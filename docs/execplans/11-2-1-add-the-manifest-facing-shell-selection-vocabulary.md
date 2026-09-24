@@ -29,8 +29,10 @@ nothing else. After the change a Netsuke developer can:
    a bare name, which fixed arguments precede the shell source, and which
    built-in `true` selects;
 2. parse any string into a validated `ShellName` that accepts exactly the
-   ADR-019 grammar `[a-z][a-z0-9_-]{0,62}`, so configured names such as `dash`
-   are representable while paths, upper-case text, and templates are not; and
+   ADR-019 grammar `[a-z][a-z0-9_-]{0,62}` minus the eight reserved YAML 1.1
+   Boolean spellings (`true`, `false`, `yes`, `no`, `y`, `n`, `on`, `off`), so
+   configured names such as `dash` are representable while paths, upper-case
+   text, templates, and Boolean spellings are not; and
 3. decode a YAML or JSON `shell` value into a three-way `ShellSelection`
    (`Direct`, `PlatformDefault`, `Named(ShellName)`), rejecting every value
    that is neither a Boolean nor a valid name.
@@ -84,8 +86,9 @@ These are hard invariants. Violating one requires escalation, not a workaround.
   to add it to the build-script slice (Decision D1).
 - Preserve ADR-019 exactly: the four built-in names, their supported hosts,
   executables, resolution kinds, fixed arguments, the `true` host mapping (`sh`
-  on Unix-like, `powershell` on Windows), and the `ShellName` grammar. Any wish
-  to diverge is an architecture deviation (see `Decision log`).
+  on Unix-like, `powershell` on Windows), and the `ShellName` grammar with the
+  reserved Boolean spellings of the 2026-09-24 addendum. Any further wish to
+  diverge is an architecture deviation (see `Decision log`).
 - Add no new dependency. `serde`, `serde_json`, `serde-saphyr`, and
   `thiserror` are existing runtime dependencies; `rstest`, `rstest-bdd`,
   `rstest-bdd-macros`, `googletest`, `pretty_assertions`, `insta`, `proptest`,
@@ -139,14 +142,16 @@ ExecPlan file itself.
   `off` to `false` before any typed deserializer runs. Unquoted `shell: yes`
   therefore means `PlatformDefault`, and `shell: n` means `Direct`. Severity:
   medium. Likelihood: certain. Mitigation: pin the behaviour with front-end
-  parity tests, document it in the design document, and hand it to 11.2.2 and
-  12.1.1; do not change the front-end here (Decision D7).
-- Risk: quoted Boolean-looking names. `shell: "true"` is the string `true`,
-  which satisfies the ADR-019 grammar, so it decodes to `Named("true")`. If
-  11.2.2 later let an operator define a shell called `on`, an unquoted `on`
-  would silently mean the platform default instead. Severity: low now, medium
-  from 11.2.2. Likelihood: low. Mitigation: pin the behaviour in tests and hand
-  11.2.2 a firm reservation recommendation (Decision D8).
+  parity tests, reserve the eight spellings as names so no quoted form can name
+  a shell (Decision D8), document it in the design document, and hand the
+  front-end question to 12.1.1; do not change the front-end here (Decision D7).
+- Risk: quoted Boolean-looking names. Without a reservation, `shell: "true"`
+  would decode to `Named("true")`, and an operator could define a shell called
+  `on` that the unquoted `on` (a Boolean) would never select. Severity: medium.
+  Likelihood: low. Mitigation: resolved by design. `ShellName` rejects the
+  eight lower-case YAML 1.1 Boolean spellings (Decision D8, ADR-019 addendum of
+  2026-09-24), which closes both the manifest and the configuration route; O7,
+  O11, and the behavioural scenarios pin it.
 - Risk: the new module drifts from ADR-019 Table 1. Severity: high (the table
   is an authority boundary). Likelihood: low. Mitigation: an exact per-shell
   `rstest` table plus an `insta` snapshot rendering the table from code.
@@ -185,6 +190,10 @@ ExecPlan file itself.
 - [x] (2026-09-24) Expert design review (structure and cost; contracts and
   alternatives; failure modes and viability). All three panels returned
   "proceed with conditions"; every condition is folded into this revision.
+- [x] (2026-09-24) User review: agreed to reserve the eight YAML 1.1 Boolean
+      spellings in `ShellName` itself in this task. Added the ADR-019 addendum
+      of 2026-09-24, aligned RFC 0011 sections 4.1, 5.2, and 11, and revised
+      this plan (Decision D8).
 - [ ] User approval of the plan.
 - [ ] EP-M0: baseline gates recorded.
 - [ ] EP-M1: host family, built-in registry, and `ShellName` landed with
@@ -302,11 +311,15 @@ ExecPlan file itself.
   2. `TooLong { length }` when the UTF-8 byte length exceeds 63, checked
      before any character is examined so the work is bounded (every accepted
      name is ASCII, so bytes equal characters there);
-  3. `InvalidFirstCharacter { character }` when the first character is not
-     `a` to `z`; and
-  4. `InvalidCharacter { character, char_index }` for the first later
-     character outside `a` to `z`, `0` to `9`, `_`, and `-`, where
-     `char_index` counts characters from zero.
+  3. `InvalidFirstCharacter { character }` when the first character is not `a`
+     to `z`;
+  4. `InvalidCharacter { character, char_index }` for the first later character
+     outside `a` to `z`, `0` to `9`, `_`, and `-`, where `char_index` counts
+     characters from zero; and
+  5. `ReservedWord { word }` when the whole grammatical name equals one of the
+     eight reserved YAML 1.1 Boolean spellings (Decision D8). `word` is the
+     `&'static str` from the reserved list, so the error stays bounded. The
+     check runs last because every reserved word already satisfies the grammar.
   Character classes use `matches!(c, 'a'..='z' | '0'..='9' | '_' | '-')`, which
   satisfies Whitaker's two-branch conditional limit. Date/Author: 2026-09-24,
   planning agent; precedence added after design review.
@@ -352,19 +365,28 @@ ExecPlan file itself.
   the exact mapping, including tagged scalars and case variants, in tests and
   in the design document so 12.1.1 decides with evidence. Date/Author:
   2026-09-24, planning agent.
-- Decision D8: keep the ADR-019 grammar exactly; do not reserve
-  Boolean-looking names in `ShellName`, and do not add a Boolean-spelling
-  helper in this task. Rationale: narrowing the grammar would be an
-  architecture deviation that also affects configuration names, with no
-  consumer in this task. A misroute is only possible once an operator can
-  define a name such as `on`, so reservation at configuration time (11.2.2)
-  prevents it completely; without such a configured name, a quoted `"on"` fails
-  closed later as an unknown shell. A shared `is_yaml11_boolean_spelling`
-  helper was proposed in review and not adopted: it has no caller in this task,
-  and an unused inherent method in `name.rs` would become a dead-code error in
-  the 11.2.2 build-script slice. The eight spellings are recorded in the design
-  document and pinned by O11, and the hand-off to 11.2.2 is firm. Date/Author:
-  2026-09-24, planning agent; amended after design review.
+- Decision D8: `ShellName` rejects the eight lower-case YAML 1.1 Boolean
+  spellings, `true`, `false`, `yes`, `no`, `y`, `n`, `on`, and `off`, with the
+  typed error `ReservedWord { word }`. This is an approved narrowing of the
+  ADR-019 name grammar, recorded as the ADR-019 addendum of 2026-09-24 and
+  mirrored in RFC 0011 sections 4.1, 5.2, and 11. Rationale: the front-end
+  reads the unquoted spellings as Booleans (Decision D7), so a quoted spelling
+  naming a shell would make one word mean two things. `ShellName` is shared by
+  manifest selectors and configured definitions, so one rule in the type closes
+  both routes: a quoted `"true"` fails when the manifest loads, with a
+  diagnostic that can point the author at the unquoted Boolean, and no operator
+  can define a shell with a Boolean-looking name. This replaces the first
+  draft's hand-off to 11.2.2, which would have fixed only the configuration
+  route and failed late. Upper-case and mixed-case spellings already fail the
+  grammar, and no built-in name is reserved. The reserved list is a private
+  constant in `name.rs` that `parse` uses, so it adds no dead code to the
+  11.2.2 build-script slice; no public Boolean-spelling helper is added. `null`
+  is deliberately not reserved: an unquoted `null` fails closed as an invalid
+  type, so it cannot misroute. Deviation record: affects `ADR019-GRAMMAR`, O2,
+  O7, O8, O10, O11, O12, and the behavioural scenarios; requires the ADR-019
+  addendum and the RFC 0011 alignment, both included in this pull request;
+  approved by the user in plan review on 2026-09-24. Date/Author: 2026-09-24,
+  planning agent with user approval; replaces the draft decision not to reserve.
 - Decision D9: verification uses `rstest` tables for the finite registry,
   `proptest` for the grammar and codec invariants, two `insta` snapshots (the
   rendered registry table, and the error and `expecting` text), and
@@ -392,8 +414,9 @@ ExecPlan file itself.
   owns user guidance. Add no `docs/polonius.md` entry, because the only
   borrow-returning accessors (`as_str`, `fixed_args`) are trivial field or
   static borrows with no lookup or get-or-create shape. Add no new ADR: the
-  decisions refine ADR-019 without changing it. Date/Author: 2026-09-24,
-  planning agent.
+  reserved-word narrowing is recorded as an ADR-019 addendum (already written
+  with this plan), and the other decisions refine ADR-019 without changing it.
+  Date/Author: 2026-09-24, planning agent.
 
 ## Outcomes & retrospective
 
@@ -404,18 +427,18 @@ results, and these hand-offs:
   `#[path]`, as `host_pattern` is, and confirm no inherent method is dead
   there; place the reserved-name check where it does not pull `built_in.rs`
   into the slice; localize `ShellNameError` inside `ShellName`'s `Deserialize`
-  implementation, naming the configuration key and definition index; and
-  resolve explicitly whether to reserve the eight lower-case YAML 1.1 Boolean
-  spellings (`true`, `false`, `yes`, `no`, `y`, `n`, `on`, `off`) as configured
-  names alongside the built-ins, through an ADR-019 addendum. This plan
-  recommends reserving them;
+  implementation, naming the configuration key and definition index. Configured
+  names inherit the reserved YAML 1.1 Boolean spellings from `ShellName`
+  automatically; 11.2.2 adds only the built-in-name reservation and the
+  uniqueness check;
 - to 11.2.3: build the resolver in a sibling module, not inside
   `shell_selection`; consume `BuiltInExecutable` and `HostFamily`; `BareName`
   entries have no path separator, and `powershell.exe` already carries an
   extension, so no `PATHEXT` suffix is appended to it;
 - to 11.3.1: add `#[serde(default)] pub shell: ShellSelection` to the command
   block and `pub use` the type from `src/ast/`; localize the selector's errors
-  inside its visitor; avoid `#[serde(untagged)]` on the enclosing command-item
+  inside its visitor, with a `ReservedWord` diagnostic that suggests the
+  unquoted Boolean; avoid `#[serde(untagged)]` on the enclosing command-item
   type, or it will swallow the selector's precise errors; decide explicitly
   whether `shell` is a rendered field (as things stand a `foreach` cannot vary
   it per item, and users must be told); and keep `ShellSelection` out of the IR
@@ -507,9 +530,11 @@ Upstream artefacts, at the revision on `main` at commit `dcac7634`:
 
 - `docs/roadmap.md` task 11.2.1 (and its successors 11.2.2, 11.2.3, 11.2.4,
   and 11.3.1 for scope boundaries).
-- ADR-019 (Accepted, 2026-09-02) including both 2026-09-02 addenda.
-- RFC 0011 (Proposed) sections 4.1, 5.1, 5.2 (name grammar only), 6.1, 9,
-  and 11.
+- ADR-019 (Accepted, 2026-09-02) including both 2026-09-02 addenda and the
+  2026-09-24 addendum reserving YAML Boolean spellings, which this pull request
+  adds.
+- RFC 0011 (Proposed) sections 4.1, 5.1, 5.2 (name grammar only), 6.1, 9, and
+  11, as aligned with the 2026-09-24 addendum by this pull request.
 - RFC 0001 (Proposed) sections 10.1 and 17.1.
 - ADR-005 (typed internal errors converted once) and ADR-008 (environment
   seam taxonomy), as governing standards.
@@ -529,7 +554,8 @@ these documents. Traced items:
 - `RM-11.2.1-E`: data-only; no AST wiring; command execution unchanged.
 - `ADR019-T1`: ADR-019 Table 1 (names, hosts, executables, resolution, fixed
   arguments) and the `true` mapping.
-- `ADR019-GRAMMAR`: `[a-z][a-z0-9_-]{0,62}`.
+- `ADR019-GRAMMAR`: `[a-z][a-z0-9_-]{0,62}`, excluding the eight reserved YAML
+  1.1 Boolean spellings (addendum of 2026-09-24).
 
 Trace chains:
 
@@ -600,7 +626,7 @@ values is exactly `{sh, bash, pwsh, powershell}`.
 #### O2: built-in names are valid registry names
 
 For every `b` in `ALL`, `ShellName::parse(b.name())` succeeds and equals
-`ShellName::from(b)`.
+`ShellName::from(b)`. This also shows that no built-in name is a reserved word.
 
 - Method: parameterized test. `From<BuiltInShell> for ShellName` constructs
   without re-validation; this lemma justifies that.
@@ -673,28 +699,39 @@ only if `RecipeShell::host_default() == RecipeShell::PowerShell`.
 #### O7: grammar
 
 For every string `s`, `ShellName::parse(s)` is `Ok` if and only if `s` matches
-`\A[a-z][a-z0-9_-]{0,62}\z`, and on success `as_str() == s`.
+`\A[a-z][a-z0-9_-]{0,62}\z` and is not one of the eight reserved YAML 1.1
+Boolean spellings, and on success `as_str() == s`.
 
-- Method: property test against the `regex` oracle, plus a boundary and
+- Method: property test against an oracle made of the `regex` crate plus the
+  reserved list written out independently in the test, plus a boundary and
   precedence table.
 - Domain: four generators combined with `prop_oneof!`:
-  1. valid names from `proptest::string::string_regex("[a-z][a-z0-9_-]{0,62}")`;
+  1. valid names from
+     `proptest::string::string_regex("[a-z][a-z0-9_-]{0,62}")`, filtered to
+     exclude the reserved words (about one sample in 800 is rejected, mostly
+     `y` and `n`);
   2. near misses built by mutating a valid name, where every mutation must
      change the string: upper-case one _letter_ position (index 0 is always a
      letter); prefix a digit, `_`, or `-`; insert one of `/`, `\`, `.`, a
-     space, NUL, `é`, or `{` using `String::insert` at a character boundary; or
-     extend to 64 characters;
+     space, NUL, `é`, or `{` using `String::insert` at a character boundary;
+     extend to 64 characters; or replace the name with one of the eight
+     reserved words;
   3. printable ASCII strings of length 0 to 70; and
   4. arbitrary Unicode strings.
 - Artefact: `name_property_tests.rs`, `parse_agrees_with_regex_oracle`, and
   boundary cases in `src/shell_selection/name_tests.rs`: empty; lengths 1, 63,
   and 64; each forbidden first character; `dash`, `/bin/bash`, `bash.exe`,
   `C:\Windows\System32\bash.exe`, `{{ shell }}`, `bash` with a leading space,
-  and `Bash`. Precedence rows in `error_precedence`: 70 characters with an
+  and `Bash`; each of the eight reserved words (rejected); and near neighbours
+  that stay valid: `yess`, `no-op`, `on1`, `nn`, `offline`, `truex`, and
+  `null`. Precedence rows in `error_precedence`: 70 characters with an
   upper-case letter at position 2 gives `TooLong`; 70 copies of `é` gives
   `TooLong { length: 140 }`; `Bash` gives `InvalidFirstCharacter('B')`; `é`
   gives `InvalidFirstCharacter('é')`; and `ba/sh` gives
-  `InvalidCharacter { character: '/', char_index: 2 }`.
+  `InvalidCharacter { character: '/', char_index: 2 }`; `true` gives
+  `ReservedWord { word: "true" }`; and `True` gives
+  `InvalidFirstCharacter('T')`, because the grammar check precedes the
+  reservation.
 - Evidence: default 256 cases per property; failures persist under
   `proptest-regressions/`.
 - Non-vacuity: a deterministic companion test, written as
@@ -708,18 +745,19 @@ For every string `s`, `ShellName::parse(s)` is `Ok` if and only if `s` matches
   Valid strings make up only about 0.6% of that last generator, so "both
   classes" is seed-dependent; the test's comment says so. Negative controls
   exercised during Red-Green: changing the length limit to 64 fails the
-  64-character boundary case; allowing upper case fails `Bash`.
+  64-character boundary case; allowing upper case fails `Bash`; dropping one
+  word from the reserved list fails that word's row.
 
 #### O8: name round trips
 
 `ShellName::parse(n.as_str()) == Ok(n)`, and JSON and YAML
 serialize-then-deserialize return `n`, for every valid `n`.
 
-- Method: property test, plus explicit rows for `yes`, `n`, `on`, `null`, and
-  `true`, which sampling reaches rarely and which are the rows at risk from
-  YAML 1.1 quoting.
+- Method: property test, plus explicit rows for `null`, `nan`, `inf`, `yess`,
+  and `no-op`: valid names that sampling reaches rarely and that a YAML
+  serializer might leave unquoted and a parser might then infer as another type.
 - Artefact: `name_property_tests.rs`, `name_round_trips` and
-  `boolean_like_names_round_trip`.
+  `scalar_like_names_round_trip`.
 - Non-vacuity: the generator is O7's valid-name strategy, whose acceptance is
   established there; the explicit rows fail if the serializer stops quoting.
 
@@ -748,8 +786,7 @@ numbers, arrays, objects).
 `decode(encode(s)) == s` for every selection, through `serde_json` and through
 `serde-saphyr`.
 
-- Method: property test plus O8's explicit Boolean-like names wrapped in
-  `Named`.
+- Method: property test plus O8's explicit scalar-like names wrapped in `Named`.
 - Artefact: `selection_property_tests.rs`, `selection_round_trips`.
 - Non-vacuity: the generator produces all three variants, which the
   deterministic companion asserts.
@@ -779,17 +816,18 @@ default. The test uses `serde_json::Value` directly, not
   | `true`, `TRUE`, `yes`, `yEs`, `y`, `Y`, `on`, `ON`                              | `PlatformDefault`              |
   | `yes` followed by U+00A0 (no-break space)                                       | `PlatformDefault`              |
   | `bash`, `dash`                                                                  | `Named` with the text          |
-  | `"true"`, `"false"`, `'yes'`, `"n"`                                             | `Named` with the unquoted text |
+  | `"bash"`, `'dash'`, `"null"`                                                    | `Named` with the unquoted text |
+  | `"true"`, `"false"`, `'yes'`, `"n"`, `"off"`                                    | error (reserved word)          |
   | bare `shell:`, `~`, `null`, `Null`, `1`, `0x10`, `""`, `[bash]`, `{name: bash}` | error                          |
   | `Bash`, `/bin/bash`, `"{{ shell }}"`                                            | error                          |
 
   _Table: O11 inputs and expected results._
 
   Tagged-scalar characterization rows are confirmed against the real crates at
-  Red and then pinned: `!!str true` (expected `Named("true")`), `! yes`
-  (non-specific tag, expected `Named("yes")`), `!custom yes` (expected
-  `PlatformDefault`), `!!bool true` (expected to fail at stage one), and `.inf`
-  (expected to fail at stage one).
+  Red and then pinned: `!!str true` (expected error, reserved word), `! yes`
+  (non-specific tag, expected error, reserved word), `!!str bash` (expected
+  `Named("bash")`), `!custom yes` (expected `PlatformDefault`), `!!bool true`
+  (expected to fail at stage one), and `.inf` (expected to fail at stage one).
 - Non-vacuity: every row is a witness with a concrete expected value, and both
   paths run the real crates (AXIOM-1, AXIOM-2).
 
@@ -802,8 +840,9 @@ number are pinned.
   consistency matters to later consumers (Decision D5).
 - Artefact: `selection_tests.rs`, `error_texts`, stored under
   `src/snapshots/shell_selection/`.
-- Non-vacuity: the snapshot contains one line per variant plus the
-  `expected a Boolean or a shell name` text, so a change to any of them fails.
+- Non-vacuity: the snapshot contains one line per variant, including
+  `ReservedWord`, plus the `expected a Boolean or a shell name` text, so a
+  change to any of them fails.
 
 #### O13: no execution change
 
@@ -930,9 +969,9 @@ Feature: Structured-command shell selection vocabulary
       | true   | the platform default    |
       | bash   | the named shell "bash"  |
       | dash   | the named shell "dash"  |
-      | "true" | the named shell "true"  |
+      | "bash" | the named shell "bash"  |
 
-  Scenario Outline: Any other selector is rejected
+  Scenario Outline: Any other selector, including a quoted Boolean spelling, is rejected
     Given the shell selector YAML <yaml>
     When the shell selector is decoded
     Then decoding the shell selector fails
@@ -945,6 +984,8 @@ Feature: Structured-command shell selection vocabulary
       | /bin/bash |
       | Bash      |
       | ""        |
+      | "true"    |
+      | "yes"     |
 ```
 
 Step definitions live in a new `tests/bdd/steps/shell_selection.rs`, declared in
@@ -1105,13 +1146,15 @@ Acceptance is behavioural:
 
 - `ShellName::parse("dash")` returns a name whose `as_str()` is `dash`, and
   `BuiltInShell::lookup` of it is `None`; `ShellName::parse("/bin/bash")`
-  returns `InvalidFirstCharacter('/')`. Both appear as doctests on `ShellName`.
+  returns `InvalidFirstCharacter('/')`; `ShellName::parse("true")` returns
+  `ReservedWord { word: "true" }`. All three appear as doctests on `ShellName`.
 - `BuiltInShell::host_default(HostFamily::Windows)` is
   `BuiltInShell::PowerShell`, whose `fixed_args()` are `-NoLogo`, `-NoProfile`,
   `-NonInteractive`, `-Command`, and whose `executable()` is
   `BareName("powershell.exe")`.
 - Decoding `shell: true` gives `PlatformDefault`; `shell: bash` gives
-  `Named("bash")`; `shell: 1` gives an error whose text contains
+  `Named("bash")`; `shell: "true"` (quoted) gives a reserved-word error;
+  `shell: 1` gives an error whose text contains
   `expected a Boolean or a shell name`.
 
 Red-Green-Refactor evidence to record in `Artefacts and notes` per milestone:
@@ -1128,7 +1171,8 @@ Quality criteria:
 - Lint and types: `make check-fmt`, `make typecheck`, and `make lint` pass;
   `make doc-coverage` does not fall below its threshold.
 - Documentation: `make markdownlint` and `make nixie` pass.
-- Security: the vocabulary accepts no path or template as a name (O7, O11).
+- Security: the vocabulary accepts no path, template, or YAML Boolean spelling
+  as a name (O7, O11).
 
 ## Idempotence and recovery
 
@@ -1238,6 +1282,8 @@ pub enum ShellNameError {
          but has {character:?} at character {char_index}"
     )]
     InvalidCharacter { character: char, char_index: usize },
+    #[error("{word:?} is reserved because YAML reads it as a Boolean; use an unquoted Boolean instead")]
+    ReservedWord { word: &'static str },
 }
 
 // src/shell_selection/selection.rs
@@ -1286,3 +1332,11 @@ executable path belongs to 11.2.3, and the IR's `ResolvedShell` belongs to
   to 11.2.2, 11.2.3, 11.3.1, and 12.1.1. None of these changes alters the
   ADR-019 contract; the remaining work is unchanged in shape (three
   implementation milestones after approval).
+- 2026-09-24: revised after user review. Reserved the eight lower-case YAML 1.1
+  Boolean spellings in `ShellName` itself (new `ReservedWord` error, last in
+  precedence), replacing the hand-off to 11.2.2. Added the ADR-019 addendum of
+  2026-09-24 and aligned RFC 0011 sections 4.1, 5.2, and 11 in this pull
+  request. Updated Decision D8 (now an approved deviation), the Purpose,
+  Constraints, Risks, Conformance basis, O2, O7, O8, O10, O11, and O12, the
+  behavioural examples, the interface sketch, and the acceptance criteria. The
+  milestone structure is unchanged.
