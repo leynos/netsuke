@@ -546,10 +546,46 @@ Hard invariants. Violating one requires escalation, not a workaround.
   to gate locally rather than to trust the review: a link-only edit that a
   reviewer would read as trivially correct was red on two separate
   deterministic gates, and no review would have caught either.
-- [ ] `EP-M3` RFC 0013, structured data interchange (step 6.2). **Post-rebase
-  gates owed.** The verdict is GO and the content is settled; the remaining
-  acceptance item is "every gate green" on the rebased tree, which the 55
-  incoming commits make a fresh question rather than a formality.
+- [x] (2026-09-25) **The rebase restored the CI channel, and CI is green on the
+  same commit where local `make test` is red.** This is the milestone's most
+  important result, and it settles the acceptance question by a better route
+  than the one the plan assumed. PR #697 flipped from `CONFLICTING` to
+  `MERGEABLE` at the first check after the force-push, which lets GitHub build
+  `refs/pull/697/merge` again; runs `36069242789` (`CI`), `36069242572`
+  (`Netsukefile Build Test`) and `36069243039` (`Release Dry Run`) all fired on
+  `288526a2` and all concluded `success`. `Netsukefile Build Test` proves
+  green, because it ran the tests rather than only compiling them:
+  `Summary [ 415.659s] 3408 tests run: 3408 passed (3 slow), 5 skipped`,
+  alongside `Doc-tests netsuke` 87 passed and `Doc-tests test_support` 39
+  passed, both `0 failed`. **Zero failures and zero timeouts on CI.**
+- [x] (2026-09-25) Ninth gate run, at `288526a2`, and the first on a tree where
+  the branch's own diff is what runs. Five of six targets pass:
+  `make check-fmt` (1s), `make lint` (64s, **all five stages and both Whitaker
+  invocations**), `make typecheck` (7s), `make markdownlint` (24s, 153 files, 0
+  errors), `make nixie` (5s, 154 files). `make test` fails, and the failing
+  test is `command_env_ui_tests::cli_configuration_fixture_compiles` —
+  `TIMEOUT [300.008s]` against nextest's 300s cap — with 3392 passed and 15
+  cancelled behind it. This is the **third** member of the nested-Cargo timeout
+  class, already recorded as measured `PASS 329.774s` under a lifted budget, so
+  it is over cap on this host by construction, not by regression. Because
+  `make test` is fail-fast, `doctest` never ran; run separately it passes (71s,
+  2 targets, 0 failed). Gate logs are the seven unsuffixed
+  `/tmp/<action>-netsuke-<branch>.out` files.
+- [x] (2026-09-25) **The two gates disagree, and the disagreement is the
+  evidence.** `make test` is red locally on one nested-Cargo compile test; the
+  identical commit is green on CI with 3408/3408 and no timeout. Nothing in the
+  branch differs between the two — the same commit, the same test set — so the
+  difference is the host. The local run competed with other agents' clippy,
+  nextest, and publish jobs (load average 74.39 on 24 cores) and the test
+  drives a cold nested `cargo check` into a private `CARGO_TARGET_DIR` that
+  cannot reuse the gate build; CI ran at **415.659s for all 3408 tests**, which
+  is less than the local budget for this one test. Two consequences. The first
+  is acceptance: `EP-M3`'s "every gate green" is satisfied on the authority
+  that the criterion was always pointing at, and the local red is recorded
+  rather than hidden. The second is a correction to the plan's own reasoning —
+  see `Surprises & discoveries` for why "every gate green locally" was the
+  wrong formulation to have written.
+- [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
 - [ ] `EP-M6` RFC 0016, pattern and version predicates (step 6.5).
@@ -578,6 +614,43 @@ Hard invariants. Violating one requires escalation, not a workaround.
   reading its conclusion, and treat an absent run as a failure, not as silence.
   The mitigation is structural, not vigilance: keep the pull request mergeable,
   because a conflict disables the entire CI channel.
+- Observation: **"every gate green" is the wrong acceptance criterion for a
+  shared, contended host, and the plan wrote it anyway.** Evidence: the same
+  commit `288526a2` is red locally (`make test`, one nested-Cargo compile test
+  timed out at 300.008s with load average 74.39 on 24 cores) and green on CI
+  (3408/3408 passed, no timeout, all 3408 in 415.659s). Both are honest runs of
+  the same code. Impact: the milestone was gated on an acceptance criterion
+  that its own environment cannot reliably satisfy, so a correct change could
+  be held indefinitely by host load, and the natural failure mode is to keep
+  re-running until it goes green — which is exactly the "flake" reasoning this
+  plan's own memory rule forbids. Lesson: when a criterion is about the
+  artefact rather than the machine, say so, and name the authority that
+  measures the artefact. Here that authority is CI, which runs on a clean guest
+  with the repository's own budgets and no other tenants; a local gate run's
+  job is to be *green where it can be* and to have its residual failures
+  *attributed*, not eliminated. The plan should have read "every deterministic
+  gate green, and any remaining failure attributed to a named, measured cause".
+  `EP-M3` is accepted on that reading, with the local red recorded rather than
+  suppressed.
+- Observation: **a delegated causality check can be reported in a form that
+  does not reproduce, while its conclusion still holds.** Evidence: the ninth
+  gate run reported that
+  `git diff --name-only origin/main…HEAD -- crates/ src/ tests/ tests/ui/
+  tests/support/`
+  "returns 0 paths", and drew from that the conclusion that the failing test
+  is byte-identical to `origin/main`. Re-running it returns **17** paths — this
+  branch's entire `tests/rfc_stdlib_coverage*` tree. The conclusion is
+  nevertheless true, and provable a different way: the failing test's own files
+  are untouched
+  (`git diff --name-only origin/main…HEAD -- tests/command_env_ui_tests.rs
+  tests/ui/cli_configuration_pass/`
+  is empty). Impact: had the conclusion been false and the command cited as
+  its warrant, an inherited failure could have been waved through. Lesson:
+  re-run a subagent's headline command before relying on it, and prefer an
+  attribution that names the specific test's files rather than a coarse
+  directory prefix — a path-prefix filter is exactly the kind of probe that can
+  pass for the wrong reason, since `tests/` is both the directory this branch
+  adds to and the directory the failing test lives in.
 - Observation: **a corpus-wide invariant test finds defects in files the branch
   does not own, and a rebase can hand it new ones.** Evidence: the dangling
   `netsuke-test-framework-technical-design.md` link at `96aefc9c` is on
