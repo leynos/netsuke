@@ -441,7 +441,11 @@ Hard invariants. Violating one requires escalation, not a workaround.
   is fail-fast, the `doctest` sub-target never ran at all: that is this run's
   one evidence gap, and it is a gap the seventh run shared. The branch's own
   `coverage_map_status_is_reported` passed in 0.223s, so the diff's assertions
-  are exercised and green.
+  are exercised and green. **Gap closed the same day**: `make doctest` was run
+  separately and passed, exit 0, `81 passed / 2 passed / 32 passed` across its
+  three targets with no failures. So `make test`'s two recognised sub-targets
+  are now both accounted for — `test-nextest` red only on the two
+  upstream-fixed live-build tests, and `doctest` green in full.
 - [x] (2026-09-24) **`make test` cannot pass on this base, and that is not a
   load story.** `e2fc2083` and `33a293a7` are on `origin/main` but are *not*
   ancestors of this branch, so main has already fixed this failure class — and
