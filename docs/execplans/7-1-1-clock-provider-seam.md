@@ -1657,6 +1657,32 @@ above, which are disposable.
   `pull_request` run builds a synthetic merge of head into `main`, so `headSha`
   identifies the PR head rather than proving that commit was built in isolation.
 
+- [x] Post-completion: the branch re-rebased onto the current `origin/main`,
+  which had advanced 20 commits past the previous boundary. The replay boundary
+  was `79545e12`, the merge base at the last re-target and the last commit the
+  branch had inherited; the target was `397fb589`. Fifty-two branch commits
+  replayed, and exactly one needed a resolution —
+  `docs/v0-1-0-migration-guide.md`, where main's #737 had rewritten the "Ninja
+  text escaping" row of the at-a-glance table while this branch appended a
+  "Clock provider" row to the same table. Both intents were additive and
+  independent, so the resolution keeps main's table wholesale and appends the
+  branch's row; `range-diff` reports 51 of 52 pairs `=` and only that commit
+  `!`, and the divergence is confined to the one line's padding. The
+  substantive fixes were confirmed to survive by comparing whole-file
+  `patch-id`s across the rebase, not by reading commit subjects:
+  `src/stdlib/time/clock.rs`, `src/stdlib/register.rs`, `docs/users-guide.md`,
+  `tests/std_filter_tests/time_functions.rs` and
+  `src/stdlib/time/clock_tests.rs` are all byte-identical, so CodeRabbit's
+  static confirmation of the Observability fix still describes the new head.
+
+  One process point is worth keeping. The previously-cited SHAs — `f81f2f98`,
+  `7d0b3f15`, `c167fb5a`, `14651fc0`, `74822cc2` — are all still objects in the
+  repository but are no longer ancestors of the tip, because a replay rewrites
+  every commit it replays. Quoting one in a review reply would therefore have
+  been false evidence that the reply described the current head.
+  `git range-diff` supplies the remapping, and the replies use the new SHAs
+  together with the run identifiers rather than the old ones alone.
+
 ## Surprises & discoveries
 
 Recorded during planning; extend during implementation.
@@ -2876,3 +2902,24 @@ still applies is not the same as knowing it.
     obligation is to show the failure is not its own, which the CI `build-test`
     pass on `8de3c963` does: the same test ran inside that job and the job
     succeeded.
+
+    That disposition was correct when written and is superseded now, so it is
+    recorded here rather than left to read as current. The rebase onto the
+    current `origin/main` adopted 20 commits, one of which is the fix: #752,
+    "Reuse nested Cargo build artefacts (#732)", merged 2026-09-20, closed issue
+    732, and replaced this very test's live private rebuild with a recorded
+    Cargo JSON fixture. `harness_compiles_under_a_split_build_dir` still exists
+    and still holds its parser contract, but it now reads
+    `tests/ui/split_build_dir_cargo_messages.jsonl` through `include_str!` and
+    spawns no Cargo at all; it was also removed from the `nested-cargo-builds`
+    nextest group, whose filter list no longer names it. Three consequences are
+    worth stating plainly. The timeout cause this entry diagnosed is fixed
+    upstream, not merely tracked. Issue 732 is closed, so citing it as a live
+    tracker would be citing a superseded record — the reason the disposition
+    read "nothing to fix here" no longer holds, because the fix has landed. And
+    the first rebased gate run confirms the new state rather than assuming it:
+    `make test` on the rebased head is 3394 of 3394 passing, 0 failed, 5
+    skipped in 276 s, up from 3250 tests, with the formerly-timing-out test
+    green and no longer among the slow ones. The four slow markers that remain
+    are genuine nested-Cargo builds in other tests, which is what the
+    `nested-cargo-builds` group and its single-slot policy exist to serialize.
