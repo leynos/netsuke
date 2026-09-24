@@ -322,6 +322,12 @@ Each goal is phrased so that an observer can check it.
 10. **G10 — Replace real monster Makefiles.** A migrated manifest for a
     repository of Cuprum's complexity consists mainly of lines that describe
     that project, not lines that compensate for the build language.
+11. **G11 — Cover Make's task-runner role.** The initial users run
+    `make test`, `make lint`, and `make clean` as well as file builds.
+    Netsuke covers that role with named phony actions (see `examples/`),
+    target listing with descriptions (`netsuke help targets`, shipped), and
+    validated recipe parameters (RFC 0022, proposed in PR #741). The
+    conveniences that stay out are those of non-goal 6.
 
 ### 6.2 Non-goals
 
@@ -433,17 +439,16 @@ Each goal is phrased so that an observer can check it.
 
 ## 9. Open questions
 
-| ID  | Question                                                                                                                                                                                                                                                 | Why it matters                                                                                                      | Resolved when                                                                                                  | Suggested path            |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| Q2  | What adoption signal defines success, inside the df12 estate and outside it?                                                                                                                                                                             | Without it, sections 1, 4, and 7 rest on inference.                                                                 | A named signal with a threshold and date, for example repositories using Netsuke as their primary entry point. | Elicitation               |
-| Q3  | Reluctant Make users reject task runners as too limited, yet Make also serves them as a task runner. Which task-runner conveniences (recipe parameters, target listing, per-task help) are in scope? Non-goal 6 (no live development loop) is confirmed. | Sets the boundary with `just` and Task, and decides whether Netsuke replaces every job the initial users give Make. | The maintainer lists the task-runner features that are in or out.                                              | Elicitation, then ADR     |
-| Q4  | How far does purity extend: to targets that call impure helpers, and to pinned remote inputs used as dependencies? What rebuild policy applies to an impure target?                                                                                      | Determines whether remote inputs become first-class and how G4 and G6 interact.                                     | A decision on impure-target rebuild semantics and on remote resources as graph inputs.                         | RFC                       |
-| Q5  | Is content-hash invalidation in scope for any input class?                                                                                                                                                                                               | Tests assumption A5; affects remote inputs and any future cache.                                                    | Evidence of missed or spurious rebuilds in real use, or a decision tied to Q4.                                 | Spike, then ADR           |
-| Q6  | Is a Makefile migration aid (importer or guide) in scope?                                                                                                                                                                                                | Directly serves the initial reluctant-Make-user group; costs significant effort.                                    | A decision recorded as a goal or a non-goal.                                                                   | Elicitation               |
-| Q7  | What plan-generation time budget is acceptable, and on what reference manifest?                                                                                                                                                                          | Needed to turn the operational criterion into a measurable one.                                                     | A budget and a benchmark manifest exist.                                                                       | Spike                     |
-| Q8  | What must be true for 1.0?                                                                                                                                                                                                                               | Gates the strategic criterion and the end of pre-1.0 latitude.                                                      | A written release checklist traced to G1 to G10.                                                               | Elicitation, then roadmap |
-| Q9  | Who maintains reusable rule bundles for common ecosystems, and are any shipped with Netsuke?                                                                                                                                                             | Decides whether G3 and G10 are met by the core or by an ecosystem that does not yet exist.                          | An ownership and distribution decision for bundles.                                                            | RFC amendment to RFC 0003 |
-| Q10 | Does the nightly toolchain requirement for source installs conflict with serving the accidental build-system authors (a later audience)?                                                                                                                 | Affects installation paths and constraint 8.1.                                                                      | Evidence that binary installers cover the target platforms, or a plan for stable builds.                       | Elicitation               |
+| ID  | Question                                                                                                                                                            | Why it matters                                                                             | Resolved when                                                                                                  | Suggested path            |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| Q2  | What adoption signal defines success, inside the df12 estate and outside it?                                                                                        | Without it, sections 1, 4, and 7 rest on inference.                                        | A named signal with a threshold and date, for example repositories using Netsuke as their primary entry point. | Elicitation               |
+| Q4  | How far does purity extend: to targets that call impure helpers, and to pinned remote inputs used as dependencies? What rebuild policy applies to an impure target? | Determines whether remote inputs become first-class and how G4 and G6 interact.            | A decision on impure-target rebuild semantics and on remote resources as graph inputs.                         | RFC                       |
+| Q5  | Is content-hash invalidation in scope for any input class?                                                                                                          | Tests assumption A5; affects remote inputs and any future cache.                           | Evidence of missed or spurious rebuilds in real use, or a decision tied to Q4.                                 | Spike, then ADR           |
+| Q6  | Is a Makefile migration aid (importer or guide) in scope?                                                                                                           | Directly serves the initial reluctant-Make-user group; costs significant effort.           | A decision recorded as a goal or a non-goal.                                                                   | Elicitation               |
+| Q7  | What plan-generation time budget is acceptable, and on what reference manifest?                                                                                     | Needed to turn the operational criterion into a measurable one.                            | A budget and a benchmark manifest exist.                                                                       | Spike                     |
+| Q8  | What must be true for 1.0?                                                                                                                                          | Gates the strategic criterion and the end of pre-1.0 latitude.                             | A written release checklist traced to G1 to G10.                                                               | Elicitation, then roadmap |
+| Q9  | Who maintains reusable rule bundles for common ecosystems, and are any shipped with Netsuke?                                                                        | Decides whether G3 and G10 are met by the core or by an ecosystem that does not yet exist. | An ownership and distribution decision for bundles.                                                            | RFC amendment to RFC 0003 |
+| Q10 | Does the nightly toolchain requirement for source installs conflict with serving the accidental build-system authors (a later audience)?                            | Affects installation paths and constraint 8.1.                                             | Evidence that binary installers cover the target platforms, or a plan for stable builds.                       | Elicitation               |
 
 ### 9.1 Resolved questions
 
@@ -451,27 +456,29 @@ Each goal is phrased so that an observer can check it.
   2026-09-24 by the maintainer: reluctant Make users, who struggle to let go of
   Make because task runners are too limited and Bazel and CMake are too
   complex. See [section 4.1](#41-primary-users).
-- **Q3, in part — Does non-goal 6 (no live development loop) stand?** Resolved
-  2026-09-24 by the maintainer: yes. File watching belongs to `inotifywait` and
-  similar tools, which can run Netsuke. The rest of Q3 remains open.
+- **Q3 — Which task-runner conveniences are in scope?** Resolved
+  2026-09-24 and 2026-09-25 by the maintainer. Named actions, target listing,
+  and per-target descriptions already exist; recipe parameters are planned in
+  RFC 0022. Non-goal 6 stands: file watching belongs to `inotifywait` and
+  similar tools, which can run Netsuke. See goal G11.
 
 ## 10. Handoff
 
 - **Downstream readiness.** The design document and roadmap already exist, so
-  this document is a reconciliation rather than a precursor. Q3 should be
-  settled before further user-facing design, because it changes what the
-  shallow end must contain.
+  this document is a reconciliation rather than a precursor. No remaining open
+  question blocks further design. Q6, on a Makefile migration aid, most
+  directly affects the initial users.
 - **ADR candidates.** Primary user segment (Q1, decided 2026-09-24; the ADR
-  records it); relationship to task runners (Q3); purity semantics for targets
-  and remote inputs (Q4); content-hash invalidation (Q5); hermeticity and
-  remote execution as a permanent non-goal (non-goal 2).
+  records it); purity semantics for targets and remote inputs (Q4);
+  content-hash invalidation (Q5); hermeticity and remote execution as a
+  permanent non-goal (non-goal 2).
 - **Glossary.** `docs/context.md` does not exist. The terms in
   [appendix B](#appendix-b-glossary) are the proposed first entries.
-- **Design-document candidates.** The following design ideas arose in the
-  source conversations and belong in RFCs rather than here: first-class file
-  sets, reusable tool contexts, managed states with functional probes, typed
-  task inputs, artefact ownership and scoped cleanup, named contention classes,
-  maturity policies, and plan explanation and diffing commands.
+- **Design-document candidates.** PR #741 already proposes RFCs for managed
+  states, typed task inputs, artefact ownership, contention classes, and
+  maturity policies. Three further ideas from the source conversations have no
+  RFC yet: first-class file sets, reusable tool contexts, and plan explanation
+  and diffing commands.
 
 ## Appendix A. References
 
