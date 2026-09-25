@@ -71,10 +71,11 @@ def parse_assignments(pairs: cabc.Iterable[str]) -> dict[str, str]:
     {'MXD_BACKEND': 'sqlite'}
     """
     selectors: dict[str, str] = {}
-    for pair in pairs:
+    for position, pair in enumerate(pairs, start=1):
         name, separator, value = pair.partition("=")
         if not separator or SELECTOR_NAME.match(name) is None:
-            msg = f"invalid environment assignment: {pair!r}"
+            # Name the position only: an assignment may carry a credential.
+            msg = f"environment assignment {position} is not NAME=value"
             raise ValueError(msg)
         selectors[name] = value
     return selectors

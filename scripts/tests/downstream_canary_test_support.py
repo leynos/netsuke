@@ -132,12 +132,26 @@ class Canary:
         int
             The runner's exit status.
         """
+        return self.completed_step(command, *arguments, **extra).returncode
+
+    def completed_step(
+        self, command: str, *arguments: str, **extra: str
+    ) -> subprocess.CompletedProcess[str]:
+        """Run one runner subcommand, capturing its output.
+
+        Returns
+        -------
+        subprocess.CompletedProcess[str]
+            The finished runner process.
+        """
         common = ["--workdir", str(self.workdir), "--state", str(self.state)]
         return subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed interpreter and script.
             [sys.executable, str(RUNNER), command, *common, *arguments],
             check=False,
+            capture_output=True,
+            text=True,
             env=self.environment(**extra),
-        ).returncode
+        )
 
     def report(self, *targets: str, revision: str | None = None) -> dict:
         """Run ``report`` for ``targets`` and return the provenance record.

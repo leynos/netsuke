@@ -108,8 +108,14 @@ def repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-def run_git_in_repository(repository: Path):  # ruff: ignore[missing-return-type-undocumented-public-function] - returns the adapter.
-    """Return a Git adapter bound to ``repository``."""
+def run_git_in_repository(repository: Path) -> resolver.GitRunner:
+    """Return a Git adapter bound to ``repository``.
+
+    Returns
+    -------
+    resolver.GitRunner
+        The adapter the resolver calls in place of :func:`resolver.run_git`.
+    """
     return lambda arguments: git(repository, *arguments) + "\n"
 
 

@@ -85,6 +85,22 @@ def test_extra_environment_reaches_tools_but_not_the_record(canary: Canary) -> N
     assert record["outcome"] == "passed", "the run should still pass"
 
 
+def test_a_malformed_assignment_is_never_echoed(canary: Canary) -> None:
+    """A rejected assignment is named by position, never by its text.
+
+    Scenario: a service connection string is mistyped. Invariant: the error
+    names the entry's position, so a credential never reaches the job log.
+    """
+    connection = "postgres://postgres:hunter2@127.0.0.1/test"
+    completed = canary.completed_step(
+        "generate", "--netsuke", str(canary.netsuke), "--environment", connection
+    )
+
+    assert completed.returncode == 2, "the malformed assignment is refused"
+    assert "assignment 1 is not NAME=value" in completed.stderr, "name the entry"
+    assert "hunter2" not in completed.stdout + completed.stderr, "never echo it"
+
+
 def test_a_step_without_targets_is_refused(canary: Canary) -> None:
     """An empty target list is a configuration error, not a vacuous pass."""
     assert canary.step("run", "--target", "  ") == 2, "an empty list is refused"
