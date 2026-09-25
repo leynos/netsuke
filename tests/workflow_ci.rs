@@ -489,9 +489,11 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
     // cold `CARGO_TARGET_DIR`; the ceiling has to contain that on top of the
     // harness run. Measured locally at 152.952s of gate time over all 18
     // tracked patches with the graph warm, plus 158s of wall clock for the
-    // recipe; the headroom here is for the cold case, which no CI run has yet
-    // measured, because every run so far aborted at toolchain selection before
-    // compiling a patch.
+    // recipe. The cold case is now measured too: run 35796798133 passed the
+    // gate at 257.703s, and run 35800582469 at 261.514s, so a cold CI run
+    // costs about 105s more than the warm local one rather than the multiple
+    // the headroom was sized for. The margin is kept because a failing host is
+    // what the ceiling is for, not a median one.
     ensure!(
         mapping_get(kani_job, YamlKey("timeout-minutes")).and_then(Value::as_u64) == Some(30),
         "Kani smoke job should enforce the 30-minute cold-run ceiling"
