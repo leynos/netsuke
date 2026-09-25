@@ -40,6 +40,7 @@ pub(crate) struct InstallerHarness {
     fake_bin_dir: PathBuf,
     pub(crate) git_args_path: PathBuf,
     pub(crate) cargo_args_path: PathBuf,
+    cargo_rustflags_path: PathBuf,
     github_output_path: PathBuf,
 }
 
@@ -50,6 +51,7 @@ impl InstallerHarness {
         let fake_bin_dir = root.path().join("fake-bin");
         test_fs::create_dir(&fake_bin_dir).context("create fake command directory")?;
         let cargo_args_path = root.path().join("cargo-args");
+        let cargo_rustflags_path = root.path().join("cargo-rustflags");
         let git_args_path = root.path().join("git-args");
         let github_output_path = root.path().join("github-output");
         let bash_env_path = root.path().join("bash-env");
@@ -64,6 +66,7 @@ impl InstallerHarness {
             fake_bin_dir,
             git_args_path,
             cargo_args_path,
+            cargo_rustflags_path,
             github_output_path,
         })
     }
@@ -85,13 +88,39 @@ impl InstallerHarness {
 
     /// Run the installer with a caller-supplied candidate revision.
     pub(crate) fn run_with_candidate_revision(&self, inputs: &InstallerRun<'_>) -> Result<Output> {
-        Command::new("bash")
+        self.command(inputs)
+            .output()
+            .context("run release-candidate installer")
+    }
+
+    /// Run a valid Linux installation that inherits `rustflags`, when given.
+    pub(crate) fn run_with_inherited_rustflags(&self, rustflags: Option<&str>) -> Result<Output> {
+        let mut command = self.command(&InstallerRun {
+            runner_os: "Linux",
+            candidate_revision: CANDIDATE_REVISION,
+            resolved_revision: CANDIDATE_REVISION,
+            version: CANDIDATE_VERSION,
+        });
+        if let Some(value) = rustflags {
+            command.env("RUSTFLAGS", value);
+        }
+        command.output().context("run release-candidate installer")
+    }
+
+    /// Build the installer command with no inherited `RUSTFLAGS`.
+    ///
+    /// The gate targets export `RUSTFLAGS` to the test process, so it is
+    /// cleared here to keep the installer's own assignment observable.
+    fn command(&self, inputs: &InstallerRun<'_>) -> Command {
+        let mut command = Command::new("bash");
+        command
             .arg(installer_script())
             .env("BASH_ENV", &self.bash_env_path)
             .env("GITHUB_OUTPUT", &self.github_output_path)
             .env("NETSUKE_CANDIDATE_REVISION", inputs.candidate_revision)
             .env("NETSUKE_CANDIDATE_VERSION", CANDIDATE_VERSION)
             .env("NETSUKE_CARGO_ARGS", &self.cargo_args_path)
+            .env("NETSUKE_CARGO_RUSTFLAGS", &self.cargo_rustflags_path)
             .env("NETSUKE_GIT_ARGS", &self.git_args_path)
             .env("GH_TOKEN", TEST_TOKEN)
             .env("NETSUKE_FAKE_BINARY_NAME", binary_name(inputs.runner_os))
@@ -103,8 +132,8 @@ impl InstallerHarness {
             )
             .env("RUNNER_OS", inputs.runner_os)
             .env("RUNNER_TEMP", self.root.path())
-            .output()
-            .context("run release-candidate installer")
+            .env_remove("RUSTFLAGS");
+        command
     }
 
     /// Read installer outputs emitted through `GITHUB_OUTPUT`.
@@ -116,6 +145,11 @@ impl InstallerHarness {
             .filter_map(|line| line.split_once('='))
             .map(|(key, value)| (key.to_owned(), value.to_owned()))
             .collect())
+    }
+
+    /// Read the `RUSTFLAGS` value Cargo received, or `<unset>`.
+    pub(crate) fn cargo_rustflags(&self) -> Result<String> {
+        test_fs::read_to_string(&self.cargo_rustflags_path).context("read recorded cargo RUSTFLAGS")
     }
 
     /// Read recorded Cargo build arguments.
@@ -217,6 +251,7 @@ if [[ "$*" != "build --locked --release --bin netsuke" ]]; then
 fi
 
 printf '%s\n' "$*" > "${NETSUKE_CARGO_ARGS}"
+printf '%s\n' "${RUSTFLAGS-<unset>}" > "${NETSUKE_CARGO_RUSTFLAGS}"
 mkdir -p target/release
 printf '#!/usr/bin/env bash\nprintf "netsuke %%s\\n" "${NETSUKE_FAKE_VERSION}"\n' \
   > "target/release/${NETSUKE_FAKE_BINARY_NAME}"

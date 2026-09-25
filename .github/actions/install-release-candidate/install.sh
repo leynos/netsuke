@@ -63,7 +63,11 @@ emit_event candidate_revision_verification success
 emit_event locked_cargo_build started
 if ! (
   cd "${candidate_source_dir}"
-  cargo build --locked --release --bin netsuke
+  # Build the shipped shape, as `make release` does: assigning RUSTFLAGS, even
+  # to an empty inherited value, displaces the checkout's development
+  # `.cargo/config.toml` rustflags, including the Linux-only `mold` linker a
+  # hosted runner does not provide.
+  RUSTFLAGS="${RUSTFLAGS-}" cargo build --locked --release --bin netsuke
 ); then
   emit_failure_event locked_cargo_build cargo_build_failed
   echo 'candidate Cargo build failed' >&2

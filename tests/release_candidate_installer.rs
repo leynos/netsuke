@@ -157,3 +157,33 @@ fn installer_rejects_an_invalid_candidate_identity(
 
     Ok(())
 }
+
+/// Verify that the candidate is built in the shipped release shape.
+///
+/// Assigning `RUSTFLAGS`, even to an empty value, displaces the checkout's
+/// development `.cargo/config.toml` flags, including the Linux `mold` linker a
+/// hosted runner lacks, while a caller's own flags still reach Cargo.
+#[rstest]
+#[case::unset(None, "")]
+#[case::inherited(Some("-C debuginfo=0"), "-C debuginfo=0")]
+fn installer_builds_in_the_release_rustflags_shape(
+    #[case] inherited: Option<&str>,
+    #[case] expected: &str,
+) -> Result<()> {
+    let harness = InstallerHarness::new()?;
+
+    let output = harness.run_with_inherited_rustflags(inherited)?;
+
+    ensure!(
+        output.status.success(),
+        "installer should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        harness.cargo_rustflags()? == format!("{expected}\n"),
+        "installer should assign RUSTFLAGS to the inherited value, got {:?}",
+        harness.cargo_rustflags()?
+    );
+
+    Ok(())
+}
