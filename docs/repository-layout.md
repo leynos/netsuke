@@ -77,6 +77,9 @@ output and some leaf files so the long-lived structure remains visible.
   development loop does not belong here. See
   [developers' guide](developers-guide.md).
 - `.github/actions/`: Reusable GitHub Actions used by workflow definitions.
+  `downstream-canary/` and `install-release-candidate/` run the v0.1.0
+  release-admission canaries against three pinned downstream repositories; see
+  [release-admission migration canaries](release-admission-canaries.md).
 - `.github/workflows/`: Continuous Integration (CI), release, packaging, and
   repository automation workflows.
 - `cyclopts/`: Local Python typing support for release and packaging helper

@@ -79,10 +79,10 @@ standard's rationale and its exclusions.
 
 ## Exercise a v0.1.0 release candidate in downstream CI
 
-Run a downstream Netsukefile quality gate against the proposed candidate before
-admitting a v0.1.0 tag. Pin the installer action reference and its `revision`
-input to the same candidate commit, and state the package version that the
-candidate must report:
+Run a downstream Netsukefile quality gate against a proposed candidate to find
+migration problems before the release. Pin the installer action reference and
+its `revision` input to the same candidate commit, and state the package
+version that the candidate must report:
 
 ```yaml
 - name: Install Netsuke release candidate
@@ -106,14 +106,10 @@ build the exact checked-out candidate. It exposes verified `binary`,
 `netsuke --version` match. On Windows, `binary` names the built `netsuke.exe`;
 invoke that output directly rather than constructing a platform-specific path.
 
-Pin the downstream workflow source and the downstream repository revision that
-ran this gate. Release admission accepts evidence only when the run belongs to
-that repository and revision, uses the pinned immutable workflow ID and
-workflow path, was pushed from the expected branch, names the candidate, and
-completed successfully. A missing, failed, incomplete, or identity-mismatched
-run does not admit publication. Pull-request dry runs disable this admission
-step because they do not receive the token used to read trusted downstream
-evidence.
+Netsuke's own v0.1.0 release is admitted by three pinned downstream migration
+canaries, which its release workflow runs against the exact candidate; see
+[release-admission migration canaries](release-admission-canaries.md). A
+downstream gate like the one above needs nothing from that process.
 
 ## Netsuke is a build tool, not a library
 

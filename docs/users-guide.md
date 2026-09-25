@@ -152,9 +152,10 @@ the proposed candidate, including its expected package version:
 
 The required `revision` input is fetched and checked out, then compared with
 the resolved Git commit. The action builds that checkout with
-`cargo build --locked --release --bin netsuke` and runs `netsuke --version`. It
-fails before exposing outputs if either the revision or the reported version
-does not match the inputs, or if the locked build fails.
+`cargo build --locked --release --bin netsuke`, in the same shape as a shipped
+release, so a hosted runner needs no `mold` linker, and runs
+`netsuke --version`. It fails before exposing outputs if either the revision or
+the reported version does not match the inputs, or if the locked build fails.
 
 On success, `steps.netsuke.outputs.binary` is the absolute path to the built
 binary, while `revision` and `version` report the verified commit and package
@@ -162,12 +163,11 @@ version. The action selects `netsuke.exe` on Windows and `netsuke` elsewhere;
 the downstream workflow can therefore pass the same output to its selected gate
 on each platform.
 
-Installing a candidate does not by itself authorize publication. A release
-requires trusted canary admission: the downstream revision and workflow must be
-pinned, and the release workflow must find completed, successful evidence for
-the exact candidate and migration revision. Run the gates from the downstream
-`Netsukefile`, then retain the workflow's bounded provenance record for release
-review.
+Netsuke's own release is admitted by three downstream migration canaries, which
+its release workflow runs against the exact candidate; see
+[release-admission migration canaries](release-admission-canaries.md). A
+downstream project using this action is testing its own gates, and needs
+nothing from Netsuke's release process to do so.
 
 ### Complete Windows setup
 

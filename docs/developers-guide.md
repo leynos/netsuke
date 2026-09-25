@@ -544,33 +544,53 @@ names diverge.
 
 ## Release-admission tooling
 
-The [install-release-candidate action][release-candidate-action] is the shared
-bootstrap for downstream release-admission canaries. Callers must provide
-`revision`, the full Git revision of the proposed candidate, and
-`expected-version`, the version that `netsuke --version` must report. The
-action fetches and checks out that exact revision, verifies the resolved
-commit, and runs `cargo build --locked --release --bin netsuke` before exposing
-the candidate binary.
+The v0.1.0 release is admitted by three downstream migration canaries, which
+the release workflow runs against the exact candidate. The
+[canary page](release-admission-canaries.md) records the pins, the selected
+targets, and the retained Makefile boundaries; this section covers the tooling.
 
-The action outputs the absolute `binary` path, the resolved `revision`, and the
-resolved `version`. It selects `netsuke.exe` on Windows and `netsuke` on other
-platforms, so callers can invoke the same outputs in platform-specific jobs.
-Each downstream canary must pin its migration revision, run the selected
-Netsukefile targets with this action, and publish a bounded provenance record;
-the release workflow admits a candidate only when the required downstream
-revisions have successful, identity-bound canary runs. It reads each pinned
-workflow source and requires the installer reference and `revision` input to
-match the published `GITHUB_SHA`, then checks the configured workflow ID and
-path, `push` event, branch, migration head SHA, candidate name, completed
-status, and successful conclusion. A changed candidate SHA therefore requires
-fresh downstream evidence.
+- `.github/scripts/resolve_release_candidate.py` resolves the candidate in the
+  `release-candidate` job. It builds the run's own commit by default. The
+  `candidate-ref` input of `release.yml`, exposed by the dry run's manual
+  trigger, names another ref, or `auto`: the newest `-rcN` tag while it is also
+  the newest version tag by SemVer precedence, and otherwise `main`. It
+  publishes the commit, the version that commit's `Cargo.toml` declares, and
+  the selecting rule.
+- The [downstream-canary action][downstream-canary-action] is the shared
+  bootstrap. The caller checks Netsuke out into `netsuke/`, never the workspace
+  root, because Cargo reads `.cargo/config.toml` from every ancestor and the
+  downstream checkout must not inherit Netsuke's development flags. The action
+  reaches its scripts through `GITHUB_ACTION_PATH`.
+- The [install-release-candidate action][release-candidate-action] builds the
+  candidate. It fetches the exact `revision`, verifies the resolved commit,
+  builds with `RUSTFLAGS` assigned as `make release` does, so the development
+  `mold` linker never reaches a hosted runner, and refuses a binary whose
+  `netsuke --version` differs from `expected-version`. It outputs the `binary`
+  path, `revision`, and `version`, choosing `netsuke.exe` on Windows. It stays
+  public, so a downstream project can run its own gates against a candidate.
+- `scripts/run_downstream_canary.py` runs the `generate`, `run`, and `report`
+  phases, sharing a JSON state file. Argument parsing lives in
+  `scripts/downstream_canary_arguments.py`, and the provenance schema and its
+  closed status vocabulary in `scripts/downstream_canary_provenance.py`.
+  `make test-downstream-canary` tests the resolver and the runner, and CI runs
+  it.
 
-`run-release-admission` is a reusable-workflow boolean input with a default of
-`true`. A tag-triggered release always runs admission because it is not a
-reusable-workflow call. A trusted reusable caller may set
-`run-release-admission: false` for a dry run that must not execute admission.
-When publication is enabled, the `release` job still depends on a successful
-`downstream-migration-canaries` job.
+The canary jobs run on GitHub-hosted runners. On a pull request they run only
+when it is marked ready for review, and never gate it: they are
+`continue-on-error` there. `release` needs both canary jobs and requires the
+canaries' candidate to equal `github.sha`, so a rehearsal that built another
+ref can never admit a release. The jobs need only `contents: read`: all three
+downstream repositories are public, so the cross-repository checkout uses the
+job's own read-only token, and no credential is persisted into the downstream
+tree.
+
+`tests/workflow_release_canaries.rs` holds the release wiring, pins, lanes, and
+pull-request policy, and `tests/workflow_contracts/downstream_canary_test.py`
+holds the composite action's shape.
+
+To rehearse a release without publishing, run the **Release Dry Run** workflow
+from the Actions tab with **Run workflow**. It runs the whole release,
+including the canaries and the Windows smoke, and uploads nothing.
 
 ## Toolchain and borrow checker
 
@@ -8542,4 +8562,5 @@ this one stops the tiers inverting.
 When test strategy or behavioural test usage changes, update this file in the
 same change-set, so the documented approach remains aligned with the codebase.
 
+[downstream-canary-action]: ../.github/actions/downstream-canary/action.yml
 [release-candidate-action]: ../.github/actions/install-release-candidate/action.yml
