@@ -107,13 +107,23 @@ fn unit_name(scenario: &str) -> String {
     format!("netsuke-kani-wrapper-{}-{scenario}", std::process::id())
 }
 
+/// The capture file for one unit, as an absolute path.
+///
+/// Derived rather than passed. Both call sites of the capture path need it to
+/// agree with the unit, and three adjacent `&str` parameters make a transposed
+/// `unit`/`capture` pair a silent bug: the scope would write one file and the
+/// assertion would read another, which fails confusingly or, worse, passes.
+fn capture_path(unit: &str) -> String {
+    format!("/tmp/{unit}.out")
+}
+
 /// Run the wrapper exactly as the plans document it, with test-sized limits.
 ///
 /// `payload` is the shell body placed inside the scope. The resource
 /// properties, `nice` level, and capture placement mirror the documented
 /// command; only the two time limits are reduced.
-fn run_scoped(unit: &str, payload: &str, capture: &str) -> Result<Output> {
-    let log = format!("/tmp/{capture}");
+fn run_scoped(unit: &str, payload: &str) -> Result<Output> {
+    let log = capture_path(unit);
     // The payload is brace-grouped so that the pipeline's left side is the
     // whole group. Without the braces a trailing `exit` in the payload would
     // end the shell before `tee` ever ran, leaving an empty capture and a
@@ -214,15 +224,17 @@ fn scope_evidence(unit: &str) -> Result<(String, String, String)> {
     ))
 }
 
-/// Read the payload's captured output from `/tmp/<capture>`.
+/// Read the payload's captured output for `unit`.
 ///
 /// The directory is opened as a capability rather than reached through
 /// `std::fs`, which this repository forbids: the capture path is fixed, so the
-/// handle is the whole of the surface this needs.
-fn captured(capture: &str) -> Result<String> {
+/// handle is the whole of the surface this needs. The path is derived from the
+/// unit, so the read cannot disagree with the write.
+fn captured(unit: &str) -> Result<String> {
+    let capture = format!("{unit}.out");
     let tmp = Dir::open_ambient_dir("/tmp", ambient_authority())
         .context("open /tmp to read the captured output")?;
-    tmp.read_to_string(capture)
+    tmp.read_to_string(&capture)
         .with_context(|| format!("read the captured output from /tmp/{capture}"))
 }
 
@@ -351,15 +363,10 @@ fn successful_payload_exits_zero_and_capture_is_complete() -> Result<()> {
         return Ok(());
     }
     let unit = unit_name("ok");
-    let capture = format!("{unit}.out");
     reset_failed(&unit);
 
     let marker = format!("payload-marker-{}", std::process::id());
-    let output = run_scoped(
-        &unit,
-        &format!("echo {marker}; echo second-line; exit 0"),
-        &capture,
-    )?;
+    let output = run_scoped(&unit, &format!("echo {marker}; echo second-line; exit 0"))?;
     ensure!(
         output.status.success(),
         "a successful payload should exit 0, got {:?}: {}",
@@ -367,7 +374,7 @@ fn successful_payload_exits_zero_and_capture_is_complete() -> Result<()> {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let text = captured(&capture)?;
+    let text = captured(&unit)?;
     ensure!(
         text.contains(&marker),
         "the capture should hold the payload's stdout, got `{text}`"
@@ -393,10 +400,9 @@ fn failing_payload_propagates_through_tee_with_pipefail() -> Result<()> {
         return Ok(());
     }
     let unit = unit_name("fail");
-    let capture = format!("{unit}.out");
     reset_failed(&unit);
 
-    let output = run_scoped(&unit, "echo verifier-failed; exit 7", &capture)?;
+    let output = run_scoped(&unit, "echo verifier-failed; exit 7")?;
     ensure!(
         output.status.code() == Some(7),
         "a failing verifier piped through tee should reach the caller as 7, got {:?}: {}",
@@ -404,7 +410,7 @@ fn failing_payload_propagates_through_tee_with_pipefail() -> Result<()> {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let text = captured(&capture)?;
+    let text = captured(&unit)?;
     ensure!(
         text.contains("verifier-failed"),
         "a failing payload's output should still be captured, got `{text}`"
@@ -427,10 +433,9 @@ fn failing_payload_is_masked_without_pipefail() -> Result<()> {
         return Ok(());
     }
     let unit = unit_name("masked");
-    let capture = format!("{unit}.out");
     reset_failed(&unit);
 
-    let log = format!("/tmp/{capture}");
+    let log = capture_path(&unit);
     let body = format!("{{ echo masked-failure; exit 7; }} 2>&1 | tee {log}");
     let output = Command::new("systemd-run")
         .args([
@@ -475,13 +480,11 @@ fn sigterm_ignoring_payload_is_stopped_after_the_grace_period() -> Result<()> {
         return Ok(());
     }
     let unit = unit_name("kill");
-    let capture = format!("{unit}.out");
     reset_failed(&unit);
 
     let output = run_scoped(
         &unit,
         &format!("trap '' TERM; sleep {}", PAYLOAD_LIFETIME.as_secs()),
-        &capture,
     )?;
     let lifetime = wait_for_terminal(&unit)?;
 
@@ -528,13 +531,11 @@ fn stop_grace_is_additive_to_the_runtime_cap() -> Result<()> {
         return Ok(());
     }
     let unit = unit_name("additive");
-    let capture = format!("{unit}.out");
     reset_failed(&unit);
 
     let _ = run_scoped(
         &unit,
         &format!("trap '' TERM; sleep {}", PAYLOAD_LIFETIME.as_secs()),
-        &capture,
     )?;
     let lifetime = wait_for_terminal(&unit)?;
 
@@ -574,13 +575,11 @@ fn journal_records_the_runtime_limit_and_the_kill() -> Result<()> {
         return Ok(());
     }
     let unit = unit_name("journal");
-    let capture = format!("{unit}.out");
     reset_failed(&unit);
 
     let _ = run_scoped(
         &unit,
         &format!("trap '' TERM; sleep {}", PAYLOAD_LIFETIME.as_secs()),
-        &capture,
     )?;
     let _ = wait_for_terminal(&unit)?;
 
