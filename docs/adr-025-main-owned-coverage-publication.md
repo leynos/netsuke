@@ -147,7 +147,7 @@ structure rather than by the file they happen to share.
 
 The decision above is unchanged. Two things it described needed correcting.
 
-_Manual dispatch._ The context above calls the publisher's manual dispatch a
+*Manual dispatch.* The context above calls the publisher's manual dispatch a
 read-only warm-run diagnostic. That held for the ratchet baseline, which the
 coverage action saves only on a push to `refs/heads/main`. It did not hold for
 the CodeScene upload, whose only guard was the credential, while the push
@@ -157,12 +157,12 @@ now also guarded on `github.ref == 'refs/heads/main'`. A dispatch from `main`
 uploads that commit's report, as a push would. A dispatch from any other branch
 uploads nothing. The baseline still advances only on a push to `main`.
 
-_The pull-request surface._ The verification above enumerated pull-request
+*The pull-request surface.* The verification above enumerated pull-request
 workflows by trigger. A `workflow_call` workflow that a pull-request workflow
 calls runs on that pull request too, and `secrets: inherit` hands it the
 credential. So the surface is now the closure through local reusable-workflow
 calls. `secrets: inherit` into another repository's workflow is refused, and so
 is any mention of `codescene.io`.
 
-The developers' guide, under _Coverage ratchet and CodeScene publication_,
+The developers' guide, under *Coverage ratchet and CodeScene publication*,
 records the contracts that hold both.

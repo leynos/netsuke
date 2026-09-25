@@ -6311,8 +6311,11 @@ failure, so "nothing was found" and "something went wrong" stay separable. A
 non-success resolution additionally carries `category`, one of the ten values in
 `RESOLVE_ERROR_CATEGORY_VALUES`, one per `ResolveError` variant, so the label
 set is fixed by the error type rather than by the failure a host happened to
-encounter. `category()` in `resolve_error.rs` returns those constants,
-single-sourcing the vocabulary.
+encounter. `ResolveError::category()` in `resolve_error.rs` returns the
+domain-owned `ResolveErrorCategory`, whose `label()` is the resolver's own
+name for the failure; `telemetry::category_label()` in `telemetry.rs` maps
+those variants to the constants above, so the two vocabularies are tied
+together by test rather than by a shared constant.
 
 That makes the resolution counter the one series whose label count is not
 fixed: two labels on success, three on failure.
