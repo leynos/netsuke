@@ -118,29 +118,43 @@ named workflow contract test,
 `tests/workflow_contracts/codescene_upload_contract_test.py`, backed by the
 predicates in `tests/workflow_contracts/codescene_upload_invariants.py`, holds
 the lane to that ordering, to the input names the generator and the upload
-agree on, to the format they agree on, to the credential being both carried and
-gated on, and to any checksum input staying unset. Both halves of that gate are
-required. The credential has to be an *identifier* in the namespace the `if` is
-evaluated against, rather than a substring a longer, unset name would satisfy —
-`env.NOT_CS_ACCESS_TOKEN != ''` compares `''` with `''` and never opens. And
-the condition has to *compare* that identifier against the empty string:
-`env.CS_ACCESS_TOKEN == ''` and `!env.CS_ACCESS_TOKEN` both name the credential
-and both open on precisely the run the gate exists to skip, so naming it is not
-gating on it. The comparison is read from the reference's own position rather
-than from an operand captured as text. An operand pattern has to decide where
-an operand ends before it knows what the operand is, and an index may carry
-spaces inside its brackets: read as a run of characters containing no space,
-the operand of `env[ 'CS_ACCESS_TOKEN' ] != ''` is `]`, so a real gate is
-reported as gating on nothing — while widening the pattern to admit a space lets
-`env.X == '' && y != ''` read as one operand, which accepts a condition whose
-credential comparison is the *inverted* one. A second test module,
-`tests/workflow_contracts/codescene_validation_step_test.py`, backed by
-`tests/workflow_contracts/codescene_report_validation_invariants.py`, holds the
-validating step's script to the validator being run over a directory the step
-also filled with the report. Both drive their predicates against synthetic
-workflow text as well as the repository file, so a detector that stopped
-matching cannot pass by finding nothing. The upload reads the workspace rather
-than an archive, so the three steps it depends on are matched by their
+agree on, to the format they agree on, to the upload action being the lane's
+only submission, to the credential being read from the secret store, to the
+upload being gated on the availability a check step publishes, not on the
+credential itself, and to any checksum input staying unset. The check step is
+`Check CodeScene token availability`, with id `codescene_token`: it writes one
+output, `available=${{ secrets.CS_ACCESS_TOKEN != '' }}`, and the upload's `if`
+must conjoin both `steps.codescene_token.outputs.available == 'true'` and
+`github.ref == 'refs/heads/main'`, since a gate that does not test what the
+check published opens on exactly the run the gate exists to skip. The rule is
+`is_trunk_only_upload`'s, in
+`tests/workflow_contracts/ci_coverage_wiring_invariants.py`, which
+`tests/workflow_contracts/coverage_upload_guard_test.py` also drives over the
+repository file. It refuses any unquoted `||` at any depth, because `&&` binds
+tighter and one disjunct would authorize the upload alone, then splits the
+condition into top-level conjuncts — a `&&` inside a string literal or a
+parenthesized group is not split on — and requires each guard clause to be
+present compared whole. A substring test would accept a clause that is quoted,
+negated or nested, since each such form still contains the clause's text, and a
+clause wrapped in its own parentheses is not equal to its bare form, so the
+reading fails closed. Further conjuncts are allowed, as without a disjunction
+they only narrow the step. The credential's source is a separate rule, owned by
+`tests/workflow_contracts/codescene_credential_invariants.py`: the
+`access-token` input must be exactly `${{ secrets.CS_ACCESS_TOKEN }}`, compared
+whole, because the fault refused is a value that *names* the credential while
+reading it from somewhere else, as `${{ env.CS_ACCESS_TOKEN }}` and
+`${{ github.CS_ACCESS_TOKEN }}` do. That module reads the step's `env` by
+containment rather than by whole comparison, walking every string the value
+holds with `iter_strings` from `tests/workflow_contracts/yaml_strings.py`: a
+step declaring `UNUSED_CS_ACCESS_TOKEN` has still written the credential into
+an environment every nested step of the composite action inherits. A second
+test module, `tests/workflow_contracts/codescene_validation_step_test.py`,
+backed by `tests/workflow_contracts/codescene_report_validation_invariants.py`,
+holds the validating step's script to the validator being run over a directory
+the step also filled with the report. Both drive their predicates against
+synthetic workflow text as well as the repository file, so a detector that
+stopped matching cannot pass by finding nothing. The upload reads the workspace
+rather than an archive, so the three steps it depends on are matched by their
 structure rather than by the file they happen to share.
 
 ## Addendum, 2026-09-23: the dispatch upload and the pull-request closure

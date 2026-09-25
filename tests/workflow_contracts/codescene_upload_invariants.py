@@ -63,6 +63,7 @@ from ci_coverage_wiring_invariants import (
     GENERATE_COVERAGE_ACTION,
     PUBLICATION_OPT_OUT_INPUT,
     UPLOAD_COVERAGE_ACTION,
+    action_of,
 )
 from codescene_credential_invariants import credential_offenders
 from codescene_report_validation_invariants import (
@@ -126,9 +127,13 @@ def report_steps(
     and neither is one that declares a name twice: the steps this contract can
     examine would be an arbitrary member of the pair, so every fault reported
     below would be a claim about a step the lane is not necessarily running.
-    Both are answered once, here, and the caller guards on a single value. The
-    lookup loops over one name at a time rather than joining three ``is None``
-    tests: a three-operand boolean is rejected by `PLR0916`, and a predicate
+    Both are answered once, here, and the caller guards on a single value. A
+    third way to leave the lane without a single upload to read — a second step
+    invoking the same action under another name — is asked about separately, by
+    ``_upload_impostors``, because it is a fault to report rather than a reason
+    to report nothing. The lookup loops over one name at a time rather than
+    joining three ``is None`` tests: a three-operand boolean is rejected by
+    `PLR0916`, and a predicate
     over a tuple of optionals is rejected by the type checker, which cannot
     narrow the individual names through it. Appending the narrowed step is what
     leaves the returned tuple non-optional.
@@ -154,6 +159,44 @@ def report_steps(
         found.append(step)
     coverage, validation, upload = found
     return coverage, validation, upload
+
+
+def _upload_impostors(
+    steps: cabc.Sequence[dict[str, object]], upload: dict[str, object]
+) -> list[str]:
+    """Return every other step submitting to CodeScene through the upload action.
+
+    The three steps are found by the names this lane declares, so a copy of the
+    upload under any other name is a second submission the rest of this contract
+    never reads: its inputs, its gate and its pin all go unchecked while the
+    certified step runs beside it. GitHub keys nothing on a step's name, so the
+    impostor runs whether or not anything asked about it — which is what a
+    copy-pasted step produces, since it keeps the action rather than the name.
+    The action is the identity the contract is stated over, so it is matched
+    through ``action_of``, which compares the reference without its version.
+    Steps are compared by identity rather than by value, because a step equal to
+    the upload is still a second step running it.
+
+    Returns
+    -------
+    list[str]
+        One entry per impostor, empty when the lane calls the action once.
+    """
+    impostors = [
+        step
+        for step in steps
+        if action_of(step) == UPLOAD_COVERAGE_ACTION and step is not upload
+    ]
+    if not impostors:
+        return []
+    names = [step.get("name") for step in impostors]
+    return [
+        (
+            f"the trunk lane must submit to CodeScene once, through "
+            f"{CODESCENE_UPLOAD_STEP!r}, whose inputs and gate are what this "
+            f"contract reads; {names!r} also invoke {UPLOAD_COVERAGE_ACTION}"
+        )
+    ]
 
 
 def _absent_steps(
@@ -229,6 +272,7 @@ def upload_contract_offenders(
         if pin is not None:
             offenders.append(pin)
 
+    offenders.extend(_upload_impostors(steps, upload))
     offenders.extend(validation_offenders(validation))
     offenders.extend(_path_offenders(coverage, upload))
     offenders.extend(_checksum_offenders(upload))
