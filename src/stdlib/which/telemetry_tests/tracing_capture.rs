@@ -243,10 +243,9 @@ fn a_hit_records_the_bounded_fields_alone(
     let root = workspace.root.as_str();
     // The matched path, and its form relative to the workspace root: a field
     // naming either would say where the tool was found.
-    let relative = match matched_path.strip_prefix(root) {
-        Ok(relative) => relative.as_str(),
-        Err(_) => matched_path.as_str(),
-    };
+    let relative = matched_path
+        .strip_prefix(root)
+        .map_or_else(|_| matched_path.as_str(), camino::Utf8Path::as_str);
     let escaped = [
         workspace.command.as_str(),
         root,
