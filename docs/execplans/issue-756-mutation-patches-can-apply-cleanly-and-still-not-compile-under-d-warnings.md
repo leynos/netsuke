@@ -237,6 +237,69 @@ failure mode cannot recur silently.
       went with it. Verified against the real merge, not the branch:
       `git merge-tree` with the work staged gives 305 lines with both sides'
       edits intact.
+- [x] (2026-09-25) Repair the oracle masker's two-pass ordering, which the
+      round-eight review surfaced and which is the same defect class this issue
+      is about, one level up. `_nextest_oracle.listing.masked` blanked line
+      comments before string literals, and no global pass can know which of the
+      two is *inside* the other: a `//` within a literal ate the closing quote
+      and blanked the rest of its line. Neither ordering is correct — the
+      suggested swap breaks the other way and still misreads `r#"…"#` — so the
+      fix is a single left-to-right scan that consumes each span as it is
+      found. Replaced the two constants with six span helpers
+      (`_line_comment_end`, `_block_comment_end`, `_raw_string_end`,
+      `_string_literal_end`, `_character_literal_end`, `_non_code_end`) and made
+      `masked` drive them positionally. Added a `rust-suites` guard to
+      `selected`, so a listing that cannot be read is refused rather than
+      reported as "selects nothing" against innocent filters.
+      `nextest_oracle_masking_test.py` pins the behaviour, liveness-checked
+      against all three variants rather than the fixed one alone: the shipped
+      masker fails 3 of its 8 cases, the pass-swap variant fails 2, the
+      single-pass scan passes all 8. Measured over `tests/` with the committed
+      code: 187 functions / 752 cases corrected against 173 / 688 as shipped —
+      16 functions the shipped reader never saw, 2 it reported that do not
+      exist, 6 found but miscounted, 24 names in all. Every one was latent,
+      because `_check` runs only for names both configured and present in the
+      oracle's dict, and no affected name appears in `.config/nextest.toml`.
+- [x] (2026-09-25) Repair the two defects the round-twelve gate run surfaced in
+      the head that carried the oracle fix, both in this branch's own work.
+      First, `python_toolchain_sync_test.py` went to `C0302 (402/400)`: the file
+      stood at **exactly 400 on `main` and on this branch's own `HEAD`** before
+      the edit, so it had no headroom, and the pinned `typecheck-python`
+      assertion cannot be compressed back — the Makefile splits its two
+      `--extra-search-path` flags across a line continuation, and the contract
+      pins each substring separately, so the assertion cannot go below two
+      entries and the file cannot come back to 400 in place. Established the
+      boundary by probe rather than by assumption: pylint rates a 400-line copy
+      10.00/10 and fires `C0302` at 401. Second, two en-GB-oxendict violations
+      in this plan (`artifact`, `mis-ordering`).
+      Fixed by extraction rather than by trimming, following the seam this
+      directory already documents: `makefile_recipes.py` states that it "owns
+      reading the Makefile" and that every contract wanting its text comes
+      through `load_makefile`, yet this module reached past it to
+      `MAKEFILE_PATH.read_text()` three times. The three readers move to that
+      module as `makefile_variable`, `makefile_target`, and `makefile_command`,
+      which is the same remedy `acab98a4` ("Split the report-validation contract
+      under the 400-line cap"), `c49ef8fc`, `7813dea1`, `8af95537`, and
+      `acf85a22` used, and the same one `makefile_variables.py` and
+      `workflow_loading.py` were themselves created by. The test module drops
+      to **363** and its new home to 192. Behaviour-preservation is measured,
+      not asserted: the old and new implementations were run side by side over
+      four variables, seven targets, and four command variables — 15 of 15
+      identical verdicts. `ruff check`, `ruff format --check`, pylint,
+      interrogate (100.0%), and `ty` all pass on both files.
+      Both are instances of this plan's own subject: the round-eleven run
+      aborted at ruff, so pylint never ran, and the `C0302` was only *unmasked*
+      by fixing the earlier failure — the same "green because the reader never
+      reached it" shape the whole issue is about.
+- [x] (2026-09-26) Repair the round-thirteen run's two `MD038` findings: this
+      document's own prose described the `ruff: ignore` convention with a code
+      span beginning with a space, which `markdownlint` rejects. Rewritten as
+      prose — the suffix really does begin with a space, so no span can carry
+      it, and the autofix would have stated the opposite. The prerequisite
+      mechanism that hid the finding is recorded under Surprises.
+- [x] (2026-09-26) Re-run the gates the repair touches: `markdownlint` (0
+      errors over 148 files) and `spelling` green, `check-fmt` green with
+      `mdtablefix --check` agreeing after its refill.
 
 ## Surprises & discoveries
 
@@ -591,6 +654,92 @@ failure mode cannot recur silently.
   default that an inert override predicts, so they are consistent with the
   override working and with it doing nothing, and only the pair of probes
   separates those.
+- **A gate that passes is evidence about the tree it ran against, and the pass
+  and the tree have to be named together.** Three gates failed on the round-8
+  head — `check-fmt`, `lint`, `typecheck` — and all three failed on the work
+  this branch had just committed, `nextest_oracle_masking_test.py` from
+  `632e5952`, not on the Rust change under test. The Rust change was clean:
+  clippy `--all-targets`, `cargo check --all-targets`, and a full `make test`
+  of 3315 tests all passed around it. Two of the three failures were of a kind
+  the gate set cannot see until the *next* run: ruff's
+  `docstring-missing-returns` fires only on a multi-line docstring, and ty's
+  `unresolved-import` fires only because `make typecheck-python` passes
+  `--extra-search-path scripts` while the test imports from `.github/scripts`
+  through a `sys.path` insert that ty does not follow. The third is a Markdown
+  refill: a one-line pronoun correction shortened a line, and mdtablefix
+  `--wrap` is a *refill*, not a cap, so an otherwise 80-column-clean line can
+  still fail it. None of these is a correctness defect in the logic the commit
+  was about; all three are the committed artefact failing the project's own
+  standards, which is what the gates measure.
+- **`make test-workflow-contracts` passing does not mean a test in
+  `tests/workflow_contracts/` was exercised by the gates that matter.** The
+  masking regression test ran green inside that target's 613 passes throughout,
+  and its file was still red under `make lint-python` in the same run. The two
+  cover different things: the contract target *executes* the test, and the lint
+  target *reads* the file with ruff, ty, pylint, and interrogate. A green test
+  run says the assertions hold; it says nothing about whether the file
+  satisfies the linters, and only the lint target does. Recording the
+  distinction because the reflex — "the file was exercised, so it was checked"
+  — is wrong in the direction that lets a defect through.
+- **A lint gate that stops at its first failing stage can *manufacture* a
+  repair that produces the next failure.** `make lint-python` runs ruff,
+  pylint, the df12 lints, ambrleaks, and interrogate in sequence and aborts on
+  the first non-zero stage. The round-eleven run died at ruff
+  (`docstring-missing-returns`), so pylint never executed, and its `C0302` on
+  the same file could not appear in that run's output. Repairing the ruff
+  finding therefore did not clear the file — it *unmasked* the pylint one on
+  the next run. The sequence reads as two independent findings arriving one
+  after another; it is one file's condition, sampled one stage at a time. A
+  green stage is evidence about that stage only, and the gate's overall verdict
+  says nothing about the stages behind the first failure.
+- **The 400-line cap is a property of the file, not of the edit, so a correct
+  edit can be blocked by a file that was already full.**
+  `max-module-lines = 400` refuses the module, and pylint's own rating of a
+  400-line copy is 10.00/10 — so `main` sat on the last passing value, and the
+  two lines this branch's wiring fix needed were not available at any price.
+  The probe that established this is the one worth repeating: rate a copy at
+  the boundary and one line past it, rather than reasoning about whether the
+  cap is inclusive. The remedy the repository already uses, and the one
+  `makefile_recipes.py`'s own docstring names, is a split along a seam — which
+  also leaves headroom rather than re-landing on the ceiling, the lesson
+  recorded the day before in `6fe4976a`.
+- **A stage that has never executed has said nothing, and the cascade runs
+  deeper than the stage list.** The df12 lints are the third stage of
+  `lint-python`, and on this branch they had never run: round eleven aborted at
+  ruff, and round twelve's pylint `C0302` aborted one stage later. Repairing
+  pylint let df12 execute for the first time, and it found five defects — four
+  `C9102` (a bare `assert`) and one `C9106` (a suppression without an
+  explanation) — in `nextest_oracle_masking_test.py`, the very file the earlier
+  repairs had been clearing. Each successive repair therefore *looked* like it
+  introduced a new fault, and did nothing of the kind: the file was in that
+  condition throughout, and each stage reported only what it was the first to
+  be able to see. "I fixed the error and a different one appeared" is not
+  evidence of a new defect; here it was evidence of the opposite.
+- **The convention a lint rule encodes is worth measuring before repairing
+  against it.** The cheap way to read `C9102` is "add messages until the lint
+  goes quiet", which would have produced four plausible strings and no evidence
+  they matched the house style. Counting instead showed the rule is total —
+  **882 `assert` statements across the three owned Python roots, and not one
+  bare**, with every `ruff: ignore` in the tree followed by a hyphen and an
+  explanation — so the five findings were this branch's file being the only
+  violation in the repository, and the repair had one unambiguous shape. The
+  same audit is what distinguishes "my defect" from "a pre-existing condition I
+  happened to expose", which is the distinction that decides whether to fix it
+  here at all.
+- **A Makefile prerequisite short-circuits its target, so a target that never
+  started is indistinguishable from one that passed.** `markdownlint: spelling`
+  runs `spelling` first; round twelve's `spelling` was red on two en-GB
+  spellings, so `markdownlint-cli2` never executed on this branch at all. The
+  two `MD038` findings it would have reported were therefore absent from every
+  round-twelve report — not because the file was clean, but because the linter
+  had not run. This is the `lint-python` cascade's shape moved one level up: a
+  stage cannot report before the stage ahead of it passes, and neither can a
+  target report before its prerequisite does. Three distinct mechanisms have
+  now produced the same false "clean" reading in this plan — a stop-at-first-
+  failure *stage*, a never-executed *job*, and a never-reached *prerequisite* —
+  and in all three the exit code alone cannot tell "passed" from "never
+  started". The generalization worth keeping: before trusting any green result,
+  ask what had to succeed for it to have been printed.
 
 ## Decision log
 
@@ -774,6 +923,26 @@ failure mode cannot recur silently.
   configuration does not have. `configured_names` is kept for the name-keyed
   comparisons, which genuinely need bare names; `anchored_selectors` is the new
   read-side function that returns both.
+- Fix the masker by scanning positionally, and **decline the review's suggested
+  swap** on measurement. The round-eight review proposed reordering the two
+  global passes so literals are masked first. That is a real improvement in one
+  direction and a regression in the other: it lets a comment containing an
+  unmatched quote pair with the next quote in the file and blank everything
+  between them, and it still reads `r#"…"#` as a plain literal, which in
+  `tests/` (534 raw-string openings across 135 files) invents a phantom
+  `probe2` carrying 22 cases. Both orderings fail, in different directions: the
+  defect lies in the *ordering* itself, not in which order was chosen. Two
+  global passes cannot know which of them is inside the other, so no
+  arrangement of them is correct. The fix has to change the shape — one
+  left-to-right scan that consumes each span it finds, raw strings before plain
+  literals — which is also the shape the repository's own
+  `tests/workflow_contracts/rust_source_scan.py::mask_non_code` already uses.
+  That scanner was not imported, because `listing.py` documents a wall against
+  depending on the test tree ("this script runs on the coverage lane and must
+  not depend on the test tree"), so the package keeps its own copy. The
+  liveness check is what settles it rather than the argument: three variants
+  run against the same eight cases, the shipped masker failing 3, the swap
+  failing 2, and the positional scan failing none.
 
 ## Outcomes & retrospective
 
@@ -949,12 +1118,11 @@ plan does not treat the set as covering the document it appears in. Those nine
 ran against the tree holding the Python fix; this ExecPlan's own entries were
 written afterwards, so the four Markdown- and Rust-sensitive gates among them —
 `check-fmt`, `lint`, `typecheck`, `markdownlint` — measured a tree that did not
-contain the paragraphs you are reading, and the set is re-run over the final
-tree rather than assumed to carry. This is the same distinction the plan makes
-elsewhere: a green gate is evidence about the tree it ran against, and nothing
-more. Per the run-id convention the figures are recorded as durations against
-the branch head rather than against a self-series SHA, which a rebase would
-invalidate.
+contain the paragraphs above, and the set is re-run over the final tree rather
+than assumed to carry. This is the same distinction the plan makes elsewhere: a
+green gate is evidence about the tree it ran against, and nothing more. Per the
+run-id convention the figures are recorded as durations against the branch head
+rather than against a self-series SHA, which a rebase would invalidate.
 
 **One residual this work leaves open, recorded because it bears on the
 `kani-smoke` entry this branch added.** `NEXTEST_JOBS` is *iterate-only*. Its
@@ -983,6 +1151,26 @@ install nextest. A job that began running nextest without joining the tuple
 would install no nextest and fail no test in this suite — which is exactly the
 "evidence that looks healthy" shape this plan is about, recorded rather than
 fixed because the fix is a broader change than the issue.
+
+The round-twelve findings are repaired and the repair is measurable. The
+extraction takes `python_toolchain_sync_test.py` from 402 lines to **363** — 37
+lines of headroom under the cap, against the zero it had before this branch
+began — and `makefile_recipes.py` to 192, both well clear. Behaviour is
+preserved by side-by-side measurement rather than by inspection: the old and
+new implementations were run together over four variables, seven targets, and
+four command variables, and returned **15 of 15 identical verdicts**. Ruff,
+pylint, interrogate at 100.0%, and `ty` all pass on both files, and the pinned
+`typecheck-python` assertion still holds each search root to its own substring,
+so the Makefile and the contract remain matched. The two en-GB-oxendict
+spellings are corrected in place.
+
+What that repair cost, and what it leaves open, is worth stating plainly. It
+was needed because the file had **no headroom**: `main` sat on the last passing
+value of a hard cap, so a two-line wiring fix had nowhere to land. That is not
+a property of this branch's change and not something a green run could have
+surfaced — CI compares trees, and the tree was over. The general remedy is the
+one this directory already applies: keep extraction as the answer when a file
+approaches the ceiling, as `makefile_recipes.py` itself records having done.
 
 ## Revision note
 
@@ -1206,3 +1394,81 @@ fixed because the fix is a broader change than the issue.
   s override actually binding, and the gate compiling all 18 patched trees.
   Nothing in this entry is inferred from a job conclusion alone; each figure is
   read from the step that produced it.
+- 2026-09-25 — The round-eight review read the oracle's masker and found the
+  two-pass ordering: `LINE_COMMENT` ran before `STRING_LITERAL`, so a `//`
+  inside a literal ate its closing quote and blanked the rest of the line.
+  Fixed by scanning left to right and consuming each span as it is found,
+  rather than by the swap the review suggested — which breaks the opposite way
+  and invents a phantom `probe2` from the raw strings in `tests/`. A regression
+  test pins the behaviour and was liveness-checked against all three variants.
+  Measured over `tests/` with the committed code: 187 functions / 752 cases
+  corrected against 173 / 688 as shipped, 24 names differing. Every one was
+  latent, because `_check` runs only for names both configured and in the
+  oracle's dict, which is this issue's own failure mode one level up. The same
+  head's gates then failed on three counts, all in the work the previous commit
+  had just added and none in the Rust change it was gating: a missing `Returns`
+  section (ruff), an import `ty` could not follow (fixed by naming
+  `.github/scripts` as a second search root, with the wiring contract updated
+  in step), and a Markdown refill on the ExecPlan. Recorded because the pattern
+  is the point — the gates were red on the tree, and the tree was the one
+  carrying the commit.
+- 2026-09-25 — **The round-twelve run's two findings are repaired.** The
+  `makefile_recipes` extraction takes `python_toolchain_sync_test.py` from 402
+  to 363 lines, so the cap is cleared with 37 lines of headroom rather than
+  re-landed on its ceiling; the two en-GB-oxendict spellings (`artifact`,
+  `mis-ordering`) are corrected in place. Both were in this branch's own work
+  rather than in the Rust change it gates, and the `C0302` was only visible
+  because the preceding ruff failure had been repaired — the same "green
+  because the reader stopped short" relationship this plan is about, now on the
+  sixth recurrence. The extraction is the repository's own remedy, named in
+  `makefile_recipes.py`'s docstring and used six times before it. The wiring
+  contract's pinned `typecheck-python` assertion is unchanged: the Makefile
+  still passes both search roots, and the contract still asserts each as a
+  separate substring, which is what keeps the two sides matched.
+- 2026-09-26 — **Repairing the `C0302` unmasked a fifth stage, which found five
+  more defects in the same file the cascade had been hiding.** The chain is now
+  three deep and every link is the same link. The round-eleven run stopped at
+  ruff, so pylint's `C0302` never printed. Fixing ruff's finding let
+  `lint-python` run past pylint, and the **df12 stage executed for the first
+  time** on this branch:
+
+  ```text
+  tests/workflow_contracts/nextest_oracle_masking_test.py:133:4: C9102: Assert
+  statement lacks a failure message (assert-missing-message)
+  ```
+
+  Five findings, four `C9102` and one `C9106`, all in
+  `nextest_oracle_masking_test.py` — the file `c4b18859` added. That the
+  convention they encode is absolute rather than advisory was established by
+  measurement against `main`, not by reading the rule's description: of **882
+  `assert` statements** across `.github/scripts`, `scripts`, and
+  `tests/workflow_contracts`, **zero lack a message**, and every `ruff: ignore`
+  in the tree carries a hyphen-and-explanation suffix. This branch's file was
+  the only one in the repository violating either. All five are repaired, and
+  the stage now rates 10.00/10. The lesson is the cascade's own, stated
+  exactly: a stage that has never executed has said nothing, and "I fixed the
+  error and a different one appeared" describes a file being sampled one stage
+  at a time, not a defect arriving.
+- 2026-09-26 — **The round-thirteen run found a fourth masking mechanism, and
+  this one is not a lint stage.** Two `MD038` findings landed on this
+  document's own prose, on the phrase describing the `ruff: ignore` convention.
+  The offending span opened with a space ahead of its hyphen — the very space
+  that separates the suffix from the rule name it explains — and `markdownlint`
+  calls that "spaces inside code span elements" and rejects it. The finding was
+  **new** — both lines are additions in the working tree, absent from `HEAD` —
+  and it was invisible in round twelve for a reason worth recording:
+  `markdownlint: spelling` declares a **prerequisite**, so the `spelling` gate
+  runs first and, when it fails, `markdownlint-cli2` never executes at all.
+  Round twelve's `spelling` was red on the two en-GB spellings, so the Markdown
+  linter had never once run on this branch. That is the same shape as the
+  `lint-python` cascade with the mechanism moved one level up: a *prerequisite*
+  short-circuits its target exactly as a failing stage short-circuits the
+  stages behind it, and a target that never ran has said nothing. "The linter
+  passed" and "the linter never started" are indistinguishable from the exit
+  code alone. The repair is prose rather than a rewritten span: the suffix
+  genuinely does begin with a space, so the hyphen-then-explanation form is
+  described in words, since no code span may hold a leading space here —
+  `markdownlint --fix` would silently strip it and state something false about
+  the convention. The two gates that own the question (`markdownlint`,
+  `spelling`) and `check-fmt` are green on the result, with
+  `mdtablefix --check` agreeing after its own refill.

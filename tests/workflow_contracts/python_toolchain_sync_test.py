@@ -19,7 +19,6 @@ Run via ``make test-workflow-contracts``.
 
 import os
 import re
-import shlex
 
 # This contract invokes `make` through a controlled command shim.
 # ruff: ignore[suspicious-subprocess-import] - the boundary is under test.
@@ -27,9 +26,9 @@ import subprocess
 import typing as typ
 
 import pytest
+from makefile_recipes import makefile_command, makefile_target, makefile_variable
 from workflow_loading import (
     CI_WORKFLOW_PATH,
-    MAKEFILE_PATH,
     PACKAGE_WORKFLOW_PATH,
     RELEASE_WORKFLOW_PATH,
     REPO_ROOT,
@@ -86,18 +85,6 @@ INTERROGATE_COMMAND: tuple[str, ...] = (
 )
 
 
-def _makefile_variable(name: str) -> str:
-    """Return the default value a ``NAME ?=`` assignment gives in the Makefile."""
-    text = MAKEFILE_PATH.read_text(encoding="utf-8")
-    pattern = re.compile(rf"^{re.escape(name)} \?= (\S+)$", flags=re.MULTILINE)
-    matches = pattern.findall(text)
-    assert len(matches) == 1, (
-        f"expected exactly one '{name} ?=' assignment in the Makefile, "
-        f"found {len(matches)}"
-    )
-    return matches[0]
-
-
 def _ci_env_value(name: str) -> str:
     """Return a workflow-level env value from ci.yml."""
     env = require_mapping(
@@ -119,7 +106,7 @@ def test_ci_env_pin_matches_makefile_default(name: str) -> None:
     pair runs different tool versions locally and in CI. No specific version
     is asserted; only agreement is.
     """
-    makefile_value = _makefile_variable(name)
+    makefile_value = makefile_variable(name)
     ci_value = _ci_env_value(name)
     assert makefile_value == ci_value, (
         f"{name} must match between the Makefile ({makefile_value!r}) and "
@@ -130,7 +117,7 @@ def test_ci_env_pin_matches_makefile_default(name: str) -> None:
 @pytest.mark.parametrize("name", ["RUFF_VERSION", "INTERROGATE_VERSION", "TY_VERSION"])
 def test_tool_pins_are_exact_versions(name: str) -> None:
     """The Ruff, Interrogate, and ty pins are exact dotted versions."""
-    value = _makefile_variable(name)
+    value = makefile_variable(name)
     assert re.fullmatch(r"\d+\.\d+\.\d+", value), (
         f"{name} must pin an exact X.Y.Z release so local runs and CI "
         f"resolve identical rule sets, got {value!r}"
@@ -174,7 +161,7 @@ def _setup_uv_python_versions(path: Path) -> list[str]:
 
 def test_release_workflow_pins_the_python_baseline() -> None:
     """The release hoist job installs the repository's Python baseline."""
-    baseline = _makefile_variable("PYTHON_BASELINE")
+    baseline = makefile_variable("PYTHON_BASELINE")
     versions = _setup_uv_python_versions(RELEASE_WORKFLOW_PATH)
     assert versions, "release.yml must install a pinned Python via setup-uv"
     assert all(version == baseline for version in versions), (
@@ -208,7 +195,7 @@ def test_ci_setup_uv_steps_install_the_python_baseline() -> None:
 
 def test_package_workflow_default_matches_the_python_baseline() -> None:
     """The build-and-package python-version input defaults to the baseline."""
-    baseline = _makefile_variable("PYTHON_BASELINE")
+    baseline = makefile_variable("PYTHON_BASELINE")
     workflow = load_workflow(PACKAGE_WORKFLOW_PATH)
     triggers = require_mapping(workflow.get("on"), "build-and-package.yml on mapping")
     workflow_call = require_mapping(
@@ -225,32 +212,6 @@ def test_package_workflow_default_matches_the_python_baseline() -> None:
         f"build-and-package.yml python-version default must equal the "
         f"Makefile PYTHON_BASELINE ({baseline!r}), got {default!r}"
     )
-
-
-def _makefile_target(target: str) -> tuple[list[str], str]:
-    """Return one Make target's prerequisites and complete recipe text."""
-    text = MAKEFILE_PATH.read_text(encoding="utf-8")
-    match = re.search(
-        rf"^{re.escape(target)}:([^\n#]*)(?:\s+##[^\n]*)?\n((?:\t[^\n]*\n?)*)",
-        text,
-        flags=re.MULTILINE,
-    )
-    assert match is not None, f"the Makefile must define the {target} target"
-    prerequisites = match.group(1).split()
-    return prerequisites, match.group(2)
-
-
-def _makefile_command(name: str) -> list[str]:
-    """Return one continued Makefile command assignment as shell tokens."""
-    text = MAKEFILE_PATH.read_text(encoding="utf-8")
-    match = re.search(
-        rf"^{re.escape(name)} = ((?:[^\n]*\\\n)*[^\n]+)$",
-        text,
-        flags=re.MULTILINE,
-    )
-    assert match is not None, f"the Makefile must define the {name} command"
-    command = match.group(1).replace("\\\n", " ")
-    return shlex.split(command)
 
 
 def _mocked_command(cmd_mox: CmdMox, name: str) -> str:
@@ -302,8 +263,8 @@ def _interrogate_invocation(baseline: str, version: str) -> list[str]:
 
 def test_python_quality_targets_preserve_their_dependency_graph() -> None:
     """The Rust umbrella gates depend on their corresponding Python gates."""
-    lint_prerequisites, _ = _makefile_target("lint")
-    typecheck_prerequisites, _ = _makefile_target("typecheck")
+    lint_prerequisites, _ = makefile_target("lint")
+    typecheck_prerequisites, _ = makefile_target("typecheck")
 
     assert "lint-python" in lint_prerequisites, (
         "make lint must depend on lint-python so Python lint failures block CI"
@@ -325,13 +286,15 @@ def test_python_quality_targets_run_the_pinned_local_commands() -> None:
         ),
         "typecheck-python": (
             "ty check --python-version $(PYTHON_BASELINE)",
-            "--extra-search-path scripts $(PYTHON_SOURCES)",
+            "--extra-search-path scripts",
+            "--extra-search-path .github/scripts",
+            "$(PYTHON_SOURCES)",
         ),
         "fmt": ("$(RUFF) format $(PYTHON_SOURCES)",),
         "check-fmt": ("$(RUFF) format --check $(PYTHON_SOURCES)",),
     }
     for target, commands in expected_commands.items():
-        _, recipe = _makefile_target(target)
+        _, recipe = makefile_target(target)
         missing = [command for command in commands if command not in recipe]
         assert not missing, (
             f"{target} must preserve its pinned Python command wiring; "
@@ -341,14 +304,14 @@ def test_python_quality_targets_run_the_pinned_local_commands() -> None:
 
 def test_interrogate_pin_is_the_selected_release() -> None:
     """Interrogate remains pinned to the issue-selected 1.7.0 release."""
-    assert _makefile_variable("INTERROGATE_VERSION") == "1.7.0", (
+    assert makefile_variable("INTERROGATE_VERSION") == "1.7.0", (
         "INTERROGATE_VERSION must remain pinned to interrogate 1.7.0"
     )
 
 
 def test_interrogate_command_uses_the_pinned_baseline_and_release() -> None:
     """Interrogate selects the baseline interpreter and exact pinned package."""
-    assert _makefile_command("INTERROGATE") == list(INTERROGATE_COMMAND), (
+    assert makefile_command("INTERROGATE") == list(INTERROGATE_COMMAND), (
         "INTERROGATE must select the baseline, pinned package, executable, "
         "and 100% threshold"
     )
@@ -391,8 +354,8 @@ def test_lint_python_runs_interrogate_over_the_documented_scope(
         if invocation.args[:2] == ["tool", "run"] and "interrogate" in invocation.args
     ]
     expected = _interrogate_invocation(
-        _makefile_variable("PYTHON_BASELINE"),
-        _makefile_variable("INTERROGATE_VERSION"),
+        makefile_variable("PYTHON_BASELINE"),
+        makefile_variable("INTERROGATE_VERSION"),
     )
     assert interrogate_calls == [expected], (
         "lint-python must pass Interrogate its baseline, pin, threshold, "
