@@ -125,17 +125,18 @@ def nextest_goals(makefile: str) -> frozenset[str]:
     """Return every Make goal that runs the nextest suite, however indirectly."""
     recipes = _recipes(makefile)
     prerequisites = rule_prerequisites(makefile)
-    goals = {goal for goal, recipe in recipes.items() if runs_nextest(recipe)}
-    changed = True
-    while changed:
-        widened = {
-            goal
-            for goal, needs in prerequisites.items()
-            if goal not in goals and goals & set(needs)
-        }
-        changed = bool(widened)
-        goals |= widened
-    return frozenset(goals)
+    direct = {goal for goal, recipe in recipes.items() if runs_nextest(recipe)}
+    return _widen(frozenset(direct), prerequisites)
+
+
+def _widen(
+    goals: frozenset[str], prerequisites: dict[str, list[str]]
+) -> frozenset[str]:
+    """Add every goal that needs one of ``goals``, until nothing more is added."""
+    widened = goals | {
+        goal for goal, needs in prerequisites.items() if goals.intersection(needs)
+    }
+    return widened if widened == goals else _widen(widened, prerequisites)
 
 
 def runs_suite(step: dict[str, object], goals: frozenset[str]) -> bool:
@@ -156,18 +157,40 @@ def _suite_jobs(
     documents: dict[str, dict[str, object]], goals: frozenset[str]
 ) -> list[tuple[str, Steps]]:
     """Return ("workflow:job", steps) for every Linux job running the suite."""
-    found: list[tuple[str, Steps]] = []
-    for name, document in documents.items():
-        jobs = document.get("jobs")
-        if not isinstance(jobs, dict):
-            continue
-        for job_id, job in jobs.items():
-            if not isinstance(job, dict) or not is_linux_job(job):
-                continue
-            steps = [step for step in job.get("steps", []) if isinstance(step, dict)]
-            if any(runs_suite(step, goals) for step in steps):
-                found.append((f"{name}:{job_id}", steps))
-    return found
+    lanes = ((where, _job_steps(job)) for where, job in _linux_jobs(documents))
+    return [
+        (where, steps)
+        for where, steps in lanes
+        if any(runs_suite(step, goals) for step in steps)
+    ]
+
+
+def _linux_jobs(
+    documents: dict[str, dict[str, object]],
+) -> list[tuple[str, dict[str, object]]]:
+    """Return ("workflow:job", job) for every Linux job in every workflow."""
+    return [
+        (f"{name}:{job_id}", job)
+        for name, document in documents.items()
+        for job_id, job in _jobs_of(document).items()
+        if is_linux_job(job)
+    ]
+
+
+def _jobs_of(document: dict[str, object]) -> dict[str, dict[str, object]]:
+    """Return a workflow's well-formed jobs, dropping anything not a mapping."""
+    jobs = document.get("jobs")
+    if not isinstance(jobs, dict):
+        return {}
+    return {str(key): job for key, job in jobs.items() if isinstance(job, dict)}
+
+
+def _job_steps(job: dict[str, object]) -> Steps:
+    """Return a job's steps that are mappings; a reusable-workflow call has none."""
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        return []
+    return [step for step in steps if isinstance(step, dict)]
 
 
 def suite_lanes(documents: dict[str, dict[str, object]], makefile: str) -> list[str]:
