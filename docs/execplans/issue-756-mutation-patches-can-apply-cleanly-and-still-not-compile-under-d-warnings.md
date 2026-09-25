@@ -260,6 +260,23 @@ failure mode cannot recur silently.
       exist, 6 found but miscounted, 24 names in all. Every one was latent,
       because `_check` runs only for names both configured and present in the
       oracle's dict, and no affected name appears in `.config/nextest.toml`.
+- [x] (2026-09-26) Pay for that scanner honestly. The six span helpers above
+      fixed a real defect and cost the module real complexity: CodeScene scored
+      `listing.py` 10.00 before the rewrite and 9.38 after, failing the
+      `Overall Code Complexity` gate on the pushed head. The three recognizers
+      that are genuinely simple — plain strings, character literals, and the
+      nesting walk of block comments — are now anchored regular expressions
+      (`STRING_LITERAL`, `CHARACTER_LITERAL`, `BLOCK_COMMENT_TOKEN`) rather than
+      handwritten loops, leaving a helper per construct as a one-line
+      predicate. Measured with the vendor's own analyser, `cs delta`, which
+      reports the rule the PR check failed on: `Code Health: (9.38 -> 10.00)`,
+      `Fixed issue: Overall Code Complexity`. `SUM_cx` falls 42 -> 33 and the
+      worst function 8 -> 5, below both siblings' shape, without moving code to
+      satisfy a metric. Held to the committed masker by a differential harness
+      over all 33 adversarial synthetics plus every tracked `.rs` file — 744
+      cases, 0 byte-level mismatches — which caught one real divergence while
+      writing it: `.` does not match a newline by default, so a Rust literal
+      continued with a backslash-newline would have been read as unterminated.
 - [x] (2026-09-25) Repair the two defects the round-twelve gate run surfaced in
       the head that carried the oracle fix, both in this branch's own work.
       First, `python_toolchain_sync_test.py` went to `C0302 (402/400)`: the file
@@ -740,6 +757,43 @@ failure mode cannot recur silently.
   and in all three the exit code alone cannot tell "passed" from "never
   started". The generalization worth keeping: before trusting any green result,
   ask what had to succeed for it to have been printed.
+- **The vendor's own analyser runs locally, so a code-health failure can be
+  measured rather than pushed at.** `CodeScene Code Health Review (main)` went
+  `success` on `f6c227f7` and `failure` on `fd8899c9`, naming `listing.py` and
+  `Overall Code Complexity` — a regression this branch introduced, and exactly
+  the shape my own notes warn not to pattern-match away as the trunk-only
+  `Coverage (main)` timeout. The `cs` CLI is installed (`~/.local/bin/cs`), and
+  `cs delta` with no arguments reproduces the gate on uncommitted changes,
+  quoting the same rule under the same name. It reported
+  `Code Health: (9.38 -> 10.00)` and `Fixed issue: Overall Code Complexity`, so
+  the remedy was confirmed before it was committed instead of after a CI round
+  trip. The recorded figure agrees with the check's own `9.39` to the last
+  place its rounding allows, which is what makes the local reading an
+  instrument rather than a proxy. The generalization: a repository can fail a
+  gate that a locally-installed vendor tool decides, and when it does, the tool
+  is the oracle — reading its rule name and score beats inferring a threshold
+  from the diff.
+- **A scanner's complexity is a real cost even when the scanner is right.** The
+  six span helpers fixed a genuine misreading, and they were the honest way to
+  fix it, but the module went from 3 functions / `SUM_cx` 8 to 9 / 35 doing so,
+  and the code-health gate caught that as its own finding. Both statements are
+  true at once: the correctness fix was not optional, and the complexity it
+  added was not free. What resolves it is not a choice between them but a third
+  factoring — three of the six recognizers are simple enough to be anchored
+  regular expressions, so the loop-per-construct shape survives only where the
+  construct genuinely needs one (`_block_comment_end`'s nesting walk). Left
+  measured with the vendor tool at `10.00`, `SUM_cx` 33, worst function 5.
+- [x] (2026-09-26) The `spelling` prerequisite short-circuited `markdownlint`
+      for a fifth time, on the prose this entry and the two above were written
+      in. Six findings: five `-ise`/`-iser` forms (`recognisers`,
+      `hand-written`) and, after correcting those, one over-correction —
+      `analyzer` for `analyser`. Both directions were wrong, and the second is
+      the instructive one: `recognizer` is the oxendict form and `analyser` is
+      not, so a pass that converts the whole `-iser` family introduces a finding
+      while fixing five. The tool is the authority in exactly the case where the
+      two categories look identical, which is why the correction was verified by
+      running `typos-config-builder gate` on the result rather than by reasoning
+      about the words. The gate was green on the corrected tree.
 
 ## Decision log
 
@@ -943,6 +997,42 @@ failure mode cannot recur silently.
   liveness check is what settles it rather than the argument: three variants
   run against the same eight cases, the shipped masker failing 3, the swap
   failing 2, and the positional scan failing none.
+- Restore the code-health score by re-factoring the three simple recognizers as
+  anchored regular expressions, **rather than** adding a scoped CodeScene
+  exemption. The repository has a precedent for the exemption —
+  `.codescene/code-health-rules.json` already zeroes
+  `String Heavy Function Arguments` for two hand-rolled parsers, and its
+  rationale reaches scanners of borrowed source text — so this was a real
+  option, not a straw man. It was rejected because the condition that rationale
+  attaches has not been met: the exemption says to reassess "if these parsers
+  grow beyond one screen each", and `_non_code_end`'s dispatch plus six helpers
+  was doing exactly that, with `SUM_cx` 42 against siblings at 17 and 8. A
+  score of 10.00 reached by declaring the rule inapplicable would say "this
+  complexity is fine", which was not true. Reached by simplifying, it says what
+  is actually the case. The cost of the honest route was one differential
+  harness; the cost of the exemption would have been a module whose measured
+  health understated its real weight, which is this issue's own subject matter
+  turned on the branch fixing it.
+- Keep the private `_block_comment_end` walk rather than expressing nesting as
+  a regular expression too. Nesting is not regular, and the token walk that
+  counts `/*` against `*/` is the one recognizer whose subject genuinely
+  demands a loop; replacing it would need a recursive pattern or a depth
+  emulation, either of which reads worse than the six lines it covers. Three of
+  six helpers became patterns, not six of six, and the split is the construct's
+  own: strings, character literals, and the two-token nesting scan are each
+  expressible, while nesting is not.
+- Hold the re-factoring to the replaced code by differential execution over the
+  whole corpus, **before** trusting the contract test that guards it. The eight
+  masking cases pin the *behaviours* the rewrite must preserve, not the
+  *outputs*; a rewrite can pass all eight while diverging on a construct none
+  of them exercises. Running the committed masker and its replacement over
+  every tracked `.rs` file and byte-comparing the results is what makes "no
+  behaviour change" a measurement. It earned its cost immediately: `.` does not
+  match a newline without `DOTALL`, so a Rust literal continued with a
+  backslash-newline would have been read as unterminated and blanked the rest
+  of the file — a divergence no case in the contract test would have caught,
+  and one the 744-case comparison surfaced while the rewrite was still
+  uncommitted.
 
 ## Outcomes & retrospective
 
@@ -1472,3 +1562,16 @@ approaches the ceiling, as `makefile_recipes.py` itself records having done.
   the convention. The two gates that own the question (`markdownlint`,
   `spelling`) and `check-fmt` are green on the result, with
   `mdtablefix --check` agreeing after its own refill.
+- 2026-09-26 — `CodeScene Code Health Review (main)` failed on the pushed head,
+  and the finding was the branch's own. The positional masker added in
+  `c4b18859` fixed a real defect and, in doing so, took `listing.py` from 3
+  functions and `SUM_cx` 8 to 9 and 42 — scoring it 9.38 where it had been
+  10.00, against siblings at 17 and 8. Three of the six new recognizers were
+  simple enough to be patterns rather than loops, so the module was re-factored
+  to `SUM_cx` 33 with the worst function at 5 and the nesting walk left as a
+  walk. Measured with the vendor's own CLI, which reproduces the gate locally
+  and named the failed rule as fixed: `Code Health: (9.38 -> 10.00)`. The
+  rewrite was held to the code it replaced by a differential harness over 744
+  cases (33 adversarial synthetics and every tracked `.rs` file) comparing
+  byte-for-byte, which caught a `DOTALL` divergence the eight contract cases
+  did not. The eight remain green.

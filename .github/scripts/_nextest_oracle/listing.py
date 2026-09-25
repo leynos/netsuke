@@ -41,6 +41,23 @@ CASE_ATTRIBUTE = re.compile(r"#\[case(?:::[a-z0-9_]+)?[\(\[]")
 #: The opening of a raw string literal, with its `#` fence length.
 RAW_STRING_START = re.compile(r'(?:br|r)(?P<hashes>#*)"')
 
+#: A plain string literal: escapes and non-quote characters, then the closing
+#: quote. Its own scan is anchored at the opening quote, so the "two passes
+#: cannot know which is inside the other" defect does not apply -- see `masked`.
+#: `DOTALL` keeps `\\.` meaning "a backslash and whatever follows it", which in
+#: Rust includes a continued line, so `"a\<newline>b"` masks as one literal.
+STRING_LITERAL = re.compile(r'"(?:[^"\\]|\\.)*"', re.DOTALL)
+
+#: A character literal: an escape (including a `\u{...}` form) or one ordinary
+#: character, then the closing quote. Requiring that quote is what refuses
+#: lifetimes (`'a`) and labels (`'outer:`), which open with the same character
+#: and must survive masking.
+CHARACTER_LITERAL = re.compile(r"'(?:\\(?:u\{[0-9a-fA-F]*\}|.)|[^'\\])'", re.DOTALL)
+
+#: The two halves of a block comment, so nesting is counted by walking them
+#: rather than by testing two prefixes at every character.
+BLOCK_COMMENT_TOKEN = re.compile(r"/\*|\*/")
+
 #: Where the parameterized tests are declared, relative to the repository root.
 TEST_SOURCE_ROOT = Path(__file__).resolve().parents[3] / "tests"
 
@@ -57,15 +74,12 @@ def _block_comment_end(source: str, index: int) -> int | None:
     """Return the end of a possibly nested block comment at ``index``."""
     if not source.startswith("/*", index):
         return None
-    depth, end = 1, index + 2
-    while depth and end < len(source):
-        if source.startswith("/*", end):
-            depth, end = depth + 1, end + 2
-        elif source.startswith("*/", end):
-            depth, end = depth - 1, end + 2
-        else:
-            end += 1
-    return end
+    depth = 1
+    for token in BLOCK_COMMENT_TOKEN.finditer(source, index + 2):
+        depth += 1 if token.group() == "/*" else -1
+        if depth == 0:
+            return token.end()
+    return len(source)
 
 
 def _raw_string_end(source: str, index: int) -> int | None:
@@ -82,41 +96,36 @@ def _string_literal_end(source: str, index: int) -> int | None:
     """Return the end of a string literal beginning at ``index``."""
     if source[index] != '"':
         return None
-    end = index + 1
-    while end < len(source):
-        match source[end]:
-            case "\\":
-                end += 2
-            case '"':
-                return end + 1
-            case _:
-                end += 1
-    return len(source)
+    match = STRING_LITERAL.match(source, index)
+    return len(source) if match is None else match.end()
 
 
 def _character_literal_end(source: str, index: int) -> int | None:
     """Return the end of a character literal, refusing lifetimes and labels."""
     if source[index] != "'":
         return None
-    end = index + 1
-    if source.startswith("\\u{", end):
-        closing_brace = source.find("}", end + 3)
-        end = len(source) if closing_brace < 0 else closing_brace + 1
-    elif end < len(source) and source[end] == "\\":
-        end += 2
-    else:
-        end += 1
-    return end + 1 if end < len(source) and source[end] == "'" else None
+    match = CHARACTER_LITERAL.match(source, index)
+    return None if match is None else match.end()
+
+
+#: Every non-code construct, tried at each position in turn. A string and a
+#: comment never open with the same character, so at most one of these can
+#: match, and the scan can resume after whichever did.
+NON_CODE_BOUNDARIES = (
+    _line_comment_end,
+    _block_comment_end,
+    _raw_string_end,
+    _string_literal_end,
+    _character_literal_end,
+)
 
 
 def _non_code_end(source: str, index: int) -> int | None:
     """Return the end of non-code text beginning at ``index``, when present."""
-    for boundary in (_line_comment_end, _block_comment_end, _raw_string_end):
+    for boundary in NON_CODE_BOUNDARIES:
         if (end := boundary(source, index)) is not None:
             return end
-    if (end := _string_literal_end(source, index)) is not None:
-        return end
-    return _character_literal_end(source, index)
+    return None
 
 
 def masked(source: str) -> str:
