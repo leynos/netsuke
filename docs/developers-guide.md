@@ -4155,6 +4155,23 @@ and URL rendering, and fallback-payload machinery, exposing them as
 call into it. The schema remains defined by the parent module; this file is a
 size split, not a second schema owner.
 
+### `src/diagnostic_json_excerpt_tests.rs`
+
+The source-excerpt guard over rendered diagnostic documents, declared by
+`src/diagnostic_json_shape_tests.rs` through a `#[path]` attribute. The guard
+walks a document's causes *and* those of its nested `related` entries, because
+the serializer renders a related diagnostic as a full entry of the same shape;
+a top-level-only walk would leave those cause chains unguarded. It covers the
+diagnostic paths, where a normalized cause renders the failing location through
+`source` and `labels` and an excerpt in `causes` would duplicate it. The plain
+path is deliberately not normalized: `render_error_json` leaves `source`,
+`primary_span`, and `labels` empty, so the cause chain is the only location
+channel a plain error has, and `causes` is documented as the error-cause chain
+itself. One case drives a real excerpt through `render_error_json` so the guard
+cannot pass by inspecting nothing; the snapshot-producing cases stay in
+`src/diagnostic_json_tests.rs`, because insta derives a snapshot's filename
+from the module path that asserted it.
+
 ### `src/stdlib/command/error_support.rs`
 
 Detail types and message-append helpers for command-failure rendering in

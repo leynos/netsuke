@@ -221,6 +221,17 @@ fn render_manifest_parse_diagnostic_omits_yaml_snippet(en_localizer: EnLocalizer
     Ok(())
 }
 
+/// The general source-excerpt guard, and the cases that keep it honest.
+///
+/// The guard walks a document's causes, including those of its nested `related`
+/// entries, and the cases plant an excerpt so a green suite cannot mean merely
+/// that the helper agreed with the current dependencies. They live here to keep
+/// this module within the repository's 400-line cap; the child reaches the
+/// helpers above through `super::*`, exactly as this parent does.
+#[path = "diagnostic_json_excerpt_tests.rs"]
+#[cfg(test)]
+mod excerpt_tests;
+
 /// Generates between `min` and `max` distinct single-character node names as
 /// [`Utf8PathBuf`] values, suitable for constructing arbitrary cycle fixtures.
 fn arb_unique_nodes(min: usize, max: usize) -> impl Strategy<Value = Vec<camino::Utf8PathBuf>> {
