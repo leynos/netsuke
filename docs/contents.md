@@ -194,6 +194,9 @@ operator, user, and contributor references are easier to find.
   Runtime annotation introspection declared unsupported for the workflow
   contract tests, with the loader gate's stale `TYPE_CHECKING` claim corrected
   and a revisit gate that reopens on a real consumer.
+- [ADR-040](adr-040-focused-child-rfcs-for-survey-rfcs.md): Splitting a survey
+  RFC into focused child RFCs, one per capability group, with the accepted set
+  partitioned by a coverage map and guarded by a derivation-based coverage test.
 
 ## Proposals
 

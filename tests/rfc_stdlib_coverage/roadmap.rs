@@ -85,25 +85,32 @@ pub(super) fn parse(repo: &Repo) -> Result<Steps> {
 
     let mut names: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut order: Vec<String> = Vec::new();
-    let mut current: Option<String> = None;
     let mut in_range = false;
 
-    for line in &section_6.lines {
-        if let Some(heading) = line.strip_prefix("### ") {
-            current = step_of(heading, &mut in_range)?;
-            if let Some(step) = &current {
-                order.push(step.clone());
-                names.entry(step.clone()).or_default();
-            }
-            continue;
-        }
-        let Some(step) = &current else {
+    // Walked through `subsections()`, which pairs each heading with its own
+    // body and skips fenced lines, rather than off the section's raw lines.
+    // The raw-line scan was fence-blind: a fenced example quoting a `### 6.5.`
+    // heading would have been read as a step heading, and a fenced bullet would
+    // have been read as naming helpers the roadmap does not schedule. Phase 6
+    // carries no fences today, so both would have been latent; going through
+    // the structure layer keeps that a fact about the document rather than a
+    // precondition of this function.
+    //
+    // The heading itself is not part of the body `subsections()` returns, so
+    // the per-step split that the raw-line scan maintained with a latch falls
+    // out of the iteration: each subsection's bullets belong to that
+    // subsection's own step and to no other. The `in_range` latch still spans
+    // the whole walk, because step 6.1's own bullets must stay ignored and it
+    // precedes 6.2.
+    for found in section_6.subsections() {
+        let Some(step) = step_of(&found.heading, &mut in_range)? else {
             continue;
         };
+        order.push(step.clone());
         names
-            .entry(step.clone())
+            .entry(step)
             .or_default()
-            .extend(backticked(line));
+            .extend(found.body.iter().flat_map(|line| backticked(line)));
     }
 
     ensure!(

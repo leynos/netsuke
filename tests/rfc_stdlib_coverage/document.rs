@@ -27,13 +27,18 @@ pub(super) struct Section<'a> {
     first_line: usize,
     /// The section's lines, with line terminators removed.
     ///
-    /// Public to the module tree because three parsers scan the raw lines
+    /// Public to the module tree because two parsers scan the raw lines
     /// themselves rather than through a method here: `section8` re-derives an
-    /// end offset for a `###` heading whose text is not known in advance,
-    /// `roadmap` walks `###` step headings, and `clauses` reads clause ids off
-    /// them. Each is a different question from the ones [`Section::tables`] and
-    /// [`Section::subsections`] answer, so an accessor for any one of them would
-    /// be unused by the other two.
+    /// end offset for a `###` heading whose text is not known in advance, and
+    /// `totals` collapses section 6.1's prose to compare it against a
+    /// transcription. Each is a different question from the ones
+    /// [`Section::tables`] and [`Section::subsections`] answer, so an accessor
+    /// for either would be unused by the other.
+    ///
+    /// A scan added here is fence-blind unless it brings its own [`Fences`].
+    /// `clauses` and `roadmap` used to walk these lines for headings and now go
+    /// through [`Section::subsections`], which is fence-aware; prefer that route
+    /// for anything that reads structure.
     pub(super) lines: Vec<&'a str>,
 }
 
@@ -116,22 +121,27 @@ impl<'a> Section<'a> {
         found
     }
 
-    /// The offset of the first unfenced line whose trimmed text equals
-    /// `heading`.
+    /// The offset of the first unfenced line that equals `heading`.
     ///
     /// Shared with [`Section::subsection`] because both scans have to agree
     /// about which lines are structure: a start scan that matched inside a fence
     /// would hand the end scan a position the end scan does not consider real.
-    /// The comparison is on the trimmed line, so an indented heading matches
-    /// too — `heading_depth` is what decides whether a line is a heading at all,
-    /// and a caller's `heading` argument already carries its hashes.
+    ///
+    /// The comparison is on the raw line and not on its trimmed text, because
+    /// [`heading_depth`] is the single authority on what a heading is and it
+    /// rejects an indented line: `   ### Foo` is body, not a heading, for every
+    /// scan in this module tree. Comparing trimmed text here would match a line
+    /// the rest of the tree treats as prose, and `subsection` would then fail at
+    /// the depth it reads next, reporting "no such section" for a heading the
+    /// caller can see. An indented `### Foo` in a document is therefore not a
+    /// heading to look up; that is `heading_depth`'s decision, made once.
     pub(super) fn unfenced_heading(&self, heading: &str) -> Option<usize> {
         let mut fences = Fences::default();
         for (offset, line) in self.lines.iter().enumerate() {
             if fences.mark(line) {
                 continue;
             }
-            if line.trim() == heading {
+            if *line == heading {
                 return Some(offset);
             }
         }

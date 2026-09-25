@@ -57,6 +57,10 @@ pub(super) struct Survey {
     pub(super) defer_rows: usize,
     /// Reject rows parsed from section 7.
     pub(super) reject_rows: usize,
+    /// Table 11's count of surveyed entries accepted.
+    pub(super) stated_accept: usize,
+    /// Table 11's count of surveyed entries deferred.
+    pub(super) stated_defer: usize,
     /// Table 11's three reject-class counts, in table order.
     pub(super) reject_classes: [usize; 3],
     /// Table 11's new-filter count.
@@ -139,6 +143,8 @@ pub(super) fn derive(repo: &Repo) -> Result<Survey> {
         accept_rows: read.accept_rows,
         defer_rows: read.defer_rows,
         reject_rows: read.reject_rows,
+        stated_accept: totals.accept_rows,
+        stated_defer: totals.defer_rows,
         reject_classes: totals.reject_classes,
         new_filters: totals.new_filters,
         new_tests: totals.new_tests,

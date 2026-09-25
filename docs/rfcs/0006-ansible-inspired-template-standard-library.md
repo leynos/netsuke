@@ -14,10 +14,9 @@
 ### Number allocation
 
 Numbers `0001` to `0012` are merged to `main` and are therefore taken. This RFC
-takes `0006`, treats the numbers below it as reserved, and reserves `0013` to
-`0020` for the capability child RFCs section 14.13 allocates, per the "gaps are
-acceptable when numbers are reserved, drafted on another branch, or
-intentionally skipped" rule in
+takes `0006`, and reserves `0013` to `0020` for the capability child RFCs
+section 14.13 allocates, per the "gaps are acceptable when numbers are
+reserved, drafted on another branch, or intentionally skipped" rule in
 [the documentation style guide](../documentation-style-guide.md).
 
 | Numbers      | Reserved for                                                                                                | Current state                                                |
@@ -33,7 +32,7 @@ intentionally skipped" rule in
 | 0012         | Netsukefile property testing                                                                                | Merged in [#654](https://github.com/leynos/netsuke/pull/654) |
 | 0013 to 0020 | Capability child RFCs this RFC's accepted set is split into                                                 | Reserved here; allocated in section 14.13                    |
 
-_Table 1: RFC sequence reservations across in-flight branches._
+_Table 1: RFC number allocation and merge state, and the numbers reserved here._
 
 Every row of table 1 records a merge state, and `Proposed` is not one: it is the
 `Status` this RFC's own preamble carries, and every merged RFC in the corpus
@@ -2062,7 +2061,7 @@ relative link to it. A repository test asserts that the two agree, that the
 rows partition the accepted set, that no rejected or deferred name reaches a
 child registry, and that no helper in this map is missing from the roadmap step
 that owns it. The convention and its amendment procedure are recorded in
-[ADR-021](../adr-021-focused-child-rfcs-for-survey-rfcs.md).
+[ADR-040](../adr-040-focused-child-rfcs-for-survey-rfcs.md).
 
 | Child RFC                                           | Title                                           | Owns                                        | Optioned              | Roadmap step | Status    |
 | --------------------------------------------------- | ----------------------------------------------- | ------------------------------------------- | --------------------- | ------------ | --------- |
