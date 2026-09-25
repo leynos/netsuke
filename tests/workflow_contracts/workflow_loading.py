@@ -50,14 +50,10 @@ SETUP_RUST_JOBS = (
 )
 
 #: The jobs that run tests and therefore install cargo-nextest. Windows needs
-#: it on the test job alone; `kani-smoke` needs it for the mutation compile
-#: gate, which drives nextest rather than `cargo kani`.
+#: it on the test job alone; `kani-smoke` needs it for the mutation compile gate.
 NEXTEST_JOBS = (
     (CI_WORKFLOW_PATH, "build-test"),
     (CI_WINDOWS_WORKFLOW_PATH, "build-test-windows"),
-    # The Kani lane runs the mutation compile gate through nextest. It is the
-    # only job with Kani installed, and only Kani parses `#[cfg(kani)]` code,
-    # so the gate lives there rather than beside the coverage run.
     (CI_WORKFLOW_PATH, "kani-smoke"),
 )
 

@@ -259,6 +259,36 @@ failure mode cannot recur silently.
   keeping: **a per-file limit is not a property of either side of a merge, so
   neither side's green run can establish it.** The narrower lesson is to leave
   headroom when a file approaches the cap, rather than landing exactly on it.
+
+- **The same cap failed again, one file over, the day after that entry was
+  written.** The C0302 repair above (`nextest_budgets.py`) pushed CI red a
+  second time, in a *different* file:
+
+  ```text
+  tests/workflow_contracts/workflow_loading.py:1:0: C0302: Too many lines in
+  module (403/400) (too-many-lines)
+  ```
+
+  This branch's entire contribution to that file is one tuple element — a
+  `kani-smoke` entry in `NEXTEST_JOBS`, which is why the branch touches it at
+  all — and the file stood at 399 on `main` before the merge. The instance is
+  unremarkable; what matters is that it recurred. The entry above had already
+  stated the general rule, in bold, and the rule did not prevent this, because
+  a rule about merges is not checkable by reading the file it applies to. The
+  repair restores this branch's *net* contribution to zero (3 lines added, 3
+  removed) rather than dropping the line that mattered, so the merge result is
+  399, `main`'s own count.
+
+  Two implementation notes survive this, and the first nearly cost a false
+  confirmation: **`git write-tree` writes the index**, so the first probe of
+  this fix reported the pre-fix count and would have "verified" a tree that
+  never existed, because the edit was unstaged. The second is that `wc -l`
+  counts newlines, so a net line-count delta and a `wc -l` delta can disagree
+  on a file with no trailing newline; `git diff --stat` is the cross-check.
+  Both probes were liveness-checked — pylint fires C0302 on the padded merge
+  result at 404 and is silent at 399 — and the scoped sweep of every `.py` file
+  this branch touches, run with the repository's own pylint wrapper against the
+  real merge tree, rates 10.00/10.
 - **A liveness probe can pass by measuring the wrong process.** The first
   attempt at liveness-checking the new guard patched
   `_nextest_oracle.grammar.NEXTEST_CONFIG` in the probe's own interpreter and
@@ -866,6 +896,45 @@ could have said so*, because a per-file limit is not a property of either side.
 The guard that would catch it is a lint run on the merge result, which is
 exactly what CI is.
 
+Task 3 delivered: the runtime liveness guard now replays **each filter as
+written** and **each arm of a top-level union separately**. The first half
+removes a reconstruction: `_check` used to rebuild the selector from the bare
+name it had extracted, so it verified a string the configuration does not
+contain — and in the case that motivated the work it replayed
+`test(/^every_patched_tree_compiles_under_denied_warnings($|::)/)`, the very
+dead selector this plan exists to repair, against a file holding the qualified
+form. The second half tracks bracket depth, because `|` is overloaded: at top
+level it joins filter alternatives, and inside `test(...)` it belongs to the
+regex. All four configured filters are unions — 17 arms between them — so a
+dead arm could hide behind a live one, which is this plan's own subject matter
+one level down.
+
+The second merge-result failure arrived after all of the above was written. CI
+went red on `workflow_loading.py` at `C0302 (403/400)`, a *different* file from
+the one the first instance named and by the same mechanism: 367 on this branch,
+399 on `main`, 403 merged, with this branch's whole contribution to the file
+being one tuple element. The repair restores the branch's net contribution to
+zero (3 added, 3 removed) rather than dropping the `kani-smoke` entry, leaving
+the merge result at 399. It was verified with the repository's own pylint
+wrapper against a real merge tree — 10.00/10 over every `.py` file this branch
+touches — and liveness-checked by padding the merged file past the cap and
+confirming C0302 fires at 404 while staying silent at 399.
+
+Raw per-run figures for the code change above, all nine gates green:
+`check-fmt` 2 s, `lint` 13 s, `typecheck` 1 s, `markdownlint` 12 s,
+`lint-python` 8 s, `test-workflow-contracts` 27 s, `test` 222 s, `nixie` 2 s,
+`doc-coverage` 7 s. Two caveats keep that honest, and both are the reason this
+plan does not treat the set as covering the document it appears in. Those nine
+ran against the tree holding the Python fix; this ExecPlan's own entries were
+written afterwards, so the four Markdown- and Rust-sensitive gates among them —
+`check-fmt`, `lint`, `typecheck`, `markdownlint` — measured a tree that did not
+contain the paragraphs you are reading, and the set is re-run over the final
+tree rather than assumed to carry. This is the same distinction the plan makes
+elsewhere: a green gate is evidence about the tree it ran against, and nothing
+more. Per the run-id convention the figures are recorded as durations against
+the branch head rather than against a self-series SHA, which a rebase would
+invalidate.
+
 ## Revision note
 
 - 2026-09-21 — Initial ExecPlan for `#756`: regenerate the rotted patches, add
@@ -1028,3 +1097,31 @@ exactly what CI is.
   one, and the first correction conflated them in two of the five places it
   landed. A claim about why a number was chosen is exactly the kind that
   survives every gate, because no gate reads prose for its arithmetic.
+- 2026-09-25 — Task 3 delivered, and the plan's own subject matter recurred at
+  a third level. The runtime guard now replays each filter as written and each
+  union arm alone; the first half removes a reconstruction that had been
+  replaying the dead selector this plan was opened to repair, and the second
+  tracks bracket depth because `|` joins alternatives at top level while inside
+  `test(...)` it belongs to the regex. All four configured filters are unions,
+  17 arms between them, so the union half was live rather than latent.
+- 2026-09-25 — The C0302 merge-result failure happened a **second** time, in
+  `workflow_loading.py` (403/400) rather than `nextest_budgets.py` (404/400),
+  the day after the first was recorded here in bold as a general rule. The rule
+  did not prevent it, and could not: it is a rule about merges, and no reading
+  of either side's file can check it. Contributing one tuple element to a file
+  sitting at 399 is sufficient. Repaired by restoring the branch's net
+  contribution to zero rather than by dropping the entry that mattered, and
+  verified with the repository's own pylint wrapper over a real merge tree
+  (10.00/10 across every `.py` file this branch touches), liveness-checked at
+  1. Two probe traps are recorded under `Surprises & discoveries`, of which
+  `git write-tree` writing the *index* is the one that nearly produced a false
+  confirmation.
+- 2026-09-25 — A correction worth keeping because of its shape rather than its
+  size: the four-line comment removed to reclaim the cap margin was described
+  here and in the pull request as restating the docstring above it. It did not.
+  The docstring answers *which jobs install nextest*; the comment answered *why
+  the gate lives in `kani-smoke`*, and that rationale survives at length in
+  `ci.yml` beside the gate's step and in the developer's guide beside the
+  measured `cargo check` counter-example. The removal was still correct — it
+  was the third copy, and the cheapest to spend — but the reason first written
+  for it was not, and was corrected in both places rather than quietly reworded.
