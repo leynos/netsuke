@@ -16,7 +16,10 @@ use tracing::level_filters::LevelFilter;
 
 use super::super::{
     options::CwdMode,
-    telemetry::{CACHE_OUTCOME_MISS, CATEGORY_NOT_FOUND, RESOLUTION_OUTCOME_NOT_FOUND},
+    telemetry::{
+        CACHE_OUTCOME_MISS, CATEGORY_NOT_FOUND, RESOLUTION_OUTCOME_FOUND,
+        RESOLUTION_OUTCOME_NOT_FOUND,
+    },
 };
 use super::{FIXTURE_PATHEXT, RESOLVER_SPAN, Workspace, options, path_override};
 use crate::test_tracing_capture::with_test_subscriber;
@@ -46,6 +49,23 @@ fn expected_span_fields(expected: &str) -> Vec<String> {
         format!("cwd_mode={expected:?}"),
         format!("error_category={CATEGORY_NOT_FOUND:?}"),
         format!("result={RESOLUTION_OUTCOME_NOT_FOUND:?}"),
+    ];
+    fields.sort_unstable();
+    fields
+}
+
+/// The span fields the hit case must record, and no others.
+///
+/// Three, not four: a resolution that succeeds records no `error_category`, so
+/// that placeholder stays [`tracing::field::Empty`] and the capture layer
+/// reports it absent rather than empty. Pinning the set here is what makes the
+/// absence an assertion — a `error_category` on a hit would otherwise be the
+/// one field nobody was looking at.
+fn expected_hit_span_fields(expected: &str) -> Vec<String> {
+    let mut fields = vec![
+        format!("cache_outcome={CACHE_OUTCOME_MISS:?}"),
+        format!("cwd_mode={expected:?}"),
+        format!("result={RESOLUTION_OUTCOME_FOUND:?}"),
     ];
     fields.sort_unstable();
     fields
@@ -162,6 +182,82 @@ fn the_span_and_event_carry_the_mode_and_nothing_else(
         ] {
             ensure!(
                 !captured.contains(leaked),
+                "{expected}: no captured field may name {leaked}: {captured}"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// A resolution that finds its tool records the same bounded fields alone.
+///
+/// The miss case above can exclude the matched path only by not having one: a
+/// fixture that resolves is the one that carries a real path to leak, and the
+/// success path records a different field set — cache outcome and result, with
+/// no error category. Both are pinned here, so a hit that starts recording a
+/// category fails and a hit that starts naming what it found fails, where the
+/// miss case alone would see neither.
+#[rstest]
+#[case::auto(CwdMode::Auto, "auto")]
+#[case::always(CwdMode::Always, "always")]
+#[case::never(CwdMode::Never, "never")]
+#[case::workspace_recursive(CwdMode::WorkspaceRecursive, "workspace_recursive")]
+fn a_hit_records_the_bounded_fields_alone(
+    #[case] mode: CwdMode,
+    #[case] expected: &str,
+) -> Result<()> {
+    let workspace = Workspace::new()?;
+    workspace.stage_tool()?;
+    let resolver = workspace.resolver(Some(path_override(&[workspace.root.as_path()])?))?;
+
+    let (resolved, events, span) = with_test_subscriber(LevelFilter::TRACE, |captured| {
+        let resolved = resolver.resolve(&workspace.command, &options(mode));
+        (
+            resolved,
+            captured.snapshot(),
+            captured.span_fields(RESOLVER_SPAN),
+        )
+    });
+
+    let matched = resolved.context("the staged tool should resolve under every policy")?;
+    ensure!(
+        !matched.is_empty(),
+        "{expected}: the staged tool must resolve, so a matched path exists to leak"
+    );
+
+    let mut recorded = span.clone();
+    recorded.sort_unstable();
+    ensure!(
+        recorded == expected_hit_span_fields(expected),
+        "{expected}: a hit must record the bounded fields and nothing else: {span:?}"
+    );
+
+    ensure!(
+        !events.iter().any(|event| event.contains(FAILURE_MESSAGE)),
+        "{expected}: a hit must not report a failure: {events:?}"
+    );
+
+    let matched_path = matched
+        .first()
+        .context("the emptiness check above leaves a matched path")?;
+    let root = workspace.root.as_str();
+    // The matched path, and its form relative to the workspace root: a field
+    // naming either would say where the tool was found.
+    let relative = match matched_path.strip_prefix(root) {
+        Ok(relative) => relative.as_str(),
+        Err(_) => matched_path.as_str(),
+    };
+    let escaped = [
+        workspace.command.as_str(),
+        root,
+        matched_path.as_str(),
+        relative,
+        FIXTURE_PATHEXT,
+    ];
+    for captured in events.iter().chain(span.iter()) {
+        for leaked in escaped {
+            ensure!(
+                !leaked.is_empty() && !captured.contains(leaked),
                 "{expected}: no captured field may name {leaked}: {captured}"
             );
         }
