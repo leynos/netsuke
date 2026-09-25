@@ -11,8 +11,8 @@
 
 ### Number allocation and related proposals
 
-RFCs 0013 to 0020 are reserved by PR #697; RFCs 0021 to 0025 already appear
-on `main`; PR #747 reserves RFCs 0026 to 0028. This proposal takes 0029 above
+RFCs 0013 to 0020 are reserved by PR #697; RFCs 0021 to 0025 already appear on
+`main`; PR #747 reserves RFCs 0026 to 0028. This proposal takes 0029 above
 those allocations. The allocation check found no existing host-facts PR.
 
 This RFC complements [RFC 0006][stdlib-rfc], rather than adding another general
@@ -53,8 +53,8 @@ The small platform slice can ship first; implementations reject unimplemented
 groups instead of pretending to have gathered them.
 
 Facts describe the environment in which the Netsuke planner process operates.
-They do not describe the machine that built Netsuke, a cross-compilation output,
-a container entered by a recipe, or an eventual remote executor.
+They do not describe the machine that built Netsuke, a cross-compilation
+output, a container entered by a recipe, or an eventual remote executor.
 
 The central contract is:
 
@@ -71,8 +71,8 @@ currently shipped functionality.
 
 ## 2. Problem and current boundaries
 
-Replacing Makefiles currently leaves platform decisions in shell probes such
-as `uname`, environment conventions such as `OS=Windows_NT`, or repeated Jinja
+Replacing Makefiles currently leaves platform decisions in shell probes such as
+`uname`, environment conventions such as `OS=Windows_NT`, or repeated Jinja
 branches with repository-specific names. Netsuke's own Makefile uses
 `BUILD_HOST_OS := $(shell uname -s)` to choose its Linux linker flag.
 
@@ -112,23 +112,23 @@ parallel providers can merge conflicting keys in an unspecified order.[^3]
 Ansible's `set_fact` creates mutable host variables and optionally cacheable
 facts.[^4]
 
-| Ansible precedent | Netsuke disposition |
-| --- | --- |
-| Namespaced facts in templates and conditions | Adopt one typed, immutable `host` object. |
-| Prefixed top-level fact aliases | Reject; avoid shadowing and two spellings per field. |
-| Selective collection versus output filtering | Adopt the distinction; filtering never authorizes collection. |
-| Per-run memory cache | Adopt one invocation snapshot, not hidden persistent discovery. |
-| Distribution and operating-system families | Adapt; platform family and distribution lineage are distinct. |
-| Local fact files and executable collectors | Defer custom data; reject executable discovery in this RFC. |
-| Mutable `set_fact` and registered results | Keep task inputs and runtime bindings separate from observations. |
-| Parallel last-merged conflict resolution | Reject; each typed field has exactly one owning collector. |
+| Ansible precedent                            | Netsuke disposition                                               |
+| -------------------------------------------- | ----------------------------------------------------------------- |
+| Namespaced facts in templates and conditions | Adopt one typed, immutable `host` object.                         |
+| Prefixed top-level fact aliases              | Reject; avoid shadowing and two spellings per field.              |
+| Selective collection versus output filtering | Adopt the distinction; filtering never authorizes collection.     |
+| Per-run memory cache                         | Adopt one invocation snapshot, not hidden persistent discovery.   |
+| Distribution and operating-system families   | Adapt; platform family and distribution lineage are distinct.     |
+| Local fact files and executable collectors   | Defer custom data; reject executable discovery in this RFC.       |
+| Mutable `set_fact` and registered results    | Keep task inputs and runtime bindings separate from observations. |
+| Parallel last-merged conflict resolution     | Reject; each typed field has exactly one owning collector.        |
 
 _Table 1: Ansible ideas adopted, adapted, or deliberately excluded._
 
 Ansible's `os_family` can denote a distribution family such as `RedHat`. In
 this proposal `host.family` means `unix`, `windows`, or `other`; distribution
-lineage appears separately under `host.distribution.id_like`. The names are
-not a compatibility promise. Ansible's architecture and userspace facts also
+lineage appears separately under `host.distribution.id_like`. The names are not
+a compatibility promise. Ansible's architecture and userspace facts also
 motivate separating process ABI from native-machine observations.[^1]
 
 Netsuke requires neither Ansible nor Python to collect these facts. This RFC
@@ -148,8 +148,8 @@ Rust documents these constants and target configuration separately.[^5][^6]
 
 In particular, `host.arch` is the **planner process ABI architecture**. An
 x86-64 Netsuke running through translation on an ARM machine still reports
-`x86_64`. A native-machine observation, when reliable, belongs in the separately
-requested `host.kernel.native_arch` field.
+`x86_64`. A native-machine observation, when reliable, belongs in the
+separately requested `host.kernel.native_arch` field.
 
 The `HOST` and `TARGET` variables used by Cargo build scripts refer to a
 particular Cargo invocation.[^7] A manifest can pass an explicit Cargo target,
@@ -170,8 +170,8 @@ must preserve that distinction rather than infer a physical platform.
 
 Facts do not identify the selected recipe interpreter. Shell choice remains
 owned by RFC 0011. `host.family == 'unix'` does not prove that Bash exists;
-`host.os == 'windows'` does not prove that PowerShell or Git Bash is configured.
-Tool presence remains a resolver or explicit state/probe concern.
+`host.os == 'windows'` does not prove that PowerShell or Git Bash is
+configured. Tool presence remains a resolver or explicit state/probe concern.
 
 ### 4.3. Remote execution and cross-compilation
 
@@ -198,8 +198,8 @@ host_facts:
 The root mapping accepts only `schema` and `gather`. `schema` is required and
 must equal a supported integer schema version. `gather` defaults to
 `[platform]`; otherwise it must be a non-empty, duplicate-free sequence of
-literal group names containing `platform`. No wildcard, negation syntax,
-Jinja, or environment interpolation is permitted in this declaration.
+literal group names containing `platform`. No wildcard, negation syntax, Jinja,
+or environment interpolation is permitted in this declaration.
 
 The group vocabulary for this RFC is closed. Later groups require a schema
 extension and explicit selection; `all` is deliberately absent so an upgrade
@@ -207,8 +207,8 @@ cannot silently broaden collection. Unknown keys, versions, and groups fail
 before any provider runs.
 
 This opt-in requires an additive manifest-format version allocated at
-implementation time. Examples omit a speculative `netsuke_version` value.
-Older compilers must reject the new field clearly, not ignore it.
+implementation time. Examples omit a speculative `netsuke_version` value. Older
+compilers must reject the new field clearly, not ignore it.
 
 ### 5.2. Authority ceiling
 
@@ -221,10 +221,10 @@ for `distribution` or `kernel` without a trusted grant fails before I/O, with
 the denied group and remediation in the diagnostic. Operators may also deny
 platform disclosure. Denials take precedence over project requests.
 
-The concrete policy key and command-line option must use the shared
-OrthoConfig metadata path, not a separate parser or file format. This RFC
-proposes the policy name `host_fact_policy.allowed_groups`; it does not assign
-an environment-variable override that could silently spoof fact values.
+The concrete policy key and command-line option must use the shared OrthoConfig
+metadata path, not a separate parser or file format. This RFC proposes the
+policy name `host_fact_policy.allowed_groups`; it does not assign an
+environment-variable override that could silently spoof fact values.
 
 ### 5.3. Immutable namespace
 
@@ -233,9 +233,9 @@ per-entry variables, loop bindings, macro parameters, imports, and local Jinja
 assignments must not shadow it. Validation covers template binding sites, not
 only `vars.host`. The projection also rejects item and attribute mutation.
 
-Without opt-in, existing user variables called `host` remain ordinary variables.
-No warning, fact collection, or migration requirement applies. The unchanged
-quickstart must remain an acceptance fixture.
+Without opt-in, existing user variables called `host` remain ordinary
+variables. No warning, fact collection, or migration requirement applies. The
+unchanged quickstart must remain an acceptance fixture.
 
 ## 6. Fact schema
 
@@ -244,16 +244,16 @@ quickstart must remain an acceptance fixture.
 The platform group uses no filesystem, registry, environment, subprocess, or
 network access. Its fields are never inferred from filenames or shell output.
 
-| Field | Type | Contract |
-| --- | --- | --- |
-| `host.os` | string | Rust-style planner OS identifier: for example `linux`, `windows`, `macos`, or `freebsd`. |
-| `host.family` | string | `windows`, `unix`, or `other`, with no distribution-family meaning. |
-| `host.arch` | string | Planner process ABI architecture: for example `x86`, `x86_64`, `arm`, or `aarch64`. |
-| `host.pointer_width` | integer | Pointer width in bits for the planner process ABI. |
-| `host.endianness` | string | `little` or `big` for the planner process ABI. |
-| `host.exe_suffix` | string | Platform executable suffix including its dot, or an empty string. |
-| `host.path_separator` | string | The native process path-component separator, not a shell escape. |
-| `host.path_list_separator` | string | Native environment path-list delimiter: `;` for Windows, `:` for Unix. |
+| Field                      | Type    | Contract                                                                                 |
+| -------------------------- | ------- | ---------------------------------------------------------------------------------------- |
+| `host.os`                  | string  | Rust-style planner OS identifier: for example `linux`, `windows`, `macos`, or `freebsd`. |
+| `host.family`              | string  | `windows`, `unix`, or `other`, with no distribution-family meaning.                      |
+| `host.arch`                | string  | Planner process ABI architecture: for example `x86`, `x86_64`, `arm`, or `aarch64`.      |
+| `host.pointer_width`       | integer | Pointer width in bits for the planner process ABI.                                       |
+| `host.endianness`          | string  | `little` or `big` for the planner process ABI.                                           |
+| `host.exe_suffix`          | string  | Platform executable suffix including its dot, or an empty string.                        |
+| `host.path_separator`      | string  | The native process path-component separator, not a shell escape.                         |
+| `host.path_list_separator` | string  | Native environment path-list delimiter: `;` for Windows, `:` for Unix.                   |
 
 _Table 2: Initial platform facts._
 
@@ -263,10 +263,10 @@ map derived from `uname`. For example, `macos` is not `Darwin`, and `aarch64`
 is not the vendor spelling `arm64`.
 
 New supported OS and architecture identifiers are additive values, not reasons
-to guess `linux` or `x86_64`. A provider unable to supply a required field fails
-with `unsupported_host_platform`. A manifest requiring a closed supported set
-must explicitly reject other values instead of treating its final `else` branch
-as a universal Windows or Unix case.
+to guess `linux` or `x86_64`. A provider unable to supply a required field
+fails with `unsupported_host_platform`. A manifest requiring a closed supported
+set must explicitly reject other values instead of treating its final `else`
+branch as a universal Windows or Unix case.
 
 The executable suffix does not enumerate `PATHEXT`, guarantee executability, or
 select an output suffix for a cross-compilation target. A path separator does
@@ -278,12 +278,12 @@ manual concatenation whenever the relevant helper exists.
 
 The first distribution provider supports the Linux `os-release` interface:
 
-| Field | Type | Contract |
-| --- | --- | --- |
-| `host.distribution.id` | string or null | Validated `ID`, without an invented fallback. |
-| `host.distribution.id_like` | sequence of strings or null | Ordered `ID_LIKE` identifiers. Empty means an observed file omitted it; null means no usable observation. |
-| `host.distribution.version_id` | string or null | `VERSION_ID` as opaque version text, not a SemVer assertion. |
-| `host.distribution.name` | string or null | Bounded display name from `NAME`; not a command or path. |
+| Field                          | Type                        | Contract                                                                                                  |
+| ------------------------------ | --------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `host.distribution.id`         | string or null              | Validated `ID`, without an invented fallback.                                                             |
+| `host.distribution.id_like`    | sequence of strings or null | Ordered `ID_LIKE` identifiers. Empty means an observed file omitted it; null means no usable observation. |
+| `host.distribution.version_id` | string or null              | `VERSION_ID` as opaque version text, not a SemVer assertion.                                              |
+| `host.distribution.name`       | string or null              | Bounded display name from `NAME`; not a command or path.                                                  |
 
 _Table 3: Optional distribution facts._
 
@@ -294,11 +294,21 @@ A parser must implement these data rules, never source the file in a shell.[^8]
 
 The provider opens only the two approved logical paths through its own narrow
 system-file capability. It resolves at most eight symlink hops, rejects cycles,
-and validates the final opened handle as a regular file. Relative system
-symlinks remain valid; no directory traversal or arbitrary caller-selected path
-is added to the manifest API. A missing final target counts as missing, but
-permission, encoding, malformed-data, and limit failures do not authorize a
-fallback to another identity source.
+and opens each approved path without blocking (the equivalent of `O_NONBLOCK`,
+plus close-on-exec and no controlling terminal), then type-checks the opened
+handle itself, for example via `fstat` on that handle, never a separate
+path-based `stat`/`lstat` before opening. This closes the check-then-open
+window, so a FIFO or device at either path cannot stall collection. Any opened
+handle that is not a regular file (a FIFO, device, socket, or directory) is a
+collection error reported as `host_fact_source_invalid` (see §12), not `absent`
+or missing; see §6.4 for the missing/denied/invalid distinction. Relative
+system symlinks remain valid; no directory traversal or arbitrary
+caller-selected path is added to the manifest API. A missing final target
+counts as missing, but permission, encoding, malformed-data, limit, and
+non-regular-file failures do not authorize a fallback to another identity
+source. This mirrors the open-then-check policy the file-reading stdlib filters
+already use for regular-file reads, documented under "File-reading filter
+boundary" in the developers' guide and in `docs/stdlib-yaml-and-jinja-guide.md`.
 
 Read at most 64 KiB plus one overflow-detection byte. Bound each exposed string
 to 256 UTF-8 bytes and `id_like` to 16 identifiers. Reject NUL and control
@@ -317,12 +327,12 @@ the initial schema.
 
 ### 6.3. Kernel group
 
-The optional kernel provider returns `host.kernel.name`,
-`host.kernel.release`, and `host.kernel.native_arch`, each a string or null.
-OS-native, non-executing APIs supply these fields through a reviewed safe
-adapter. The initial Unix adapter reads the equivalent of `uname` fields
-without executing `uname`; the Windows adapter must use documented APIs rather
-than parsing `ver` or PowerShell output.
+The optional kernel provider returns `host.kernel.name`, `host.kernel.release`,
+and `host.kernel.native_arch`, each a string or null. OS-native, non-executing
+APIs supply these fields through a reviewed safe adapter. The initial Unix
+adapter reads the equivalent of `uname` fields without executing `uname`; the
+Windows adapter must use documented APIs rather than parsing `ver` or
+PowerShell output.
 
 `native_arch` is populated only when the adapter can establish its documented
 meaning under translation. Otherwise it is null. It is not an alias for
@@ -342,11 +352,11 @@ them into a fictitious universal host identity.
 
 ### 6.4. Missing, denied, and invalid are different
 
-For optional groups, all schema fields exist once the group is selected.
-Field absence in a valid observation becomes null where the table permits it.
-Whole-group outcomes are `collected`, `partial`, `absent`, or `unsupported`.
-A denied group, malformed data, I/O failure, or exceeded bound is an error,
-not `absent`, `false`, zero, or an empty mapping.
+For optional groups, all schema fields exist once the group is selected. Field
+absence in a valid observation becomes null where the table permits it.
+Whole-group outcomes are `collected`, `partial`, `absent`, or `unsupported`. A
+denied group, malformed data, I/O failure, or exceeded bound is an error, not
+`absent`, `false`, zero, or an empty mapping.
 
 Accessing a known group not selected by `gather` produces
 `host_fact_not_collected` without invoking a collector. Accessing an unknown
@@ -355,8 +365,8 @@ typo does not become a silent platform decision. Optional null fields can use
 an explicit `is not none` check.
 
 The serialized inspection envelope carries group outcomes and fixed provider
-identifiers separately from the `host` values. Outcomes and semantic values
-are hashable inputs; operational timing and detailed error strings are not.
+identifiers separately from the `host` values. Outcomes and semantic values are
+hashable inputs; operational timing and detailed error strings are not.
 
 ## 7. Collection and evaluation lifecycle
 
@@ -391,8 +401,8 @@ existing schema permits them. They do not add another conditional language.
 They cannot choose an include path, bundle URL, Git ref, or other field whose
 own RFC requires a literal value.
 
-A fact is data, never pre-quoted shell source or a filesystem capability. Values
-from system files keep untrusted-data status through rendering. Direct
+A fact is data, never pre-quoted shell source or a filesystem capability.
+Values from system files keep untrusted-data status through rendering. Direct
 structured invocation retains typed argument boundaries. Legacy shell recipes
 still require the existing quoting and interpolation protections; registering
 facts must not mark them as safe shell fragments.
@@ -404,10 +414,10 @@ RFCs 0009 and 0010 cannot change the frozen planner facts. A child has no
 ### 7.3. Includes and bundles
 
 All local fragments share the importing root's snapshot. An included file may
-not declare another collector request. A bundle can declare a static requirement
-for an already selected group in its compatibility metadata, but cannot widen
-the root request or operator grant. Missing required facts fail before bundle
-rendering.
+not declare another collector request. A bundle can declare a static
+requirement for an already selected group in its compatibility metadata, but
+cannot widen the root request or operator grant. Missing required facts fail
+before bundle rendering.
 
 The bundle observes the importing planner, not the bundle publisher or a remote
 Git server. A bundle needing artefact target facts must accept explicit typed
@@ -437,8 +447,9 @@ permit `env()`, `which()`, command execution, or network helpers. A project
 setting cannot enable the flag on the caller's behalf.
 
 This proposal deliberately accepts an actionable discovery error without
-consent instead of adding symbolic evaluation of every host-dependent condition.
-A future static listing of unresolved conditions requires its own contract.
+consent instead of adding symbolic evaluation of every host-dependent
+condition. A future static listing of unresolved conditions requires its own
+contract.
 
 ### 8.2. Standalone inspection
 
@@ -484,9 +495,9 @@ and full fact digests must not become unbounded metric labels.
 ### 9.1. Explicit planning input
 
 Opted-in host facts are environmental planning inputs. The same manifest,
-snapshot, and other declared planning inputs must compile identically; different
-planners need not generate the same graph. This does not make a build hermetic
-merely because collection uses no shell.
+snapshot, and other declared planning inputs must compile identically;
+different planners need not generate the same graph. This does not make a build
+hermetic merely because collection uses no shell.
 
 Compute a versioned digest from the fact schema, selected groups, normalized
 values, and semantic group outcomes. Sort mapping keys, preserve meaningful
@@ -519,8 +530,8 @@ provenance or test fixtures, not authoritative input for ordinary builds.
 Internally generated immediate execution uses the frozen snapshot. Exported or
 reused plans record their host-facts scope and semantic digest. Netsuke must
 verify that context before executing a reused fact-dependent plan; mismatch
-requires regeneration. It must not silently re-plan under new facts after
-some edges have already run.
+requires regeneration. It must not silently re-plan under new facts after some
+edges have already run.
 
 Native Ninja execution of an exported file bypasses Netsuke's revalidation.
 Document that limitation and mark the export's planner context; do not claim a
@@ -567,19 +578,19 @@ render environment in one invocation borrows or shares the same snapshot.
 explicitly authorized immutable projection.
 
 Tests supply a `FixedHostFactsProvider` with no fallback to real host APIs.
-Selecting an unavailable fixture group fails rather than reading the developer's
-machine. No test calls `set_var`, changes a global cwd, executes `uname`, or
-requires serialization to fake a platform.
+Selecting an unavailable fixture group fails rather than reading the
+developer's machine. No test calls `set_var`, changes a global cwd, executes
+`uname`, or requires serialization to fake a platform.
 
 Manifest tests under RFC 0007 should gain a typed host fixture through its
 existing mock registry. Schema validation applies to fixtures too. Synthetic
 facts may render and inspect a graph but must not authorize actual execution
-for another platform or widen file/network capabilities. No ordinary build
-flag permitting arbitrary host-value overrides ships with this RFC.
+for another platform or widen file/network capabilities. No ordinary build flag
+permitting arbitrary host-value overrides ships with this RFC.
 
 Implementation must preserve the workspace's unsafe-code prohibition. Select a
-reviewed safe platform adapter or explicitly propose a dependency change; do not
-attempt to override `forbid(unsafe_code)` with an expectation around FFI.
+reviewed safe platform adapter or explicitly propose a dependency change; do
+not attempt to override `forbid(unsafe_code)` with an expectation around FFI.
 
 ## 12. Diagnostics and compatibility rules
 
@@ -591,8 +602,8 @@ Stable diagnostic categories include `unsupported_host_fact_schema`,
 
 Report the group, field, request origin, and relevant manifest span without
 printing arbitrary system-file values. Optional source absence is an explicit
-status, not an error log that leaks a path. Invalid encoding and I/O faults keep
-their bounded error category without dumping source bytes.
+status, not an error log that leaks a path. Invalid encoding and I/O faults
+keep their bounded error category without dumping source bytes.
 
 Adding an optional field is an additive schema change. Changing an existing
 field's meaning, type, normalization, default collection scope, or authority
@@ -640,6 +651,9 @@ or #597.
 - The distribution parser handles quotes, escapes, missing optional values,
   duplicate-key precedence, invalid UTF-8, NUL, oversized data, symlink cycles,
   and the standard relative `/etc/os-release` symlink. It never executes text.
+- A FIFO or other non-regular object at either approved `os-release` path
+  fails promptly as `host_fact_source_invalid`, without blocking and without
+  falling back to the other path.
 - Kernel tests distinguish reliable native architecture from unknown and never
   copy process architecture merely to fill a missing native observation.
 - Field access distinguishes null, empty, unknown, and not collected. Metadata
@@ -697,9 +711,9 @@ Explicit opt-in and caller-authorized discovery make both changes reviewable.
 ### 14.4. Treat process facts as physical-host or target facts
 
 This is concise but wrong under cross-compilation and translation. The RFC
-chooses explicit process-ABI semantics and separately scoped native observation.
-Review may prefer a longer field name such as `process_arch`; any rename must
-retain the distinction before acceptance.
+chooses explicit process-ABI semantics and separately scoped native
+observation. Review may prefer a longer field name such as `process_arch`; any
+rename must retain the distinction before acceptance.
 
 ### 14.5. Lazily gather on attribute access or cache globally
 
@@ -727,19 +741,30 @@ privacy, latency, and portability can be stated precisely.
 
 ## References
 
-External references were consulted on 2026-09-25. They are prior art or provider
-contracts, not executable inputs to a Netsuke build.
+External references were consulted on 2026-09-25. They are prior art or
+provider contracts, not executable inputs to a Netsuke build.
 
-[^1]: Ansible, [Discovering variables: facts and magic variables](https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_vars_facts.html).
-[^2]: Ansible, [ansible.builtin.setup](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/setup_module.html).
-[^3]: Ansible, [ansible.builtin.gather_facts](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/gather_facts_module.html).
-[^4]: Ansible, [ansible.builtin.set_fact](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/set_fact_module.html).
-[^5]: Rust, [std::env::consts](https://doc.rust-lang.org/std/env/consts/index.html).
-[^6]: Rust Reference, [Conditional compilation](https://doc.rust-lang.org/reference/conditional-compilation.html).
-[^7]: Cargo Book, [Environment variables](https://doc.rust-lang.org/cargo/reference/environment-variables.html).
-[^8]: systemd, [os-release manual](https://www.man7.org/linux/man-pages/man5/os-release.5.html), upstream documentation reproduced by man7.org.
-[^9]: Microsoft, [IsWow64Process2](https://learn.microsoft.com/en-us/windows/win32/api/wow64apiset/nf-wow64apiset-iswow64process2).
-[^10]: Rust, [available_parallelism](https://doc.rust-lang.org/std/thread/fn.available_parallelism.html).
+[^1]: Ansible,
+      [Discovering variables: facts and magic variables](https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_vars_facts.html).
+[^2]: Ansible,
+      [ansible.builtin.setup](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/setup_module.html).
+[^3]: Ansible,
+      [ansible.builtin.gather_facts](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/gather_facts_module.html).
+[^4]: Ansible,
+      [ansible.builtin.set_fact](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/set_fact_module.html).
+[^5]: Rust,
+      [std::env::consts](https://doc.rust-lang.org/std/env/consts/index.html).
+[^6]: Rust Reference,
+      [Conditional compilation](https://doc.rust-lang.org/reference/conditional-compilation.html).
+[^7]: Cargo Book,
+      [Environment variables](https://doc.rust-lang.org/cargo/reference/environment-variables.html).
+[^8]: systemd,
+      [os-release manual](https://www.man7.org/linux/man-pages/man5/os-release.5.html),
+      upstream documentation reproduced by man7.org.
+[^9]: Microsoft,
+      [IsWow64Process2](https://learn.microsoft.com/en-us/windows/win32/api/wow64apiset/nf-wow64apiset-iswow64process2).
+[^10]: Rust,
+       [available_parallelism](https://doc.rust-lang.org/std/thread/fn.available_parallelism.html).
 
 [stdlib-rfc]: 0006-ansible-inspired-template-standard-library.md
 [commands-rfc]: 0001-structured-command-blocks.md

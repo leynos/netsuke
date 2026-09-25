@@ -94,8 +94,8 @@ operator, user, and contributor references are easier to find.
 - [RFC 0025: Progressive enhancement and maturity policies][rfc-0025]:
   Shallow-end compatibility and opt-in, scoped, trust-aware enforcement.
 - [RFC 0029: First-class host facts][rfc-0029]: Ansible-informed, typed
-  platform observations, explicit collection, privacy-preserving discovery,
-  and reproducible planning without ambient environment probes.
+  platform observations, explicit collection, privacy-preserving discovery, and
+  reproducible planning without ambient environment probes.
 
 - [RFC 0026](rfcs/0026-hexagonal-domain-hardening.md): Proposed resolved
   operations, shell binding, application execution, and diagnostic boundaries.
