@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Teich na slaisean-cùil no thoir air falbh na sreath
 manifest.env.missing = Chan eil caochladair àrainneachd riatanach air a shuidheachadh.
 manifest.env.invalid_utf8 = Tha UTF-8 mì-dhligheach ann an caochladair àrainneachd.
 manifest.env.blocked = Tha inntrigeadh do chaochladair àrainneachd air a bhacadh.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Feumaidh default env a bhith na shreang; fhuaras { $kind }.
 manifest.vars.not_object = Feumaidh `vars` an fhoirm-liosta a bhith na mhapadh no na oibseact.
 manifest.vars.reserved_name = Tha an iuchair `vars` '{ $name }' sa mhanifest glèidhte do chuidiche teamplaid na broinn; thoir ainm ùr air a' chaochladair.
 manifest.read_failed = Cha b' urrainnear am foirm-liosta a leughadh o { $path }.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algairim hais gun taic: “{ $al
 
 # Breithneachadh chuidichean nan cruinneachaidhean.
 stdlib.collections.flatten.expected_sequence = Bha dùil aig flatten ri nithean sreath ach fhuair e { $kind }.
+stdlib.collections.compact.not_sequence = Bha dùil aig compact ri sreath ach fhuair e { $kind }.
 stdlib.collections.group_by.empty_attribute = Tha group_by ag iarraidh buadh nach eil falamh.
 stdlib.collections.group_by.unresolved = Cha b' urrainn do group_by “{ $attr }” a lorg air nì den t-seòrsa { $kind }.
 

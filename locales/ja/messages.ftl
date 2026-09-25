@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = 逆斜線をエスケープするか、無効なエ�
 manifest.env.missing = 必須の環境変数が設定されていません。
 manifest.env.invalid_utf8 = 環境変数に無効な UTF-8 が含まれています。
 manifest.env.blocked = 環境変数へのアクセスはブロックされています。
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env の default は文字列でなければなりません。{ $kind } を受け取りました。
 manifest.vars.not_object = マニフェストの `vars` はマップまたはオブジェクトでなければなりません。
 manifest.vars.reserved_name = マニフェストの `vars` キー '{ $name }' は組み込みのテンプレートヘルパー用に予約されています。変数名を変更してください。
 manifest.read_failed = { $path } のマニフェストを読み取れませんでした。
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = 対応していないハッシ�
 
 # コレクションヘルパーの診断。
 stdlib.collections.flatten.expected_sequence = flatten は列の要素を期待しましたが、{ $kind } が見つかりました。
+stdlib.collections.compact.not_sequence = compact は列を期待しましたが、{ $kind } が見つかりました。
 stdlib.collections.group_by.empty_attribute = group_by には空でない属性が必要です。
 stdlib.collections.group_by.unresolved = group_by は種別 { $kind } の要素で「{ $attr }」を解決できませんでした。
 

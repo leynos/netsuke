@@ -1,10 +1,10 @@
 //! Bounded telemetry for the manifest `env()` lookup boundary.
 //!
-//! Every `env()` call reaches exactly one place: [`super::env_reader::env_var_with`]
-//! evaluates the access policy, reads through the injected reader, and maps
-//! failures to Jinja errors. That single boundary is therefore also the single
-//! telemetry point, and each lookup is counted once under a closed `outcome`
-//! vocabulary.
+//! Every `env()` call reaches exactly one place:
+//! [`super::env_reader::env_var_with_default`] evaluates the access policy,
+//! reads through the injected reader, and maps failures to Jinja errors. That
+//! single boundary is therefore also the single telemetry point, and each
+//! lookup is counted once under a closed `outcome` vocabulary.
 //!
 //! The blocked outcome is the reason this series exists. Denying a lookup is
 //! new behaviour that previously could not occur, so without a counter an

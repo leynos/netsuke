@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Escape-elje a fordított perjeleket, vagy távolíts
 manifest.env.missing = Egy kötelező környezeti változó nincs beállítva.
 manifest.env.invalid_utf8 = Egy környezeti változó érvénytelen UTF-8 kódolást tartalmaz.
 manifest.env.blocked = Egy környezeti változóhoz való hozzáférés le van tiltva.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Az env default értékének karakterláncnak kell lennie, ezt kaptuk: { $kind }.
 manifest.vars.not_object = A jegyzék `vars` mezőjének leképezésnek vagy objektumnak kell lennie.
 manifest.vars.reserved_name = A manifest `vars` kulcsa, '{ $name }', egy beépített sablonsegéd számára fenntartott; nevezze át a változót.
 manifest.read_failed = A jegyzéket nem sikerült beolvasni innen: { $path }.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nem támogatott kivonatoló algo
 
 # A gyűjteményeket kezelő segédfüggvények diagnosztikája.
 stdlib.collections.flatten.expected_sequence = A flatten sorozatelemeket várt, de ezt találta: { $kind }.
+stdlib.collections.compact.not_sequence = A compact sorozatot várt, de ezt találta: { $kind }.
 stdlib.collections.group_by.empty_attribute = A group_by nem üres attribútumot igényel.
 stdlib.collections.group_by.unresolved = A group_by nem találta a(z) „{ $attr }” attribútumot a(z) { $kind } típusú elemen.
 

@@ -140,6 +140,8 @@ manifest.yaml.hint.escape = Escape backslashes or remove invalid escape sequence
 manifest.env.missing = A required environment variable is not set.
 manifest.env.invalid_utf8 = An environment variable contains invalid UTF-8.
 manifest.env.blocked = Access to an environment variable is blocked.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env default must be a string, received { $kind }.
 manifest.vars.not_object = Manifest `vars` must be a map/object.
 manifest.vars.reserved_name = Manifest `vars` key '{ $name }' is reserved for a built-in template helper; rename the variable.
 manifest.read_failed = Failed to read manifest at { $path }.
@@ -341,6 +343,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Unsupported hash algorithm '{ $a
 
 # Collection helper diagnostics.
 stdlib.collections.flatten.expected_sequence = Flatten expected sequence items but found { $kind }.
+stdlib.collections.compact.not_sequence = compact expects a sequence, received { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by requires a non-empty attribute.
 stdlib.collections.group_by.unresolved = group_by could not resolve '{ $attr }' on item of kind { $kind }.
 

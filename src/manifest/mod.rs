@@ -15,7 +15,6 @@ use crate::{
 use anyhow::Result;
 use minijinja::{Environment, UndefinedBehavior};
 use serde::de::Error as _;
-use std::sync::Arc;
 
 mod budget;
 pub(crate) mod budget_adapter;
@@ -43,7 +42,7 @@ mod render;
 pub type ManifestValue = serde_json::Value;
 /// JSON object mapping string keys to manifest values.
 pub type ManifestMap = serde_json::Map<String, ManifestValue>;
-use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros_with_budget};
+use self::jinja_macros::register_manifest_macros_with_budget;
 pub use budget::ManifestBudgetLimits;
 pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
@@ -65,7 +64,9 @@ pub(crate) use query::from_path_for_manifest_query;
 pub(crate) use query::from_path_for_manifest_query_with_limits;
 #[cfg(test)]
 use registration::RESERVED_VAR_NAMES;
-use registration::{localize_recipe_error, register_manifest_vars};
+use registration::{
+    localize_recipe_error, register_env_function, register_glob_function, register_manifest_vars,
+};
 pub use render::render_manifest;
 #[cfg(test)]
 use workspace::open_manifest_workspace;
@@ -132,16 +133,8 @@ fn evaluate_manifest(
     let mut jinja = Environment::new();
     jinja.set_undefined_behavior(UndefinedBehavior::Strict);
     // Expose custom helpers to templates.
-    let reader = Arc::clone(env_reader);
-    let policy_for_env_lookup = env_access_policy.clone();
-    jinja.add_function("env", move |var_name: String| {
-        env_var_with(&var_name, &policy_for_env_lookup, |key| reader(key))
-    });
-    let glob_base = glob::GlobBaseCache::new(manifest_root);
-    jinja.add_function("glob", move |pattern: String| {
-        let expansion = glob::expand_manifest_template_glob(&pattern, &glob_base)?;
-        expansion.into_template_paths(&pattern)
-    });
+    register_env_function(&mut jinja, env_reader, env_access_policy);
+    register_glob_function(&mut jinja, manifest_root);
     let _stdlib_state = match stdlib_registration {
         Some(StdlibRegistration::Full(config)) => {
             crate::stdlib::register_with_config(&mut jinja, *config)

@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = 역슬래시를 이스케이프하거나 잘못된 �
 manifest.env.missing = 필수 환경 변수가 설정되지 않았습니다.
 manifest.env.invalid_utf8 = 환경 변수에 잘못된 UTF-8이 들어 있습니다.
 manifest.env.blocked = 환경 변수에 대한 접근이 차단되었습니다.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env의 default는 문자열이어야 합니다. { $kind }을(를) 받았습니다.
 manifest.vars.not_object = 매니페스트의 `vars`는 매핑이나 객체여야 합니다.
 manifest.vars.reserved_name = 매니페스트의 `vars` 키 '{ $name }'은(는) 내장 템플릿 헬퍼용으로 예약되어 있습니다. 변수 이름을 바꾸십시오.
 manifest.read_failed = { $path }의 매니페스트를 읽지 못했습니다.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = 지원하지 않는 해시 알�
 
 # 컬렉션 도우미 진단.
 stdlib.collections.flatten.expected_sequence = flatten은 열의 항목을 기대했지만 { $kind }을(를) 발견했습니다.
+stdlib.collections.compact.not_sequence = compact은 열을 기대했지만 { $kind }을(를) 발견했습니다.
 stdlib.collections.group_by.empty_attribute = group_by에는 비어 있지 않은 속성이 필요합니다.
 stdlib.collections.group_by.unresolved = group_by가 { $kind } 형식의 항목에서 '{ $attr }'을(를) 찾지 못했습니다.
 

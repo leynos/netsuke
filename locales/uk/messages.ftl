@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Екрануйте зворотні скісні р�
 manifest.env.missing = Обов’язкову змінну середовища не задано.
 manifest.env.invalid_utf8 = Змінна середовища містить некоректний UTF-8.
 manifest.env.blocked = Доступ до змінної середовища заблоковано.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Значення default у env має бути рядком, отримано { $kind }.
 manifest.vars.not_object = Поле `vars` маніфесту має бути відображенням або об’єктом.
 manifest.vars.reserved_name = Ключ `vars` '{ $name }' у маніфесті зарезервовано для вбудованої допоміжної функції шаблонів; перейменуйте змінну.
 manifest.read_failed = Не вдалося прочитати маніфест за шляхом { $path }.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Непідтримуваний �
 
 # Діагностика помічників для колекцій.
 stdlib.collections.flatten.expected_sequence = flatten очікував елементи послідовності, але знайшов { $kind }.
+stdlib.collections.compact.not_sequence = compact очікував послідовність, але знайшов { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by потребує непорожнього атрибута.
 stdlib.collections.group_by.unresolved = group_by не зміг знайти «{ $attr }» в елементі типу { $kind }.
 

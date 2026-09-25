@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = โปรดหลีกอักขระแบ็�
 manifest.env.missing = ยังไม่ได้ตั้งค่าตัวแปรสภาพแวดล้อมที่จำเป็น
 manifest.env.invalid_utf8 = ตัวแปรสภาพแวดล้อมมี UTF-8 ที่ไม่ถูกต้อง
 manifest.env.blocked = การเข้าถึงตัวแปรสภาพแวดล้อมถูกบล็อก
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = ค่า default ของ env ต้องเป็นสายอักขระ แต่ได้รับ { $kind }
 manifest.vars.not_object = `vars` ของไฟล์รายการต้องเป็นการจับคู่หรือวัตถุ
 manifest.vars.reserved_name = คีย์ `vars` '{ $name }' ของมานิเฟสต์ถูกสงวนไว้สำหรับฟังก์ชันช่วยเทมเพลตในตัว โปรดเปลี่ยนชื่อตัวแปร
 manifest.read_failed = อ่านไฟล์รายการที่ { $path } ไม่สำเร็จ
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = ไม่รองรับข�
 
 # การวินิจฉัยของตัวช่วยด้านคอลเลกชัน
 stdlib.collections.flatten.expected_sequence = flatten คาดว่าจะพบสมาชิกของลำดับ แต่พบ { $kind }
+stdlib.collections.compact.not_sequence = compact คาดว่าจะพบลำดับ แต่พบ { $kind }
 stdlib.collections.group_by.empty_attribute = group_by ต้องมีแอตทริบิวต์ที่ไม่ว่างเปล่า
 stdlib.collections.group_by.unresolved = group_by หา “{ $attr }” ในสมาชิกชนิด { $kind } ไม่พบ
 

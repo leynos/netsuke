@@ -1,4 +1,9 @@
 //! Tests for injected environment access through the manifest `env()` helper.
+//!
+//! The `default` keyword argument's own cases are split across
+//! `tests/manifest_env_tests/` so no file exceeds the repository's 400-line
+//! limit; this file keeps the shared rendering helpers, the access-policy
+//! coverage, and the diagnostic snapshots.
 
 use anyhow::{Context, Result, anyhow, ensure};
 use netsuke::{
@@ -66,14 +71,20 @@ fn allowlisted_lookup_resolves_successfully() -> Result<()> {
 }
 
 /// Assert that a denied lookup cannot reach or disclose an injected reader.
+///
+/// `argument` is appended verbatim inside the `env(...)` call, so `""`
+/// exercises the bare form and `", default='fallback'"` exercises the form
+/// that must not become an access-policy bypass. The fallback text is checked
+/// for leakage here for the same reason the value is: the diagnostic is
+/// user-visible, so neither may appear in it.
 fn denied_lookup_is_value_and_name_free(
     policy: &EnvAccessPolicy,
     variable_name: &str,
     variable_value: &str,
-    failure_context: &str,
+    argument: &str,
 ) -> Result<()> {
     let yaml = manifest_yaml(&format!(
-        "targets:\n  - name: hello\n    command: \"echo {{{{ env('{variable_name}') }}}}\"\n"
+        "targets:\n  - name: hello\n    command: \"echo {{{{ env('{variable_name}'{argument}) }}}}\"\n"
     ));
     let reader_was_called = Arc::new(AtomicBool::new(false));
     let invocation_recorder = Arc::clone(&reader_was_called);
@@ -83,7 +94,7 @@ fn denied_lookup_is_value_and_name_free(
         Ok(reader_value.clone())
     });
     let Err(error) = manifest::from_str_with_env_and_policy(&yaml, &reader, policy) else {
-        return Err(anyhow!("{failure_context}"));
+        return Err(anyhow!("a denied environment variable must fail"));
     };
     let diagnostic = format!("{error:#}");
     ensure!(diagnostic.contains("Access to an environment variable is blocked."));
@@ -93,6 +104,10 @@ fn denied_lookup_is_value_and_name_free(
     );
     ensure!(!diagnostic.contains(variable_name));
     ensure!(!diagnostic.contains(variable_value));
+    ensure!(
+        !diagnostic.contains("fallback"),
+        "the default must not appear in the diagnostic: {diagnostic}"
+    );
     Ok(())
 }
 
@@ -102,7 +117,23 @@ fn blocked_lookup_is_value_and_name_free() -> Result<()> {
         &EnvAccessPolicy::default().block_var("CREDENTIAL_LIKE_VARIABLE"),
         "CREDENTIAL_LIKE_VARIABLE",
         "credential-like-value",
-        "a blocked environment variable must fail",
+        "",
+    )
+}
+
+/// A `default` must not become an access-policy bypass.
+///
+/// `env('BLOCKED', default='x')` fails for the same reason `env('BLOCKED')`
+/// does. The policy is evaluated before the reader, so the block cannot be
+/// downgraded into a successful read by supplying a fallback — which is what a
+/// naive "resolve, then substitute on absence" implementation would do.
+#[test]
+fn a_blocked_lookup_still_fails_when_a_default_is_supplied() -> Result<()> {
+    denied_lookup_is_value_and_name_free(
+        &EnvAccessPolicy::default().block_var("CREDENTIAL_LIKE_VARIABLE"),
+        "CREDENTIAL_LIKE_VARIABLE",
+        "credential-like-value",
+        ", default='fallback'",
     )
 }
 
@@ -112,7 +143,7 @@ fn unlisted_allowlist_lookup_is_value_and_name_free() -> Result<()> {
         &EnvAccessPolicy::default().allow_var("ANOTHER_VARIABLE"),
         "UNLISTED_CREDENTIAL_LIKE_VARIABLE",
         "unlisted-credential-like-value",
-        "an unlisted environment variable must fail",
+        "",
     )
 }
 
@@ -160,7 +191,7 @@ fn lookup_failures_are_diagnostic(
         error
             .chain()
             .any(|cause| cause.to_string().to_lowercase().contains(expected)),
-        "unexpected error: {error}"
+        "unexpected error: {error:#}"
     );
     Ok(())
 }
@@ -210,3 +241,6 @@ fn blocked_lookup_diagnostic_snapshot(en_localizer: EnLocalizer) -> Result<()> {
     insta::assert_snapshot!(normalized_message, @"invalid operation: Access to an environment variable is blocked. (in <string>:1)");
     Ok(())
 }
+
+#[path = "manifest_env_tests/default_argument.rs"]
+mod default_argument;

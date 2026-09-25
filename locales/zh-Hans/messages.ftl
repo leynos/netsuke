@@ -138,6 +138,8 @@ manifest.yaml.hint.escape = 请转义反斜杠，或删除无效的转义序列�
 manifest.env.missing = 未设置必需的环境变量。
 manifest.env.invalid_utf8 = 环境变量包含无效的 UTF-8。
 manifest.env.blocked = 对环境变量的访问已被阻止。
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env 的 default 必须是字符串，但收到了 { $kind }。
 manifest.vars.not_object = 清单的 `vars` 必须是映射或对象。
 manifest.vars.reserved_name = 清单的 `vars` 键 '{ $name }' 已保留给内置模板辅助函数；请重命名该变量。
 manifest.read_failed = 无法读取 { $path } 处的清单。
@@ -339,6 +341,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = 不支持的散列算法“{ $al
 
 # 集合辅助函数的诊断。
 stdlib.collections.flatten.expected_sequence = flatten 期望序列元素，却发现 { $kind }。
+stdlib.collections.compact.not_sequence = compact 期望序列，却发现 { $kind }。
 stdlib.collections.group_by.empty_attribute = group_by 需要非空的属性。
 stdlib.collections.group_by.unresolved = group_by 无法在类型为 { $kind } 的元素上解析“{ $attr }”。
 

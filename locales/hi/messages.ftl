@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = बैकस्लैश को एस्केप �
 manifest.env.missing = एक आवश्यक परिवेश चर निर्धारित नहीं है।
 manifest.env.invalid_utf8 = एक परिवेश चर में अमान्य UTF-8 है।
 manifest.env.blocked = किसी परिवेश चर तक पहुँच अवरुद्ध है।
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env का default स्ट्रिंग होना चाहिए, { $kind } प्राप्त हुआ।
 manifest.vars.not_object = मैनिफ़ेस्ट का `vars` प्रतिचित्रण अथवा वस्तु होना चाहिए।
 manifest.vars.reserved_name = मैनिफ़ेस्ट की `vars` कुंजी '{ $name }' अंतर्निहित टेम्पलेट सहायक के लिए आरक्षित है; चर का नाम बदलें।
 manifest.read_failed = { $path } से मैनिफ़ेस्ट नहीं पढ़ा जा सका।
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = असमर्थित है�
 
 # संग्रह सहायकों के निदान।
 stdlib.collections.flatten.expected_sequence = flatten को अनुक्रम की मदें अपेक्षित थीं, किंतु { $kind } मिला।
+stdlib.collections.compact.not_sequence = compact को अनुक्रम अपेक्षित था, किंतु { $kind } मिला।
 stdlib.collections.group_by.empty_attribute = group_by को अरिक्त गुण चाहिए।
 stdlib.collections.group_by.unresolved = group_by { $kind } प्रकार की मद पर “{ $attr }” नहीं खोज सका।
 

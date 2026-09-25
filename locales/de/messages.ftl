@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Maskieren Sie Backslashes oder entfernen Sie ungült
 manifest.env.missing = Eine erforderliche Umgebungsvariable ist nicht gesetzt.
 manifest.env.invalid_utf8 = Eine Umgebungsvariable enthält ungültiges UTF-8.
 manifest.env.blocked = Der Zugriff auf eine Umgebungsvariable ist gesperrt.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Der default von env muss eine Zeichenkette sein, empfangen wurde { $kind }.
 manifest.vars.not_object = `vars` im Manifest muss eine Zuordnung bzw. ein Objekt sein.
 manifest.vars.reserved_name = Der `vars`-Schlüssel '{ $name }' im Manifest ist für eine integrierte Vorlagenfunktion reserviert; benennen Sie die Variable um.
 manifest.read_failed = Das Manifest unter { $path } konnte nicht gelesen werden.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nicht unterstützter Hash-Algori
 
 # Diagnosen der Sammlungshelfer.
 stdlib.collections.flatten.expected_sequence = flatten erwartete Sequenzelemente, fand aber { $kind }.
+stdlib.collections.compact.not_sequence = compact erwartet eine Sequenz, fand aber { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by benötigt ein nicht leeres Attribut.
 stdlib.collections.group_by.unresolved = group_by konnte „{ $attr }“ an einem Element vom Typ { $kind } nicht auflösen.
 

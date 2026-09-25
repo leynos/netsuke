@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Poprzedź ukośniki odwrotne znakiem ucieczki albo u
 manifest.env.missing = Wymagana zmienna środowiskowa nie jest ustawiona.
 manifest.env.invalid_utf8 = Zmienna środowiskowa zawiera nieprawidłowy UTF-8.
 manifest.env.blocked = Dostęp do zmiennej środowiskowej jest zablokowany.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Wartość default w env musi być łańcuchem znaków, otrzymano { $kind }.
 manifest.vars.not_object = Pole `vars` manifestu musi być odwzorowaniem lub obiektem.
 manifest.vars.reserved_name = Klucz `vars` '{ $name }' w manifeście jest zarezerwowany dla wbudowanej funkcji pomocniczej szablonów; zmień nazwę zmiennej.
 manifest.read_failed = Nie udało się odczytać manifestu z { $path }.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nieobsługiwany algorytm skrótu
 
 # Diagnostyka pomocników kolekcji.
 stdlib.collections.flatten.expected_sequence = flatten oczekiwał elementów sekwencji, ale napotkał { $kind }.
+stdlib.collections.compact.not_sequence = compact oczekiwał sekwencji, ale napotkał { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by wymaga niepustego atrybutu.
 stdlib.collections.group_by.unresolved = group_by nie zdołał odnaleźć „{ $attr }” w elemencie typu { $kind }.
 

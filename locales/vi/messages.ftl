@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Hãy thoát dấu gạch chéo ngược hoặc bỏ 
 manifest.env.missing = Một biến môi trường bắt buộc chưa được đặt.
 manifest.env.invalid_utf8 = Một biến môi trường chứa UTF-8 không hợp lệ.
 manifest.env.blocked = Quyền truy cập vào biến môi trường đã bị chặn.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Giá trị default của env phải là chuỗi, nhưng nhận được { $kind }.
 manifest.vars.not_object = Trường `vars` của tệp kê khai phải là ánh xạ hoặc đối tượng.
 manifest.vars.reserved_name = Khóa `vars` '{ $name }' của tệp kê khai được dành riêng cho hàm trợ giúp mẫu tích hợp; hãy đổi tên biến.
 manifest.read_failed = Không đọc được tệp kê khai tại { $path }.
@@ -340,6 +342,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Thuật toán băm không đư�
 
 # Chẩn đoán của các hàm trợ giúp tập hợp.
 stdlib.collections.flatten.expected_sequence = flatten mong đợi các phần tử của một dãy nhưng lại gặp { $kind }.
+stdlib.collections.compact.not_sequence = compact mong đợi một dãy nhưng lại gặp { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by cần một thuộc tính không rỗng.
 stdlib.collections.group_by.unresolved = group_by không tìm được “{ $attr }” trên phần tử kiểu { $kind }.
 
