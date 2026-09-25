@@ -150,7 +150,7 @@ def duplicated_step(name: str) -> Mutation:
 
 
 def _guarded_index(steps: cabc.Sequence[dict[str, object]], position: int) -> int:
-    """Return the lane index the ``position``\\ th guarded step now sits at.
+    """Return the lane index of the guarded step now at rank ``position``.
 
     ``position`` counts the steps the *contract* orders, not the lane's entries:
     the lane carries steps the contract says nothing about, so the third place

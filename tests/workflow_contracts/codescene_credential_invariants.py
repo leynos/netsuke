@@ -70,9 +70,7 @@ def _names_credential(value: object) -> bool:
     bool
         `True` when some string in the value contains the credential's name.
     """
-    return any(
-        CREDENTIAL_ENVIRONMENT_KEY in text for text in iter_strings(value)
-    )
+    return any(CREDENTIAL_ENVIRONMENT_KEY in text for text in iter_strings(value))
 
 
 def credential_offenders(
