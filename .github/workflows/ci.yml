@@ -217,7 +217,7 @@ jobs:
         shell: bash
       - name: Install Nixie
         uses: >-
-          leynos/shared-actions/.github/actions/install-nixie@a5765019912a8ab6882b12db049c7cde635f3a85
+          leynos/shared-actions/.github/actions/install-nixie@438ad8a99a3580e753189c47391a1652c5f46ed4
         with:
           python-version: '3.14'
       - name: Format
