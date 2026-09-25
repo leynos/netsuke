@@ -3150,6 +3150,85 @@ Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`, or
 `[package.metadata.kani.flags] default-unwind = "6"`; both settings are part of
 the harness contract and must move in lockstep with new Kani-only modules.
 
+### Kani scope wrapper
+
+Never run Kani bare on a developer machine. Uncapped local runs have OOM-killed
+the machine, so every local `cargo kani` and `make kani-ir` invocation runs
+inside a `systemd-run --user --scope` wrapper that places the verifier in its
+own control group and caps what it may consume. Composed in full, the wrapper
+around `make kani-ir` is:
+
+```bash
+systemd-run \
+    --user \
+    --scope \
+    --expand-environment=no \
+    -p RuntimeMaxSec=8m \
+    -p TimeoutStopSec=20s \
+    -p CPUQuota=200% \
+    -p MemoryMax=8G \
+    -p MemorySwapMax=0 \
+    -p TasksMax=96 \
+    -p IOWeight=20 \
+    /usr/bin/nice -n 15 \
+    bash -c 'set -o pipefail; \
+      env LD_LIBRARY_PATH="$HOME/.kani/kani-0.67.0/toolchain/lib:$HOME/.kani/kani-0.67.0/lib" \
+      make kani-ir 2>&1 \
+      | tee /tmp/kani-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out'
+```
+
+`RuntimeMaxSec=8m` is the runtime cap and `TimeoutStopSec=20s` the stop grace
+that follows it; `CPUQuota`, `MemoryMax`, `MemorySwapMax`, `TasksMax` and
+`IOWeight` are the resource properties; and `/usr/bin/nice -n 15` keeps the
+verifier from crowding the rest of the machine. The explicit `LD_LIBRARY_PATH`
+points at the pinned Kani toolchain and is not optional: without it
+`cargo kani` and Cargo build scripts fail to load `libLLVM` with an opaque
+linker error, and that is the most common way to lose an hour on a Kani task.
+
+The bound is the pair, not `RuntimeMaxSec` alone. Reaching `RuntimeMaxSec` puts
+the scope into a failure state and starts the stop: systemd sends `SIGTERM`,
+escalating to `SIGKILL` only once `TimeoutStopSec` expires. The effective bound
+is therefore `RuntimeMaxSec` plus `TimeoutStopSec` — 8m20s with the documented
+figures. Leaving `TimeoutStopSec` unpinned hands that decision to the host
+default, 90 seconds on the reference host, and a payload that ignores `SIGTERM`
+can then overrun the nominal cap by that much: one sleeping for 200 seconds
+under `RuntimeMaxSec=3s` alone was killed at 93 seconds, and at 23 seconds once
+`TimeoutStopSec=20s` was pinned.
+
+`tee` sits inside the scope, and that is deliberate. The pipeline travels as
+the scope's payload, so the captured file is exactly the output the cap
+governs: a run stopped by `RuntimeMaxSec` leaves a capture that ends where the
+budget ran out, rather than one the scope can no longer reach.
+`set -o pipefail` is set in that same shell, because a pipeline written outside
+the scope cannot carry it in. A pipeline's status is otherwise `tee`'s, zero
+whenever the capture succeeded, so a failing verifier would be masked by a
+successful capture.
+
+The wrapper has host prerequisites. Its effective systemd minimum is 254:
+`RuntimeMaxSec` on a scope needs 244 and `--expand-environment=no` needs 254,
+so the higher floor binds; the reference host reports 257. It also needs a
+running per-user systemd manager with delegated cgroup support, which is what
+`--user --scope` delegates the scope's control group to and what a `--user`
+login session provides on the reference host. Without such a manager the
+command fails before any unit is created, reporting
+`Failed to connect to user scope bus via local transport`.
+
+Do not reintroduce a `timeout` prefix in place of `RuntimeMaxSec`. The prefix
+does reach a payload that stays in its process group: GNU `timeout` signals the
+supervised command's group rather than only its immediate child, and under
+`--scope` the payload's parent is the `timeout` process itself, so the two
+share one. Two other limits still make it the worse bound. The `--kill-after=`
+grace is added to the deadline rather than nested inside it, so a workload that
+ignores the first signal is bounded by the sum of the two figures. And a
+descendant that leaves the process group, by `setsid` or a double fork, escapes
+a process-group signal altogether, while the scope's cgroup stop does not
+depend on signal propagation.
+
+The wrapper's own end-to-end suite is `tests/kani_scope_wrapper_e2e_tests.rs`,
+run by `make test-kani-scope-wrapper`; it exercises the documented shape at
+test-sized limits. The probe evidence behind the figures above is recorded in
+the 4.2.2 and 4.2.3 ExecPlans under `docs/execplans/`.
+
 ### Kani harness inventory
 
 The IR harnesses are declared by the modules they verify, under

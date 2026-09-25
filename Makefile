@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -393,6 +393,25 @@ kani-full: ## Run the full Kani verification suite
 	$(KANI_RUSTFLAGS) $(KANI) $(KANI_FLAGS)
 
 kani-ir: kani-full ## Run the IR Kani verification suite
+
+# The scope wrapper's own end-to-end suite. It drives `systemd-run --user
+# --scope` at test-sized limits rather than the documented eight minutes, so it
+# needs no Kani install. The strict variable is what makes this lane meaningful:
+# without it a host lacking a per-user systemd manager would skip every scenario
+# and still report green, which would be coverage in name only. See
+# tests/kani_scope_wrapper_e2e_tests.rs for the prerequisites.
+#
+# It takes `KANI_RUSTFLAGS`, not `GATE_RUSTFLAGS`, and declares no
+# `check-build-tools` prerequisite. Both would be wrong here: the lane that runs
+# this is `kani-smoke`, which builds on the stable toolchain and installs neither
+# the pinned `mold` nor the Polonius nightly, so `-Zthreads` is rejected outright
+# and the capability check would fail before a single scenario ran. The suite is
+# an ordinary test binary with no need for the build standard's linker or
+# frontend, so it takes the same flags the Kani targets do.
+KANI_SCOPE_WRAPPER_STRICT ?= 1
+test-kani-scope-wrapper: ## Verify the Kani scope wrapper end to end
+	NETSUKE_KANI_SCOPE_WRAPPER_STRICT=$(KANI_SCOPE_WRAPPER_STRICT) \
+		$(KANI_RUSTFLAGS) $(CARGO) nextest run --test kani_scope_wrapper_e2e_tests $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 install-verus: ## Install the pinned Verus verifier
 	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2

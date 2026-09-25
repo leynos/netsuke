@@ -1415,11 +1415,12 @@ No new external dependency is introduced.
   90-second default, so `TimeoutStopSec=20s` is load-bearing rather than
   cosmetic. The sibling wrapper in
   `docs/execplans/4-2-3-kani-harnesses-for-command-interpolation.md` was
-  partially reconciled by #755, which removed its `timeout` prefix, but it
-  still omits `TimeoutStopSec` and still leaves `tee` outside the scope, so it
-  carries the unbounded stop grace and the masked pipeline status this revision
-  removes. That residue, and the rest of 4.2.3's reconciliation, belong to
-  roadmap 4.2.3 and are escalated as issue #769 rather than absorbed here.
+  partially reconciled by #755, which removed its `timeout` prefix, but at that
+  point it still omitted `TimeoutStopSec` and still left `tee` outside the
+  scope, so it carried the unbounded stop grace and the masked pipeline status
+  this revision removes. That residue, and the rest of 4.2.3's reconciliation,
+  were escalated as issue #769 rather than absorbed here; both have since been
+  fixed in place, as the revision note at the end of this file records.
 
 - 2026-06-20 (planning agent, after Logisphere community-of-experts review):
   Added a fourth "output is a rotation of the input interior" assertion to each
@@ -1437,3 +1438,16 @@ No new external dependency is introduced.
   mutations accordingly. These changes affect Stage C, Stage E, the Interfaces
   section, the Decision Log, and Surprises & Discoveries; they do not change
   the scope, the file list, or the approval gate.
+
+**Revision note (2026-09-25, issue #765).** The 2026-09-21 entry above closed
+by escalating 4.2.3's residue — that its wrapper still omitted `TimeoutStopSec`
+and still left `tee` outside the scope — as issue #769 rather than absorbing it
+here. That residue has since been fixed in place, in
+`docs/execplans/4-2-3-kani-harnesses-for-command-interpolation.md`, so the
+sentence describing it is now historical rather than current. This document's
+own command, its topology and additive-grace account, and its `tee`-inside-
+the-scope rationale were already correct and are unchanged; the two wrappers
+now agree. Revision 2.31 of that document records the reconciliation and
+corrects the mechanism its own Revision 2.30 had given for the 2026-09-20
+overrun. Nothing in this plan's scope, obligations, or completion state is
+affected: status remains `COMPLETE`.

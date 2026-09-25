@@ -436,6 +436,38 @@ jobs:
           fi
       - name: Kani version check
         run: cargo kani --version | grep --fixed-strings "0.67.0"
+      - name: Start the user manager
+        # A hosted runner's job does not run inside a login session, so the
+        # per-user systemd manager that `systemd-run --user --scope` needs is
+        # absent until lingering is on; without it every scenario in the next
+        # step would fail its prerequisite check rather than test anything.
+        # This is the same remedy the estate's Podman lanes use.
+        shell: bash
+        run: |
+          sudo loginctl enable-linger "$(id -un)"
+          echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus" >> "$GITHUB_ENV"
+          for _ in $(seq 1 30); do
+            [ -S "/run/user/$(id -u)/bus" ] && break
+            sleep 1
+          done
+      - name: Install cargo-nextest
+        # The wrapper's own suite is an ordinary test binary run through the
+        # standard runner, and this job installs none of the test tooling the
+        # `build-test` lane does. Pinned to the same action revision and the
+        # same workflow-scoped version as that lane, so the two cannot drift.
+        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375  # v2.87.12
+        with:
+          tool: nextest@${{ env.NEXTEST_VERSION }}
+      - name: Verify the scope wrapper end to end
+        # Runs before the harness suite so a broken wrapper is reported as
+        # itself rather than as a Kani failure. Not a `make test` invocation:
+        # the wrapper's own suite is one test binary, and `kani-smoke` is
+        # exempt from the single-execution rule precisely for steps like this.
+        # The target exports the strict variable, which turns an absent
+        # per-user systemd manager into a failure instead of a skip -- a lane
+        # that skipped every scenario would otherwise read as green.
+        run: make test-kani-scope-wrapper
       - name: Run Kani harnesses
         run: make kani-ir
       - name: Save Kani payloads
