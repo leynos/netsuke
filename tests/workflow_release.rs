@@ -231,7 +231,7 @@ fn require_release_admission_workflow_wiring(
     require_hermetic_admission_runtime(workflow, admission)
 }
 
-/// Require every release build job to request only checkout and workflow-read scopes.
+/// Require every release build job to request only the checkout read scope.
 fn require_build_job_permissions(jobs: &Mapping) -> Result<()> {
     for job_name in ["build-linux", "build-windows", "build-macos"] {
         let job = release_workflow_job(jobs, job_name)?;
@@ -239,12 +239,10 @@ fn require_build_job_permissions(jobs: &Mapping) -> Result<()> {
             .and_then(YamlValue::as_mapping)
             .with_context(|| format!("{job_name} should declare permissions"))?;
         ensure!(
-            permissions.len() == 2
-                && mapping_value(permissions, "actions").and_then(YamlValue::as_str)
-                    == Some("read")
+            permissions.len() == 1
                 && mapping_value(permissions, "contents").and_then(YamlValue::as_str)
                     == Some("read"),
-            "{job_name} should request only read permissions"
+            "{job_name} should request only contents read permission"
         );
     }
 
