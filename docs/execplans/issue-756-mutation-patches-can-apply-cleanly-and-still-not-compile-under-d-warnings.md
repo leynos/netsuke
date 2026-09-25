@@ -1188,3 +1188,21 @@ fixed because the fix is a broader change than the issue.
   carried the same staleness and were corrected with it. Recorded because this
   is the plan's own subject one level up: a claim that was true on the tree
   where it was written, and that nothing re-checks when the tree moves.
+- 2026-09-25 — **CI confirmed both fixes on the pushed head `10270c37`.** The
+  C0302 repair is verified in the place the failure actually occurred: the
+  `build-test` job's `Lint` step is `success`, where the previous head
+  `3e88ff63` failed at the same step with:
+
+  ```text
+  tests/workflow_contracts/workflow_loading.py:1:0: C0302: Too many lines in module (403/400)
+  ```
+
+  That step number is the same in both runs (24), so the comparison is like for
+  like, and the new log carries no `C0302` or `too-many-lines` anywhere.
+  Separately, `kani-smoke` concludes `success` and its **"Mutation patch
+  compile gate"** step runs `19:45:33Z → 19:51:12Z` — **339 s** inside the 600
+  s allowance, 261 s of margin. That is the first head on which the whole chain
+  is green together: the reseeded patches, the module-qualified filter, the 600
+  s override actually binding, and the gate compiling all 18 patched trees.
+  Nothing in this entry is inferred from a job conclusion alone; each figure is
+  read from the step that produced it.
