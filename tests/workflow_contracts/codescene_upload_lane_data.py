@@ -28,6 +28,8 @@ from ci_coverage_wiring_invariants import (
 from codescene_credential_invariants import (
     CREDENTIAL_ENVIRONMENT_KEY,
     CREDENTIAL_INPUT,
+    CREDENTIAL_INPUT_VALUE,
+    CREDENTIAL_SOURCE_NAMESPACE,
 )
 from codescene_report_validation_invariants import (
     REPORT_VALIDATION_STEP,
@@ -54,6 +56,28 @@ if typ.TYPE_CHECKING:
 
 #: The job holding the trunk lane's report-delivery steps.
 TRUNK_JOB = "coverage-upload"
+
+#: The step publishing whether the credential exists, and the id whose output
+#: the upload's gate reads. Modelled in the fixture because the upload's guard
+#: is a statement about that output, so a clean lane without the step would be
+#: one whose gate reads nothing.
+AVAILABILITY_STEP = "Check CodeScene token availability"
+AVAILABILITY_STEP_ID = "codescene_token"
+
+#: The check's command, which publishes a boolean and nothing else. The token
+#: itself is named here and in the upload's input — nowhere else in the lane,
+#: and nowhere in an environment.
+AVAILABILITY_COMMAND = (
+    'echo "available=${{ '
+    f"{CREDENTIAL_SOURCE_NAMESPACE}.{CREDENTIAL_ENVIRONMENT_KEY} != ''"
+    ' }}" >> "$GITHUB_OUTPUT"'
+)
+
+#: The guard the upload must carry, in the spelling the repository uses.
+UPLOAD_GUARD = (
+    f"steps.{AVAILABILITY_STEP_ID}.outputs.available == 'true'"
+    " && github.ref == 'refs/heads/main'"
+)
 
 #: A full 40-character lowercase commit SHA, standing in for whatever
 #: revision the dependency updater last pinned. The contract checks the
@@ -88,15 +112,16 @@ jobs:
           cp -- {COVERAGE_REPORT_PATH} "${{staged}}/{COVERAGE_REPORT_PATH}"
           uv run --no-project \\
             {REPORT_VALIDATOR_SCRIPT} --artifact-dir "${{staged}}"
+      - name: {AVAILABILITY_STEP}
+        id: {AVAILABILITY_STEP_ID}
+        run: {AVAILABILITY_COMMAND}
       - name: {CODESCENE_UPLOAD_STEP}
-        if: env.{CREDENTIAL_ENVIRONMENT_KEY} != ''
-        env:
-          {CREDENTIAL_ENVIRONMENT_KEY}: ${{{{ secrets.{CREDENTIAL_ENVIRONMENT_KEY} }}}}
+        if: {UPLOAD_GUARD}
         uses: {UPLOAD_COVERAGE_ACTION}@{FIXTURE_PIN}
         with:
           {UPLOAD_PATH_INPUT}: {COVERAGE_REPORT_PATH}
           {COVERAGE_FORMAT_INPUT}: {COVERAGE_FORMAT_VALUE}
-          {CREDENTIAL_INPUT}: ${{{{ env.{CREDENTIAL_ENVIRONMENT_KEY} }}}}
+          {CREDENTIAL_INPUT}: {CREDENTIAL_INPUT_VALUE}
 """
 
 

@@ -23,7 +23,6 @@ Run via ``make test-workflow-contracts``.
 import copy
 import typing as typ
 
-from codescene_credential_invariants import CREDENTIAL_ENVIRONMENT_KEY
 from codescene_lane_edit_model import (
     DUPLICATION,
     INSERTION,
@@ -37,7 +36,7 @@ from codescene_lane_edit_model import (
     visible_names,
 )
 from codescene_upload_invariants import CODESCENE_UPLOAD_STEP, REPORT_STEP_NAMES
-from codescene_upload_lane_data import inputs_of, step_of
+from codescene_upload_lane_data import inputs_of, step_named, step_of
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -150,13 +149,33 @@ def duplicated_step(name: str) -> Mutation:
     )
 
 
+def _guarded_index(steps: cabc.Sequence[dict[str, object]], position: int) -> int:
+    """Return the lane index the ``position``\\ th guarded step now sits at.
+
+    ``position`` counts the steps the *contract* orders, not the lane's entries:
+    the lane carries steps the contract says nothing about, so the third place
+    among the three ordered steps is the lane index of the third of them rather
+    than lane entry 3. A rank past the last one is the end of the lane.
+
+    Returns
+    -------
+    int
+        The index to insert at, ``len(steps)`` to append.
+    """
+    present = [ordered for ordered in REPORT_STEP_NAMES if step_named(steps, ordered)]
+    if position < len(present):
+        return index_of(steps, present[position])
+    return len(steps)
+
+
 def moved_step(name: str, position: int) -> Mutation:
-    """Return a mutation moving the step called ``name`` to ``position``.
+    """Return a mutation moving the step called ``name`` to rank ``position``.
 
     Where the step belongs is the model's own statement of the order, not
     something read back out of the lane, so a mutation that leaves the step
     where the contract wants it is recorded as the control it is rather than
-    silently being a no-op with a fault claimed for it.
+    silently being a no-op with a fault claimed for it. Both ranks are counted
+    over the steps the contract orders, which is the frame the verdict is in.
 
     Returns
     -------
@@ -166,9 +185,9 @@ def moved_step(name: str, position: int) -> Mutation:
     expected = REPORT_STEP_NAMES.index(name)
 
     def apply(steps: list[dict[str, object]]) -> None:
-        """Lift the named step out and reinsert it at ``position``."""
+        """Lift the named step out and reinsert it at rank ``position``."""
         moved = steps.pop(index_of(steps, name))
-        steps.insert(position, moved)
+        steps.insert(_guarded_index(steps, position), moved)
 
     return Mutation(
         REORDERING,
@@ -249,18 +268,28 @@ def smuggled_input(step_name: str, input_name: str, value: str) -> Mutation:
     )
 
 
-def rebound_environment(value: str) -> Mutation:
-    """Return a mutation reading the credential from the wrong context."""
+def unguarded_upload(condition: str) -> Mutation:
+    """Return a mutation replacing the upload's guard with ``condition``.
+
+    The upload's gate is a statement about the check step's output and the ref,
+    so a condition that keeps the shape of a gate while dropping either
+    conjunct is a lane that submits when it must not. Both halves are drawn by
+    the strategy, because a contract that read only one of them would accept the
+    other's absence.
+
+    Returns
+    -------
+    Mutation
+        The mutation and the verdict the contract must return on it.
+    """
 
     def apply(steps: list[dict[str, object]]) -> None:
-        """Point the upload's credential environment entry at ``value``."""
-        environment = step_of(steps, CODESCENE_UPLOAD_STEP)["env"]
-        if isinstance(environment, dict):
-            environment[CREDENTIAL_ENVIRONMENT_KEY] = value
+        """Set the upload's gate to ``condition``."""
+        step_of(steps, CODESCENE_UPLOAD_STEP)["if"] = condition
 
     return _reportable_mutation(
-        MISBINDING,
-        f"the upload reads {CREDENTIAL_ENVIRONMENT_KEY} from {value!r}",
+        UNGATING,
+        f"the upload's guard narrowed to {condition!r}",
         apply,
         visible_names(CODESCENE_UPLOAD_STEP),
     )

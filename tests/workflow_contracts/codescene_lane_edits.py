@@ -19,11 +19,14 @@ Run via ``make test-workflow-contracts``.
 import itertools
 import typing as typ
 
-from ci_coverage_wiring_invariants import COVERAGE_REPORT_PATH
+from ci_coverage_wiring_invariants import (
+    COVERAGE_REPORT_PATH,
+    UPLOAD_GUARD_CONJUNCTS,
+)
 from codescene_credential_invariants import (
     CREDENTIAL_ENVIRONMENT_KEY,
-    CREDENTIAL_GATE_NAMESPACE,
     CREDENTIAL_INPUT,
+    CREDENTIAL_INPUT_VALUE,
     CREDENTIAL_SOURCE_NAMESPACE,
 )
 from codescene_lane_edit_model import (
@@ -36,7 +39,6 @@ from codescene_lane_mutations import (
     inserted_step,
     misbound_input,
     moved_step,
-    rebound_environment,
     removed_field,
     removed_input,
     removed_step,
@@ -44,6 +46,7 @@ from codescene_lane_mutations import (
     smuggled_input,
     swapped_steps,
     ungated_upload,
+    unguarded_upload,
     weakened_gate,
 )
 from codescene_report_validation_invariants import REPORT_VALIDATOR_SCRIPT
@@ -64,8 +67,8 @@ from hypothesis import strategies as st
 #: rebinds a value to a context the contract does not accept is the whole point
 #: of the misbinding family, so the pool has to be wider than the accepted one.
 CONTEXTS: typ.Final[tuple[str, ...]] = (
-    CREDENTIAL_GATE_NAMESPACE,
     CREDENTIAL_SOURCE_NAMESPACE,
+    "env",
     "github",
     "vars",
     "steps",
@@ -151,7 +154,7 @@ def misbindings() -> st.SearchStrategy[Mutation]:
 
     Each arm is a different way for a value to be wrong: a path the generator
     never wrote, a format the upload would parse as another shape, a credential
-    read from a context the gate cannot compare, and an input the contract
+    read from any context other than the secret store, and an input the contract
     requires to stay absent. All four are the *same* family because they are one
     kind of fault — the lane binds something the contract did not ask for — and
     a contract that caught one while missing another would be stated over the
@@ -173,16 +176,11 @@ def misbindings() -> st.SearchStrategy[Mutation]:
         _unlike(COVERAGE_FORMAT_VALUE),
     ).map(lambda pair: misbound_input(pair[0], COVERAGE_FORMAT_INPUT, pair[1]))
     token = st.one_of(
-        _other_than(CREDENTIAL_GATE_NAMESPACE).map(
+        _other_than(CREDENTIAL_SOURCE_NAMESPACE).map(
             lambda context: f"${{{{ {context}.{CREDENTIAL_ENVIRONMENT_KEY} }}}}"
         ),
-        _unlike(CREDENTIAL_ENVIRONMENT_KEY),
+        _unlike(CREDENTIAL_INPUT_VALUE),
     ).map(lambda value: misbound_input(CODESCENE_UPLOAD_STEP, CREDENTIAL_INPUT, value))
-    environment = (
-        _other_than(CREDENTIAL_SOURCE_NAMESPACE)
-        .map(lambda context: f"${{{{ {context}.{CREDENTIAL_ENVIRONMENT_KEY} }}}}")
-        .map(rebound_environment)
-    )
     smuggled = st.sampled_from(
         [
             (CODESCENE_UPLOAD_STEP, input_name, "abc123")
@@ -193,75 +191,90 @@ def misbindings() -> st.SearchStrategy[Mutation]:
             (CODESCENE_UPLOAD_STEP, PUBLICATION_OPT_OUT_INPUT, "false"),
         ]
     ).map(lambda triple: smuggled_input(*triple))
-    return st.one_of(path, format_, token, environment, smuggled)
+    return st.one_of(path, format_, token, smuggled)
 
 
 def ungatings() -> st.SearchStrategy[Mutation]:
-    """Return a strategy for mutations deleting the upload's gate.
+    """Return a strategy for mutations narrowing or deleting the upload's gate.
+
+    Three ways to leave the upload under-guarded: the entry deleted, the entry
+    present with the empty condition the clean lane's entry is not, and the
+    entry keeping one conjunct of the two the guard is a conjunction of. The
+    third is the one a contract stated over *presence* rather than over both
+    clauses would accept, and the conjuncts are drawn from the constant the
+    repository's own predicate is stated over, so a narrowing cannot be
+    generated against a conjunct the contract never asked about.
 
     Returns
     -------
     st.SearchStrategy
     """
-    return st.one_of(st.none(), st.just("")).map(ungated_upload)
+    removed = st.one_of(st.none(), st.just("")).map(ungated_upload)
+    narrowed = st.sampled_from(sorted(UPLOAD_GUARD_CONJUNCTS)).map(unguarded_upload)
+    return st.one_of(removed, narrowed)
 
 
 def reversals() -> st.SearchStrategy[Mutation]:
     """Return a strategy for mutations inverting the upload's gate.
 
-    Each arm names the credential, reads it from the context the gate can see,
-    and opens on exactly the run the gate exists to skip. A contract that asked
-    only whether the credential were *named* would accept every one of them.
+    Each arm is a condition a contract reading only for the credential's *name*
+    would accept: the credential itself as the whole condition, the credential
+    read out of the environment the composite action made dangerous, a
+    disjunction that lets either half authorize the upload alone, and a
+    disjunction over the two genuine conjuncts. GitHub evaluates ``&&`` more
+    tightly than ``||``, so the last two authorize the step on a single
+    conjunct — which is the fault a substring test on the guard cannot see.
 
     Returns
     -------
     st.SearchStrategy
     """
-    gate = CREDENTIAL_GATE_NAMESPACE
     key = CREDENTIAL_ENVIRONMENT_KEY
+    present, trunk = sorted(UPLOAD_GUARD_CONJUNCTS)
     return st.sampled_from([
-        f"{gate}.{key} == ''",
-        f"!{gate}.{key}",
-        f"{gate}['{key}'] == ''",
-        f"{gate}[ '{key}' ] == ''",
-        f"'' == {gate}.{key}",
-        f"${{{{ {gate}.{key} == '' }}}}",
-        f"${{{{ {gate}['{key}'] == '' }}}}",
-        f"${{{{ !{gate}.{key} }}}}",
+        f"env.{key}",
+        f"${{{{ env.{key} }}}}",
+        f"{present} || {trunk}",
+        f"{trunk} || {present}",
+        f"always() && {trunk}",
     ]).map(reversed_gate)
 
 
 def weakenings() -> st.SearchStrategy[Mutation]:
-    """Return a strategy for mutations naming the credential without gating.
+    """Return a strategy for mutations that name the parts without requiring them.
 
-    Three ways to name it and gate on nothing, each of which a contract reading
-    only for the name would accept: the bare reference, which is not a
-    comparison at all; a quoted literal that spells the reference exactly, which
-    GitHub reads as text; and the same name reached through a context the
-    condition cannot compare, which resolves to the empty string on every run.
+    Each arm mentions something the guard is about — the credential, the check
+    step, the ref — in a condition that does not *require* it, which is the
+    fault a contract stated over presence accepts: the name is there, and the
+    step still runs on the run the guard exists to skip. The forms are the
+    plausible near-misses a workflow author writes: the bare reference, which is
+    not a comparison at all; a comparison against the wrong value, which tests
+    presence back-to-front; a quoted literal that spells the clause exactly,
+    which GitHub reads as text; and an unrelated condition that merely mentions
+    the credential's name.
 
     Returns
     -------
     st.SearchStrategy
     """
-    gate = CREDENTIAL_GATE_NAMESPACE
     key = CREDENTIAL_ENVIRONMENT_KEY
+    present, _trunk = sorted(UPLOAD_GUARD_CONJUNCTS)
     bare = st.sampled_from([
-        f"{gate}.{key}",
-        f"{gate}['{key}']",
-        f"${{{{ {gate}.{key} }}}}",
+        f"{present}",
+        f"${{{{ {present} }}}}",
     ])
-    spelled = st.just(f"${{{{ '{gate}.{key}' != '' }}}}")
-    elsewhere = _other_than(gate).map(
-        lambda context: f"${{{{ {context}.{key} != '' }}}}"
-    )
+    wrong_value = st.sampled_from([
+        f"{present} == 'false'",
+        f"{present} != 'true'",
+    ])
+    spelled = st.just(f"${{{{ '{present}' }}}}")
     unimplemented = st.sampled_from([
         "github.event_name == 'push'",
         "runner.os == 'Linux'",
         f"env.NOT_{key} != ''",
         f"${{{{ vars.{key} != '' }}}}",
     ])
-    return st.one_of(bare, spelled, elsewhere, unimplemented).map(weakened_gate)
+    return st.one_of(bare, wrong_value, spelled, unimplemented).map(weakened_gate)
 
 
 def payloads() -> st.SearchStrategy[dict[str, object]]:
