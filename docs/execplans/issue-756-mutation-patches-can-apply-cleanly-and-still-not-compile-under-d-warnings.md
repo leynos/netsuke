@@ -80,7 +80,11 @@ failure mode cannot recur silently.
       two `#755`-owned patches.
 - [x] (2026-09-21) Adopt PR `#755`'s two repairs verbatim, so the gate is green
       here without waiting for an unmerged PR and the two branches cannot
-      conflict whichever lands first.
+      conflict whichever lands first. `#755` merged on 2026-09-22 (`ee0e5523`),
+      before this branch's own base, so the two files now arrive from `main`
+      and the adoption was dropped as redundant when rebasing onto `30c50e27`.
+      The blobs are byte-identical to `#755`'s repair commit (`3a282018`)
+      either way; only the provenance changed.
 - [x] (2026-09-21) Wire it into `.config/nextest.toml` (the
       `nested-cargo-builds` group), the Makefile (`test-kani-mutations`, with
       both worker bounds, plus `.PHONY` and `NEXTEST_TARGETS`), and CI
@@ -341,12 +345,26 @@ failure mode cannot recur silently.
   leave the guide stating a number the file no longer has.
 - **A compile survey found five broken patches, not three.** Running
   `RUSTFLAGS="-D warnings" cargo check --lib --all-features` over all 18
-  patches at `main` (`00f48f77`) showed `marker_token_match_is_exact` and
+  patches at the then-current `main` (`00f48f77`, 2026-09-21) showed
+  `marker_token_match_is_exact` and
   `scanner_agrees_with_independent_specification` also fail — these are exactly
-  the two PR `#755` repairs, and `#755` has not merged. `main` and `#755`'s base
-  (`61a944fb`) have identical blob hashes for all five affected files, so the
-  mechanism reproduces on a clean `main`. They are in scope for `#755`, not
-  `#756`.
+  the two PR `#755` repairs, which had not yet merged. At that head, `main` and
+  `#755`'s base (`61a944fb`) had identical blob hashes for all five affected
+  files, so the mechanism reproduced on a clean `main`. They were in scope for
+  `#755`, not `#756`.
+- **That survey's framing was overtaken by the merge, and read as false once
+  the base moved.** `#755` merged on 2026-09-22 (`ee0e5523`), and this branch's
+  base (`30c50e27`, 2026-09-22 23:01) sits after it, so the two repairs now
+  arrive from `main` rather than from this branch. The earlier revision of this
+  entry said `#755` "has not merged", which was true when written and is not
+  now. The adoption itself was real: it was folded into `a5b8a928` ("Gate
+  mutation patches on compiling under `-D warnings`"), which touched both patch
+  files, and the rebase onto `30c50e27` dropped it as redundant. The blobs are
+  byte-identical either way — verified against `#755`'s own repair commit,
+  `3a282018`, not inferred from the merge — so the tree this branch ships is
+  the one the adoption produced and only the provenance changed. What this
+  branch reseeds is therefore **four** patches, and the issue's "three" and the
+  survey's "five" are both correct at their respective heads.
 - The issue's suggested `_name` / `#[cfg(test)]`-visibility remedy is weaker
   than the in-place idiom the healthy patches already use: rebinding silences a
   warning without seeding a behavioural fault the harness can catch.
@@ -759,10 +777,13 @@ failure mode cannot recur silently.
 
 ## Outcomes & retrospective
 
-Task 1 delivered: the three named patches now seed the same faults without dead
-code, each validated by apply → compile → harness failure → revert → harness
-success. The survey widened the count from three to five, and the two extras
-were adopted from `#755`.
+Task 1 delivered: the four patches this branch reseeds now seed the same faults
+without dead code, each validated by apply → compile → harness failure → revert
+→ harness success. The survey at `00f48f77` widened the count from three to
+five; of those two extras, `#755` merged its own repairs on 2026-09-22 and they
+now arrive from `main`, while the fourth patch this branch reseeds
+(`self_dependency_reports_cycle`) was found separately, by the `cfg(kani)`
+census below, and is not one the survey could have seen.
 
 Task 2 delivered: `compile_guard` closes the gap the issue describes. It is
 gated (one Kani codegen per patch), registered in the `nested-cargo-builds`
@@ -1153,3 +1174,17 @@ fixed because the fix is a broader change than the issue.
   measured `cargo check` counter-example. The removal was still correct — it
   was the third copy, and the cheapest to spend — but the reason first written
   for it was not, and was corrected in both places rather than quietly reworded.
+- 2026-09-25 — **The `#755` provenance read as false once the base moved.** PR
+  `#755` merged on 2026-09-22 (`ee0e5523`), before this branch's own base
+  (`30c50e27`), so the two patch files it repaired now arrive from `main` and
+  the rebase dropped this branch's verbatim adoption of them as redundant. The
+  Progress item, the survey entry, and the `Outcomes` passage all described the
+  adoption in the present tense — "`#755` has not merged", "whichever PR merges
+  second" — which was accurate when written and is not now. Corrected in the
+  direction the tree actually is, and the adoption is recorded as having really
+  happened rather than deleted: it was folded into `a5b8a928`, which touched
+  both patch files, and the blobs are byte-identical to `#755`'s own repair
+  commit (`3a282018`). The pull request's scope note and References section
+  carried the same staleness and were corrected with it. Recorded because this
+  is the plan's own subject one level up: a claim that was true on the tree
+  where it was written, and that nothing re-checks when the tree moves.
