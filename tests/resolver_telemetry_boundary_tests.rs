@@ -37,6 +37,7 @@ use cap_std::{
     ambient_authority,
     fs_utf8::{Dir, DirEntry},
 };
+use rstest::rstest;
 use syn::{File, Item, UseTree};
 
 /// The resolver domain, relative to the workspace root.
@@ -194,7 +195,7 @@ fn names_segment(tree: &UseTree, wanted: &str) -> bool {
     }
 }
 
-/// Return whether `file` imports the telemetry module.
+/// Return whether `items` holds a `use` reaching the telemetry module.
 ///
 /// Only `use` items are read, not qualified paths written at a call site. Those
 /// are the same dependency, and the rule is stated over imports, so a module
@@ -203,10 +204,26 @@ fn names_segment(tree: &UseTree, wanted: &str) -> bool {
 /// encodes. It is a convention rather than an invariant because whether a
 /// path's first segment is a crate or a local module is not a fact a single
 /// file carries.
-fn imports_telemetry(file: &File) -> bool {
-    file.items.iter().any(|item| {
-        matches!(item, Item::Use(item_use) if names_segment(&item_use.tree, TELEMETRY_MODULE))
+///
+/// Inline modules are descended into. `use` is legal inside `mod tests { ... }`,
+/// and this domain writes several of its test modules that way, so a scan that
+/// read only a file's own items would report a clean file for one whose `use`
+/// sits one block down. The walk is over the syntax tree, so a module written
+/// inline and the same module split into its own file are read alike.
+fn imports_telemetry_in(items: &[Item]) -> bool {
+    items.iter().any(|item| match item {
+        Item::Use(item_use) => names_segment(&item_use.tree, TELEMETRY_MODULE),
+        Item::Mod(item_mod) => item_mod
+            .content
+            .as_ref()
+            .is_some_and(|(_, nested)| imports_telemetry_in(nested)),
+        _ => false,
     })
+}
+
+/// Return whether `file` imports the telemetry module, at any nesting depth.
+fn imports_telemetry(file: &File) -> bool {
+    imports_telemetry_in(&file.items)
 }
 
 /// Every module under the resolver domain that names telemetry must be allowed to.
@@ -280,106 +297,53 @@ fn only_the_telemetry_boundary_names_telemetry_in_the_resolver_domain() -> Resul
     Ok(())
 }
 
-/// The module is named by the last segment of a plain path.
+/// The position in a `use` tree at which the module is named.
 ///
-/// This is the shape the domain would reach the reporting layer with, and the
-/// one the permitted list is written against.
-#[test]
-fn use_tree_names_the_last_segment_of_a_plain_path() -> Result<()> {
-    let tree: UseTree = syn::parse_quote!(crate::stdlib::which::telemetry);
+/// Every position can reach the module, and the spellings the domain would
+/// actually use are spread across them, so each is a case of its own rather
+/// than a detail the others happen to cover. One table rather than seven test
+/// bodies, because the cases differ only in the tree and the verdict.
+#[rstest]
+#[case::plain_path("crate::stdlib::which::telemetry", true)]
+#[case::braced_group("crate::stdlib::which::{cache, telemetry}", true)]
+#[case::nested_group("crate::stdlib::which::{cache::{self, key}, telemetry}", true)]
+#[case::opening_segment("telemetry::counters", true)]
+#[case::renamed("crate::stdlib::which::telemetry as reporting", true)]
+#[case::longer_name("crate::stdlib::which::telemetry_tests", false)]
+#[case::group_of_siblings("crate::stdlib::which::{cache, resolve_error}", false)]
+fn use_tree_naming(#[case] source: &str, #[case] expected: bool) -> Result<()> {
+    let tree: UseTree = syn::parse_str(source).with_context(|| format!("parse {source}"))?;
     ensure!(
-        names_segment(&tree, TELEMETRY_MODULE),
-        "a plain path ending in {TELEMETRY_MODULE} reaches it"
+        names_segment(&tree, TELEMETRY_MODULE) == expected,
+        "{source}"
     );
     Ok(())
 }
 
-/// The module is named from inside a braced group.
+/// The `use` sits inside an inline module rather than at the file's top level.
 ///
-/// The module tree spells most of its imports this way, because the resolver
-/// domain is re-exported as a group rather than named one path per item.
-#[test]
-fn use_tree_names_a_branch_of_a_braced_group() -> Result<()> {
-    let tree: UseTree = syn::parse_quote!(crate::stdlib::which::{cache, telemetry});
-    ensure!(
-        names_segment(&tree, TELEMETRY_MODULE),
-        "a group naming {TELEMETRY_MODULE} as one of its branches reaches it"
-    );
-    Ok(())
-}
-
-/// The module is named from inside a group nested in a group.
-///
-/// A group's branches are themselves trees, so a branch that opens another
-/// group has to be descended into; a scan that read only the outer group's
-/// own identifiers would stop one level short.
-#[test]
-fn use_tree_names_a_branch_of_a_nested_group() -> Result<()> {
-    let tree: UseTree = syn::parse_quote!(crate::stdlib::which::{cache::{self, key}, telemetry});
-    ensure!(
-        names_segment(&tree, TELEMETRY_MODULE),
-        "nesting a group does not hide the branch beside it"
-    );
-    Ok(())
-}
-
-/// The module is named by the segment that opens the path.
-///
-/// A `use telemetry::counters;` reaches the module from the root position
-/// rather than the leaf, so a rule that read only each branch's final
-/// identifier would miss every import that takes something out of the module
-/// rather than the module itself.
-#[test]
-fn use_tree_names_the_opening_segment_of_a_path() -> Result<()> {
-    let tree: UseTree = syn::parse_quote!(telemetry::counters);
-    ensure!(
-        names_segment(&tree, TELEMETRY_MODULE),
-        "a path opening on {TELEMETRY_MODULE} reaches it"
-    );
-    Ok(())
-}
-
-/// The module is named by a renamed import, which a rename does not change.
-///
-/// `use ...::telemetry as reporting;` binds a local name to the module, so the
-/// path still reaches it. The rename is what the module is called here, not
-/// what it is.
-#[test]
-fn use_tree_names_a_renamed_import() -> Result<()> {
-    let tree: UseTree = syn::parse_quote!(crate::stdlib::which::telemetry as reporting);
-    ensure!(
-        names_segment(&tree, TELEMETRY_MODULE),
-        "renaming the binding does not stop the path reaching {TELEMETRY_MODULE}"
-    );
-    Ok(())
-}
-
-/// A module whose name merely begins with the same text is not the module.
-///
-/// `telemetry_tests` is a sibling of the boundary rather than a spelling of
-/// it, and the resolver's own test modules are exactly the importers this rule
-/// must distinguish. Comparing identifiers is what makes the distinction,
-/// where text matching had to state it as a whole-word condition.
-#[test]
-fn use_tree_does_not_name_a_module_that_only_begins_with_the_text() -> Result<()> {
-    let tree: UseTree = syn::parse_quote!(crate::stdlib::which::telemetry_tests);
-    ensure!(
-        !names_segment(&tree, TELEMETRY_MODULE),
-        "{TELEMETRY_MODULE}_tests is a different module from {TELEMETRY_MODULE}"
-    );
-    Ok(())
-}
-
-/// A group naming only siblings does not name the module.
-///
-/// The negative direction of the group case, so that a rule returning true for
-/// every `use` in the file could not satisfy the pair.
-#[test]
-fn use_tree_does_not_name_the_module_when_no_branch_does() -> Result<()> {
-    let tree: UseTree = syn::parse_quote!(crate::stdlib::which::{cache, resolve_error});
-    ensure!(
-        !names_segment(&tree, TELEMETRY_MODULE),
-        "no branch of this group reaches {TELEMETRY_MODULE}"
-    );
+/// `use` is legal inside `mod tests { ... }`, and this domain writes several of
+/// its test modules that way, so a scan reading only a file's own items reports
+/// a clean file for one whose import sits one block down. The fault is a false
+/// negative, which the whole-set assertion cannot notice on its own: the file is
+/// in the permitted set or it is not, and either way nothing was found to check.
+#[rstest]
+#[case::one_block_down("mod tests {\n    use crate::stdlib::which::telemetry;\n}\n", true)]
+#[case::two_blocks_down(
+    "mod outer {\n    mod inner {\n        use crate::stdlib::which::telemetry;\n    }\n}\n",
+    true
+)]
+#[case::nested_group_in_block(
+    "mod tests {\n    use crate::stdlib::which::{cache, telemetry};\n}\n",
+    true
+)]
+#[case::block_without_import(
+    "mod tests {\n    use crate::stdlib::which::{cache, resolve_error};\n}\n",
+    false
+)]
+#[case::top_level_import("use crate::stdlib::which::telemetry;\n", true)]
+fn inline_module_naming(#[case] source: &str, #[case] expected: bool) -> Result<()> {
+    let parsed: File = syn::parse_str(source).with_context(|| format!("parse {source:?}"))?;
+    ensure!(imports_telemetry(&parsed) == expected, "{source:?}");
     Ok(())
 }
