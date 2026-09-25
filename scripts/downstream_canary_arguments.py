@@ -102,7 +102,7 @@ def split_values(values: cabc.Iterable[str], separator: str | None) -> list[str]
     ]
 
 
-def normalise_lists(arguments: argparse.Namespace) -> None:
+def normalize_lists(arguments: argparse.Namespace) -> None:
     """Split every list argument in place, and require at least one target.
 
     Targets are whitespace-separated; selectors, extra environment, and

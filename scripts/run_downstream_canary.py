@@ -26,7 +26,7 @@ import subprocess  # ruff: ignore[suspicious-subprocess-import] - the canary run
 import sys
 import typing as typ
 
-from downstream_canary_arguments import build_parser, normalise_lists
+from downstream_canary_arguments import build_parser, normalize_lists
 from downstream_canary_provenance import (
     FAILED,
     NOT_RUN,
@@ -348,7 +348,7 @@ def main(argv: cabc.Sequence[str] | None = None) -> int:
     handlers = {"generate": generate, "run": run_targets, "report": report}
     arguments = build_parser(handlers).parse_args(argv)
     try:
-        normalise_lists(arguments)
+        normalize_lists(arguments)
         return arguments.handler(arguments)
     except ValueError as error:
         print(f"downstream canary {arguments.command} failed: {error}", file=sys.stderr)
