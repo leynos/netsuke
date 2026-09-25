@@ -62,10 +62,17 @@ if typ.TYPE_CHECKING:
 #: The fields each guarded step must carry for the lane to satisfy the
 #: contract. The clean fixture carries every one — asserted in the test module,
 #: not assumed here — so removing one is a real change to a lane that had it.
+#:
+#: The upload requires no ``env``, and that absence is the contract rather than
+#: an omission: the upload is a composite action whose nested steps inherit the
+#: calling step's environment, so the credential is taken straight from the
+#: secret store instead of through one. The cleanliness of that absence is a
+#: separate case in the test module, asserted directly rather than by removing
+#: a key the lane never had — a removal of something absent would change nothing.
 REQUIRED_FIELDS: typ.Final[dict[str, tuple[str, ...]]] = {
     COVERAGE_STEP: ("uses",),
     REPORT_VALIDATION_STEP: ("run",),
-    CODESCENE_UPLOAD_STEP: ("uses", "if", "env"),
+    CODESCENE_UPLOAD_STEP: ("uses", "if"),
 }
 
 #: The `with` inputs each guarded step must carry, for the same reason.
@@ -134,9 +141,9 @@ def visible_names(*names: str) -> tuple[str, ...]:
 
     A clause may describe such a change by the step it was made to, by the field
     it was made in, or by the credential the step's wiring is about — the gate,
-    the environment entry, and the token handed to the action are three readings
-    of one arrangement. So the credential is added whenever the change touches
-    the upload, which is this module's own statement of what the step is for: a
+    the input handed to the action, and the token itself are three readings of
+    one arrangement. So the credential is added whenever the change touches the
+    upload, which is this module's own statement of what the step is for: a
     contract describing the change at all names one of these.
 
     Returns
