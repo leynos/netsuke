@@ -72,7 +72,7 @@ fn subsection_lines<'a>(section_8: &Section<'a>, number: &str) -> Option<Vec<&'a
             .lines
             .iter()
             .enumerate()
-            .find(|(_, line)| !fence_state.mark(line) && line.trim().starts_with(&prefix))
+            .find(|(_, line)| !fence_state.mark(line) && line.starts_with(&prefix))
             .map(|(offset, _)| offset)?
     };
     let depth = heading_depth(section_8.lines.get(start)?)?;

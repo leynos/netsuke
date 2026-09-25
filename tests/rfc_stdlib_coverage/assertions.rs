@@ -6,6 +6,15 @@
 //! new-filter and new-test counts against the tables, and the deny set against
 //! the non-vacuity witnesses. A parse that silently returns nothing must fail
 //! here.
+//!
+//! One comparison in this module is not of that shape. The deny set's size is
+//! checked against the literal 71, because the complement rule that produces the
+//! deny set has no second statement in the document to read a figure from: the
+//! rule is this plan's decision `D10`, and 71 is what it yields over RFC 0006's
+//! own reject and defer rows. That literal is the assertion. It is not a
+//! transcription of a sentence somewhere that a rebase could leave behind, so
+//! it is deliberately not moved into the table-11 reads above with the counts
+//! that are.
 
 use anyhow::{Result, ensure};
 
@@ -13,27 +22,36 @@ use super::{Namespace, name_set, survey::Survey};
 
 /// Assert the derived totals agree with what RFC 0006 states.
 pub(super) fn check_against_document(survey: &Survey) -> Result<()> {
+    // The accept and defer counts are compared against table 11's own rows
+    // rather than against transcribed literals, because the table is what the
+    // comparison is between: a literal here would make this an assertion about
+    // a constant, and would have to be edited by hand every time the survey
+    // legitimately grew. Table 11 is expected to agree with section 7, and if
+    // it stops agreeing that is the finding, not a reason to re-read the table.
     ensure!(
-        survey.accept_rows == 55,
-        "derived {} accept rows in RFC 0006 section 7; table 11 states 55",
-        survey.accept_rows
+        survey.accept_rows == survey.stated_accept,
+        "derived {} accept rows in RFC 0006 section 7; table 11 states {}",
+        survey.accept_rows,
+        survey.stated_accept
     );
     ensure!(
-        survey.defer_rows == 6,
-        "derived {} defer rows in RFC 0006 section 7; table 11 states 6",
-        survey.defer_rows
+        survey.defer_rows == survey.stated_defer,
+        "derived {} defer rows in RFC 0006 section 7; table 11 states {}",
+        survey.defer_rows,
+        survey.stated_defer
     );
+    // The reject count is the one row count with no table 11 row of its own:
+    // table 11 splits rejections across three classes, so the sum of those three
+    // rows is what section 7's reject count has to equal. Both sides of the
+    // comparison are read from the document, which is why this needs no
+    // literal — and it is also why the message names both figures rather than
+    // asserting the equality of one of them to a constant.
+    let class_sum: usize = survey.reject_classes.iter().sum();
     ensure!(
-        survey.reject_rows == 50,
-        "derived {} reject rows in RFC 0006 section 7; table 11 states 22 + 10 + 18",
-        survey.reject_rows
-    );
-    ensure!(
-        survey.reject_classes.iter().sum::<usize>() == survey.reject_rows,
-        "table 11's class counts {:?} sum to {}, but section 7 has {} reject rows",
-        survey.reject_classes,
-        survey.reject_classes.iter().sum::<usize>(),
-        survey.reject_rows
+        survey.reject_rows == class_sum,
+        "derived {} reject rows in RFC 0006 section 7; table 11's classes {:?} sum to {class_sum}",
+        survey.reject_rows,
+        survey.reject_classes
     );
     ensure!(
         survey.new_by_namespace(Namespace::Filter) == survey.new_filters,

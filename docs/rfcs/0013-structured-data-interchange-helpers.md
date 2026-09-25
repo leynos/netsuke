@@ -21,9 +21,10 @@ a manifest read the metadata `cargo metadata` emits, a compiler's JSON output,
 a YAML package manifest, or a generated configuration fragment, and write a
 fragment back, without invoking `jq`, `yq`, or a scripting runtime. All five
 are pure, so all five are available to manifest queries as well as to target
-recipes, and none needs a capability handle. The group is the first slice RFC
-0006 section 14.2 sequences, because the remaining groups read their inputs in
-the forms it produces.
+recipes, and none needs a capability handle. RFC 0006 section 14.2 defines this
+group as slice 1, and section 14.11's recommended first wave places slice 0
+ahead of it, because the remaining groups read their inputs in the forms it
+produces.
 
 ## 2. Problem
 
@@ -40,9 +41,9 @@ quoting, so a value reading `no` can silently become a YAML boolean.
 The contortion is not incidental to build manifests; it is the ordinary case.
 Compiler metadata is JSON, package manifests and generated configuration are
 YAML in most of the ecosystems Netsuke targets, and Rust's own `cargo metadata`
-is JSON. Section 15.2 considers and rejects adding nothing here, on the grounds
-that it leaves `netsuke help targets` unable to answer questions it should be
-able to answer purely.
+is JSON. RFC 0006 section 15.2 considers and rejects adding nothing here, on
+the grounds that it leaves `netsuke help targets` unable to answer questions it
+should be able to answer purely.
 
 This group addresses the JSON and YAML halves. A TOML package manifest is
 outside it: RFC 0006 accepts no TOML parser, and Cargo metadata is available as
@@ -364,13 +365,13 @@ No new crate. This group is the one RFC 0006 section 13.4 adds nothing for: it
 uses `serde_json` with `preserve_order` for the JSON half and the existing
 `serde-saphyr` stack for the YAML half, both of which Netsuke already carries,
 plus `serde_json_canonicalizer` for `sort_keys=true`'s canonical key. Adding no
-dependency is why RFC 0006 section 14.2 sequences this slice first.
+dependency is one reason the group can lead the wave.
 
-Within the RFC set it requires the shared contract RFC 0006 section 14.2's
+Within the RFC set it requires the shared contract RFC 0006 section 14.1's
 "slice 0" describes, which roadmap steps 6.1.3 and 6.1.4 deliver: the
-bounded-parser helper the two parsers share. It requires no other child RFC,
-and no other child RFC requires it, which is why it is the group `EP-M3`'s hard
-go/no-go is spent on.
+bounded-parser helper the two parsers share. Sections 14.2, 14.3, 14.4 and 14.9
+are the four that state a slice 0 requirement; sections 14.5 to 14.8 and 14.10
+state none. It requires no other child RFC, and no other child RFC requires it.
 
 ## 7. Delivery
 
@@ -414,14 +415,15 @@ roadmap task rather than by a child RFC.
 
 ## 9. Recommendation
 
-This group should be implemented first, at v0.1.x or later. It is the only
-group RFC 0006 section 14.2 sequences with no prerequisite besides the shared
-contract, it adds no crate, and it removes the most common reason a manifest
-reaches for `shell()` at all. The group's five helpers are also the ones whose
-absence is least defensible in a build tool: reading a JSON field is not a
-template language feature request, it is the minimum needed to consume the
-metadata that compilers and package managers already emit. Implementing it
-first also exercises the whole contract at its smallest: five pure filters with
-no capability handle, no platform variation, and no dialect, which is exactly
-the shape that shows whether the cross-cutting clauses in section 5 carry
-content or merely restate RFC 0006.
+This group should be implemented first, at v0.1.x or later. RFC 0006 section
+14.11's recommended first wave names slice 0 ahead of it and places `from_json`
+sixth of its seven entries; this group leads the wave because it is the only
+one whose prerequisite is slice 0 alone, it adds no crate, and it removes the
+most common reason a manifest reaches for `shell()` at all. The group's five
+helpers are also the ones whose absence is least defensible in a build tool:
+reading a JSON field is not a template language feature request, it is the
+minimum needed to consume the metadata that compilers and package managers
+already emit. Implementing it first also exercises the whole contract at its
+smallest: five pure filters with no capability handle, no platform variation,
+and no dialect, which is exactly the shape that shows whether the cross-cutting
+clauses in section 5 carry content or merely restate RFC 0006.

@@ -34,6 +34,10 @@ four are filesystem-observing, and one is environment-observing.";
 
 /// The tally rows of RFC 0006 table 11 that this test consumes.
 pub(super) struct Totals {
+    /// Surveyed entries accepted, per table 11's first row.
+    pub(super) accept_rows: usize,
+    /// Surveyed entries deferred, per table 11's second row.
+    pub(super) defer_rows: usize,
     /// Reject rows classed "already provides", "redundant alias", "principle".
     pub(super) reject_classes: [usize; 3],
     /// New Netsuke filters table 11 counts.
@@ -45,6 +49,12 @@ pub(super) struct Totals {
 }
 
 /// Read table 11 by row label.
+///
+/// Every row is read by prefix rather than by an index into a fixed list, and
+/// the prefix must match exactly one row: a table 11 that grew a second row
+/// starting `Surveyed entries accepted` would be ambiguous, and this is the
+/// point at which that ambiguity is refused rather than silently resolved to
+/// whichever row came first.
 pub(super) fn table_11(section_7: &Section<'_>) -> Result<Totals> {
     let mut totals: BTreeMap<String, usize> = BTreeMap::new();
     for (heading, rows) in section_7.tables() {
@@ -81,6 +91,8 @@ pub(super) fn table_11(section_7: &Section<'_>) -> Result<Totals> {
         })
     };
     Ok(Totals {
+        accept_rows: find("Surveyed entries accepted")?,
+        defer_rows: find("Surveyed entries deferred")?,
         reject_classes: [
             find("Surveyed entries rejected because")?,
             find("Surveyed entries rejected as a redundant alias")?,

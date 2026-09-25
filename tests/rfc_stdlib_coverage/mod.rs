@@ -29,6 +29,7 @@
 
 mod assertions;
 mod clauses;
+mod deference;
 mod document;
 mod inventory;
 mod links;

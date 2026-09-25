@@ -209,7 +209,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   gate may prove premature. Severity: medium. Likelihood: medium. Mitigation:
   nothing here changes a disposition, and because section 8 is not moved, a
   later change costs a registry row and a coverage-map row rather than a
-  document rewrite. `ADR-021` carries the amendment procedure named in `D9`.
+  document rewrite. `ADR-040` carries the amendment procedure named in `D9`.
 
 - Risk: the reviewer concludes the split is not worth its cost.
   Severity: medium. Likelihood: medium. Mitigation: `Alternatives considered`
@@ -252,7 +252,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   totals plus that table 11's three class counts sum to the reject-row count.
   Amended in place: `D10`'s tail, `COV-2`'s closing note, the audit table's
   last row, and the `Surprises` bullet that had recorded the rule as working.
-- [x] (2026-09-11) `EP-M1` Land the coverage test, `ADR-021`, the RFC 0006
+- [x] (2026-09-11) `EP-M1` Land the coverage test, `ADR-040`, the RFC 0006
   corrections and reservations, and the roadmap 6.1.1 rewrite. All seven
   coverage checks are green on the unwritten map, `COV-4` reports 8 remaining,
   and roadmap 6.1.1 was confirmed to already carry the `D8` wording. Three
@@ -293,7 +293,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   skeleton now, before `EP-M3` could spend the go/no-go on a document written
   to the wrong contract.
 - [x] (2026-09-24) `EP-M2` the child-RFC template and one worked section 5,
-  both landed in `ADR-021`. The template left this plan for the ADR rather than
+  both landed in `ADR-040`. The template left this plan for the ADR rather than
   the developers' guide, and the worked section followed it: a template that a
   parser reads must live where the child author is already sent, and that is
   the ADR the convention is stated in. The worked section is RFC 0013's — the
@@ -343,7 +343,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   absorbed by a `BTreeSet` in two places, `child_number` accepted non-numeric
   link text, the totals and purity aggregate were gated on all eight groups
   being written so nothing could contradict them until the split was over,
-  ADR-021 claimed the test "transcribes none of them" when it carries four
+  ADR-040 claimed the test "transcribes none of them" when it carries four
   anchor lists, RFC 0006 tied delivery to child-RFC closure where `D8` ties it
   to roadmap tasks, and a stray `**` in this plan was followed by a newline and
   so rendered literally. Every fix was proven by a probe. See
@@ -398,7 +398,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `assertions.rs`'s half-checked `hash` invariant; `map.rs`'s unvalidated
   `Owns` arity; the crate doc's "nothing here transcribes an inventory"; the
   plan's seven-to-ten test count and its two wrong `0014`/`0015` slugs;
-  `ADR-021`'s doubly-listed `duplicate_key`). Two were applied against a *false
+  `ADR-040`'s doubly-listed `duplicate_key`). Two were applied against a *false
   premise* in the finding: `document.rs`'s start scan was made fence-aware
   because the doc comment promised a property `position()` could not deliver,
   not because a live bug existed — no document in the corpus has a heading
@@ -474,13 +474,13 @@ Hard invariants. Violating one requires escalation, not a workaround.
   pull request says "Draft PR not reviewed". So `EP-M3`'s "every gate green"
   criterion could not have been met through CI, and the two controls this
   milestone was counting on were not watching.
-- [x] (2026-09-24) Our own `.config/nextest.toml` addition from `3a207c13` is
-  stale against main's convention. It uses
+- [x] (2026-09-24) This branch's `.config/nextest.toml` addition from
+  `3a207c13` is stale against main's convention. It uses
   `filter = 'test(=coverage_map_status_is_reported)'`; main's file now
   documents at length that the `test(=NAME)` form compares the whole name and
   so silently matches *none* of a parameterized `#[rstest]`'s instances, and
-  mandates the anchored `test(/^NAME($|::)/)` instead. Ours is correct today
-  only because that test is unparameterized, which is precisely the latent
+  mandates the anchored `test(/^NAME($|::)/)` instead. That filter is correct
+  today only because the test is unparameterized, which is precisely the latent
   defect main's comment was written to prevent. The rebase should adopt the
   anchored form.
 - [x] (2026-09-25) **`EP-M3` go/no-go: GO.** RFC 0013 was put to an independent
@@ -519,8 +519,8 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `docs/contents.md`. Both were resolved by taking main's version and
   re-applying this branch's addition, rather than transcribing the conflict
   hunks — main had reorganized the nextest overrides into `nested-cargo-builds`
-  groups and our hunk was the extraction of the Windows override it removed.
-  Our addition now uses main's mandated anchored filter form,
+  groups, and this branch's hunk was the extraction of the Windows override
+  main removed. That addition now uses main's mandated anchored filter form,
   `test(/^coverage_map_status_is_reported($|::)/)`, closing the
   latent-unhooking defect recorded above. Verified after: `main` is an ancestor,
   `origin/main..HEAD` is 25, `HEAD..origin/main` is 0, `e2fc2083` and
@@ -585,7 +585,69 @@ Hard invariants. Violating one requires escalation, not a workaround.
   rather than hidden. The second is a correction to the plan's own reasoning —
   see `Surprises & discoveries` for why "every gate green locally" was the
   wrong formulation to have written.
-- [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
+- [x] (2026-09-25) **Tenth gate run, red on three in-diff defects, all fixed.**
+  The run covered the uncommitted tree that carries the five CodeRabbit code
+  findings; `make typecheck`, `make nixie`, and `make test` passed, and
+  `cli_configuration_fixture_compiles` passed in 8.6s rather than timing out,
+  so the known 300s failure did not reproduce. Three gates failed, and every
+  failure was introduced by this branch rather than inherited:
+
+  - `make check-fmt`, on `clauses.rs`'s `DEFERENCE_PHRASES`. That const was
+    formatted at `HEAD`, and rewriting it to a two-line form rustfmt rejects is
+    this branch's doing. `make fmt` resolved it.
+  - `make lint`, on Whitaker's `module-max-lines`: `clauses.rs` grew from 354
+    lines at `HEAD` to **432**, past the 400 cap. Every sibling in that
+    directory is under 400, the next largest being `section7.rs` at 332. Fixed
+    by splitting the module at a seam rather than raising the cap.
+  - `make markdownlint`, on three MD013 lines this branch added: one in this
+    plan and two in RFC 0013. `make fmt` does not repair MD013, so all three
+    were rewrapped by hand.
+
+  The `clauses.rs` split extracted the appeal-to-Ansible predicate and its five
+  unit tests into a new `tests/rfc_stdlib_coverage/deference.rs`. The seam is
+  the *kind* of judgement: `clauses` grades document structure (an empty body,
+  a body naming no owned helper), while the third vacuity shape `CONF-1` names
+  is a judgement about prose. `clauses.rs` is now 258 lines and `deference.rs`
+  202, and the directory's largest module is unchanged at 332. The module doc
+  of each records the move, following the precedent `mod.rs` set when
+  `markdown.rs` and `document.rs` were split out of it for the same reason.
+  Re-verified after the split: `rfc_stdlib_coverage_tests` 15/15 green,
+  including all five moved `deference` tests and `inter_document_links_resolve`.
+- [x] (2026-09-25) **`ADR-021` was a number collision, and it is now `ADR-040`
+      .**
+  Found while investigating a grep that showed two files sharing the number.
+  `main` published `adr-021-trust-aware-fetch-policy-merge.md` on 2026-09-09
+  (`3348cc0a`, "Prevent project configuration from widening trusted fetch
+  policy (#644) (#663)"); this branch minted
+  `adr-021-focused-child-rfcs-for-survey-rfcs.md` with its `Date` field reading
+  2026-09-11 and committed it at `9730a880`. Both files are tracked at `HEAD`,
+  so main's 021 was already an ancestor when the branch's was committed. This
+  is the exact failure the plan warned about: the `EP-M0` note at line 1361
+  records "The highest existing ADR is 020; three earlier numbers collided, so
+  re-check before committing", dated 2026-09-08 — one day before main took 021.
+  The re-check did not happen, for any of the four subsequent commits that
+  touched the ADR.
+
+  Renumbered to **040**, the lowest free number above the ceiling. A fresh
+  remote sweep puts that ceiling at 039 (`jm5/kani-change-scoped-gate`);
+  `origin/main`'s own highest is 038. Eight edits, all mechanical and all
+  verified: the file moved by `git mv` (preserving history), its H1 renumbered
+  (it carried no internal self-references), the RFC 0006 section 14.13 link
+  repointed, the two execplan path references repointed, all 17 execplan
+  `ADR-021` mentions renumbered, and — the defect that made this visible — the
+  missing `docs/contents.md` entry added. That file was the only one of 39 ADR
+  files with no index entry, so files and entries now both read 39 and a Python
+  set-comparison confirms they agree exactly, with no dangling target.
+
+  Two guards held. `main`'s `adr-021-trust-aware-fetch-policy-merge.md` is
+  untouched, as are all three of its inbound citations (`docs/contents.md` and
+  two in `adr-026-manifest-environment-access-policy.md`, one of which is a
+  link-reference definition). And the 17 execplan mentions were checked before
+  the replace: grepping them for `fetch`, `trust`, `quarantin`, `network`, or
+  `policy` returns nothing, so no mention means main's ADR and a scoped global
+  replace was safe. The renumber is escalated rather than decided — see the
+  item below — but the remedy is preparable without touching `main`, so it is
+  prepared.
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
 - [ ] `EP-M6` RFC 0016, pattern and version predicates (step 6.5).
@@ -661,14 +723,14 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `netsukefile` all `success`), because `links::dangling` and its
   `inter_document_links_resolve` caller exist only on this branch:
   `git ls-tree -r origin/main tests/` has no `rfc_stdlib_coverage*` entry at
-  all. Impact: the invariant is ours to enforce and no upstream gate shares it,
-  so the failure could only ever appear here, and it appeared only because a
-  rebase imported a document neither party was editing in this branch — the RFC
-  0006 split never touches RFC 0007. Lesson: when a branch adds a test that
-  reads the whole corpus rather than its own diff, re-run it after every rebase
-  and expect it to indict the incoming commits, not the branch. The repair
-  belongs in the branch (and rides to main with it) rather than in a separate
-  upstream pull request, because the two are the same edit.
+  all. Impact: the invariant is this branch's to enforce and no upstream gate
+  shares it, so the failure could only ever appear here, and it appeared only
+  because a rebase imported a document neither party was editing in this branch
+  — the RFC 0006 split never touches RFC 0007. Lesson: when a branch adds a
+  test that reads the whole corpus rather than its own diff, re-run it after
+  every rebase and expect it to indict the incoming commits, not the branch.
+  The repair belongs in the branch (and rides to main with it) rather than in a
+  separate upstream pull request, because the two are the same edit.
 - Observation: **"environmental" can be the right verdict for the wrong
   reason.** Evidence: the seventh and eighth gate runs both correctly cleared
   this branch's diff of blame for the two `make test` timeouts, and both
@@ -1213,6 +1275,30 @@ tracked; the derivation it performs is reimplemented in the coverage test at
   commit from here runs all five `make` targets as a single command, however
   mechanical the change looks.
 
+- Observation: `docs/contents.md` is the one index in the corpus that nothing
+  checks, and this task was carrying the only defect it had. Of 39 ADR files,
+  38 were indexed and the missing one was exactly this branch's. Impact: the
+  omission survived nine gate runs, and it was found only by reading the file,
+  not by a gate. No test in the tree mentions `contents.md` at all. The rule
+  this plan already fixed for RFC numbers therefore has a second, unguarded
+  instance: `D2` allocates RFC numbers lazily *because* they collide, and the
+  index that records them has no equivalent guard. Not fixed here — a check on
+  `docs/contents.md` is outside this plan's declared interface set, and adding
+  one would be a new obligation rather than a discharge of an existing one. It
+  is recorded so the omission is not rediscovered later.
+
+- Observation: "run `make fmt`" is not a remedy for MD013, and the two look
+  alike from the gate output. The three over-long lines this task added were
+  prose, and `make fmt` rewrapped neither: `mdtablefix` has no wrap rule that
+  reaches an unwrapped prose line, and `markdownlint --fix` does not implement
+  MD013 at all. Impact: the plan's summary of `make fmt` as the fix for
+  formatting findings was too broad. MD013 is a hand fix, and treating the
+  formatter as its remedy would have left the gate red for a second run. The
+  converse also held and was checked rather than assumed: after the hand fix,
+  `make fmt` ran again and touched none of the three, and
+  `mdtablefix --renumber` did not eat the `- [x] (2026-09-25)` progress
+  entries, which is the failure mode that tool is known for.
+
 ## Decision log
 
 - Decision `D1`: eight child RFCs, one per roadmap phase-6 capability step 6.2
@@ -1344,10 +1430,37 @@ tracked; the derivation it performs is reimplemented in the coverage test at
   one" of each, because `product` is already named by tasks 6.4.2 and 6.4.5.
   Making the roadmap half "exactly one" would have required splitting existing
   tasks for no benefit. Date/Author: 2026-09-08, planning agent; roadmap
-  wording confirmed by the reviewer.
+  wording only under `D8`, `EP-M1` and `EP-M11` doing the rest.
+
+- Decision `D11`: this branch's ADR is renumbered from 021 to **040**, the
+  lowest free number above the corpus ceiling, and `docs/contents.md` gains the
+  index entry it never had. Rationale: `main` published an ADR 021 of its own
+  on 2026-09-09 (`3348cc0a`), one day after `EP-M0` recorded "the highest
+  existing ADR is 020 … re-check before committing", and the branch's ADR is
+  dated 2026-09-11 and committed at `9730a880` with main's already in its
+  history. Two ADRs cannot both be 021 in one corpus. The plan's tolerance rule
+  is unambiguous about the disposition — "If a number is taken, stop and
+  escalate" — and the escalation is raised rather than assumed away. Of the two
+  admissible remedies, renumbering the unmerged branch is the one the corpus
+  already prescribes: main's number is cited by three inbound links including a
+  link-reference definition, so moving it would churn a published document to
+  fix an unpublished one. The ceiling is re-swept rather than remembered,
+  because the number that was free when this plan was written is the number
+  this defect is made of: 039 on `jm5/kani-change-scoped-gate` is the current
+  highest anywhere, so 040 is free, and `origin/main`'s own highest is 038.
+
+  Scope is eight edits, all mechanical, and the guard is what makes the last
+  two safe. The 17 `ADR-021` mentions in this plan were checked for `fetch`,
+  `trust`, `quarantin`, `network`, and `policy` before any replacement: none
+  matched, so every mention means this branch's ADR and a scoped global replace
+  cannot corrupt a reference to main's. Main's file and all three of its
+  citations are left untouched, and the result is verified by set-comparison
+  rather than by count, because 39 files against 39 entries is also what a swap
+  looks like. Date/Author: 2026-09-25, implementation agent. wording confirmed
+  by the reviewer.
 
 - Decision `D9`: record the convention in
-  `docs/adr-021-focused-child-rfcs-for-survey-rfcs.md`, scoped narrowly.
+  `docs/adr-040-focused-child-rfcs-for-survey-rfcs.md`, scoped narrowly.
   Rationale: allocating eight numbers under a particular partition is hard to
   reverse. But the ADR must not claim to generalize. It applies to **survey
   RFCs** — documents that enumerate a large candidate set with a per-candidate
@@ -1409,7 +1522,7 @@ tracked; the derivation it performs is reimplemented in the coverage test at
 The first draft had no such section. Two alternatives are live at the approval
 gate.
 
-**Stop after `EP-M1`.** The coverage test, `ADR-021`, the RFC 0006 defect
+**Stop after `EP-M1`.** The coverage test, `ADR-040`, the RFC 0006 defect
 corrections, and the roadmap rewrite together solve the mechanical half of the
 problem — the bijection nobody can check by reading — for roughly a tenth of
 the cost and none of the irreversibility. No RFC number is spent. The
@@ -1561,16 +1674,26 @@ RFC 0006's section 16 open questions distribute as follows. Question 1 on
 version prefix goes to RFC 0016; question 2 on the `abs` test name goes to RFC
 0017; question 6 on a truncating hash sibling goes to RFC 0019. Questions 5 and
 7 belong to no child: question 5 concerns the shared bounds of step 6.1, and
-question 7, on an injected clock, is already owned by roadmap task 7.1.1, "Add
-the clock provider seam to the stdlib time module", on a separate reserved
-branch. Both stay in RFC 0006 section 16, and `EP-M1` annotates question 7 with
-a pointer to task 7.1.1 so a phase-6 implementer does not adopt it by accident.
-All seven stay open.
+question 7, on an injected clock, is owned by roadmap task 7.1.1, "Add the
+clock provider seam to the stdlib time module", on a separate reserved branch.
+
+**Six of the seven remain open, and question 7 does not.** This split does not
+close any of them — that is the point of carrying each into its owning child,
+unresolved — but question 7 was resolved independently of this task, by the
+merge of task 7.1.1 in `96aefc9c`, which is this branch's base. RFC 0006
+section 16 item 7 already reads "Resolved", recording that `now()` reads
+through a `ClockProvider` held by `StdlibConfig` and classified in the
+[ADR-008](../adr-008-environment-seam-taxonomy.md) addendum for 2026-09-11, and
+that RFC 0020 neither needs the seam nor depends on 7.1.1. Reading the section
+16 list as seven open questions would therefore contradict the document itself,
+so it is recorded here as six. `EP-M1` still annotates question 7 so a phase-6
+implementer does not adopt it by accident; the annotation is now redundant with
+the section's own text rather than the only pointer to it.
 
 ### The child RFC template
 
 The template is committed to
-[ADR-021](../adr-021-focused-child-rfcs-for-survey-rfcs.md), under "The child
+[ADR-040](../adr-040-focused-child-rfcs-for-survey-rfcs.md), under "The child
 RFC template", together with the registry row shape and each column's accepted
 vocabulary. It is not restated here: two copies of a parsed artefact drift, and
 the copy a child is written from must be the copy the test reads. `EP-M2` moved
@@ -1596,7 +1719,7 @@ There is no Terms of Reference document. Upstream artefacts:
   `glob` option; and
   [ADR-001](../adr-001-replace-serde-yml-with-serde-saphyr.md) governs the YAML
   stack RFC 0013 discharges.
-- `docs/adr-021-focused-child-rfcs-for-survey-rfcs.md`, created at `EP-M1`.
+- `docs/adr-040-focused-child-rfcs-for-survey-rfcs.md`, created at `EP-M1`.
 
 Trace links, one per obligation. `EP-M1` is the milestone that lands the check;
 the tests are named without their `netsuke-build::rfc_stdlib_coverage_tests::`
@@ -1610,7 +1733,7 @@ RFC0006-S6.1 -> ROADMAP-6.1.1 -> EP-M1 -> COV-3 -> totals_and_purity_aggregate_a
 RFC0006-S14  -> ROADMAP-6.1.1 -> EP-M1 -> COV-4 -> coverage_map_status_is_reported
 ROADMAP-6.2..6.9 -> ROADMAP-6.1.1 -> EP-M1 -> COV-6 -> every_capability_has_a_roadmap_task
 RFC0006-S6   -> ROADMAP-6.1.1 -> EP-M3..EP-M10 -> CONF-1 -> every_child_discharges_every_clause
-ADR-021      -> EP-M1 -> docs/adr-021-focused-child-rfcs-for-survey-rfcs.md
+ADR-040      -> EP-M1 -> docs/adr-040-focused-child-rfcs-for-survey-rfcs.md
 ```
 
 ## Verification plan
@@ -1866,7 +1989,7 @@ row so failures name a location.
   and why a green suite one obligation short of its plan is indistinguishable
   from a complete one.
 - Non-vacuity: all four controls were run at `EP-M2`'s second review, against a
-  probe child RFC mounted from the `ADR-021` worked specimen with the coverage
+  probe child RFC mounted from the `ADR-040` worked specimen with the coverage
   map's row `0013` flipped to written. Deleting subsection 5.8's body failed
   with "is subsection 5.8. Resource bounds of section 5 with an empty body".
   Replacing 5.7's body with "This group meets the clause by construction"
@@ -1878,7 +2001,7 @@ row so failures name a location.
   and the map row flipped, all ten tests passed, which is the state `EP-M3`
   must reach.
 - **The specimen itself failed this check, and the check is right.** Subsection
-  5.9 of the `ADR-021` worked section named thirteen diagnostic codes and no
+  5.9 of the `ADR-040` worked section named thirteen diagnostic codes and no
   helper. It was corrected by naming all five helpers alongside the codes, not
   by weakening the check; a rule written before the document it grades is the
   only version that can surprise its author, which is why the two were read
@@ -1948,7 +2071,7 @@ width; nextest wraps them the same way at a terminal.
   The three registry controls this obligation also specifies — delete,
   duplicate, and move the `combine` row — need a registry to corrupt and are
   deferred to `EP-M4` and `EP-M5`.
-- `COV-5`, dangling link. The `ADR-021` link in section 14.13 is repointed at a
+- `COV-5`, dangling link. The `ADR-040` link in section 14.13 is repointed at a
   file that does not exist:
 
   ```text
@@ -2006,7 +2129,7 @@ first milestone that supplies both is `EP-M3`, not `EP-M4` as this section
 first said: `EP-M3` delivers RFC 0013, which owns five registry rows and
 discharges all eleven clauses.
 
-`EP-M2`'s second review ran them ahead of `EP-M3`, by mounting the `ADR-021`
+`EP-M2`'s second review ran them ahead of `EP-M3`, by mounting the `ADR-040`
 worked specimen as a probe child RFC and flipping coverage map row `0013` to
 written. All four `CONF-1` controls fired, as did the `COV-3` partial-purity
 bound and both new link-number checks; the transcripts are in
@@ -2168,7 +2291,7 @@ Ship as a self-contained pull request. It is independently valuable and is the
 fallback if nothing else proceeds.
 
 - Outcome: `tests/rfc_stdlib_coverage_tests.rs` green with all eight groups
-  unwritten and `COV-4` reporting 8. `ADR-021` records the convention, its
+  unwritten and `COV-4` reporting 8. `ADR-040` records the convention, its
   narrow scope, and the amendment procedure. RFC 0006 gains the section 14
   coverage map and reservation rows for 0013 to 0020, has its number-allocation
   table backfilled and its false claim that no RFC has been merged removed, has
@@ -2185,7 +2308,7 @@ fallback if nothing else proceeds.
 
 ### `EP-M2` — the template and one worked section 5
 
-- Outcome: the literal skeleton is committed into `ADR-021` — chosen over the
+- Outcome: the literal skeleton is committed into `ADR-040` — chosen over the
   developers' guide because the template is part of the convention the ADR
   already states in four parts, and the ADR is where a child's author is
   already sent — and one complete worked section 5 exists for review, for RFC
@@ -2195,7 +2318,7 @@ fallback if nothing else proceeds.
   entry as well. The choice of 0013 stands regardless, because the worked
   example earns its keep by being the document the go/no-go is spent on, not by
   being cheap to write.
-- Where it landed: the worked section sits in `ADR-021` under **The worked
+- Where it landed: the worked section sits in `ADR-040` under **The worked
   section**, immediately after the template it fills in, and is a fenced
   specimen rather than a ninth RFC. It could not be a file under `docs/rfcs/`:
   `registries::parse_all` scans that directory and takes every file whose
@@ -2236,7 +2359,7 @@ fallback if nothing else proceeds.
 Identical in shape, so stated once. For child `00NN` owning the groups in
 `Table 1` for roadmap step `6.S`:
 
-- Outcome: `docs/rfcs/00NN-<slug>.md` exists per the template in `ADR-021`; the
+- Outcome: `docs/rfcs/00NN-<slug>.md` exists per the template in `ADR-040`; the
   coverage map names it; `docs/contents.md` lists it; roadmap step `6.S` and
   each of its tasks cite it.
 - Acceptance evidence: `COV-1` shows exactly that RFC's registry helpers owned
@@ -2312,7 +2435,7 @@ covering struct fields and enum variants, not merely types.
 `EP-M1` as its own pull request. Then `EP-M2`, then one commit per child. For
 each child:
 
-1. Create `docs/rfcs/00NN-<slug>.md` from the literal template in `ADR-021`.
+1. Create `docs/rfcs/00NN-<slug>.md` from the literal template in `ADR-040`.
 2. Write section 4 as a list of the group's helpers with one-line purposes and
    links into RFC 0006 section 8.N. Do not restate a contract.
 3. Write section 5.1's registry, then 5.6, 5.7, 5.8, and 5.9. Apply the
@@ -2501,7 +2624,7 @@ Files created:
 - `docs/rfcs/0018-host-state-predicates-and-environment-expansion.md`
 - `docs/rfcs/0019-encoding-identity-and-formatting-helpers.md`
 - `docs/rfcs/0020-date-and-time-conversion-helpers.md`
-- `docs/adr-021-focused-child-rfcs-for-survey-rfcs.md`
+- `docs/adr-040-focused-child-rfcs-for-survey-rfcs.md`
 - `tests/rfc_stdlib_coverage_tests.rs`
 - `tests/rfc_stdlib_coverage/mod.rs` and its submodules
 

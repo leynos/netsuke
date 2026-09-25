@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 021: Focused child RFCs for survey RFCs
+# Architectural decision record (ADR) 040: Focused child RFCs for survey RFCs
 
 ## Status
 
