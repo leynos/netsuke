@@ -108,7 +108,10 @@ def forbidden_matches(manifest: str, patterns: cabc.Iterable[str]) -> list[str]:
 
 
 def load_state(path: Path) -> dict[str, object]:
-    """Read the shared step state, or an empty state when none was written.
+    """Read the shared step state, or an empty state when none is usable.
+
+    ``report`` always runs, so a missing, unreadable, or damaged state file
+    must still yield a record, with every unreached phase ``not_run``.
 
     Parameters
     ----------
@@ -118,11 +121,13 @@ def load_state(path: Path) -> dict[str, object]:
     Returns
     -------
     dict[str, object]
-        The recorded state.
+        The recorded state, or ``{}``.
     """
-    if not path.exists():
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except OSError, ValueError:
         return {}
-    return json.loads(path.read_text(encoding="utf-8"))
+    return state if isinstance(state, dict) else {}
 
 
 def save_state(path: Path, state: cabc.Mapping[str, object]) -> None:

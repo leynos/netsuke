@@ -62,7 +62,11 @@ equal to this table.
 | `leynos/mxd`               | `737048017901868a885ae23dcd4c0473242eb765` | `check-fmt`, `lint`, `test`                                                                                    | `postgres`, `sqlite`, `wireframe-only` | Linux          |
 | `leynos/ortho-config`      | `64cd6cb9526d1b7742373bc466a2121f8d395b50` | Linux: `check-fmt`, `lint`, `test`, `markdownlint`, `generated-config`; Windows: `powershell-wrapper-validate` | —                                      | Linux, Windows |
 
-Every pin is a commit on the downstream `issue-598-v010-netsuke-canary` branch.
+Every pin is a commit on the downstream `issue-598-v010-netsuke-canary` branch,
+and is also retained by a `netsuke-canary/<commit>` tag in that repository. A
+branch can be rewritten or deleted; the tag keeps the pinned commit fetchable
+for as long as the release needs it. Do not move or delete a retaining tag
+while a release, or a rehearsal of one, still names its commit.
 
 ## Distinctive contracts
 
@@ -128,9 +132,13 @@ retained boundaries in more detail.
 
 1. Commit the change to the downstream `issue-598-v010-netsuke-canary` branch
    and push it.
-2. Update the commit in every matrix row for that repository in
+2. Push a retaining tag for the new commit:
+   `git tag netsuke-canary/<commit> <commit>` and
+   `git push origin refs/tags/netsuke-canary/<commit>`. Keep the old pin's tag
+   until no release or rehearsal names it.
+3. Update the commit in every matrix row for that repository in
    `.github/workflows/release.yml`, and in the table above.
-3. Run a manual rehearsal: the **Release Dry Run** workflow with **Run
+4. Run a manual rehearsal: the **Release Dry Run** workflow with **Run
    workflow**, which runs every canary without publishing.
 
 ## Release decision

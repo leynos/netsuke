@@ -140,6 +140,20 @@ def test_report_without_state_records_a_failed_setup(canary: Canary) -> None:
     ), "an absent state should be reported as not run"
 
 
+@pytest.mark.parametrize("damage", ["{not json", "[1, 2]", "\udcff"])
+def test_a_damaged_state_still_yields_a_bounded_record(
+    canary: Canary, damage: str
+) -> None:
+    """``report`` survives a damaged state file and records nothing passed."""
+    canary.state.write_text(damage, encoding="utf-8", errors="surrogateescape")
+
+    record = canary.report("lint")
+
+    assert (record["generate"], record["outcome"]) == ("not_run", "failed"), (
+        "a damaged state should read as nothing having run"
+    )
+
+
 @pytest.mark.parametrize("pair", ["MXD_BACKEND", "mxd_backend=sqlite", "=sqlite"])
 def test_malformed_selectors_are_refused(canary: Canary, pair: str) -> None:
     """Only ``NAME=value`` assignments with an upper-case name are accepted."""
