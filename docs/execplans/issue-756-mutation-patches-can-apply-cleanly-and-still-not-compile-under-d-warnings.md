@@ -935,6 +935,34 @@ more. Per the run-id convention the figures are recorded as durations against
 the branch head rather than against a self-series SHA, which a rebase would
 invalidate.
 
+**One residual this work leaves open, recorded because it bears on the
+`kani-smoke` entry this branch added.** `NEXTEST_JOBS` is *iterate-only*. Its
+sole consumer, `tests/workflow_contracts/ci_lint_test.py:262`, loops over the
+tuple asserting each listed job installs `nextest@${{ env.NEXTEST_VERSION }}` —
+which holds the listed jobs to their contract but cannot notice a job that
+should be listed and is not, nor a listed job that is removed. Deleting the
+`kani-smoke` element this branch added would therefore fail no test; the loop
+would simply run one fewer time, and the gate's install step would go
+unchecked. The Makefile-level analogue is bidirectional — `NEXTEST_TARGETS` is
+checked against the targets the file actually invokes, in both directions — so
+the workflow-level list is the weaker of the two, and it is the one this branch
+extended. Closing it means deriving "which jobs run nextest" from the workflow
+rather than from a hand-kept tuple, which is a broader change than this issue
+and is deliberately not made here.
+
+The `kani-smoke` entry is not unguarded meanwhile, and the guard is closer than
+"nearby". `runner_shape_test.py:60` lists the job against `NEXTEST_TEST_JOBS` in
+`UBICLOUD_WORKER_BOUNDS`, and the parametrized test at line 129 fails when a
+listed job does not declare that variable
+(`jobs.kani-smoke must declare ['NEXTEST_TEST_JOBS']`). Since only a nextest
+lane sets it, removing the job's nextest wiring breaks that test. What remains
+unguarded is therefore the narrower thing than first written here: not the
+presence of the entry, but `NEXTEST_JOBS` being the authority on which jobs
+install nextest. A job that began running nextest without joining the tuple
+would install no nextest and fail no test in this suite — which is exactly the
+"evidence that looks healthy" shape this plan is about, recorded rather than
+fixed because the fix is a broader change than the issue.
+
 ## Revision note
 
 - 2026-09-21 — Initial ExecPlan for `#756`: regenerate the rotted patches, add
