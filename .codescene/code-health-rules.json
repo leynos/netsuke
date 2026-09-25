@@ -20,6 +20,16 @@
           "weight": 0.0
         }
       ]
+    },
+    {
+      "matching_content_path": "tests/kani_scope_wrapper_e2e_tests.rs",
+      "matching_content_path_doc": "An end-to-end harness for a shell command. Every helper here either composes a systemd-run argv or interrogates systemctl and journalctl, so its inputs are unit names, property names, payload fragments, and status words -- all strings to the tools being driven, not a domain model waiting to be typed. Two design changes were considered and rejected on measurement rather than taste. Grouping the two parameter pairs into one context type still leaves 71% of arguments as &str; adding property and status enums beside it still leaves 57%, because the payload and unit name have no type to take. Both sit far above the 39% threshold, so the biomarker cannot be satisfied by any design that keeps the module's job. One genuinely redundant parameter was removed rather than exempted: the capture path was passed alongside the unit it is derived from at every call site, and three adjacent &str parameters made a transposed pair a silent bug, so it is now computed by capture_path. Reassess if these helpers gain a caller outside the module or stop driving external commands.",
+      "rules": [
+        {
+          "name": "String Heavy Function Arguments",
+          "weight": 0.0
+        }
+      ]
     }
   ]
 }
