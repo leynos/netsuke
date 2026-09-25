@@ -12,6 +12,16 @@
       ]
     },
     {
+      "matching_content_path": "src/stdlib/which/telemetry_tests/**",
+      "matching_content_path_doc": "Test-only telemetry assertions, gated behind #[cfg(test)] in src/stdlib/which/mod.rs. Each case names the mode, outcome, and category it expects as an independent literal, which is the point: deriving the expected spelling from CwdMode or from telemetry.rs would make the assertion circular and let a renamed label pass. Reading them from shared constants is the same defect one step removed, so the fixtures must take unconstrained &str. The three-argument shape is a (cwd_mode, outcome, category) tuple describing one sample, not a set of like-typed parameters that a newtype could constrain; grouping it into a struct would put the expected literals behind a builder and make each table case harder to read against the vocabulary it pins. Reassess if this module gains non-test callers or a production path.",
+      "rules": [
+        {
+          "name": "String Heavy Function Arguments",
+          "weight": 0.0
+        }
+      ]
+    },
+    {
       "matching_content_path": "src/ir/cmd_interpolate_property_support.rs",
       "matching_content_path_doc": "Private test-only generated strategies and an independent POSIX scanner oracle must accept unconstrained templates, raw bindings, replacement values, and fragments. Those adversarial values intentionally include placeholders, backticks, quotes, empty text, and malformed forms. Newtypes would add conversion and borrowing noise without enforcing a constraint; reassess if this code becomes production-facing or its inputs gain a meaningful invariant.",
       "rules": [
