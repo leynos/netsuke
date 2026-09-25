@@ -251,7 +251,7 @@ jobs:
 
       - name: Stage artefacts
         id: stage
-        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/stage-release-artefacts@438ad8a99a3580e753189c47391a1652c5f46ed4
         with:
           config-file: .github/release-staging.toml
           target: ${{ inputs['stage-target'] }}
