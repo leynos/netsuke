@@ -1969,7 +1969,7 @@ changelog entry instead.
 
 The `rust-toolchain` ecosystem block updates the checked-in Rust toolchain
 declaration in `rust-toolchain.toml`. It targets the repository root (`/`),
-runs weekly, permits five open pull requests, and applies the `dependencies` and
+runs daily, permits five open pull requests, and applies the `dependencies` and
 `rust-toolchain` labels. The declaration remains pinned to a dated nightly;
 each Dependabot pull request still requires normal human review and the
 repository quality gates. Kani's separately managed toolchain is outside this
@@ -3666,8 +3666,15 @@ Netsuke uses a mixed strategy:
 - Behavioural test discovery is defined in `tests/bdd_tests.rs`.
 - Dependabot configuration lives in `.github/dependabot.yml`, with
   `tests/dependabot_config_tests.rs` validating the Cargo, GitHub Actions, and
-  `rust-toolchain` update policies, including their configured schedules,
-  labels, directories, and open pull request limits where applicable.
+  `rust-toolchain` update policies, including their daily schedules, labels,
+  directories, and open pull request limits where applicable. Each ecosystem
+  has one trailing catch-all group limited to minor and patch updates, so
+  majors arrive one per pull request; `group_policy.rs` under
+  `tests/dependabot_test_support/` owns that check. The only other groups are
+  the cargo lockstep families listed in `CARGO_LOCKSTEP_GROUPS`, which the
+  contract requires with exactly those patterns and no `update-types` limit.
+  Group options that narrow a group's reach (`exclude-patterns`, `applies-to`,
+  `group-by`) are refused.
 - **Property-based tests** use `proptest` and take two shapes: some live in
   `*_tests.rs` modules adjacent to the code under test, included via
   `#[cfg(test)] #[path = "..."] mod ...;` declarations; others are standalone
@@ -6975,10 +6982,16 @@ minimal feature for returning an owned digest.
 Because these crates share their breaking changes, `.github/dependabot.yml`
 collects them into a `rustcrypto` group for the `cargo` ecosystem, so the next
 major arrives as one buildable pull request rather than several that cannot
-compile individually. Add any new RustCrypto crate to that group's `patterns`
-list at the same time as the dependency itself. Never work around a lockstep
-break by pinning one member to an exact version: that blocks the whole family,
-which is what issue #477 had to undo.
+compile individually. It and the `rstest-bdd` group are the only groups
+permitted to take majors, and both are listed before the `minor-and-patch`
+catch-all because Dependabot assigns a dependency to the first group that
+matches it. The `rstest-bdd` group exists because `rstest-bdd` and
+`rstest-bdd-macros` also release in lockstep, and Cargo's pre-1.0 rules count a
+0.x minor as a major, which the catch-all would leave ungrouped. Add any new
+RustCrypto crate to the `rustcrypto` group's `patterns` list at the same time
+as the dependency itself. Never work around a lockstep break by pinning one
+member to an exact version: that blocks the whole family, and undoing it was
+the work of issue #477.
 
 Both removals are pinned by `tests/sha2_migration_guard_tests.rs`, which
 asserts at compile time that the digest type does not implement

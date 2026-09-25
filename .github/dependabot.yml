@@ -6,6 +6,9 @@ updates:
       github-actions:
         patterns:
           - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
     directories:
       - "/"
       - "/.github/actions/*"
@@ -14,7 +17,7 @@ updates:
       - "dependencies"
       - "github-actions"
     schedule:
-      interval: "weekly"
+      interval: "daily"
     cooldown:
       default-days: 7
 
@@ -40,6 +43,19 @@ updates:
           - "block-buffer"
           - "crypto-common"
           - "hybrid-array"
+      # The rstest-bdd crates release in lockstep and one bumped alone does not
+      # build. Cargo counts a 0.x minor as a major, which the catch-all leaves
+      # ungrouped, so this group keeps the family in one pull request. It must
+      # precede the catch-all: Dependabot uses the first group that matches.
+      rstest-bdd:
+        patterns:
+          - "rstest-bdd*"
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     directories:
       - "/"
       - "/test_support"
@@ -55,9 +71,16 @@ updates:
       semver-major-days: 14
   - package-ecosystem: rust-toolchain
     directory: /
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
     open-pull-requests-limit: 5
     labels:
       - dependencies
       - rust-toolchain
     schedule:
-      interval: weekly
+      interval: daily

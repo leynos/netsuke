@@ -5,8 +5,12 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use serde::Deserialize;
 use std::{collections::BTreeSet, io::Write};
+#[path = "dependabot_test_support/group_policy.rs"]
+mod group_policy;
 #[path = "dependabot_test_support/manifest_discovery.rs"]
 mod manifest_discovery;
+use group_policy::{DependabotGroup, LockstepGroup, assert_group_policy};
+use indexmap::IndexMap;
 /// Parsed Dependabot configuration root.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -24,12 +28,38 @@ struct DependabotUpdate {
     open_pull_requests_limit: u64,
     labels: Vec<String>,
     schedule: DependabotSchedule,
+    #[serde(default)]
+    groups: IndexMap<String, DependabotGroup>,
 }
 /// Parsed Dependabot schedule block.
 #[derive(Debug, Deserialize)]
 struct DependabotSchedule {
     interval: String,
 }
+/// Cargo families whose members share breaking changes, so their majors move
+/// as one pull request. Patterns mirror `.github/dependabot.yml` exactly.
+const CARGO_LOCKSTEP_GROUPS: &[LockstepGroup<'static>] = &[
+    LockstepGroup {
+        name: "rustcrypto",
+        patterns: &[
+            "digest",
+            "sha1",
+            "sha2",
+            "sha3",
+            "md-5",
+            "hmac",
+            "hkdf",
+            "pbkdf2",
+            "block-buffer",
+            "crypto-common",
+            "hybrid-array",
+        ],
+    },
+    LockstepGroup {
+        name: "rstest-bdd",
+        patterns: &["rstest-bdd*"],
+    },
+];
 /// Return the repository root as a UTF-8 Camino path.
 fn repo_root_path() -> Utf8PathBuf {
     Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -309,25 +339,25 @@ fn dependabot_updates_have_expected_policy() -> Result<()> {
         "Dependabot config should define GitHub Actions, Cargo, and rust-toolchain updates"
     );
 
+    let github_actions_update = update_for(&config, "github-actions")?;
     assert_update_policy(
-        update_for(&config, "github-actions")?,
-        "weekly",
+        github_actions_update,
+        "daily",
         &["dependencies", "github-actions"],
         5,
     );
-    assert_update_policy(
-        update_for(&config, "cargo")?,
-        "daily",
-        &["dependencies", "cargo"],
-        5,
-    );
+    assert_group_policy("github-actions", &github_actions_update.groups, &[])?;
+    let cargo_update = update_for(&config, "cargo")?;
+    assert_update_policy(cargo_update, "daily", &["dependencies", "cargo"], 5);
+    assert_group_policy("cargo", &cargo_update.groups, CARGO_LOCKSTEP_GROUPS)?;
     let rust_toolchain_update = update_for(&config, "rust-toolchain")?;
     assert_update_policy(
         rust_toolchain_update,
-        "weekly",
+        "daily",
         &["dependencies", "rust-toolchain"],
         5,
     );
+    assert_group_policy("rust-toolchain", &rust_toolchain_update.groups, &[])?;
     ensure!(
         rust_toolchain_update.directory.as_deref() == Some("/"),
         "rust-toolchain updates should target the repository root"
