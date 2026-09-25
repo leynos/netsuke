@@ -11,9 +11,9 @@ name: Release Dry Run
     inputs:
       candidate-ref:
         description: >-
-          Netsuke ref for the downstream canaries to build. Empty builds the
-          selected ref; `auto` picks the newest `-rcN` tag, or `main` when a
-          later version tag exists.
+          Netsuke ref for the downstream canaries to build: a tag, commit, or
+          branch name. Empty builds the selected ref; `auto` picks the newest
+          `-rcN` tag, or `main` when a later version tag exists.
         required: false
         type: string
         default: ''

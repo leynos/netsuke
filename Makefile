@@ -255,7 +255,10 @@ test-downstream-canary: ## Validate the downstream migration-canary tooling
 		--with pytest==9.0.2 python -m pytest \
 		scripts/tests/test_resolve_release_candidate.py \
 		scripts/tests/test_run_downstream_canary.py \
-		scripts/tests/test_downstream_canary_arguments.py -c /dev/null \
+		scripts/tests/test_downstream_canary_arguments.py \
+		.github/scripts/resolve_release_candidate.py \
+		scripts/run_downstream_canary.py scripts/downstream_canary_arguments.py \
+		scripts/downstream_canary_provenance.py --doctest-modules -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 
 test-coverage-artifact: ## Test hostile LCOV artefact validation

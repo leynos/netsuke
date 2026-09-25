@@ -206,6 +206,36 @@ def test_explicit_ref_is_resolved_to_its_commit(repository: Path) -> None:
     )
 
 
+def test_explicit_branch_resolves_through_its_remote_tracking_ref(
+    repository: Path,
+) -> None:
+    """A branch the checkout has only as ``origin/<name>`` still resolves."""
+    branch = commit_version(repository, "0.1.0-rc1-dev")
+    git(repository, "update-ref", "refs/remotes/origin/release/0.1", branch)
+    git(repository, "reset", "--quiet", "--hard", "HEAD~1")
+
+    candidate = resolver.resolve(
+        "release/0.1", "0" * 40, run_git_in_repository(repository)
+    )
+
+    assert candidate == resolver.Candidate(branch, "0.1.0-rc1-dev", "explicit"), (
+        "the remote-tracking branch should be the candidate"
+    )
+
+
+def test_a_ref_that_resolves_as_given_wins_over_the_remote(repository: Path) -> None:
+    """A tag of the same name as a remote branch keeps its own meaning."""
+    tag = git(repository, "rev-parse", "v0.1.0-beta3^{commit}")
+    other = commit_version(repository, "9.9.9")
+    git(repository, "update-ref", "refs/remotes/origin/v0.1.0-beta3", other)
+
+    candidate = resolver.resolve(
+        "v0.1.0-beta3", "0" * 40, run_git_in_repository(repository)
+    )
+
+    assert candidate.commit == tag, "the tag should win over the remote branch"
+
+
 @pytest.mark.parametrize("ref", ["--output=/tmp/owned", "no-such-ref"])
 def test_unresolvable_refs_are_refused(repository: Path, ref: str) -> None:
     """Option-shaped and unknown refs fail rather than selecting anything."""

@@ -235,6 +235,63 @@ def requested_ref(requested: str, workflow_sha: str, git: GitRunner) -> tuple[st
     return requested, "explicit"
 
 
+def peel_to_commit(ref: str, git: GitRunner) -> str:
+    """Return Git's resolution of ``ref`` to a commit.
+
+    A ref that does not resolve raises ``subprocess.CalledProcessError``.
+
+    Parameters
+    ----------
+    ref
+        The ref to resolve.
+    git
+        Runs Git with an argument vector and returns its standard output.
+
+    Returns
+    -------
+    str
+        Git's output, stripped.
+    """
+    # `--end-of-options` stops a caller-supplied ref being read as an option.
+    return git([
+        "rev-parse",
+        "--verify",
+        "--end-of-options",
+        f"{ref}^{{commit}}",
+    ]).strip()
+
+
+def resolve_commit(ref: str, source: str, git: GitRunner) -> str:
+    """Return the commit ``ref`` names, trying its remote branch as well.
+
+    The resolver's checkout has every branch only as a remote-tracking ref,
+    so an explicitly requested name that does not resolve as given is tried
+    under ``refs/remotes/origin/``. A name that resolves as given, such as a
+    tag, always wins. When neither resolves, the remote spelling's
+    ``subprocess.CalledProcessError`` propagates.
+
+    Parameters
+    ----------
+    ref
+        The ref to resolve.
+    source
+        The rule that selected it.
+    git
+        Runs Git with an argument vector and returns its standard output.
+
+    Returns
+    -------
+    str
+        Git's resolution of the first spelling that resolves.
+    """
+    if source != "explicit" or ref.startswith("refs/"):
+        return peel_to_commit(ref, git)
+    try:
+        return peel_to_commit(ref, git)
+    except subprocess.CalledProcessError:
+        return peel_to_commit(f"refs/remotes/origin/{ref}", git)
+
+
 def resolve(requested: str, workflow_sha: str, git: GitRunner) -> Candidate:
     """Resolve the candidate commit and the version it declares.
 
@@ -260,13 +317,7 @@ def resolve(requested: str, workflow_sha: str, git: GitRunner) -> Candidate:
         ``TypeError`` raised by :func:`package_version`.
     """
     ref, source = requested_ref(requested, workflow_sha, git)
-    # `--end-of-options` stops a caller-supplied ref being read as an option.
-    commit = git([
-        "rev-parse",
-        "--verify",
-        "--end-of-options",
-        f"{ref}^{{commit}}",
-    ]).strip()
+    commit = resolve_commit(ref, source, git)
     if COMMIT_ID.match(commit) is None:
         msg = f"candidate ref did not resolve to a commit: {ref}"
         raise ValueError(msg)
@@ -304,44 +355,8 @@ def run_git(arguments: cabc.Sequence[str]) -> str:
     return completed.stdout
 
 
-def write_outputs(candidate: Candidate, output_path: Path) -> None:
-    """Append the candidate to a GitHub Actions output file.
-
-    Parameters
-    ----------
-    candidate
-        The resolved candidate.
-    output_path
-        The ``GITHUB_OUTPUT`` file.
-    """
-    with output_path.open("a", encoding="utf-8") as output:
-        output.write(f"commit={candidate.commit}\n")
-        output.write(f"version={candidate.version}\n")
-        output.write(f"source={candidate.source}\n")
-
-
-def parse_arguments(argv: cabc.Sequence[str] | None) -> argparse.Namespace:
-    """Parse the command line.
-
-    Parameters
-    ----------
-    argv
-        Arguments excluding the program name, or ``None`` for ``sys.argv``.
-
-    Returns
-    -------
-    argparse.Namespace
-        The parsed ``requested``, ``workflow_sha``, and ``output`` values.
-    """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--requested", default="", help="ref, 'auto', or empty")
-    parser.add_argument("--workflow-sha", required=True, help="the run's commit")
-    parser.add_argument("--output", required=True, type=Path, help="GITHUB_OUTPUT")
-    return parser.parse_args(argv)
-
-
 def main(argv: cabc.Sequence[str] | None = None) -> int:
-    """Resolve the candidate and publish it as step outputs.
+    """Resolve the candidate and append it to the ``GITHUB_OUTPUT`` file.
 
     Parameters
     ----------
@@ -353,16 +368,23 @@ def main(argv: cabc.Sequence[str] | None = None) -> int:
     int
         ``0`` on success, ``1`` when the candidate cannot be resolved.
     """
-    arguments = parse_arguments(argv)
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--requested", default="", help="ref, 'auto', or empty")
+    parser.add_argument("--workflow-sha", required=True, help="the run's commit")
+    parser.add_argument("--output", required=True, type=Path, help="GITHUB_OUTPUT")
+    arguments = parser.parse_args(argv)
     try:
         candidate = resolve(arguments.requested, arguments.workflow_sha, run_git)
     except (ValueError, TypeError, OSError, subprocess.CalledProcessError) as error:
         print(f"release candidate resolution failed: {error}", file=sys.stderr)
         return 1
-    write_outputs(candidate, arguments.output)
+    with arguments.output.open("a", encoding="utf-8") as output:
+        output.write(
+            f"commit={candidate.commit}\nversion={candidate.version}\n"
+            f"source={candidate.source}\n"
+        )
     print(
-        f"release candidate {candidate.commit} "
-        f"version {candidate.version} ({candidate.source})"
+        f"release candidate {candidate.commit} {candidate.version} ({candidate.source})"
     )
     return 0
 

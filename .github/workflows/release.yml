@@ -27,7 +27,8 @@ name: Release Binary
           The Netsuke ref the downstream migration canaries build. Empty, the
           default, builds the commit this run is for. `auto` selects the
           newest `-rcN` tag while it is also the newest version tag, and
-          otherwise `main`. Any other value is resolved as a Git ref. A
+          otherwise `main`. Any other value is resolved as a Git ref, and a
+          branch name also as its `origin/` remote-tracking branch. A
           publishing run admits only canaries that built its own commit.
         required: false
         type: string

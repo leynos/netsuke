@@ -128,13 +128,19 @@ runs:
         inputs.platform == 'linux' &&
         contains(format(' {0} ', inputs.tools), ' libpq ')
       shell: bash
-      run: sudo apt-get install --yes --no-install-recommends libpq-dev
+      # Refresh the package index first: a hosted image's cached index can
+      # name versions the mirror no longer serves.
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes --no-install-recommends libpq-dev
     - name: Install SQLite headers
       if: >-
         inputs.platform == 'linux' &&
         contains(format(' {0} ', inputs.tools), ' libsqlite3 ')
       shell: bash
-      run: sudo apt-get install --yes --no-install-recommends libsqlite3-dev
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes --no-install-recommends libsqlite3-dev
     - name: Build the Netsuke candidate
       id: netsuke
       # The installer script rather than its action wrapper: a composite
