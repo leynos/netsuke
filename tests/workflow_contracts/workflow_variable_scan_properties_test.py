@@ -182,6 +182,8 @@ def test_each_reference_is_reported_exactly_once(expression: Expression) -> None
 @settings(max_examples=200, derandomize=True, deadline=None)
 @example(expression=Expression.of(dotted("env", "CS_ACCESS_TOKEN")))
 @example(expression=Expression.of(dotted("secrets", "NETSUKE_SCCACHE_LOCAL_DIR")))
+@example(expression=Expression.of(dotted(VARIABLE_NAMESPACE, PERMITTED_VARIABLE_NAME)))
+@example(expression=Expression.of(indexed(VARIABLE_NAMESPACE, PERMITTED_VARIABLE_NAME)))
 @given(expression=permitted_conditions())
 def test_only_the_declared_variable_is_permitted(expression: Expression) -> None:
     """Report nothing for a condition that names no undeclared variable.
@@ -199,6 +201,15 @@ def test_only_the_declared_variable_is_permitted(expression: Expression) -> None
     the empty string.
     """
     assert expression.references, f"{expression.body!r} must name a reference"
+    # The chain below passes when the scan reports nothing, and a scan that had
+    # stopped naming anything would pass every step of it for the wrong reason.
+    # The model's verdict is asserted here — before the scan's — so the two
+    # directions are stated separately: this expression names something, and the
+    # scan agrees that what it names is declared.
+    assert not expression.undeclared(), (
+        f"{expression.body!r} must name nothing undeclared, got "
+        f"{expression.undeclared()!r}"
+    )
 
     for text, options in _spellings(expression):
         assert not unbound_variable_references({"if": text}), (

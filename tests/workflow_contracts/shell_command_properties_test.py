@@ -53,18 +53,23 @@ MAXIMUM_WORDS: typ.Final[int] = 12
 #: carries meaning, so it is the command a caller most often asks about.
 COPY_COMMAND: typ.Final[str] = "cp"
 
-#: Commands no generated script runs, and so no segment may read as.
+#: Commands no generated script runs, whatever plan it was built from.
 #:
-#: The complement of the vocabulary a plan draws from, plus `true`, which only
-#: ever appears as the command a commented-out mention runs. A property asks
-#: that a segment reads as none of these, which fails if the scanner matched a
-#: command name it was handed as an argument or found in a comment.
-UNRUN_COMMANDS: typ.Final[tuple[str, ...]] = (
-    *[name for name in COMMAND_NAMES if name != COPY_COMMAND],
-    "true",
-    "sudo",
-    "xargs",
-)
+#: `true` only ever appears as the command a commented-out mention runs, and
+#: `sudo` and `xargs` are handed to a command as operands; none is ever the
+#: command of a generated plan. A property asks that a segment reads as none of
+#: these, which fails if the scanner matched a command name it was handed as an
+#: argument or found in a comment.
+#:
+#: The vocabulary's own commands are deliberately *not* listed here. A command
+#: is unrun only relative to the plan that was drawn, so the names to exclude
+#: come from `Invocation.other_commands` at each use site. A fixed complement
+#: cannot express that: it would have to exclude the one command the plan does
+#: run, which is a different name for every drawn plan, and excluding a literal
+#: instead silently drops the check for that command on every plan that does not
+#: run it — including `cp`, the command whose operand order the fixture documents
+#: as the interesting case.
+UNRUN_COMMANDS: typ.Final[tuple[str, ...]] = ("true", "sudo", "xargs")
 
 
 def _segments_of(invocation: Invocation, text: str) -> list[str]:
@@ -129,9 +134,7 @@ def test_a_single_command_reads_as_exactly_its_own_plan(
     assert assigned_from(segment, "mktemp") == invocation.captured_names(), (
         f"captured names in {text!r}"
     )
-    for other in UNRUN_COMMANDS:
-        if other == invocation.command:
-            continue
+    for other in (*UNRUN_COMMANDS, *invocation.other_commands()):
         assert not command_operands(segment, other), (
             f"{text!r} runs {invocation.command!r}, not {other!r}"
         )
