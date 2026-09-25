@@ -37,6 +37,7 @@ if typ.TYPE_CHECKING:
 ROOTED_PATH = re.compile(r"(?<![\w$])(?P<head>\$crate|crate|super|self)\s*::")
 PATH_SEGMENT = re.compile(r"\s*(?P<name>[A-Za-z_]\w*)\s*::")
 GROUP_OPEN = re.compile(r"\s*\{")
+FINAL_SEGMENT = re.compile(r"\s*(?P<name>[A-Za-z_]\w*)")
 GROUP_NAME = re.compile(r"(?:^|[{,])\s*(?P<name>[A-Za-z_]\w*)")
 BARE_PATH = re.compile(r"(?<![\w:$])(?P<name>[A-Za-z_]\w*)\s*::")
 MACRO_DEFINITION = re.compile(r"\bmacro_rules!\s*(?P<name>[A-Za-z_]\w*)")
@@ -62,9 +63,29 @@ def _rooted_targets(
         base, index = _walk_path(code, match.end(), _path_base(module, match["head"]))
         prefix = crate.resolve(base)
         targets.add(prefix)
+        targets.add(_final_target(crate, base, code, index))
         if group := GROUP_OPEN.match(code, index):
             targets |= _grouped_targets(crate, prefix, code, group.end())
     return targets
+
+
+def _final_target(
+    crate: CrateSource, base: tuple[str, ...], code: str, index: int
+) -> tuple[str, ...]:
+    """Return the module a path's final segment names, or ``base`` itself.
+
+    `use crate::hasher;` names the module `hasher` in a segment no `::`
+    follows, and the file then reaches it through a bare `hasher::` path that
+    ``_bare_targets`` cannot see from a nested module. When the final segment
+    is an item rather than a module, resolving falls back to ``base``.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The longest module prefix of the path including its final segment.
+    """
+    final = FINAL_SEGMENT.match(code, index)
+    return crate.resolve((*base, final["name"]) if final else base)
 
 
 def _path_base(module: RustModule, head: str) -> tuple[str, ...]:
