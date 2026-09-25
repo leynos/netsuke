@@ -701,18 +701,18 @@ failure mode cannot recur silently.
   guard still reports a `compile_guard::neighbour::case_9` stray — so the
   consolidation is behaviour-preserving and the detector is still live, rather
   than merely importable.
-- Replay each alternative of a top-level union separately, rather than each
+- Replay each arm of a top-level union separately, rather than each
   `filter = '…'` value whole. A union is satisfied by any one of its arms, so
-  the whole-value replay this branch added could be satisfied by a live alt-
-  ernative while a dead one beside it left its test running under the defaults
-  — the branch's own subject matter, one level down. All four configured fil-
-  ters are unions (17 alternatives between them), so this was live rather than
+  the whole-value replay this branch added could be satisfied by a live arm
+  while a dead one beside it left its test running under the defaults — the
+  branch's own subject matter, one level down. Every `filter` the configuration
+  declares is such a union (17 arms between them), so this was live rather than
   latent. The split tracks bracket depth, because `|` is overloaded: inside
   `test(...)` it belongs to the regular expression, where `($|::)` means "end
   of name or a module separator". A naive split would have cut every selector
-  in half and replayed fragments; the probe confirms 17 alternatives, none
-  fragmentary, and confirms the injected dead arm appears as its own
-  alternative where the whole-union replay would have hidden it.
+  in half and replayed fragments; the probe confirms 17 arms, none fragmentary,
+  and confirms the injected dead arm appears as its own arm where the
+  whole-union replay would have hidden it.
 - Replay the anchored selector *as the configuration wrote it*, rather than
   rebuilding it from the extracted bare name. `_check` did
   `ANCHORED_SELECTOR.format(name=name)`, and that constant carries no module
