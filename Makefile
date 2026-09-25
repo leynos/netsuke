@@ -254,7 +254,8 @@ test-downstream-canary: ## Validate the downstream migration-canary tooling
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with pytest==9.0.2 python -m pytest \
 		scripts/tests/test_resolve_release_candidate.py \
-		scripts/tests/test_run_downstream_canary.py -c /dev/null \
+		scripts/tests/test_run_downstream_canary.py \
+		scripts/tests/test_downstream_canary_arguments.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 
 test-coverage-artifact: ## Test hostile LCOV artefact validation

@@ -18,7 +18,6 @@ vocabulary and command output stays in the job log, so the provenance record
 never carries unbounded text.
 """
 
-import argparse
 import json
 import os
 import re
@@ -26,8 +25,8 @@ import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the canary runs fixed downstream tools.
 import sys
 import typing as typ
-from pathlib import Path
 
+from downstream_canary_arguments import build_parser, normalise_lists
 from downstream_canary_provenance import (
     FAILED,
     NOT_RUN,
@@ -38,7 +37,9 @@ from downstream_canary_provenance import (
 )
 
 if typ.TYPE_CHECKING:
+    import argparse
     import collections.abc as cabc
+    from pathlib import Path
 
 #: The generated manifest, relative to the downstream checkout.
 MANIFEST = "build.ninja"
@@ -46,18 +47,18 @@ MANIFEST = "build.ninja"
 SELECTOR_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 
 
-def parse_selectors(pairs: cabc.Iterable[str]) -> dict[str, str]:
-    """Parse ``NAME=value`` lane selectors.
+def parse_assignments(pairs: cabc.Iterable[str]) -> dict[str, str]:
+    """Parse ``NAME=value`` environment assignments.
 
     Parameters
     ----------
     pairs
-        Selector assignments, such as ``MXD_BACKEND=postgres``.
+        Assignments, such as the lane selector ``MXD_BACKEND=postgres``.
 
     Returns
     -------
     dict[str, str]
-        The selectors by variable name.
+        The values by variable name.
 
     Raises
     ------
@@ -66,14 +67,14 @@ def parse_selectors(pairs: cabc.Iterable[str]) -> dict[str, str]:
 
     Examples
     --------
-    >>> parse_selectors(["MXD_BACKEND=sqlite"])
+    >>> parse_assignments(["MXD_BACKEND=sqlite"])
     {'MXD_BACKEND': 'sqlite'}
     """
     selectors: dict[str, str] = {}
     for pair in pairs:
         name, separator, value = pair.partition("=")
         if not separator or SELECTOR_NAME.match(name) is None:
-            msg = f"invalid lane selector: {pair!r}"
+            msg = f"invalid environment assignment: {pair!r}"
             raise ValueError(msg)
         selectors[name] = value
     return selectors
@@ -164,20 +165,27 @@ def run_tool(command: cabc.Sequence[str], workdir: Path, env: dict[str, str]) ->
     return completed.returncode == 0
 
 
-def child_environment(selectors: cabc.Mapping[str, str]) -> dict[str, str]:
-    """Return the inherited environment with the lane selectors applied.
+def child_environment(arguments: argparse.Namespace) -> dict[str, str]:
+    """Return the inherited environment with the canary's assignments applied.
+
+    Lane selectors are recorded in the provenance; the extra environment, such
+    as a service connection string, reaches the tools but is never recorded.
 
     Parameters
     ----------
-    selectors
-        Lane selector variables.
+    arguments
+        Parsed ``generate`` or ``run`` arguments.
 
     Returns
     -------
     dict[str, str]
         The child process environment.
     """
-    return {**os.environ, **selectors}
+    return {
+        **os.environ,
+        **parse_assignments(arguments.environment),
+        **parse_assignments(arguments.selector),
+    }
 
 
 def generate(arguments: argparse.Namespace) -> int:
@@ -193,7 +201,7 @@ def generate(arguments: argparse.Namespace) -> int:
     int
         ``0`` when generation succeeds, otherwise ``1``.
     """
-    env = child_environment(parse_selectors(arguments.selector))
+    env = child_environment(arguments)
     command = [arguments.netsuke, "--verbose", "generate", "--output", MANIFEST]
     passed = run_tool(command, arguments.workdir, env)
     save_state(arguments.state, {"generate": PASSED if passed else FAILED})
@@ -248,7 +256,7 @@ def run_each_target(arguments: argparse.Namespace) -> dict[str, str]:
         Each target's ``passed`` or ``failed`` status, in request order.
     """
     ninja = shutil.which("ninja") or "ninja"
-    env = child_environment(parse_selectors(arguments.selector))
+    env = child_environment(arguments)
     return {
         target: PASSED
         if run_tool([ninja, "-f", MANIFEST, target], arguments.workdir, env)
@@ -302,7 +310,7 @@ def report(arguments: argparse.Namespace) -> int:
         netsuke_revision=arguments.netsuke_revision,
         netsuke_version=arguments.netsuke_version,
         platform=arguments.platform,
-        selectors=parse_selectors(arguments.selector),
+        selectors=parse_assignments(arguments.selector),
         targets=tuple(arguments.target),
     )
     record = provenance_record(
@@ -318,52 +326,6 @@ def report(arguments: argparse.Namespace) -> int:
     return 0
 
 
-def parser() -> argparse.ArgumentParser:
-    """Build the command-line parser for the three canary steps.
-
-    Returns
-    -------
-    argparse.ArgumentParser
-        The parser, with ``generate``, ``run``, and ``report`` subcommands.
-    """
-    root = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    commands = root.add_subparsers(dest="command", required=True)
-    for name, handler in (
-        ("generate", generate),
-        ("run", run_targets),
-        ("report", report),
-    ):
-        command = commands.add_parser(name)
-        command.set_defaults(handler=handler)
-        command.add_argument("--workdir", required=True, type=Path)
-        command.add_argument("--state", required=True, type=Path)
-        command.add_argument("--selector", action="append", default=[])
-    commands.choices["generate"].add_argument("--netsuke", required=True)
-    commands.choices["run"].add_argument("--target", action="append", required=True)
-    commands.choices["run"].add_argument("--forbid", action="append", default=[])
-    add_report_arguments(commands.choices["report"])
-    return root
-
-
-def add_report_arguments(command: argparse.ArgumentParser) -> None:
-    """Add the run-identity arguments that ``report`` records.
-
-    Parameters
-    ----------
-    command
-        The ``report`` subcommand parser.
-    """
-    command.add_argument("--target", action="append", required=True)
-    command.add_argument("--canary", required=True)
-    command.add_argument("--repository", required=True)
-    command.add_argument("--downstream-revision", required=True)
-    command.add_argument("--netsuke-revision", required=True)
-    command.add_argument("--netsuke-version", required=True)
-    command.add_argument("--platform", required=True)
-    command.add_argument("--provenance", required=True, type=Path)
-    command.add_argument("--summary", type=Path)
-
-
 def main(argv: cabc.Sequence[str] | None = None) -> int:
     """Run one canary step.
 
@@ -377,8 +339,10 @@ def main(argv: cabc.Sequence[str] | None = None) -> int:
     int
         The step's exit status.
     """
-    arguments = parser().parse_args(argv)
+    handlers = {"generate": generate, "run": run_targets, "report": report}
+    arguments = build_parser(handlers).parse_args(argv)
     try:
+        normalise_lists(arguments)
         return arguments.handler(arguments)
     except ValueError as error:
         print(f"downstream canary {arguments.command} failed: {error}", file=sys.stderr)
