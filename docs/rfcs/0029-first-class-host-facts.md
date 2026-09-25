@@ -12,8 +12,9 @@
 ### Number allocation and related proposals
 
 RFCs 0013 to 0020 are reserved by PR #697; RFCs 0021 to 0025 already appear on
-`main`; PR #747 reserves RFCs 0026 to 0028. This proposal takes 0029 above
-those allocations. The allocation check found no existing host-facts PR.
+`main`; PR #747 has since landed RFCs 0026 to 0028 there. This proposal takes
+0029 above those allocations. The allocation check found no existing host-facts
+PR.
 
 This RFC complements [RFC 0006][stdlib-rfc], rather than adding another general
 filter library. It integrates with [structured commands][commands-rfc],

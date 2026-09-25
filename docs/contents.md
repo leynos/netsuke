@@ -93,9 +93,6 @@ operator, user, and contributor references are easier to find.
   lowered to Ninja pools, with explicit invocation-only scope.
 - [RFC 0025: Progressive enhancement and maturity policies][rfc-0025]:
   Shallow-end compatibility and opt-in, scoped, trust-aware enforcement.
-- [RFC 0029: First-class host facts][rfc-0029]: Ansible-informed, typed
-  platform observations, explicit collection, privacy-preserving discovery, and
-  reproducible planning without ambient environment probes.
 
 - [RFC 0026](rfcs/0026-hexagonal-domain-hardening.md): Proposed resolved
   operations, shell binding, application execution, and diagnostic boundaries.
@@ -103,6 +100,9 @@ operator, user, and contributor references are easier to find.
   policy, explicit analysis coverage, migration debt, and qualified checking.
 - [RFC 0028](rfcs/0028-paralegal-architecture-experiment.md): Proposed bounded
   Paralegal trial, starting with Netsuke toolchain compatibility.
+- [RFC 0029: First-class host facts][rfc-0029]: Ansible-informed, typed
+  platform observations, explicit collection, privacy-preserving discovery, and
+  reproducible planning without ambient environment probes.
 
 [rfc-0009]: rfcs/0009-structured-command-working-directories.md
 [rfc-0012]: rfcs/0012-netsukefile-property-testing.md
