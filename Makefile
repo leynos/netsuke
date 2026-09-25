@@ -357,11 +357,15 @@ typecheck-python: ## Typecheck the Python sources with ty
 	# `uv tool run` materialises one venv holding ty plus the test-suite
 	# dependencies, so ty can resolve third-party imports. `uv run --with`
 	# would layer the extras through `.pth` chaining, which ty cannot follow.
+	# Both `scripts` and `.github/scripts` are named as search roots because
+	# the contract tests import from them through a `sys.path` insert, which
+	# ty does not follow; without the roots those imports read as unresolved.
 	$(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 		--from ty==$(TY_VERSION) --with pytest==9.0.2 --with pytest-cov==7.0.0 \
 		--with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' \
 		ty check --python-version $(PYTHON_BASELINE) \
-		--extra-search-path scripts $(PYTHON_SOURCES)
+		--extra-search-path scripts --extra-search-path .github/scripts \
+		$(PYTHON_SOURCES)
 
 markdownlint: spelling ## Lint Markdown and enforce en-GB-oxendict spelling
 	@unset FORCE_COLOR; $(MDLINT) "**/*.md"

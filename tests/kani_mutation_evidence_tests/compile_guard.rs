@@ -88,13 +88,21 @@ impl AppliedPatch<'_> {
     /// Reverting here rather than relying on `Drop` is what stops a failed
     /// reverse from passing quietly: without it the test returns `Ok(())` and
     /// the working tree keeps a mutation nothing reports.
+    ///
+    /// `applied` is cleared only when the reverse actually succeeded, so a
+    /// failure leaves the flag set and `Drop` still attempts the reverse as
+    /// the run unwinds. Clearing it unconditionally would disable that retry
+    /// at the one moment it is wanted, turning a recoverable failure into a
+    /// stranded mutation.
     fn revert(mut self) -> Result<()> {
         let outcome = run_git_apply(
             ["apply", "--reverse", self.patch.as_str()],
             self.patch,
             "reverse",
         );
-        self.applied = false;
+        if outcome.is_ok() {
+            self.applied = false;
+        }
         outcome
     }
 }
@@ -205,15 +213,25 @@ fn every_patched_tree_compiles_under_denied_warnings() -> Result<()> {
         }
         // Reverted through the fallible path, not left to `Drop`: a reverse
         // that fails must fail the test, or a run reports success while the
-        // working tree still carries the mutation it just seeded.
+        // working tree still carries the mutation it just seeded. [`revert`]
+        // has already given `Drop` its own attempt by the time it returns, so
+        // an error here means the mutation is genuinely still in the tree --
+        // and every later patch would then be compiled against a checkout
+        // carrying it. The loop stops rather than reporting the remaining
+        // patches against a contaminated tree.
+        //
+        // [`revert`]: AppliedPatch::revert
         if let Err(err) = applied.revert() {
             unreverted.push(format!("{patch}: {err}"));
+            break;
         }
     }
     ensure!(
         unreverted.is_empty(),
         "mutation patches could not be reverted, so the working tree still \
-         carries seeded faults: {unreverted:#?}",
+         carries seeded faults and the run stopped there rather than \
+         compiling later patches against a contaminated tree: \
+         {unreverted:#?}",
     );
     ensure!(
         broken.is_empty(),

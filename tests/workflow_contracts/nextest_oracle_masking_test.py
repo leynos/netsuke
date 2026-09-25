@@ -37,7 +37,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # than the module copied, so the test exercises the code that actually runs.
 sys.path.insert(0, str(REPO_ROOT / ".github" / "scripts"))
 
-from _nextest_oracle.listing import (  # ruff: ignore[module-import-not-at-top-of-file]
+from _nextest_oracle.listing import (  # ruff: ignore[module-import-not-at-top-of-file] - needs the sys.path insertion above.
     CASE_ATTRIBUTE,
     RUST_FUNCTION,
     masked,
@@ -130,7 +130,10 @@ def test_a_comment_holding_an_unmatched_quote_does_not_swallow_code() -> None:
 def test_a_comment_holding_a_matched_quote_pair_is_still_prose() -> None:
     """A pair of quotes in prose is prose, not a literal worth keeping."""
     source = '// e.g. "a" and "b"\n#[case::live(1)]\n'
-    assert _cases(source) == 1
+    assert _cases(source) == 1, (
+        "a bare pair of quotes in prose must not open a literal, so the case "
+        "after the comment still counts"
+    )
 
 
 def test_a_raw_string_hides_its_contents_entirely() -> None:
@@ -145,7 +148,9 @@ def test_a_raw_string_hides_its_contents_entirely() -> None:
     assert _cases(source) == 1, (
         "a raw string's contents must be masked, including any quotes inside it"
     )
-    assert "ghost" not in masked(source)
+    assert "ghost" not in masked(source), (
+        "the raw string's body must be blanked whole, not merely its fence"
+    )
 
 
 def test_a_raw_string_with_a_longer_fence_is_not_closed_early() -> None:
@@ -175,6 +180,10 @@ def test_the_masker_blanks_recognised_spans() -> None:
     """
     source = '// comment\nlet a = "text";\nfn real() {}\n'
     assert masked(source) != source, "the masker must blank what it recognises"
-    assert "comment" not in masked(source)
-    assert "text" not in masked(source)
+    assert "comment" not in masked(source), (
+        "the line comment must be blanked, not passed through"
+    )
+    assert "text" not in masked(source), (
+        "the string literal's contents must be blanked, not passed through"
+    )
     assert "fn real() {}" in masked(source), "code must survive masking"
