@@ -79,8 +79,8 @@ fn label_set(cwd_mode: &str, outcome: &str, category: Option<&str>) -> Vec<(Stri
         ("cwd_mode".to_owned(), cwd_mode.to_owned()),
         ("outcome".to_owned(), outcome.to_owned()),
     ];
-    if let Some(category) = category {
-        labels.push(("category".to_owned(), category.to_owned()));
+    if let Some(value) = category {
+        labels.push(("category".to_owned(), value.to_owned()));
     }
     labels.sort_unstable();
     labels
@@ -283,7 +283,13 @@ fn cache_outcomes_carry_the_search_domain() -> Result<()> {
     );
     let found = samples.of(WHICH_RESOLUTION_TOTAL);
     ensure!(
-        found == [Sample::tally("workspace_recursive", RESOLUTION_OUTCOME_FOUND, None, 3)],
+        found
+            == [Sample::tally(
+                "workspace_recursive",
+                RESOLUTION_OUTCOME_FOUND,
+                None,
+                3
+            )],
         "the three passes are one series, so the count must be a tally: {found:?}"
     );
     Ok(())
