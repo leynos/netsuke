@@ -197,3 +197,44 @@ def test_runner_labels_ignore_an_unresolved_shape() -> None:
     assert not is_linux_job({"runs-on": "${{ inputs.runner }}"}), (
         "an expression cannot be read as a Linux runner"
     )
+
+
+def test_a_suite_job_on_an_unplaced_runner_is_reported(
+    documents: Documents, makefile: str
+) -> None:
+    """An expression may resolve to Linux, so the job is reported, not exempted."""
+    _jobs(documents, PUBLISHER)["matrixed"] = {
+        "runs-on": "${{ matrix.os }}",
+        "steps": [{"run": "make test"}],
+    }
+    _reports(documents, makefile, f"{PUBLISHER}:matrixed: runs the nextest suite on")
+
+
+def test_an_unplaced_job_without_the_suite_is_not_reported(
+    documents: Documents, makefile: str
+) -> None:
+    """The unplaced-runner clause is as narrow as the Linux one."""
+    _jobs(documents, PUBLISHER)["matrixed"] = {
+        "runs-on": "${{ matrix.os }}",
+        "steps": [{"run": "make check-fmt"}],
+    }
+    _clean(documents, makefile)
+
+
+def test_blank_and_comment_lines_do_not_end_a_recipe() -> None:
+    """Make ignores both among recipe lines, and so must the goal reader."""
+    makefile = "test-nextest:\n\n# run the suite\n\tcargo nextest run --workspace\n"
+    goals = nextest_goals(makefile)
+    assert "test-nextest" in goals, f"the recipe must still be read, got {goals}"
+
+
+def test_a_sub_make_call_reaches_the_suite() -> None:
+    """A recipe running `$(MAKE) test-nextest` runs the suite too."""
+    makefile = (
+        "test-nextest:\n\tcargo nextest run\n"
+        "ci-suite:\n\t$(MAKE) test-nextest\n"
+        "lint:\n\t$(MAKE) check-fmt\n"
+    )
+    goals = nextest_goals(makefile)
+    assert "ci-suite" in goals, f"the sub-make caller must be derived, got {goals}"
+    assert "lint" not in goals, f"an unrelated sub-make must not be, got {goals}"

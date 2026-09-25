@@ -31,6 +31,9 @@ from build_standard_predicates import (
 #: Words in a runner label that place a job on Linux.
 LINUX_MARKERS = ("ubuntu", "linux")
 
+#: Words in a runner label that place a job off Linux, where `mold` is inert.
+OTHER_PLATFORM_MARKERS = ("windows", "macos")
+
 
 def runner_labels(job: dict[str, object]) -> list[str]:
     """Return a job's ``runs-on`` labels from any of its three forms.
@@ -84,6 +87,30 @@ def is_linux_job(job: dict[str, object]) -> bool:
     )
 
 
+def is_unplaced_job(job: dict[str, object]) -> bool:
+    """Return whether a job's runner cannot be placed on any platform.
+
+    An expression such as ``${{ matrix.os }}`` may resolve to Linux, so a
+    suite job on one is reported rather than exempted.
+
+    Returns
+    -------
+    bool
+        True when no label names Linux, Windows or macOS.
+
+    Examples
+    --------
+    >>> is_unplaced_job({"runs-on": "${{ matrix.os }}"})
+    True
+    >>> is_unplaced_job({"runs-on": "windows-latest"})
+    False
+
+    """
+    labels = [label.casefold() for label in runner_labels(job)]
+    markers = LINUX_MARKERS + OTHER_PLATFORM_MARKERS
+    return not any(marker in label for label in labels for marker in markers)
+
+
 def _recipes(makefile: str) -> dict[str, str]:
     """Return each Make goal's recipe text, tab-indented lines joined."""
     recipes: dict[str, str] = {}
@@ -92,8 +119,12 @@ def _recipes(makefile: str) -> dict[str, str]:
         if line.startswith("\t") and goal:
             recipes[goal] = recipes.get(goal, "") + line + "\n"
             continue
+        if not line.strip() or line.startswith("#"):
+            # Make ignores blank and comment-only lines among recipe lines, so
+            # they must not end the recipe being read.
+            continue
         match = RULE_HEADER.match(line)
-        goal = match.group("goal") if match and not line.startswith("#") else ""
+        goal = match.group("goal") if match else ""
     return recipes
 
 
@@ -125,6 +156,10 @@ def nextest_goals(makefile: str) -> frozenset[str]:
     """Return every Make goal that runs the nextest suite, however indirectly."""
     recipes = _recipes(makefile)
     prerequisites = rule_prerequisites(makefile)
+    # A recipe running `$(MAKE) test-nextest` reaches the suite as surely as a
+    # declared prerequisite does, so sub-make goals count as edges too.
+    for goal, recipe in recipes.items():
+        prerequisites.setdefault(goal, []).extend(invoked_make_targets(recipe))
     direct = {goal for goal, recipe in recipes.items() if runs_nextest(recipe)}
     return _widen(frozenset(direct), prerequisites)
 
@@ -241,7 +276,23 @@ def nextest_lane_violations(
     lanes = _suite_jobs(documents, goals)
     if not lanes:
         return ["no Linux workflow job runs the nextest suite"]
-    problems: list[str] = []
+    problems = [
+        f"{where}: runs the nextest suite on a runner no label places"
+        for where in _unplaced_suite_jobs(documents, goals)
+    ]
     for where, steps in lanes:
         problems.extend(_lane_violations(where, steps, goals))
     return problems
+
+
+def _unplaced_suite_jobs(
+    documents: dict[str, dict[str, object]], goals: frozenset[str]
+) -> list[str]:
+    """Return "workflow:job" for every suite job whose runner is unplaced."""
+    return [
+        f"{name}:{job_id}"
+        for name, document in documents.items()
+        for job_id, job in _jobs_of(document).items()
+        if is_unplaced_job(job)
+        and any(runs_suite(step, goals) for step in _job_steps(job))
+    ]
