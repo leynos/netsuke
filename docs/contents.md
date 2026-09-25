@@ -31,6 +31,9 @@ operator, user, and contributor references are easier to find.
 - [roadmap-progressive-enhancement.md](roadmap-progressive-enhancement.md):
   Phases 20 to 25 for shallow-end compatibility, optional typed inputs,
   contention classes, states and probes, owned cleanup, and maturity policies.
+- [roadmap-hexagonal-hardening.md](roadmap-hexagonal-hardening.md):
+  Proposed phases 26 to 29 for semantic hardening, architecture checking, and a
+  compatibility-gated Paralegal experiment.
 - [archive/roadmap-completed-foundations.md](archive/roadmap-completed-foundations.md):
   Archived completed roadmap foundations with relevance assessments and
   traceability notes.
@@ -90,6 +93,13 @@ operator, user, and contributor references are easier to find.
   lowered to Ninja pools, with explicit invocation-only scope.
 - [RFC 0025: Progressive enhancement and maturity policies][rfc-0025]:
   Shallow-end compatibility and opt-in, scoped, trust-aware enforcement.
+
+- [RFC 0026](rfcs/0026-hexagonal-domain-hardening.md): Proposed resolved
+  operations, shell binding, application execution, and diagnostic boundaries.
+- [RFC 0027](rfcs/0027-executable-architecture-contract.md): Proposed structural
+  policy, explicit analysis coverage, migration debt, and qualified checking.
+- [RFC 0028](rfcs/0028-paralegal-architecture-experiment.md): Proposed bounded
+  Paralegal trial, starting with Netsuke toolchain compatibility.
 
 [rfc-0009]: rfcs/0009-structured-command-working-directories.md
 [rfc-0012]: rfcs/0012-netsukefile-property-testing.md
@@ -205,6 +215,12 @@ operator, user, and contributor references are easier to find.
   without an always-cold nested workspace build.
 - [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md): Script
   `$in` and `$out` shell-variable semantics and marker-token separation.
+- [ADR-035](adr-035-semantic-compiler-boundaries.md): Proposed semantic
+  compiler/model ownership and application execution boundaries.
+- [ADR-036](adr-036-layered-architecture-enforcement.md): Proposed complementary
+  architecture checks, explicit coverage, and reviewed migration exceptions.
+- [ADR-037](adr-037-gate-paralegal-on-measured-evidence.md): Proposed evidence
+  gates for the optional Paralegal experiment, without mandatory adoption.
 - [ADR-038](adr-038-runtime-annotation-introspection-in-workflow-contracts.md):
   Runtime annotation introspection declared unsupported for the workflow
   contract tests, with the loader gate's stale `TYPE_CHECKING` claim corrected
