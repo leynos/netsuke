@@ -60,6 +60,8 @@ Each phase validates a product hypothesis:
 - Phases 26 to 28 validate internal semantic hardening, application
   boundaries, and executable architecture policy.
 - Phase 29 evaluates a bounded, compatibility-gated Paralegal experiment.
+- Phase 30 validates that opt-in, immutable host facts can replace platform
+  shell probes without weakening discovery privacy or Ninja invalidation.
 
 Each phase carries one hypothesis, and Phase 6 is the capability track for
 template standard-library work. Phases 3 to 5 predate that separation: each
@@ -73,6 +75,7 @@ extensions separate from the initial delivery contract. Phases 16 to 19 live in
 the [composition roadmap](roadmap-composition.md), with local includes before
 local bundles and external acquisition only after both local layers. Phases 26
 to 29 continue in the [architecture roadmap](roadmap-hexagonal-hardening.md).
+Phase 30 owns RFC 0029's host facts and follows phase 15 in this document.
 
 The roadmap keeps user-facing product grammar separate from implementation
 detail. Public tasks name Netsuke capabilities first. Implementation adapters,
@@ -199,6 +202,9 @@ shared integration work does not duplicate those implementations.
 - [RFC 0028](rfcs/0028-paralegal-architecture-experiment.md): phase 29 owns
   the bounded compatibility-gated Paralegal experiment, which may conclude
   without adoption.
+- [RFC 0029](rfcs/0029-first-class-host-facts.md): phase 30 owns opt-in host
+  facts, shipping the platform-only slice before separately authorized
+  distribution and kernel observations.
 
 Task 17.4.4 joins the local-composition and structured-execution tracks for the
 combined migration canaries in issue `#598`. Local delivery through 16.3.3 and
@@ -3024,3 +3030,215 @@ capability guarantees before any new execution path can land.
 Phases 16 to 19 continue in the [composition roadmap](roadmap-composition.md),
 and phases 26 to 29 continue in the
 [architecture roadmap](roadmap-hexagonal-hardening.md).
+
+## 30. Opt-in host facts without hidden discovery
+
+Hypothesis: manifests can replace `uname` probes and environment conventions
+with one immutable, opt-in `host` snapshot without weakening non-disclosing
+target discovery, cross-compilation correctness, or Ninja work invalidation.
+
+This phase implements [RFC 0029](rfcs/0029-first-class-host-facts.md). The
+platform-only slice in step 30.2 is independently useful; distribution and
+kernel observations in step 30.3 need explicit selection and an operator grant.
+The phase depends on neither external bundles, remote execution, a resource
+scheduler, nor the complete RFC 0006 filter programme, and it adds no v0.1.0
+release gate. Phase 30 sits above phases 20 to 25 in the
+[progressive-enhancement roadmap](roadmap-progressive-enhancement.md) and
+phases 26 to 29 in the [architecture roadmap](roadmap-hexagonal-hardening.md).
+
+### 30.1. Settle the host-facts contract before collecting anything
+
+This step asks whether field meanings, opt-in, authority, and privacy can be
+fixed before implementation choices harden them. Its outcome gates every later
+task in this phase.
+
+- [ ] 30.1.1. Accept RFC 0029 and record its public-surface decisions.
+  - Settle `host.arch` against the longer `process_arch`, the inspection
+    command and query-consent spellings, the platform naming catalogue for less
+    common targets, and the safe native adapter dependencies.
+  - Record the substantive decision in an ADR referenced from the design
+    document, and allocate the additive manifest-format version without
+    coupling it to the schedules of 12.1.1 or 16.1.1.
+  - See [RFC 0029 §§4, 5, 13.1, and 14](rfcs/0029-first-class-host-facts.md).
+  - Success: the RFC is accepted with no open review decision, and the ADR
+    names the schema version, field spellings, and adapter choices.
+- [ ] 30.1.2. Define the owned snapshot, request, grant, and diagnostic types.
+  - Requires 30.1.1.
+  - Add `HostFactsSnapshot`, validated requests, operator grants, group
+    outcomes, and the stable diagnostic categories with localized messages.
+  - Add the `HostFactsProvider` seam with disjoint field ownership, treating a
+    duplicate contribution as an internal contract error, and a
+    `FixedHostFactsProvider` with no fallback to real host APIs.
+  - See [RFC 0029 §§6.4, 11, and 12](rfcs/0029-first-class-host-facts.md).
+  - Success: property tests over bounded requests and grants prove strict
+    request-and-grant intersection and preserve null versus empty values.
+
+### 30.2. Ship the platform-only slice end to end
+
+This step asks whether an opted-in manifest can branch on the planner process
+platform with no filesystem, environment, subprocess, or network access while
+existing manifests keep their meaning. Its outcome decides whether optional
+groups are worth adding at all.
+
+- [ ] 30.2.1. Parse the `host_facts` opt-in and enforce the authority ceiling.
+  - Requires 30.1.2.
+  - Accept only literal `schema` and `gather`, defaulting to `[platform]`;
+    reject unknown keys, versions, and groups, duplicates, wildcards, Jinja,
+    and a selection omitting `platform`. Older formats reject the field.
+  - Resolve `host_fact_policy.allowed_groups` through the shared OrthoConfig
+    metadata path with provenance; denials outrank project requests, and no
+    environment variable overrides fact values.
+  - See [RFC 0029 §§5.1 and 5.2](rfcs/0029-first-class-host-facts.md).
+  - Success: denied and invalid requests fail before any provider call, and
+    the unchanged quickstart and an existing `vars.host` manifest render
+    byte-for-byte as before without opt-in.
+- [ ] 30.2.2. Collect platform facts once and inject an immutable `host`.
+  - Requires 30.2.1.
+  - Implement the platform provider from `std::env::consts` and target
+    configuration; fail with `unsupported_host_platform` rather than guessing.
+    Freeze one snapshot at the application boundary and share it with every
+    render environment through `StdlibConfig` or the evaluation context.
+  - Reject `host` shadowing at every binding site and any item or attribute
+    mutation. Report `host_fact_not_collected` and `unknown_host_fact`,
+    including inside `default` expressions.
+  - See [RFC 0029 §§5.3, 6.1, 6.4, 7.1, 7.2, and
+    11](rfcs/0029-first-class-host-facts.md).
+  - Success: fixed Linux, macOS, Windows, and other-platform snapshots render
+    identical results on every runner, and a counting provider observes one
+    collection per invocation however many fields templates read.
+- [ ] 30.2.3. Bind the facts digest into plan identity and Ninja invalidation.
+  - Requires 30.2.2.
+  - Compute the versioned digest over schema, selected groups, normalized
+    values, and semantic outcomes, fingerprinting every selected group and
+    excluding timing, paths, localization, and diagnostic text.
+  - Carry the digest in generated-plan identity and per-edge command
+    signatures, check reused-plan context with `host_plan_context_mismatch`,
+    and document the native Ninja bypass of that check.
+  - See [RFC 0029 §§9.1-9.3](rfcs/0029-first-class-host-facts.md).
+  - Success: property tests show digests are deterministic across insertion
+    order and change for altered semantic facts, and real Ninja runs prove
+    no-op reuse, rebuilds, removal of deselected edges, and reused-plan
+    rejection.
+- [ ] 30.2.4. Keep target discovery non-disclosing and add explicit consent.
+  - Requires 30.2.2.
+  - Install the unavailable sentinel in `register_manifest_query`, returning
+    `host_facts_disabled_in_query` without guessing or hiding targets.
+  - Add the per-invocation consent flag settled in 30.1.1; it reuses the
+    planning provider, renders no recipes, and enables no `env()`, `which()`,
+    command, or network helper. Project settings cannot enable it.
+  - See [RFC 0029 §8.1](rfcs/0029-first-class-host-facts.md).
+  - Success: discovery without consent makes zero provider calls, and with
+    consent recipe-only fact references remain unevaluated.
+- [ ] 30.2.5. Add the standalone `facts` inspection command.
+  - Requires 30.2.2.
+  - Integrate the command with the canonical command tree, requiring no
+    Netsukefile and reading only trusted operator configuration. `--gather`
+    selects collection; exact `--filter` values select output only.
+  - Emit the JSON envelope and escaped human output through the existing CLI
+    metadata, localization, and JSON conventions; the schema-description
+    option collects nothing. Update the users' guide.
+  - See [RFC 0029 §§8.2 and 8.3](rfcs/0029-first-class-host-facts.md).
+  - Success: snapshot tests fix human and JSON output under fixed providers,
+    keep empty, null, and unsupported values distinct, and show filters never
+    widen collection.
+
+### 30.3. Add separately authorized distribution and kernel observations
+
+This step asks whether richer observations can be read from untrusted system
+data within fixed bounds, without blocking, executing text, or fabricating
+values. Its outcome decides which optional groups each platform supports.
+
+- [ ] 30.3.1. Implement the bounded `os-release` distribution provider.
+  - Requires 30.2.1 and 30.2.3.
+  - Open only the two approved paths through a narrow system-file capability,
+    with a non-blocking open and a type check on the opened handle; a
+    non-regular handle, including a FIFO, is a collection error.
+  - Parse without a shell within the byte, string, and identifier bounds,
+    applying duplicate-key precedence and never merging the two files.
+    Non-Linux platforms report `unsupported`.
+  - See [RFC 0029 §§6.2, 7.1, and 12](rfcs/0029-first-class-host-facts.md).
+  - Success: the RFC's parser corpus passes, a FIFO at either path fails
+    promptly, and bounded fuzzing from a finite seed corpus finds no panic or
+    unbounded read.
+- [ ] 30.3.2. Implement kernel facts through reviewed safe native adapters.
+  - Requires 30.1.1 and 30.2.1.
+  - Read `uname`-equivalent fields without executing `uname`, and use
+    documented Windows APIs rather than parsing `ver` or PowerShell output.
+    Populate `native_arch` only when its meaning is established.
+  - Preserve `forbid(unsafe_code)` by selecting a reviewed safe adapter or
+    proposing the dependency change explicitly.
+  - See [RFC 0029 §§6.3 and 11](rfcs/0029-first-class-host-facts.md).
+  - Success: translated fixtures report a process architecture distinct from
+    the native one, unknown native architecture stays null, and denied or
+    unselected groups perform zero native or filesystem operations.
+
+### 30.4. Prove host facts across composition, fixtures, and real platforms
+
+This step asks whether the contract survives contact with includes, bundles,
+manifest tests, runtime bindings, and native execution. Its evidence decides
+whether the facts surface is ready to document as supported.
+
+- [ ] 30.4.1. Add typed host fixtures to manifest tests.
+  - Requires 30.2.2 and 7.3.1.
+  - Register a typed host fixture in the manifest-test mock registry and
+    validate it against the fact schema. Synthetic facts may render and
+    inspect a graph but never authorize execution or widen capabilities.
+  - See [RFC 0029 §11](rfcs/0029-first-class-host-facts.md) and
+    [RFC 0007](rfcs/0007-netsukefile-testing-framework.md).
+  - Success: a fixture selecting an unavailable group fails instead of reading
+    the developer's machine, and no ordinary build flag overrides host values.
+- [ ] 30.4.2. Share one snapshot across includes and bundle instances.
+  - Requires 30.2.2, 16.2.2, and 17.1.2.
+  - Reject collector requests in included files; let bundles declare static
+    requirements for already selected groups without widening the root request
+    or operator grant; keep bundle and host provenance separate.
+  - See [RFC 0029 §7.3](rfcs/0029-first-class-host-facts.md).
+  - Success: missing required facts fail before bundle rendering, and nested
+    fragments observe the importing planner's snapshot.
+- [ ] 30.4.3. Add the host-facts interaction and native smoke matrix.
+  - Requires 30.2.3, 30.2.4, 30.2.5, 30.3.1, and 30.3.2.
+  - Cross group selections and grant states with `when`, variables, recipes,
+    consented and unconsented discovery, and inspection; show child overlays,
+    temporary directories, and captures cannot mutate facts.
+  - Run native smoke jobs on Linux, macOS, and Windows, including Git Bash and
+    WSL launches, and model-check the collect-once and query-consent state
+    machine against the production validation functions.
+  - See [RFC 0029 §§4.2, 7.2, and 13.2](rfcs/0029-first-class-host-facts.md).
+  - Success: the matrix records fixture rendering separately from native
+    execution, and no case collects twice, collects without consent, or leaks
+    identifying inventory into JSON, diagnostics, or telemetry labels.
+- [ ] 30.4.4. Publish migrations and record downstream canaries.
+  - Requires 30.4.1 and 30.4.3.
+  - Publish Linux, macOS, and Windows migration examples and exercise the
+    Repovec Appliance, MXD, and OrthoConfig canaries without changing their
+    release ownership. Update the users' guide, design document, and
+    developers' guide.
+  - See [RFC 0029 §§13.1 and 13.3](rfcs/0029-first-class-host-facts.md).
+  - Success: canary evidence keeps target selection and build budgets as
+    explicit inputs, the quickstart stays byte-for-byte unchanged, and no
+    simulated snapshot counts as a native smoke test.
+
+### 30.5. Keep deferred host observations out of the initial contract
+
+This step asks which deferred observations earn separate designs once the
+initial facts surface has shipped. Its outcomes are dispositions, not
+implementation promises.
+
+- [ ] 30.5.1. Decide whether resource or capability facts need their own RFC.
+  - Requires 30.4.4.
+  - Keep CPU, memory, load, filesystem features, libc compatibility, and tool
+    presence out of the schema unless canary evidence justifies a group that
+    separates physical resources, effective constraints, and approved budgets.
+  - See [RFC 0029 §10](rfcs/0029-first-class-host-facts.md) and
+    [RFC 0024](rfcs/0024-named-contention-classes.md).
+  - Success: a follow-on RFC or a recorded rejection exists, and neither `-j`,
+    Ninja pools, nor contention classes change as a side effect.
+- [ ] 30.5.2. Triage persistent reuse, dependency tracking, and remote facts.
+  - Requires 30.4.4.
+  - Assess persistent snapshot reuse, per-field dependency tracking, static
+    listing of unresolved discovery conditions, and remote execution-context
+    facts against evidence from the shipped slice.
+  - See [RFC 0029 §§8.1, 9.1, 9.3, and
+    14.5](rfcs/0029-first-class-host-facts.md).
+  - Success: each candidate has an explicit defer, reject, or separately
+    specified disposition, with no relaxation hidden in phase 30 tasks.
