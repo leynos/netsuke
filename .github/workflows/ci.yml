@@ -66,6 +66,8 @@ jobs:
       # deliberately uncapped for local runs on contended hosts.
       NEXTEST_PROFILE: ci
       RUSTC_WRAPPER: sccache
+      SCCACHE_LOG: debug
+      SCCACHE_ERROR_LOG: /tmp/sccache-server.log
       # sccache uses the GitHub Actions backend, whose objects land in
       # Ubicloud's own store, so it needs no archive. Setting the repository
       # variable NETSUKE_SCCACHE_LOCAL_DIR to `true` switches the gate to the
@@ -145,6 +147,9 @@ jobs:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Reset sccache statistics
         run: sccache --zero-stats
+      - name: Probe compiler statistics after reset
+        if: always()
+        run: sccache --show-stats | grep -E '^(Compile requests|Cache hits|Cache misses|Cache write errors) ' || true
       - name: Install the build standard
         # The pinned `mold` is the repository's default linker and
         # `check-build-tools` gates every build target on it, so this runs
@@ -242,19 +247,34 @@ jobs:
           cache-provider: external
       - name: Lint
         run: /usr/bin/make ACTIONLINT="$GITHUB_WORKSPACE/actionlint" lint
+      - name: Probe compiler statistics after lint
+        if: always()
+        run: sccache --show-stats | grep -E '^(Compile requests|Cache hits|Cache misses|Cache write errors) ' || true
       - name: Typecheck
         run: make typecheck
+      - name: Probe compiler statistics after typecheck
+        if: always()
+        run: sccache --show-stats | grep -E '^(Compile requests|Cache hits|Cache misses|Cache write errors) ' || true
       - name: Doc coverage
         # Gated on the 80% threshold in AGENTS.md; after `make lint`.
         run: make doc-coverage
+      - name: Probe compiler statistics after doc coverage
+        if: always()
+        run: sccache --show-stats | grep -E '^(Compile requests|Cache hits|Cache misses|Cache write errors) ' || true
       - name: Spelling
         run: make spelling
       - name: Validate Mermaid diagrams
         run: make nixie
       - name: Workflow contract tests
         run: make test-workflow-contracts
+      - name: Probe compiler statistics after contracts
+        if: always()
+        run: sccache --show-stats | grep -E '^(Compile requests|Cache hits|Cache misses|Cache write errors) ' || true
       - name: Release-admission runtime tests
         run: make test-release-admission
+      - name: Probe compiler statistics after release-admission tests
+        if: always()
+        run: sccache --show-stats | grep -E '^(Compile requests|Cache hits|Cache misses|Cache write errors) ' || true
       - name: Test and Measure Coverage
         # The only test execution on this lane: measuring and testing in one
         # instrumented run costs one compile instead of two, so the flags must
@@ -294,6 +314,9 @@ jobs:
           # on the runner for the ratchet and leaves with the instrumented tree
           # below. `coverage-main.yml` keeps the action's default and uploads.
           publish-artefact: 'false'
+      - name: Probe compiler statistics after coverage
+        if: always()
+        run: sccache --show-stats | grep -E '^(Compile requests|Cache hits|Cache misses|Cache write errors) ' || true
       - name: Verify the anchored Nextest filters select their instances
         # The contract tests can only hold `.config/nextest.toml` to the
         # anchored grammar; they cannot ask Nextest which tests a filter
@@ -318,6 +341,13 @@ jobs:
             cat sccache-stats.txt
             printf '```\n'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the sccache server log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sccache-server-log
+          path: /tmp/sccache-server.log
+          retention-days: 3
       - name: Discard the instrumented build tree
         # No consumer once the report exists, and the second tree on a volume
         # a sibling repository exhausted. Removed before any cache save.
