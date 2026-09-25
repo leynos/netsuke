@@ -103,10 +103,19 @@ The first block is direct mode. The second uses the platform default. The third
 and fourth select named shells. An absent `shell` field is equivalent to
 `false`.
 
-`ShellName` is a validated name, not a path. Manifest deserialization must
-distinguish Boolean values from strings and must reject every other YAML type.
-A string is validated syntactically while loading the manifest and resolved
-against the trusted registry during compilation.
+`ShellName` is a validated name, not a path. It must match
+`[a-z][a-z0-9_-]{0,62}` and must not be one of the eight lower-case YAML 1.1
+Boolean spellings: `true`, `false`, `yes`, `no`, `y`, `n`, `on`, or `off`. The
+manifest front-end already reads those words as Booleans when unquoted, so
+reserving them stops a quoted spelling from naming a shell that the unquoted
+spelling would not select (
+[ADR-019 addendum of 2026-09-24][adr-019-reserved-names]). Manifest
+deserialization must distinguish Boolean values from strings and must reject
+every other YAML type. A string is validated syntactically while loading the
+manifest and resolved against the trusted registry during compilation.
+
+[adr-019-reserved-names]:
+  ../adr-019-structured-command-shell-selection.md#2026-09-24-reserve-yaml-boolean-spellings-as-shell-names
 
 ### 4.2 Valid command positions
 
@@ -151,7 +160,8 @@ args = ["-c"]
 Each `ShellDefinition` contains exactly `name`, `executable`, and `args`.
 Configuration loading enforces these rules:
 
-- `name` matches `[a-z][a-z0-9_-]{0,62}`;
+- `name` matches `[a-z][a-z0-9_-]{0,62}` and is not one of the reserved YAML
+  Boolean spellings listed in section 4.1;
 - built-in names are reserved and merged configured names are unique;
 - `executable` is non-empty UTF-8 without NUL;
 - `executable` is a bare executable name or an absolute path, never a relative
@@ -396,8 +406,9 @@ Implementation must include:
 - host-independent table tests for every built-in name, supported-host rule,
   executable, and fixed argument list;
 - platform-specific tests for `true` selecting the existing host default;
-- deserialization tests for `false`, `true`, valid names, invalid names, and
-  non-Boolean, non-string values;
+- deserialization tests for `false`, `true`, valid names, invalid names, the
+  reserved YAML Boolean spellings in quoted form, and non-Boolean, non-string
+  values;
 - configuration tests for valid definitions, reserved and duplicate names,
   invalid paths and arguments, and post-merge collision validation;
 - resolver tests with `mockable::MockEnv` and injected executable probes for
