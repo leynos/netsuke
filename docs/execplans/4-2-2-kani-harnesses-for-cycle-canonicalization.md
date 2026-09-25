@@ -1415,9 +1415,10 @@ No new external dependency is introduced.
   90-second default, so `TimeoutStopSec=20s` is load-bearing rather than
   cosmetic. The sibling wrapper in
   `docs/execplans/4-2-3-kani-harnesses-for-command-interpolation.md` was
-  partially reconciled by #755, which removed its `timeout` prefix, but at that
-  point it still omitted `TimeoutStopSec` and still left `tee` outside the
-  scope, so it carried the unbounded stop grace and the masked pipeline status
+  partially reconciled by #755, which removed its `timeout` prefix and added
+  `set -o pipefail` to the shell that ran the pipeline, so it did not leave the
+  pipeline status masked. At that point it still omitted `TimeoutStopSec` and
+  still left `tee` outside the scope, so it carried the unbounded stop grace
   this revision removes. That residue, and the rest of 4.2.3's reconciliation,
   were escalated as issue #769 rather than absorbed here; both have since been
   fixed in place, as the revision note at the end of this file records.
