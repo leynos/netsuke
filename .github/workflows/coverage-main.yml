@@ -45,6 +45,10 @@ jobs:
     # measures the peak; see the developers guide for the return-to-`-2`
     # condition.
     runs-on: ubicloud-standard-4-ubuntu-2404
+    # The CodeScene token lives in this environment, whose deployment policy
+    # admits `main` alone; the codescene environment contract holds it to
+    # this job.
+    environment: codescene
     # Ninety minutes, not sixty. The coverage step below passes
     # `doctests: 'true'`, so the shared action runs `cargo llvm-cov nextest`
     # and then an uninstrumented `cargo test --doc`, each arming the 1,800 s
