@@ -1,0 +1,291 @@
+//! Bounded telemetry for the `which` resolver.
+//!
+//! The resolver has four search policies and one cache, and before this module
+//! its counters could not say which one a resolution was requested under. A
+//! `workspace-recursive` miss and an `auto` miss produced the same series, so
+//! an operator could not tell whether a manifest had requested the recursive
+//! search at all. The label records that request: it is read from the options
+//! before the cache probe and before the lookup, so it does not indicate
+//! whether recursive workspace lookup ran or produced the result.
+//!
+//! Two counters are owned here. `netsuke_stdlib_which_cache_total` counts
+//! cache outcomes, and `netsuke_stdlib_which_resolution_total` counts
+//! resolution outcomes. Both carry a `cwd_mode` label drawn from the closed
+//! [`WHICH_CWD_MODE_VALUES`] set. That set is a telemetry vocabulary rather
+//! than the template spelling: a manifest writes `workspace-recursive`, and
+//! the label is `workspace_recursive`.
+//!
+//! Every label is drawn from a closed set declared in this module. The
+//! `cwd_mode` label records the search policy a manifest requested, named as
+//! one of that set's fixed spellings rather than quoted from the template, and
+//! nothing else is recorded: no command name, no filesystem path, no workspace
+//! name, and no `PATH` or `PATHEXT` value. A series can therefore be exported
+//! without quoting the manifest or saying where it was found.
+
+use std::sync::Once;
+
+use metrics::{counter, describe_counter};
+
+use super::{
+    options::CwdMode,
+    resolve_error::{ResolveError, ResolveErrorCategory},
+};
+
+/// Counts resolver cache outcomes by bounded `cwd_mode` and `outcome`.
+///
+/// Both labels are drawn from the closed sets below, so the number of series
+/// is fixed by this module rather than by anything a template supplies.
+pub const WHICH_CACHE_TOTAL: &str = "netsuke_stdlib_which_cache_total";
+
+/// Counts resolver outcomes by bounded `cwd_mode` and `outcome`.
+///
+/// A non-success outcome also carries the bounded `category` label, so the
+/// counter's series take one of two label shapes. Both are declared here, and
+/// the application recorder admits each by its exact shape.
+pub const WHICH_RESOLUTION_TOTAL: &str = "netsuke_stdlib_which_resolution_total";
+
+/// The bounded `cwd_mode` recorded when the `auto` policy is requested.
+const CWD_MODE_AUTO: &str = "auto";
+/// The bounded `cwd_mode` recorded when the `always` policy is requested.
+const CWD_MODE_ALWAYS: &str = "always";
+/// The bounded `cwd_mode` recorded when the `never` policy is requested.
+const CWD_MODE_NEVER: &str = "never";
+/// The bounded `cwd_mode` recorded when the `workspace-recursive` policy is
+/// requested.
+const CWD_MODE_WORKSPACE_RECURSIVE: &str = "workspace_recursive";
+
+/// The closed `cwd_mode` vocabulary admitted on both resolver counters.
+///
+/// Four values, one per `CwdMode` variant. The label set is what lets an
+/// operator see which search policy a resolution was requested under; it does
+/// not show which domain produced a result. It is not the template spelling,
+/// which uses a hyphen for the recursive mode.
+pub const WHICH_CWD_MODE_VALUES: [&str; 4] = [
+    CWD_MODE_AUTO,
+    CWD_MODE_ALWAYS,
+    CWD_MODE_NEVER,
+    CWD_MODE_WORKSPACE_RECURSIVE,
+];
+
+/// The bounded `outcome` recorded when the resolver answered from its cache.
+pub(super) const CACHE_OUTCOME_HIT: &str = "hit";
+/// The bounded `outcome` recorded when the cache held no entry for the key.
+pub(super) const CACHE_OUTCOME_MISS: &str = "miss";
+/// The bounded `outcome` recorded when the caller bypassed the cache.
+pub(super) const CACHE_OUTCOME_BYPASS: &str = "bypass";
+
+/// The closed `outcome` vocabulary admitted on [`WHICH_CACHE_TOTAL`].
+pub const WHICH_CACHE_OUTCOME_VALUES: [&str; 3] =
+    [CACHE_OUTCOME_HIT, CACHE_OUTCOME_MISS, CACHE_OUTCOME_BYPASS];
+
+/// The bounded `outcome` recorded when a resolution produced matches.
+pub(super) const RESOLUTION_OUTCOME_FOUND: &str = "found";
+/// The bounded `outcome` recorded when no executable was discovered.
+pub(super) const RESOLUTION_OUTCOME_NOT_FOUND: &str = "not_found";
+/// The bounded `outcome` recorded when the resolution failed for another reason.
+pub(super) const RESOLUTION_OUTCOME_ERROR: &str = "error";
+
+/// The closed `outcome` vocabulary admitted on [`WHICH_RESOLUTION_TOTAL`].
+pub const WHICH_RESOLUTION_OUTCOME_VALUES: [&str; 3] = [
+    RESOLUTION_OUTCOME_FOUND,
+    RESOLUTION_OUTCOME_NOT_FOUND,
+    RESOLUTION_OUTCOME_ERROR,
+];
+
+/// The outcome that carries no `category` label, and so takes two labels.
+///
+/// The complement of [`WHICH_RESOLUTION_FAILURE_OUTCOME_VALUES`]. Declaring it
+/// as a vocabulary of its own rather than reusing
+/// [`WHICH_RESOLUTION_OUTCOME_VALUES`] lets the application recorder admit the
+/// two-label shape precisely: a failure recorded without its category is a bug
+/// elsewhere, not telemetry to export, and naming the full outcome set here
+/// would admit exactly that.
+pub const WHICH_RESOLUTION_SUCCESS_OUTCOME_VALUES: [&str; 1] = [RESOLUTION_OUTCOME_FOUND];
+
+/// The outcomes that carry a `category` label, and so take three labels.
+///
+/// A resolution records a category only when it fails, so the three-label
+/// series are exactly these two outcomes. Declaring the subset lets the
+/// application recorder admit each label shape precisely — a `found` series
+/// carrying a category is a bug elsewhere, not telemetry to export.
+pub const WHICH_RESOLUTION_FAILURE_OUTCOME_VALUES: [&str; 2] =
+    [RESOLUTION_OUTCOME_NOT_FOUND, RESOLUTION_OUTCOME_ERROR];
+
+/// The bounded `category` recorded for a PATH search miss.
+pub(super) const CATEGORY_NOT_FOUND: &str = "not_found";
+/// The bounded `category` recorded for a direct-path lookup miss.
+pub(super) const CATEGORY_DIRECT_NOT_FOUND: &str = "direct_not_found";
+/// The bounded `category` recorded for an invalid argument or option value.
+pub(super) const CATEGORY_ARGS: &str = "args";
+/// The bounded `category` recorded when canonicalization failed.
+pub(super) const CATEGORY_CANONICALIZE: &str = "canonicalize";
+/// The bounded `category` recorded when an executable probe failed.
+pub(super) const CATEGORY_IS_EXECUTABLE: &str = "is_executable";
+/// The bounded `category` recorded for a non-UTF-8 canonical path.
+pub(super) const CATEGORY_CANONICALIZE_NON_UTF8: &str = "canonicalize_non_utf8";
+/// The bounded `category` recorded for a non-UTF-8 workspace path.
+pub(super) const CATEGORY_WORKSPACE_NON_UTF8: &str = "workspace_non_utf8";
+/// The bounded `category` recorded for a workspace traversal failure.
+pub(super) const CATEGORY_WALKDIR: &str = "walkdir";
+/// The bounded `category` recorded when the working directory could not be read.
+pub(super) const CATEGORY_CWD_RESOLVE: &str = "cwd_resolve";
+/// The bounded `category` recorded for a non-UTF-8 working directory.
+pub(super) const CATEGORY_CWD_NON_UTF8: &str = "cwd_non_utf8";
+
+/// Spell a domain category for the `category` label.
+///
+/// This function is the boundary the module exists for. The resolver owns the
+/// taxonomy — [`ResolveErrorCategory`] and its variants say what can go wrong —
+/// and this module decides how each of those is spelled as telemetry. Keeping
+/// the mapping here rather than making the domain name its own labels means a
+/// rename in either direction is a local change: the domain can reletter a
+/// variant without touching a metric, and the label set can be respelled
+/// without changing what the resolver means by a failure.
+///
+/// Every variant is matched explicitly, so a new category is a compile error
+/// here until someone decides what to call it on the wire. That is the point:
+/// an unclassified failure must not be able to reach a counter.
+pub(super) const fn category_label(category: ResolveErrorCategory) -> &'static str {
+    match category {
+        ResolveErrorCategory::NotFound => CATEGORY_NOT_FOUND,
+        ResolveErrorCategory::DirectNotFound => CATEGORY_DIRECT_NOT_FOUND,
+        ResolveErrorCategory::Args => CATEGORY_ARGS,
+        ResolveErrorCategory::Canonicalize => CATEGORY_CANONICALIZE,
+        ResolveErrorCategory::IsExecutable => CATEGORY_IS_EXECUTABLE,
+        ResolveErrorCategory::CanonicalizeNonUtf8 => CATEGORY_CANONICALIZE_NON_UTF8,
+        ResolveErrorCategory::WorkspaceNonUtf8 => CATEGORY_WORKSPACE_NON_UTF8,
+        ResolveErrorCategory::WalkDir => CATEGORY_WALKDIR,
+        ResolveErrorCategory::CwdResolve => CATEGORY_CWD_RESOLVE,
+        ResolveErrorCategory::CwdNonUtf8 => CATEGORY_CWD_NON_UTF8,
+    }
+}
+
+/// The closed `category` vocabulary admitted on [`WHICH_RESOLUTION_TOTAL`].
+///
+/// One value per domain category, so the label set is fixed by the error type
+/// rather than by the failure a host happened to encounter.
+///
+/// Spelled as the label constants above. The domain declares its own spellings
+/// separately, in `ResolveErrorCategory::label`, and the two are tied together
+/// by test rather than by a shared constant: `telemetry_tests` maps every
+/// variant through the boundary and asserts that the mapped words are exactly
+/// this set, with no duplicates and the whole set reached; the same module also
+/// pins the words themselves. A second assertion naming the domain's spellings
+/// outright is deliberately not made here — an alias or a sentinel would
+/// compare a value with itself, and a public constant cannot link to the
+/// private items such an assertion would read.
+pub const RESOLVE_ERROR_CATEGORY_VALUES: [&str; 10] = [
+    CATEGORY_NOT_FOUND,
+    CATEGORY_DIRECT_NOT_FOUND,
+    CATEGORY_ARGS,
+    CATEGORY_CANONICALIZE,
+    CATEGORY_IS_EXECUTABLE,
+    CATEGORY_CANONICALIZE_NON_UTF8,
+    CATEGORY_WORKSPACE_NON_UTF8,
+    CATEGORY_WALKDIR,
+    CATEGORY_CWD_RESOLVE,
+    CATEGORY_CWD_NON_UTF8,
+];
+
+/// Return the bounded `cwd_mode` label for a search domain.
+///
+/// The mapping is total over [`CwdMode`], so every resolution carries a label
+/// from [`WHICH_CWD_MODE_VALUES`] and no series can be created outside it.
+pub(super) const fn cwd_mode_label(mode: CwdMode) -> &'static str {
+    match mode {
+        CwdMode::Auto => CWD_MODE_AUTO,
+        CwdMode::Always => CWD_MODE_ALWAYS,
+        CwdMode::Never => CWD_MODE_NEVER,
+        CwdMode::WorkspaceRecursive => CWD_MODE_WORKSPACE_RECURSIVE,
+    }
+}
+
+/// Describe the resolver's counters once per process.
+fn describe_which_metrics() {
+    static DESCRIBE: Once = Once::new();
+    DESCRIBE.call_once(|| {
+        describe_counter!(
+            WHICH_CACHE_TOTAL,
+            "Counts which resolver cache outcomes labelled by the requested \
+             cwd_mode (auto, always, never, or workspace_recursive) and by \
+             outcome (hit, miss, or bypass)."
+        );
+        describe_counter!(
+            WHICH_RESOLUTION_TOTAL,
+            "Counts which resolver outcomes labelled by the requested cwd_mode \
+             (auto, always, never, or workspace_recursive) and by outcome \
+             (found, not_found, or error); non-success outcomes also carry a \
+             bounded category."
+        );
+    });
+}
+
+/// Record one cache outcome on the span and its counter.
+///
+/// `cwd_mode` is a label from [`WHICH_CWD_MODE_VALUES`] and `outcome` one from
+/// [`WHICH_CACHE_OUTCOME_VALUES`]; neither is derived from manifest content.
+pub(super) fn record_cache_outcome(
+    span: &tracing::Span,
+    cwd_mode: &'static str,
+    outcome: &'static str,
+) {
+    describe_which_metrics();
+    span.record("cache_outcome", outcome);
+    counter!(
+        WHICH_CACHE_TOTAL,
+        "cwd_mode" => cwd_mode,
+        "outcome" => outcome,
+    )
+    .increment(1);
+}
+
+/// Record a successful resolution on the span and its counter.
+pub(super) fn record_resolution_found(span: &tracing::Span, cwd_mode: &'static str) {
+    describe_which_metrics();
+    span.record("result", RESOLUTION_OUTCOME_FOUND);
+    counter!(
+        WHICH_RESOLUTION_TOTAL,
+        "cwd_mode" => cwd_mode,
+        "outcome" => RESOLUTION_OUTCOME_FOUND,
+    )
+    .increment(1);
+}
+
+/// Record a resolution failure's outcome and bounded error category as metrics.
+///
+/// A search or direct-path miss is counted as `not_found` and every other
+/// failure as `error`, so the two categories an operator acts on — nothing was
+/// found, versus something went wrong — stay separable. The debug event
+/// repeats the bounded facts for a reader of the log alone; neither it nor the
+/// counter names the command that failed.
+pub(super) fn record_resolution_error(
+    span: &tracing::Span,
+    cwd_mode: &'static str,
+    error: &ResolveError,
+) {
+    describe_which_metrics();
+    let category = category_label(error.category());
+    let outcome = if matches!(
+        error,
+        ResolveError::NotFound { .. } | ResolveError::DirectNotFound { .. }
+    ) {
+        RESOLUTION_OUTCOME_NOT_FOUND
+    } else {
+        RESOLUTION_OUTCOME_ERROR
+    };
+    span.record("result", outcome);
+    span.record("error_category", category);
+    tracing::debug!(
+        cwd_mode,
+        outcome,
+        error_category = category,
+        "which resolver finished with non-success result",
+    );
+    counter!(
+        WHICH_RESOLUTION_TOTAL,
+        "cwd_mode" => cwd_mode,
+        "outcome" => outcome,
+        "category" => category,
+    )
+    .increment(1);
+}

@@ -63,8 +63,9 @@ modelled by repository workflows.
   `build-test` job.
 - A failed main coverage upload can leave CodeScene without current data, but
   it cannot give a pull request a verdict derived from the wrong commit.
-- The historical hostile-artefact validators remain standalone maintenance
-  tools; no active workflow downloads pull-request coverage.
+- The historical hostile-artefact validators remain available for maintenance
+  use, and the trunk lane now runs the outer one over the report it generated
+  itself; no active workflow downloads pull-request coverage.
 - The report the shared action generates is not archived on a pull request,
   because that lane passes `publish-artefact: 'false'`. Had it been archived,
   it would be readable by any step in the pull-request job that can read the
@@ -94,11 +95,73 @@ does not compare against. A further test holds the two lanes apart, requiring
 the pull-request lane to decline the archive and forbidding the main workflow
 from passing the input that would suppress the upload CodeScene reads.
 
+The main lane also reads the report as data before it submits it. The shared
+generation action reports success for a report it wrote nothing into, and the
+upload asserts only that the file exists, so existence is not evidence that the
+report is usable: a malformed report previously reached CodeScene and was
+refused there, in another system and later, without naming the step or the file
+at fault. The lane therefore stages `lcov.info` into a directory of its own and
+runs `scripts/validate_coverage_artifact.py` over it — the validator that
+already owns the LCOV contract for a hostile report, is exercised by
+`make test-coverage-artifact`, and executes nothing in the file it reads. Both
+halves are required: staging a directory and never copying the report into it
+would leave the validator reading an empty directory, so the contract test
+fails a step that names one without filling it. The step's position is part of
+the contract, and is asserted as such: it must follow the step that writes the
+report, precede the upload that sends it, and precede
+`Show sccache statistics`. The last of those is a requirement
+`tests/workflow_contracts/sccache_contract_test.py` places on the lane — it
+requires `Show sccache statistics` to follow every compile step, so a step
+inserted after the last compile and before that report would break the
+compiler-cache observability contract rather than merely reorder the lane. A
+named workflow contract test,
+`tests/workflow_contracts/codescene_upload_contract_test.py`, backed by the
+predicates in `tests/workflow_contracts/codescene_upload_invariants.py`, holds
+the lane to that ordering, to the input names the generator and the upload
+agree on, to the format they agree on, to the upload action being the lane's
+only submission, to the credential being read from the secret store, to the
+upload being gated on the availability a check step publishes, not on the
+credential itself, and to any checksum input staying unset. The check step is
+`Check CodeScene token availability`, with id `codescene_token`: it writes one
+output, `available=${{ secrets.CS_ACCESS_TOKEN != '' }}`, and the upload's `if`
+must conjoin both `steps.codescene_token.outputs.available == 'true'` and
+`github.ref == 'refs/heads/main'`, since a gate that does not test what the
+check published opens on exactly the run the gate exists to skip. The rule is
+`is_trunk_only_upload`'s, in
+`tests/workflow_contracts/ci_coverage_wiring_invariants.py`, which
+`tests/workflow_contracts/coverage_upload_guard_test.py` also drives over the
+repository file. It refuses any unquoted `||` at any depth, because `&&` binds
+tighter and one disjunct would authorize the upload alone, then splits the
+condition into top-level conjuncts — a `&&` inside a string literal or a
+parenthesized group is not split on — and requires each guard clause to be
+present compared whole. A substring test would accept a clause that is quoted,
+negated or nested, since each such form still contains the clause's text, and a
+clause wrapped in its own parentheses is not equal to its bare form, so the
+reading fails closed. Further conjuncts are allowed, as without a disjunction
+they only narrow the step. The credential's source is a separate rule, owned by
+`tests/workflow_contracts/codescene_credential_invariants.py`: the
+`access-token` input must be exactly `${{ secrets.CS_ACCESS_TOKEN }}`, compared
+whole, because the fault refused is a value that *names* the credential while
+reading it from somewhere else, as `${{ env.CS_ACCESS_TOKEN }}` and
+`${{ github.CS_ACCESS_TOKEN }}` do. That module reads the step's `env` by
+containment rather than by whole comparison, walking every string the value
+holds with `iter_strings` from `tests/workflow_contracts/yaml_strings.py`: a
+step declaring `UNUSED_CS_ACCESS_TOKEN` has still written the credential into
+an environment every nested step of the composite action inherits. A second
+test module, `tests/workflow_contracts/codescene_validation_step_test.py`,
+backed by `tests/workflow_contracts/codescene_report_validation_invariants.py`,
+holds the validating step's script to the validator being run over a directory
+the step also filled with the report. Both drive their predicates against
+synthetic workflow text as well as the repository file, so a detector that
+stopped matching cannot pass by finding nothing. The upload reads the workspace
+rather than an archive, so the three steps it depends on are matched by their
+structure rather than by the file they happen to share.
+
 ## Addendum, 2026-09-23: the dispatch upload and the pull-request closure
 
 The decision above is unchanged. Two things it described needed correcting.
 
-_Manual dispatch._ The context above calls the publisher's manual dispatch a
+*Manual dispatch.* The context above calls the publisher's manual dispatch a
 read-only warm-run diagnostic. That held for the ratchet baseline, which the
 coverage action saves only on a push to `refs/heads/main`. It did not hold for
 the CodeScene upload, whose only guard was the credential, while the push
@@ -108,12 +171,12 @@ now also guarded on `github.ref == 'refs/heads/main'`. A dispatch from `main`
 uploads that commit's report, as a push would. A dispatch from any other branch
 uploads nothing. The baseline still advances only on a push to `main`.
 
-_The pull-request surface._ The verification above enumerated pull-request
+*The pull-request surface.* The verification above enumerated pull-request
 workflows by trigger. A `workflow_call` workflow that a pull-request workflow
 calls runs on that pull request too, and `secrets: inherit` hands it the
 credential. So the surface is now the closure through local reusable-workflow
 calls. `secrets: inherit` into another repository's workflow is refused, and so
 is any mention of `codescene.io`.
 
-The developers' guide, under _Coverage ratchet and CodeScene publication_,
+The developers' guide, under *Coverage ratchet and CodeScene publication*,
 records the contracts that hold both.

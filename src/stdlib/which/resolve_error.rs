@@ -7,6 +7,66 @@ use walkdir;
 
 use super::options::CwdMode;
 
+/// The bounded failure taxonomy of [`ResolveError`].
+///
+/// The resolver's own vocabulary, kept beside the error type it describes and
+/// independent of how any of it is reported. A consumer that needs to name a
+/// failure names a variant here; the telemetry layer is one such consumer and
+/// spells these for its own label set, so a change to what is *recorded*
+/// cannot change what the resolver *means* by a failure.
+///
+/// The declaration order is the order [`ResolveErrorCategory::label`] spells,
+/// and it is the order the variants appear in [`ResolveError`]. Nothing depends
+/// on that beyond readability, but keeping the two in step is what makes the
+/// taxonomy legible at a glance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(super) enum ResolveErrorCategory {
+    /// A PATH search exhausted every candidate directory without a hit.
+    NotFound,
+    /// A direct-path lookup found no executable at the resolved path.
+    DirectNotFound,
+    /// An invalid argument or option value was supplied.
+    Args,
+    /// Canonicalization of a matched path failed.
+    Canonicalize,
+    /// `fs::metadata` failed whilst checking whether a path is executable.
+    IsExecutable,
+    /// A canonical path could not be represented as UTF-8.
+    CanonicalizeNonUtf8,
+    /// A workspace fallback path could not be represented as UTF-8.
+    WorkspaceNonUtf8,
+    /// A `walkdir` traversal error encountered during workspace fallback search.
+    WalkDir,
+    /// The working directory could not be read.
+    CwdResolve,
+    /// The working directory path is not valid UTF-8.
+    CwdNonUtf8,
+}
+
+impl ResolveErrorCategory {
+    /// The lowercase spelling the domain uses for this category.
+    ///
+    /// This is the resolver's own name for the failure, and the string a
+    /// diagnostic carries when it names a category rather than an instance.
+    /// It is deliberately the same spelling the telemetry label uses: the
+    /// label is this taxonomy exported, not a parallel naming of it, and the
+    /// telemetry boundary is where the two are tied together.
+    pub(super) const fn label(self) -> &'static str {
+        match self {
+            Self::NotFound => "not_found",
+            Self::DirectNotFound => "direct_not_found",
+            Self::Args => "args",
+            Self::Canonicalize => "canonicalize",
+            Self::IsExecutable => "is_executable",
+            Self::CanonicalizeNonUtf8 => "canonicalize_non_utf8",
+            Self::WorkspaceNonUtf8 => "workspace_non_utf8",
+            Self::WalkDir => "walkdir",
+            Self::CwdResolve => "cwd_resolve",
+            Self::CwdNonUtf8 => "cwd_non_utf8",
+        }
+    }
+}
+
 /// Typed errors raised while resolving a command with `which`.
 #[derive(Debug)]
 pub(crate) enum ResolveError {
@@ -79,19 +139,30 @@ impl ResolveError {
         }
     }
 
-    /// Return the stable low-cardinality category used by logs and metrics.
-    pub(super) const fn category(&self) -> &'static str {
+    /// Return the domain category this error belongs to.
+    ///
+    /// The return type is the resolver's own [`ResolveErrorCategory`] rather
+    /// than a string, so the pairing of variant to category is a fact this
+    /// module states and the type system checks: an arm cannot return a value
+    /// outside the taxonomy, and no consumer can read the taxonomy without
+    /// naming the type it belongs to. Reporting the category — as a label, a
+    /// log field, or a diagnostic — is a separate decision made by whoever
+    /// reports it.
+    ///
+    /// Every variant is listed explicitly rather than caught by a wildcard, so
+    /// adding a variant is a compile error here until its category is decided.
+    pub(super) const fn category(&self) -> ResolveErrorCategory {
         match self {
-            Self::NotFound { .. } => "not_found",
-            Self::DirectNotFound { .. } => "direct_not_found",
-            Self::Args { .. } => "args",
-            Self::Canonicalize { .. } => "canonicalize",
-            Self::IsExecutable { .. } => "is_executable",
-            Self::CanonicalizeNonUtf8 => "canonicalize_non_utf8",
-            Self::WorkspaceNonUtf8 { .. } => "workspace_non_utf8",
-            Self::WalkDir { .. } => "walkdir",
-            Self::CwdResolve { .. } => "cwd_resolve",
-            Self::CwdNonUtf8 => "cwd_non_utf8",
+            Self::NotFound { .. } => ResolveErrorCategory::NotFound,
+            Self::DirectNotFound { .. } => ResolveErrorCategory::DirectNotFound,
+            Self::Args { .. } => ResolveErrorCategory::Args,
+            Self::Canonicalize { .. } => ResolveErrorCategory::Canonicalize,
+            Self::IsExecutable { .. } => ResolveErrorCategory::IsExecutable,
+            Self::CanonicalizeNonUtf8 => ResolveErrorCategory::CanonicalizeNonUtf8,
+            Self::WorkspaceNonUtf8 { .. } => ResolveErrorCategory::WorkspaceNonUtf8,
+            Self::WalkDir { .. } => ResolveErrorCategory::WalkDir,
+            Self::CwdResolve { .. } => ResolveErrorCategory::CwdResolve,
+            Self::CwdNonUtf8 => ResolveErrorCategory::CwdNonUtf8,
         }
     }
 }
@@ -105,7 +176,7 @@ impl fmt::Display for ResolveError {
                     "failed to inspect executable path '{path}': {source}"
                 )
             }
-            _ => formatter.write_str(self.category()),
+            _ => formatter.write_str(self.category().label()),
         }
     }
 }
