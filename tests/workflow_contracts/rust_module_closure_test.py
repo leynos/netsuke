@@ -29,6 +29,7 @@ mod macros;
 mod argument_position;
 mod sibling;
 mod echo;
+mod tail;
 #[cfg(test)]
 mod test_only;
 """,
@@ -61,7 +62,9 @@ pub mod located;
 #[cfg(test)]
 mod model_tests;
 """,
-    "src/model/nested.rs": "pub fn nested() {}\n",
+    # Imports the crate-root `tail` by its final segment, then uses it bare.
+    "src/model/nested.rs": "use crate::tail;\npub fn nested() { tail::wag(); }\n",
+    "src/tail.rs": "pub fn wag() {}\n",
     "src/model/model_tests.rs": "use crate::unrelated::helper;\n",
     # Reached through `super::super::sibling` from inside the model subtree.
     "src/custom/located.rs": "pub fn located() { super::super::sibling::touch(); }\n",
@@ -92,6 +95,7 @@ EXPECTED_REACHED = {
     "src/harness.rs",
     "src/model.rs",
     "src/model/nested.rs",
+    "src/tail.rs",
     "src/custom/located.rs",
     "src/sibling.rs",
     "src/sibling/echo.rs",
