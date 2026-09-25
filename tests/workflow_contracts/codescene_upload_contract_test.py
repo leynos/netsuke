@@ -140,7 +140,7 @@ def test_the_detectors_accept_an_unrelated_caller_of_another_action(
     the failure mode that gets a contract deleted rather than fixed.
     """
     steps = clean_steps()
-    unrelated = {
+    unrelated: dict[str, object] = {
         "name": "Unrelated step",
         "uses": f"{GENERATE_COVERAGE_ACTION}@{FIXTURE_PIN}",
     }
