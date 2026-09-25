@@ -2685,6 +2685,18 @@ has something to read. `tests/workflow_contracts/build_standard_wiring_test.py`
 asserts the assignment and, separately, that no excluded flag appears; the two
 fail to different edits.
 
+The coverage lanes install the pinned `mold` all the same, with
+`make install-build-tools` ahead of the coverage step. The measured build never
+links with it, but the suite does not only build: its tests drive `make`
+recipes gated on `check-build-tools`, which refuses to run without the pinned
+`mold` on `PATH`. The rule is general. Every Linux job that runs the nextest
+suite, whether through the coverage action, `cargo nextest run`, or a Make goal
+whose recipe reaches it, runs `make install-build-tools` in an unguarded step
+of its own before the suite. `tests/workflow_contracts/nextest_lane_rules.py`
+derives those jobs from the workflows and the Makefile rather than listing
+them, and `tests/workflow_contracts/nextest_lane_mold_test.py` proves each
+clause by mutation.
+
 ### Why Cranelift is not part of the standard
 
 The Cranelift codegen backend is the obvious third member of this set, and it
