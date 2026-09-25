@@ -403,11 +403,14 @@ kani-ir: kani-full ## Run the IR Kani verification suite
 #
 # It takes `KANI_RUSTFLAGS`, not `GATE_RUSTFLAGS`, and declares no
 # `check-build-tools` prerequisite. Both would be wrong here: the lane that runs
-# this is `kani-smoke`, which builds on the stable toolchain and installs neither
-# the pinned `mold` nor the Polonius nightly, so `-Zthreads` is rejected outright
-# and the capability check would fail before a single scenario ran. The suite is
-# an ordinary test binary with no need for the build standard's linker or
-# frontend, so it takes the same flags the Kani targets do.
+# this is `kani-smoke`, which builds on the stable toolchain, so `-Zthreads` is
+# rejected outright and the capability check would fail before a single scenario
+# ran. The suite is an ordinary test binary with no need for the build standard's
+# linker or frontend, so it takes the same flags the Kani targets do. The lane
+# does install the build standard, because every Linux job that runs the nextest
+# suite must -- but that is `nextest_lane_mold_test.py`'s rule about the lane,
+# not a prerequisite of this target, and this target must stay reachable on a
+# host that has only `rustup`.
 KANI_SCOPE_WRAPPER_STRICT ?= 1
 test-kani-scope-wrapper: ## Verify the Kani scope wrapper end to end
 	NETSUKE_KANI_SCOPE_WRAPPER_STRICT=$(KANI_SCOPE_WRAPPER_STRICT) \

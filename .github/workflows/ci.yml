@@ -451,6 +451,15 @@ jobs:
             [ -S "/run/user/$(id -u)/bus" ] && break
             sleep 1
           done
+      - name: Install the build standard
+        # Not because the wrapper's suite needs the pinned linker: its recipe is
+        # a single `cargo nextest run` whose `RUSTFLAGS` displace the
+        # configuration's `-Zthreads`/`mold` tables, and the target declares no
+        # `check-build-tools` prerequisite. It is here because every Linux job
+        # that runs the nextest suite installs the build standard before it, and
+        # the step below is what makes this job such a lane.
+        # tests/workflow_contracts/nextest_lane_mold_test.py is that contract.
+        run: make install-build-tools
       - name: Install cargo-nextest
         # The wrapper's own suite is an ordinary test binary run through the
         # standard runner, and this job installs none of the test tooling the
