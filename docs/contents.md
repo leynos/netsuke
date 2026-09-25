@@ -100,6 +100,9 @@ operator, user, and contributor references are easier to find.
   policy, explicit analysis coverage, migration debt, and qualified checking.
 - [RFC 0028](rfcs/0028-paralegal-architecture-experiment.md): Proposed bounded
   Paralegal trial, starting with Netsuke toolchain compatibility.
+- [RFC 0029: First-class host facts][rfc-0029]: Ansible-informed, typed
+  platform observations, explicit collection, privacy-preserving discovery, and
+  reproducible planning without ambient environment probes.
 
 [rfc-0009]: rfcs/0009-structured-command-working-directories.md
 [rfc-0012]: rfcs/0012-netsukefile-property-testing.md
@@ -112,6 +115,7 @@ operator, user, and contributor references are easier to find.
 [rfc-0023]: rfcs/0023-artefact-ownership-and-scoped-cleanup.md
 [rfc-0024]: rfcs/0024-named-contention-classes.md
 [rfc-0025]: rfcs/0025-progressive-enhancement-and-maturity-policies.md
+[rfc-0029]: rfcs/0029-first-class-host-facts.md
 
 ## Decision records
 
