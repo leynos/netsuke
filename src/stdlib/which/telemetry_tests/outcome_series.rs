@@ -4,7 +4,9 @@
 //! `DebuggingRecorder` and then reads the counter series back as bounded
 //! labels. The claim under test is always the same one: the `cwd_mode` label
 //! separates two resolutions that are otherwise indistinguishable, and the
-//! sample set stays inside the declared vocabularies.
+//! sample set stays inside the declared vocabularies — in its values *and* in
+//! its shape, so a label the resolver was never meant to emit fails a case
+//! rather than being projected away by the read.
 
 use std::ffi::OsString;
 
@@ -26,15 +28,17 @@ use super::super::{
 };
 use super::{Workspace, options, path_override};
 
-/// One counter sample, flattened to the bounded labels that produced it.
+/// One counter sample, flattened to the labels that produced it.
+///
+/// The whole label set is held, not the three labels the assertions name. A
+/// sample is read from the recorder with its key's labels exactly as reported,
+/// so an extra label the resolver was never meant to emit changes this value
+/// and fails the case. Reading only the expected labels would project such a
+/// sample onto a bounded shape and compare it equal.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Sample {
-    /// The `cwd_mode` label.
-    cwd_mode: String,
-    /// The `outcome` label.
-    outcome: String,
-    /// The `category` label, present only on a resolution failure.
-    category: Option<String>,
+    /// The sample's labels as `(key, value)` pairs, sorted by key.
+    labels: Vec<(String, String)>,
     /// The recorded count.
     count: u64,
 }
@@ -42,11 +46,14 @@ struct Sample {
 impl Sample {
     /// Describe one series with a count of one.
     fn once(cwd_mode: &str, outcome: &str, category: Option<&str>) -> Self {
+        Self::tally(cwd_mode, outcome, category, 1)
+    }
+
+    /// Describe one series with `count`.
+    fn tally(cwd_mode: &str, outcome: &str, category: Option<&str>, count: u64) -> Self {
         Self {
-            cwd_mode: cwd_mode.to_owned(),
-            outcome: outcome.to_owned(),
-            category: category.map(str::to_owned),
-            count: 1,
+            labels: label_set(cwd_mode, outcome, category),
+            count,
         }
     }
 
@@ -58,6 +65,25 @@ impl Sample {
             Some(CATEGORY_NOT_FOUND),
         )
     }
+}
+
+/// The label set a bounded `which` series carries, sorted by key.
+///
+/// `cwd_mode` and `outcome` are on every series and `category` only on a
+/// failure, which is the shape the resolver's own record functions produce.
+/// Spelling the expected set here rather than at each comparison is what makes
+/// those comparisons an assertion about the series' shape as well as its
+/// labels.
+fn label_set(cwd_mode: &str, outcome: &str, category: Option<&str>) -> Vec<(String, String)> {
+    let mut labels = vec![
+        ("cwd_mode".to_owned(), cwd_mode.to_owned()),
+        ("outcome".to_owned(), outcome.to_owned()),
+    ];
+    if let Some(category) = category {
+        labels.push(("category".to_owned(), category.to_owned()));
+    }
+    labels.sort_unstable();
+    labels
 }
 
 /// One snapshot entry, as the debugging recorder renders it.
@@ -82,6 +108,11 @@ impl Samples {
     /// and label set, so one read yields both counters; the order within a
     /// counter is the hasher's, which the sort below replaces with a stable
     /// label order rather than pretending to recover the call order.
+    ///
+    /// Every label the key carries is read, not only the three this file knows
+    /// how to name: a series is reported as the recorder holds it, so the
+    /// comparisons in the cases above see an extra label instead of ignoring
+    /// it.
     fn take(snapshotter: &Snapshotter) -> Self {
         let mut counters: Vec<(&'static str, Sample)> = snapshotter
             .snapshot()
@@ -97,34 +128,22 @@ impl Samples {
                     WHICH_RESOLUTION_TOTAL => WHICH_RESOLUTION_TOTAL,
                     _ => return None,
                 };
-                let label = |field: &str| {
-                    key.key()
-                        .labels()
-                        .find(|label| label.key() == field)
-                        .map(|label| label.value().to_owned())
-                };
                 let DebugValue::Counter(count) = value else {
                     return None;
                 };
-                Some((
-                    name,
-                    Sample {
-                        cwd_mode: label("cwd_mode")?,
-                        outcome: label("outcome")?,
-                        category: label("category"),
-                        count,
-                    },
-                ))
+                let mut labels: Vec<(String, String)> = key
+                    .key()
+                    .labels()
+                    .map(|label| (label.key().to_owned(), label.value().to_owned()))
+                    .collect();
+                labels.sort_unstable();
+                Some((name, Sample { labels, count }))
             })
             .collect();
         counters.sort_unstable_by(|left, right| {
-            left.0.cmp(right.0).then_with(|| {
-                (&left.1.cwd_mode, &left.1.outcome, &left.1.category).cmp(&(
-                    &right.1.cwd_mode,
-                    &right.1.outcome,
-                    &right.1.category,
-                ))
-            })
+            left.0
+                .cmp(right.0)
+                .then_with(|| left.1.labels.cmp(&right.1.labels))
         });
         Self { counters }
     }
@@ -264,13 +283,7 @@ fn cache_outcomes_carry_the_search_domain() -> Result<()> {
     );
     let found = samples.of(WHICH_RESOLUTION_TOTAL);
     ensure!(
-        found
-            == [Sample {
-                cwd_mode: "workspace_recursive".to_owned(),
-                outcome: RESOLUTION_OUTCOME_FOUND.to_owned(),
-                category: None,
-                count: 3,
-            }],
+        found == [Sample::tally("workspace_recursive", RESOLUTION_OUTCOME_FOUND, None, 3)],
         "the three passes are one series, so the count must be a tally: {found:?}"
     );
     Ok(())
