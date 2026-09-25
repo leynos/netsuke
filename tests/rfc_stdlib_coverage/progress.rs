@@ -1,0 +1,303 @@
+//! The reported state of the split: totals, coverage status, links, and clauses.
+//!
+//! These five checks read what the documents *say* about the split rather than
+//! what they claim: the registries' running totals against RFC 0006 section
+//! 6.1's aggregate, the coverage map's own status column, the link graph between
+//! documents, the roadmap steps that schedule each capability, and each child's
+//! discharge of RFC 0006 section 6's clauses.
+//!
+//! They are grouped because a half-finished split satisfies every obligation in
+//! `super::partition`: the abandoned state and the finished state are
+//! indistinguishable to a bijection check. What these checks add is the ability
+//! to tell the two apart — `COV-4` prints the count of unwritten groups, and the
+//! totals are asserted over whatever prefix of the split exists.
+//!
+//! Split out of `checks.rs` to keep both modules under Whitaker's 400-line
+//! `module_max_lines` ceiling.
+
+use std::collections::BTreeSet;
+
+use anyhow::{Context, Result, ensure};
+
+use super::{Registration, Repo, World, clauses, links, registries};
+
+/// The derived totals and the registries' purity aggregate agree with RFC 0006.
+pub fn totals_and_purity_aggregate_agree(repo: &Repo) -> Result<()> {
+    let world = World::load(repo)?;
+
+    let registered: usize = world
+        .registries
+        .iter()
+        .map(|registry| registry.names().len())
+        .sum();
+    let written = world.map.rows.len() - world.map.unwritten();
+
+    // Both halves are partial on purpose. Gating either on *all eight* rows
+    // being written would defer every assertion in this function to the end of
+    // the split, and the totals a half-written split can already contradict are
+    // the ones that matter: full coverage is an exact equality because every
+    // registry is read at that point, while partial coverage asserts only that
+    // the rows read so far do not collectively exceed what RFC 0006 accepts.
+    // Without the partial form, a milestone that writes a registry row twice
+    // would be reported by nothing until the last child RFC landed.
+    if world.map.unwritten() == 0 {
+        ensure!(
+            registered == world.survey.accepted.len(),
+            "the registries together list {registered} helpers; RFC 0006 accepts {}",
+            world.survey.accepted.len()
+        );
+    } else {
+        ensure!(
+            registered <= world.survey.accepted.len(),
+            "the registries together list {registered} helpers, but RFC 0006 accepts only {} — \
+             with {} of 8 capability groups written",
+            world.survey.accepted.len(),
+            written
+        );
+    }
+
+    // The purity aggregate is taken over `New` rows only, because section 6.1's
+    // 52/4/1 counts the 57 proposed helpers. The registries carry all 60
+    // accepted helpers, and the optioned rows include the filesystem-observing
+    // `glob`, so an all-row aggregate would be 54/5/1.
+    //
+    // Three of these hold for every prefix of the split rather than only at the
+    // end, so they run unconditionally and the exact equality does not.
+    // Section 6.1 states that *no* proposed helper is clock-, network-, or
+    // subprocess-observing, which is a hard zero and not a budget; the classes
+    // that do have a budget can be over-spent but never under-spent, so each is
+    // bounded above by its stated total. Deferring all of this until the last
+    // child RFC landed would mean a registry declaring `subprocess-observing`
+    // was reported by nothing for seven milestones.
+    let (want_pure, want_filesystem, want_environment) = world.survey.purity;
+    for forbidden in [
+        registries::Purity::Clock,
+        registries::Purity::Network,
+        registries::Purity::Subprocess,
+    ] {
+        let found = new_rows_with(&world.registries, forbidden);
+        ensure!(
+            found == 0,
+            "the registries declare {found} helper(s) `{}`; RFC 0006 section 6.1 states no \
+             proposed helper is",
+            forbidden.label()
+        );
+    }
+    let pure = new_rows_with(&world.registries, registries::Purity::Pure);
+    let filesystem = new_rows_with(&world.registries, registries::Purity::Filesystem);
+    let environment = new_rows_with(&world.registries, registries::Purity::Environment);
+    let optioned: usize = world
+        .registries
+        .iter()
+        .map(|registry| registry.with_registration(Registration::OptionAdded))
+        .sum();
+    ensure!(
+        pure <= want_pure && filesystem <= want_filesystem && environment <= want_environment,
+        "the registries already declare {pure} pure / {filesystem} filesystem / {environment} \
+         environment; RFC 0006 section 6.1 states only {want_pure}/{want_filesystem}/\
+         {want_environment} in total"
+    );
+    ensure!(
+        optioned <= world.survey.optioned.len(),
+        "the registries mark {optioned} rows `option added`; RFC 0006 table 11 lists only {}",
+        world.survey.optioned.len()
+    );
+    if world.map.unwritten() == 0 {
+        ensure!(
+            (pure, filesystem, environment) == (want_pure, want_filesystem, want_environment),
+            "the registries' purity aggregate is {pure} pure / {filesystem} filesystem / \
+             {environment} environment; RFC 0006 section 6.1 states {want_pure}/{want_filesystem}/\
+             {want_environment}"
+        );
+        ensure!(
+            optioned == world.survey.optioned.len(),
+            "the registries mark {optioned} rows `option added`; RFC 0006 table 11 states {}",
+            world.survey.optioned.len()
+        );
+    }
+    Ok(())
+}
+
+/// How many `New` rows across `registries` carry `purity`.
+///
+/// The aggregate is over `New` rows only, which is
+/// [`registries::Registry::new_with_purity`]'s contract; this merely folds it
+/// across the registries.
+fn new_rows_with(registries: &[registries::Registry], purity: registries::Purity) -> usize {
+    registries
+        .iter()
+        .map(|registry| registry.new_with_purity(purity))
+        .sum()
+}
+
+/// The coverage map reports progress honestly.
+///
+/// The count is printed rather than only asserted, because a half-finished
+/// split satisfies every other obligation: the abandoned state and the finished
+/// state are indistinguishable to a bijection check, so the one thing that
+/// announces a stall is the number of groups still unwritten. `nextest.toml`
+/// raises this test's success output to `immediate` so the line reaches the
+/// terminal on a green run rather than being captured.
+#[expect(
+    clippy::print_stdout,
+    reason = "obligation COV-4 requires the unwritten-group count in the passing \
+              test's output, and this target prints nowhere else"
+)]
+pub fn coverage_map_status_is_reported(repo: &Repo) -> Result<()> {
+    let world = World::load(repo)?;
+    let unwritten = world.map.unwritten();
+    println!(
+        "coverage map: {} of {} capability groups written; {unwritten} remaining",
+        world.map.rows.len() - unwritten,
+        world.map.rows.len()
+    );
+    ensure!(
+        world.map.rows.len() == 8,
+        "the coverage map has {} rows; expected 8",
+        world.map.rows.len()
+    );
+    // Every accepted helper the map claims must have an owning row, and every
+    // written row must have a child file that exists. `parse` already checked
+    // that a written row carries a link; here the link is resolved.
+    //
+    // The base is the map's *own* file rather than its directory: a relative
+    // link is relative to the document containing it, and `resolve` derives the
+    // directory by popping the last segment. Passing `RFC_DIR` would pop into
+    // `docs/`, so every correct `0013-….md` link would resolve to
+    // `docs/0013-….md` and be reported missing.
+    for row in &world.map.rows {
+        if let Some(target) = &world.child_paths.get(&row.number) {
+            let path = links::resolve(super::RFC_0006, target).with_context(|| {
+                format!(
+                    "coverage map row for RFC {} links to {target}, which climbs above the \
+                     repository root",
+                    row.number
+                )
+            })?;
+            ensure!(
+                repo.exists(&path)?,
+                "coverage map row for RFC {} is marked written and links to {target}, which \
+                 resolves to {path}; no such file exists",
+                row.number
+            );
+        }
+    }
+    for registry in &world.registries {
+        let matched = world
+            .map
+            .rows
+            .iter()
+            .find(|row| row.number == registry.number);
+        ensure!(
+            matched.is_none_or(|row| row.is_written),
+            "RFC {} exists at {} but its coverage map row still says unwritten",
+            registry.number,
+            registry.file
+        );
+    }
+    // The converse of the loop above, and the load-bearing direction: a registry
+    // that fails to parse is *absent* from `world.registries`, which every check
+    // reads as "not written yet". A row marked written with a link that resolves
+    // to an unparseable document would therefore satisfy every other check by
+    // being invisible to all of them. Requiring a parsed registry per written row
+    // closes that, and it is the same link resolution the loop above uses.
+    for row in &world.map.rows {
+        ensure!(
+            !row.is_written
+                || world
+                    .registries
+                    .iter()
+                    .any(|registry| registry.number == row.number),
+            "coverage map row for RFC {} is marked written, but no registry was parsed for it — \
+             its link must resolve to a child RFC with a readable section 5 registry table",
+            row.number
+        );
+    }
+    Ok(())
+}
+
+/// Every relative link in the RFC corpus resolves.
+pub fn inter_document_links_resolve(repo: &Repo) -> Result<()> {
+    let failures = links::dangling(repo)?;
+    ensure!(
+        failures.is_empty(),
+        "dangling inter-document links: {failures:?}"
+    );
+    Ok(())
+}
+
+/// Every capability has a roadmap task, and each child's step names what it owns.
+pub fn every_capability_has_a_roadmap_task(repo: &Repo) -> Result<()> {
+    let world = World::load(repo)?;
+    let unscheduled = world.roadmap.unscheduled(world.survey.accepted.keys());
+    ensure!(
+        unscheduled.is_empty(),
+        "accepted helpers {:?} are named in no roadmap capability step at all, so nothing \
+         schedules them",
+        // Name the step each one belongs to. A helper named nowhere is exactly
+        // the case where the reader needs to be told where it was meant to go,
+        // and the coverage map is the only place that records it.
+        unscheduled
+            .iter()
+            .map(|name| {
+                world
+                    .map
+                    .rows
+                    .iter()
+                    .find(|row| row.claims().contains(name))
+                    .map_or_else(
+                        || format!("{name} (claimed by no coverage-map row)"),
+                        |row| format!("{name} (RFC {}, step {})", row.number, row.step),
+                    )
+            })
+            .collect::<Vec<_>>()
+    );
+    for row in &world.map.rows {
+        let missing = world
+            .roadmap
+            .missing_from_step(&row.step, row.claims().iter())?;
+        ensure!(
+            missing.is_empty(),
+            "the coverage map gives RFC {} roadmap step {}, but that step names none of {missing:?}",
+            row.number,
+            row.step
+        );
+    }
+    Ok(())
+}
+
+/// Every child RFC discharges every clause of RFC 0006 section 6.
+pub fn every_child_discharges_every_clause(repo: &Repo) -> Result<()> {
+    let world = World::load(repo)?;
+    let clauses: BTreeSet<String> = clauses::clause_ids(repo)?.into_iter().collect();
+    for registry in &world.registries {
+        let discharged = clauses::discharged(repo, &registry.file)?;
+        let undischarged: Vec<_> = clauses.difference(&discharged).cloned().collect();
+        ensure!(
+            undischarged.is_empty(),
+            "{} does not discharge RFC 0006 clause(s) {undischarged:?}",
+            registry.file
+        );
+        let invented: Vec<_> = discharged.difference(&clauses).cloned().collect();
+        ensure!(
+            invented.is_empty(),
+            "{} discharges {invented:?}, which is not a clause of RFC 0006 section 6",
+            registry.file
+        );
+        // The table says a clause was discharged; it cannot say the discharge
+        // says anything. The subsections are where the group's own contract is
+        // recorded, and their vacuity is what this task's principal risk names.
+        //
+        // Their ids and the table's must agree exactly. A subsection with no
+        // table row is a discharge a reviewer would read but the table would
+        // deny, and one is the only place the other's absence is visible.
+        let sections = clauses::check_section_five(repo, &registry.file, &registry.names())?;
+        ensure!(
+            sections == discharged,
+            "{} has section 5 subsections {sections:?} but a clause-discharge table listing \
+             {discharged:?}; the two must name the same clauses",
+            registry.file
+        );
+    }
+    Ok(())
+}

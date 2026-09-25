@@ -59,10 +59,11 @@ parallel one; the technical design records the consequences.
 What is missing: a mechanism to substitute manifest macros, any test dialect,
 discovery, mock engine, fixture lifecycle, or `test` subcommand. (The clock
 seam for `now()` that this section originally listed was supplied by roadmap
-item 7.1.1; the [technical design](netsuke-test-framework-technical-design.md)
-§5.2 records the implemented shape.) The manifest schema rejects unknown
-top-level keys, so the proposed `tests` configuration block is a schema
-addition with compatibility consequences (see below).
+item 7.1.1; the
+[technical design](../netsuke-test-framework-technical-design.md) §5.2 records
+the implemented shape.) The manifest schema rejects unknown top-level keys, so
+the proposed `tests` configuration block is a schema addition with
+compatibility consequences (see below).
 
 ## Goals and non-goals
 

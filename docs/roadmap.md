@@ -804,14 +804,21 @@ boundary, can carry every later helper, or whether each capability group needs
 its own. Its outcome decides whether steps 6.2 to 6.9 can be reviewed as
 ordinary additions or need individual design passes. See RFC 0006 §§6 and 14.1.
 
-- [ ] 6.1.1. Split the RFC 0006 accepted set into focused child issues.
-  - See RFC 0006 §14.
-  - Give each issue the full cross-cutting contract from RFC 0006 §6 rather
-    than a reference to Ansible.
-  - Record a release target of v0.1.x or later for each issue.
+- [ ] 6.1.1. Split the RFC 0006 accepted set into focused child RFCs and
+  accompanying roadmap tasks.
+  - See RFC 0006 §14 and
+    [the execplan](execplans/6-1-1-split-rfc-0006-set-into-focused-child-rfcs-and-task.md).
+  - Give each RFC the full cross-cutting contract from RFC 0006 §6 rather
+    than a reference to Ansible. Discharging each clause for the RFC's own
+    helpers satisfies this; citing §6 without discharging it does not.
+  - Record a release target of v0.1.x or later for each RFC.
+  - Track delivery through the roadmap tasks in steps 6.2 to 6.9 rather than
+    through separate issues, so progress stays in committed documentation.
   - Success: every accepted capability in RFC 0006 §7 is covered by exactly
-    one open child issue, and every deferred or rejected candidate is covered
-    by none.
+    one child RFC and by at least one accompanying roadmap task, and every
+    deferred or rejected candidate is covered by neither. A capability may be
+    named by more than one roadmap task, as `product` already is by 6.4.2 and
+    6.4.5, so only the RFC count is exactly one.
 - [ ] 6.1.2. Implement the canonical value key and equality relation.
   - See RFC 0006 §6.7.
   - Derive the key with the existing `serde_json_canonicalizer` dependency and
@@ -881,19 +888,22 @@ This step answers whether a manifest can consume compiler metadata, package
 manifests, and generated configuration fragments directly, or whether `jq`,
 `yq`, and a scripting runtime remain unavoidable host assumptions. Its outcome
 determines how much surrounding toolchain a `Netsukefile` still has to assume.
-See RFC 0006 §8.1 and
+See RFC 0006 §8.1, delivered by
+[RFC 0013](rfcs/0013-structured-data-interchange-helpers.md), and
 [adr-001-replace-serde-yml-with-serde-saphyr.md](adr-001-replace-serde-yml-with-serde-saphyr.md).
 
 - [ ] 6.2.1. Add `from_json` with duplicate-key rejection and source offsets.
   Requires 6.1.3 and 6.1.4.
-  - See RFC 0006 §8.1.
+  - See RFC 0006 §8.1 and
+    [RFC 0013](rfcs/0013-structured-data-interchange-helpers.md) §7.
   - Preserve object order and report line, column, and byte offset on failure.
   - Success: a document with a repeated object key fails naming the key and
     the offset of its second occurrence, rather than silently keeping the last
     value.
 - [ ] 6.2.2. Add `from_yaml` and `from_yaml_all` over the existing safe YAML
   stack. Requires 6.2.1.
-  - See RFC 0006 §8.1.
+  - See RFC 0006 §8.1 and
+    [RFC 0013](rfcs/0013-structured-data-interchange-helpers.md) §§5.8 and 7.
   - Reject non-standard tags, duplicate keys, and merge keys, and materialize
     the multi-document result rather than exposing a lazy iterator.
   - Establish whether `serde-saphyr` can bound alias expansion; if it cannot,
@@ -902,7 +912,9 @@ See RFC 0006 §8.1 and
     instead of exhausting memory.
 - [ ] 6.2.3. Add the deterministic `to_yaml` and `to_nice_json` serializers.
   Requires 6.2.2.
-  - See RFC 0006 §§6.3 and 8.1.
+  - See RFC 0006 §§6.3 and 8.1, and
+    [RFC 0013](rfcs/0013-structured-data-interchange-helpers.md) §§5.3, 5.7, and
+    8.
   - Pin key ordering, indentation, scalar quoting, line endings, and
     trailing-newline behaviour, quoting every scalar that could be read back
     as a boolean, null, number, or timestamp.
