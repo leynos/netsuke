@@ -1,0 +1,589 @@
+# Netsuke — terms of reference
+
+- **Status:** Draft (v0.2). Reconstructed from existing artefacts, then
+  reviewed with the maintainer on 2026-09-24 and 2026-09-25. The five remaining
+  open questions are tracked as issues #781 to #785 (see
+  [section 9](#9-open-questions)).
+- **Audience:** The maintainer, contributors and reviewers deciding what
+  Netsuke should and should not become, and anyone writing a design document,
+  Request for Comments (RFC), or roadmap phase that needs a defensible problem
+  statement to trace back to.
+- **Companion documents:** `docs/netsuke-design.md` (architecture),
+  `docs/netsuke-cli-design-document.md` (command-line interface),
+  `docs/roadmap.md` and `docs/roadmap-composition.md` (sequencing),
+  `docs/adr-003-agent-consistent-human-first-cli.md`,
+  `docs/adr-021-trust-aware-fetch-policy-merge.md`,
+  `docs/adr-026-manifest-environment-access-policy.md`, and the RFCs under
+  `docs/rfcs/`. There is no `docs/context.md` yet; see
+  [appendix B](#appendix-b-glossary).
+- **Last revised:** 2026-09-25.
+
+## Reading this document
+
+This document states the problem Netsuke addresses, for whom, and within what
+bounds. It does not describe how Netsuke works; `docs/netsuke-design.md` does
+that.
+
+Its purpose is to give Netsuke a coherent vision and a consistent language. New
+RFCs, ADRs, and roadmap phases should trace to the users, goals, and non-goals
+in sections 4 to 6, and should use the terms defined in
+[appendix B](#appendix-b-glossary). A proposal that cannot do either is a
+prompt to revise this document first.
+
+It was written after the design document, the roadmap, and nearly forty
+architectural decision records (ADRs). The usual order is the reverse. The
+document therefore records the premises the existing design already assumes, so
+that later design work can test itself against them rather than against each
+author's recollection.
+
+Each substantive claim has one of three statuses:
+
+- **Established** claims cite a source in the repository or in the recorded
+  design conversations and carry no marker.
+- **Assumed** claims are marked with an assumption identifier, such as
+  `(A3)`, which resolves to [section 8.2](#82-assumptions) with its failure
+  consequence.
+- **Open** matters are marked with a question identifier, such as `(Q4)`,
+  which resolves to [section 9](#9-open-questions).
+
+## 1. Background and motivation
+
+GNU Make encodes a small, domain-agnostic idea: this file needs building, it
+needs those files, and here is how to build it. That idea has lasted almost
+fifty years because it is indifferent to what is being built. The notation
+around it has not aged as well: tab-sensitive syntax, automatic variables such
+as `$@` and `$^`, implicit suffix rules, recursive invocation hazards, and
+quoting that is delegated wholesale to the shell.
+
+The alternatives that grew up since then split into two camps, with little
+between them:
+
+- **Task runners** (`just`, Task, Mage, Invoke) fix the notation but mostly
+  give up the dependency graph, or keep only a light per-task freshness check.
+- **Hermetic build systems** (Bazel, Buck2, Pants) keep a rigorous graph and
+  add sandboxing, remote execution, and remote caching, at the price of a new
+  language (Starlark), a new filesystem model, and a substantial adoption
+  effort.
+
+Ninja, meanwhile, provides a fast, static, domain-agnostic executor, and says
+plainly that it expects a generator above it. The generators that exist (CMake,
+Meson, GN, xmake) are organized around compiling C and C++ and carry opinions
+about toolchains, installation, and project layout.
+
+Three conditions make a general-purpose generator worth building now:
+
+1. **The accidental-build-system problem has grown.** A typical repository
+   now carries a Makefile or `justfile`, several shell scripts, continuous
+   integration (CI) YAML that restates the same commands, and pinned tool
+   invocations for linters and formatters across several languages. The
+   Makefile in `leynos/cuprum` at revision `08c7665` is the reference specimen:
+   most of it is file selection, tool-environment construction, and worker-flag
+   coordination rather than a description of the project.
+2. **Automated agents now author and run build logic.** A build description
+   that resolves to a static, inspectable plan before any command runs is far
+   easier for an agent to author, check, and explain than an imperative script.
+   ADR-003 made agent-consistent structure a product requirement `(A7)`.
+3. **The implementation substrate is mature.** A Jinja implementation in Rust
+   (`minijinja`), a YAML 1.2 parser with source-aware diagnostics
+   (`serde-saphyr`), and a stable Ninja make a compiler of this shape tractable
+   for a small team.
+
+The motivation is also, candidly, personal. The project began when the
+maintainer went looking for "Make, without the painful syntax and the
+dependence on shell" and found that the tool did not exist: an assistant asked
+for recommendations invented two of the three it offered. Netsuke's first users
+are its maintainer's own repositories, the dogfooding set in section 7.1
+`(A1)`. That is a legitimate origin, but it means the external demand described
+in sections 3 and 4 is inferred from the landscape rather than measured `(Q12)`.
+
+## 2. Domain
+
+### 2.1 Field of practice
+
+Netsuke operates in build automation: turning source files and declared
+intentions into derived artefacts and completed side effects, doing only the
+work whose inputs have changed, and running independent work in parallel.
+
+### 2.2 Established conventions
+
+Practitioners in this field share several conventions that Netsuke inherits
+rather than questions:
+
+- **The dependency graph is the model.** Work is a directed acyclic graph of
+  edges from inputs to outputs; cycles are errors.
+- **Modification time decides freshness for local files.** Make and Ninja
+  rebuild an output when an input is newer. It is cheap, universally
+  understood, and good enough for local sources; its weaknesses (clock skew,
+  preserved timestamps) are well known and tolerated `(A5)`.
+- **Phony and always-run targets exist.** Some nodes name side effects rather
+  than files (`clean`, `test`, `lint`), and some must run on every invocation.
+- **Recipes are commands.** The unit of work is an external program, usually
+  launched through a shell. The build tool does not know what the program does.
+- **Generators and executors are separate layers.** Ninja's authors describe it
+  as an assembler for build systems; CMake, Meson, and GN are its compilers.
+- **Hermeticity is a spectrum, not a switch.** At one end, Make trusts the
+  ambient environment completely; at the other, Bazel and Nix control every
+  input. Most projects sit in between and want to know *where* they sit.
+
+### 2.3 Trust and purity
+
+Two domain facts shape what a build tool can promise:
+
+- **A build description executes code.** A `Netsukefile`, like a `Makefile`,
+  runs arbitrary commands. Netsuke can reduce quoting mistakes; it is not a
+  sandbox, and the README says so.
+- **The checkout is less trusted than the operator.** A project's manifest is
+  authored by whoever controls the repository, while credentials, tokens, and
+  network access belong to the person or CI job running the build. ADR-021 and
+  ADR-026 established that project configuration must not grant itself
+  authority the operator has not granted.
+
+Anything that consults the network, the clock, the environment, or a subprocess
+while the plan is being produced makes that plan depend on something outside
+the repository. Netsuke calls such a plan *impure*. Netsuke already tracks
+impurity for its template helpers; how far that concept extends to targets and
+remote inputs is open `(Q4)`.
+
+### 2.4 Prior art
+
+| Tool           | Relationship to Netsuke                                                                                        |
+| -------------- | -------------------------------------------------------------------------------------------------------------- |
+| GNU Make       | The semantic ancestor. Netsuke keeps its graph model and discards its notation.                                |
+| Ninja          | The executor Netsuke targets. Netsuke exists because Ninja is unpleasant to write by hand.                     |
+| Shake, redo    | Demonstrations of rigorous, domain-agnostic build semantics; neither reached a broad audience.                 |
+| Bazel, Nix     | The reference for ownership of outputs, typed configuration, toolchains, and content identity.                 |
+| `just`         | The reference for ergonomics: visible parameters, readable recipes, and a pleasant first five minutes.         |
+| Ansible        | The source of the `foreach`/`when` idiom for declarative repetition and conditions in YAML.                    |
+| GitHub Actions | Evidence that templated YAML is an accepted authoring format among the target users, whatever its critics say. |
+
+## 3. Market context
+
+### 3.1 Alternatives users already have
+
+| Alternative                        | What it does well                                                            | Where it falls short for Netsuke's users                                                               |
+| ---------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| GNU Make                           | Universal, domain-agnostic, installed everywhere                             | Hostile notation; shell quoting is the author's problem; large Makefiles become unreviewable           |
+| Shell scripts, `build.py`, CI YAML | No new tool to learn; the current default for many projects                  | No graph, no incrementality, no parallelism; logic is duplicated between local scripts and CI          |
+| `just`                             | Excellent ergonomics and diagnostics; parameterized recipes                  | A command runner with no freshness model                                                               |
+| Task (Taskfile)                    | YAML recipes, includes, watch mode, checksum or timestamp freshness per task | Freshness is per task rather than a compiled graph; templating can reshape the file at run time        |
+| Mage, Rake, Invoke                 | The full power of a general-purpose language                                 | Imperative build logic that becomes hard to inspect or parallelize                                     |
+| CMake, Meson, GN, xmake            | Mature Ninja generators with toolchain and install support                   | Organized around compiling C and C++; opinions about layout and toolchains                             |
+| Bazel, Buck2, Pants, Please        | Hermetic, reproducible, remotely executable monorepo builds                  | New language, new filesystem model, and an adoption cost that small and medium projects cannot justify |
+| Writing `build.ninja` by hand      | Maximum speed and control                                                    | No variables, conditions, or globbing; unmaintainable beyond a toy                                     |
+
+### 3.2 The gap
+
+No widely used tool combines all four of these properties:
+
+1. a general-purpose, domain-agnostic dependency graph with Make's semantics;
+2. an authoring format that ordinary developers can read and write without
+   learning a build-specific language;
+3. a plan that is fully resolved, validated, and inspectable before any
+   command runs, and identical for identical inputs; and
+4. an adoption cost measured in minutes rather than weeks.
+
+Netsuke aims at that "static middle": more than a task runner, far less than
+Bazel. The risk of the middle is that it is squeezed from both sides. A tool
+that chases developer-workflow conveniences will be compared with Task and
+lose; a tool that chases sandboxing and remote caching will be compared with
+Bazel and lose. Section 6.2 exists largely to hold that line.
+
+## 4. Users and stakeholders
+
+### 4.1 Primary users
+
+The design conversations identify three primary user groups. They form a
+progression in how much they know about build systems, not three separate
+products.
+
+Netsuke initially serves the reluctant Make users: developers who struggle to
+let go of Make because task runners are too limited and Bazel and CMake are too
+complex to justify. The maintainer settled this on 2026-09-24 (Q1, resolved).
+The other two groups are later audiences. The design should not close doors to
+them, but where their needs conflict with the initial group's, the initial
+group takes precedence `(A8)`.
+
+| User group                              | Context                                                                                                       | Cares about                                                                           | Ignores or dislikes                                                                                | Current alternative                  |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| Reluctant Make users (initial)          | Fluent Make users who value its small core and inspectability, and have tried the alternatives                | A domain-agnostic graph with freshness checks, transparency, no hidden magic, speed   | Task runners' missing graph; Bazel's and CMake's ceremony; anything that feels like a new religion | GNU Make                             |
+| Bazel-curious, Bazel-repelled (later)   | Engineers who understand why hermeticity, reproducibility, and dependency graphs matter                       | Correctness, determinism, reviewable build changes, explicit inputs                   | Starlark, toolchain ceremony, a new filesystem model, "attaining enlightenment" first              | Make or scripts, with private guilt  |
+| Accidental build-system authors (later) | Developers with scripts, a `justfile`, CI YAML, and a load-bearing `build.py`, who deny having a build system | Commands that run, incremental speed without having to think about it, readable files | Build-system theory, long documentation, anything longer than their current script                 | Shell scripts, `just`, Task, CI YAML |
+
+The reluctant Make users recognize exactly what Netsuke fixes, because they
+live with the problem daily; they are the likeliest early adopters and
+contributors. The Bazel-curious share their values and follow naturally. The
+accidental build-system authors are probably the largest group in the long run
+`(A2)`, but they are not the group Netsuke is first built for.
+
+### 4.2 Secondary users
+
+| User                            | Interaction                                                                                          |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Automated agents and CI systems | Author, validate, and run manifests; consume `--json` output. ADR-003 makes them a design audience.  |
+| Reviewers                       | Read manifest changes and generated plans in pull requests, without necessarily running them.        |
+| Operators of a checkout         | Run someone else's manifest and decide what network, environment, and filesystem authority to grant. |
+| Netsukefile test authors        | Write manifest-time tests (`docs/rfcs/0007-netsukefile-testing-framework.md`).                       |
+
+### 4.3 Stakeholders
+
+| Stakeholder                       | Interest                                                                                                  |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| The maintainer (df12 Productions) | Owns direction; uses Netsuke across their own repositories; funds the work in time.                       |
+| The dogfooding repositories       | Listed in section 7.1: the first real workload and the source of migration benchmarks.                    |
+| OrthoConfig maintainers           | Netsuke depends on OrthoConfig for command, configuration, and schema machinery (`docs/roadmap.md`).      |
+| Downstream packagers              | Debian, RPM, macOS, and Windows installer consumers who need predictable releases and a Ninja dependency. |
+
+### 4.4 Non-users
+
+| Non-user                                                                               | Better served by                                      |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Organizations needing sandboxed, remotely executed builds with a shared remote cache   | Bazel, Buck2, Pants                                   |
+| C and C++ projects needing toolchain detection, install rules, and IDE project export  | Meson or CMake                                        |
+| Teams wanting a live development loop: file watching, dev servers, interactive prompts | Task, or `inotifywait` or `watchexec` running Netsuke |
+| Projects whose whole build is one language's native tool and needs nothing around it   | Cargo, `uv`, npm, Gradle                              |
+
+## 5. Jobs to be done
+
+### 5.1 Reluctant Make users (initial primary users)
+
+> When a Makefile has become hard to read, quote, or change safely, and the
+> alternatives they have tried are either too limited (task runners with no
+> dependency graph) or too demanding (Bazel, CMake), a seasoned Make user wants
+> to keep Make's graph semantics while replacing its notation and
+> shell-quoting hazards, so they can finally leave Make without giving up
+> anything it did for them.
+
+- **Functional:** targets, dependencies, phony and always-run nodes, and
+  order-only dependencies, with no loss of generality.
+- **Emotional:** the sense that nothing was taken away.
+- **Social:** no need to defend a trendy tool to other Make users.
+
+### 5.2 Bazel-curious, Bazel-repelled (later)
+
+> When their project has outgrown scripts and they need builds they can trust
+> and review, a correctness-minded engineer wants to describe the build as an
+> explicit, checkable graph without adopting a new build language and
+> filesystem model, so they can get reproducibility and reviewable build
+> changes at a cost their team will accept.
+
+- **Functional:** a plan that is identical for identical inputs and can be
+  inspected, diffed, and explained before it runs.
+- **Emotional:** confidence that nothing varies without their knowledge.
+- **Social:** being the colleague who improved the build rather than the one
+  who imposed Bazel.
+
+### 5.3 Accidental build-system authors (later)
+
+> When a repository's scripts, CI steps, and task-runner recipes have drifted
+> apart and slow down every change, a developer who "does not need a build
+> system" wants one readable file that runs the right commands in the right
+> order and skips work that is already done, so they can stop maintaining
+> glue and trust that local runs match CI.
+
+- **Functional:** one command for the common workflow; the same file drives
+  local runs and CI.
+- **Emotional:** the pain stops without a detour through build-system theory.
+- **Social:** a repository newcomers can build on their first day.
+
+### 5.4 Agents and CI (secondary)
+
+> When an automated agent must change or run a project's build, it wants a
+> build description whose effects are resolved, validated, and reported in a
+> structured form before execution, so it can act without guessing and
+> explain what it did.
+
+## 6. Scope
+
+### 6.1 Goals
+
+Each goal is phrased so that an observer can check it.
+
+1. **G1 — A shallow end.** A newcomer can write and run a working manifest
+   using only targets, commands, and defaults, after reading one page, with no
+   concept introduced before it solves a problem the user has. The existing
+   quick start is the regression fixture for this goal.
+2. **G2 — Progressive enhancement, never contagion.** Every advanced semantic
+   (structured commands, typed inputs, managed states, artefact ownership,
+   contention classes, strictness policies) is opt-in, local to the entry that
+   uses it, and never makes a simpler manifest longer or invalid. A project can
+   stop on any rung: command runner, typed task graph, or reproducible
+   orchestration.
+3. **G3 — Domain agnosticism.** Netsuke builds anything a command can build and
+   ships no blessed language or toolchain in its core.
+4. **G4 — Deterministic plans.** Given the same manifest, environment, and
+   filesystem state, Netsuke produces a byte-identical Ninja plan.
+5. **G5 — Inspect before execute.** Users and agents can list, render, graph,
+   and validate the full plan, including which entries are conditional, without
+   running a recipe.
+6. **G6 — Visible impurity.** Every input the plan draws from outside the
+   repository (network, environment, clock, subprocess) is declared or
+   detectable, and the operator, not the checkout, grants that authority.
+7. **G7 — Safe command construction by default.** Paths Netsuke substitutes
+   reach programs as intended arguments, and an argv-based command form exists
+   that involves no shell at all `(A6)`.
+8. **G8 — Actionable failures.** Every diagnostic states what failed, where in
+   the manifest, and what to do next, in human-readable and versioned
+   machine-readable forms.
+9. **G9 — Parity across Linux, macOS, and Windows** for the documented manifest
+   model, with any platform-specific behaviour stated explicitly.
+10. **G10 — Replace real monster Makefiles.** A migrated manifest for a
+    repository of Cuprum's complexity replaces its Makefile entirely and
+    consists mainly of lines that describe that project, not lines that
+    compensate for the build language. A line-for-line translation of Make
+    into YAML and Jinja does not meet this goal, however faithful.
+11. **G11 — Cover Make's task-runner role.** The initial users run
+    `make test`, `make lint`, and `make clean` as well as file builds.
+    Netsuke covers that role with named phony actions (see `examples/`),
+    target listing with descriptions (`netsuke help targets`, shipped), and
+    validated recipe parameters (RFC 0022, proposed in PR #741). The
+    conveniences that stay out are those of non-goal 6.
+12. **G12 — A documented way off Make.** A "Netsuke for Make Diehards" guide,
+    published at <https://df12.studio/netsuke>, maps Make idioms to idiomatic
+    Netsuke rather than to their literal YAML equivalents.
+
+### 6.2 Non-goals
+
+1. **A new scheduler or executor.** Ninja schedules and executes; Netsuke
+   compiles. Resource and ordering needs lower to Ninja's facilities rather
+   than to a second scheduler.
+2. **Hermetic sandboxing, remote execution, or a shared remote cache.** Users
+   who need these should use Bazel, Buck2, or Pants. Netsuke makes impurity
+   visible; it does not eliminate it.
+3. **Package or toolchain management.** Netsuke does not resolve or install
+   dependencies. It may describe and verify a tool environment that `uv`,
+   Cargo, or a system package manager provides.
+4. **Out-guessing native incremental builds.** Netsuke does not reimplement
+   Cargo's or any other tool's incremental graph; it delegates.
+5. **A general-purpose programming language in the manifest.** Jinja renders
+   values; structure changes only through `foreach` and `when`. Users who want
+   imperative build code should use Mage, Invoke, or a script that Netsuke
+   calls.
+6. **A live development loop.** File watching, long-running dev servers, and
+   interactive prompts are out of scope, confirmed by the maintainer on
+   2026-09-24. Users who want rebuild-on-save should drive Netsuke from
+   `inotifywait`, `watchexec`, or a task runner, as Make users already do with
+   Make.
+7. **A security sandbox for untrusted manifests.** Reviewing a manifest before
+   running it remains the operator's responsibility, as with a Makefile.
+8. **Inferring semantics from command text.** Netsuke will not decide that
+   `uv sync` creates an environment or that `rm -rf build` owns `build`.
+   Semantics are declared, not guessed.
+9. **Mandatory annotation.** No strictness rule applies unless a project opts
+   into it.
+10. **C and C++ project conveniences as core features.** Toolchain detection,
+    install rules, and IDE export belong to Meson and CMake, or to optional
+    rule bundles.
+11. **An automatic Makefile importer.** A mechanical translation is exactly
+    what a finished migration must not be (G10). Users leaving Make should
+    follow the "Netsuke for Make Diehards" guide (G12).
+
+## 7. Success criteria
+
+### 7.1 User-facing
+
+- The quick-start manifest in `docs/quickstart.md` works unchanged in every
+  release, and a newcomer completes the guide in under five minutes `(A4)`.
+- The Cuprum Makefile at `08c7665` migrates to a Netsukefile that keeps its
+  deliberate safeguards (restricted extension-test selection, interpreter
+  requirements, extension preconditions) and removes repository-authored file
+  transport, duplicated tool pins, and hand-coordinated worker flags.
+- Dogfooding is the initial feedback loop. Six maintained repositories run
+  their gates from Netsukefiles: `leynos/catnap`, `leynos/actix-v2a`, and
+  `leynos/cuprum`, plus the three release-admission canaries
+  `leynos/repovec-appliance`, `leynos/mxd`, and `leynos/ortho-config`
+  (`docs/release-admission-canaries.md`, currently on the branch for PR #780).
+  Ergonomic gaps found there become roadmap work. A repository's migration is
+  done when its Makefile is retired and its Netsukefile meets G10: it is
+  written in Netsuke's own terms, not a mechanical translation of the Makefile
+  into YAML and Jinja. The v0.1.0 canaries' partial migrations, which keep
+  Makefiles for out-of-slice targets, are waypoints, not the finish line.
+- External adoption is measured first as crates.io downloads of
+  `netsuke-build` that do not come from the maintainer's own CI, and later as
+  `Netsukefile`s appearing in other people's GitHub repositories. How to
+  compute the first figure, and what thresholds count as success, are open
+  `(Q12)`.
+
+### 7.2 Operational
+
+- Snapshot tests show byte-identical Ninja output for identical inputs on
+  Linux, macOS, and Windows.
+- Every `--json` document validates against its published, versioned schema.
+- A manifest that consults the network or environment without an operator
+  grant fails before any recipe runs.
+- Plan generation time stays small relative to the Ninja run it precedes. No
+  budget is set yet `(Q7)`.
+
+### 7.3 Strategic
+
+- Netsuke reaches 1.0 when its interface is stable: no further breaking
+  change to the Netsukefile format or to command-line behaviour is planned.
+  Stability is the whole release criterion. Finishing the dogfooding
+  migrations, publishing the Make Diehards guide, and reaching the adoption
+  signals are not 1.0 gates.
+- By 1.0, the semantics of the Netsukefile testing framework
+  (`docs/rfcs/0007-netsukefile-testing-framework.md`) and of the Netsukefile
+  linter (issue #592) should also be stable. This is an aim, not a gate.
+- The progressive-enhancement features proposed in PR #741 are delivered
+  without changing the shallow-end fixture.
+- A reference repository demonstrates Netsuke in a real multi-language
+  workflow, including its generated plan under review in a pull request.
+
+## 8. Constraints and assumptions
+
+### 8.1 Hard constraints
+
+- **Ninja is the execution backend.** Any capability must be expressible as a
+  static Ninja graph, possibly with `dyndep`, produced before execution begins.
+- **The authoring format is YAML with Jinja.** This decision predates this
+  document and is embodied in every manifest written so far `(A3)`.
+- **Manifests execute arbitrary commands.** No design may claim sandboxing it
+  does not provide.
+- **Project configuration cannot grant itself operator authority**
+  (ADR-021, ADR-026).
+- **Licensing and openness.** Netsuke is ISC-licensed and developed in public.
+- **Pre-1.0 status.** Interfaces may change before 1.0; after 1.0, the manifest
+  schema version (`netsuke_version`) governs compatibility.
+- **Source builds need the pinned nightly Rust toolchain** (ADR-006). Prebuilt
+  binaries and installers avoid this for users, but not for contributors or
+  registry installs. The constraint is accepted for now; Netsuke intends to
+  move to stable Rust once Polonius stabilizes, as ADR-006's stabilization path
+  anticipates.
+
+### 8.2 Assumptions
+
+| ID  | Assumption                                                                                                                              | Consequence if false                                                                                                     |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| A1  | The dogfooding repositories are representative of the wider target users.                                                               | Features tuned to them (for example Python-and-Rust quality gates) misfire for other users; external research is needed. |
+| A2  | Accidental build-system authors are the largest group, and they will adopt a graph-based tool if its first five minutes match `just`'s. | Adoption stalls outside expert users; onboarding and defaults need rework.                                               |
+| A3  | Target users accept YAML with Jinja as an authoring format.                                                                             | Reluctant Make users reject the tool on sight; an alternative surface or stronger justification is needed.               |
+| A4  | Users can install Ninja, or accept an installer that depends on it.                                                                     | Onboarding fails at the first step on platforms without packaged Ninja; bundling or fetching Ninja becomes necessary.    |
+| A5  | Modification-time freshness is sufficient for local files.                                                                              | Users hit spurious or missed rebuilds; content-hash invalidation moves into scope `(Q5)`.                                |
+| A6  | Shell-string recipes remain acceptable while structured commands mature.                                                                | Quoting failures on Windows or with unusual filenames erode trust before the safer form ships.                           |
+| A7  | Agents benefit materially from a static, structured plan compared with an imperative script.                                            | ADR-003's investment in agent-consistent output delivers less value than expected.                                       |
+| A8  | Serving reluctant Make users first does not preclude serving the other two groups later.                                                | A feature the later groups need is blocked by an early decision; migrating them requires breaking changes.               |
+
+### 8.3 Dependencies
+
+| Dependency                                                                            | Role                                                           | Critical path                                |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------- |
+| Ninja                                                                                 | Executes every build                                           | Yes: every user needs it at run time         |
+| OrthoConfig                                                                           | Command, configuration, and schema machinery                   | Yes for command-line and configuration work  |
+| `minijinja`, `serde-saphyr`                                                           | Template evaluation and YAML parsing                           | Yes for manifest semantics                   |
+| Pinned nightly Rust (Polonius, next-generation trait solver)                          | Compiles Netsuke                                               | Yes for contributors and source installs     |
+| The dogfooding repositories                                                           | Supply migration benchmarks and first real use                 | Yes for G10 and the user-facing criteria     |
+| Progressive-enhancement RFCs 0021 to 0025 (PR #741), plus file sets and tool contexts | Supply the declared semantics an idiomatic migration relies on | Yes for completing the dogfooding migrations |
+
+## 9. Open questions
+
+| ID  | Question                                                                                                                                                                                           | Why it matters                                                                                                                           | Resolved when                                                                                  | Suggested path                                                     |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Q4  | How far does purity extend: to targets that call impure helpers, and to pinned remote inputs used as dependencies? What rebuild policy applies to an impure target?                                | Determines whether remote inputs become first-class and how G4 and G6 interact; any answer that changes the format must land before 1.0. | An accepted RFC deciding impure-target rebuild semantics and remote resources as graph inputs. | RFC, tracked in issue #781 (implementation of remote inputs: #590) |
+| Q5  | Is content-hash invalidation in scope for any input class?                                                                                                                                         | Tests assumption A5; affects remote inputs and any future cache.                                                                         | Evidence of missed or spurious rebuilds in real use, or a decision tied to Q4.                 | Spike, then ADR; issue #782                                        |
+| Q7  | What plan-generation time budget is acceptable, and on what reference manifest?                                                                                                                    | Needed to turn the operational criterion into a measurable one.                                                                          | A budget and a benchmark manifest exist.                                                       | Spike; issue #783                                                  |
+| Q9  | Who maintains reusable rule bundles for common ecosystems, and are any shipped with Netsuke?                                                                                                       | Decides whether G3 and G10 are met by the core or by an ecosystem that does not yet exist.                                               | An ownership and distribution decision for bundles.                                            | RFC amendment to RFC 0003; issue #784                              |
+| Q12 | How are crates.io downloads from the maintainer's own CI separated from external ones, do GitHub release and installer downloads count, and what thresholds mark success for each adoption signal? | Without a method the first external signal cannot be reported; without thresholds it cannot show success.                                | A documented counting method and a threshold with a date for each signal.                      | Spike, then elicitation; issue #785                                |
+
+### 9.1 Resolved questions
+
+- **Q1 — Which primary user group does Netsuke 1.0 serve first?** Resolved
+  2026-09-24 by the maintainer: reluctant Make users, who struggle to let go of
+  Make because task runners are too limited and Bazel and CMake are too
+  complex. See [section 4.1](#41-primary-users).
+- **Q2 — How will the maintainer know Netsuke is working?** Resolved
+  2026-09-25. Dogfooding across six named repositories is the initial feedback
+  loop. External adoption is measured first by crates.io downloads outside the
+  maintainer's CI, then by `Netsukefile`s in other people's GitHub
+  repositories. See [section 7.1](#71-user-facing); the counting method and
+  thresholds remain open as Q12.
+- **Q3 — Which task-runner conveniences are in scope?** Resolved
+  2026-09-24 and 2026-09-25 by the maintainer. Named actions, target listing,
+  and per-target descriptions already exist; recipe parameters are planned in
+  RFC 0022. Non-goal 6 stands: file watching belongs to `inotifywait` and
+  similar tools, which can run Netsuke. See goal G11.
+- **Q6 — Is a Makefile migration aid in scope?** Resolved 2026-09-25: a guide
+  is (G12); an automatic importer is not (non-goal 11).
+- **Q8 — What must be true for 1.0?** Resolved 2026-09-25: a stable
+  interface, with no further breaking changes planned to the Netsukefile format
+  or command-line behaviour. The testing framework and linter semantics should
+  be stable by then too. See [section 7.3](#73-strategic).
+- **Q10 — Is the nightly toolchain acceptable for source installs?**
+  Resolved 2026-09-25: yes for now, since prebuilt installers serve most users.
+  Netsuke is likely to move to stable Rust when Polonius stabilizes. The pin
+  also enables the next-generation trait solver, which AGENTS.md says the
+  codebase assumes, so that feature's stabilization may gate the move too. See
+  [section 8.1](#81-hard-constraints).
+- **Q11 — What migration depth counts as done?** Resolved 2026-09-25: the
+  Makefile is retired, and the Netsukefile is idiomatic rather than a
+  mechanical translation of Make into YAML and Jinja. See goal G10 and
+  [section 7.1](#71-user-facing).
+
+## 10. Handoff
+
+- **Downstream readiness.** The design document and roadmap already exist, so
+  this document is a reconciliation rather than a precursor. No remaining open
+  question blocks further design. Q4, on purity semantics, bears most directly
+  on 1.0, because its answer can still change the Netsukefile format.
+- **ADR candidates.** Primary user segment (Q1, decided 2026-09-24; the ADR
+  records it); purity semantics for targets and remote inputs (Q4);
+  content-hash invalidation (Q5); the 1.0 stability criterion (Q8, decided
+  2026-09-25); hermeticity and remote execution as a permanent non-goal
+  (non-goal 2).
+- **Glossary.** `docs/context.md` does not exist. The terms in
+  [appendix B](#appendix-b-glossary) are the proposed first entries.
+- **Design-document candidates.** PR #741 already proposes RFCs for managed
+  states, typed task inputs, artefact ownership, contention classes, and
+  maturity policies. Three further ideas from the source conversations have no
+  RFC yet: first-class file sets, reusable tool contexts, and plan explanation
+  and diffing commands.
+
+## Appendix A. References
+
+- `docs/netsuke-design.md`, sections 1 and 9.3.
+- `docs/roadmap.md`, "How to read this roadmap" and "Canonical public
+  vocabulary".
+- `docs/quickstart.md`.
+- `README.md`, "Security and command interpolation" and "Release and
+  development status".
+- ADR-003, ADR-006, ADR-021, and ADR-026 under `docs/`.
+- `docs/release-admission-canaries.md` on the branch for pull request #780.
+- Issues #590 (URL dependency providers), #592 (Netsukefile linter), and #781
+  to #785 (the open questions in section 9).
+- Pull request #741, proposing RFCs 0021 to 0025 on managed states, typed task
+  inputs, artefact ownership, contention classes, and progressive enhancement.
+- The `leynos/cuprum` Makefile at revision
+  `08c766550504fa39009d6503e4fdf3de77c14bd3`.
+- Recorded design conversations between the maintainer and an assistant on
+  target users, Taskfile comparison, remote dependencies, and the Cuprum
+  migration (not published).
+- Ninja manual: <https://ninja-build.org/manual.html> (accessed 2026-09-24).
+
+## Appendix B. Glossary
+
+Proposed first entries for `docs/context.md`:
+
+- **Netsukefile:** the YAML manifest describing a project's build.
+- **Rule:** a named, reusable recipe template.
+- **Target:** a graph node naming one or more output files.
+- **Action:** a graph node naming a side effect rather than a file; phony by
+  default.
+- **Recipe:** how a node runs: a rule reference, a command, or a script.
+- **Aggregate:** a node with dependencies and no recipe.
+- **Reluctant Make user:** a Make user held back from leaving it because task
+  runners are too limited and Bazel and CMake are too complex; Netsuke's
+  initial audience.
+- **Dogfooding repositories:** the six maintained repositories whose
+  migrations provide Netsuke's initial feedback loop (section 7.1).
+- **Idiomatic migration:** a migration that retires the Makefile and expresses
+  the build in Netsuke's own terms rather than translating Make line by line.
+- **Stable interface:** the state in which no further breaking change to the
+  Netsukefile format or command-line behaviour is planned; the 1.0 criterion.
+- **Plan:** the static, validated build graph Netsuke produces, and the Ninja
+  file generated from it.
+- **Impure:** describes a plan or helper that consults the network, clock,
+  environment, or a subprocess.
+- **Operator:** the person or CI job running a manifest, who owns credentials
+  and grants authority.
+- **Shallow end:** the minimal subset of the manifest model that a newcomer
+  needs: targets, commands, and defaults.
+- **Progressive enhancement:** adding stronger semantics to one entry without
+  requiring them anywhere else.

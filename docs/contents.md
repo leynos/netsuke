@@ -11,6 +11,9 @@ operator, user, and contributor references are easier to find.
 
 ## Core design and planning
 
+- [terms-of-reference.md](terms-of-reference.md): Problem statement, target
+  users, scope, non-goals, success criteria, and open questions that the design
+  and roadmap trace back to.
 - [netsuke-design.md](netsuke-design.md): Primary architecture, manifest, and
   execution design document.
 - [netsuke-cli-design-document.md](netsuke-cli-design-document.md): Command-line
