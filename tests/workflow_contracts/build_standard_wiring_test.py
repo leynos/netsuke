@@ -56,8 +56,9 @@ if typ.TYPE_CHECKING:
     from pathlib import Path
 
 #: Flags no measured build may carry. The parallel frontend is excluded because
-#: a measurement is a reproducibility claim; the linker change goes with it so
-#: the coverage lane needs no tool the other lanes install.
+#: a measurement is a reproducibility claim, and the linker change goes with it.
+#: The coverage lanes still install the pinned `mold`: their tests drive `make`
+#: recipes gated on `check-build-tools` (see `nextest_lane_rules.py`).
 EXCLUDED_FLAGS = ("-Zthreads", "-fuse-ld=")
 
 NETSUKEFILE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "netsukefile-test.yml"
