@@ -110,6 +110,11 @@ fn is_full_commit(value: &str) -> bool {
             .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
 }
 
+/// Verify that publication needs both canary jobs, and canaries of this commit.
+///
+/// A rehearsal may build another candidate, so a green canary run admits a
+/// release only when its candidate is the release commit, and no clause may be
+/// bypassed by a disjunction.
 #[test]
 fn publication_requires_every_canary_against_its_own_commit() -> Result<()> {
     let release_workflow = workflow("release.yml")?;
@@ -140,6 +145,10 @@ fn publication_requires_every_canary_against_its_own_commit() -> Result<()> {
     Ok(())
 }
 
+/// Verify that each downstream repository has one full-commit pin, as documented.
+///
+/// A tag or branch could move under a release, and a pin that drifts from the
+/// documented table leaves release review reading the wrong revision.
 #[test]
 fn every_canary_is_pinned_to_a_documented_full_commit() -> Result<()> {
     let pins = workflow_pins(&workflow("release.yml")?)?;
@@ -174,6 +183,10 @@ fn every_canary_is_pinned_to_a_documented_full_commit() -> Result<()> {
     Ok(())
 }
 
+/// Verify that MXD runs one isolated row per feature lane.
+///
+/// The lanes are mutually exclusive, so each row must select exactly one,
+/// forbid the others' features, and start PostgreSQL only for its own lane.
 #[test]
 fn mxd_lanes_are_distinct_and_isolated() -> Result<()> {
     let release_workflow = workflow("release.yml")?;
@@ -207,6 +220,10 @@ fn mxd_lanes_are_distinct_and_isolated() -> Result<()> {
     Ok(())
 }
 
+/// Verify the canaries' placement and their pull-request policy.
+///
+/// They run on GitHub-hosted runners, build the resolved candidate, and on a
+/// pull request run only when it is ready for review, without gating it.
 #[test]
 fn canaries_run_on_github_hosted_runners_and_never_gate_pull_requests() -> Result<()> {
     let release_workflow = workflow("release.yml")?;
@@ -238,6 +255,10 @@ fn canaries_run_on_github_hosted_runners_and_never_gate_pull_requests() -> Resul
     Ok(())
 }
 
+/// Verify that the release build jobs request only `contents: read`.
+///
+/// None of them publishes or exchanges an OIDC token, so any wider scope is
+/// unused privilege.
 #[test]
 fn release_build_jobs_request_only_the_checkout_read_scope() -> Result<()> {
     let release_workflow = workflow("release.yml")?;
@@ -253,6 +274,10 @@ fn release_build_jobs_request_only_the_checkout_read_scope() -> Result<()> {
     Ok(())
 }
 
+/// Verify that the dry run can be dispatched by hand without publishing.
+///
+/// A maintainer rehearses a release before tagging it, optionally for another
+/// candidate ref, and a rehearsal must never publish.
 #[test]
 fn dry_run_offers_a_manual_rehearsal_of_the_whole_release() -> Result<()> {
     let dry_run = workflow("release-dry-run.yml")?;
