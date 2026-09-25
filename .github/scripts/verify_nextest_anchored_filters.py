@@ -13,10 +13,16 @@ other end, by asking Nextest itself. It asserts two things:
     parameterized test's cases, or for a test declared in a submodule is judged
     the same way, and so is a spelling this file has not reviewed. A filter
     that selects nothing is the defect -- it leaves its test running under the
-    defaults while the policy still looks enforced.
+    defaults while the policy still looks enforced. Each alternative of a
+    top-level union is replayed on its own, because a union is satisfied by any
+    one arm: a dead selector beside a live one would otherwise pass, and the
+    test it names would run unpoliced behind a filter that looks healthy.
   - each anchored filter naming a parameterized test selects exactly that
     test's case instances and nothing else, while the rejected whole-name
-    `test(=NAME)` form selects none of them.
+    `test(=NAME)` form selects none of them. The selector is replayed as the
+    *file wrote it*, module path included, rather than rebuilt from the bare
+    name: a rebuilt selector would drop the prefix and then report its own
+    empty match as a fault in the configuration.
 
 The second check alone was scoped past a whole class, which is why the first
 exists: it only ever examined filters naming a parameterized test, so a filter
@@ -55,20 +61,29 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _nextest_oracle import (
-    ANCHORED_SELECTOR,
     LEGACY_SELECTOR,
     MODULE_PATH,
-    all_filters,
+    anchored_selectors,
     configured_names,
     fail,
+    filter_alternatives,
     instrumented_environment,
     parameterized_tests,
     selected,
 )
 
 
-def _check(env: dict[str, str], name: str, cases: int) -> None:
+def _check(env: dict[str, str], anchored: str, name: str, cases: int) -> None:
     """Assert both selector forms behave as the configuration assumes.
+
+    ``anchored`` is the selector *the configuration wrote*, not one rebuilt from
+    ``name``. That distinction is the whole reason this check is trustworthy: a
+    selector re-synthesized from the bare name would drop the module path the
+    file carries, so a test declared in a submodule would be replayed with a
+    filter that selects nothing -- and this file would report the resulting
+    empty match, or the strays, as a fault in the configuration rather than in
+    its own reading. The name is still taken, because the case count and the
+    legacy form are keyed by it.
 
     The anchored form must select one instance per case the source declares,
     and nothing outside the test's own namespace. An rstest appends the case's
@@ -92,7 +107,6 @@ def _check(env: dict[str, str], name: str, cases: int) -> None:
     name, so it cannot match ``NAME::case_…`` at all. Its exit status is 0
     whether or not it selected anything, so only the parsed names can tell.
     """
-    anchored = ANCHORED_SELECTOR.format(name=name)
     matched = selected(env, anchored)
     instance = re.compile(
         rf"^{MODULE_PATH}{re.escape(name)}::case_(?P<index>\d+)(?:_|$)"
@@ -123,35 +137,46 @@ def _check(env: dict[str, str], name: str, cases: int) -> None:
 
 
 def _check_every_filter_selects_something(env: dict[str, str]) -> None:
-    """Replay every filter in the configuration and require a non-empty result.
+    """Replay every filter alternative and require a non-empty result.
 
-    Each value is replayed as written, with no name extracted and no grammar
-    applied, so a filter written in a spelling this file has not reviewed is
+    Each alternative is replayed as written, with no name extracted and no
+    grammar applied, so one written in a spelling this file has not reviewed is
     still held to the one property that matters: it must select a test. The
-    command that reproduces a failure is named in the message, because a filter
-    that selects nothing looks exactly like one that works. A configuration
-    declaring no filter at all is refused too: an empty corpus would leave this
-    check passing while asserting nothing.
+    command that reproduces a failure is named in the message, because a
+    selector that selects nothing looks exactly like one that works. A
+    configuration declaring no filter at all is refused too: an empty corpus
+    would leave this check passing while asserting nothing.
 
-    Any filter that selects no test ends the run through `fail`, so the exit is
-    non-zero and names the filter.
+    Alternatives are replayed one at a time rather than whole. A filter joining
+    several selectors with ``|`` is satisfied by any one of them, so replaying
+    the union would let a dead arm sit behind a live one -- and the test that
+    arm names would quietly run under the defaults while the filter itself
+    looked healthy. A non-union filter comes back whole and is judged as it is,
+    which is what keeps intersection, subtraction, and negation exactly as
+    strict as before.
+
+    Any alternative that selects no test ends the run through `fail`, so the
+    exit is non-zero and names it.
     """
-    filters = all_filters()
-    if not filters:
+    alternatives = filter_alternatives()
+    if not alternatives:
         fail(
             "the Nextest configuration declares no `filter = '…'`, so there is "
             "nothing to replay; a configuration whose filters cannot be read is "
             "not the same as one whose filters all select a test"
         )
-    for filter_ in filters:
-        if not selected(env, filter_):
-            command = f"cargo nextest list --run-ignored all --filterset {filter_}"
+    for alternative in alternatives:
+        if not selected(env, alternative):
+            command = f"cargo nextest list --run-ignored all --filterset {alternative}"
             fail(
-                f"the filter {filter_!r} selects no test, so the policy it "
+                f"the filter {alternative!r} selects no test, so the policy it "
                 f"carries applies to nothing and the test it names runs under "
                 f"the defaults. Reproduce with `{command}`"
             )
-    print(f"replayed {len(filters)} filter(s); each selects at least one test")
+    print(
+        f"replayed {len(alternatives)} filter alternative(s); each selects at "
+        f"least one test"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -182,8 +207,16 @@ def main(argv: list[str] | None = None) -> int:
             f"a parameterized test and leaves it outside its policy; use "
             f"`test(/^NAME($|::)/)`"
         )
-    filtered = sorted(set(parameterized) & anchored)
-    if not filtered:
+    # Each selector is carried whole, beside the bare name its comparisons use.
+    # Rebuilding it from the name would drop the module path the configuration
+    # wrote, so a test declared in a submodule would be replayed with a filter
+    # that selects nothing -- the fault this file reports would be its own.
+    wanted = {
+        name: selector
+        for selector, name in anchored_selectors()
+        if name in parameterized
+    }
+    if not wanted:
         fail(
             f"no anchored filter names a parameterized test; the anchored "
             f"filters name {sorted(anchored)!r} and the parameterized tests "
@@ -193,9 +226,9 @@ def main(argv: list[str] | None = None) -> int:
         )
     env = instrumented_environment()
     _check_every_filter_selects_something(env)
-    for name in filtered:
-        _check(env, name, parameterized[name])
-    print(f"verified {len(filtered)} filtered parameterized test(s)")
+    for name, selector in sorted(wanted.items()):
+        _check(env, selector, name, parameterized[name])
+    print(f"verified {len(wanted)} filtered parameterized test(s)")
     return 0
 
 

@@ -3243,10 +3243,14 @@ is the host's to decide. Two CI runs passed at 257.7 s and 261.5 s; a third
 failed at 300.008 s on a head whose only difference was eight lines of
 Markdown. A 38 s margin is not a budget but the difference between two runners,
 and the failure then names nextest's cap rather than the patch that was slow.
-The widened allowance is bounded from above by the whole-run budget, not chosen
-freely: 600 s is the largest value that keeps `global-timeout` strictly above
-it, so raising it further would invert the two tiers and make the run end
-before this test could use its budget.
+The widened allowance is bounded from above by the whole-run budget, though not
+tightly: what the ordering requires is `global-timeout` strictly above the
+largest per-test allowance, and at 60 s periods 780 s admits up to twelve of
+them, 720 s. The 600 s is therefore a chosen allowance with 180 s of margin
+above it rather than the ceiling itself. Raising it to 780 s is what the
+ordering forbids: the test's allowance would then equal the whole-run budget it
+must stay below, and the run would end before the test could use it. So 720 s
+is the last value the ordering admits, and 780 s is where the two tiers meet.
 
 That widening was inert when it first landed, which is why the override is
 worth reading as a worked example of the trap above. Its filter named the bare
@@ -3473,10 +3477,18 @@ governs the non-doctest pass only, and deliberately stays small:
   it only ever examined filters naming a parameterized test. It therefore also
   replays every filter expression in the configuration verbatim through Nextest
   and requires each to select at least one test, whatever the filter names and
-  whichever override carries it. The replay works on the raw filter text rather
-  than a name re-synthesized from the grammar, so a form the grammar admits but
-  writes differently still round-trips to the same selector. The rule for a
-  test's `module::` prefix is written once, as
+  whichever override carries it. A filter that joins several selectors with `|`
+  is replayed one alternative at a time, because a union is satisfied by any
+  one of its arms: a dead selector beside a live one would otherwise pass, and
+  the test it names would run unpoliced behind a filter that looks healthy. The
+  split follows bracket depth, since `|` inside `test(...)` belongs to the
+  regular expression rather than to the union. Both replays work on the raw
+  filter text rather than a name re-synthesized from the grammar, so a form the
+  grammar admits but writes differently still round-trips to the same selector
+  — and, for the parameterized check, so the selector replayed is the one the
+  file wrote, module path included, rather than one the checker rebuilt and
+  which would then report its own empty match as a fault in the configuration.
+  The rule for a test's `module::` prefix is written once, as
   `_nextest_oracle.grammar.MODULE_PATH`, and read from there by every user
   rather than restated: a second copy stays parseable while it drifts, which is
   precisely the silent-mismatch shape this script exists to catch. It reuses
@@ -7892,13 +7904,14 @@ own policy asks for, and it is worth reading as the worked example of it. The
 gate passed twice at 257.7 s and 261.5 s and then failed at 300.008 s on a head
 whose only diff was eight lines of Markdown. The code was not slow; the cap was
 too near the cost, and a margin of 38 s is the difference between one runner
-and another rather than a budget. The widened allowance is not slack either —
-600 s is the largest value that keeps
-`global-timeout > largest per-test allowance`, so the two tiers are what bound
-each other. That override binds only because its filter carries the test's
-module path; for a period it did not, and the two passing runs above were read
-as evidence the widened allowance was in force when both sit inside the 300 s
-default anyway. See "nextest configuration" for the rule.
+and another rather than a budget. The widened allowance is a chosen figure
+inside the ordering rather than at its edge: what
+`global-timeout > largest per-test allowance` permits at 60 s periods is up to
+720 s under the 780 s budget, so the 600 s leaves 180 s of margin and the two
+tiers still bound each other. That override binds only because its filter
+carries the test's module path; for a period it did not, and the two passing
+runs above were read as evidence the widened allowance was in force when both
+sit inside the 300 s default anyway. See "nextest configuration" for the rule.
 
 ### The whole-run budget, and how 13 minutes was arrived at
 

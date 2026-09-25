@@ -150,9 +150,11 @@ failure mode cannot recur silently.
       a real cap being hit, not a flake, on a head whose only diff was eight
       lines of Markdown. The override at `.config/nextest.toml` now carries
       `slow-timeout = { period = "60s", terminate-after = 10 }` (600 s), which
-      is the targeted-override case that file's own policy asks for and the
-      largest value the ordering permits, since `global-timeout` (780 s) must
-      stay strictly above the largest per-test allowance. The figure moved from
+      is the targeted-override case that file's own policy asks for, and it
+      sits *inside* the ordering rather than at its edge: `global-timeout`
+      (780 s) must stay strictly above the largest per-test allowance, which at
+      60 s periods admits up to 720 s, so 600 s is a chosen figure leaving 180 s
+      of margin. The figure moved from
       300 s to 600 s in the four contract modules that state it, in the
       developers-guide tier table and arithmetic, and in the `kani-smoke`
       ceiling comment; the ceiling still contains the worst case, 518 s of
@@ -267,8 +269,8 @@ failure mode cannot recur silently.
   load the entry script with `importlib` and call `main([])` in-process, where
   the patched module is the one the guard actually uses. This is the same class
   of error as the green exit it was meant to guard against — a probe that
-  cannot fail for the reason you think is not evidence — and it is worth
-  recording that the second, *correct* run reported both defects as caught.
+  cannot fail for its stated reason is not evidence — and it is worth recording
+  that the second, *correct* run reported both defects as caught.
 - **A widening can be correct and still be untested by the suite.** Writing the
   widened reading grammar in `_nextest_oracle/grammar.py` changed nothing
   observable in the current configuration, because the only qualified filter it
@@ -640,18 +642,20 @@ failure mode cannot recur silently.
   same head would sit within seconds of the same cap, and the next runner to be
   slightly slower would fail it again. The cost is the host's, so the budget
   has to absorb a slow host rather than assume a median one. Six hundred
-  seconds is not a free choice — it is the largest value that keeps
-  `global-timeout > largest per-test allowance` — so the two tiers bound each
-  other, and the ordering contract is what stops this being raised further
-  without also raising the whole-run budget. **Annotated 2026-09-23: the
-  reasoning was sound and the value was right, but it was reasoned about a
-  filter that bound nothing.** The override's filter omitted the
-  `compile_guard::` module path, so it selected no test and the 600 s was never
-  in force. Nothing in this entry is withdrawn — the cap was real, a re-run
-  would have taught nothing, and the ordering argument is what fixes 600 s —
-  but the decision as *executed* bought no allowance until the qualifier
-  landed. A value can be correct and its delivery inert, and only the binding,
-  not the value, was ever checked here.
+  seconds is a chosen allowance inside the ordering, not the ceiling the
+  ordering permits: `global-timeout > largest per-test allowance` admits up to
+  720 s at 60 s periods under the 780 s budget, so 600 s leaves 180 s of
+  margin. The two tiers do bound each other, and the ordering contract is what
+  stops this being raised to 780 s without also raising the whole-run budget --
+  720 s being the last value permitted rather than the first refused.
+  **Annotated 2026-09-23: the reasoning was sound and the value was right, but
+  it was reasoned about a filter that bound nothing.** The override's filter
+  omitted the `compile_guard::` module path, so it selected no test and the 600
+  s was never in force. Nothing in this entry is withdrawn — the cap was real,
+  a re-run would have taught nothing, and the ordering argument is what fixes
+  600 s — but the decision as *executed* bought no allowance until the
+  qualifier landed. A value can be correct and its delivery inert, and only the
+  binding, not the value, was ever checked here.
 - Qualify the gate's filter with its module path, rather than approximating Rust
   module naming in a static contract. The static contracts compare bare names
   to bare names, which is why they passed on a filter that selected nothing:
@@ -697,6 +701,31 @@ failure mode cannot recur silently.
   guard still reports a `compile_guard::neighbour::case_9` stray — so the
   consolidation is behaviour-preserving and the detector is still live, rather
   than merely importable.
+- Replay each alternative of a top-level union separately, rather than each
+  `filter = '…'` value whole. A union is satisfied by any one of its arms, so
+  the whole-value replay this branch added could be satisfied by a live alt-
+  ernative while a dead one beside it left its test running under the defaults
+  — the branch's own subject matter, one level down. All four configured fil-
+  ters are unions (17 alternatives between them), so this was live rather than
+  latent. The split tracks bracket depth, because `|` is overloaded: inside
+  `test(...)` it belongs to the regular expression, where `($|::)` means "end
+  of name or a module separator". A naive split would have cut every selector
+  in half and replayed fragments; the probe confirms 17 alternatives, none
+  fragmentary, and confirms the injected dead arm appears as its own
+  alternative where the whole-union replay would have hidden it.
+- Replay the anchored selector *as the configuration wrote it*, rather than
+  rebuilding it from the extracted bare name. `_check` did
+  `ANCHORED_SELECTOR.format(name=name)`, and that constant carries no module
+  path while the config's own `ANCHORED_SELECTOR_IN_CONFIG` admits one — the
+  read-side/write-side asymmetry `grammar.py` already warns about, in the one
+  reader that had not been brought into line. The A/B is decisive: for the
+  gate's test the old code replayed
+  `test(/^every_patched_tree_compiles_under_denied_warnings($|::)/)` — the
+  *original dead selector from this very bug* — while the file contains the
+  `compile_guard::`-qualified one. The guard was verifying a filter the
+  configuration does not have. `configured_names` is kept for the name-keyed
+  comparisons, which genuinely need bare names; `anchored_selectors` is the new
+  read-side function that returns both.
 
 ## Outcomes & retrospective
 
@@ -960,10 +989,10 @@ exactly what CI is.
   widening this plan is largely about is now confirmed on CI rather than only
   probed. The split is recorded under `Progress`, its general statement under
   `Surprises & discoveries`, and both are the same lesson the plan already
-  carries: evidence that looks green on the surface you can see, while the
-  surface that decides is a different one. `make test-kani-mutations` was
-  deliberately not re-run locally; the gate's cost is what the override exists
-  to accommodate, and CI is where it binds.
+  carries: evidence that looks green on the visible surface, while the surface
+  that decides is a different one. `make test-kani-mutations` was deliberately
+  not re-run locally; the gate's cost is what the override exists to
+  accommodate, and CI is where it binds.
 - 2026-09-23 — Consolidated the module-qualification rule to one definition.
   `verify_nextest_anchored_filters.py`'s instance prefix restated `MODULE_PATH`
   as a bare literal, making three copies of a rule this branch had just widened
@@ -975,3 +1004,27 @@ exactly what CI is.
   failure this script was widened to catch. The probe is recorded under the
   Decision log; a green import would not have been evidence, so liveness was
   re-established by confirming the guard still reports a stray in a submodule.
+- 2026-09-23 — **CodeRabbit's review of the frozen head returned six findings,
+  and all six were accepted.** Two were the branch's own subject matter turned
+  on its own new code, which is the outcome the plan should have expected: a
+  guard widened to catch a dead selector was itself replaying a dead selector
+  (the bare-name rebuild above), and the whole-value replay it was widened with
+  could still hide a dead union arm. Those two are recorded in the Decision log
+  with their A/B and their liveness probes. The rest: the branch had written
+  `serialised` in `runner_shape_test.py` where the repository spells
+  `serialized`; the `workflow_ci.rs` ceiling comment claimed no CI run had yet
+  measured the cold case, which run `35796798133` had already done at
+  `257.703 s` — the claim was true when written (22:29Z) and was falsified an
+  hour later by the run that passed it, so it is corrected with the measured
+  figures rather than deleted; and two passages carried second-person pronouns.
+  One finding's arithmetic is the most useful of the six: the config, the
+  guide, and this plan all asserted that 600 s is "the largest value the
+  ordering permits", but `whole_run_ordering._per_test_faults` faults only when
+  `whole_run <= largest`, so at 780 s and 60 s periods the ceiling is **720 s**
+  and 600 s is a chosen allowance with 180 s of margin. Probed rather than
+  reasoned: driving the real reader over `terminate-after` 5, 10, 11, 12, 13
+  gives 300 s / 600 s / 660 s / 720 s / fault, so 720 s is the last permitted
+  value and 780 s is where the inversion begins. Those are two figures, not
+  one, and the first correction conflated them in two of the five places it
+  landed. A claim about why a number was chosen is exactly the kind that
+  survives every gate, because no gate reads prose for its arithmetic.

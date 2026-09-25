@@ -27,7 +27,13 @@ from _nextest_oracle.grammar import (
     all_filters as all_filters,
 )
 from _nextest_oracle.grammar import (
+    anchored_selectors as anchored_selectors,
+)
+from _nextest_oracle.grammar import (
     configured_names as configured_names,
+)
+from _nextest_oracle.grammar import (
+    filter_alternatives as filter_alternatives,
 )
 from _nextest_oracle.listing import (
     parameterized_tests as parameterized_tests,
