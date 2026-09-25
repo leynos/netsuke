@@ -10,8 +10,9 @@
 //! resolutions that are otherwise identical — the same tool, the same
 //! directory, the same outcome — which is exactly what the counters could not
 //! do before. And nothing beyond the closed vocabularies leaves the process:
-//! the command, the workspace root, and the matched path are asserted absent
-//! from every captured event and every captured span field.
+//! the span and the failure event are held to an exact field set, and the
+//! command, the workspace root, the searched directory, and the pinned
+//! extension list are each asserted absent from every field of either.
 //!
 //! This file holds the workspace fixture and the label vocabulary, which the
 //! cases share — including the two that hold the domain's error taxonomy to
