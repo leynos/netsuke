@@ -16,19 +16,13 @@
 //!
 //! # The tree it patches is a sandbox, not the checkout
 //!
-//! Patches are applied to an isolated copy of the current revision, exported
-//! by [`sandbox`] under `target/`, rather than to the checkout the test is
-//! running in. Reverting still happens on the normal path, but it is no
-//! longer what the developer's checkout depends on: Nextest terminates a
-//! timed-out test by signalling its process group, so `Drop` cannot run and a
-//! seeded mutation could otherwise outlive the run in the working tree. A
-//! sandbox makes that outcome survivable — the next run exports a fresh copy
-//! — instead of leaving a change nobody made.
-//!
-//! The revision is the working tree captured with `git stash create`, not
-//! `HEAD`, so an uncommitted patch edit is what gets compiled. The parent
-//! contract `every_patch_applies_cleanly` reads the working tree too, and the
-//! two must agree on which tree they are describing.
+//! Patches are applied to an isolated copy of the working tree, exported by
+//! [`sandbox`], rather than to the checkout the test is running in: reverting
+//! happens on the normal path, but it cannot be what the developer's checkout
+//! depends on. [`sandbox`] gives the mechanism, and why a timed-out run can
+//! strand a mutation it never reverts. The parent contract
+//! `every_patch_applies_cleanly` reads the working tree too, so the two agree
+//! on which tree they describe.
 //!
 //! # Why Kani compiles the tree, not `cargo check`
 //!
@@ -228,15 +222,12 @@ fn compile_patched_tree(sandbox: &Sandbox, target_dir: &Utf8Path) -> Result<Opti
 ///
 /// "In both" is limited to *tracked* patches. `git stash create` captures only
 /// tracked content, so an untracked patch is in the working tree and absent
-/// from the sandbox — which would make this listing silently shorter than the
-/// evidence on disk. [`ensure_no_untracked_patches`] rejects that state before
+/// from the sandbox. [`ensure_no_untracked_patches`] rejects that state before
 /// this runs, so the only patches that can be missing here are ones that do
-/// not exist.
-///
-/// A non-`.patch` entry is refused rather than skipped, matching the sibling
-/// contract's `patch_stems`. Skipping would leave this gate green over fewer
-/// patches than the directory holds — this issue's own failure mode, one turn
-/// deeper — so the directory is kept restricted to mutation evidence instead.
+/// not exist. A non-`.patch` entry is refused rather than skipped, as the
+/// sibling contract `patch_stems` does: skipping one would leave this gate
+/// green over fewer patches than the directory holds, this issue's own failure
+/// mode one turn deeper.
 fn patch_paths(sandbox: &Sandbox) -> Result<Vec<Utf8PathBuf>> {
     let mutations = Dir::open_ambient_dir(sandbox.tree().join(MUTATIONS_DIR), ambient_authority())
         .with_context(|| format!("open {MUTATIONS_DIR} in the sandbox"))?;
@@ -250,9 +241,8 @@ fn patch_paths(sandbox: &Sandbox) -> Result<Vec<Utf8PathBuf>> {
         let path = Utf8Path::new(MUTATIONS_DIR).join(&name);
         ensure!(
             Utf8Path::new(&name).extension() == Some("patch"),
-            "{path} is not a .patch file; keep the directory restricted to \
-             mutation evidence, because every entry here is passed to \
-             `git apply` as a patch",
+            "{path} is not a .patch file; every entry in {MUTATIONS_DIR} is \
+             passed to `git apply`, so keep it restricted to mutation evidence",
         );
         paths.push(path);
     }

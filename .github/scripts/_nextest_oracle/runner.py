@@ -19,11 +19,11 @@ EXPORTED_VARIABLE = re.compile(r"^export (?P<name>[A-Za-z_][A-Za-z0-9_]*)=.*$")
 
 
 def _decode_value(assignment: str) -> str:
-    """Return the effective value of one ``export``-prefixed assignment.
+    r"""Return the effective value of one ``export``-prefixed assignment.
 
     `cargo llvm-cov show-env --export-prefix` prints shell-sourceable text, so
     a value is quoted only when it needs to be and a quoted value escapes an
-    embedded apostrophe as ``'\\''``. Reading such a value back verbatim would
+    embedded apostrophe as ``'\''``. Reading such a value back verbatim would
     carry that shell syntax into the environment, so a path containing an
     apostrophe would export the wrong string and make this step's fingerprint
     differ from the coverage run's -- which is the one thing the reuse of the
@@ -31,7 +31,7 @@ def _decode_value(assignment: str) -> str:
 
     The whole `NAME=value` word is decoded rather than the quoted fragment
     alone, because the escaping is a property of the word: the fragment
-    `\\'` is unterminated once the surrounding quotes are stripped.
+    `\'` is unterminated once the surrounding quotes are stripped.
 
     Either a word the shell cannot parse, or an unquoted value containing
     whitespace, ends the run through `fail`. The first would otherwise surface
