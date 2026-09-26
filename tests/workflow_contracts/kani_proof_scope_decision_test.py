@@ -192,14 +192,17 @@ def test_git_failure_is_unreadable(tmp_path: Path) -> None:
 
 
 def _run_script(
-    tmp_path: Path, repository: Path, scope_text: str
+    tmp_path: Path,
+    repository: Path,
+    scope_text: str,
+    event_name: str = "pull_request",
 ) -> subprocess.CompletedProcess[str]:
     """Run the script as the workflow does, with inputs in the child's environment."""
     scope_file = tmp_path / "proof-scope.toml"
     scope_file.write_text(scope_text, encoding="utf-8")
     environment = {
         **GIT_ENVIRONMENT,
-        "INPUT_EVENT_NAME": "pull_request",
+        "INPUT_EVENT_NAME": event_name,
         "INPUT_REPOSITORY": str(repository),
         "INPUT_SCOPE_FILE": str(scope_file),
         "GITHUB_OUTPUT": str(tmp_path / "output"),
@@ -230,6 +233,23 @@ def test_script_publishes_the_decision(
     summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
     assert f"### {heading}" in summary, summary
     assert f"::notice title={heading}::" in completed.stdout, completed.stdout
+
+
+@pytest.mark.parametrize("event_name", ["push", "schedule", "workflow_dispatch"])
+def test_script_runs_every_other_event_in_full(tmp_path: Path, event_name: str) -> None:
+    """Publish a full run for every event but a pull request, whatever changed.
+
+    The merge commit changes only a path outside the scope, which a pull
+    request would skip, so a run here comes from the event alone.
+    """
+    repository = _merge_commit_repository(tmp_path, "docs/guide.md")
+    completed = _run_script(tmp_path, repository, VALID_SCOPE, event_name)
+    assert completed.returncode == 0, completed.stderr
+    output = (tmp_path / "output").read_text(encoding="utf-8")
+    assert output == "run-proofs=true\n", output
+    summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    assert "### Kani proofs run" in summary, summary
+    assert f"`{event_name}`" in summary, summary
 
 
 def test_script_fails_on_a_damaged_scope(tmp_path: Path) -> None:
