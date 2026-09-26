@@ -160,16 +160,16 @@ remote inputs is open `(Q4)`.
 
 ### 3.1 Alternatives users already have
 
-| Alternative                        | What it does well                                                            | Where it falls short for Netsuke's users                                                               |
-| ---------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| GNU Make                           | Universal, domain-agnostic, installed everywhere                             | Hostile notation; shell quoting is the author's problem; large Makefiles become unreviewable           |
-| Shell scripts, `build.py`, CI YAML | No new tool to learn; the current default for many projects                  | No graph, no incrementality, no parallelism; logic is duplicated between local scripts and CI          |
-| `just`                             | Excellent ergonomics and diagnostics; parameterized recipes                  | A command runner with no freshness model                                                               |
-| Task (Taskfile)                    | YAML recipes, includes, watch mode, checksum or timestamp freshness per task | Freshness is per task rather than a compiled graph; templating can reshape the file at run time        |
-| Mage, Rake, Invoke                 | The full power of a general-purpose language                                 | Imperative build logic that becomes hard to inspect or parallelize                                     |
-| CMake, Meson, GN, xmake            | Mature Ninja generators with toolchain and install support                   | Organized around compiling C and C++; opinions about layout and toolchains                             |
-| Bazel, Buck2, Pants, Please        | Hermetic, reproducible, remotely executable monorepo builds                  | New language, new filesystem model, and an adoption cost that small and medium projects cannot justify |
-| Writing `build.ninja` by hand      | Maximum speed and control                                                    | No variables, conditions, or globbing; unmaintainable beyond a toy                                     |
+| Alternative                        | What it does well                                                            | Where it falls short for Netsuke's users                                                                                               |
+| ---------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| GNU Make                           | Universal, domain-agnostic, installed everywhere                             | Hostile notation; shell quoting is the author's problem; large Makefiles become unreviewable                                           |
+| Shell scripts, `build.py`, CI YAML | No new tool to learn; the current default for many projects                  | No graph, no incrementality, no parallelism; logic is duplicated between local scripts and CI                                          |
+| `just`                             | Excellent ergonomics and diagnostics; parameterized recipes                  | A command runner with no freshness model                                                                                               |
+| Task (Taskfile)                    | YAML recipes, includes, watch mode, checksum or timestamp freshness per task | Freshness is per task rather than a compiled graph; templating can reshape the file at run time                                        |
+| Mage, Rake, Invoke                 | The full power of a general-purpose language                                 | Imperative build logic that becomes hard to inspect or parallelize                                                                     |
+| CMake, Meson, GN, xmake            | Mature Ninja generators with toolchain and install support                   | Organized around compiling C and C++; opinions about layout and toolchains                                                             |
+| Bazel, Buck2, Pants, Please        | Hermetic, reproducible, remotely executable monorepo builds                  | New language, new filesystem model, and an adoption cost that small and medium projects cannot justify                                 |
+| Writing `build.ninja` by hand      | Maximum speed and control                                                    | Variables expand but cannot be computed: no conditionals, loops, string manipulation, or globbing; unmaintainable beyond a small graph |
 
 ### 3.2 The gap
 
