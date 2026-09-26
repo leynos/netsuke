@@ -466,7 +466,14 @@ failure mode cannot recur silently.
       300 s default), and `test` (3315 passed, 6 skipped, 2 doctest targets).
       The runner recorded each changed blob's hash identical before and after
       the sweep, so the set is evidence about one frozen revision rather than a
-      suite reconciled gate by gate.
+      suite reconciled gate by gate. Its subject is the two code blobs, and
+      both are unchanged since: the sweep still covers them exactly. The
+      document's own blob has moved on, twice, recording the review history
+      after the sweep — so as at `d8d0ba6d` above, the heavyweight Rust gates
+      are declared as holding for the earlier revision whose sources the later
+      prose did not touch, rather than re-run to re-observe an unchanged tree.
+      Both later deltas are prose-only and were gated on the set a prose delta
+      actually needs.
 - [x] (2026-09-26) Clear the third `coderabbit review --agent` pass, which ran
       against `c1497d4c` at coverage `3/3` over the three changed files. It
       confirmed both round-one duplications fixed in the tree — `SANDBOX_DIR`
