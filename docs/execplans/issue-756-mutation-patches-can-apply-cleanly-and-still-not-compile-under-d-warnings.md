@@ -11,19 +11,30 @@ runs to reach it, compiling all 18 patches in 361 s, with all five jobs of that
 workflow green). The second is outstanding, and its shape has since been
 measured rather than assumed.
 
-The GitHub CodeRabbit review has not simply lagged; it has **auto-paused**. Its
-own comment on PR `#766` reads "Reviews paused … this branch is under active
-development", offering `@coderabbitai resume` and `@coderabbitai review` as the
-ways out. So the `CodeRabbit` commit status of `success` posted at 23:19Z on
-`7143648c` is the pause path reporting completion, **not** a review of that
-head: no inline comment on this pull request is newer than `21:47:53Z` on
-2026-09-21, and every one of the three predates the commit that fixed it. The
-lingering `CHANGES_REQUESTED` is correspondingly pinned to `e4f93b93`, which a
-rebase has since made non-ancestral — it describes a revision on a superseded
-history line, so its diff matches no code that exists. Clearing or waiving it
-is a maintainer action, not something this branch can do; what the branch can
-do is re-run the review and leave the record unambiguous. That is the remaining
-work.
+The review history here was rewritten on 2026-09-26 and the earlier reading is
+kept rather than deleted, because the way it went wrong is instructive. On
+2026-09-23 the GitHub CodeRabbit review had **auto-paused** — its own comment
+on PR `#766` read "Reviews paused … this branch is under active development" —
+and the record correctly described that state, including the fact that the
+`CodeRabbit` commit status was reporting the pause path rather than a review.
+What it then inferred was that the pause would hold: *"no inline comment on
+this pull request is newer than `21:47:53Z`"* was true when written and false
+by 2026-09-25, and the *"lingering `CHANGES_REQUESTED`"* pinned to `e4f93b93`
+acquired a second sibling pinned to the head of the day. A description of a
+state that a later event overturns is a forecast wearing the clothes of an
+observation, and this one was written as an observation. The lesson is not to
+avoid describing transient state — the pause was real and worth recording — but
+to date the claim and name what would falsify it, so that the reader can tell
+which of the two they are holding.
+
+As of 2026-09-26 the pull request has **two** `coderabbitai[bot]` review events:
+`changes_requested` on `e4f93b93` at `2026-09-21T21:47:54Z`, and
+`changes_requested` on `d8d0ba6d` at `2026-09-25T23:35:01Z`. The second named
+two findings, both actioned — a first-person pronoun in this document, and the
+gate's use of the developer's working checkout. Clearing or waiving a
+`CHANGES_REQUESTED` review remains a maintainer action, not something a branch
+can do; what the branch owes the record is a fresh pass on the corrected head,
+which is requested once the gates are green.
 
 This ExecPlan is a living document. The sections `Progress`,
 `Surprises & discoveries`, `Decision log`, and `Outcomes & retrospective` must
@@ -1783,3 +1794,15 @@ approaches the ceiling, as `makefile_recipes.py` itself records having done.
   re-verified inert; its prior content is not recoverable. The probe belonged
   in a throwaway repository, and a shared-state probe that truncates before
   reading is the reason that rule exists.
+- 2026-09-26 — The header's account of the review was corrected, because a
+  later event falsified it. It had read "The GitHub CodeRabbit review has not
+  simply lagged; it has **auto-paused**", which was accurate on 2026-09-23, and
+  drew from that the conclusion that no review was newer than `21:47:53Z` on
+  2026-09-21. On 2026-09-25 a second pass ran unprompted and posted
+  `changes_requested` on `d8d0ba6d` at `23:35:01Z`, naming two findings that
+  were both accepted. The count of `coderabbitai[bot]` review events on this
+  pull request is therefore **two**, not one, and the newest is not `e4f93b93`.
+  The old text is kept above the correction rather than deleted: it described a
+  real transient state and then read a forecast out of it, presenting the
+  forecast as an observation. A claim about the present that a future event can
+  overturn should say when it was made and what would falsify it.
