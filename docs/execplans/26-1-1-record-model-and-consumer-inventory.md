@@ -8,11 +8,12 @@ proceeds.
 
 Status: DRAFT
 
-Revision 2. See `Revision note` at the foot of this document. This plan was
+Revision 3. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
-revised after an expert design review. It must not be implemented until it is
-approved and the approver has chosen an entry-gate option in decision D-6.
+revised after two rounds of expert design review. It must not be implemented
+until it is approved and the approver has chosen an entry-gate option in
+decision D-6.
 
 ## Purpose / big picture
 
@@ -254,7 +255,7 @@ Upstream artefacts at planning time (`ebcedaef`):
 Trace chains:
 
 ```plaintext
-RM-26.1.1-D -> EP-M0 -> D-6 option -> EV-ENTRY
+RM-26.1.1-D -> D-6 option -> EP-M0 (Option A) or EP-M4 (Option B) -> EV-ENTRY
 RM-26.1.1-S1 -> RFC26-CM1 -> EP-M2 -> inventory Register A1..A7 -> EV-ORACLE, EV-SWEEP, EV-REVERSE
 RM-26.1.1-A2 -> EP-M2 -> inventory Method + Register -> EV-ORACLE, EV-SEEDED
 RM-26.1.1-S2 -> RFC26-H1..H4 -> EP-M3 -> inventory Landed work + Findings -> EV-FINDINGS
@@ -316,7 +317,10 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   scope definitions would then be wrong.
 - Oracle failure: if the scratch build fails for a reason other than the
   deliberate attributes (for example, a toolchain download failure), stop and
-  report rather than falling back to text sweeps alone.
+  report rather than falling back to text sweeps alone. An error caused by an
+  attribute in an illegal position (such as rustc's deny-by-default
+  `useless_deprecated` on a trait implementation) is a method defect: move the
+  attribute and re-run; never add an `allow`.
 - Findings: if a finding looks release-critical (for example, a manifest a user
   can write that panics a release build), stop and report it immediately.
 - Ambiguity: when a site's classification is genuinely ambiguous, include it
@@ -367,6 +371,9 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   alternatives and cost; failure modes and viability). Verdict: revise.
 - [x] (2026-09-27) Revision 2 addresses every review finding (see
   `Revision note`).
+- [x] (2026-09-27) Closing review of revision 2; revision 3 fixes the
+  oracle's trait-implementation blind spot, the Kani-only file gap, the
+  empty-list flood, the vacuous empty-pin case, and site-identifier collisions.
 - [ ] Plan approved by the user, with a D-6 option chosen.
 - [ ] EP-M0: entry gate passed and pin declared.
 - [ ] EP-M1: contract test red, then green against a skeleton inventory.
@@ -422,6 +429,19 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   Linux linker flag), so deprecation warnings do not stop the scratch build.
   Evidence: `Cargo.toml` `[workspace.lints.rust]`, `.cargo/config.toml`.
   Impact: the oracle needs no new dependency.
+- Observation: during the revision 2 gate run, `make test` reported 3412 of
+  3413 tests passing;
+  `packaging_smoke_tests::packaged_manifest_retains_build_script_sources` timed
+  out at 300.018 s, and again at 300.009 s when re-run alone, with the host
+  load average between 11.6 and 19.2 on six cores. The revision 1 run, on the
+  same Rust tree, passed it. The doctest pass, skipped by the abort, was run
+  separately with `make doctest` and passed. Evidence:
+  `/tmp/test-netsuke-26-1-1-record-model-and-consumer-inventory.out` and
+  `/tmp/rerun-packaging-netsuke-26-1-1-record-model-and-consumer-inventory.out`.
+  Impact: this test's `cargo publish --dry-run` cold-builds by design and sits
+  close to its 300 s cap, so its local outcome is load-determined; CI is the
+  authoritative check for it. The implementer should expect the same on a
+  loaded host and confirm it in CI rather than retrying locally.
 
 ## Decision log
 
@@ -489,9 +509,12 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   sees no function bodies (it remains an optional cross-check for impls and
   receivers). Date/Author: 2026-09-27, planning agent, after review.
 - Decision D-8: register identifiers are symbol-keyed and append-only, of the
-  form `A3/ir::graph::BuildGraph::replace_edge_for_output`; a refresh never
-  reuses or renumbers them. Diagnostics (A6) are listed per variant, with a
-  site count and files, and per-site citations only where construction shapes
+  form `A3/ir::graph::BuildGraph::replace_edge_for_output` for items and
+  `<item-id>@<enclosing symbol>#<kind>[-n]` for sites (the numeric suffix
+  separates several sites of one kind in one function); trace rows may cite a
+  prefix ending in `/*` or `@*`, which the contract test expands. A refresh
+  never reuses or renumbers them. Diagnostics (A6) are listed per variant, with
+  a site count and files, and per-site citations only where construction shapes
   differ. Rationale: positional identifiers break on refresh; per-site A6 rows
   would roughly double the register without adding decision value. Date/Author:
   2026-09-27, planning agent, after review.
@@ -518,6 +541,11 @@ Axioms relied on:
 - AXIOM-1: `rustc` emits a `deprecated` warning, with a primary span, at every
   resolved use of a `#[deprecated]` item in code it compiles, unless the use
   sits inside an `#[allow(deprecated)]` scope. (Documented compiler behaviour.)
+  It does not report uses inside derive expansions, and it rejects
+  `#[deprecated]` on trait implementation blocks and their items with the
+  deny-by-default `useless_deprecated` lint, so calls dispatched through a trait
+  (`Default::default`, `From`/`Into`, `FromStr`, `Deserialize`) are invisible
+  to the oracle and are listed by a dedicated sweep instead.
 - AXIOM-2: `cargo check --message-format=json` reports those warnings as JSON
   objects whose `message.code.code` is `"deprecated"`.
 - AXIOM-3: `rg` reports every textual match of a pattern in the files given.
@@ -548,10 +576,15 @@ Obligations:
   `src/ninja_gen/`; P5 `*s = StringOrList::Empty` through a
   `&mut StringOrList`; P6 a `mut self` builder on `BuildEdge`; P7 a
   `#[cfg(windows)]` function building a `BuildEdge` literal; P8 a `#[cfg(kani)]`
-  `BuildEdge` construction; P9 a construction inside a `#[cfg(test)]` module.
-  The method must report P1 to P8 as unregistered production sites (P7 and P8
-  through the sweep) and P9 as test only. Any missed plant fails the obligation
-  and sends the method back for repair.
+  `BuildEdge` construction; P9 a construction inside a `#[cfg(test)]` module;
+  P10 an `EdgeId(0)` call in `src/ninja_gen/`; P11 a
+  `#[cfg(windows)] impl BuildGraph { fn f(&mut self) { self.actions.clear() } }`
+  block; P12 a `BuildEdge` literal inside `src/ir/cycle_verification.rs` (a
+  file that is Kani-only through its parent's `#[cfg(kani)] mod` line, with no
+  `cfg` text of its own). The method must report P1 to P8 and P10 to P12 as
+  unregistered sites (production, or Kani-only for P8 and P12; P7, P8, P11, and
+  P12 through the sweep) and P9 as test only. Any missed plant fails the
+  obligation and sends the method back for repair.
 - Obligation OB-REV (reverse soundness): every register row names a
   module-qualified symbol that exists at the pin, at or around its cited line.
   Method: `git grep -n` at the pin, per row. Rationale: checking only one side
@@ -576,13 +609,14 @@ Obligations:
   Domain: the real inventory and roadmap, plus fixtures. Evidence: EV-RED (the
   real-document test fails while the inventory is absent, naming the missing
   file) and EV-CONTRACT (all cases pass). Non-vacuity: negative fixtures that
-  must each fail with a specific message: two different pins; a trace row
-  naming a task absent from the roadmap; a dependent task (including a
-  transitive one) missing from the matrix; a task identifier that appears only
-  outside the trace-matrix section; a duplicate register identifier; an orphan
-  `CO-n`; and an `OBS-n` without an owner. The dependency parser must be shown
-  to follow a two-step chain (a fixture where task C depends on B, which
-  depends on 26.1.1) so the closure is not trivially direct.
+  must each fail with a specific message: two different pins; no `Pin:` line at
+  all (so an empty document cannot pass); a trace row naming a task absent from
+  the roadmap; a dependent task (including a transitive one) missing from the
+  matrix; a task identifier that appears only outside the trace-matrix section;
+  a duplicate register identifier; an orphan `CO-n`; and an `OBS-n` without an
+  owner. The dependency parser must be shown to follow a two-step chain (a
+  fixture where task C depends on B, which depends on 26.1.1) so the closure is
+  not trivially direct.
 - Obligation OB-652 (no repetition): the canonical edge arena appears only as
   landed work and as obligation `CO-14`. Method: review of the listed mentions
   from `rg -n '652|714' docs/hexagonal-hardening-inventory.md`. Evidence:
@@ -704,9 +738,11 @@ Create `docs/hexagonal-hardening-inventory.md` with these sections, in order:
    27.1.2, 27.1.3, 27.2.1, 27.2.2, 27.2.3, and 28.1.2 for exception mapping),
    with columns `Task`, `Register items`, `Findings`, and `Obligations`.
    "Consumes": one row per task that only reads the inventory (28.1.1, the rest
-   of phase 28 transitively, 27.3.1, 27.3.2, and 29.2.1). Then an "Excluded"
-   list for any task in the dependency closure that has no row, each with a
-   reason, and an "Unchanged" list of register items no task changes.
+   of phase 28 transitively, 29.2.1, 29.2.3, 29.3.2, 29.4.1, and 29.4.2; 27.3.1
+   and 27.3.2 get optional rows through the phase-27 Entry line, not the
+   dependency closure). Then an "Excluded" list for any task in the dependency
+   closure that has no row, each with a reason, and an "Unchanged" list of
+   register items no task changes.
 9. **Consuming this inventory.** The rule that a consuming ExecPlan cites
    register identifiers in its `Conformance basis`, runs
    `git log <pin>..HEAD -- src build.rs tests test_support benches` first, and
@@ -728,7 +764,8 @@ each with a `///` comment:
   hexadecimal token.
 - `declared_pin(text) -> Option<String>` reads the `Pin:` line.
 - `task_ids(text) -> BTreeSet<String>` returns identifiers matching
-  `\b\d+\.\d+\.\d+\b` (callers pass only the relevant section).
+  `\b2[6-9]\.\d+\.\d+\b`, so version strings such as `0.1.0` never match
+  (callers pass only the relevant section).
 - `roadmap_tasks(roadmap) -> BTreeMap<String, BTreeSet<String>>` parses each
   `- [ ] N.N.N.` or `- [x] N.N.N.` task and the identifiers named in its
   `Dependencies:` bullet, including continuation lines, up to the next bullet
@@ -781,8 +818,8 @@ top-level test files automatically; confirm it passes.
 - Identifier and outcome: EP-M2. Inventory sections 1 to 4 are complete.
 - Requirements and gaps: `RM-26.1.1-S1`, `RM-26.1.1-A2`, `RFC26-CM1`.
 - Acceptance evidence: EV-ORACLE and EV-SWEEP (empty unregistered sets),
-  EV-SEEDED (P1 to P8 found, P9 classified as test), EV-REVERSE (zero misses),
-  EV-CONTRACT, and EV-GATES.
+  EV-SEEDED (P1 to P8 and P10 to P12 found, P9 classified as test), EV-REVERSE
+  (zero misses), EV-CONTRACT, and EV-GATES.
 - Conformance check: no tracked source change; scratch directories deleted;
   single pin; every D-4 API-reachable item present.
 - Recovery: additive; revert to retry. Scratch exports are recreated from
@@ -820,12 +857,14 @@ top-level test files automatically; confirm it passes.
     inventory's H1 finding.
   - `docs/developers-guide.md`: a "Test suite map" entry for
     `tests/hexagonal_inventory_contract_tests.rs`.
-  - The inventory: the "commits since the pin" list.
+  - The inventory: the "commits since the pin" list, using short SHAs only so
+    that the one-pin check still holds.
   - This plan: `Status: COMPLETE`; `Outcomes & retrospective`.
 - Acceptance evidence: EV-GATES on the final tree.
 - Conformance check: `docs/users-guide.md` unchanged; no ADR added; under D-6
-  Option B, ADR-035 reads `Accepted` at `origin/main` before the checkbox is
-  ticked, otherwise set `Status: BLOCKED` and stop.
+  Option B, ADR-035 reads `Accepted` in
+  `git fetch origin && git show origin/main:docs/adr-035-semantic-compiler-boundaries.md`
+  before the checkbox is ticked, otherwise set `Status: BLOCKED` and stop.
 - Recovery: revert the integration commit.
 - Remaining gaps: none; 26.1.2 starts from the inventory.
 - Compatibility decision: none.
@@ -870,18 +909,21 @@ git archive "$PIN" | tar -x -C "$SCRATCH/tree"
 ```
 
 In `$SCRATCH/tree` only, add `#[deprecated(note = "inventory")]` to every
-field, variant, inherent method, and associated function of the items named in
-A1 to A7, and to each free function named there. Then:
+field, every variant, and every inherent method or associated function (inside
+`impl Type`, never inside `impl Trait for Type` or on an implementation block,
+which rustc's deny-by-default `useless_deprecated` rejects) of the items named
+in A1 to A7, to each free function named there, and to the tuple struct
+`EdgeId` itself (deprecating its field does not flag `EdgeId(..)` calls, which
+resolve to the constructor). Then:
 
 ```bash
 PIN="<pin>"; ROOT="$(pwd)"; SCRATCH="$ROOT/target/inventory-26-1-1/$PIN"
 cd "$SCRATCH/tree" && CARGO_TARGET_DIR="$SCRATCH/target" \
   cargo check --workspace --all-targets --all-features --message-format=json \
   > "/tmp/oracle-netsuke-26-1-1-$PIN.json"
-jq -r 'select(.reason == "compiler-message")
-  | select(.message.code.code == "deprecated")
-  | .message.spans[] | select(.is_primary)
-  | "\(.file_name):\(.line_start):\(.text[0].text | ltrimstr(" "))"' \
+jq -r 'select(.reason == "compiler-message" and .message.code.code == "deprecated")
+  | .message as $m | $m.spans[] | select(.is_primary)
+  | "\(.file_name):\(.line_start):\(.column_start)\t\($m.message)"' \
   "/tmp/oracle-netsuke-26-1-1-$PIN.json" | sort -u \
   > "/tmp/oracle-sites-netsuke-26-1-1-$PIN.out"
 wc -l "/tmp/oracle-sites-netsuke-26-1-1-$PIN.out"
@@ -893,32 +935,43 @@ not: list test-only modules first with
 `#[path = ..]`, and treat inline `#[cfg(test)] mod` blocks as test code. Then
 subtract the register; expect an empty set.
 
-EP-M2, targeted sweep for code the host build does not compile:
+EP-M2, text sweeps (every file, trait-dispatched construction, and doctests):
 
 ```bash
 PIN="<pin>"; ROOT="$(pwd)"; TREE="$ROOT/target/inventory-26-1-1/$PIN/tree"
 T='Action|BuildEdge|BuildGraph|EdgeId|Recipe|RawRecipe|Rule|Target|NetsukeManifest|StringOrList|DependencyOrder'
-rg -n --type rust -l 'cfg\((kani|windows|target_os|not\(unix\)|unix)' "$TREE/src" "$TREE/build.rs" \
-  | tee "/tmp/sweep-files-netsuke-26-1-1-$PIN.out"
-rg -n --type rust "\b(Self|$T)(::\w+)?\s*[{(]|&mut\s+($T)\b|mem::(take|replace|swap)" \
-  $(cat "/tmp/sweep-files-netsuke-26-1-1-$PIN.out") \
+F="/tmp/sweep-files-netsuke-26-1-1-$PIN.out"
+rg --files --type rust "$TREE/src" "$TREE/build.rs" | tee "$F"
+test -s "$F" || { echo "empty sweep list"; exit 1; }
+P="\b(Self|$T)(::\w+)?\s*[{(]|&mut\s+($T)\b|mem::(take|replace|swap)"
+P="$P|&mut self|\bmut self\b|self\s*:\s*&mut|\.(retain|clear|insert|push|extend|values_mut|iter_mut)\("
+xargs -r -d '\n' rg -n --type rust "$P" < "$F" \
   | tee "/tmp/sweep-sites-netsuke-26-1-1-$PIN.out"
+rg -n --type rust "(\b($T)::default\(|Default::default|\.into\(\)|from_(str|value|slice|reader)\b)" \
+  "$TREE/src" "$TREE/build.rs" | tee "/tmp/sweep-trait-netsuke-26-1-1-$PIN.out"
+rg -n --type rust "^\s*//[/!] .*\b($T)\b" "$TREE/src" \
+  | tee "/tmp/sweep-doctest-netsuke-26-1-1-$PIN.out"
 ```
 
-Classify the hits that lie inside uncompiled `cfg` regions and add them to the
-register (production) or the appendix (Kani). Doctest sites are listed from
-`rg -n '^\s*//[/!] .*\b($T)\b' src`. Optionally cross-check implementations and
-receivers with rustdoc JSON
+The first sweep covers every file, so Kani-only modules enabled from a parent's
+`#[cfg(kani)] mod` line are included; remove the hits the oracle already
+reported, then classify the rest (in particular those inside uncompiled `cfg`
+regions). The second lists trait-dispatched construction, which the oracle
+cannot see; classify each hit by hand and record its count separately in
+Method. The third lists doctest sites for the appendix.
+
+Add production hits to the register and Kani, test, and doctest hits to the
+appendix. Optionally cross-check implementations and receivers with rustdoc JSON
 (`cargo rustdoc --lib -- -Z unstable-options --output-format json
 --document-private-items`)
 and public mutators with CodeGraph callers.
 
-EV-SEEDED: hand the nine plants from OB-FWD and the prediction to an
+EV-SEEDED: hand the twelve plants from OB-FWD and the prediction to an
 `alchemist` agent, which applies them in a *second* export
 (`$ROOT/target/inventory-26-1-1/$PIN-seeded`) and records them in
 `/tmp/seeded-netsuke-26-1-1-$PIN.out`. Re-run the oracle and sweep there,
-classify blind, and compare. Expected: P1 to P8 unregistered production sites,
-P9 test only. Then delete both exports:
+classify blind, and compare. Expected: P1 to P8 and P10 to P12 reported as
+unregistered sites, P9 classified as test only. Then delete both exports:
 
 ```bash
 PIN="<pin>"; rm -rf "$(pwd)/target/inventory-26-1-1"
@@ -957,8 +1010,8 @@ subject, for example `Record the pinned semantic-boundary register (26.1.1)`.
   trace-matrix row (or reasoned exclusion), follows a register identifier to a
   `path:line` that exists at the pin, and reads a named obligation.
 - The "Method" section records oracle and sweep counts with empty unregistered
-  sets and a seeded-fault result of eight found and one correctly classified as
-  test.
+  sets and a seeded-fault result of eleven plants found and one correctly
+  classified as test.
 - `#652` / `#714` appear only under "Landed work" and in `CO-14`.
 - Roadmap item 26.1.1 is checked (subject to D-6) and links to the inventory.
 
@@ -1106,6 +1159,19 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   added observations OBS-8 to OBS-16. Moved scratch builds from `/tmp` to the
   ignored `target/` directory and made every command self-contained. The
   remaining work is unchanged in kind: approval, then EP-M0 to EP-M4.
+
+- Revision 3 (2026-09-27): closing review of revision 2. Record that
+  `#[deprecated]` cannot be placed on trait implementations and that derive
+  expansions and trait-dispatched calls produce no warnings, and add a
+  dedicated sweep for trait-dispatched construction. Deprecate `EdgeId` itself.
+  Sweep every file rather than `cfg`-bearing files only, so Kani-only modules
+  are covered, and guard the sweep against an empty file list. Keep the item
+  name and column in the oracle's output. Add plants P10 to P12, an empty-pin
+  negative fixture, and site-level identifiers. Restrict task extraction to
+  `2[6-9]` identifiers, correct the dependency-closure list (29.2.3 to 29.4.2
+  in; 27.3.x optional), and record the load-bound packaging-test timeout seen
+  while gating the second revision. The remaining work is unchanged: approval,
+  then EP-M0 to EP-M4.
 
 [rfc-0026]: ../rfcs/0026-hexagonal-domain-hardening.md
 [adr-035]: ../adr-035-semantic-compiler-boundaries.md
