@@ -70,16 +70,13 @@ use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
-/// Repository-relative directory the sandbox tree is created under.
+/// Directory name the sandbox is created as, relative to `target/`.
 ///
 /// Inside `target/` because that directory is ignored: a sandbox must never
 /// appear in `git status`, and a crash that leaves one behind must not
-/// require a cleanup step before the next run can start. Its name is also the
-/// only component the sandbox removal has to name, so the parent handle stays
-/// the ambient `target/` directory.
-pub(super) const SANDBOX_DIR: &str = "target/kani-mutation-sandbox";
-
-/// Directory name the sandbox is created as, relative to `target/`.
+/// require a cleanup step before the next run can start. The name is the only
+/// component the sandbox removal has to name, so the parent handle stays the
+/// ambient `target/` directory.
 const SANDBOX_NAME: &str = "kani-mutation-sandbox";
 
 /// A revision of the tracked tree, extracted into a fresh isolated directory.
@@ -111,7 +108,9 @@ impl Sandbox {
     /// Any previous sandbox at the same path is removed first, so the tree
     /// compiled is this run's rather than one a previous run left patched.
     pub(super) fn create(manifest_dir: &Utf8Path) -> Result<Self> {
-        let root = manifest_dir.join(SANDBOX_DIR);
+        // Both this path and `remove_sandbox` are built from `SANDBOX_NAME`,
+        // so the directory created and the one emptied cannot drift apart.
+        let root = manifest_dir.join("target").join(SANDBOX_NAME);
         let tree = root.join("tree");
 
         let target = Dir::open_ambient_dir(manifest_dir.join("target"), ambient_authority())
