@@ -89,15 +89,11 @@ mod tests {
     fn dialect_follows_recipe_shell() {
         let base = config().expect("open workspace for dialect test");
         assert_eq!(
-            base.clone()
-                .with_recipe_shell(RecipeShell::Posix)
-                .dialect(),
+            base.clone().with_recipe_shell(RecipeShell::Posix).dialect(),
             ShellDialect::Sh
         );
         assert_eq!(
-            base.clone()
-                .with_recipe_shell(RecipeShell::Bash)
-                .dialect(),
+            base.clone().with_recipe_shell(RecipeShell::Bash).dialect(),
             ShellDialect::Sh
         );
         assert_eq!(

@@ -368,25 +368,46 @@ artefacts are:
 
 | Identifier      | Artefact                                                     | Revision anchor      |
 | --------------- | ------------------------------------------------------------ | -------------------- |
-| `RM-3.14.8`     | `docs/roadmap.md` lines 343-356                              | at commit `0ba6672f` |
-| `RM-6.8.3`      | `docs/roadmap.md` lines 1162-1169                            | at commit `0ba6672f` |
-| `DD-4.4`        | `docs/netsuke-design.md` §4.4, lines 1263-1346               | at commit `0ba6672f` |
-| `DD-4.5`        | `docs/netsuke-design.md` §4.5, lines 1347-1373               | at commit `0ba6672f` |
-| `DD-2.6`        | `docs/netsuke-design.md` §2.6, lines 593-740                 | at commit `0ba6672f` |
-| `RFC-0006-8.9`  | `docs/rfcs/0006-…md` lines 1393-1409                         | at commit `0ba6672f` |
-| `RFC-0006-13.3` | `docs/rfcs/0006-…md` line 1834                               | at commit `0ba6672f` |
+| `RM-3.14.8`     | `docs/roadmap.md` lines 367-380                              | at commit `ebcedaef` |
+| `RM-6.8.3`      | `docs/roadmap.md` lines 1189-1196                            | at commit `ebcedaef` |
+| `DD-4.4`        | `docs/netsuke-design.md` §4.4, lines 1272-1355               | at commit `ebcedaef` |
+| `DD-4.5`        | `docs/netsuke-design.md` §4.5, lines 1356-1382               | at commit `ebcedaef` |
+| `DD-2.6`        | `docs/netsuke-design.md` §2.6, lines 602-749                 | at commit `ebcedaef` |
+| `RFC-0006-8.9`  | `docs/rfcs/0006-…md` lines 1396-1412                         | at commit `ebcedaef` |
+| `RFC-0006-13.3` | `docs/rfcs/0006-…md` line 1837                               | at commit `ebcedaef` |
 | `ADR-008`       | `docs/adr-008-environment-seam-taxonomy.md`                  | Accepted 2026-08-06  |
 | `ADR-014`       | `docs/adr-014-backend-text-escaping-seam.md`                 | Accepted             |
 | `ADR-026`       | `docs/adr-026-manifest-environment-access-policy.md`         | Accepted 2026-09-17  |
-| `UG-WIN`        | `docs/users-guide.md:331-399` Windows legacy recipe contract | at commit `0ba6672f` |
+| `UG-WIN`        | `docs/users-guide.md:358-485` Windows legacy recipe contract | at commit `ebcedaef` |
 
 The anchors were re-taken against commit `0ba6672f` after the branch rebased
 onto `origin/main`. The pre-rebase anchors (`81d44f89`) have moved: `RM-3.14.8`
 was at 282-295, `RM-6.8.3` at 1103-1110, `DD-4.4` at 1233-1307, `DD-4.5` at
 1309-1334, `DD-2.6` at 630-700, and `UG-WIN` at 330-348. `RFC-0006-8.9` and
-`RFC-0006-13.3` did not move. Every citation in this plan that names a document
-line number is therefore in the `0ba6672f` frame; a citation whose file has
-since grown is a pointer, not a claim, and the section heading is authoritative.
+`RFC-0006-13.3` did not move.
+
+A second rebase moved the base on to `ebcedaef` (the `origin/main` head), and
+every reference anchor was re-taken against it. The deltas are not uniform —
+the roadmap moved by +24 and +27, the design document by a flat +9, the RFC by
+a flat +3 — so nothing was extrapolated; each anchor was re-measured by content.
+`DD-2.6`, `DD-4.4`, `DD-4.5`, and both RFC citations were confirmed by diffing
+the cited body between the two commits: all four design sections and both RFC
+spans are byte-identical, so only the offset moved. `DD-4.5`'s end is the full
+section (`### 4.6` follows at 1383), not a truncation, so 1382 is simply 1373
+shifted.
+
+`UG-WIN` is the one anchor whose *span* changed rather than just shifting. At
+`0ba6672f` the plan's 331-399 was already a truncation: the section
+(`### Windows legacy recipe contract`) ran 331-458, and 399 was merely the
+sentence "do not rely on a workflow-wide `shell: bash` setting." The section
+body is byte-identical between the two commits, so the faithful shift of that
+truncation would be 358-426. The table instead records 358-485, the full
+section, because the section end is the stronger anchor and the terminal line
+was an arbitrary stopping point rather than a cited claim.
+
+Every citation in this plan that names a document line number is therefore in
+the `ebcedaef` frame; a citation whose file has since grown is a pointer, not a
+claim, and the section heading is authoritative.
 
 Those anchors were **not** re-taken again at the `ebcedaef` rebase, and the
 distinction matters. A citation into a *reference* document — an ADR, a design
@@ -2475,10 +2496,10 @@ catalogue has the key; there is no partial state to clean up.
       predicted exactly one conflicting path against four auto-merged ones, and
       that is what happened. The conflict is a pure adjacent-addition collision:
       upstream added `mod clock;`, the `time::WallClock` import, a `clock:
-      WallClock` field and its `WallClock::default()` initialiser in the same
+      WallClock` field and its `WallClock::default()` initializer in the same
       three regions where EP-M3 adds `mod recipe_shell;`, the `RecipeShell` and
       `ShellDialect` imports, a `dialect: ShellDialect` field and its
-      `RecipeShell::host_default().dialect()` initialiser. Both sides were kept
+      `RecipeShell::host_default().dialect()` initializer. Both sides were kept
       at every region, so the resolution is the union of two independent
       additions and neither side's work is amended. The merged file is 397
       lines against AGENTS.md's 400-line cap — 6 more than upstream's 391
@@ -2492,6 +2513,29 @@ catalogue has the key; there is no partial state to clean up.
       and the only semantic pairing is that upstream's deletion of
       `try_match_dollar_placeholder` leaves the `find_substitution` call EP-M3
       depends on intact, which was confirmed by grep before continuing.
+- [x] (2026-09-27) The `ebcedaef` rebase created a 400-line-cap regression in
+      `src/stdlib/register.rs` that neither side owned. The file left the
+      merge-base at 393, upstream grew it to 398, and EP-M1's `Kwargs` change
+      to the `env` query stub added 3 more, reaching 401. Neither contribution
+      is individually at fault and the pre-rebase tree genuinely passed — the
+      cap is crossed only by their sum, which is exactly the kind of defect a
+      rebase manufactures. The +3 is not revertible: upstream routes the `env`
+      function through a `Kwargs`-taking path, so a stub without `_kwargs`
+      panics at runtime on a `default=` call, replacing a clean diagnostic with
+      a crash. The file was split instead: the query-disabled cluster (the
+      marker, the error constructor that appends it, and the two registration
+      functions that raise it) moved to `src/stdlib/register/query_helpers.rs`,
+      declared with an explicit `#[path]` so `clippy::self_named_module_files`
+      stays satisfied. The parent keeps
+      `MANIFEST_QUERY_DISABLED_HELPER_MARKER` declared at `pub(super)` because
+      the child appends it and the parent's consumers name the same constant,
+      and the `pub(crate)` predicate is re-exported from the parent so every
+      `super::is_manifest_query_disabled_error` path in the tree still
+      resolves. Result: parent 401 → 297, child 135, and no file in `src/`
+      exceeds 400. Verified with `cargo check --lib` and, crucially, with
+      `cargo check --all-targets`, both under `-D warnings` — the lib-only
+      profile does not compile `#[cfg(test)]` modules, so it would not have
+      proved the split sound.
 - [ ] EP-M4 `shell_quote` and `shell_join`.
 - [ ] EP-M5 documentation, ADR-027, roadmap tick.
 
@@ -2557,7 +2601,7 @@ catalogue has the key; there is no partial state to clean up.
   entry above records for `src/manifest/tests/env_function.rs`. Evidence: the
   first-ever completed `make lint-whitaker` run on this branch, at
   `src/stdlib/config/recipe_shell.rs:76,78`, reporting "The call originates
-  within function `config` which is not recognised as a test." Impact: this is
+  within function `config` which is not recognized as a test." Impact: this is
   the most instructive failure of the milestone, because the rule was *already
   written down twice in this very document* — once for EP-M1 and once in the
   observation above — and the new code still repeated it. A recorded lesson
@@ -2567,7 +2611,7 @@ catalogue has the key; there is no partial state to clean up.
   shape: `config()` now returns `anyhow::Result<StdlibConfig>` via
   `StdlibConfig::from_current_dir()` — the same constructor `config_tests.rs`
   uses — and each `#[test]` unwraps, so the `expect` sits where the lint
-  recognises it. Confidence: verified by `make lint-whitaker` exiting 0.
+  recognizes it. Confidence: verified by `make lint-whitaker` exiting 0.
 
 - Observation: **`make fmt` is not sufficient to make an edited execplan pass
   `markdownlint`; MD046 needs a structural fix, and `mdtablefix` can *create*
