@@ -17,6 +17,7 @@ use rstest::rstest;
     "tested-example identifier must not be empty"
 )]
 #[case("```yaml\ntargets: []\n```\n", "missing a tested-example marker")]
+#[case("~~~yaml\ntargets: []\n~~~\n", "missing a tested-example marker")]
 #[case(
     "<!-- tested-example: sample -->\n```yaml\ntargets: []\n",
     "fence is not terminated"
@@ -70,12 +71,55 @@ fn marked_only_documents_skip_unmarked_fences() -> Result<()> {
 ///
 /// A document may quote the marker syntax in a code block, as the developers'
 /// guide does when it describes the loader; reading that line as a marker
-/// would register a phantom example.
-#[test]
-fn marked_only_documents_ignore_markers_inside_unmarked_fences() -> Result<()> {
-    let contents = "```markdown\n<!-- tested-example: quoted -->\n```\n";
+/// would register a phantom example. Tilde fences and longer backtick fences
+/// are fences too, and a four-backtick fence stays open across the
+/// three-backtick line it quotes.
+#[rstest]
+#[case::backtick("```markdown\n<!-- tested-example: quoted -->\n```\n")]
+#[case::tilde("~~~markdown\n<!-- tested-example: quoted -->\n~~~\n")]
+#[case::four_backticks(concat!(
+    "````markdown\n",
+    "```\n",
+    "<!-- tested-example: quoted -->\n",
+    "```\n",
+    "````\n",
+))]
+fn marked_only_documents_ignore_markers_inside_unmarked_fences(
+    #[case] contents: &str,
+) -> Result<()> {
     let examples = parse_document_with_policy("fixture.md", contents, FencePolicy::MarkedOnly)?;
     ensure!(examples.is_empty(), "unexpected examples: {examples:?}");
+    Ok(())
+}
+
+/// A marked fence closes only on its own delimiter, at least as long.
+///
+/// A four-backtick example may quote a three-backtick block; closing on the
+/// inner line would truncate the example and misread the rest of the document.
+#[test]
+fn marked_four_backtick_fence_keeps_its_inner_fence() -> Result<()> {
+    let contents = concat!(
+        "<!-- tested-example: nested -->\n",
+        "````markdown\n",
+        "```sh\n",
+        "make test\n",
+        "```\n",
+        "````\n",
+    );
+    let examples = parse_document_with_policy("fixture.md", contents, FencePolicy::RequireMarkers)?;
+    let [example] = examples.as_slice() else {
+        anyhow::bail!("expected one example, got {examples:?}");
+    };
+    ensure!(
+        example.language == "markdown",
+        "language: {}",
+        example.language
+    );
+    ensure!(
+        example.body == "```sh\nmake test\n```\n",
+        "body: {:?}",
+        example.body
+    );
     Ok(())
 }
 

@@ -266,18 +266,22 @@ the full marker contract.
 ## Resolve build-graph outputs through the accessors
 
 The intermediate build graph now owns each logical build edge once, however
-many outputs it declares, and indexes every explicit output alias to a stable
-`EdgeId`. The public `BuildGraph::targets` map, which held one cloned edge per
-output, is gone. Rust callers of this unstable API should use:
+many outputs it declares, and indexes every output alias, explicit and
+implicit, to a stable `EdgeId`. The public `BuildGraph::targets` map, which
+held one cloned edge per output, is gone. Rust callers of this unstable API
+should use:
 
 - `BuildGraph::edges` to iterate each logical edge exactly once;
-- `BuildGraph::output_paths` to iterate every explicit output;
+- `BuildGraph::output_paths` to iterate every output alias, explicit and
+  implicit;
 - `BuildGraph::target_for_output` to fetch an output together with its edge;
 - `BuildGraph::edge_id_for_output` to obtain the edge's stable identity.
 
-Code that counted edges through `targets.len()` should use `edges().count()`
-for logical edges or `output_count()` for outputs. Manifests, generated Ninja
-files, and graph exports are unaffected.
+Code should count logical edges with `edge_count()`. Note that `output_paths()`
+and `output_count()` also include implicit outputs, which the old `targets` map
+never held. Code that needs only the declared explicit outputs, as the old map
+provided, should iterate `edges()` and read each edge's `explicit_outputs`.
+Manifests, generated Ninja files, and graph exports are unaffected.
 
 ## Windows legacy recipe interpreter
 

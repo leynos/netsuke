@@ -160,10 +160,12 @@ pub(crate) fn parse_document_with_policy(
             );
             ensure!(ids.insert(id), "duplicate tested-example identifier '{id}'");
             examples.push(read_marked_example(&cursor, id, &mut lines)?);
-        } else if policy == FencePolicy::MarkedOnly && line.starts_with("```") {
+        } else if let Some(opening) = FenceOpening::parse(line)
+            && policy == FencePolicy::MarkedOnly
+        {
             // Consume the unmarked body so a marker-like line inside it is
             // never read as a marker.
-            read_fence_body(source, line_index, &mut lines)?;
+            read_fence_body(source, line_index, opening, &mut lines)?;
         } else {
             reject_invalid_example_line(&cursor, line)?;
         }
@@ -192,15 +194,15 @@ fn read_marked_example<'a>(
         source: cursor.source,
         line_index: fence_index,
     };
-    let language = fence
-        .strip_prefix("```")
+    let opening = FenceOpening::parse(fence)
         .with_context(|| fence_cursor.error("expected an opening fence after marker"))?;
+    let language = opening.info;
     ensure!(
         !language.is_empty(),
         "{}",
         fence_cursor.error("fence should declare a language")
     );
-    let body = read_fence_body(cursor.source, fence_index, lines)?;
+    let body = read_fence_body(cursor.source, fence_index, opening, lines)?;
     Ok(DocumentedExample {
         id: id.to_owned(),
         language: language.to_owned(),
@@ -210,7 +212,7 @@ fn read_marked_example<'a>(
 
 fn reject_unmarked_fence(cursor: &Cursor, line: &str) -> Result<()> {
     ensure!(
-        !line.starts_with("```"),
+        FenceOpening::parse(line).is_none(),
         "{}",
         cursor.error("fence is missing a tested-example marker")
     );
@@ -228,14 +230,48 @@ fn next_non_empty_line<'a>(
     lines.find(|(_, line)| !line.is_empty())
 }
 
+/// The opening line of a fenced code block.
+///
+/// A fence is a run of at least three backticks or tildes at column 0, and it
+/// closes only on a line of the same character at least as long, so a longer
+/// fence can quote a shorter one.
+#[derive(Clone, Copy)]
+struct FenceOpening<'a> {
+    delimiter: char,
+    run_length: usize,
+    info: &'a str,
+}
+
+impl<'a> FenceOpening<'a> {
+    /// Recognize `line` as a fence opening, capturing its delimiter and run.
+    fn parse(line: &'a str) -> Option<Self> {
+        let delimiter = line.chars().next().filter(|ch| matches!(ch, '`' | '~'))?;
+        let info = line.trim_start_matches(delimiter);
+        // Both delimiters are one byte, so the byte difference is the run.
+        let run_length = line.len() - info.len();
+        (run_length >= 3).then_some(Self {
+            delimiter,
+            run_length,
+            info,
+        })
+    }
+
+    /// Report whether `line` closes this fence.
+    fn is_closed_by(self, line: &str) -> bool {
+        let candidate = line.trim_end();
+        candidate.len() >= self.run_length && candidate.chars().all(|ch| ch == self.delimiter)
+    }
+}
+
 fn read_fence_body<'a>(
     source: &str,
     fence_index: usize,
+    opening: FenceOpening<'_>,
     lines: &mut impl Iterator<Item = (usize, &'a str)>,
 ) -> Result<String> {
     let mut body = String::new();
     for (_, line) in lines {
-        if line == "```" {
+        if opening.is_closed_by(line) {
             return Ok(body);
         }
         body.push_str(line);
