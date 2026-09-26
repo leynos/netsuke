@@ -13,7 +13,7 @@
 //! functions that raise it — and nothing else in the parent refers to any of
 //! them.
 
-use super::MANIFEST_QUERY_DISABLED_HELPER_MARKER;
+use super::{FILE_TESTS, MANIFEST_QUERY_DISABLED_HELPER_MARKER};
 use minijinja::{
     Environment, Error, ErrorKind, State,
     value::{Kwargs, Value},
@@ -27,6 +27,7 @@ pub(super) fn register_disabled_query_helpers(env: &mut Environment<'_>) {
 
 /// Register helpers that are never safe while rendering discovery metadata.
 fn register_always_disabled_query_helpers(env: &mut Environment<'_>) {
+    register_file_test_stubs(env);
     env.add_function(
         "env",
         |_variable: String, _kwargs: Kwargs| -> Result<String, Error> {
@@ -67,6 +68,22 @@ fn register_always_disabled_query_helpers(env: &mut Environment<'_>) {
     );
 }
 
+/// Register deliberate failures for the `is <kind>` file tests.
+///
+/// Each test stats the path it is given, so it discloses host state and is
+/// unavailable to a discovery query. Registering the stubs from the parent's
+/// own [`FILE_TESTS`] list, rather than retyping the names, keeps this stub set
+/// exactly as wide as the real one: a file test that reaches the build surface
+/// without a stub here would otherwise fail as merely "unknown", which a
+/// name-only assertion cannot tell apart from a deliberate rejection.
+fn register_file_test_stubs(env: &mut Environment<'_>) {
+    for &(name, _) in FILE_TESTS {
+        env.add_test(name, move |_value: Value| -> Result<bool, Error> {
+            Err(manifest_query_operation_error(name))
+        });
+    }
+}
+
 /// Register helpers whose result would disclose host state during a query.
 fn register_host_dependent_query_helpers(env: &mut Environment<'_>) {
     env.add_filter(
@@ -99,21 +116,20 @@ fn register_host_dependent_query_helpers(env: &mut Environment<'_>) {
     env.add_filter("size", |_value: String| -> Result<u64, Error> {
         Err(manifest_query_operation_error("size"))
     });
-    env.add_filter("linecount", |_value: String| -> Result<u64, Error> {
+    env.add_filter("linecount", |_value: String| -> Result<usize, Error> {
         Err(manifest_query_operation_error("linecount"))
     });
-    env.add_function(
+    env.add_filter(
         "hash",
-        |_value: Value, _kwargs: Kwargs| -> Result<String, Error> {
+        |_value: String, _algorithm: Option<String>| -> Result<String, Error> {
             Err(manifest_query_operation_error("hash"))
         },
     );
     env.add_filter(
         "digest",
-        |_state: &State,
-         _value: Value,
-         _algorithm: String,
-         _encoding: Option<String>|
+        |_value: String,
+         _length: Option<usize>,
+         _algorithm: Option<String>|
          -> Result<String, Error> { Err(manifest_query_operation_error("digest")) },
     );
 }

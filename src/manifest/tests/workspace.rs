@@ -250,6 +250,13 @@ fn manifest_query_rejects_restricted_template_helpers(
         "query should name its rejected helper: {error:?}"
     );
     ensure!(
+        error
+            .chain()
+            .any(|cause| cause.to_string().contains(QUERY_DISABLED_MARKER)),
+        "query should report the helper as deliberately disabled, not merely \
+         unregistered: {error:?}"
+    );
+    ensure!(
         !error
             .chain()
             .any(|cause| cause.to_string().contains(QUERY_SECRET)),
@@ -372,3 +379,11 @@ fn manifest_query_does_not_emit_expansion_telemetry() -> AnyResult<()> {
     Ok(())
 }
 const QUERY_SECRET: &str = "help-query-secret";
+
+/// The wording `register_manifest_query`'s stubs attach to every rejection.
+///
+/// Asserting this, rather than only the helper's name, is what separates "the
+/// helper is deliberately disabled here" from "the name was never registered
+/// at all". Both failures mention the helper, so a name-only assertion would
+/// accept `unknown filter: hash` as evidence that the `hash` stub ran.
+const QUERY_DISABLED_MARKER: &str = "is disabled while rendering";

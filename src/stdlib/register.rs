@@ -196,6 +196,11 @@ pub fn value_from_bytes(bytes: Vec<u8>) -> Value {
 }
 
 /// The file tests registered as template tests on Unix.
+///
+/// Shared with the [`query_helpers`] child, which registers the same names as
+/// deliberate failures. Keeping one list means a file test added here cannot
+/// reach the build surface while staying silently unregistered — and therefore
+/// merely "unknown" — on the query surface.
 #[cfg(unix)]
 const FILE_TESTS: &[FileTest] = &[
     ("dir", is_dir),
