@@ -35,15 +35,24 @@ gate's use of the developer's working checkout. Clearing or waiving a
 `CHANGES_REQUESTED` review remains a maintainer action, not something a branch
 can do; what the branch owes the record is a fresh pass on the corrected head.
 
-Two local `coderabbit review --agent` passes have since run against corrected
+Four local `coderabbit review --agent` passes have since run against corrected
 heads and are the branch's own evidence that the findings are cleared: one
-against `ebd70e4e` returning seven findings over five sites, and one against
+against `ebd70e4e` returning seven findings over five sites; one against
 `674e266f` clearing all five of those sites with coverage `33/33` and raising
-two `trivial` duplications of its own, both since fixed. These are distinct
-from the GitHub review events counted above — `review --agent` reads the local
-workspace, not the pull request — so the count of two `coderabbitai[bot]`
-review events stands. The GitHub review is requested with a new top-level
-comment once the gates are green and the fixes are pushed.
+two `trivial` duplications of its own; one against `c1497d4c` clearing both of
+those with coverage `3/3` over the changed set and raising one `minor`
+first-person finding in this document's own new prose; and one against
+`03780568`, which returned **zero findings** at coverage `33/33`. The last is
+the branch's clearest evidence, and its zero was checked for liveness rather
+than trusted: the same whole-document sweep that finds nothing on `03780568`
+finds exactly the two cited sites (`I` and `me`) on `c1497d4c`, so the sweep
+can see what it is looking for.
+
+These are distinct from the GitHub review events counted above —
+`review --agent` reads the local workspace, not the pull request — so the count
+of two `coderabbitai[bot]` review events stands, and a green local pass does
+not clear a `CHANGES_REQUESTED` review. The GitHub review is requested with a
+new top-level comment once the gates are green and the fixes are pushed.
 
 This ExecPlan is a living document. The sections `Progress`,
 `Surprises & discoveries`, `Decision log`, and `Outcomes & retrospective` must
@@ -458,6 +467,28 @@ failure mode cannot recur silently.
       The runner recorded each changed blob's hash identical before and after
       the sweep, so the set is evidence about one frozen revision rather than a
       suite reconciled gate by gate.
+- [x] (2026-09-26) Clear the third `coderabbit review --agent` pass, which ran
+      against `c1497d4c` at coverage `3/3` over the three changed files. It
+      confirmed both round-one duplications fixed in the tree — `SANDBOX_DIR`
+      gone with `SANDBOX_NAME` the single source, and `fail` annotated
+      `typ.NoReturn` — and raised one `minor` finding of its own: two
+      first-person passages in the revision-note prose that `c1497d4c` had just
+      added. Both were reworded impersonally. That is the same rule the GitHub
+      review raised against an earlier head, so rewording was the consistent
+      answer even though no gate enforces it here — `markdownlint` configures
+      only `MD004`, `MD010`, `MD013` and `MD029`, no prose linter is installed,
+      and the ExecPlan status contract reads no pronouns. Worth noting because
+      the branch had already swept this file for first-person prose at
+      `21d4363c`, and that sweep's record of four repairs was accurate when
+      written: the two new instances arrived later, in prose a subsequent commit
+      added. A document-wide property is re-established by its gates, not by the
+      commit that last checked it.
+- [x] (2026-09-26) Re-run the pass as a verification pass on the result,
+      `03780568`: it returned **zero findings** at coverage `33/33`, and its
+      premise was checked in both directions — the 33 reviewed paths and the 33
+      paths from `git diff --name-only origin/main...HEAD` compare as identical
+      sets, and the reviewed revision matches the pushed head before and after
+      the run. The docstyle finding is therefore cleared.
 
 ## Surprises & discoveries
 
