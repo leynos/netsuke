@@ -60,7 +60,7 @@ Netsuke currently requires:
 
 ### Installation
 
-The latest published prerelease is Netsuke v0.1.0-beta3, available from
+The latest published prerelease is Netsuke v0.1.0-beta4, available from
 crates.io. Where
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is available,
 prefer it: it fetches a prebuilt release binary and avoids the toolchain
@@ -83,7 +83,7 @@ cargo +nightly-2026-08-23 install netsuke-build
 ```
 
 Pre-built installers are available from the
-[v0.1.0-beta3 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3):
+[v0.1.0-beta4 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta4):
 
 | Platform | Architectures                        | Packages                         |
 | -------- | ------------------------------------ | -------------------------------- |
@@ -96,7 +96,7 @@ as a dependency. Ninja must be installed separately when using the macOS or
 Windows installer. The Windows MSI installs to `C:\Program Files\netsuke` and
 does not update `PATH`. SHA-256 checksum files accompany standalone binaries
 and staged help and licence files. Installer packages do not have checksum
-sidecars in v0.1.0-beta3. See the
+sidecars in v0.1.0-beta4. See the
 [user's guide](docs/users-guide.md#install-netsuke) for platform-specific
 commands and Windows setup.
 
@@ -160,7 +160,7 @@ ______________________________________________________________________
 
 ## What works today
 
-Netsuke v0.1.0-beta3's core build-system compiler provides:
+Netsuke v0.1.0-beta4's core build-system compiler provides:
 
 - YAML 1.2 manifest parsing with duplicate-key and schema validation;
 - Jinja variables, macros, `foreach`, `when`, globbing, environment helpers,
@@ -179,11 +179,13 @@ Netsuke v0.1.0-beta3's core build-system compiler provides:
   accessible HTML;
 - layered configuration, localized output, accessibility preferences,
   progress reporting, stage timings, and versioned JSON results or diagnostics;
+- bounded manifest evaluation, operator-controlled network and `env()` access
+  policies, and bounded file-reading filters;
 - unit, behavioural, integration, property, snapshot, and initial Kani
   verification coverage.
 
-The beta3 release also supports dependency-only action and target aggregates:
-nodes with a non-empty `deps` list may omit a recipe.
+Since beta3, Netsuke also supports dependency-only action and target
+aggregates: nodes with a non-empty `deps` list may omit a recipe.
 
 ______________________________________________________________________
 
@@ -308,7 +310,7 @@ ______________________________________________________________________
 
 ## Release and development status
 
-The v0.1.0-beta3 release is a useful preview for early adopters, not a
+The v0.1.0-beta4 release is a useful preview for early adopters, not a
 declaration that Netsuke is finished or that every interface is stable. The
 compiler pipeline and ordinary local-build workflow are substantial; the
 command-line interface, configuration vocabulary, and advanced recipe model
@@ -317,7 +319,7 @@ remain pre-stable.
 Pin the Netsuke version in automation and expect some command names, flags,
 diagnostic schemas, and manifest details to change before 1.0.
 
-The following limitations apply to beta3.
+The following limitations apply to beta4.
 
 Known limitations include:
 
@@ -336,6 +338,10 @@ The beta3 release fixes beta2's shell-dollar limitation with Ninja-aware
 escaping, so ordinary shell expressions can be written normally. Beta2
 manifests that use literal shell dollar expressions require migration; see the
 [users' guide safety boundary](docs/users-guide.md#review-the-safety-boundary).
+Beta4 extends the same treatment to `$in` and `$out` in `script:` recipes, so
+beta3 manifests that relied on them for path substitution must use `{{ ins }}`
+and `{{ outs }}` instead; see the
+[migration guide](docs/v0-1-0-migration-guide.md).
 
 Review
 [Security and command interpolation](#security-and-command-interpolation) and

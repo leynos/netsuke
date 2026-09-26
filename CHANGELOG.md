@@ -1,17 +1,48 @@
 # Changelog
 
-## Unreleased
+## [0.1.0-beta4] - 2026-09-26
+
+_If you are upgrading: see the
+[v0.1.0 migration guide](docs/v0-1-0-migration-guide.md)._
 
 ### Changed
 
-- Raise the declared MiniJinja baseline to 2.24.0, retaining the `fuel` and
-  `loader` features. Its 100 MB string-repetition guard is independent of
-  Netsuke's output budgets and does not resolve internal macro/capture buffering
-  ([#719](https://github.com/leynos/netsuke/issues/719)).
+- **Breaking:** make `which` and `command_available` search only `PATH` by
+  default; manifests that intentionally resolve checkout executables must use
+  `cwd_mode='workspace-recursive'`
+  ([#646](https://github.com/leynos/netsuke/issues/646))
+- **Breaking:** treat `$in` and `$out` in `script:` recipes as shell variables,
+  as `command:` recipes already do; use `{{ ins }}` and `{{ outs }}` for
+  Netsuke path substitution
+  ([#737](https://github.com/leynos/netsuke/issues/737))
+- **Breaking:** stop the primary project `.netsuke.toml` from widening the
+  operator's fetch allowlists; `trust_project_fetch_policy` opts a checkout
+  back in ([#644](https://github.com/leynos/netsuke/issues/644))
+- **Breaking:** evaluate every fetch redirect destination against the network
+  policy before requesting it, stop after five redirects, refuse redirect
+  loops, and drop URL credentials when the origin changes
+  ([#647](https://github.com/leynos/netsuke/issues/647))
+- **Breaking:** read the `contents`, `linecount`, `hash`, and `digest` filters
+  under an 8 MiB default budget, reject a symlink final component unless
+  `follow_symlinks=true`, and reject FIFOs and devices
+  ([#648](https://github.com/leynos/netsuke/issues/648))
 - **Breaking:** store each logical build edge once, indexed by output alias to
   an `EdgeId`; `BuildGraph::targets` is no longer public, so Rust callers must
   resolve outputs through the graph accessors
   ([#652](https://github.com/leynos/netsuke/issues/652))
+- **Breaking:** link checkout builds on Linux with `mold` through the committed
+  `.cargo/config.toml`; install it with `make install-build-tools`, which
+  replaces `install-dev-fast`, as `check-build-tools` replaces `dev-fast-check`
+  ([#733](https://github.com/leynos/netsuke/issues/733))
+- Stop logging rendered manifest values and the manifest syntax tree in verbose
+  output; log bounded structural counts instead
+  ([#649](https://github.com/leynos/netsuke/issues/649), [#657](https://github.com/leynos/netsuke/issues/657))
+- Bump `serde-saphyr` from 0.0.6 to 1.2.0 and `ureq` from 2.12.1 to 3.4.0
+  ([#450](https://github.com/leynos/netsuke/issues/450), [#438](https://github.com/leynos/netsuke/issues/438))
+- Raise the declared MiniJinja baseline to 2.24.0, retaining the `fuel` and
+  `loader` features. Its 100 MB string-repetition guard is independent of
+  Netsuke's output budgets and does not resolve internal macro/capture buffering
+  ([#719](https://github.com/leynos/netsuke/issues/719))
 - Size the coverage timeout tiers against the doctest pass: a coverage step
   passing `doctests: 'true'` arms the cargo watchdog twice, so the watchdog's
   requirement gains a report-phase term and both coverage job ceilings rise
@@ -26,26 +57,39 @@
   it
   ([#730](https://github.com/leynos/netsuke/issues/730), [ADR-038](docs/adr-038-runtime-annotation-introspection-in-workflow-contracts.md))
 
+### Added
+
+- Bound manifest evaluation with configurable instruction, rendered-output,
+  template-source, `foreach`, and expansion budgets
+  ([#651](https://github.com/leynos/netsuke/issues/651))
+- Add optional exact-name allow and block lists for the manifest `env()` helper
+  ([#666](https://github.com/leynos/netsuke/issues/666))
+- Record bounded metrics for the release-admission canary
+  ([#627](https://github.com/leynos/netsuke/issues/627))
+- Report each Linux release binary's glibc floor in the release job summary
+  ([#775](https://github.com/leynos/netsuke/issues/775))
+- Document the command placeholder contract in the README
+  ([#699](https://github.com/leynos/netsuke/issues/699))
+
 ### Fixed
-
-- Support beta-to-beta and beta-to-final Windows MSI replacement through WiX
-  major-upgrade metadata.
-
-## [0.1.0-beta3] - 2026-09-02
-
-<!-- markdownlint-disable-next-line MD024 -->
-### Changed
-
-- **Breaking:** make `which` and `command_available` search only `PATH` by
-  default; manifests that intentionally resolve checkout executables must use
-  `cwd_mode='workspace-recursive'`
-  ([#646](https://github.com/leynos/netsuke/issues/646))
-
-### Security
 
 - Require an explicit recursive-workspace opt-in before an empty or unset
   `PATH` can resolve a checkout-controlled executable
   ([#646](https://github.com/leynos/netsuke/issues/646))
+- Support beta-to-beta and beta-to-final Windows MSI replacement through WiX
+  major-upgrade metadata ([#656](https://github.com/leynos/netsuke/issues/656))
+- Terminate Ninja options before build targets, so a target name beginning
+  with `-` cannot be read as a Ninja option
+  ([#645](https://github.com/leynos/netsuke/issues/645))
+- Bound Ninja status-line buffering, so a child stream without newlines cannot
+  exhaust memory ([#650](https://github.com/leynos/netsuke/issues/650))
+- Judge a Windows final path component from the handle that is read, closing
+  a reparse-point race in the file filters
+  ([#703](https://github.com/leynos/netsuke/issues/703))
+- Keep annotated source excerpts out of JSON diagnostic `causes`
+  ([#754](https://github.com/leynos/netsuke/issues/754))
+
+## [0.1.0-beta3] - 2026-09-02
 
 - Add injectable Ninja child environments, named Ninja request types, and
   target/action discovery through `description` and `netsuke help targets`.
@@ -58,6 +102,7 @@
 
 ## [0.1.0-beta2] - 2026-08-19
 
+<!-- markdownlint-disable-next-line MD024 -->
 ### Added
 
 - Add [docs/v0-1-0-migration-guide.md](docs/v0-1-0-migration-guide.md)
@@ -163,6 +208,7 @@
   of truth for the compiler contract
   ([#465](https://github.com/leynos/netsuke/issues/465))
 
+[0.1.0-beta4]: https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta4
 [0.1.0-beta3]: https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3
 [0.1.0-beta2]: https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta2
 [0.1.0-beta1]: https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta1

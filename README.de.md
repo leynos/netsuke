@@ -58,7 +58,7 @@ Netsuke erfordert derzeit:
 
 ### Installation
 
-Die zuletzt veröffentlichte Vorabversion ist Netsuke v0.1.0-beta3, verfügbar
+Die zuletzt veröffentlichte Vorabversion ist Netsuke v0.1.0-beta4, verfügbar
 über crates.io. Wo
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) verfügbar ist,
 sollte es bevorzugt werden: Es lädt eine vorgefertigte Release-Binärdatei
@@ -78,7 +78,7 @@ cargo +nightly-2026-08-23 install netsuke-build
 ```
 
 Vorgefertigte Installationsprogramme sind über das
-[v0.1.0-beta3-GitHub-Release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3)
+[v0.1.0-beta4-GitHub-Release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta4)
 verfügbar:
 
 | Plattform | Architekturen                        | Pakete                           |
@@ -93,7 +93,7 @@ Windows-Installationsprogramms separat installiert werden. Die Windows-MSI
 installiert nach `C:\Program Files\netsuke` und aktualisiert `PATH` nicht.
 SHA-256-Prüfsummendateien begleiten eigenständige Binärdateien sowie
 bereitgestellte Hilfe- und Lizenzdateien. Installationspakete verfügen in
-v0.1.0-beta3 nicht über begleitende Prüfsummen. Siehe das
+v0.1.0-beta4 nicht über begleitende Prüfsummen. Siehe das
 [Benutzerhandbuch](docs/users-guide.md#install-netsuke) für
 plattformspezifische Befehle und die Windows-Einrichtung.
 
@@ -139,7 +139,7 @@ ______________________________________________________________________
 
 ## Was heute funktioniert
 
-Der zentrale Build-System-Compiler von Netsuke v0.1.0-beta3 bietet:
+Der zentrale Build-System-Compiler von Netsuke v0.1.0-beta4 bietet:
 
 - YAML-1.2-Manifest-Parsing mit Prüfung auf doppelte Schlüssel und
   Schemavalidierung;
@@ -161,10 +161,12 @@ Der zentrale Build-System-Compiler von Netsuke v0.1.0-beta3 bietet:
 - geschichtete Konfiguration, lokalisierte Ausgaben,
   Barrierefreiheitseinstellungen, Fortschrittsanzeigen, Phasenzeiten sowie
   versionierte JSON-Ergebnisse oder -Diagnosen;
+- begrenzte Manifest-Auswertung, betreiberkontrollierte Richtlinien für
+  Netzwerk- und `env()`-Zugriff sowie begrenzte Dateilesefilter;
 - Unit-, Verhaltens-, Integrations-, Property-, Snapshot- und erste
   Kani-Verifikationsabdeckung.
 
-Das beta3-Release unterstützt außerdem reine Abhängigkeits-Aggregate für
+Seit beta3 unterstützt Netsuke außerdem reine Abhängigkeits-Aggregate für
 Aktionen und Ziele: Knoten mit einer nicht leeren `deps`-Liste können ein
 Rezept auslassen.
 
@@ -295,7 +297,7 @@ ______________________________________________________________________
 
 ## Release- und Entwicklungsstatus
 
-Das Release v0.1.0-beta3 ist eine nützliche Vorschau für Früheinsteiger, keine
+Das Release v0.1.0-beta4 ist eine nützliche Vorschau für Früheinsteiger, keine
 Erklärung, dass Netsuke fertig ist oder jede Schnittstelle stabil ist. Die
 Compiler-Pipeline und der gewöhnliche lokale Build-Workflow sind umfangreich;
 die Kommandozeilenschnittstelle, das Konfigurationsvokabular und das erweiterte
@@ -305,7 +307,7 @@ Legen Sie die Netsuke-Version in der Automatisierung fest und rechnen Sie
 damit, dass sich einige Befehlsnamen, Flags, Diagnoseschemata und
 Manifestdetails vor 1.0 ändern.
 
-Für beta3 gelten die folgenden Einschränkungen.
+Für beta4 gelten die folgenden Einschränkungen.
 
 Zu den bekannten Einschränkungen zählen:
 
@@ -327,6 +329,10 @@ Ninja-bewusstes Escaping, sodass gewöhnliche Shell-Ausdrücke normal geschriebe
 werden können. Beta2-Manifeste, die wörtliche Shell-Dollar-Ausdrücke verwenden,
 müssen migriert werden; siehe die
 [Sicherheitsgrenze im Benutzerhandbuch](docs/users-guide.md#review-the-safety-boundary).
+Beta4 behandelt `$in` und `$out` in `script:`-Rezepten ebenso als
+Shell-Variablen; beta3-Manifeste, die sie zur Pfadersetzung genutzt haben,
+müssen stattdessen `{{ ins }}` und `{{ outs }}` verwenden; siehe den
+[Migrationsleitfaden](docs/v0-1-0-migration-guide.md).
 
 Weitere Einzelheiten finden Sie unter
 [Sicherheit und Befehlsinterpolation](#sicherheit-und-befehlsinterpolation)
