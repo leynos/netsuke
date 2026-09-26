@@ -33,8 +33,17 @@ As of 2026-09-26 the pull request has **two** `coderabbitai[bot]` review events:
 two findings, both actioned — a first-person pronoun in this document, and the
 gate's use of the developer's working checkout. Clearing or waiving a
 `CHANGES_REQUESTED` review remains a maintainer action, not something a branch
-can do; what the branch owes the record is a fresh pass on the corrected head,
-which is requested once the gates are green.
+can do; what the branch owes the record is a fresh pass on the corrected head.
+
+Two local `coderabbit review --agent` passes have since run against corrected
+heads and are the branch's own evidence that the findings are cleared: one
+against `ebd70e4e` returning seven findings over five sites, and one against
+`674e266f` clearing all five of those sites with coverage `33/33` and raising
+two `trivial` duplications of its own, both since fixed. These are distinct
+from the GitHub review events counted above — `review --agent` reads the local
+workspace, not the pull request — so the count of two `coderabbitai[bot]`
+review events stands. The GitHub review is requested with a new top-level
+comment once the gates are green and the fixes are pushed.
 
 This ExecPlan is a living document. The sections `Progress`,
 `Surprises & discoveries`, `Decision log`, and `Outcomes & retrospective` must
@@ -424,6 +433,31 @@ failure mode cannot recur silently.
       and re-verified inert, but its pre-truncation content is not
       recoverable, so any ignore rule another session had placed there is lost.
       The probe should have used a throwaway repository.
+
+- [x] (2026-09-26) Clear the second `coderabbit review --agent` pass on
+      `674e266f`. All five round-one sites were confirmed cleared and the pass's
+      coverage count was exact at `33/33`, but two `trivial` findings were
+      raised, both real and both duplication: `SANDBOX_DIR` in `sandbox.rs`
+      spelled a path the same file already spelled as `SANDBOX_NAME` under
+      `target/`, and the oracle's `fail` was annotated `-> None` while its body
+      ends in a raise. The first is fixed by deleting the redundant constant and
+      deriving the path from the name, so the directory created and the
+      directory emptied cannot drift; the deletion was checked against the whole
+      repository first, because the constant was `pub(super)` and could have had
+      an in-crate consumer, and it has none. The second is fixed with
+      `typ.NoReturn`, the house convention already used twice in
+      `scripts/tests/test_doc_coverage.py`. Nothing else in the pass's output
+      required action. Both fixes are verified — the derived path is
+      byte-identical to the old literal, and the annotation resolves at run time
+      (`fail.__annotations__` returns `typing.NoReturn`, and a call exits 1).
+      The full nine-target gate set was then re-run on the resulting head, and
+      is green as one set: `check-fmt`, `lint`, `typecheck`, `markdownlint`,
+      `lint-python`, `nixie`, `test-workflow-contracts` (613 passed, 2 skipped),
+      `test-kani-mutations` (the gate this issue is about, 171.6 s against a
+      300 s default), and `test` (3315 passed, 6 skipped, 2 doctest targets).
+      The runner recorded each changed blob's hash identical before and after
+      the sweep, so the set is evidence about one frozen revision rather than a
+      suite reconciled gate by gate.
 
 ## Surprises & discoveries
 
@@ -953,6 +987,39 @@ failure mode cannot recur silently.
   bounded, and stated in the Progress entry rather than repaired silently: the
   file is now git's default template, and any rule another session had put
   there is gone.
+
+- **A gate result is evidence about the revision it read, so a suite that spans
+  a change has to be re-run rather than reconciled.** The first nine-target run
+  of this branch returned eight green and one red, and eight of its nine
+  results were unusable — not because any gate was flaky, but because the three
+  changed files kept being edited while it ran, so six gates judged revisions
+  that no longer existed by the time they were read. The runner noticed on its
+  own and reported that its evidence was invalidated, which is the behaviour
+  worth wanting from a gate runner: it said so rather than reporting a green
+  set of unknown provenance.
+
+  The instructive part is that the one red was still a real finding. It failed
+  on the `spelling` prerequisite with `artifacts` where en-GB-oxendict requires
+  `artefacts`, in prose this branch had just written. That result was about a
+  revision that had already been superseded, and it was nonetheless true — so
+  the temptation was to keep the finding and believe the eight greens beside
+  it. Those two verdicts have different validities, and a run that mixes them
+  cannot be cited as a set. Making the finding actionable meant first repairing
+  the *other* instance of the same word, at line 1940, which the sweep could
+  never have seen: a gate can only report what was on disk when it read the
+  file.
+
+  Two hardenings follow, and the second is the one that generalizes. Freeze the
+  tree, then gate it, then push — the discipline this repository already
+  recorded for a *frozen SHA* turns out to apply to the working tree as well,
+  and there is no version of it that works while edits continue. And because the
+  `spelling` prerequisite short-circuits `markdownlint-cli2`, a green
+  `markdownlint` must be shown to have run *both* stages; the re-run's log
+  names the prerequisite and then `linting 148 file(s)` with `0 error(s)`,
+  which is what makes the difference between a green gate and a gate that never
+  reached its assertions. The same shape appears in this branch's other
+  evidence — the `-tf1` sweep's failure proved nothing about the Markdown rules
+  either, in the opposite direction.
 
 ## Decision log
 
@@ -1841,3 +1908,101 @@ approaches the ceiling, as `makefile_recipes.py` itself records having done.
   The repair keeps the numeral mid-line, which is where the pass cannot read it
   as a marker; `make check-fmt` is what proves the repair holds, since it runs
   the same pass that caused the damage.
+- 2026-09-26 — A second `coderabbit review --agent` pass ran against `674e266f`
+  and cleared all five round-one sites, with its coverage count exact at
+  `33/33`, but raised two new `trivial` findings. Both were real and both were
+  duplication rather than defects, which is the shape worth recording: neither
+  would have failed a gate, and each was a place where a fact was written twice
+  and could therefore drift.
+
+  The first was `SANDBOX_DIR` in `sandbox.rs`, a second constant spelling a
+  path the file already spelled as `SANDBOX_NAME` under `target/`. The fix
+  removes the redundant constant rather than reconciling the two, so the
+  directory created and the directory emptied are now built from one name.
+  Before deleting it I checked that nothing outside the file consumed it — the
+  constant was `pub(super)`, so an in-crate consumer was possible — and found
+  zero hits repo-wide; the derived path is byte-identical to the old literal.
+
+  The second was `fail` in the oracle's runner, annotated `-> None` while its
+  body ends in a raise. That is the same class of defect this branch exists to
+  catch, one level down: a type that describes a reachable path which is not
+  reachable, so a caller reading the two as equivalent would treat the lines
+  after a `fail` call as live. Annotating it `typ.NoReturn` is the house
+  convention already (`scripts/tests/test_doc_coverage.py` uses it twice) and
+  needs no new dependency, since `typing` is imported as `typ` throughout.
+
+  **The gate caught me twice on the second fix, and both times the rule was
+  right.** Widening the one-line docstring into a body gave ruff's pydocstyle
+  checks something to inspect, and `docstring-missing-exception` fired naming
+  `SystemExit` — the raise the old annotation had hidden from the checker as
+  well as from callers. Adding a NumPy-style `Raises` section, matching the
+  house format in `scripts/coverage_artifact_archive.py`, satisfies it. The
+  lesson is that a docstring with no body is not held to the same standard as
+  one with a body, so expanding a docstring can surface a real omission rather
+  than a spurious one; the fix is to answer the rule, not to retract the prose.
+
+- 2026-09-26 — The pull request body was re-read against the live pull request
+  rather than against the prepared artefacts, and it is already correct: body
+  and prepared copy differ only by a trailing blank line, so the update landed
+  before this check. Verified in the live body: the title carries `(#756)`,
+  `closingIssuesReferences` resolves to exactly `[756]`, the `## References`
+  section carries the session URL, the attribution line is present, and the
+  "The widening was inert as first written, and is not now" section carries the
+  correction. The lesson is to read state from the system of record before
+  acting on a note-to-self, because a pending-task list decays: it recorded
+  work that had in fact been done, and re-applying the prepared body would have
+  been a no-op at best. One detail was still worth correcting, and only because
+  it was checked rather than trusted — the prepared block labelled the pronoun
+  finding `` `low` ``, but the review's own inline comment labels it
+  `🟡 Minor`. The label now matches the source.
+
+- 2026-09-26 — **A falsification that was nearly recorded, and was false because
+  the tool version was guessed.** Having annotated `fail` as `NoReturn` on the
+  reviewer's suggestion, the obvious next question was whether the annotation
+  does anything — so a probe was built: a union narrowed by a guard whose arm
+  calls `fail`. `ty` rejected it under *both* annotations, which reads as the
+  annotation being inert and the docstring's stated reason being false. That
+  reading is wrong, and the reason is worth keeping: the probe was run with
+  `--from ty==0.0.1a34`, a version invented on the spot from the shape of ty's
+  release tags. `0.0.1a34` is an *alpha of 0.0.1*, which sorts **older** than
+  the `0.0.74` this repository pins, so the probe measured a six-month-old
+  checker and reported a limitation the pinned one does not have. Re-run
+  against the pinned `0.0.74` the result inverts exactly as the docstring
+  claims: `-> None` fails to narrow and the use site is rejected, `-> NoReturn`
+  narrows and it passes. The docstring now states the measurement rather than
+  the intuition.
+
+  Two lessons, and the second is the sharper. A control that isolates the
+  variable is not enough if the *instrument* is unverified — the "control" here
+  (a direct `raise` in the guard, which narrowed under every version) correctly
+  proved that narrowing was implemented at all, and that is exactly what made
+  the union result look like a real limitation rather than a version artefact.
+  The instrument's own version had to be pinned to the repository's, and that
+  check had no equivalent of the direct-raise control guarding it. The
+  falsification also arrived late enough to be tempting: a fixed finding, a
+  green gate, and a probe that agreed with neither — the moment to distrust a
+  probe is when it contradicts a verified fix.
+
+- 2026-09-26 — **An enumeration that did not sum to the total stated beside
+  it, in the pull request body, found by re-reading the live pull request
+  rather than the prepared text.** The passage listing the `reviewed` events by
+  actor read "**25** `codescene-access[bot]` approvals, **2**
+  `coderabbitai[bot]`, **1** `sourcery-ai[bot]`, and **1**
+  `chatgpt-codex-connector[bot]` — 30 in all". Those four figures sum to
+  **29**, not 30, so at least one was wrong and the sentence could not be
+  self-consistent at any instant. Reconstructing the running counts event by
+  event shows the two figures came from different moments: CodeScene passed 25
+  at `23:25:13Z` on 2026-09-25 (total 28), and the total reached 30 at
+  `01:47:13Z` on 2026-09-26 (CodeScene 26). The pair `(25, 30)` never
+  co-occurred. Both are now restated as of one named instant,
+  `2026-09-26T03:00:02Z`, with the total computed from the parts.
+
+  Two things are worth keeping. First, the defect was invisible to every gate:
+  no formatter reads arithmetic, and the sentence parses perfectly — it is only
+  wrong. Second, the count had *already* decayed once before, from a claim of a
+  fixed figure to a dated observation, and the dating is what made the error
+  findable now: because the prose said which moment it described, the figures
+  could be checked against that moment instead of against the present, and the
+  mismatch between the parts and the whole is what exposed two different
+  moments wearing one date. A hedge that names its instant is not just more
+  honest, it is more testable.
