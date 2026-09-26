@@ -61,7 +61,7 @@ Netsuke actualmente requiere lo siguiente:
 
 ### Instalación
 
-La última versión prelanzamiento publicada es Netsuke v0.1.0-beta3, disponible
+La última versión prelanzamiento publicada es Netsuke v0.1.0-beta4, disponible
 en crates.io. Cuando
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) esté
 disponible, prefiéralo: obtiene un binario ya compilado del lanzamiento y evita
@@ -81,7 +81,7 @@ cargo +nightly-2026-08-23 install netsuke-build
 ```
 
 Hay instaladores prediseñados disponibles en el
-[lanzamiento de GitHub v0.1.0-beta3](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3):
+[lanzamiento de GitHub v0.1.0-beta4](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta4):
 
 | Plataforma | Arquitecturas                      | Paquetes                       |
 | ---------- | ---------------------------------- | ------------------------------ |
@@ -95,7 +95,7 @@ instalador de macOS o de Windows. El instalador MSI de Windows se instala en
 `C:\Program Files\netsuke` y no actualiza `PATH`. Los archivos de suma de
 comprobación SHA-256 acompañan a los binarios independientes y a los archivos
 de ayuda y licencia preparados. Los paquetes instaladores no tienen archivos de
-suma de comprobación adjuntos en v0.1.0-beta3. Consulte la
+suma de comprobación adjuntos en v0.1.0-beta4. Consulte la
 [guía del usuario](docs/users-guide.md#install-netsuke) para conocer los
 comandos específicos de cada plataforma y la configuración en Windows.
 
@@ -140,7 +140,7 @@ ______________________________________________________________________
 
 ## Qué funciona hoy
 
-El compilador de sistemas de construcción principal de Netsuke v0.1.0-beta3
+El compilador de sistemas de construcción principal de Netsuke v0.1.0-beta4
 ofrece lo siguiente:
 
 - análisis de manifiestos YAML 1.2 con validación de claves duplicadas y de
@@ -163,10 +163,12 @@ ofrece lo siguiente:
 - configuración por capas, salida localizada, preferencias de
   accesibilidad, informes de progreso, tiempos de las etapas, y resultados o
   diagnósticos JSON versionados;
+- evaluación acotada de manifiestos, políticas de acceso a la red y a `env()`
+  controladas por el operador, y filtros de lectura de archivos acotados;
 - cobertura de pruebas unitarias, de comportamiento, de integración, de
   propiedades, de instantáneas y de verificación inicial con Kani.
 
-El lanzamiento beta3 también admite agregados de acciones y objetivos basados
+Desde beta3, Netsuke también admite agregados de acciones y objetivos basados
 únicamente en dependencias: los nodos con una lista `deps` no vacía pueden
 omitir una receta.
 
@@ -296,7 +298,7 @@ ______________________________________________________________________
 
 ## Estado del lanzamiento y del desarrollo
 
-El lanzamiento v0.1.0-beta3 es una vista previa útil para quienes lo adoptan
+El lanzamiento v0.1.0-beta4 es una vista previa útil para quienes lo adoptan
 tempranamente, no una declaración de que Netsuke esté terminado o de que todas
 sus interfaces sean estables. El pipeline del compilador y el flujo de trabajo
 habitual de compilación local son sustanciales; la interfaz de línea de
@@ -307,7 +309,7 @@ Fije la versión de Netsuke en la automatización y espere que algunos nombres d
 comandos, indicadores, esquemas de diagnóstico y detalles del manifiesto
 cambien antes de la versión 1.0.
 
-Las siguientes limitaciones se aplican a beta3.
+Las siguientes limitaciones se aplican a beta4.
 
 Las limitaciones conocidas incluyen:
 
@@ -332,6 +334,10 @@ habituales puedan escribirse con normalidad. Los manifiestos de beta2 que usan
 expresiones literales con el signo de dólar de shell requieren migración; véase
 el
 [límite de seguridad de la guía del usuario](docs/users-guide.md#review-the-safety-boundary).
+Beta4 aplica el mismo tratamiento a `$in` y `$out` en las recetas `script:`;
+los manifiestos de beta3 que los usaban para sustituir rutas deben usar
+`{{ ins }}` y `{{ outs }}` en su lugar; véase la
+[guía de migración](docs/v0-1-0-migration-guide.md).
 
 Consulte
 [seguridad e interpolación de comandos](#seguridad-e-interpolación-de-comandos)

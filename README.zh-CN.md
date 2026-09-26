@@ -51,7 +51,7 @@ Netsuke目前需要：
 
 ### 安装
 
-最新发布的预发布版本是Netsuke v0.1.0-beta3，可从crates.io获取；若可以使用
+最新发布的预发布版本是Netsuke v0.1.0-beta4，可从crates.io获取；若可以使用
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall)
 ，则优先使用它：它会获取预构建的发行版二进制文件，从而避免下文提到的工具链要求。
 
@@ -67,7 +67,7 @@ cargo +nightly-2026-08-23 install netsuke-build
 ```
 
 预构建的安装程序可从
-[v0.1.0-beta3 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3)
+[v0.1.0-beta4 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta4)
 获取：
 
 | 平台    | 架构                                | 软件包                          |
@@ -79,7 +79,7 @@ cargo +nightly-2026-08-23 install netsuke-build
 Linux软件包会安装`netsuke`的手册页，并声明`ninja-build`为依赖项
 ；使用macOS或Windows安装程序时，必须单独安装Ninja；Windows MSI会安装到
 `C:\Program Files\netsuke`，且不会更新`PATH`
-；SHA-256校验和文件会随附独立二进制文件以及配套的帮助文档和许可证文件；在v0.1.0-beta3中，安装程序包不附带校验和文件；关于平台专属命令和Windows设置，参见
+；SHA-256校验和文件会随附独立二进制文件以及配套的帮助文档和许可证文件；在v0.1.0-beta4中，安装程序包不附带校验和文件；关于平台专属命令和Windows设置，参见
 [用户指南](docs/users-guide.md#install-netsuke)。
 
 要使用Cargo安装当前的源码检出：
@@ -121,7 +121,7 @@ ______________________________________________________________________
 
 ## 目前已支持的功能
 
-Netsuke v0.1.0-beta3的核心构建系统编译器提供以下功能：
+Netsuke v0.1.0-beta4的核心构建系统编译器提供以下功能：
 
 - YAML 1.2清单解析，包含重复键检测和模式验证；
 - Jinja变量、宏、`foreach`、`when`
@@ -134,9 +134,12 @@ Netsuke v0.1.0-beta3的核心构建系统编译器提供以下功能：
 - Ninja文件的生成与执行，以及`clean`和独立清单生成；
 - 可复现的依赖图，格式为Graphviz DOT或自包含、无障碍的HTML；
 - 分层配置、本地化输出、无障碍偏好设置、进度报告、阶段耗时，以及带版本号的JSON结果或诊断信息；
+- 有界的清单求值、由操作者控制的网络与`env()`访问策略
+  ，以及有界的文件读取过滤器；
 - 单元测试、行为测试、集成测试、属性测试、快照测试，以及初步的Kani验证覆盖。
 
-beta3版本还支持仅依赖的操作和目标聚合：`deps`列表非空的节点可以省略配方。
+自beta3起，Netsuke还支持仅依赖的操作和目标聚合：
+`deps`列表非空的节点可以省略配方。
 
 ______________________________________________________________________
 
@@ -245,11 +248,11 @@ ______________________________________________________________________
 
 ## 发布与开发状态
 
-v0.1.0-beta3版本是面向早期采用者的实用预览版，并不代表Netsuke已经完成，也不代表每个接口都已稳定；编译器管线和普通本地构建工作流已相当完善，但命令行界面、配置词汇和高级配方模型仍处于预稳定阶段。
+v0.1.0-beta4版本是面向早期采用者的实用预览版，并不代表Netsuke已经完成，也不代表每个接口都已稳定；编译器管线和普通本地构建工作流已相当完善，但命令行界面、配置词汇和高级配方模型仍处于预稳定阶段。
 
 在自动化流程中锁定Netsuke的版本号，并预期在1.0版本发布之前，部分命令名称、标志、诊断模式和清单细节可能发生变化。
 
-以下限制适用于beta3版本。
+以下限制适用于beta4版本。
 
 已知限制包括：
 
@@ -265,6 +268,9 @@ v0.1.0-beta3版本是面向早期采用者的实用预览版，并不代表Netsu
 beta3版本通过引入Ninja感知的转义，修复了beta2中shell美元符号（`$`
 ）的限制，因此可以正常编写普通的shell表达式；使用字面shell美元符号表达式的beta2清单需要迁移，参见
 [用户指南中的安全边界](docs/users-guide.md#review-the-safety-boundary)。
+beta4对`script:`配方中的`$in`和`$out`采用同样的处理
+，将其视为shell变量；依赖它们进行路径替换的beta3清单必须改用
+`{{ ins }}`和`{{ outs }}`，参见 [迁移指南](docs/v0-1-0-migration-guide.md)。
 
 详见[安全与命令插值](#安全与命令插值)以及
 [用户指南中的安全边界](docs/users-guide.md#review-the-safety-boundary)。

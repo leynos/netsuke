@@ -1,4 +1,4 @@
-//! Executable contracts for examples in the public user documentation.
+//! Executable contracts for examples in the project documentation.
 
 mod documentation_examples;
 
@@ -16,18 +16,20 @@ use test_support::fs as test_fs;
 use test_support::netsuke::{NetsukeRun, run_netsuke_in, run_netsuke_in_with_env};
 
 const EXPECTED_EXAMPLE_IDS: &[&str] = &[
+    "devguide-clock-snippet",
+    "devguide-env-reader-snippet",
+    "devguide-ninja-request-snippet",
+    "devguide-verbose-timing-reporter",
     "guide-accessible-output",
     "guide-binstall-install",
     "guide-boolean-string-interpolation",
     "guide-cli-usage",
-    "guide-clock-snippet",
     "guide-command-available-manifest",
     "guide-command-list",
     "guide-complete-manifest",
     "guide-configuration-observability",
     "guide-crates-io-install",
     "guide-direct-command-list",
-    "guide-env-reader-snippet",
     "guide-file-follow-symlinks-expression",
     "guide-file-max-bytes-expression",
     "guide-first-build-commands",
@@ -40,14 +42,12 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-manifest-environment-policy",
     "guide-manifest-environment-policy-cli",
     "guide-manifest-environment-policy-env",
-    "guide-ninja-request-snippet",
     "guide-output-streams",
     "guide-project-anchor",
     "guide-project-config",
     "guide-serial-dependency-order-manifest",
     "guide-source-install",
     "guide-utility-commands",
-    "guide-verbose-timing-reporter",
     "guide-windows-bash-compatibility",
     "guide-windows-help",
     "guide-windows-help-install",
@@ -69,7 +69,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "stdlib-yaml-syntax-manifest",
 ];
 
-/// Assert that a guide snippet is a Rust fence naming the given API entry points.
+/// Assert that a developers' guide snippet is a Rust fence naming the given APIs.
 ///
 /// Several guide snippets duplicate an executable doctest, and pinning the copy
 /// to the same identifiers is what keeps the two from drifting silently. The
@@ -89,39 +89,39 @@ fn assert_snippet_names(example_id: &str, label: &str, needles: &[&str]) -> Resu
     Ok(())
 }
 
-/// The guide's env-reader snippet must stay in step with the API it mirrors.
+/// The developers' guide env-reader snippet must track the API it mirrors.
 ///
 /// The snippet is Rust and is executed as the doctest on `from_str_with_env`.
 #[test]
 fn env_reader_snippet_mirrors_the_doctest() -> Result<()> {
     assert_snippet_names(
-        "guide-env-reader-snippet",
+        "devguide-env-reader-snippet",
         "env-reader",
         &["from_str_with_env", "EnvReader", "env('PROFILE')"],
     )
 }
 
-/// The guide's clock snippet must stay in step with the API it mirrors.
+/// The developers' guide clock snippet must track the API it mirrors.
 ///
 /// The snippet is Rust and is executed as the doctest on `with_clock`.
 #[test]
 fn clock_snippet_mirrors_the_doctest() -> Result<()> {
     assert_snippet_names(
-        "guide-clock-snippet",
+        "devguide-clock-snippet",
         "clock",
         &["with_clock", "fixed_clock", "StdlibConfig"],
     )
 }
 
-/// The guide's Ninja-request snippet must name the API it documents.
+/// The developers' guide Ninja-request snippet must name the API it documents.
 ///
-/// The snippet is the only place the guide constructs the request bundles, so
-/// pinning the identifiers keeps it from drifting into prose about types the
-/// crate no longer exports.
+/// The snippet is the only place the developers' guide constructs the request
+/// bundles, so pinning the identifiers keeps it from drifting into prose about
+/// types the crate no longer exports.
 #[test]
 fn ninja_request_snippet_names_both_request_types() -> Result<()> {
     assert_snippet_names(
-        "guide-ninja-request-snippet",
+        "devguide-ninja-request-snippet",
         "Ninja-request",
         &[
             "NinjaBuildRequest",
