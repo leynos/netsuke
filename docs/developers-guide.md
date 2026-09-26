@@ -8357,6 +8357,15 @@ set is not a reason to omit the rule, it is the state the rule must notice
 leaving. A harness added tomorrow inherits the 300 s base allowance, which is
 sized for a test that compiles nothing.
 
+Targets are found as Cargo auto-discovers them
+(`tests/workflow_contracts/cargo_test_targets.py`): `tests/<name>.rs` is a
+target called `<name>`, and `tests/<name>/main.rs` is a target called `<name>`
+compiling every `.rs` file beneath that directory. An override covers a target
+only when its filter selects the binary exactly and without negation:
+`binary(=<name>)` or `binary_id(=netsuke::<name>)`. A substring selector such as
+`binary(<name>)` and any filter containing `not` or `!` count as covering
+nothing.
+
 The discovery reads what a file constructs, not what it mentions.
 `tests/sha2_migration_guard_tests.rs` documents at length why a trybuild
 harness was removed during the Polonius migration, and a text match would
