@@ -363,14 +363,73 @@ jobs:
     # generation, since the save gates on a push to `main`, so all it can do
     # here is measure a warm restore, which is the one the exit gate needs.
     runs-on: ubicloud-standard-2-ubuntu-2404
-    timeout-minutes: 20
+    # Thirty minutes, not twenty. The compile gate at the end of this job
+    # builds the whole dependency graph through the Kani frontend, and a cold
+    # `CARGO_TARGET_DIR` plus the frontend's own toolchain download is what the
+    # ceiling has to contain. See "Test timeouts: the tiers this repository
+    # sets" in docs/developers-guide.md.
+    #
+    # The ceiling also contains that gate's own slow-timeout, which is ten
+    # 60-second periods rather than the profile's five because the default
+    # allowance sits too near the gate's cost for a runner to decide. A job
+    # whose gate burned the whole raised allowance would still land inside the
+    # ceiling: the measured job is 776s with the gate costing 257.7s of it, so
+    # the work outside the gate is 518s, and 518s + 600s is 1,118s against
+    # 1,800s. That is why raising the per-test allowance needed no change here;
+    # a ceiling that no longer contained it would be the fault to check for.
+    timeout-minutes: 30
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
-      RUSTUP_TOOLCHAIN: stable
+      # The mutation compile gate runs through nextest, so this lane declares a
+      # test-process bound like every other nextest lane. Two vCPUs, two test
+      # processes.
+      LINUX_LANE_VCPUS: '2'
+      NEXTEST_TEST_JOBS: -j 2
+      # The toolchain this job builds with. Declared at job scope, like every
+      # other job that hands it to `Setup Rust`, because the `env` context
+      # resolves per job: a job that reads a variable only another job declared
+      # gets the empty string, never an error. `build-test` owns the only other
+      # copy and it does not reach here.
+      #
+      # The absent declaration is the defect this line repairs, found on run
+      # 35792995207. An empty `toolchain` input is not a request for a default:
+      # it makes `setup-rust` take its `rust-toolchain file` arm, which passes
+      # `override: false` and leaves the compiler resolved from ambient state.
+      # The winner there is a *stale directory override* — `kani-cache`
+      # restores `.kani-rustup` wholesale, `settings.toml` and its `[overrides]`
+      # table included, and a directory override outranks `rust-toolchain.toml`.
+      # That table was written while this job's input was the literal `stable`,
+      # so the cached home kept selecting stable and the gate aborted having
+      # compiled nothing.
+      #
+      # Naming the pin is what displaces that entry: a non-empty input selects
+      # `setup-rust`'s `explicit toolchain` arm with `override: true`, which
+      # installs the nightly and rewrites the override to point at it.
+      #
+      # The failure this prevents is an abort, not a silent fallback.
+      # `GATE_RUSTFLAGS` unconditionally appends the nightly-only `-Zthreads=8`
+      # and stable rejects it before a single patch compiles.
+      # `check-build-tools` cannot catch it: it asserts the pin is *installed*,
+      # not *active*, so it can report `toolchain nightly-2026-08-23 available`
+      # one line before the gate aborts on stable.
+      #
+      # With `cargo kani` the value would not matter, because it resolves its
+      # own bundled toolchain. Do not drop it on the grounds that the harnesses
+      # pass without it: the mutation compile gate is the consumer.
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
       CARGO_HOME: ${{ github.workspace }}/.kani-cargo
       KANI_HOME: ${{ github.workspace }}/.kani-home
+      # Redirected so the Kani payloads' toolchain state is cached and torn down
+      # with the job. `make install-build-tools` installs the pin into this home.
+      #
+      # The redirection is also how a stale toolchain selection survives across
+      # runs: this home holds `settings.toml`, whose `[overrides]` table is what
+      # `rustup override set` writes and `rust-toolchain.toml` loses to, and
+      # `kani-cache` restores the whole directory. A `RUSTUP_HOME` that is cached
+      # is a toolchain decision that is cached, which is why the job must name
+      # the toolchain it wants rather than inherit whatever the last writer left.
       RUSTUP_HOME: ${{ github.workspace }}/.kani-rustup
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -387,7 +446,15 @@ jobs:
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
-          toolchain: stable
+          # Resolved from the job's own `env`, which declares the pinned
+          # nightly. This input does double duty: a non-empty value selects
+          # `setup-rust`'s `explicit toolchain` arm, which installs the named
+          # toolchain *and* runs `rustup override set` on it. That override is
+          # what outranks `rust-toolchain.toml` for the whole workspace, so it
+          # has to point at the nightly: it is also what displaces the stale
+          # `stable` entry a restored `.kani-rustup` carries in. See the job's
+          # `NETSUKE_RUST_TOOLCHAIN` for what an empty value here costs.
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           cache-provider: external
           # Kani's payloads come from pinned release archives, so this job
           # needs no binary-install helper.
@@ -438,6 +505,38 @@ jobs:
         run: cargo kani --version | grep --fixed-strings "0.67.0"
       - name: Run Kani harnesses
         run: make kani-ir
+      - name: Install the build standard
+        # The gate below compiles the tree the harnesses are verified in, so it
+        # needs the same prerequisites every other build target declares: the
+        # pinned `mold` linker and the repository's nightly toolchain. This is
+        # the step that puts the pinned nightly on the machine; `cargo kani`
+        # itself drives its own bundled toolchain and is unaffected.
+        run: make install-build-tools
+      - name: Install cargo-nextest
+        # The gate runs through nextest like every other test target. Installed
+        # by the workflow-scoped pin rather than `cargo binstall`, so it matches
+        # the version the other lanes use without needing a binary-install
+        # helper in this job.
+        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375  # v2.87.12
+        with:
+          tool: nextest@${{ env.NEXTEST_VERSION }}
+      - name: Mutation patch compile gate
+        # Applies each patch under docs/verification/mutations/ and compiles the
+        # patched tree under `-D warnings`. `#[ignore]`-gated and run from its
+        # own target: one Kani codegen per patch is too costly for the default
+        # nextest profile, but a patch that applies cleanly yet cannot compile
+        # contributes no mutation evidence while looking healthy.
+        #
+        # This job, not `build-test`, is where the gate belongs. Only Kani
+        # parses `#[cfg(kani)]` code, so only Kani can reject a patch that seeds
+        # its fault inside a Kani-gated item; `build-test` has no Kani at all.
+        # The gate compiles through the Kani frontend for that reason.
+        #
+        # `make test-kani-mutations` is deliberately named so the
+        # forbidden-suite scan in
+        # tests/workflow_contracts/test_execution_coverage_test.py does not read
+        # it as a second workspace-suite execution.
+        run: make test-kani-mutations
       - name: Save Kani payloads
         # This job owns the Kani key and nothing else; the action restricts
         # the save to a push on `main`.

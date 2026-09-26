@@ -1,13 +1,13 @@
 diff --git a/src/ir/cycle_detector.rs b/src/ir/cycle_detector.rs
-index a08fe7b9..3b600a42 100644
+index 2de8038d..64ee7157 100644
 --- a/src/ir/cycle_detector.rs
 +++ b/src/ir/cycle_detector.rs
-@@ -194,7 +194,7 @@ impl<'targets> CycleDetector<'targets> {
-     fn back_edge_result(&self, node: &'targets Utf8Path, search: CycleSearch) -> CycleVisitResult {
-         match search {
-             #[cfg(kani)]
--            CycleSearch::Presence => CycleVisitResult::Present,
-+            CycleSearch::Presence => CycleVisitResult::None,
-             CycleSearch::Path => CycleVisitResult::Path(canonicalize_cycle(
-                 self.cycle_from_stack(self.stack_index(node), node),
-             )),
+@@ -49,7 +49,7 @@ pub(super) enum CycleVisitResult {
+ impl CycleVisitResult {
+     /// Return whether the result carries a detected cycle.
+     const fn is_cycle(&self) -> bool {
+-        !matches!(self, Self::None)
++        matches!(self, Self::Path(_))
+     }
+ 
+     /// Convert a path-carrying result into its cycle, if any.

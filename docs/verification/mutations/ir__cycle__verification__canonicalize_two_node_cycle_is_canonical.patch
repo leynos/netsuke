@@ -1,13 +1,13 @@
 diff --git a/src/ir/cycle_support.rs b/src/ir/cycle_support.rs
-index 59012331..abdcf08f 100644
+index b3e8cd9c..8ed0222f 100644
 --- a/src/ir/cycle_support.rs
 +++ b/src/ir/cycle_support.rs
-@@ -51,7 +51,7 @@ pub(super) fn find_rotation_start_by<T>(
+@@ -29,7 +29,7 @@ pub(super) fn find_rotation_start_by<T>(
+     let mut index = 1;
+     while index < len {
          if let (Some(candidate), Some(current)) = (cycle.get(index), cycle.get(start))
-             && compare(candidate, current) == Ordering::Less
+-            && compare(candidate, current) == Ordering::Less
++            && compare(candidate, current) == Ordering::Greater
          {
--            start = index;
-+            let _ = index;
+             start = index;
          }
-         index += 1;
-     }

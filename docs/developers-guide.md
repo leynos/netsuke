@@ -3350,7 +3350,7 @@ was validated by applying the patch and watching the harness fail under
 `cargo kani --harness <name>`.
 
 `tests/kani_mutation_evidence_tests.rs` keeps that evidence in lockstep with
-the harnesses as part of `make test`:
+the harnesses. Three of its checks run as part of `make test`:
 
 - every patch must still apply cleanly to the current tree
   (`git apply --check`), catching silent rot when production code near a
@@ -3362,9 +3362,91 @@ the harnesses as part of `make test`:
   named patch, or appear in the test's exemption list with a stated reason; and
 - every patch must correspond to a live harness, catching renames.
 
-When the gate reports a rotted patch, regenerate it against the moved
-production code and re-validate it by applying the patch and running its
-harness under the mutation before committing the regenerated file.
+A fourth check is gated, because it costs one Kani codegen per patch:
+`compile_guard::every_patched_tree_compiles_under_denied_warnings` applies each
+patch, compiles the patched tree under `-D warnings`, and reverts it through a
+fallible `revert()` whose failure is aggregated and reported, so a failed
+reverse cannot pass quietly as a green run with a mutation still applied. A
+`Drop` guard remains as the unwind fallback for an assertion failure mid-patch.
+Run it with `make test-kani-mutations`, which drives nextest with
+`--run-ignored ignored-only`; `kani-smoke` runs the same target on every pull
+request. Applying cleanly is not enough on its own: `make kani-full` denies
+warnings, so a patch that seeds its fault by leaving a binding or helper unused
+is a hard compile error, `cargo kani` never reaches the harness, and the patch
+contributes no evidence while still looking healthy to `git apply --check`.
+
+The tree it patches is not the checkout it runs in. `sandbox.rs` exports the
+current revision with `git archive` into `target/kani-mutation-sandbox/`, and
+both the `git apply` and the `cargo kani` run there. That is what makes the
+revert a tidiness step rather than a safety one: nextest terminates a timed-out
+test by signalling its process group, so `Drop` cannot run, and a mutation
+seeded into the working checkout would survive the run as a change nobody made.
+An isolated copy is simply discarded, so termination cannot leave one behind.
+`GIT_CEILING_DIRECTORIES` is pinned to the sandbox root, because the sandbox
+sits inside the checkout and an unceiled `git` would walk up into the real
+repository; the gate asserts that the sandbox resolves no repository before it
+applies anything. The revision is the working tree captured with
+`git stash create`, not `HEAD`, so an uncommitted patch edit is what gets
+compiled — compiling `HEAD` would report a committed patch healthy while the
+developer was editing it, the same shape as the dead override below. On CI the
+tree is clean and the capture resolves to `HEAD`.
+
+One consequence of reading a captured revision rather than the working tree: a
+patch that is untracked cannot be compiled, because the capture holds tracked
+content only. The gate refuses that state rather than ignoring it, so `git add`
+a new patch before running `make test-kani-mutations`. A patch that is both
+untracked and ignored is not reported — an ignored file is not evidence the
+gate was asked to read.
+
+The gate compiles through the Kani frontend (`cargo kani --only-codegen`)
+rather than `cargo check`, and it runs in `kani-smoke` rather than
+`build-test`, for one reason: only Kani parses `#[cfg(kani)]` code.
+`cargo check` leaves that surface unparsed, so a patch that seeds its fault
+inside a Kani-gated item is invisible to it — measured on
+`ir__cycle__verification__self_dependency_reports_cycle`, whose only changed
+line is a `cfg(kani)` match arm, `cargo check --lib --all-features` exits 0 and
+reports the tree healthy while `cargo kani` rejects that same tree with
+`variant Present is never constructed`. `--only-codegen` is a full compile under
+`cfg(kani)` with verification skipped, so it subsumes the check it replaced
+rather than joining it.
+
+It carries its own `slow-timeout` in `.config/nextest.toml`, ten 60-second
+periods rather than the profile's five, because the default allowance is too
+small for it rather than merely tight. The test compiles into
+`target/kani-mutation-compile`, which no cache restores — `kani-cache` holds
+the Kani payloads, not a build tree — so every run pays a cold build of the
+whole dependency graph plus 18 incremental recompiles, and how long that takes
+is the host's to decide. Two CI runs passed at 257.7 s and 261.5 s; a third
+failed at 300.008 s on a head whose only difference was eight lines of
+Markdown. A 38 s margin is not a budget but the difference between two runners,
+and the failure then names nextest's cap rather than the patch that was slow.
+The widened allowance is bounded from above by the whole-run budget, though not
+tightly: what the ordering requires is `global-timeout` strictly above the
+largest per-test allowance, and at 60 s periods 780 s admits up to twelve of
+them, 720 s. The 600 s is therefore a chosen allowance with 180 s of margin
+above it rather than the ceiling itself. Raising it to 780 s is what the
+ordering forbids: the test's allowance would then equal the whole-run budget it
+must stay below, and the run would end before the test could use it. So 720 s
+is the last value the ordering admits, and 780 s is where the two tiers meet.
+
+That widening was inert when it first landed, which is why the override is
+worth reading as a worked example of the trap above. Its filter named the bare
+test name, and the test is declared in a submodule, so the anchor never matched
+and the override applied to nothing: the 600 s was never in force, and the two
+passing CI runs at 257.7 s and 261.5 s cannot show otherwise, because both sit
+inside the 300 s default an inert override predicts. The filter now carries the
+`compile_guard::` prefix. The general rule is that a filter for a test in a
+submodule must name the module path Nextest prefixes onto the qualified name it
+matches against; `cargo nextest show-config test-groups` is the cheap way to
+see whether an override binds, since a filter selecting nothing leaves its
+override out of that listing entirely.
+
+Regenerate a rotted patch *in place*: swap an operator, comparator, index, or
+literal rather than deleting a statement or redirecting a call. Deleting the
+only use of a helper, or the only reassignment of a `mut` binding, is what
+turns the mutation into a compile error under denied warnings. Then re-validate
+the regenerated file by applying the patch, confirming the patched tree
+compiles, and watching the harness fail under the mutation before committing.
 
 ### Kani cfg compile-time checks
 
@@ -3399,10 +3481,13 @@ for the design rationale and re-entry criteria.
 Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
 `build-test` job. The job installs the pinned, checksummed `cargo-kani`
 front-end and Kani release bundle, checks the reported version, and then runs
-the bounded harness suite through `make kani-ir` under a 20-minute job timeout;
-it does not run `make verus`, coverage, CodeScene upload, or the normal build
-matrix. Its cache entry owns the job-local Kani Cargo, support-file, and Rust
-toolchain homes separately from ordinary Cargo build artefacts.
+the bounded harness suite through `make kani-ir` and the mutation compile gate
+through `make test-kani-mutations`, both under a 30-minute job timeout; it does
+not run `make verus`, coverage, CodeScene upload, or the normal build matrix.
+Its cache entry owns the job-local Kani Cargo, support-file, and Rust toolchain
+homes separately from ordinary Cargo build artefacts. The job runs on every
+pull request, on a push to `main`, and on a manual dispatch, which is what lets
+a dispatch measure a warm restore of those homes.
 
 ## Test execution
 
@@ -3442,6 +3527,7 @@ Table: the executed test set of every job that runs tests.
 | `coverage-upload`          | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | all      | all         | denied   |
 | `netsukefile`              | Ubuntu 22.04 | builds a manifest and runs Ninja           | default  | binary only | allowed  |
 | `kani-smoke`               | Ubuntu 24.04 | `make kani-ir`                             | Kani cfg | harnesses   | allowed  |
+| `kani-smoke` mutation step | Ubuntu 24.04 | `make test-kani-mutations`                 | all      | library     | denied   |
 | `build-test-windows`       | Windows      | `cargo nextest run` and `cargo test --doc` | all      | all         | denied   |
 
 Coverage is measured once per commit. `build-test` measures it only on a pull
@@ -3450,6 +3536,16 @@ request, where the changed-line gate consumes `lcov.info`. On a push to `main`,
 is the sole writer of the ratchet baseline, so the baseline is comparable with
 what the ratchet later checks against. A second instrumented build would pay
 twice and give that baseline two writers.
+
+`kani-smoke` carries two test sets that share only the lane. `make kani-ir`
+verifies the harnesses under the Kani configuration with warnings allowed;
+`make test-kani-mutations` compiles patched trees through the same frontend
+with warnings denied. They are separate because they answer different
+questions: the first asks whether the harnesses hold, the second whether they
+can still be reached at all. The gate compiles each patch into one shared
+`CARGO_TARGET_DIR`, so successive patches reuse a single compiled dependency
+graph rather than rebuilding it apiece: each patch touches one file, so only
+that crate and its dependants recompile.
 
 `netsukefile` and `kani-smoke` differ in platform or in purpose, so neither is
 a candidate for folding. The Windows gate keeps its own `cargo nextest` pass
@@ -3509,15 +3605,27 @@ governs the non-doctest pass only, and deliberately stays small:
   join `nested-cargo-builds`, whose `max-threads = 1` stops four Nextest
   workers from each starting a four-job build on four vCPUs. Membership is
   decided by Nextest evaluating each override's filter against real test names,
-  so a filter can fail silently: a name no test has, or a form that cannot
-  match how a test is named at run time, selects nothing and leaves the test
-  running unserialized while the group still looks healthy. Every filter — for
-  a group slot or for a widened timeout alike — therefore uses
-  `test(/^NAME($|::)/)`, not `test(=NAME)`. An `#[rstest]` with `#[case]`
-  attributes compiles to one test per case, named `name::case_1_…`, and the `=`
-  form compares the whole name, so it matches none of them; the anchored regex
-  form matches the plain name and every case suffix alike. Nextest's `~`
-  substring form is unanchored and over-matches, so it is not used.
+  so a filter can fail silently in three ways: a name no test has, a form that
+  cannot match how a test is named at run time, or an anchored name missing the
+  module path a submodule contributes. Any of the three selects nothing and
+  leaves the test running under the defaults while the policy still looks
+  enforced. Every filter — for a group slot or for a widened timeout alike —
+  therefore uses `test(/^MODULE::NAME($|::)/)`, not `test(=NAME)`. An
+  `#[rstest]` with `#[case]` attributes compiles to one test per case, named
+  `name::case_1_…`, and the `=` form compares the whole name, so it matches
+  none of them; the anchored regex form matches the plain name and every case
+  suffix alike. Nextest applies that regex to the whole qualified name, so a
+  test declared inside a submodule carries its `module::` prefix and the anchor
+  stops short of it: a filter reading
+  `test(/^every_patched_tree_compiles_under_denied_warnings($|::)/)` names a
+  test whose real name is
+  `compile_guard::every_patched_tree_compiles_under_denied_warnings` and
+  selects nothing. The static contracts cannot see this one, because they
+  compare bare names to bare names and the written name resolves; the accepted
+  grammar admits an optional `module::` prefix and captures only the bare name
+  so that comparison stays bare-to-bare, which leaves the prefix itself to be
+  proved at run time. Nextest's `~` substring form is unanchored and
+  over-matches, so it is not used.
   `tests/workflow_contracts/nextest_child_cargo_group_test.py` holds these
   contracts, including that every filtered name resolves to a declared test.
   The rule is applied to every filter, not only this group's, because the same
@@ -3536,10 +3644,31 @@ governs the non-doctest pass only, and deliberately stays small:
   they hold every filter to the anchored grammar but cannot say which tests a
   filter selects, because that needs compiled test binaries. The runtime half is
   `.github/scripts/verify_nextest_anchored_filters.py`, which runs on the
-  coverage lane after `Test and Measure Coverage` and asks Nextest itself. It
-  reads the parameterized tests and their case counts from the Rust sources,
-  then asserts that each anchored filter in the configuration selects exactly
-  those instances and that the whole-name form selects none of them. It reuses
+  coverage lane after `Test and Measure Coverage` and asks Nextest itself. The
+  reading lives in the `_nextest_oracle` package beside it, so that every unit
+  stays inside the 400-line cap while the workflow keeps calling the entry
+  script by path. It reads the parameterized tests and their case counts from
+  the Rust sources, then asserts that each anchored filter in the configuration
+  selects exactly those instances and that the whole-name form selects none of
+  them. That check alone was scoped past the module-qualification case, because
+  it only ever examined filters naming a parameterized test. It therefore also
+  replays every filter expression in the configuration verbatim through Nextest
+  and requires each to select at least one test, whatever the filter names and
+  whichever override carries it. A filter that joins several selectors with `|`
+  is replayed one alternative at a time, because a union is satisfied by any
+  one of its arms: a dead selector beside a live one would otherwise pass, and
+  the test it names would run unpoliced behind a filter that looks healthy. The
+  split follows bracket depth, since `|` inside `test(...)` belongs to the
+  regular expression rather than to the union. Both replays work on the raw
+  filter text rather than a name re-synthesized from the grammar, so a form the
+  grammar admits but writes differently still round-trips to the same selector
+  — and, for the parameterized check, so the selector replayed is the one the
+  file wrote, module path included, rather than one the checker rebuilt and
+  which would then report its own empty match as a fault in the configuration.
+  The rule for a test's `module::` prefix is written once, as
+  `_nextest_oracle.grammar.MODULE_PATH`, and read from there by every user
+  rather than restated: a second copy stays parseable while it drifts, which is
+  precisely the silent-mismatch shape this script exists to catch. It reuses
   the instrumented build tree rather than compiling, by taking the environment
   `cargo llvm-cov show-env` reports, so it is gated exactly as the coverage
   step is and must run before `Discard the instrumented build tree`. The
@@ -7993,12 +8122,12 @@ fed back upstream.
 
 All four tiers are set here.
 
-| Tier                     | What it bounds                     | Where it is set                               | Current value                                 |
-| ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5)                              |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 780 s (13 m) in CI; unset locally             |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m), armed twice per coverage step |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 90 m                                          |
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                                     |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | ----------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5); 600 s (60 s x 10) for the mutation compile gate |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 780 s (13 m) in CI; unset locally                                 |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m), armed twice per coverage step                     |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 90 m                                                              |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
@@ -8012,9 +8141,31 @@ and the watchdog's 1,800 s keep the values they already had.*
 
 `terminate-after` counts warning periods, so the budget a test actually gets is
 `period` multiplied by it. Every period here is 60 s, so reading the period
-alone would report a 60 s allowance where the real figure is 300 s. Any
+alone would report a 60 s allowance where the real figure is 600 s. Any
 comparison against the tiers above rests on that reading, and the contract
 asserts it explicitly rather than leaving it implied.
+
+There are two such figures and the larger one governs. `[profile.default]`'s own
+`slow-timeout` gives five periods — 300 s — to every test no override matches,
+which is almost all of them. One override widens it: the mutation compile gate
+takes ten periods, 600 s, because it compiles all 18 patched trees through the
+Kani frontend into a target directory no cache restores. A whole-run budget has
+to sit above the largest allowance in the file, so 600 s is the figure the
+ordering below is written against, not the 300 s most tests get.
+
+That override is the targeted, written-rationale case `.config/nextest.toml`'s
+own policy asks for, and it is worth reading as the worked example of it. The
+gate passed twice at 257.7 s and 261.5 s and then failed at 300.008 s on a head
+whose only diff was eight lines of Markdown. The code was not slow; the cap was
+too near the cost, and a margin of 38 s is the difference between one runner
+and another rather than a budget. The widened allowance is a chosen figure
+inside the ordering rather than at its edge: what
+`global-timeout > largest per-test allowance` permits at 60 s periods is up to
+720 s under the 780 s budget, so the 600 s leaves 180 s of margin and the two
+tiers still bound each other. That override binds only because its filter
+carries the test's module path; for a period it did not, and the two passing
+runs above were read as evidence the widened allowance was in force when both
+sit inside the 300 s default anyway. See "nextest configuration" for the rule.
 
 ### The whole-run budget, and how 13 minutes was arrived at
 
@@ -8093,7 +8244,7 @@ has to sit between its neighbours, and does:
 
 ```text
 global-timeout > largest per-test allowance
-780 s          > 300 s
+780 s          > 600 s
 
 watchdog      >= global-timeout + termination + cold build + report
 1,800 s       >= 780 s + 70 s + 600 s + 300 s = 1,750 s
@@ -8555,7 +8706,7 @@ accepting an override or a bare duration.
 
 `tests/workflow_contracts/whole_run_value_test.py` pins the budget's value as
 well as its place in the order. The ordering holds for everything between the
-300 s largest per-test allowance and the 830 s the watchdog can cover, so the
+600 s largest per-test allowance and the 830 s the watchdog can cover, so the
 budget could drift to a value nobody chose with every comparison still passing,
 and the sample above would then describe a figure the file no longer sets.
 

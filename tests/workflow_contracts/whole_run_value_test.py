@@ -1,7 +1,7 @@
 """The whole-run budget's value, pinned to the figure the guide states.
 
 The ordering assertions in ``timeout_ordering_test`` hold for every
-budget between the 300 s largest per-test allowance and the 830 s the
+budget between the 600 s largest per-test allowance and the 830 s the
 1,800 s watchdog can cover, so the budget can drift to a value nobody
 chose while each of them still passes. The guide records one value and
 the arithmetic that produced it, and this is what makes changing the

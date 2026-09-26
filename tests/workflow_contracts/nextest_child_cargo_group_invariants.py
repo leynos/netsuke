@@ -67,8 +67,20 @@ NESTED_CARGO_BUILD_TESTS = (
 # `test(=NAME)` compares the whole name, so it matches none of them and the test
 # silently leaves the group; `test(/^NAME($|::)/)` matches the plain name and
 # every case suffix alike. The `~` substring form is unanchored and over-matches.
-GROUP_FILTER = re.compile(r"test\(/\^([a-z0-9_]+)\(\$\|::\)/\)")
-LEGACY_EXACT_FILTER = re.compile(r"test\(=([a-z0-9_]+)\)")
+#
+# `MODULE_PATH` is the leading `module::` segments of a test declared inside a
+# submodule, which Nextest prefixes onto the qualified name it matches against.
+# It is deliberately NOT part of the capture group: every consumer compares the
+# captured name against a corpus of bare function names — `declared_test_names`
+# computes no module path at all — so capturing it would report every
+# module-scoped test as unresolved. Matching the prefix while capturing only the
+# bare name keeps both halves of that comparison bare-to-bare. The cost is that
+# the module prefix itself goes unverified here; a filter naming the right test
+# under the wrong module still resolves statically, and catching that is the
+# runtime check's job (`.github/scripts/verify_nextest_anchored_filters.py`).
+MODULE_PATH = r"(?:[a-z0-9_]+::)*"
+GROUP_FILTER = re.compile(rf"test\(/\^{MODULE_PATH}([a-z0-9_]+)\(\$\|::\)/\)")
+LEGACY_EXACT_FILTER = re.compile(rf"test\(={MODULE_PATH}([a-z0-9_]+)\)")
 # A second deny-list entry beside `LEGACY_EXACT_FILTER` would only ever see the
 # spellings it happens to list, so the constraint is the accepted grammar
 # instead: every `test(...)` argument is one of the named anchors. `test(=NAME)`
@@ -79,9 +91,12 @@ LEGACY_EXACT_FILTER = re.compile(r"test\(=([a-z0-9_]+)\)")
 # selector beside an unanchored one.
 TEST_SELECTOR = re.compile(r"\btest\(")
 ACCEPTED_TEST_SELECTOR = re.compile(
-    r"^/\^[a-z0-9_]+\(\$\|::\)/$"  # `test(/^NAME($|::)/)`, the form used here
-    r"|^/\^[a-z0-9_]+\(::\|\$\)/$"  # the same set with the branches transposed
-    r"|^=\^[a-z0-9_]+\(::\|\$\)/$"  # `test(=^NAME(::|$)/)`, nextest's own spelling
+    # `test(/^NAME($|::)/)`, the form used here, with an optional module path
+    rf"^/\^{MODULE_PATH}[a-z0-9_]+\(\$\|::\)/$"
+    # the same set with the branches transposed
+    rf"|^/\^{MODULE_PATH}[a-z0-9_]+\(::\|\$\)/$"
+    # `test(=^NAME(::|$)/)`, nextest's own spelling
+    rf"|^=\^{MODULE_PATH}[a-z0-9_]+\(::\|\$\)/$"
 )
 
 

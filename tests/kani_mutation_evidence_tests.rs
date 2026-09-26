@@ -13,6 +13,13 @@
 //!
 //! Patch names use the harness path with `::` replaced by `__`, for example
 //! `ir__cycle__verification__self_dependency_reports_cycle.patch`.
+//!
+//! A patch that applies is not yet trustworthy: the tree it produces must also
+//! compile, or `cargo kani` never reaches the harness it targets. That second
+//! half lives in [`compile_guard`], which is expensive enough to be gated.
+
+#[path = "kani_mutation_evidence_tests/compile_guard.rs"]
+mod compile_guard;
 
 use std::{collections::BTreeSet, io::Write as _, process::Command};
 

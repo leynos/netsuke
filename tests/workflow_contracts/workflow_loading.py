@@ -52,12 +52,12 @@ SETUP_RUST_JOBS = (
     (CI_WINDOWS_WORKFLOW_PATH, "build-test-windows"),
 )
 
-#: The jobs that run tests and therefore install cargo-nextest. A subset of
-#: `SETUP_RUST_JOBS`: on Windows only the test job runs the suite, so only it
-#: needs the runner.
+#: The jobs that run tests and therefore install cargo-nextest. Windows needs
+#: it on the test job alone; `kani-smoke` needs it for the mutation compile gate.
 NEXTEST_JOBS = (
     (CI_WORKFLOW_PATH, "build-test"),
     (CI_WINDOWS_WORKFLOW_PATH, "build-test-windows"),
+    (CI_WORKFLOW_PATH, "kani-smoke"),
 )
 
 #: The jobs that run the Markdown formatter check and therefore install
