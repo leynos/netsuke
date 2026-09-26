@@ -12,6 +12,11 @@
 //!
 //! FIXME(rstest-bdd): Once <https://github.com/leynos/rstest-bdd/issues/381>
 //! is resolved, these suppressions may be removable.
+//!
+//! Migrating to `rstest-bdd` 0.6.0 did not change any of this. All 45
+//! suppressions remain achieved, verified by the `-D warnings` build inside
+//! `make test-nextest` — not by `make lint`, which aborts in `src/` first.
+//! Remove one only when the compiler proves its lint no longer fires.
 
 mod accessibility_preferences;
 mod accessible_output;
