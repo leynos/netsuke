@@ -1452,6 +1452,72 @@ Placement lives in `runner_placement_test.py` and the shapes jobs are sized to
 in `runner_shape_test.py`, which also holds the memory measurement that lets an
 escalation be reviewed.
 
+### Cancelling superseded pull-request runs
+
+Every push to a pull request starts a fresh run of each gate, and the run
+already in flight is answering a question about a commit nobody will merge. The
+three workflows a pull request starts, `ci.yml`, `netsukefile-test.yml` and
+`release-dry-run.yml`, therefore carry one concurrency block:
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+```
+
+A newer push to the same pull request lands in its predecessor's group and
+cancels it. Cancellation is conditioned on the event, so a push to `main`, a
+dispatch or a schedule never cancels anything, and without a pull-request
+number the group falls back to `github.run_id`, so no such run shares a group
+with another either. A `github.ref` fallback would put two trunk pushes in one
+group, where a third push replaces the pending second and that commit never
+gets CI. `ci-windows.yml` is called from `ci.yml` and runs inside the caller's
+group. The dry run calls `release.yml`, whose own group evaluates in the
+caller's context; the caller's block cancels the whole superseded dry run,
+called jobs included.
+
+No other workflow cancels a run in progress. `coverage-main.yml` publishes the
+trunk's coverage, `mutation-testing.yml` serializes per ref, and `release.yml`
+queues rather than cancels, because a second push of the same tag would
+otherwise abandon a half-published release. The group keeps GitHub's default
+`queue: single`, so at most one run waits: a third push of the tag replaces the
+second while it is pending, and the newest push is the one that publishes.
+`queue: max` would publish every intermediate push in turn, which nothing needs.
+`release.yml` cancelled until September 2026; that change is behavioural, and
+for pull requests it changes nothing, since the dry run's caller-level group
+already supersedes the older run. The `pull_request_target` Dependabot merge
+workflow is out of scope: cancelling a merge mid-flight is a hazard with no
+minutes to win.
+
+`tests/workflow_contracts/pr_concurrency_test.py` holds the rule. It reads
+every workflow at test setup through `workflow_loading.py`, which refuses a
+repeated key, and takes as in scope each workflow that `declares_trigger` reads
+as starting on `pull_request`, with a floor of the three above so discovery
+cannot empty into a vacuous pass. Rather than search each group's text, it
+renders the group with `pr_concurrency_groups.py` for a set of run contexts:
+two pushes to one pull request must render one group, and that pull request, a
+fork's pull request from a branch of the same name, two trunk pushes, two
+dispatches and two scheduled runs must all render different groups. Groups are
+compared casefolded, because GitHub treats group names case-insensitively. The
+run identifier may appear only as the fallback behind the pull-request number;
+no two workflows may render one group for a pull request; each group must also
+differ under two synthetic workflow names; and `cancel-in-progress` must be
+exactly the event-conditioned expression. `pr_concurrency_groups_test.py`
+drives the renderer with the shapes the rules refuse, and an expression it does
+not model is refused rather than guessed at.
+
+Each clause was proved by mutation, and every mutation fails the suite: the
+cancel line removed, a literal `true`, a group from `run_id` alone, a constant
+group, a `head_ref` group, a `format()` group, a `ref` fallback, `run_number`
+as the fallback, the run identifier ahead of the number, the block removed, the
+trigger renamed to `pull_request_target`, a duplicated block, a quoted `on`
+beside the unquoted key, the `github.workflow` prefix dropped, and the casefold
+removed from the comparison. `cancel-in-progress: true` restored on
+`release.yml` fails `test_no_other_workflow_cancels_a_run`. That clause reads a
+missing `cancel-in-progress` as not cancelling, so
+`test_the_release_lane_queues_rather_than_cancels` also pins `release.yml`'s
+block exactly; deleting the block fails it.
+
 ## Quality gates
 
 Run these commands before finalizing any change:

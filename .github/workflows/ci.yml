@@ -30,6 +30,14 @@ env:
   MDTABLEFIX_VERSION: '0.6.0'
   NETSUKE_RUNNER_IMAGE: ubuntu2404  # carried in every compiled-tool cache key
 
+# A newer push to a pull request cancels the run it supersedes. Other events
+# never cancel: each `main` push, dispatch or schedule falls back to its own
+# run identifier, so no run replaces another that is still pending. See
+# tests/workflow_contracts/pr_concurrency_test.py.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-test:
     # Escalated from `-2` on the recipe's memory criterion: on the two-vCPU,
