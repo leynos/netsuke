@@ -56,6 +56,15 @@ pub fn totals_and_purity_aggregate_agree(repo: &Repo) -> Result<()> {
         );
     }
 
+    check_registry_aggregate(&world)
+}
+
+/// The registries' purity classes and `option added` count, against RFC 0006.
+///
+/// Takes the [`World`] the caller has already parsed rather than a [`Repo`]:
+/// this check and the totals beside it must describe one tree, so it must not
+/// derive a second one of its own.
+fn check_registry_aggregate(world: &World) -> Result<()> {
     // The purity aggregate is taken over `New` rows only, because section 6.1's
     // 52/4/1 counts the 57 proposed helpers. The registries carry all 60
     // accepted helpers, and the optioned rows include the filesystem-observing
