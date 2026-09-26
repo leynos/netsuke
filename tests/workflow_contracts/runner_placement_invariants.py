@@ -74,6 +74,9 @@ REQUIRED_RUNNER_ASSIGNMENTS = {
     "release.macos.x86_64-apple-darwin": "macos-15-intel",
     "release.macos.aarch64-apple-darwin": "macos-15",
     "release.windows-native-recipe-smoke": "windows-latest",
+    "release.release-candidate": "ubuntu-latest",
+    "release.downstream-canaries": "ubuntu-latest",
+    "release.downstream-canaries-windows": "windows-latest",
     "release.release": "ubuntu-latest",
     "build-and-package.build": CALLER_SELECTED_RUNNER,
     "mutation-testing.mutation": CALLEE_SELECTED_RUNNER,
@@ -87,7 +90,9 @@ UBICLOUD_ASSIGNMENT_KEYS = tuple(
 )
 
 #: Jobs that must never reach a Ubicloud label. Windows and macOS have no
-#: Ubicloud image; the rest are API-bound or not developer-blocking.
+#: Ubicloud image; the rest are API-bound or not developer-blocking. The
+#: downstream canaries are a maintainer's placement decision: they never gate
+#: a pull request, and MXD's lane needs a service container.
 GITHUB_HOSTED_ONLY_KEYS = (
     "ci-windows.lint-windows",
     "ci-windows.build-test-windows",
@@ -98,6 +103,9 @@ GITHUB_HOSTED_ONLY_KEYS = (
     "release.macos.x86_64-apple-darwin",
     "release.macos.aarch64-apple-darwin",
     "release.windows-native-recipe-smoke",
+    "release.release-candidate",
+    "release.downstream-canaries",
+    "release.downstream-canaries-windows",
     "release.release",
 )
 

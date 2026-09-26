@@ -196,3 +196,21 @@ exits non-zero for those results. An evidence-state value such as `fresh` does
 not substitute for a real evidence producer or enable enforcement. Publication
 must remain independent of the scaffold until that producer and its validation
 are available.
+
+## Addendum (2026-09-25)
+
+The downstream migration canaries (issue #598) do not change this decision.
+They run in the release workflow's `downstream-canaries` and
+`downstream-canaries-windows` jobs, and `release` needs them, while the RFC
+0005 scaffold above stays in observation mode. The canaries emit no metric or
+trace series, and do not extend the closed `CANARIES` and `OPERATIONS`
+vocabularies of `require-release-admission-canaries.sh`, this record, or
+`release_admission_metrics.py`.
+
+Each canary instead writes `downstream-canary-provenance.json`, a provenance
+artefact for release review. Unlike a metric label, it deliberately carries
+identifiers: the downstream repository and revisions, the Netsuke commit and
+version, the platform, the lane selectors, and each target. Its statuses come
+from the closed set `passed`, `failed`, and `not_run`, and it carries no
+command output. A future coarse pass or fail metric for the canaries is
+separate work, and requires the three-way lockstep change this record describes.

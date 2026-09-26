@@ -206,6 +206,50 @@ import, inspect the external help with:
 Get-Help Netsuke -Full
 ```
 
+## Use a release candidate in downstream CI
+
+Downstream projects can use the public
+`.github/actions/install-release-candidate` action to run their quality gates
+against one exact Netsuke revision. Pin the action reference and both inputs to
+the proposed candidate, including its expected package version:
+
+<!-- tested-example: guide-release-candidate-action -->
+
+```yaml
+- name: Install Netsuke release candidate
+  id: netsuke
+  uses: leynos/netsuke/.github/actions/install-release-candidate@<candidate-sha>
+  with:
+    revision: <candidate-sha>
+    expected-version: 0.1.0-beta2
+
+- name: Run the selected Netsuke gate
+  env:
+    NETSUKE: ${{ steps.netsuke.outputs.binary }}
+  shell: bash
+  run: |
+    "$NETSUKE" build all
+```
+
+The required `revision` input is fetched and checked out, then compared with
+the resolved Git commit. The action builds that checkout with
+`cargo build --locked --release --bin netsuke`, in the same shape as a shipped
+release, so a hosted runner needs no `mold` linker, and runs
+`netsuke --version`. It fails before exposing outputs if either the revision or
+the reported version does not match the inputs, or if the locked build fails.
+
+On success, `steps.netsuke.outputs.binary` is the absolute path to the built
+binary, while `revision` and `version` report the verified commit and package
+version. The action selects `netsuke.exe` on Windows and `netsuke` elsewhere;
+the downstream workflow can therefore pass the same output to its selected gate
+on each platform.
+
+Netsuke's own release is admitted by three downstream migration canaries, which
+its release workflow runs against the exact candidate; see
+[release-admission migration canaries](release-admission-canaries.md). A
+downstream project using this action is testing its own gates, and needs
+nothing from Netsuke's release process to do so.
+
 ## Run the first build
 
 Create an empty project directory and add a file named `Netsukefile` with the

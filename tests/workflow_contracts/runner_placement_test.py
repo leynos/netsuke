@@ -52,6 +52,13 @@ DIRECT_RUNNER_SOURCES = (
         "release.yml",
         "windows-native-recipe-smoke",
     ),
+    ("release.release-candidate", "release.yml", "release-candidate"),
+    ("release.downstream-canaries", "release.yml", "downstream-canaries"),
+    (
+        "release.downstream-canaries-windows",
+        "release.yml",
+        "downstream-canaries-windows",
+    ),
     ("release.release", "release.yml", "release"),
 )
 
@@ -71,6 +78,9 @@ DIRECT_RUNNER_SOURCES = (
         ("netsukefile-test.yml", "netsukefile", UBICLOUD_COMPAT_LABEL),
         ("release.yml", "metadata", "ubuntu-latest"),
         ("release.yml", "windows-native-recipe-smoke", "windows-latest"),
+        ("release.yml", "release-candidate", "ubuntu-latest"),
+        ("release.yml", "downstream-canaries", "ubuntu-latest"),
+        ("release.yml", "downstream-canaries-windows", "windows-latest"),
         ("release.yml", "release", "ubuntu-latest"),
     ],
 )

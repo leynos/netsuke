@@ -52,6 +52,7 @@ excluded_paths = [
     "workflow_ci::common",
     "workflow_orthohelp_install::common",
     "workflow_release::common",
+    "workflow_release_canaries::common",
 
     # The build script's parsers, included by path so `cargo test` can reach
     # them (build scripts are not test targets). Each reads a file Cargo hands

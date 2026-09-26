@@ -1,0 +1,244 @@
+---
+name: Downstream migration canary
+description: >-
+  Run one pinned downstream repository's Netsukefile gates against the exact
+  Netsuke release candidate. This is the shared bootstrap for the v0.1.0
+  release-admission canaries: the release workflow's matrix supplies the
+  downstream repository, its pinned commit, the targets, the platform, and the
+  resolved candidate, and this action does the rest in the same order for
+  every canary.
+
+  It checks the downstream repository out at its pinned commit into
+  `downstream/`, the only cross-repository checkout in this repository. The
+  three canaries are public, so the job's own read-only token suffices and no
+  credential is persisted. It then builds the candidate with
+  `install-release-candidate`, installs only the tools the canary names, runs
+  `netsuke --verbose generate` and `ninja -f build.ninja <target>` inside the
+  checkout, and always writes a bounded provenance record. That record is a
+  release-review artefact, not a metric or trace series.
+
+  The caller checks this repository out into `netsuke/`, never the workspace
+  root: Cargo reads `.cargo/config.toml` from every ancestor directory, so a
+  downstream checkout nested inside Netsuke's would build with Netsuke's
+  development `mold` flags. The action reaches its scripts through
+  `GITHUB_ACTION_PATH`, so it does not depend on that layout otherwise.
+  Ownership: the release workflow is the only caller.
+
+inputs:
+  canary:
+    description: >-
+      Name of the matrix row, such as `mxd-postgres`. It names the provenance
+      artefact, so it must be unique within one workflow run.
+    required: true
+  repository:
+    description: Downstream `owner/name`.
+    required: true
+  ref:
+    description: The pinned downstream commit, as a full 40-hex identifier.
+    required: true
+  targets:
+    description: Whitespace-separated Netsuke targets to run, in order.
+    required: true
+  platform:
+    description: >-
+      `linux` or `windows`. Selects the shell that drives the canary steps:
+      Bash on Linux, PowerShell on Windows. Recipes themselves run under the
+      shell Netsuke selects for the platform.
+    required: true
+  netsuke-commit:
+    description: The resolved Netsuke candidate commit.
+    required: true
+  netsuke-version:
+    description: The package version the candidate must report.
+    required: true
+  selectors:
+    description: >-
+      Lane selector assignments, one `NAME=value` per line, such as
+      `MXD_BACKEND=postgres`. They reach Netsuke and Ninja and are recorded in
+      the provenance.
+    required: false
+    default: ''
+  environment:
+    description: >-
+      Extra assignments, one `NAME=value` per line, such as a service
+      connection string. They reach Netsuke and Ninja and are never recorded.
+    required: false
+    default: ''
+  forbid:
+    description: >-
+      Literal patterns, one per line, that the generated `build.ninja` must not
+      contain. A match means another lane survived manifest-time expansion, so
+      no target runs.
+    required: false
+    default: ''
+  tools:
+    description: >-
+      Space-separated tools to install from a closed set: `nextest`,
+      `whitaker`, `markdownlint`, `libpq`, and `libsqlite3`. The last three
+      are Linux-only. Ninja and uv are always installed.
+    required: false
+    default: ''
+  upload-provenance:
+    description: >-
+      `true` to upload `downstream-canary-provenance.json` as a workflow
+      artefact. Dry runs pass `false`; the job summary carries the record.
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Check out the pinned downstream revision
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      # v7.0.1
+      with:
+        repository: ${{ inputs.repository }}
+        ref: ${{ inputs.ref }}
+        path: downstream
+        persist-credentials: false
+    - name: Install Ninja
+      uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67
+      # v6
+    - name: Install uv and the runner's Python
+      uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+      with:
+        python-version: '3.14'
+        enable-cache: false
+    - name: Install cargo-nextest
+      if: contains(format(' {0} ', inputs.tools), ' nextest ')
+      uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375
+      # v2.87.12
+      with:
+        tool: nextest@0.9.133
+        fallback: none
+    - name: Install Whitaker
+      if: contains(format(' {0} ', inputs.tools), ' whitaker ')
+      uses: >-
+        leynos/shared-actions/.github/actions/install-whitaker@a5765019912a8ab6882b12db049c7cde635f3a85
+      with:
+        installer-version: '0.2.7'
+    - name: Install markdownlint-cli2
+      if: >-
+        inputs.platform == 'linux' &&
+        contains(format(' {0} ', inputs.tools), ' markdownlint ')
+      shell: bash
+      run: npm install --global markdownlint-cli2@0.22.0
+    - name: Install PostgreSQL client headers
+      if: >-
+        inputs.platform == 'linux' &&
+        contains(format(' {0} ', inputs.tools), ' libpq ')
+      shell: bash
+      # Refresh the package index first: a hosted image's cached index can
+      # name versions the mirror no longer serves.
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes --no-install-recommends libpq-dev
+    - name: Install SQLite headers
+      if: >-
+        inputs.platform == 'linux' &&
+        contains(format(' {0} ', inputs.tools), ' libsqlite3 ')
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes --no-install-recommends libsqlite3-dev
+    - name: Build the Netsuke candidate
+      id: netsuke
+      # The installer script rather than its action wrapper: a composite
+      # action can only name a local action by a workspace-relative path,
+      # which would tie this action to the caller's checkout layout.
+      shell: bash
+      env:
+        NETSUKE_CANDIDATE_REVISION: ${{ inputs.netsuke-commit }}
+        NETSUKE_CANDIDATE_VERSION: ${{ inputs.netsuke-version }}
+      run: bash "$GITHUB_ACTION_PATH/../install-release-candidate/install.sh"
+    - name: Generate the downstream Ninja manifest (Bash)
+      if: inputs.platform == 'linux'
+      shell: bash
+      env:
+        CANARY_NETSUKE: ${{ steps.netsuke.outputs.binary }}
+        CANARY_SELECTORS: ${{ inputs.selectors }}
+        CANARY_ENVIRONMENT: ${{ inputs.environment }}
+      run: >-
+        uv run --no-project --python 3.14
+        "$GITHUB_ACTION_PATH/../../../scripts/run_downstream_canary.py" generate
+        --workdir downstream --state "$RUNNER_TEMP/downstream-canary-state.json"
+        --netsuke "$CANARY_NETSUKE" --selector "$CANARY_SELECTORS"
+        --environment "$CANARY_ENVIRONMENT"
+    - name: Generate the downstream Ninja manifest (PowerShell)
+      if: inputs.platform == 'windows'
+      shell: pwsh
+      env:
+        CANARY_NETSUKE: ${{ steps.netsuke.outputs.binary }}
+        CANARY_SELECTORS: ${{ inputs.selectors }}
+        CANARY_ENVIRONMENT: ${{ inputs.environment }}
+      run: >-
+        uv run --no-project --python 3.14
+        "$env:GITHUB_ACTION_PATH/../../../scripts/run_downstream_canary.py" generate
+        --workdir downstream --state "$env:RUNNER_TEMP/downstream-canary-state.json"
+        --netsuke "$env:CANARY_NETSUKE" --selector "$env:CANARY_SELECTORS"
+        --environment "$env:CANARY_ENVIRONMENT"
+    - name: Assert the Ninja manifest exists
+      shell: bash
+      env:
+        NINJA_MANIFEST: downstream/build.ninja
+      run: bash "$GITHUB_ACTION_PATH/../../../scripts/assert-file-exists.sh" downstream/build.ninja
+    - name: Run the downstream targets (Bash)
+      if: inputs.platform == 'linux'
+      shell: bash
+      env:
+        CANARY_TARGETS: ${{ inputs.targets }}
+        CANARY_SELECTORS: ${{ inputs.selectors }}
+        CANARY_ENVIRONMENT: ${{ inputs.environment }}
+        CANARY_FORBID: ${{ inputs.forbid }}
+      run: >-
+        uv run --no-project --python 3.14
+        "$GITHUB_ACTION_PATH/../../../scripts/run_downstream_canary.py" run
+        --workdir downstream --state "$RUNNER_TEMP/downstream-canary-state.json"
+        --target "$CANARY_TARGETS" --selector "$CANARY_SELECTORS"
+        --environment "$CANARY_ENVIRONMENT" --forbid "$CANARY_FORBID"
+    - name: Run the downstream targets (PowerShell)
+      if: inputs.platform == 'windows'
+      shell: pwsh
+      env:
+        CANARY_TARGETS: ${{ inputs.targets }}
+        CANARY_SELECTORS: ${{ inputs.selectors }}
+        CANARY_ENVIRONMENT: ${{ inputs.environment }}
+        CANARY_FORBID: ${{ inputs.forbid }}
+      run: >-
+        uv run --no-project --python 3.14
+        "$env:GITHUB_ACTION_PATH/../../../scripts/run_downstream_canary.py" run
+        --workdir downstream --state "$env:RUNNER_TEMP/downstream-canary-state.json"
+        --target "$env:CANARY_TARGETS" --selector "$env:CANARY_SELECTORS"
+        --environment "$env:CANARY_ENVIRONMENT" --forbid "$env:CANARY_FORBID"
+    - name: Record downstream canary provenance
+      # Always: a failed setup still reports which canary, revisions, and
+      # platform it was, with every unreached phase recorded as `not_run`.
+      if: always()
+      shell: bash
+      env:
+        CANARY_NAME: ${{ inputs.canary }}
+        CANARY_REPOSITORY: ${{ inputs.repository }}
+        CANARY_REF: ${{ inputs.ref }}
+        CANARY_TARGETS: ${{ inputs.targets }}
+        CANARY_SELECTORS: ${{ inputs.selectors }}
+        CANARY_NETSUKE_COMMIT: ${{ inputs.netsuke-commit }}
+        CANARY_NETSUKE_VERSION: ${{ inputs.netsuke-version }}
+      run: >-
+        uv run --no-project --python 3.14
+        "$GITHUB_ACTION_PATH/../../../scripts/run_downstream_canary.py" report
+        --workdir downstream --state "$RUNNER_TEMP/downstream-canary-state.json"
+        --target "$CANARY_TARGETS" --selector "$CANARY_SELECTORS"
+        --canary "$CANARY_NAME" --repository "$CANARY_REPOSITORY"
+        --downstream-revision "$CANARY_REF"
+        --netsuke-revision "$CANARY_NETSUKE_COMMIT"
+        --netsuke-version "$CANARY_NETSUKE_VERSION" --platform "$RUNNER_OS"
+        --provenance "$RUNNER_TEMP/downstream-canary-provenance.json"
+        --summary "$GITHUB_STEP_SUMMARY"
+    - name: Upload downstream canary provenance
+      if: always() && inputs.upload-provenance == 'true'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      # v7.0.1
+      with:
+        name: downstream-canary-provenance-${{ inputs.canary }}
+        path: ${{ runner.temp }}/downstream-canary-provenance.json
+        if-no-files-found: error

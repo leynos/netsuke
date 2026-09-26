@@ -4,10 +4,24 @@ name: Release Dry Run
 'on':
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  # A manual release rehearsal: pick the ref in the Actions UI. It runs the
+  # whole release, including the downstream canaries and the Windows smoke,
+  # and publishes nothing.
+  workflow_dispatch:
+    inputs:
+      candidate-ref:
+        description: >-
+          Netsuke ref for the downstream canaries to build: a tag, commit, or
+          branch name. Empty builds the selected ref; `auto` picks the newest
+          `-rcN` tag, or `main` when a later version tag exists.
+        required: false
+        type: string
+        default: ''
 
 jobs:
   release:
     uses: ./.github/workflows/release.yml
     with:
       dry-run: true
+      candidate-ref: ${{ inputs.candidate-ref || '' }}
     secrets: inherit

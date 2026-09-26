@@ -77,6 +77,40 @@ more detail, and the
 [developers' guide](developers-guide.md#the-build-standard) records the
 standard's rationale and its exclusions.
 
+## Exercise a v0.1.0 release candidate in downstream CI
+
+Run a downstream Netsukefile quality gate against a proposed candidate to find
+migration problems before the release. Pin the installer action reference and
+its `revision` input to the same candidate commit, and state the package
+version that the candidate must report:
+
+```yaml
+- name: Install Netsuke release candidate
+  id: netsuke
+  uses: leynos/netsuke/.github/actions/install-release-candidate@<candidate-sha>
+  with:
+    revision: <candidate-sha>
+    expected-version: 0.1.0-beta2
+
+- name: Run the selected Netsuke gate
+  env:
+    NETSUKE: ${{ steps.netsuke.outputs.binary }}
+  shell: bash
+  run: |
+    "$NETSUKE" build all
+```
+
+The required `revision` and `expected-version` inputs cause the installer to
+build the exact checked-out candidate. It exposes verified `binary`,
+`revision`, and `version` outputs only after the resolved commit and
+`netsuke --version` match. On Windows, `binary` names the built `netsuke.exe`;
+invoke that output directly rather than constructing a platform-specific path.
+
+Netsuke's own v0.1.0 release is admitted by three pinned downstream migration
+canaries, which its release workflow runs against the exact candidate; see
+[release-admission migration canaries](release-admission-canaries.md). A
+downstream gate like the one above needs nothing from that process.
+
 ## Netsuke is a build tool, not a library
 
 Netsuke is intended to be used as a command-line build tool. The only surfaces
