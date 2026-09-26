@@ -211,11 +211,17 @@ def main(argv: list[str] | None = None) -> int:
     # Rebuilding it from the name would drop the module path the configuration
     # wrote, so a test declared in a submodule would be replayed with a filter
     # that selects nothing -- the fault this file reports would be its own.
-    wanted = {
-        name: selector
+    #
+    # Every selector is kept, not one per name: a name may carry several (a
+    # group policy and a timeout, say), and a mapping keyed by name would
+    # silently drop all but the last, leaving an unreplayed selector looking
+    # checked. The list preserves file order so a failure names them in the
+    # order the configuration declares them.
+    wanted = [
+        (name, selector)
         for selector, name in anchored_selectors()
         if name in parameterized
-    }
+    ]
     if not wanted:
         fail(
             f"no anchored filter names a parameterized test; the anchored "
@@ -226,9 +232,10 @@ def main(argv: list[str] | None = None) -> int:
         )
     env = instrumented_environment()
     _check_every_filter_selects_something(env)
-    for name, selector in sorted(wanted.items()):
+    for name, selector in sorted(wanted):
         _check(env, selector, name, parameterized[name])
-    print(f"verified {len(wanted)} filtered parameterized test(s)")
+    names = len({name for name, _ in wanted})
+    print(f"verified {len(wanted)} anchored selector(s) over {names} test(s)")
     return 0
 
 

@@ -8,17 +8,62 @@ the reuse is one function's job rather than a habit each caller repeats.
 
 import os
 import re
+import shlex
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the cargo boundary is this package's job.
 import sys
 
 #: One `export NAME=value` line of `cargo llvm-cov show-env --export-prefix`
-#: output. The value is single-quoted only when it needs to be, so both
-#: spellings are accepted; requiring the quotes silently drops the unquoted
-#: lines, which are most of them.
-EXPORTED_VARIABLE = re.compile(
-    r"^export (?P<name>[A-Za-z_][A-Za-z0-9_]*)="
-    r"(?:'(?P<single>.*)'|(?P<bare>\S*))$"
-)
+#: output. This pattern only *locates* the assignment and names it; the value
+#: is decoded by [`_decode_value`] rather than read straight out of the match.
+EXPORTED_VARIABLE = re.compile(r"^export (?P<name>[A-Za-z_][A-Za-z0-9_]*)=.*$")
+
+
+def _decode_value(assignment: str) -> str:
+    """Return the effective value of one ``export``-prefixed assignment.
+
+    `cargo llvm-cov show-env --export-prefix` prints shell-sourceable text, so
+    a value is quoted only when it needs to be and a quoted value escapes an
+    embedded apostrophe as ``'\\''``. Reading such a value back verbatim would
+    carry that shell syntax into the environment, so a path containing an
+    apostrophe would export the wrong string and make this step's fingerprint
+    differ from the coverage run's -- which is the one thing the reuse of the
+    instrumented tree depends on.
+
+    The whole `NAME=value` word is decoded rather than the quoted fragment
+    alone, because the escaping is a property of the word: the fragment
+    `\\'` is unterminated once the surrounding quotes are stripped.
+
+    Either a word the shell cannot parse, or an unquoted value containing
+    whitespace, ends the run through `fail`. The first would otherwise surface
+    as a traceback; the second would be truncated at the first space, exporting
+    a plausible-looking wrong path -- and a silent truncation here is the same
+    class of fault as the escaping bug, so it is refused rather than guessed.
+
+    Parameters
+    ----------
+    assignment : str
+        The text after ``export ``, such as ``NAME='/tmp/a b'``.
+
+    Returns
+    -------
+    str
+        The value the shell would assign.
+    """
+    try:
+        words = shlex.split(assignment)
+    except ValueError as error:
+        fail(
+            f"`cargo llvm-cov show-env` printed an assignment this step "
+            f"cannot parse ({error}): {assignment}"
+        )
+    if len(words) != 1:
+        fail(
+            f"`cargo llvm-cov show-env` printed an assignment whose value is "
+            f"not shell-quoted, so its extent is ambiguous and this step would "
+            f"truncate it at the first space: {assignment}"
+        )
+    return words[0].split("=", 1)[1]
+
 
 #: The environment variable holding the instrumented build tree.
 LLVM_COV_TARGET_DIR = "CARGO_LLVM_COV_TARGET_DIR"
@@ -74,12 +119,7 @@ def instrumented_environment() -> dict[str, str]:
     for line in completed.stdout.splitlines():
         match = EXPORTED_VARIABLE.match(line)
         if match is not None:
-            value = (
-                match.group("single")
-                if match.group("single") is not None
-                else match.group("bare")
-            )
-            env[match.group("name")] = value
+            env[match.group("name")] = _decode_value(line.removeprefix("export "))
     target_dir = env.get(LLVM_COV_TARGET_DIR)
     if not target_dir:
         fail(

@@ -108,7 +108,7 @@ def makefile_variable(name: str) -> str:
     """Return the default value a ``NAME ?=`` assignment gives in the Makefile.
 
     Reads the ``?=`` form alone: that is the shape a toolchain pin takes, and
-    the ``=` form some other variables use is not a default the environment
+    the ``=`` form some other variables use is not a default the environment
     may displace. A pin written as ``=`` would otherwise be reported here as
     absent rather than as the wrong shape, sending a reader to the wrong line.
 
