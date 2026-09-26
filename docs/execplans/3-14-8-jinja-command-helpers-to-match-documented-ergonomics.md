@@ -581,12 +581,20 @@ Stop and escalate — do not improvise — when any of these is reached.
   `///` comment or `make doc-coverage` drops below 80%. Severity: low.
   Likelihood: medium. Mitigation: write the doc comment with the function, not
   afterwards.
-- **R8 — Manifest-query surface drift.** There is no parity test between
-  `register_with_config` and `register_manifest_query`. Severity: medium.
-  Likelihood: medium. Mitigation: EP-M2 and EP-M4 each add an explicit
+- **R8 — Manifest-query surface drift. Realised, and one instance fixed.**
+  There is no parity test between `register_with_config` and
+  `register_manifest_query`. Severity: medium. Likelihood: medium — confirmed,
+  not merely estimated. Mitigation: EP-M2 and EP-M4 each add an explicit
   manifest-query test for the helper they introduce, and EP-M1 adds one proving
   the disabled `env` stub still reports "disabled", not an argument-count
-  error, when called with `default=`.
+  error, when called with `default=`. The likelihood was upgraded from an
+  estimate to a fact when the `is <kind>` file tests were found to be
+  registered on the build surface and absent from the query surface, so
+  `'x' is file` failed as "unknown test" — and the case asserting otherwise
+  passed anyway. Stubs for the seven file tests are now registered from the
+  parent's own `FILE_TESTS` list, which removes this instance and makes the
+  next one impossible to add silently; the residual risk is any *future* helper
+  registered on one surface only, which a stub list cannot cover.
 
 - **R9 — Collision with in-flight budget work. Resolved as a convergence.**
   The remote branch
@@ -2536,11 +2544,70 @@ catalogue has the key; there is no partial state to clean up.
       `cargo check --all-targets`, both under `-D warnings` — the lib-only
       profile does not compile `#[cfg(test)]` modules, so it would not have
       proved the split sound.
+- [x] (2026-09-27) The split above was performed by hand-retyping the cluster
+      rather than by moving the text, and three closures drifted. Only one was
+      caught, and the reason is worth recording because it generalises.
+
+      | Stub | Pre-image (`HEAD~1:180-291`) | As first committed | Caught? |
+      | --- | --- | --- | --- |
+      | `digest` | `(_value: String, _length: Option<usize>, _algorithm: Option<String>)` | `(_state: &State, _value: Value, _algorithm: String, _encoding: Option<String>)` | yes |
+      | `linecount` | `Result<usize, Error>` | `Result<u64, Error>` | no |
+      | `hash` | `add_filter(_value: String, _algorithm: Option<String>)` | `add_function(_value: Value, _kwargs: Kwargs)` | no |
+
+      Only `digest` failed, because an arity mismatch raises during argument
+      binding, before the stub body runs, so it produced "missing argument"
+      rather than the helper's name. `linecount` and `hash` changed types and
+      registration kind while `case_11_hash` still passed *with `hash`
+      registered as a function*: the case asserted only that the error text
+      contains the helper's name, and MiniJinja's own `unknown filter: hash`
+      contains it too. The assertion could not distinguish "deliberately
+      disabled" from "never registered at all" — so a name-only assertion
+      silently accepted a stub that had stopped being a stub.
+
+      Fixing that assertion to require the marker exposed a second vacuous
+      case, `case_13_file_test`, which had been passing for the wrong reason
+      since before this branch: `register_file_tests` is reachable only from
+      `register_read_only_helpers`, so `'x' is file` failed as "unknown test:
+      test file is unknown". File tests call `symlink_metadata`, so they do
+      disclose host state and belong in the disabled set; stubs are now
+      registered for them, with the names taken from the parent's `FILE_TESTS`
+      rather than retyped, so the two lists cannot drift. That the compiler
+      enforces the wiring is a useful property: with the stub registration
+      removed, the now-unused function is a `-D warnings` error.
 - [ ] EP-M4 `shell_quote` and `shell_join`.
 - [ ] EP-M5 documentation, ADR-027, roadmap tick.
 
 ## Surprises & discoveries
 
+- Observation: **A test that asserts a substring can pass on the strength of
+  the error it was meant to rule out.** `case_11_hash` asserted that the query
+  error mentions `hash`. With the `hash` stub mistakenly registered as a
+  function, MiniJinja reported `unknown filter: hash` — which contains `hash`,
+  so the case passed. The assertion was written to prove the helper was
+  *deliberately disabled*, and it was satisfied by the helper not existing. The
+  general shape: when a test checks for an artifact's name, any error that
+  names the artifact passes, including the "it isn't there" error. Impact: the
+  `hash` drift reached a full green gate set, and the one case that failed
+  (`digest`) failed for an unrelated reason, so the suite looked like it had
+  caught the class when it had caught one instance. The fix is to assert the
+  distinguishing text (here, the disabled marker), not the shared one; applied,
+  it converted thirteen of fifteen cases from vacuous to live and immediately
+  found a fourteenth that had been vacuous for longer than this branch has
+  existed.
+- Observation: **Hand-retyping a block is not moving it, and the drift it
+  introduces is invisible to a compile check.** The extraction was done by
+  writing the child out rather than by relocating the text, and three closures
+  changed: `digest`'s arity, `linecount`'s return type, and `hash`'s
+  registration kind. `cargo check --all-targets` under `-D warnings` passed for
+  all three, because each is a well-typed program — a stub with the wrong arity
+  compiles, and `add_function`/`add_filter` are both legitimate. Only a runtime
+  that actually evaluates the template can tell them apart. Impact: this is the
+  argument for the plan's own "the extraction is a pure move" language being a
+  *requirement* rather than a description, and it is why the parent is at
+  `pub(super)` on two items that a hand-write would not need. The mechanical
+  check that settles it is a normalized diff of the moved range against the
+  pre-image: with whitespace collapsed, the two must differ only in the
+  intended visibility widenings.
 - Observation: **A rebase is lossless in proportion to how little it has to
   resolve, and that proportion is measurable rather than assumed.** Fourteen of
   fifteen commits replayed to identical trees; the fifteenth carried a real
