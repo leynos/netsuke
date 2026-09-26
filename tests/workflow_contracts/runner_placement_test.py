@@ -12,6 +12,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import pytest
+from fork_fallback import owned_runner
 from runner_placement_invariants import (
     CALLEE_SELECTED_RUNNER,
     GITHUB_HOSTED_ONLY_KEYS,
@@ -81,7 +82,11 @@ def test_repository_owned_jobs_use_required_runners(
 ) -> None:
     """Require each repository-owned job to use its intended runner."""
     workflow = load_workflow(WORKFLOW_DIR / workflow_name)
-    actual_runner = workflow_job(workflow, job_name).get("runs-on")
+    # A lane that serves pull requests names two runners. The table pins the
+    # one this repository's own branches get; the fork arm is a GitHub-hosted
+    # fallback whose shape this rule deliberately does not govern, and
+    # `test_pull_request_lanes_fall_back_for_forks` pins it instead.
+    actual_runner = owned_runner(workflow_job(workflow, job_name).get("runs-on"))
     assert actual_runner == expected_runner, (
         f"{workflow_name} job {job_name} must run on {expected_runner}, "
         f"got {actual_runner!r}"
@@ -240,7 +245,7 @@ def _all_workflow_text() -> str:
 def _checked_in_runner_assignments() -> dict[str, str]:
     """Normalize checked-in direct, matrix, and reusable runner ownership."""
     assignments = {
-        key: str(
+        key: owned_runner(
             workflow_job(load_workflow(WORKFLOW_DIR / workflow), job).get("runs-on")
         )
         for key, workflow, job in DIRECT_RUNNER_SOURCES
