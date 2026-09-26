@@ -5108,10 +5108,19 @@ Current usage in this repository is:
   reduces duplication and keeps feature wording clear.
 - Use `rstest_bdd::async_step::sync_to_async` for manual sync-to-async wrappers
   and the concise wrapper aliases (`StepCtx`, `StepTextRef`, `StepDoc`,
-  `StepTable`) where required.
+  `StepTable`) where required. All six names still exist in 0.6.0; nothing in
+  `tests/` or `src/` uses them today, so this is guidance for new work rather
+  than a description of the current suite.
 - Introduce async step definitions only where asynchronous behaviour is natural
   and improves coverage.
-- Keep async execution on Tokio current-thread runtime for behavioural tests.
+- Select async execution with
+  `harness = rstest_bdd_harness_tokio::TokioHarness`, **not** the legacy
+  `runtime = "tokio-current-thread"` syntax. 0.6.0 keeps the legacy syntax only
+  as a deprecated compatibility alias and emits a `deprecated` warning for it
+  (`crates/rstest-bdd-macros/src/macros/scenarios/mod.rs`), which this
+  repository's `-D warnings` builds would escalate to an error. Nothing here
+  selects a harness yet; ordinary synchronous scenarios stay ordinary and need
+  no harness at all.
 - Restrict `#[once]` fixtures to expensive, effectively read-only
   infrastructure.
 

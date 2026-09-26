@@ -79,13 +79,17 @@ the conflict in `Decision log` before proceeding.
   v0.7-only features that the crate does not contain, and do not avoid 0.6.0
   APIs the crate does contain. Recorded in `Surprises & discoveries` below.
 
-- Risk: 0.6.0 classifies step returns by concrete type, so 41 `#[expect(...)]`
+- Risk: 0.6.0 classifies step returns by concrete type, so the `#[expect(...)]`
   attributes in `tests/bdd/steps/` that cite upstream issue #381 may become
   "unfulfilled expectation" errors if the generated wrapper no longer triggers
-  those lints. Severity: medium Likelihood: medium Mitigation: run `make lint`
-  immediately after the version bump; remove an expectation only where the
-  compiler proves the lint no longer fires, and update `tests/bdd/steps/mod.rs`
-  to match.
+  those lints. Severity: medium Likelihood: medium Mitigation: the oracle is the
+  `-D warnings` compilation inside `make test-nextest`, *not* `make lint` —
+  the latter aborts in `src/` before reaching the test targets
+  (`Surprises & discoveries`). **Resolved 2026-09-26:** the risk did not
+  materialize. The count was originally stated as 41; a multi-line-aware parse
+  gives 45 across 16 files. All 45 are proven achieved by the green test
+  compilation. Three sit under `#[cfg(not(unix))]` and remain Windows-CI-only
+  evidence. No expectation was removed, and none was converted to `#[allow]`.
 
 - Risk: the 39 `strict-compile-time-validation` checks may reject a step shape
   that 0.5.0 accepted. Severity: low Likelihood: low Mitigation: the feature is
@@ -116,17 +120,151 @@ the conflict in `Decision log` before proceeding.
   direct runtime API usage.
 - [x] (2026-09-26) Establish the baseline BDD inventory: 254 scenarios, 254
   generated tests.
-- [ ] Import `docs/users-guide.md` and `docs/v0-6-0-migration-guide.md` from the
-  pinned commit; record provenance.
-- [ ] Bump the `rstest-bdd` family in `Cargo.toml` and update `Cargo.lock`.
-- [ ] Reconcile lint expectations and step signatures; fix any newly-red
-  scenario.
-- [ ] Update `docs/developers-guide.md`, `docs/contents.md`, and add the v0.6.0
-  migration ExecPlan references.
-- [ ] Run the full gate set; compare the migrated inventory against baseline.
+- [x] (2026-09-26) Import `docs/users-guide.md` and
+  `docs/v0-6-0-migration-guide.md` from the pinned commit; record provenance.
+  Committed as `e62af317`.
+- [x] (2026-09-26) Bump the `rstest-bdd` family in `Cargo.toml` and update
+  `Cargo.lock` with targeted `--precise 0.6.0` updates.
+- [x] (2026-09-26) Reconcile lint expectations and step signatures; fix any
+  newly-red scenario. Finding: no step signature changed and no scenario turned
+  red, because the fixture-name normalization strips *one leading underscore*
+  and this repository's fixtures use the unprefixed identifier `world`. All 45
+  expectations are proven achieved by the green `-D warnings` test compilation;
+  none was removed or weakened. See `Surprises & discoveries`.
+- [x] (2026-09-26) Update `docs/developers-guide.md` and `docs/contents.md`.
+  Both were already written in `e62af317`; this session corrected the async
+  bullet to name the canonical `TokioHarness` instead of the now-deprecated
+  `runtime = "tokio-current-thread"` syntax, and added the
+  `adopt-rstest-bdd-v0-6-0.md` plan reference.
+- [x] (2026-09-26) Discharge INV-3: probe the corrected `Err` propagation, then
+  add `tests/step_error_propagation_tests.rs` as its durable guard, validated
+  green-to-red-to-green. The swept BDD inventory remains exactly 254.
+- [x] (2026-09-26) Run the full gate set on a frozen revision and compare the
+  migrated inventory against baseline. Six of seven gates pass, including
+  `markdownlint`, whose `markdownlint-cli2` stage had never previously executed.
+  `make lint` is red on the pre-existing `src/`-only `cognitive_complexity`
+  condition and is recorded as **unavailable**, not as a pass. Logs are in
+  `### Gate logs`. Inventory comparison: 254 scenario names before and after,
+  identical as sets.
 - [ ] Push and open a draft pull request.
 
 ## Surprises & discoveries
+
+- Observation: `make lint` is red on this branch with 39
+  `cognitive_complexity` errors, and the failure is pre-existing on `main`, not
+  caused by the migration.
+
+  Evidence: every diagnostic names a file under `src/`; none is under `tests/`.
+  All 31 named files, plus `clippy.toml` (threshold 9) and
+  `rust-toolchain.toml` (pin `nightly-2026-08-23`), are byte-identical to
+  `origin/main` — a 33-file `git diff --quiet origin/main` sweep reports zero
+  differences. `clippy`'s `cognitive_complexity` is a syntactic AST metric, so
+  it cannot be affected by a dev-dependency version. The branch's only
+  `Cargo.toml` change is the two version strings in `[dev-dependencies]`. CI on
+  the base commit `ebcedaef` (run `36194972050`, job `build-test`) did pass the
+  identical
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`, so
+  the local red and CI's green disagree about the same tree; that discrepancy
+  is environmental and is not resolved here.
+
+  Impact: `make lint` cannot be used as a green signal for this branch, and the
+  migration is not the cause. The gate stops at `lint-clippy`, so
+  `lint-whitaker`, `lint-python` and `github-actions-lint` never ran. This must
+  be reported as an unavailable check rather than claimed as passing.
+
+- Observation: the 0.6.0 dependency bump did **not** turn any BDD scenario red,
+  despite 177 of 185 step functions returning the `anyhow::Result<()>` alias
+  whose `Err` was previously discarded.
+
+  Evidence: `make test` on the migrated tree reports
+  `3413 tests run: 3413 passed, 5 skipped`. Extracting the generated scenario
+  tests from that run and comparing them as sets against the pre-migration
+  baseline gives exact equality: 254 scenarios before, 254 after, with no
+  additions and no losses.
+
+  Impact: invariant INV-1 (coverage preservation) and INV-3's central worry (a
+  former false green becoming red) are both discharged by observation. No
+  scenario needed a fix, and none was disabled. The suite had no latent
+  swallowed `Err` that the corrected propagation could expose.
+
+- Observation: the 45 `#[expect(clippy::…)]` attributes under `tests/bdd/steps/`
+  are already verified as *achieved* by the green `make test` run, and so do
+  not depend on the red `make lint` to be trustworthy.
+
+  Evidence: `make test-nextest` compiles
+  `--workspace --all-targets --all-features` under `GATE_RUSTFLAGS`, which sets
+  `RUSTFLAGS="… -D warnings"` (`Makefile` lines 78 and 232). `-D warnings`
+  implies `-D unfulfilled-lint-expectations`; the probe below confirms the
+  oracle is live, and confirms that an *achieved* expectation produces no
+  diagnostic:
+
+  ```plaintext
+  $ rustc --edition 2024 -D warnings --emit=metadata \
+      -o /tmp/a.rmeta /tmp/fulfilled.rs        # #[expect(unused_variables)] on a fn
+                                               # that really does have an unused arg
+  exit=0                                       # no diagnostics
+
+  $ rustc --edition 2024 -D warnings --emit=metadata \
+      -o /tmp/b.rmeta /tmp/unfulfilled.rs      # same attribute, lint does not fire
+  error: this lint expectation is unfulfilled
+   --> /tmp/unfulfilled.rs:2:10
+    |
+  2 | #[expect(unused_variables)]
+    |          ^^^^^^^^^^^^^^^^
+    |
+    = note: `-D unfulfilled-lint-expectations` implied by `-D warnings`
+  exit=1
+  ```
+
+  Inventory (multi-line-aware parse of `tests/bdd/`): 45 attributes — 23
+  `shadow_reuse`, 19 `unnecessary_wraps`, 1 `option_if_let_else`, 1
+  `missing_const_for_fn` — spread over 16 files, densest in
+  `tests/bdd/steps/manifest/targets.rs` (11). Grepping the test log for
+  `unfulfilled`, `warning:` and `error:` yields 0, 0 and 33; the 33 `error:`
+  hits are test *names* (`…validation_error::case_…`), not diagnostics.
+
+  Bound: three of the 45 sit under `#[cfg(not(unix))]`
+  (`conditional_manifest.rs:106`, `progress_output.rs:29`,
+  `stdlib/workspace.rs:229`) and are therefore **not** reached by a Linux
+  compilation. Each carries a written `reason` and the same documented shape —
+  a fallible `const fn` that must match its Unix variant's signature — so the
+  `unnecessary_wraps` expectation remains live by the same argument that
+  justified it originally. Windows CI is the oracle for those three; the same
+  constraint already recorded under the Windows toolchain Risk applies.
+
+  Impact: EP-M3's lint-expectation obligation is discharged from evidence
+  `make test` already produced, not from the unavailable `make lint`. That
+  matters because `make lint` cannot currently answer the question:
+  `lint-clippy` aborts in `src/` before it reaches the test targets, so a green
+  `make lint` was never available as a signal here. No expectation was removed,
+  and none was converted to an `#[allow]`.
+
+- Observation: the `docs/developers-guide.md` async bullet that the migration
+  inherited told readers to "Keep async execution on Tokio current-thread
+  runtime" — which 0.6.0 now deprecates.
+
+  Evidence: `crates/rstest-bdd-macros/src/macros/scenarios/mod.rs` in the
+  pinned v0.6.0 checkout emits, for `runtime = "tokio-current-thread"` without
+  an explicit harness, "the `runtime = \"tokio-current-thread\"` syntax is
+  deprecated; use `harness = rstest_bdd_harness_tokio::TokioHarness` instead".
+  The migration guide's "New features requiring new practices" section says the
+  same. This repository's builds set `-D warnings` (`Makefile` line 78), and
+  the upstream guide records that `#![deny(deprecated)]` escalates the same
+  warning to an error, so following the old bullet would produce a build
+  failure rather than a style regression.
+
+  Scope check, so the correction is proportionate: no `scenarios!` invocation
+  in this repository passes `runtime =`, and `TokioHarness`, `sync_to_async`,
+  `StepCtx`, `StepTextRef`, `StepDoc` and `StepTable` appear **only in prose
+  documents** — `git grep` finds no use in `tests/` or `src/`. The bullet was
+  stale guidance, not a false statement about live code. Each of those names
+  was confirmed still exported by the pinned source, so the surviving bullets
+  stand.
+
+  Impact: EP-M4's async bullet was rewritten to name the canonical harness and
+  to say explicitly that synchronous scenarios need no harness at all — which
+  is the task's actual requirement, and which the old bullet obscured. No code
+  changed, because there is no async step here to migrate.
 
 - Observation: the `v0.6.0` tag and the published `rstest-bdd 0.6.0` crate
   contain byte-identical `src/` trees, and both contain APIs the migration
@@ -176,6 +314,43 @@ the conflict in `Decision log` before proceeding.
   passes, 0.6.0 will surface it as a real failure. That is the migration's
   acceptance test, not an obstacle.
 
+- Observation: no scenario in the suite exercised the corrected propagation,
+  so the fix arrived unguarded and a focused regression check had to be added.
+  This is the *opposite* of the false-green the migration guide warns about,
+  and it is the reason INV-3 could not be discharged by observation alone.
+
+  Evidence: every scenario that passes walks a green path whose steps return
+  `Ok`. A green suite is therefore consistent both with propagation working and
+  with it being silently reverted; the 254-scenario equality proves the first,
+  not the second. A deliberate injection into `documentation_file_contains`
+  settled the behaviour question: with the step forced to `Err`, both dependent
+  scenarios failed, naming the injected string, and reverted cleanly. That
+  experiment was a *probe*, not a permanent guard, so
+  `tests/step_error_propagation_tests.rs` was added to hold the property
+  durably.
+
+  The new test is a two-sided oracle rather than a decoration. It is green on
+  the migrated tree, and it goes red when the propagation is simulated away:
+  neutralizing the failing step to `Ok(())` makes it fail on the *trailing*
+  assertion, `trailing step ran: the earlier error was not propagated`, which
+  is precisely the pre-0.6.0 behaviour. Neither outcome can be produced
+  accidentally, so the test detects the regression it exists to detect. It
+  compiles clean under `-D warnings` and, in an isolated clippy run that
+  excuses only the pre-existing `src/` complexity blocker, reports no
+  diagnostics; injecting `&String::from("x")[0..1]` makes that same run fail on
+  `clippy::string_slice`, so the clean result is a live signal rather than a
+  vacuous one.
+
+  Placement matters and is recorded here because it is a trap: the feature file
+  lives in `tests/features_step_results/`, *not* `tests/features/`, since
+  `scenarios!` in `tests/bdd_tests.rs` sweeps the latter directory and would
+  collect a deliberately-failing scenario as an ordinary one. Upstream keeps
+  its own failing scenarios out of the directories its `scenarios!` invocations
+  sweep, for the same reason.
+
+  Impact: INV-3 is discharged, and INV-1 is unaffected — the new test is a
+  separate target, and the swept BDD inventory remains exactly 254 names.
+
 - Observation: the only step body that can skip, `tests/bdd/steps/fs.rs:62`,
   calls `rstest_bdd::skip!`, which remains present in 0.6.0.
 
@@ -184,6 +359,24 @@ the conflict in `Decision log` before proceeding.
 
   Impact: skip propagation is preserved. The baseline skips, if any, must be
   identical after migration.
+
+- Observation: the published 0.6.0 API surface confirms the source-derived
+  reading of the version boundary, and the harness adapters are separate
+  crates, not new requirements.
+
+  Evidence: `docs.rs/rstest-bdd/0.6.0/rstest_bdd/` lists `InsertOutcome`,
+  `BypassedScenario`, `FixtureBorrowError`, `FixtureRef`/`FixtureRefMut`,
+  `RSTEST_BDD_HARNESS_CONTEXT_FIXTURE` and `StepResult`, matching the pinned
+  source. `docs.rs/rstest-bdd-harness-tokio` is documented as a distinct crate
+  that "wraps scenario execution inside a current-thread Tokio runtime"; it is
+  absent from this repository's lockfile. The crate's own dependency list shows
+  `rstest-bdd-harness` as a *dev*-dependency of `rstest-bdd` and a normal
+  dependency of `rstest-bdd-macros`, which is exactly how it enters netsuke's
+  graph.
+
+  Impact: no source change is needed for harnesses, and adopting a harness
+  adapter would be a new capability rather than a migration step. This agrees
+  with the task's instruction that new harness adoption is not mandatory.
 
 - Observation: byte-for-byte upstream Markdown already satisfies this
   repository's Markdown gates.
@@ -203,6 +396,33 @@ the conflict in `Decision log` before proceeding.
   (`docs/rstest-bdd-users-guide.md` = `1c0a331c…617d` locally versus
   `ac9340d3…8fd6` upstream at tag v0.5.0); that earlier copy was adapted, and
   this plan deliberately does not repeat that.
+
+- Observation: the targeted `--precise 0.6.0` updates re-selected
+  `cfg(windows)` and optional dependencies of *unchanged* crates, so the
+  lockfile diff is wider than the four family crates.
+
+  Evidence: within the lockfile, `cap-primitives 3.4.6` and `winx 0.36.4` moved
+  from `windows-sys 0.59.0` to `0.52.0`, and `rustix 1.1.4`, `tempfile 3.27.0`,
+  `errno 0.3.14` and `winapi-util 0.1.11` likewise re-selected `0.52.0`. Cargo
+  unifies a `cfg(windows)`-gated requirement across the whole graph, so
+  removing the entry that previously forced the higher version lowers every
+  consumer. Each requirement was read from the registry manifest and admits the
+  new selection: `cap-primitives` and `winx` declare `>=0.52, <=0.59`,
+  `io-extras 0.18.4` declares `>=0.52, <=0.59`, `rustix`, `tempfile` and
+  `errno` declare `>=0.52, <0.62`. All nine consumers' requested `windows-sys`
+  features exist in 0.52.0's 233-feature set. On the non-Windows optional side,
+  `serde-saphyr 1.2.0` re-selected `base64 0.23.1` (declared `>=0.21, <0.24`),
+  `tracing 0.1.44` gained the already-optional `log` feature dependency, and
+  `hashbrown 0.16.1` dropped its optional `allocator-api2`/`equivalent` edges.
+
+  Impact: every macro-dependency diff in the lockfile is confined to the
+  `rstest-bdd` family closure and legal by declaration; no crate changed
+  version except family members and crates that only they or their former
+  versions used. The one effect worth watching is that Windows builds now
+  compile `windows-sys 0.52.0` where they previously used `0.59.0`/`0.60.2`;
+  this is API-compatible for the listed features but is only *executed* on
+  Windows CI, so the Windows job is the oracle. Verified statically here; see
+  the Risk entry on the Windows toolchain.
 
 ## Imported-document provenance and link mapping
 
@@ -267,9 +487,106 @@ the link site.
   increase, and rewriting links would break byte-for-byte fidelity.
   Date/Author: 2026-09-26, implementing agent.
 
+- Decision: the `rstest-bdd-harness` crate that now appears in `Cargo.lock` is
+  transitive and is not added to any manifest. Rationale:
+  `rstest-bdd-macros 0.6.0` depends on it, and this repository calls no harness
+  API. The task requires including "only harness crates actually needed by the
+  existing tests". The opt-in adapters (`rstest-bdd-harness-tokio`,
+  `rstest-bdd-harness-gpui`) do not appear in the lockfile at all, because
+  nothing in netsuke requests them. Date/Author: 2026-09-26, implementing agent.
+
+- Decision: leave all 45 `#[expect(...)]` attributes in `tests/bdd/steps/`
+  unchanged, and treat the 0.6.0 bump as not having invalidated any of them.
+  Rationale: `make test-nextest` compiles
+  `--workspace --all-targets --all-features` under `-D warnings` (`Makefile`
+  line 232 via `GATE_RUSTFLAGS`), and `-D warnings` implies
+  `-D unfulfilled-lint-expectations`, so every *reached and achieved*
+  expectation is verified by that compilation succeeding. Removing an
+  expectation would require positive evidence that its lint no longer fires;
+  absence of such evidence is not evidence of absence, and guessing would trade
+  a verified `#[expect]` for an unverified `#[allow]`-shaped silence.
+  Date/Author: 2026-09-26, implementing agent.
+
+- Decision: add a dedicated regression test for step-result `Err`
+  propagation, in a new `tests/step_error_propagation_tests.rs`, rather than
+  relying on the existing suite to catch a regression. Rationale: INV-3's own
+  discharge clause makes the check conditional on no existing scenario covering
+  the behaviour. None does — every green scenario's steps return `Ok` — so the
+  conditional resolves to "add one". A test that can only ever pass is not
+  coverage, so the new test was validated in both directions before being kept.
+  Date/Author: 2026-09-26, implementing agent.
+
 ## Outcomes & retrospective
 
-To be completed at the end of the migration.
+What was achieved. Netsuke's behavioural suite runs on the published
+`rstest-bdd` 0.6.0. The change to `Cargo.toml` is two version strings; every
+other breaking change in the migration guide is inapplicable, evidenced by the
+absence of a call site rather than assumed. The consumed surface is
+`rstest_bdd::Slot` plus the `given`, `when`, `then` and `scenarios` macros.
+`Slot` is unchanged in 0.6.0 and is not mentioned by the guide. The declared
+requirements stayed caret requirements and the macros crate kept
+`strict-compile-time-validation`, so compile-time validation was neither
+relaxed nor disabled to make the migration compile. No MSRV bump was needed:
+the graph already required Rust 1.89 through pre-existing `ortho_config` 0.9.0
+and `serde-saphyr` 1.2.0, above the 1.88 that `gherkin` 0.16 imposes, so
+`rust-toolchain.toml` and its Polonius nightly pin are untouched and the
+repository is not nightly-only by virtue of this dependency. The two imported
+guides are byte-for-byte copies of the `v0.6.0` tag, with provenance recorded
+separately from the upstream text.
+
+The exposure the migration carried. The 0.6.0 headline is a correctness fix: a
+step whose return type is a type alias of `Result<T, E>` previously had its
+`Err` discarded and the scenario stayed green. Netsuke's 177 fallible steps are
+declared `-> Result<()>` with `anyhow::Result`, which is exactly such an alias.
+No scenario of the 254 turned red, so the fix exposed no latent swallowed error
+here. That is a weaker result than it looks, and the difference matters: a
+green suite is equally consistent with the propagation working and with it
+being silently reverted, and no existing scenario has a step that returns `Err`
+at all. The fix therefore arrived unguarded, and the migration's job was not
+finished until it was guarded.
+
+The artefact that closed it. `tests/step_error_propagation_tests.rs` is a
+self-contained `#[scenario]` with `#[should_panic]`, deliberately driven to
+failure, that passes only when a step's `Err` reaches the generated step loop.
+It is two-sided: neutralizing the failing step to `Ok(())` reproduces the
+pre-0.6.0 behaviour and the test then fails on its *trailing* assertion
+(`trailing step ran: the earlier error was not propagated`). It cannot pass by
+accident. Its feature file lives in `tests/features_step_results/` rather than
+`tests/features/` because `scenarios!` in `tests/bdd_tests.rs` sweeps the
+latter directory and would otherwise collect a deliberately-failing scenario as
+an ordinary one expected to pass.
+
+Lessons learned.
+
+1. A dependency upgrade that fixes a false green does not announce itself by
+   turning the suite red. If every existing scenario walks a green path, a
+   correctness fix that can only manifest on error paths is invisible in the
+   suite's results. The question to ask is not "did anything break?" but "which
+   behaviour changed, and does any test bind it?" Here the answer was no, and
+   the migration was incomplete until a test did.
+2. An inapplicable breaking change is a claim that needs evidence. The guide
+   lists a dozen; the credible way to retire each is to show the call site does
+   not exist. That is what was done, and the negative result is what makes the
+   "inapplicable" table mean something.
+3. A green stage is not a stage that ran. `markdownlint` passed on revisions
+   where `markdownlint-cli2` had never executed, because the preceding
+   `spelling` stage aborted the target first. A `make` prerequisite that dies
+   short-circuits the rest of the target, so a gate's exit status is only
+   meaningful once every stage of it is known to have run. Distinguishing
+   "unavailable" from "passed" is what kept this from being recorded as a
+   stronger result than it was.
+4. A test that can only pass is not coverage. Green-to-red-to-green, with the
+   red failing for the intended reason, is the evidence that the new guard
+   actually binds the behaviour.
+
+Residual gaps, stated rather than papered over. `make lint` did not complete on
+this revision and is recorded as unavailable: `lint-clippy` aborts with 39
+`cognitive_complexity` diagnostics across 31 files, all under `src/`, and
+`lint-whitaker`, `lint-python` and `github-actions-lint` therefore never ran.
+The 0.5.0 false green itself was not reproduced on a 0.5.0 build; what is
+evidenced is 0.6.0's corrected behaviour, which is the behaviour the repository
+now depends on. `make test-podman` was out of scope, as no path under
+`ansible/` appears in this change surface.
 
 ## Context and orientation
 
@@ -287,6 +604,14 @@ and a standalone UI-test manifest at
 `tests/ui/cli_configuration_pass/Cargo.toml` which declares `[workspace]` and
 is not a member.
 
+No pre-existing v0.6.0 migration PR duplicates this work: a `gh pr list` over
+all states finds no PR whose title mentions `rstest` or `bdd`, and the only
+live pull requests (numbers 621-792) are unrelated. A remote branch
+`origin/adopt-rstest-bdd-v0-5-0` does exist and is *not* an ancestor of
+`origin/main`, but its head `7781f9ab` is an unrelated historical branch ("Add
+accessible output mode and status reporting (#265)") that predates the v0.5.0
+work; it is not a migration in flight.
+
 Key files for this migration:
 
 - `Cargo.toml` — declares the `rstest-bdd` and `rstest-bdd-macros`
@@ -295,9 +620,10 @@ Key files for this migration:
 - `Cargo.lock` — the single maintained lockfile; resolves the family at 0.5.0.
 - `tests/bdd_tests.rs` — the `scenarios!` entry point.
 - `tests/bdd/steps/mod.rs` and its 30 sibling modules — 185 step functions,
-  41 lint expectations citing upstream issue #381.
+  45 lint expectations citing upstream issue #381.
 - `docs/developers-guide.md` — section `## rstest-bdd v0.5.0 usage` at line
-  4384 states the current pin and must be updated.
+  4384 (this document's revision at the baseline commit) stated the
+  then-current pin; it was renamed to `## rstest-bdd v0.6.0 usage`.
 - `docs/contents.md` — the `docs/` index, listing the imported guides.
 
 A *step function* is a function annotated `#[given]`, `#[when]`, or `#[then]`.
@@ -359,13 +685,17 @@ Trace links:
 - **INV-3 (step error propagation).** A step returning `Err` from an
   `anyhow::Result` alias fails its scenario. Method: the alias-classification
   fix is upstream behaviour; this repository verifies it is *in effect* by
-  observing that 0.6.0's type-directed classification is reached. Planned
-  artefact: a focused regression check only if a plausible false-green is not
-  already covered by an existing unhappy-path scenario (see `Decision log` when
-  decided). Discharge: a deliberately failing step makes its scenario fail,
-  then is reverted. Non-vacuity: a test that always fails, or one whose
-  assertion never runs, proves nothing; the check must show the scenario
-  *passing* without the injected `Err` and *failing* with it.
+  observing that 0.6.0's type-directed classification is reached. Artefact:
+  `tests/step_error_propagation_tests.rs`, a self-contained
+  `#[scenario]`-plus-`#[should_panic]` regression check. The condition for
+  adding one was met: no existing scenario has a step that returns `Err`, so
+  the property was unguarded. Discharge: **discharged 2026-09-26** — the test
+  is green on the migrated tree, and goes red on the trailing assertion when
+  the propagation is simulated away. Non-vacuity: the check is two-sided; a
+  green-only result could be produced by a test that never asserts anything,
+  but the deliberate-break run fails on
+  `trailing step ran: the earlier error was not propagated`, which only the
+  pre-0.6.0 behaviour produces.
 
 - **INV-4 (declared-versus-resolved agreement).** The declared requirement in
   `Cargo.toml` and the resolved version in `Cargo.lock` both denote 0.6.0, and
@@ -384,7 +714,7 @@ Trace links:
 - The published `rstest-bdd` crates' documented interfaces behave as their
   source indicates. Verified against the extracted `.crate` archives at the
   checksums recorded in `Surprises & discoveries`; not re-verified internally.
-- `cargo`'s resolver honors `--precise` for a targeted lockfile update.
+- `cargo`'s resolver honours `--precise` for a targeted lockfile update.
 - The repository's gate commands are as `AGENTS.md` documents.
 
 ### Methods and residual gaps
@@ -428,11 +758,16 @@ for each family member.
 
 ### EP-M3 — Reconcile source and lint expectations
 
-End state: the suite compiles and lints clean under 0.6.0. Every one of the 41
+End state: the suite compiles and lints clean under 0.6.0. Every one of the 45
 issue-#381 expectations is either still fulfilled or removed with evidence.
 `tests/bdd/steps/mod.rs` documentation matches reality.
 
-Acceptance: `make lint-clippy` clean; INV-1 holds.
+Acceptance: the `-D warnings` compilation inside `make test-nextest` is clean
+with zero `unfulfilled_lint_expectations` diagnostics; INV-1 holds. The
+original acceptance named `make lint-clippy`, which is **unavailable** on this
+branch because it aborts in `src/` on a pre-existing red; the substitute is
+stronger for this question, since it is the compile that actually reaches the
+test targets. **Discharged 2026-09-26** — see `Surprises & discoveries`.
 
 Recovery: each expectation removal is independently revertible.
 
@@ -441,7 +776,12 @@ Recovery: each expectation removal is independently revertible.
 End state: `docs/developers-guide.md` describes v0.6.0 usage;
 `docs/contents.md` lists both imported guides with provenance.
 
-Acceptance: `make markdownlint` and `make check-fmt` clean.
+End state also covers the async guidance: the `## rstest-bdd v0.6.0 usage`
+section must not recommend a syntax 0.6.0 deprecates.
+
+Acceptance: `make markdownlint` and `make check-fmt` clean. **Discharged
+2026-09-26** — both gates green on the committed tree; the `markdownlint-cli2`
+stage ran and linted 166 files with 0 errors.
 
 ### EP-M5 — Validate and deliver
 
@@ -449,8 +789,12 @@ End state: the full gate set has run and been recorded; the branch is pushed
 and a draft PR is open.
 
 Acceptance: INV-1 through INV-5 discharged with recorded evidence; `make test`,
-`make lint`, `make check-fmt`, `make typecheck`, and `make doc-coverage` all
-pass; unavailable checks are named rather than claimed.
+`make check-fmt`, `make typecheck`, `make doc-coverage`, `make markdownlint` and
+`make nixie` all pass. `make lint` is recorded as an **unavailable** check
+with its pre-existing-red evidence, never as a pass; the `-D warnings`
+compilation inside `make test-nextest` stands in for the one question
+`make lint` would have answered about `tests/`. Unavailable checks are named
+rather than claimed.
 
 ## Outputs and evidence
 
@@ -459,8 +803,96 @@ before/after declared and resolved versions, the lint-expectation disposition
 list, the baseline-versus-migrated inventory diff, and the gate log paths under
 `/tmp`.
 
+### Dependency versions, before and after
+
+| Crate                 | Declared before | Declared after | Resolved before | Resolved after |
+| --------------------- | --------------- | -------------- | --------------- | -------------- |
+| `rstest-bdd`          | `"0.5.0"`       | `"0.6.0"`      | 0.5.0           | 0.6.0          |
+| `rstest-bdd-macros`   | `"0.5.0"`       | `"0.6.0"`      | 0.5.0           | 0.6.0          |
+| `rstest-bdd-patterns` | inherited       | inherited      | 0.5.0           | 0.6.0          |
+| `rstest-bdd-policy`   | inherited       | inherited      | 0.5.0           | 0.6.0          |
+| `rstest-bdd-harness`  | not present     | not present    | absent          | 0.6.0          |
+| `gherkin`             | inherited       | inherited      | 0.14.0          | 0.16.0         |
+| `rstest`              | `"0.26.1"`      | `"0.26.1"`     | 0.26.1          | 0.26.1         |
+
+`rstest-bdd-harness` is transitive only: no manifest declares it, and the
+opt-in adapters `rstest-bdd-harness-tokio` / `rstest-bdd-harness-gpui` are
+absent from the lockfile. Both manifest requirements remain caret requirements,
+and `rstest-bdd-macros` retains `strict-compile-time-validation`.
+
+### Breaking changes, applied or inapplicable
+
+Each 0.6.0 breaking change from the migration guide, with its disposition here.
+"Inapplicable" is evidenced by the absence of a call site, not asserted.
+
+| Breaking change                                  | Disposition  | Evidence                                                                                                                  |
+| ------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Underscore-prefixed implicit fixture naming      | inapplicable | fixtures use the unprefixed `world`; no `_`-prefixed fixture exists                                                       |
+| `runtime = "tokio-current-thread"`               | inapplicable | no `runtime =` and no `TokioHarness` anywhere; scenarios are synchronous                                                  |
+| `HarnessAdapter::run` returns `HarnessResult`    | inapplicable | no `impl HarnessAdapter`, no custom harness; the only `harness` match is `tests/makefile_test_target/markdown_recipes.rs` |
+| Step aliases of `Result<T, E>` propagate `Err`   | **applied**  | upstream behaviour, now guarded by `tests/step_error_propagation_tests.rs`                                                |
+| `insert_value` returns `InsertOutcome`           | inapplicable | zero direct `insert_value` callers                                                                                        |
+| `record_bypassed_steps` takes `BypassedScenario` | inapplicable | zero callers of `record_bypassed_steps` / `BypassedScenario`                                                              |
+| `RustStepIndexResult` from indexing entry points | inapplicable | zero references to `index_rust_file`, `index_rust_source`, `RustStepIndexResult`                                          |
+| `index_feature_file` removed                     | inapplicable | zero callers; no language-server integration in this repository                                                           |
+| `publish_rust_diagnostics` removed               | inapplicable | zero callers                                                                                                              |
+| `find_feature_files` returns `Result`            | inapplicable | zero callers of `find_feature_files` / `ServerError`                                                                      |
+| Feature paths manifest-relative in reports       | inapplicable | no `ScenarioMetadata`, JSON reporter or JUnit `classname` consumer                                                        |
+| MSRV raised to 1.88                              | not binding  | the graph already required 1.89 via pre-existing `ortho_config`; the pin is `nightly-2026-08-23`                          |
+
+The consumed surface is small and stable, which is why most rows read
+"inapplicable": this repository imports `rstest_bdd::Slot` and the four macros
+`given`, `when`, `then` and `scenarios`, and nothing else. `Slot` is unchanged
+in 0.6.0 and is not mentioned by the migration guide.
+
+### Gate logs
+
+All paths are under `/tmp` and are named `…-netsuke-<branch>.out`. The `-m2`
+set gated the dependency delta across the `e62af317` revision. The `-m4` set is
+the definitive sweep: it ran against the working tree that this commit
+captures, after a `-m3` sweep was discarded because a concurrent writer touched
+the ExecPlan mid-sweep and invalidated its freeze.
+
+| Gate                | Status                         | Log                                                        |
+| ------------------- | ------------------------------ | ---------------------------------------------------------- |
+| `make check-fmt`    | pass                           | `/tmp/check-fmt-netsuke-adopt-rstest-bdd-v0-6-0-m4.out`    |
+| `make lint`         | unavailable — pre-existing red | `/tmp/lint-netsuke-adopt-rstest-bdd-v0-6-0-m4.out`         |
+| `make typecheck`    | pass                           | `/tmp/typecheck-netsuke-adopt-rstest-bdd-v0-6-0-m4.out`    |
+| `make test`         | pass — 3414/3414, 5 skipped    | `/tmp/test-netsuke-adopt-rstest-bdd-v0-6-0-m4.out`         |
+| `make doc-coverage` | pass — 98.81% vs 80.00%        | `/tmp/doc-coverage-netsuke-adopt-rstest-bdd-v0-6-0-m4.out` |
+| `make markdownlint` | pass — 166 files, 0 errors     | `/tmp/markdownlint-netsuke-adopt-rstest-bdd-v0-6-0-m4.out` |
+| `make nixie`        | pass                           | `/tmp/nixie-netsuke-adopt-rstest-bdd-v0-6-0-m4.out`        |
+
+The `-m4` sweep's key result is that `make markdownlint` passed end to end.
+Every earlier revision had failed at the preceding `spelling` stage, so the
+`markdownlint-cli2` stage itself had never executed; it now reports
+`166 file(s)` linted and `0 error(s)`. The `-m4` sweep also confirms the new
+regression test ran:
+`netsuke-build::step_error_propagation_tests step_error_fails_its_scenario` is
+`PASS` at position 3131 of 3414, which is why the suite total moved from the
+3413 baseline.
+
+`make test-podman` was deliberately not run: no path under `ansible/` appears
+in this change surface.
+
+Editing this document after the `-m4` sweep shifted the revision, so the
+Markdown-scoped gates were re-run on the final revision; those logs are
+separate and are named with the `-m5` suffix.
+
+### Session provenance
+
+The work session that produced this migration is recorded at
+<https://lody.ai/leynos/sessions/7bb1d019-44e1-4cc0-b860-e7ac1b312667>.
+
 ## Revision note
 
 2026-09-26 — initial draft, written after reconnaissance established the
 baseline and falsified the assumption that the 0.6.0 crate is materially larger
 in scope than the guide's headline suggests. No revisions to earlier text.
+
+2026-09-26 — final revision, recording the `-m4` gate sweep and closing the
+plan's living sections. `## Outcomes & retrospective` was written and the
+`### Gate logs` table replaced: it had carried `-m2` paths and a `3413/3413`
+test count, both superseded once the regression test was added. The `-m3` sweep
+is not cited anywhere, because a concurrent writer touched this document
+mid-sweep and invalidated its freeze.
