@@ -525,14 +525,14 @@ a decision or an owner. EP-M3 introduces the obligations below.
 
 Axioms relied on:
 
-- AX-1: `semver::Version::parse` implements SemVer 2.0.0 syntax, and
+- AXIOM-1: `semver::Version::parse` implements SemVer 2.0.0 syntax, and
   `semver::VersionReq::matches` excludes prerelease versions unless a
   comparator names a prerelease on the same major, minor, and patch. This is the
   `semver` crate's documented behaviour; it is not re-verified.
-- AX-2: `serde_saphyr::from_str` into `serde_json::Value` performs no
+- AXIOM-2: `serde_saphyr::from_str` into `serde_json::Value` performs no
   template evaluation. Jinja evaluation happens only through the MiniJinja
   environment built afterwards in `evaluate_manifest`.
-- AX-3: the injected `EnvReader` passed to `from_str_with_env` is the only
+- AXIOM-3: the injected `EnvReader` passed to `from_str_with_env` is the only
   path by which template `env()` reads variables, so counting its calls
   observes whether templates were evaluated.
 
