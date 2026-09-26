@@ -8,11 +8,11 @@ proceeds.
 
 Status: DRAFT
 
-Revision 1. See `Revision note` at the foot of this document. This plan was
+Revision 2. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
-("RFC 0029: first-class host facts with explicit collection (#802)"). It must
-not be implemented until it is approved and the entry gate in milestone EP-M0
-passes.
+("RFC 0029: first-class host facts with explicit collection (#802)") and
+revised after an expert design review. It must not be implemented until it is
+approved and the approver has chosen an entry-gate option in decision D-6.
 
 ## Purpose / big picture
 
@@ -31,33 +31,45 @@ constructs, mutates, and consumes. Before anyone changes them, the project
 needs one trustworthy answer to "what exists today, who builds it, who changes
 it, who reads it, and what must not break?". RFC 0026 recorded its audit
 against an older baseline (`79545e12`, 2026-09-19), and 34 commits have landed
-since, six of them in `src/`. Roadmap task 26.1.1 exists to replace that
-snapshot with an inventory pinned to the implementation head.
+since, six of them in `src/`. Roadmap task 26.1.1 replaces that snapshot with
+an inventory pinned to the implementation head.
 
 After this change:
 
 - A new reference document, `docs/hexagonal-hardening-inventory.md`, names the
   exact commit it describes and lists, for authored types, lowering, graph
   storage, backend consumers, command-line interface (CLI) orchestration,
-  diagnostics, and existing seams, every production constructor and every
-  production mutator of the types the programme will change.
+  diagnostics, and existing seams, every production constructor, every
+  production mutator, and every production consumer of the types the programme
+  will change. The site set comes from the Rust compiler itself (a disposable,
+  never-committed build that marks each inventoried item `#[deprecated]` so that
+  `rustc` reports every use), united with a text sweep for code the build does
+  not compile.
 - The same document records which earlier work has already landed (without
-  scheduling issue `#652` again), which parts of H1 to H4 remain, and any new
-  observations found during the sweep.
-- A trace matrix maps every planned phase-26 and phase-27 task (and 28.1.1,
-  which also depends on this inventory) to the inventory items it changes and
-  the compatibility obligation it must preserve.
-- The roadmap entry 26.1.1 is marked done and links to the inventory.
+  scheduling issue `#652` again), which parts of H1 to H4 remain, numbered new
+  observations, and a catalogue of compatibility obligations.
+- A trace matrix maps every roadmap task that depends on 26.1.1 to the
+  inventory items it changes or consumes and to the obligations it must
+  preserve.
+- A new contract test, `tests/hexagonal_inventory_contract_tests.rs`, keeps
+  the document internally consistent: one pin, unique register identifiers,
+  trace-matrix task identifiers that exist in the roadmap, every task in the
+  roadmap's dependency closure of 26.1.1 either traced or excluded with a
+  reason, and every finding owned by an existing task. It never reads Rust
+  source, so it cannot fail because later work legitimately changes the code.
+- Roadmap entry 26.1.1 is marked done and links to the inventory (subject to
+  the entry-gate option chosen in D-6).
 
-A reviewer can observe success by opening the inventory, choosing any planned
-task in the roadmap, and following its row in the trace matrix to named,
-revision-pinned code locations and a named compatibility obligation; and by
-re-running the recorded sweep commands at the pinned commit and obtaining the
-same site set that the register lists.
+A reviewer observes success by running
+`cargo nextest run --test hexagonal_inventory_contract_tests` and seeing it
+pass; by choosing any dependent roadmap task and following its trace-matrix row
+to a register entry and a named obligation; and by reading the inventory's
+"Method" section, which records the oracle's and sweeps' commands and counts
+and the seeded-fault result showing the method finds sites it was not told
+about.
 
-This task changes no Rust source, no manifest behaviour, no command-line
-behaviour, and no generated output. See `Decision log` entry D-2 for why no new
-Rust test is added.
+No production Rust source, manifest behaviour, command-line behaviour, or
+generated output changes.
 
 ## Context and orientation
 
@@ -71,83 +83,112 @@ Netsuke processes a manifest in stages (see `docs/netsuke-design.md`, Section
 
 1. **Authored types.** `src/ast/mod.rs`, `src/ast/target.rs`,
    `src/ast/string_or_list.rs`, and `src/ast/dependency_order.rs` define the
-   deserialized manifest: `NetsukeManifest`, `Rule`, `Target`, the `Recipe`
-   enumeration (`Command`, `Script`, `Rule` variants), `StringOrList`, and
-   `DependencyOrder`. They are built only by `serde` deserialization, via a
-   hand-written `Deserialize` implementation for `Recipe`. `src/manifest/**`
-   loads, renders, and expands manifests but defines no further authored recipe
-   types.
+   deserialized manifest: `NetsukeManifest`, `MacroDefinition`, `Rule`,
+   `Target`, the `Recipe` enumeration (`Command`, `Script`, `Rule` variants,
+   read through a private `RawRecipe`), `StringOrList`, and `DependencyOrder`.
+   They are created by `serde` deserialization and by `From` conversions on
+   `StringOrList`. `src/manifest/**` defines no further authored recipe types,
+   but it is a major *mutator* of them: `src/manifest/render.rs` renders Jinja
+   in place through `&mut` borrows of targets, rules, recipes, and string lists
+   (including the `rule:` selector), and `src/manifest/mod.rs` exposes the
+   library entry points `manifest::from_str` and (via
+   `src/manifest/path_loaders.rs`) `from_path`.
 2. **Lowering.** `src/ir/from_manifest.rs` (entry points
-   `BuildGraph::from_manifest` and `BuildGraph::from_manifest_for_shell`) and
-   `src/ir/from_manifest_support.rs` (`register_action`, `resolve_rule`,
-   `resolve_recipe`) turn the manifest into the intermediate representation
-   (IR). `src/ir/cmd_interpolate/**` substitutes and shell-quotes input and
-   output paths for a chosen interpreter.
+   `BuildGraph::from_manifest` and the `#[doc(hidden)] pub`
+   `BuildGraph::from_manifest_for_shell`) and `src/ir/from_manifest_support.rs`
+   (`register_action`, `resolve_rule`, `resolve_recipe`, `ActionBindings`) turn
+   the manifest into the intermediate representation (IR).
+   `src/ir/cmd_interpolate/**` substitutes and shell-quotes input and output
+   paths for a chosen interpreter through `CommandBindings`.
 3. **Graph storage.** `src/ir/graph.rs` defines `BuildGraph`, `Action`,
    `BuildEdge`, `EdgeId`, and the IR `DependencyOrder`. `Action.recipe` stores
-   an `ast::Recipe`: this is finding H1. `src/hasher.rs` derives each action's
-   identity by hashing the serialized `Action`.
-4. **Backend consumers.** `src/ninja_gen/**`, `src/ninja_gen_validation.rs`,
-   `src/ninja_gen_recipe_shell.rs`, and `src/ninja_gen_escape.rs` render Ninja
-   text; `src/graph_view/**` projects the graph for the `graph` subcommand.
+   an `ast::Recipe`: this is H1. `src/hasher.rs` derives each action's identity
+   by hashing the serialized `Action`.
+4. **Backend consumers.** `src/ninja_gen/**` (including `dyndep.rs` and
+   `explicit_shell.rs`), `src/ninja_gen_validation.rs`,
+   `src/ninja_gen_recipe_shell.rs`, `src/ninja_gen_escape.rs` (`ShellText`,
+   `NinjaValue`), and `src/ninja_gen_command_list*.rs` render Ninja text;
+   `src/graph_view/**` projects the graph for the `graph` subcommand.
 5. **CLI orchestration.** `src/main.rs` calls `runner::run` in
-   `src/runner/mod.rs`, which dispatches through `src/runner/dispatch.rs` and
-   spawns Ninja through `src/runner/process/**`. Layered configuration is
-   merged by `ortho_config` in `src/cli/config.rs` and `src/cli/merge/**`.
+   `src/runner/mod.rs`, which dispatches through `src/runner/dispatch.rs`,
+   generates through `src/runner/graph_generation.rs` and
+   `src/runner/generation.rs`, and spawns Ninja through
+   `src/runner/ninja_process_adapter.rs` and `src/runner/process/**`.
+   `src/runner/graph.rs` and `src/runner/help_query.rs` also lower manifests.
+   Layered configuration is merged by `ortho_config` in `src/cli/config.rs` and
+   `src/cli/merge/**`. `build.rs` compiles parts of `src/cli` and
+   `src/localization/mod.rs` through `#[path]`, so it is a consumer too.
 6. **Diagnostics.** `src/ir/graph_error.rs` (`IrGenError`),
    `src/ninja_gen_error.rs` (`NinjaGenError`), `src/manifest/diagnostics/**`
    (`ManifestError`), `src/runner/error.rs` (`RunnerError`),
-   `src/localization/mod.rs` (`LocalizedMessage`), and `src/diagnostic_json.rs`
-   (structured output).
+   `src/localization/mod.rs` (`LocalizedMessage`, the process-global
+   `set_localizer`), `src/localization/keys.rs`, `src/diagnostic_json.rs`,
+   `src/result_json.rs`, `src/json_envelope.rs`, and the error rendering and
+   exit-code paths in `src/main.rs`.
 
 ### Terms used in this plan
 
-- **Revision-pinned.** Every code citation in the inventory refers to one
-  named commit, the *pin*. Line numbers are only meaningful at that commit, so
-  the inventory cites them as `path:line` beneath a single pin declaration and
-  also names the enclosing symbol, so a later reader can relocate the site.
-- **Production code.** Code compiled into the `netsuke` library or binary when
-  neither `cfg(test)` nor `cfg(kani)` is set, for any supported target and
-  feature combination. Test modules (including `#[path]`-included `*_tests.rs`
-  files), `tests/**`, `test_support/**`, doctests, and Kani-only (`cfg(kani)`)
-  code are *not* production, but the inventory lists them by file in a separate
-  appendix so that later migration tasks know which callers to update.
-- **Constructor.** Any production site that brings a value of an inventoried
-  type into existence: a struct or enum-variant literal, an associated function
-  returning `Self`, a `From`/`TryFrom`/`FromStr`/`Default` implementation, a
-  `Deserialize` implementation (derived or hand-written), or a `Clone`
-  implementation where cloning can duplicate an invalid state.
-- **Mutator.** Any production site that changes an existing value: a method
-  taking `&mut self`, a write to a `pub` field (including collection mutation
-  through a `pub` field, such as `graph.actions.insert(...)`), or an accessor
-  returning `&mut` into the value.
-- **API-reachable.** A constructor or mutator that an external library caller
-  can use because the type, field, or function is public from `src/lib.rs`,
-  whether or not any internal production code uses it. For example,
-  `BuildGraph::replace_edge_for_output` is `pub`, but at the planning head only
-  test modules call it.
-- **Compatibility obligation.** A behaviour a later migration must preserve or
-  deliberately change with an explained rationale. Netsuke is pre-1.0 (crate
-  version `0.1.0-beta3`), so Rust source APIs carry no compatibility commitment
-  (see `Constraints`); the obligations are behavioural.
+- **Pin.** The one commit the inventory describes. Every `path:line` in the
+  inventory is valid only at the pin, and every citation also names its
+  module-qualified enclosing symbol so a later reader can relocate it.
+- **Production code.** Code compiled into the `netsuke` library, the
+  `netsuke` binary, or `build.rs` when neither `cfg(test)` nor `cfg(kani)` is
+  set, for any supported target and feature combination. Test modules
+  (including inline `#[cfg(test)] mod tests { .. }` blocks and
+  `#[path]`-included `*_tests.rs` files), `tests/**`, `test_support/**`,
+  `benches/**`, doctests, and Kani-only code are *not* production. The
+  inventory lists them by file in an appendix, because later migrations must
+  update them.
+- **Constructor.** A production site that creates a value of an inventoried
+  type: a struct literal, an enum-variant construction (including
+  `Self::Variant { .. }`, tuple-struct calls such as `EdgeId(..)`, and unit
+  variants), an associated function returning `Self`, a `From`, `TryFrom`,
+  `FromStr`, or `Default` implementation, or a `Deserialize` implementation
+  (derived or handwritten). `Clone` is not a constructor, because it cannot
+  create a state the original did not have; derives are instead recorded as
+  per-type columns.
+- **Mutator.** A production site that changes an existing value: a method
+  taking `&mut self`, `self: &mut Self`, or `mut self`; any function taking
+  `&mut T` for an inventoried `T`; a write to a field; collection mutation
+  through a field (`insert`, `push`, `retain`, `values_mut`, `iter_mut`, and
+  similar); `std::mem::{take, replace, swap}`; or an assignment through a
+  mutable reference (`*r = ..`).
+- **Consumer.** A production site that reads an inventoried type's fields,
+  matches its variants, or calls its query methods.
+- **Visibility class.** One of: `pub` (reachable by library callers through
+  `src/lib.rs`), `pub` with `#[doc(hidden)]`, crate-internal (`pub(crate)`,
+  `pub(super)`, `pub(in ..)`), and private.
+- **API-reachable.** A constructor or mutator in the `pub` or
+  `pub`-`doc(hidden)` class, whether or not internal production code uses it.
+  For example, `BuildGraph::replace_edge_for_output` is `pub` with only test
+  callers at the planning head.
+- **Compatibility obligation.** A behaviour a later migration must preserve,
+  or change deliberately with an explained rationale. Netsuke is pre-1.0
+  (`0.1.0-beta3`) and publishes to crates.io as `netsuke-build` with library
+  target `netsuke` (ADR-007, Accepted). Rust source APIs therefore carry no
+  compatibility commitment, but the project records source-breaking changes in
+  `CHANGELOG.md` as "**Breaking:**" entries (for example, the `#652` entry).
+- **Oracle.** The compiler-based site discovery described in
+  `Verification plan` (OB-FWD).
 
 ### Governing documents
 
 - `docs/roadmap-hexagonal-hardening.md`, section 26.1, defines the task.
-- `docs/rfcs/0026-hexagonal-domain-hardening.md`, section "Current state and
-  audit reconciliation", defines H1 to H6 against baseline `79545e12`.
+- `docs/rfcs/0026-hexagonal-domain-hardening.md`, "Current state and audit
+  reconciliation", defines H1 to H6 against baseline `79545e12`.
 - `docs/adr-035-semantic-compiler-boundaries.md` records the direction.
-- `docs/rfcs/0027-executable-architecture-contract.md`, section "Inventory and
-  coverage", assigns *automated* source inventory to the phase-28 checker. This
-  plan must not build that checker.
-- `docs/adr-014-backend-text-escaping-seam.md` (shell quoting versus Ninja
-  escaping), `docs/adr-019-structured-command-shell-selection.md`,
+- `docs/rfcs/0027-executable-architecture-contract.md`, "Proposed checker"
+  and "Inventory and coverage", assigns automated root, configuration, and
+  import coverage to the phase-28 checker. This plan builds no such checker.
+- `docs/adr-014-backend-text-escaping-seam.md`,
+  `docs/adr-019-structured-command-shell-selection.md`,
   `docs/adr-027-command-placeholder-contract.md`,
   `docs/adr-034-preserve-script-in-out-as-shell-variables.md`,
   `docs/adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md`,
-  `docs/adr-012-bound-dyndep-sidecar-retention.md`, and
-  `docs/adr-008-environment-seam-taxonomy.md` define contracts the inventory
-  must name as compatibility obligations.
+  `docs/adr-012-bound-dyndep-sidecar-retention.md`,
+  `docs/adr-008-environment-seam-taxonomy.md`, and
+  `docs/adr-007-publish-as-netsuke-build.md` define contracts the inventory
+  names as obligations.
 - `docs/polonius.md` classifies borrow-centric sites, including
   `POLONIUS-REFUSED(id-is-data)` in `register_action`.
 
@@ -155,248 +196,311 @@ Netsuke processes a manifest in stages (see `docs/netsuke-design.md`, Section
 
 Read these before starting, in this order:
 
-1. `AGENTS.md` (repository rules, gates, Markdown rules).
-2. `docs/roadmap-hexagonal-hardening.md` sections "Existing work and
-   ownership" and 26 to 28.
+1. `AGENTS.md` (repository rules, gates, Markdown rules, test rules).
+2. `docs/roadmap-hexagonal-hardening.md`, "Existing work and ownership" and
+   phases 26 to 29.
 3. `docs/rfcs/0026-hexagonal-domain-hardening.md` and
    `docs/adr-035-semantic-compiler-boundaries.md`.
-4. `docs/rfcs/0027-executable-architecture-contract.md` "Proposed checker",
-   so the inventory stays a document, not a checker.
-5. `docs/netsuke-design.md` Sections 1.2, 3.2, 5, 6.1, and 7.
-6. `docs/developers-guide.md` sections "IR dependency classes", "Graph view
-   projection and renderer adapters", and "Internal support module boundaries".
+4. `docs/rfcs/0027-executable-architecture-contract.md`, "Proposed checker".
+5. `docs/netsuke-design.md`, Sections 1.2, 3.2, 5, 6.1, and 7.
+6. `docs/developers-guide.md`, "Test suite map", "IR dependency classes",
+   "Graph view projection and renderer adapters", and "Internal support module
+   boundaries".
 7. `docs/documentation-style-guide.md` (tables, headings, ExecPlan status
    vocabulary) and `docs/contents.md`.
-8. For later tasks that consume this inventory (not this one):
-   `docs/rust-testing-with-rstest-fixtures.md`,
-   `docs/rstest-bdd-users-guide.md`,
-   `docs/reliable-testing-in-rust-via-dependency-injection.md`,
-   `docs/rust-doctest-dry-guide.md`, `docs/ortho-config-users-guide.md`, and
+8. For the contract test: `docs/rust-testing-with-rstest-fixtures.md`,
+   `docs/reliable-testing-in-rust-via-dependency-injection.md`, and the
+   precedent `tests/execplan_status_contract_tests.rs` (capability-scoped reads
+   through `cap_std::fs_utf8::Dir`).
+9. For tasks that later consume the inventory (not this one):
+   `docs/rstest-bdd-users-guide.md`, `docs/rust-doctest-dry-guide.md`,
+   `docs/ortho-config-users-guide.md`, and
    `docs/formal-verification-methods-in-netsuke.md`.
 
-Skills to load: `execplans` (this plan's format), `hexagonal-architecture`
-(classify each item by boundary role without transplanting a directory pattern),
-`rust-router` then `rust-types-and-apis` (classify constructors, visibility,
-and invalid-state reachability), `nll-to-polonius` (respect `POLONIUS` tags
-when describing borrow-shaped sites), `codegraph-mcp` (caller and callee
-sweeps), `en-gb-oxendict-style` (prose), and `firecrawl-mcp` only if an
-external format or tool fact is needed.
+Skills to load: `execplans`; `hexagonal-architecture` (classify each item by
+boundary role without transplanting a directory pattern); `rust-router`, then
+`rust-types-and-apis` (constructors, visibility, invalid-state reachability) and
+`rust-unit-testing` (the contract test's fixtures and assertions);
+`nll-to-polonius` (respect `POLONIUS` tags); `codegraph-mcp` (caller
+cross-checks); `en-gb-oxendict-style` (prose); and `firecrawl-mcp` only if an
+external tool fact is needed.
 
 ## Conformance basis
 
-Upstream artefacts and their revisions at planning time:
+Upstream artefacts at planning time (`ebcedaef`):
 
-- Roadmap: `docs/roadmap-hexagonal-hardening.md` at `ebcedaef`, item 26.1.1
-  (identifier `RM-26.1.1`). Its acceptance text is `RM-26.1.1-A1` ("every
-  planned change maps to a current item and compatibility obligation") and
-  `RM-26.1.1-A2` ("the inventory includes every production constructor and
-  mutator"). Its scope bullets are `RM-26.1.1-S1` (identify authored types,
-  lowering, graph storage, backend consumers, CLI orchestration, diagnostics,
-  and existing seams at the implementation head) and `RM-26.1.1-S2` (record
-  landed work and remaining H1 to H4 findings without repeating `#652`).
-- RFC: `docs/rfcs/0026-hexagonal-domain-hardening.md` at `ebcedaef`, status
-  **Proposed**. Traced items: `RFC26-H1` to `RFC26-H4` (audit findings);
-  `RFC26-CM1` ("Implementation must characterize manifest acceptance, graph
-  export, generated Ninja, diagnostics, and library entry points before
-  extraction"); `RFC26-CM2` ("Explain any necessary hash change and its rebuild
-  consequences").
-- ADR: `docs/adr-035-semantic-compiler-boundaries.md` at `ebcedaef`, status
-  **Proposed**. Traced item: `ADR35-RISK` ("Rule delegation, declaration
+- Roadmap `docs/roadmap-hexagonal-hardening.md`, item 26.1.1 (`RM-26.1.1`).
+  Acceptance: `RM-26.1.1-A1` ("every planned change maps to a current item and
+  compatibility obligation") and `RM-26.1.1-A2` ("the inventory includes every
+  production constructor and mutator"). Scope: `RM-26.1.1-S1` (identify
+  authored types, lowering, graph storage, backend consumers, CLI
+  orchestration, diagnostics, and existing seams at the implementation head) and
+  `RM-26.1.1-S2` (record landed work and remaining H1 to H4 findings without
+  repeating `#652`). Dependency: `RM-26.1.1-D` ("acceptance of RFC 0026").
+- RFC 0026, status **Proposed**: `RFC26-H1` to `RFC26-H4`; `RFC26-CM1`
+  ("characterize manifest acceptance, graph export, generated Ninja,
+  diagnostics, and library entry points before extraction"); `RFC26-CM2`
+  ("Explain any necessary hash change and its rebuild consequences");
+  `RFC26-OD` (Outstanding decisions: delegation and duplicate precedence are
+  settled by characterization, that is, 26.1.2).
+- ADR-035, status **Proposed**: `ADR35-RISK` ("Rule delegation, declaration
   precedence, action identity, and diagnostic shape need characterization
   before refactoring").
-- RFC: `docs/rfcs/0027-executable-architecture-contract.md`, section
-  "Inventory and coverage" (`RFC27-INV`), as a *boundary*: automated inventory
-  belongs to roadmap tasks 28.1.1 and 28.2.x.
-- No Terms of Reference document exists for this programme; the roadmap and
-  RFC 0026 serve that role. No separate technical-design revision exists beyond
-  `docs/netsuke-design.md` at `ebcedaef`.
+- RFC 0027, `RFC27-INV`, as a boundary only.
+- ADR-007 (Accepted): the published package and library target names.
+- No Terms of Reference document exists; the roadmap and RFC 0026 serve that
+  role. The technical design is `docs/netsuke-design.md` at `ebcedaef`.
 
-Trace chains this plan must preserve:
+Trace chains:
 
 ```plaintext
-RM-26.1.1-S1 -> RFC26-CM1 -> EP-M1 -> inventory §Register (sections A1..A7) -> EV-SWEEP, EV-REVERSE
-RM-26.1.1-A2 -> EP-M1 -> inventory §Register + §Method -> EV-SWEEP, EV-SEEDED
-RM-26.1.1-S2 -> RFC26-H1..H4 -> EP-M2 -> inventory §Landed work, §Findings -> EV-FINDINGS
-RM-26.1.1-A1 -> ADR35-RISK, RFC26-CM2 -> EP-M2 -> inventory §Obligations, §Trace matrix -> EV-TRACE
-RM-26.1.1 (done) -> EP-M3 -> roadmap checkbox + docs/contents.md entry -> EV-GATES
+RM-26.1.1-D -> EP-M0 -> D-6 option -> EV-ENTRY
+RM-26.1.1-S1 -> RFC26-CM1 -> EP-M2 -> inventory Register A1..A7 -> EV-ORACLE, EV-SWEEP, EV-REVERSE
+RM-26.1.1-A2 -> EP-M2 -> inventory Method + Register -> EV-ORACLE, EV-SEEDED
+RM-26.1.1-S2 -> RFC26-H1..H4 -> EP-M3 -> inventory Landed work + Findings -> EV-FINDINGS
+RM-26.1.1-A1 -> ADR35-RISK, RFC26-CM2 -> EP-M3 -> inventory Obligations + Trace matrix -> EV-CONTRACT
+RM-26.1.1-A1 -> EP-M1 -> tests/hexagonal_inventory_contract_tests.rs -> EV-CONTRACT, EV-RED
+RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
 ```
 
 ## Constraints
 
-- Do not modify any Rust source, test, build script, Cargo manifest,
-  `Cargo.lock`, Makefile, workflow, Fluent catalogue, or snapshot. This task is
-  documentation only. If recording the inventory appears to require a code
-  change (for example, to make a site observable), stop and escalate.
-- Do not fix any defect discovered during the sweep, however small. Record it
-  in the inventory's findings and map it to its owning task (26.1.2 for
-  characterization; 26.2.x, 26.3.x, or 27.x for remediation). RFC 0026 permits
-  a separately reproduced release-critical fix, but that is a separate task
-  with its own plan.
-- Do not build, commit, or propose an automated source-inventory tool,
-  scanner, contract test, or policy file (`architecture.toml`,
-  `architecture-exceptions.toml`). RFC 0027 assigns those to phase 28.
+- Change no production Rust source, build script, Cargo manifest,
+  `Cargo.lock`, Makefile, workflow, Fluent catalogue, or existing test or
+  snapshot. The only Rust file added is
+  `tests/hexagonal_inventory_contract_tests.rs`, which reads Markdown only.
+- The oracle's `#[deprecated]` attributes and the seeded faults exist only in a
+  disposable export under the worktree's ignored `target/` directory. They are
+  never committed, never applied to the working tree, and deleted afterwards.
+  Do not use `/tmp` as a build target; `/tmp` holds logs only.
+- Do not fix any defect found during the sweep. Record it as an observation
+  owned by its task (26.1.2 for characterization; 26.2.x, 26.3.x, or 27.x for
+  remediation). A release-critical defect triggers the Findings tolerance.
+- Do not build, commit, or propose an automated source-inventory tool, a
+  code-reading test, or a policy file (`architecture.toml`,
+  `architecture-exceptions.toml`). RFC 0027 owns those.
 - Do not re-schedule, re-describe as future work, or re-audit the canonical
-  edge arena from issue `#652` / PR `#714`. Record it once as landed, with its
-  merge commit, and list only the obligations later tasks must preserve.
-- Do not decide disputed placeholder semantics; `#699` and ADR-027/ADR-034 own
-  them. Do not decide rule-delegation or duplicate-declaration policy; 26.1.2
-  owns that decision. The inventory records *observed* behaviour only.
-- Every code citation must be valid at the declared pin. Use one pin for the
-  whole document; do not mix revisions.
-- The inventory must not promise Rust source-API stability. The crate is
-  pre-1.0 (`0.1.0-beta3`); per the execplans policy no source-compatibility
-  machinery (aliases, facades, deprecated entry points) may be prescribed for
-  it. Compatibility obligations are behavioural and persisted-format ones only.
-- Markdown must satisfy `docs/documentation-style-guide.md`: en-GB-oxendict
-  spelling (`-ize`), 80-column wrapping of prose, unwrapped tables and headings,
-  `-` bullets, and footnotes as `[^n]`. Code identifiers go in backticks; bare
-  `#NNN` issue references at a line start must be backticked to avoid being
-  read as headings.
-- Run gates only through the `scrutineer` agent, sequentially, never in
-  parallel with another gate.
+  edge arena from `#652` / PR `#714`. Record it once as landed with its merge
+  commit and preservation obligations.
+- Record observed behaviour only. Rule-delegation and duplicate-declaration
+  policy belongs to 26.1.2; placeholder semantics to ADR-027, ADR-034, and
+  `#699`; diagnostic contract changes to 27.1.3.
+- One pin for the whole inventory; no mixed revisions.
+- Prescribe no source-compatibility machinery (aliases, facades, deprecated
+  entry points) for any Rust API; the crate is pre-1.0. Obligations are
+  behavioural and persisted-format ones, plus the CHANGELOG "Breaking" practice.
+- Markdown follows `docs/documentation-style-guide.md`: en-GB-oxendict
+  spelling with `-ize`, prose wrapped at 80 columns, code at 120, tables and
+  headings unwrapped, `-` bullets, `[^n]` footnotes, identifiers in backticks,
+  and no bare `#NNN` at the start of a line.
+- The contract test follows `AGENTS.md`: a `//!` module comment, `///` docs
+  on every helper, no in-process environment mutation, no `.unwrap()`, `rstest`
+  for cases, capability-scoped reads, and fewer than 400 lines.
+- Run gates only through the `scrutineer` agent, sequentially. Never run the
+  oracle build while a gate is running.
 
 ## Tolerances (exception triggers)
 
-- Entry: if RFC 0026 or ADR-035 is not `Accepted` when implementation is
-  requested, stop, set this plan to `BLOCKED`, and ask whether the maintainer
-  wants to accept them or explicitly waive the roadmap dependency.
-- Scope: if the change touches more than eight files, or any file outside
-  `docs/`, stop and escalate.
-- Drift: if the chosen pin differs from `ebcedaef` and any commit between them
-  touches `src/ast/`, `src/ir/`, `src/ninja_gen*`, `src/graph_view/`,
-  `src/runner/`, `src/cli/`, `src/manifest/`, `src/localization/`,
-  `src/diagnostic_json*`, `src/hasher.rs`, or `src/recipe_shell.rs`, re-run the
-  full sweep rather than patching this plan's planning-time observations. If
-  the pin moves again during implementation, stop and ask whether to re-pin or
-  proceed on the declared pin.
-- Register size: if the forward sweep finds more than 25 production
-  constructor or mutator sites *not* anticipated in `Artefacts and notes`, stop
-  and report, because the scope definitions may be wrong.
-- Findings: if a finding suggests a user-visible defect severe enough to be
-  release-critical (for example, a manifest a user can write that panics a
-  release build), stop and report it immediately rather than only recording it.
-- Ambiguity: if a site's classification (production versus test, constructor
-  versus query) is genuinely ambiguous, record both readings in the inventory,
-  choose the conservative one (include it), and note it in `Decision log`.
-- Iterations: if the Markdown gates still fail after three fix attempts on the
-  same file, stop and escalate.
+- Entry: follow the option the approver chooses in D-6. If none is chosen,
+  stop at EP-M0.
+- Scope: stop and escalate if the change touches more than ten files, or any
+  file outside `docs/` other than `tests/hexagonal_inventory_contract_tests.rs`
+  and (only if the spelling gate requires it) `typos.local.toml`.
+- Drift: if the pin differs from `ebcedaef` and any commit between them
+  touches `src/`, `build.rs`, `tests/`, `test_support/`, or `benches/`, re-run
+  every sweep; do not patch this plan's planning-time observations. If
+  `origin/main` moves again before EP-M2 finishes, ask whether to re-pin.
+- Register size: stop and report if, in any area other than A6, the oracle
+  finds more than 25 production constructor or mutator sites whose enclosing
+  symbol is not named in that area's list under `Plan of work`, because the
+  scope definitions would then be wrong.
+- Oracle failure: if the scratch build fails for a reason other than the
+  deliberate attributes (for example, a toolchain download failure), stop and
+  report rather than falling back to text sweeps alone.
+- Findings: if a finding looks release-critical (for example, a manifest a user
+  can write that panics a release build), stop and report it immediately.
+- Ambiguity: when a site's classification is genuinely ambiguous, include it
+  under the conservative reading, record both readings, and log it in
+  `Decision log`.
+- Iterations: if a gate still fails after three fix attempts on the same
+  cause, stop and escalate.
 
 ## Risks
 
-- Risk: the pin goes stale before review completes because `main` moves.
-  Severity: medium. Likelihood: high. Mitigation: declare the pin prominently,
-  cite the enclosing symbol with every line, and accept that the inventory is a
-  snapshot; the Drift tolerance defines when to re-sweep.
-- Risk: text sweeps miss a constructor shape (a macro-generated literal, a
-  `Self { .. }` inside an `impl`, a re-exported alias, or an inline module).
-  Severity: high. Likelihood: medium. Mitigation: run several independent
-  patterns (literal, `Self {`, `impl` headers, derives, `&mut self`, `pub`
-  field writes), cross-check public mutators with CodeGraph callers, and prove
-  sensitivity with the seeded-fault control EV-SEEDED.
-- Risk: the inventory quietly becomes the phase-28 checker's inventory.
-  Severity: medium. Likelihood: low. Mitigation: the Constraints forbid tools;
-  the inventory states that RFC 0027 owns automated coverage.
-- Risk: recording findings is mistaken for deciding policy (for example,
-  "last-declared rule wins" read as the intended contract). Severity: medium.
-  Likelihood: medium. Mitigation: every finding carries the label *observed*
-  and names the task that owns the decision.
-- Risk: Markdown tooling reflows or renumbers the new document unexpectedly
-  (`mdtablefix --wrap --renumber` refills paragraphs and can turn a wrapped
-  number such as `72.` into a list item). Severity: low. Likelihood: medium.
-  Mitigation: run `make fmt` after every edit, reread the diff, and avoid
-  sentences that wrap onto a line starting with a number and a full stop.
-- Risk: the roadmap dependency on "acceptance of RFC 0026" is not met.
-  Severity: high. Likelihood: high (both RFC 0026 and ADR-035 read "Proposed" at
-  `ebcedaef`). Mitigation: EP-M0 is an explicit entry gate.
+- Risk: the pin goes stale before review completes. Severity: medium.
+  Likelihood: high. Mitigation: rebase the branch onto the pin (D-3), cite
+  module-qualified symbols, append a "commits since the pin" list at merge
+  time, and state in the inventory that each consuming plan re-sweeps
+  `git log <pin>..HEAD` for in-scope paths before relying on a citation.
+- Risk: the oracle misses code the build does not compile (`cfg(kani)`,
+  non-Linux `cfg` branches, doctests) or derive-generated code that suppresses
+  deprecation warnings. Severity: high. Likelihood: medium. Mitigation: unite
+  the oracle with a corrected text sweep targeted at exactly those classes, and
+  seed plants in each class (EV-SEEDED).
+- Risk: the register is read as proof. Severity: medium. Likelihood: medium.
+  Mitigation: the inventory states that it is evidence at one pin, and that
+  26.2.1's API-negative and compile-fail tests remain the backstop.
+- Risk: the contract test becomes a maintenance tax. Severity: low.
+  Likelihood: medium. Mitigation: it reads only the inventory and roadmap,
+  never code; it fails only when the roadmap gains or renumbers a dependent
+  task, and its failure message names the missing task and the fix.
+- Risk: findings are mistaken for decided policy. Severity: medium.
+  Likelihood: medium. Mitigation: every finding is labelled *observed* and
+  names the owning task.
+- Risk: `mdtablefix --wrap --renumber` refills or renumbers the new document
+  (a wrapped `72.` can become a list item). Severity: low. Likelihood: medium.
+  Mitigation: run `make fmt` after every edit and reread the diff.
+- Risk: the roadmap dependency on "acceptance of RFC 0026" is never met,
+  because no RFC in `docs/rfcs/` has ever left `Proposed` (including RFCs whose
+  roadmap work is complete) and the house convention is ADR acceptance.
+  Severity: high. Likelihood: high. Mitigation: D-6 asks the approver to choose
+  the gate explicitly.
 
 ## Progress
 
 - [x] (2026-09-27) Renamed the working branch to
   `26-1-1-record-model-and-consumer-inventory`.
-- [x] (2026-09-27) Planning reconnaissance across six boundaries (authored
-  types, lowering and graph, backend and shell, CLI and runner, diagnostics,
-  documentation and governance) at `ebcedaef`.
-- [x] (2026-09-27) Drafted this ExecPlan (revision 1).
-- [ ] Expert design review of the draft and revision.
-- [ ] Plan approved by the user.
+- [x] (2026-09-27) Planning reconnaissance across six boundaries at
+  `ebcedaef`.
+- [x] (2026-09-27) Drafted revision 1.
+- [x] (2026-09-27) Expert design review (structure and contracts;
+  alternatives and cost; failure modes and viability). Verdict: revise.
+- [x] (2026-09-27) Revision 2 addresses every review finding (see
+  `Revision note`).
+- [ ] Plan approved by the user, with a D-6 option chosen.
 - [ ] EP-M0: entry gate passed and pin declared.
-- [ ] EP-M1: register recorded; EV-SWEEP, EV-REVERSE, EV-SEEDED captured.
-- [ ] EP-M2: landed work, findings, obligations, and trace matrix recorded.
-- [ ] EP-M3: documentation integration, roadmap marked done, gates green.
+- [ ] EP-M1: contract test red, then green against a skeleton inventory.
+- [ ] EP-M2: register recorded; EV-ORACLE, EV-SWEEP, EV-REVERSE, EV-SEEDED.
+- [ ] EP-M3: landed work, findings, obligations, and trace matrix.
+- [ ] EP-M4: documentation integration, roadmap update, gates green.
 
 ## Surprises & discoveries
 
-- Observation: both governing records are still `Proposed`.
-  Evidence: `docs/rfcs/0026-hexagonal-domain-hardening.md` preamble "Status:
-  Proposed"; `docs/adr-035-semantic-compiler-boundaries.md` "## Status /
-  Proposed." at `ebcedaef`. Impact: the roadmap dependency "acceptance of RFC
-  0026" is unmet; EP-M0 gates implementation on it.
-- Observation: a rule whose own recipe is `rule: other` lowers successfully and
-  reaches the Ninja backend. `resolve_recipe` passes `Recipe::Rule` through
-  (`src/ir/from_manifest_support.rs:89`), `validate_action_recipe` returns
-  `Ok(())` for it (`src/ninja_gen_validation.rs:31-35`), and
-  `NamedAction::reject_rule_recipe` panics in debug builds and returns
-  `NinjaGenError::UnsafeNinjaValue` in release builds
-  (`src/ninja_gen/mod.rs:289-301`). Evidence: code reading at `ebcedaef`; not
-  yet reproduced with a manifest. Impact: this is the "backend panic
-  substitutes for compiler validation" case named by roadmap 26.2.2. The
-  inventory records it as an observation for 26.1.2 to characterize. It is not
-  release-critical by itself, because release builds do not panic, but the
-  release diagnostic is misleading; if reproduction shows otherwise, the
-  Findings tolerance applies.
-- Observation: `syn` is not a direct dependency anywhere in the workspace; the
-  only precedent source scanner is the text scanner in
-  `tests/env_access_suppressions/` (about 2,300 lines). Evidence: `Cargo.toml`
-  `[dev-dependencies]`; `Cargo.lock` lists `syn` only transitively. Impact: an
-  AST-based completeness test would add a dependency and duplicate RFC 0027's
-  checker; see D-2.
+- Observation: both governing records are still `Proposed`, and every RFC in
+  `docs/rfcs/` reads `Proposed`, including RFCs whose roadmap tasks are
+  checked. ADRs are the documents the project actually accepts. Evidence: RFC
+  preambles at `ebcedaef`; ADR-001 to ADR-034 are mostly `Accepted`; roadmap
+  11.1.1 says "Accept the governing ADR before implementation". Impact: EP-M0's
+  gate is ADR-035, and D-6 asks the approver how to satisfy `RM-26.1.1-D`.
+- Observation: a rule whose own recipe is `rule: other` lowers and reaches the
+  Ninja backend. `resolve_recipe` passes `Recipe::Rule` through
+  (`src/ir/from_manifest_support.rs:89`); `validate_action_recipe` returns
+  `Ok(())` for it (`src/ninja_gen_validation.rs:30-34`); and
+  `NamedAction::reject_rule_recipe` (`src/ninja_gen/mod.rs:286-301`) panics in
+  debug builds and returns a misleading `NinjaGenError::UnsafeNinjaValue` in
+  release builds. Evidence: code reading at `ebcedaef`; not yet reproduced with
+  a manifest. Impact: this is the case roadmap 26.2.2 names ("No backend panic
+  substitutes for compiler validation"). It is recorded for 26.1.2 to
+  characterize. Release builds do not panic, so it is not release-critical
+  unless reproduction shows otherwise.
+- Observation: `netsuke graph` (`src/runner/graph.rs:53`, via
+  `generation::build_graph`, `src/runner/generation.rs:160-163`) and
+  `netsuke help targets` (`src/runner/help_query.rs:98`) lower with
+  `BuildGraph::from_manifest`, which uses `RecipeShell::host_default()`, not
+  the resolved recipe shell used by `build` and `generate`. Evidence: code
+  reading at `ebcedaef`. Impact: with a non-default shell (for example, a Bash
+  override on Windows) the action identifiers shown by `graph` can differ from
+  those in generated Ninja. An H2 observation for 26.3.1.
+- Observation: the hash comment in `src/hasher.rs` says canonical JSON with
+  sorted keys, but `serde_json` is built with `preserve_order`
+  (`Cargo.toml:135`), so field declaration order is part of the hash input.
+  Evidence: `Cargo.toml` and `src/hasher.rs:58-66` at `ebcedaef`. Impact: the
+  action-identity obligation must name field order, variant tag names,
+  `skip_serializing_if` attributes, and interpolated shell text.
+- Observation: text sweeps alone are unsound for this acceptance criterion. The
+  review ran revision 1's patterns and found that they miss generic trait
+  implementations (`impl<'de> Deserialize<'de> for Recipe`, three
+  `From<..> for StringOrList`,
+  `From<ast::DependencyOrder> for DependencyOrder`), `Self::Command { .. }`
+  constructions, `EdgeId(..)`, `&mut` free-function mutation throughout
+  `src/manifest/render.rs`, and `manifest.targets.retain` in
+  `src/runner/help_query.rs:110`, while their seeded plants were shaped to
+  match the patterns. Evidence: expert review, counts reproduced against
+  `ebcedaef`. Impact: D-7 makes the compiler the primary site oracle.
+- Observation: `syn` is not a direct dependency; `deprecated` is not denied by
+  the workspace lint table or `.cargo/config.toml` (only `-Zthreads=8` and the
+  Linux linker flag), so deprecation warnings do not stop the scratch build.
+  Evidence: `Cargo.toml` `[workspace.lints.rust]`, `.cargo/config.toml`.
+  Impact: the oracle needs no new dependency.
 
 ## Decision log
 
 - Decision D-1: deliver the inventory as a standalone reference document,
-  `docs/hexagonal-hardening-inventory.md`, not as an appendix to RFC 0026, a
-  section of `docs/netsuke-design.md`, or the body of this ExecPlan. Rationale:
-  the inventory is revision-pinned and will be consumed by at least eleven
-  later tasks; an RFC appendix would mix a proposal with an observation, the
-  design document describes the intended design rather than a dated snapshot,
-  and an ExecPlan is a handoff document for one task. The name pairs it with
-  `docs/roadmap-hexagonal-hardening.md`, and
+  `docs/hexagonal-hardening-inventory.md`. Rationale: it is revision-pinned and
+  consumed by many later tasks. An RFC appendix would mix a dated observation
+  with a proposal and reopen the RFC at every refresh; `docs/netsuke-design.md`
+  describes intended design; an ExecPlan is a one-task handoff.
   `docs/security-network-command-audit.md` is a precedent for a dated,
-  evidence-led reference document. Date/Author: 2026-09-27, planning agent.
-- Decision D-2: add no Rust test, contract test, or scanning tool in this task.
-  Rationale: 26.1.1 changes no behaviour, so there is nothing for `rstest`,
-  `rstest-bdd`, `insta`, `proptest`, Kani, or Verus to specify; the
-  characterization fixtures the user's testing guidance calls for are
-  explicitly owned by roadmap 26.1.2 ("Establish recipe and declaration
-  characterization fixtures"), and adding them here would pre-empt that task's
-  observed-versus-intended review. An executable completeness guard would
-  either add `syn` as a new dependency (a tolerance breach) or re-implement a
-  text scanner, and in both cases would duplicate the automated inventory that
-  RFC 0027 assigns to roadmap 28.1.1 and 28.2.x. A guard over a revision-pinned
-  snapshot would also fail on every legitimate phase-26 change, turning a dated
-  record into a maintenance tax. Completeness is instead evidenced by a
-  reproducible two-directional sweep with a seeded-fault control (see
-  `Verification plan`). Date/Author: 2026-09-27, planning agent. Subject to
-  expert review.
-- Decision D-3: pin to the `origin/main` tip at the moment EP-M0 runs, not to
-  this plan's planning head, unless the two are identical. Rationale: the
-  roadmap requires the inventory "at the implementation head". The
-  planning-time observations in `Artefacts and notes` are hypotheses to be
-  re-verified at the pin, not results to be copied. Date/Author: 2026-09-27,
+  evidence-led reference document. The review endorsed this choice.
+  Date/Author: 2026-09-27, planning agent.
+- Decision D-2 (revised): add exactly one Rust test,
+  `tests/hexagonal_inventory_contract_tests.rs`, that checks the inventory's
+  internal integrity against the roadmap and reads no Rust source. Add no
+  code-reading test, scanner, or characterization fixture. Rationale: the
+  roadmap is groomed with `mapsplice`, which renumbers tasks and rewrites
+  dependencies; a renumbering or a newly added dependent task would silently
+  invalidate the trace matrix, which is the literal acceptance criterion
+  `RM-26.1.1-A1`. A document-integrity test catches that, has in-repository
+  precedent (`tests/execplan_status_contract_tests.rs`), and cannot fail on
+  legitimate code changes. Characterization fixtures belong to 26.1.2, and a
+  code-reading completeness guard would need a new dependency or duplicate RFC
+  0027's checker, and would fail on every legitimate phase-26 change to a
+  snapshot. `rstest-bdd`, `insta`, `proptest`, Kani, and Verus are not
+  applicable: no user-visible behaviour, multivariant output, input-domain
+  invariant, bounded state space, or contractual lemma is introduced. The
+  approver may strike this test; the rest of the plan does not depend on it.
+  Date/Author: 2026-09-27, planning agent, after review.
+- Decision D-3 (revised): pin to the `origin/main` tip when EP-M0 runs, rebase
+  the branch onto it so the pin is the merge base, and append a "commits since
+  the pin" list for in-scope paths at merge time. Rationale: the roadmap
+  requires the inventory "at the implementation head"; a pin that is not an
+  ancestor of the branch cannot be reproduced from it. Date/Author: 2026-09-27,
   planning agent.
-- Decision D-4: include API-reachable constructors and mutators (public fields,
-  `pub` methods with only test callers, public entry points taking a separate
-  interpreter) in the register even when no internal production code uses them.
-  Rationale: RFC 0026 requires that "public fields, deserialization,
-  alternative constructors, and mutation methods must not reopen unresolved
-  states". An unused public mutator is exactly such a reopening path.
-  Date/Author: 2026-09-27, planning agent.
-- Decision D-5: no ADR is needed for this task; the inventory records facts
-  and assigns them to already-decided tasks. `docs/netsuke-design.md` gains
-  only a pointer from its existing "FUTURE" note under Stage 5, and
-  `docs/users-guide.md` is unchanged because no user-visible behaviour changes.
-  `ortho_config` is not touched because no configuration surface changes.
-  Date/Author: 2026-09-27, planning agent.
+- Decision D-4: include API-reachable constructors and mutators even when no
+  internal production code uses them. Rationale: RFC 0026 says "Public fields,
+  deserialization, alternative constructors, and mutation methods must not
+  reopen unresolved states". Date/Author: 2026-09-27, planning agent.
+- Decision D-5: no ADR. The inventory records facts and assigns them to
+  decided tasks. `docs/netsuke-design.md` gains a pointer from its Stage 5
+  "FUTURE" note; `docs/users-guide.md` is unchanged (no user-visible change);
+  `ortho_config` is untouched (no configuration change), though configuration
+  precedence is recorded as an obligation for 27.2.1. Date/Author: 2026-09-27,
+  planning agent.
+- Decision D-6 (open, for the approver): how to satisfy `RM-26.1.1-D`.
+  Option A: the maintainer sets ADR-035 to `Accepted` (with a date and summary,
+  per the style guide) before implementation starts; all milestones then run.
+  Option B (recommended): EP-M1 to EP-M3 run now and produce the inventory as
+  the pre-acceptance characterization RFC 0026 itself asks for; EP-M4's roadmap
+  checkbox and RFC pointer wait until ADR-035 is `Accepted`, and the plan is
+  `BLOCKED` at that point if it is not. Option B respects the roadmap's
+  dependency for *completion* while letting the evidence inform acceptance.
+  Either way, RFC 0026's own status line is not the gate, because no RFC in
+  this repository has ever been moved out of `Proposed`. Date/Author:
+  2026-09-27, planning agent. Awaiting the approver.
+- Decision D-7: the compiler is the primary site oracle; a text sweep covers
+  only what the build does not compile. Rationale: marking each inventoried
+  field, variant, and inherent function `#[deprecated]` in a disposable export
+  makes `rustc` report every resolved use, including `Self::Variant`, aliases,
+  re-exports, generic trait implementations, and uses in `tests/**`,
+  `benches/**`, and `build.rs`, without breaking the build. Privacy-based
+  discovery (making fields private and collecting E0451/E0616) was rejected
+  because a failing library build hides every downstream site and same-module
+  uses need sealed submodules; rustdoc JSON was rejected as primary because it
+  sees no function bodies (it remains an optional cross-check for impls and
+  receivers). Date/Author: 2026-09-27, planning agent, after review.
+- Decision D-8: register identifiers are symbol-keyed and append-only, of the
+  form `A3/ir::graph::BuildGraph::replace_edge_for_output`; a refresh never
+  reuses or renumbers them. Diagnostics (A6) are listed per variant, with a
+  site count and files, and per-site citations only where construction shapes
+  differ. Rationale: positional identifiers break on refresh; per-site A6 rows
+  would roughly double the register without adding decision value. Date/Author:
+  2026-09-27, planning agent, after review.
+- Decision D-9: the rule that later ExecPlans cite register identifiers lives
+  in the inventory's "Consuming this inventory" section, not in
+  `docs/developers-guide.md`, which gains only a "Test suite map" entry for the
+  contract test. Rationale: an evergreen guide should not carry a convention
+  tied to one pinned snapshot. Date/Author: 2026-09-27, planning agent, after
+  review.
 
 ## Outcomes & retrospective
 
@@ -405,376 +509,432 @@ to `COMPLETE`.
 
 ## Verification plan
 
-This task introduces no executable behaviour, so it introduces no program
-invariant for tests, property tests, bounded model checking, or proofs to
-discharge. The obligations below are properties *of the document*, checked
-mechanically where possible. D-2 records why no Rust verification artefact is
-added and which later task owns characterization.
+The production code is unchanged, so this task introduces no program invariant.
+The obligations below are properties of the inventory and of the one
+document-integrity test.
 
 Axioms relied on:
 
-- AX-1: `rg` (ripgrep) and `git grep` report every textual match of a regular
-  expression in the files they are given. This is a documented tool interface
-  and is not itself verified.
-- AX-2: CodeGraph's caller index reflects the workspace at the time of a
-  reindex. Because this is a derived index, it is used only to cross-check the
-  text sweep, never as the sole evidence for a site.
-- AX-3: `cfg(test)`, `cfg(kani)`, and file naming conventions (`*_tests.rs`,
-  `*_tests/`, `*_verification.rs`, `tests/**`) identify non-production code in
-  this repository. Where a module is test-only only by virtue of a
-  `#[cfg(test)] #[path = ...] mod` declaration in its parent, the sweep must
-  read the parent declaration rather than trust the file name.
+- AXIOM-1: `rustc` emits a `deprecated` warning, with a primary span, at every
+  resolved use of a `#[deprecated]` item in code it compiles, unless the use
+  sits inside an `#[allow(deprecated)]` scope. (Documented compiler behaviour.)
+- AXIOM-2: `cargo check --message-format=json` reports those warnings as JSON
+  objects whose `message.code.code` is `"deprecated"`.
+- AXIOM-3: `rg` reports every textual match of a pattern in the files given.
+- AXIOM-4: `git archive <pin>` reproduces the tracked tree at the pin.
+- AXIOM-5: CodeGraph's caller index reflects the workspace at its last reindex;
+  it is a cross-check only, never sole evidence.
 
 Obligations:
 
-- Obligation OB-FWD (forward completeness): every production constructor or
-  mutator site of an inventoried type that the recorded sweep finds at the pin
-  appears in the register, with its enclosing symbol, visibility, and
-  production callers. Method: a recorded set of independent `rg` sweeps
-  (patterns in `Concrete steps`) run over a clean export of the pinned tree,
-  followed by a classification pass and a set difference against the register.
-  Rationale: the register is a finite list; a set difference over explicit
-  patterns is exhaustive for the patterns chosen, and several patterns cover
-  the syntactic forms that can construct or mutate a value. Domain: all `.rs`
-  files under `src/` at the pin, all features and targets (text sweeps see every
-  `cfg` branch). Artefact: inventory section "Method", which lists the exact
-  commands, the pin, and each pattern's raw hit count and production hit count.
-  Evidence: EV-SWEEP, the recorded counts and an empty "unregistered sites"
-  difference. Non-vacuity: EV-SEEDED. In a scratch export (never committed),
-  plant one site per sweep pattern (an `Action { .. }` literal in
-  `src/runner/`, a `Self { .. }` constructor on `BuildEdge`, a new
-  `pub fn f(&mut self)` on `BuildGraph`, a `graph.actions.insert` in a non-test
-  file, a new `impl Default for Action`, and a `pub` field write to
-  `BuildEdge.action_id`) and one site inside a `#[cfg(test)]` module. The sweep
-  and classification must report exactly the six production plants as
-  unregistered and must not report the test plant. A sweep that reports nothing
-  for a plant fails the obligation for that pattern.
-- Obligation OB-REV (reverse soundness): every register entry names a symbol
-  that exists at the pin, at the cited line or within the cited enclosing
-  symbol. Method: for each entry, `git grep -n` at the pin for the enclosing
-  symbol and the cited construct. Rationale: forward completeness alone would
-  pass if the register were a superset padded with stale or invented entries;
-  checking both sides of the comparison rejects that. Domain: every register
-  row. Artefact: inventory section "Method", reverse-check subsection.
-  Evidence: EV-REVERSE, a count of rows checked equal to the register size and
-  zero misses. Non-vacuity: add one deliberately fictitious row to a scratch
-  copy of the register (for example, `BuildGraph::remove_edge`) and confirm the
-  reverse check reports it.
-- Obligation OB-TRACE (trace totality): every roadmap task that lists 26.1.1
-  as a direct or transitive dependency and changes an inventoried type (26.1.2,
-  26.2.1, 26.2.2, 26.2.3, 26.3.1, 26.3.2, 27.1.1, 27.1.2, 27.1.3, 27.2.1,
-  27.2.2, 27.2.3, and 28.1.1) has at least one register item and at least one
-  compatibility obligation in the trace matrix; every register item marked
-  "changes" names at least one owning task; and every remaining H1 to H4
-  finding names an owning task. Method: a mechanical cross-check: extract task
-  identifiers from the roadmap with `rg -o '2[678]\.[0-9]+\.[0-9]+'` and
-  compare with those in the trace matrix; then review each row. Rationale: this
-  is the literal acceptance text `RM-26.1.1-A1`. Evidence: EV-TRACE, both
-  identifier sets and an empty difference. Non-vacuity: delete one matrix row
-  in a scratch copy and confirm the identifier comparison reports the missing
-  task.
-- Obligation OB-652 (no repetition): the inventory describes the canonical edge
-  arena only as landed work with preservation obligations, and no trace row
-  schedules its implementation. Method: review, plus
-  `rg -n '652|714' docs/hexagonal-hardening-inventory.md` to list every mention
-  for the reviewer. Evidence: EV-FINDINGS. Non-vacuity: not mechanically
-  testable; the reviewer confirms each listed mention is in the "Landed work"
-  section or an obligation.
-- Obligation OB-PIN (single revision): the inventory declares exactly one pin,
-  and every permalink in it uses that SHA. Method:
-  `rg -o 'blob/[0-9a-f]{40}' docs/hexagonal-hardening-inventory.md | sort -u`
-  returns one value equal to the declared pin. Evidence: EV-PIN. Non-vacuity:
-  the command returns two values if any other SHA is present; confirm by
-  running it against a scratch copy with one altered permalink.
-- Obligation OB-GATES: the repository's gates pass after each milestone:
-  `make check-fmt`, `make typecheck`, `make lint`, `make test`,
-  `make markdownlint` (which runs `make spelling`), and `make nixie`. Method:
-  `scrutineer` runs them sequentially with `tee` logs under `/tmp`. Evidence:
-  EV-GATES. Non-vacuity: the Rust gates cannot detect documentation faults,
-  which is why the Markdown gates are included; `make check-fmt` is sensitive
-  to Markdown through `mdtablefix --check`.
+- Obligation OB-FWD (forward completeness): every production constructor,
+  mutator, and consumer site of an inventoried item in code compiled on the
+  build host appears in the register, and every such site in uncompiled code
+  (`cfg(kani)`, non-host `cfg` branches) found by the targeted sweep appears
+  too. Method: the oracle (D-7) for compiled code, united with a targeted text
+  sweep. Rationale: the compiler resolves names; a text sweep only guesses
+  them. The union covers the oracle's known blind spots. Domain: `src/`,
+  `build.rs`, `tests/`, `test_support/`, and `benches/` at the pin, with
+  `--workspace --all-targets --all-features` on the host. Artefact: inventory
+  "Method" section: attribute list, commands, warning count per item,
+  deduplicated site count, and the sweep patterns and counts. Evidence:
+  EV-ORACLE and EV-SWEEP, each with an empty "unregistered" set. Non-vacuity:
+  EV-SEEDED. A separate agent (an `alchemist` given this plan's prediction)
+  applies nine plants in a second scratch export and records them without
+  telling the classifier: P1 a generic trait impl constructing an `Action` in
+  `src/runner/`; P2 a `Self::Script { .. }` construction in an `impl Recipe`
+  helper; P3 a free function in `src/manifest/` taking `&mut BuildGraph` and
+  calling `actions.values_mut()`; P4 `std::mem::take(&mut edge.inputs)` in
+  `src/ninja_gen/`; P5 `*s = StringOrList::Empty` through a
+  `&mut StringOrList`; P6 a `mut self` builder on `BuildEdge`; P7 a
+  `#[cfg(windows)]` function building a `BuildEdge` literal; P8 a `#[cfg(kani)]`
+  `BuildEdge` construction; P9 a construction inside a `#[cfg(test)]` module.
+  The method must report P1 to P8 as unregistered production sites (P7 and P8
+  through the sweep) and P9 as test only. Any missed plant fails the obligation
+  and sends the method back for repair.
+- Obligation OB-REV (reverse soundness): every register row names a
+  module-qualified symbol that exists at the pin, at or around its cited line.
+  Method: `git grep -n` at the pin, per row. Rationale: checking only one side
+  would accept a register padded with stale or invented rows. Evidence:
+  EV-REVERSE, "N rows checked, 0 misses". Non-vacuity: a fictitious row (for
+  example, `BuildGraph::remove_edge`) in a scratch copy must be reported.
+- Obligation OB-INTEGRITY (document integrity, executable): the inventory
+  declares exactly one pin and contains no other 40-character hexadecimal
+  commit identifier; register identifiers are unique and well-formed; every
+  trace-matrix task identifier exists in the roadmap; every roadmap task in the
+  dependency closure of 26.1.1 has a trace-matrix row or an "Excluded" entry
+  with a reason; every register identifier is referenced by a trace-matrix row
+  or listed as unchanged; every `CO-n` is referenced by at least one row; every
+  `OBS-n` and every H1 to H4 finding names an owning task that exists. Method:
+  `rstest` tests in `tests/hexagonal_inventory_contract_tests.rs`. Pure parsing
+  helpers (section extraction, pin extraction, task-identifier extraction from
+  the trace-matrix section only, roadmap task and dependency parsing, and
+  dependency-closure computation) are tested on in-memory fixtures; one test
+  applies them to the real `docs/` files through a `cap_std` directory handle.
+  Rationale: these are finite, structural properties of two documents;
+  parameterized example tests with negative fixtures fully specify them.
+  Domain: the real inventory and roadmap, plus fixtures. Evidence: EV-RED (the
+  real-document test fails while the inventory is absent, naming the missing
+  file) and EV-CONTRACT (all cases pass). Non-vacuity: negative fixtures that
+  must each fail with a specific message: two different pins; a trace row
+  naming a task absent from the roadmap; a dependent task (including a
+  transitive one) missing from the matrix; a task identifier that appears only
+  outside the trace-matrix section; a duplicate register identifier; an orphan
+  `CO-n`; and an `OBS-n` without an owner. The dependency parser must be shown
+  to follow a two-step chain (a fixture where task C depends on B, which
+  depends on 26.1.1) so the closure is not trivially direct.
+- Obligation OB-652 (no repetition): the canonical edge arena appears only as
+  landed work and as obligation `CO-14`. Method: review of the listed mentions
+  from `rg -n '652|714' docs/hexagonal-hardening-inventory.md`. Evidence:
+  EV-FINDINGS. Non-vacuity: review only; each mention is checked against its
+  section.
+- Obligation OB-GATES: `make check-fmt`, `make typecheck`, `make lint`,
+  `make test`, `make markdownlint` (which runs `make spelling`), and
+  `make nixie` pass after each milestone. Method: `scrutineer`, sequentially,
+  with `tee` logs. Evidence: EV-GATES. Non-vacuity: `make check-fmt` checks
+  Markdown through `mdtablefix --check`; `make lint` compiles and lints the new
+  test.
 
 ## Plan of work
 
-Stage A (understand, no edits) is EP-M0. Stage B, which for code work would add
-failing tests, is replaced by the seeded-fault and fictitious-row controls,
-which must fail before the register is trusted. Stage C (build the artefact) is
-EP-M1 and EP-M2. Stage D (integrate and validate) is EP-M3.
+Stage A is EP-M0. Stage B (red) is EP-M1's failing contract test and EP-M2's
+seeded controls, which must fail on seeded input before results are trusted.
+Stage C is EP-M2 and EP-M3. Stage D is EP-M4.
 
 ### Inventory document structure
 
-Create `docs/hexagonal-hardening-inventory.md` with these top-level sections,
-in this order:
+Create `docs/hexagonal-hardening-inventory.md` with these sections, in order:
 
-1. **Title and pin.** `# Hexagonal hardening model and consumer inventory`,
-   followed by a pin block: commit SHA, commit subject, commit date, toolchain
-   from `rust-toolchain.toml`, and the statement that every `path:line` in the
-   document is valid only at that commit. State that the document is a dated
-   snapshot for roadmap phases 26 and 27, owned by RFC 0026, and that RFC 0027
-   owns automated inventory.
-2. **Scope and definitions.** The definitions of production code,
-   constructor, mutator, API-reachable, and compatibility obligation from this
-   plan, and the list of inventoried types.
-3. **Method.** The exact sweep commands, the classification rules, each
-   pattern's raw and production hit counts (EV-SWEEP), the reverse-check result
-   (EV-REVERSE), and the seeded-fault result (EV-SEEDED), each naming the date
-   and pin on which they ran.
-4. **Register.** One subsection per area, each with a table whose columns are
-   `ID`, `Symbol`, `Kind`, `Visibility`, `Location`, `Production callers`,
-   `Planned change`, and `Obligations`:
-   - A1 authored types (`ast::NetsukeManifest`, `Rule`, `Target`, `Recipe`,
-     `StringOrList`, `DependencyOrder`, the private `RawRecipe`, and the
-     `deserialize_actions` post-deserialization mutation that forces
-     `phony = true`);
-   - A2 lowering (`from_manifest`, `from_manifest_for_shell`,
-     `process_rules`, `process_targets`, `register_action`, `resolve_rule`,
-     `resolve_recipe`, `resolve_command`, `resolve_script`,
-     `insert_edge_for_outputs`, `duplicate_output_error`, `detect_cycles`,
-     and `NetsukeManifest::validate_recipes`);
-   - A3 graph storage (`BuildGraph` and its `Default`, `insert_edge` in both
-     `cfg(kani)` and `cfg(not(kani))` forms, `insert_canonical_edge`,
-     `index_output_aliases`, `index_output`, `replace_edge_for_output`, the
-     `pub` fields `actions` and `default_targets`; `Action` and its `pub`
-     fields; `BuildEdge` and its `pub` fields; `EdgeId`; the IR
-     `DependencyOrder`; `ActionHasher::hash`);
-   - A4 backend consumers (`ninja_gen::generate`, `generate_into`,
-     `generate_into_with_shell`, `generate_with_shell`, `write_action_rules`,
-     `NamedAction::shell_text`, `reject_rule_recipe`,
-     `reject_empty_command_recipe`, `validate_action_recipe`,
-     `dyndep::generate_bundle`, `generate_bundle_for_shell`,
-     `RecipeShell::command_value`, the escaping functions, and
-     `GraphView::from_build_graph`), recording for each which model fields it
-     reads and whether it has a panic path;
-   - A5 CLI orchestration (`runner::run`, `run_with_ninja_program`,
-     `dispatch::execute` and its per-command handlers, `execute_build`,
-     `execute_ninja_tool`, `generate_ninja_with_shell`,
-     `GraphGenerationContext`, `ninja_process_adapter`, `resolve_recipe_shell`,
-     `create_temp_ninja_file`, `materialize_dyndep_bundle`,
-     `prune_dyndep_bundle`, `open_effective_dir`), recording which `Cli`
-     fields each reads and classifying each field as semantic or presentation;
-   - A6 diagnostics (`IrGenError`, `NinjaGenError`, `ManifestError`,
-     `RunnerError`, `LocalizedMessage`, every construction site of a variant
-     that pairs structured fields with a `LocalizedMessage`,
-     `localize_recipe_error`, diagnostic codes, the JSON document types, and
-     the exit-code mapping in `src/main.rs`);
-   - A7 existing seams (`NinjaBuildRequest`, `NinjaToolRequest`,
+1. **Title and pin.** `# Hexagonal hardening model and consumer inventory`, then
+   a line `Pin: <40-character SHA>` followed by the commit subject, date, and
+   the toolchain from `rust-toolchain.toml`. State that every `path:line` is
+   valid only at the pin, that the document is a dated snapshot owned by RFC
+   0026, that RFC 0027 owns automated coverage, and that the register is
+   evidence, not proof: 26.2.1's API-negative and compile-fail tests remain the
+   backstop.
+2. **Scope and definitions.** The terms from this plan, the list of
+   inventoried items per area, and the visibility classes.
+3. **Method.** Oracle attribute list and commands, per-item warning counts,
+   deduplicated site counts, sweep patterns and counts, the classification
+   procedure, and the EV-SEEDED and EV-REVERSE results, each with its date.
+4. **Register.** One subsection per area, each with a type table (columns
+   `ID`, `Item`, `Visibility`, `Derives`, `Location`) and a site table (columns
+   `ID`, `Site`, `Kind`, `Location`, `Production callers`, `Planned change`,
+   `Obligations`), where `Kind` is one of constructor, mutator, consumer, or
+   API-reachable. Areas and the enclosing symbols each must cover at minimum
+   (anticipated sites for the Register-size tolerance):
+   - A1 authored types: `ast::{NetsukeManifest, MacroDefinition, Rule, Target,
+     Recipe, RawRecipe, StringOrList, DependencyOrder}`; `Recipe`'s
+     `Deserialize`; `StringOrList`'s three `From` impls; `deserialize_actions`
+     (forces `phony = true`); `NetsukeManifest::validate_recipes`;
+     `Recipe::is_dependency_only`; `manifest::from_str`; `from_path`;
+     `render_manifest` and every `&mut` helper in `src/manifest/render.rs`;
+     `serde_json::from_value` into `NetsukeManifest` in `src/manifest/mod.rs`;
+     `help_query::manifest_for_graph_validation` (`retain` on `actions` and
+     `targets`).
+   - A2 lowering: `from_manifest`, `from_manifest_for_shell`,
+     `TargetLoweringContext`, `process_rules`, `process_targets`,
+     `process_defaults`, `detect_cycles`, `register_action`, `ActionBindings`,
+     `resolve_rule`, `resolve_recipe`, `resolve_command`, `resolve_script`,
+     `insert_edge_for_outputs`, `duplicate_output_error`,
+     `From<ast::DependencyOrder> for ir::DependencyOrder`, and
+     `CommandBindings::new`.
+   - A3 graph storage: `BuildGraph` (`Default`), both `cfg` forms of
+     `insert_edge`, `insert_canonical_edge`, `index_output_aliases`,
+     `index_output`, `replace_edge_for_output`, the `pub` fields `actions` and
+     `default_targets`; `Action` and its fields; `BuildEdge` and its fields;
+     `EdgeId(..)`; the IR `DependencyOrder`; `ActionHasher::hash`. Record that
+     the IR types do not implement `Deserialize` (an obligation for 26.2.1 to
+     keep) and that `insert_edge` does not check that `action_id` exists.
+   - A4 backend consumers: `ninja_gen::{generate, generate_into,
+     generate_into_with_shell, generate_with_shell, write_action_rules}`,
+     `edge_requires_gates`, `NamedAction` (literal and `shell_text`,
+     `reject_rule_recipe`, `reject_empty_command_recipe`,
+     `assert_shell_command`), `validate_action_recipe`,
+     `validate_action_metadata`, `dyndep::{generate_bundle,
+     generate_bundle_for_shell, generate_bundle_inner, render_edge}`,
+     `RenderedAction`, `RecipeShell::command_value`, `ShellText::new`,
+     `NinjaValue::from_encoded`, `escape_ninja_value`, `escape_metadata_value`,
+     and `GraphView::from_build_graph`, recording the model fields each reads
+     and every debug-only panic path.
+   - A5 CLI orchestration: `runner::{run, run_with_ninja_program}`,
+     `run_with_ninja_program_resolver`, `ExecutionContext`, `dispatch::execute`
+     and its `execute_build`, `execute_generate`, `execute_clean`, and
+     `execute_help`; `runner::{execute_build, execute_ninja_tool}`;
+     `graph_generation::{GraphGenerationContext, generate_ninja_with_shell}`;
+     `generation::{ManifestLoadInputs::from_cli, build_graph,
+     build_graph_for_shell, ninja_text_for_shell}`;
+     `ninja_process_adapter::{ninja_process_options, run_ninja,
+     run_ninja_tool}`; `resolve_recipe_shell`; `StderrMode::from_json_enabled`;
+     `create_temp_ninja_file`; `materialize_dyndep_bundle`;
+     `prune_dyndep_bundle`; `open_effective_dir`; `graph::handle_graph`;
+     `help_query`; the `Commands`, `BuildArgs`, and `BuildTargets` types
+     (`Deserialize` and `Default` derives); and every `Cli` field each reads,
+     classified as semantic or presentation.
+   - A6 diagnostics: per variant of `IrGenError` (including `InvalidManifest`),
+     `NinjaGenError` (including the variants with fixed English `#[error]`
+     text), `ManifestError`, and `RunnerError`; whether each enum is
+     `#[non_exhaustive]`; `LocalizedMessage` and `set_localizer`;
+     `localize_recipe_error`; the keys used in `src/localization/keys.rs`; the
+     diagnostic codes; `DiagnosticDocument` and `DiagnosticEntry`; the success
+     envelope in `src/result_json.rs` and `src/json_envelope.rs`; and
+     `handle_runner_error`, `render_runtime_error_json`, and
+     `parse_cli_or_exit` in `src/main.rs` (exit codes).
+   - A7 existing seams: `NinjaBuildRequest`, `NinjaToolRequest`,
      `NinjaProcessOptions`, `CommandEnv`, the `MonotonicClock` parameters,
-     `StatusObserver` and `StatusReporter`, `cap_std` directory handles,
-     `DyndepPublicationLease`, `DyndepPublication`, `TempNinjaFile`,
-     `GraphRenderer`), recording whether each is already injectable and how
-     tests substitute it.
-   Follow the tables with an appendix listing, by file only, the test, doctest,
-   and Kani-only constructors and mutators of each type, so that later
-   migrations know which callers they must update.
-5. **Landed work.** One short entry per item, each with its merge commit and
-   the preservation obligation it creates: `#652` / PR `#714` (edge arena, merge
-   `2c030fd1`); `#705` (typed redirect boundary, closed; H6 context only);
-   `#699` / ADR-027 (placeholder contract); `#753` / ADR-034 (script `$in`/
-   `$out` as shell variables); `#754` (JSON diagnostic excerpt guard); and any
-   further relevant commit between `79545e12` and the pin.
-6. **Findings.** The remaining parts of H1 to H4, stated as observed facts with
-   citations, plus numbered observations (`OBS-n`) found during the sweep. Each
-   carries the label *observed*, the owning task, and, where relevant, the
-   phrase "policy decision owned by 26.1.2" or "diagnostic contract owned by
-   27.1.3".
-7. **Compatibility obligations.** A numbered catalogue (`CO-n`), including at
-   least: manifest acceptance and rejection (including the established
-   `MISSING_RECIPE_ERROR` text); generated Ninja bytes and repeated-run
-   determinism; action identity hashes and their rebuild consequences; graph
-   export (DOT, HTML, and JSON); diagnostic codes, JSON schema version 1,
-   localized text, and exit codes; ADR-014 shell-quoting versus Ninja-escaping
-   separation; ADR-011/ADR-012 dyndep publication and retention; the
-   `POLONIUS-REFUSED(id-is-data)` action-identity decision; synchronization of
-   the Kani harnesses in `src/ir/*_verification.rs` with any `cfg(kani)` type
-   change; and the quickstart and unannotated-manifest shallow end. State
-   explicitly that Rust source APIs are pre-1.0 and carry no
-   source-compatibility commitment, and that any existing external library
-   consumer must be named before a compatibility layer is proposed.
-8. **Trace matrix.** One row per planned task (the thirteen listed in OB-TRACE),
-   with columns `Task`, `Register items changed`, `Findings addressed`, and
-   `Obligations`. Add a closing paragraph listing register items no task
-   changes, so a reader sees what the programme deliberately leaves alone.
-9. **Refreshing this inventory.** A short procedure for re-running the sweep
-   against a new pin, stating that a refresh produces a new pinned revision of
-   the document rather than editing citations piecemeal.
+     `StatusObserver`, `StatusReporter`, the `cap_std` directory handles,
+     `DyndepPublicationLease`, `DyndepPublication`, `TempNinjaFile`, and
+     `GraphRenderer`, recording whether each is injectable and how tests
+     substitute it.
+   Close the register with an appendix listing, by file only, every test,
+   doctest, bench, `test_support`, and Kani-only site per item.
+5. **Landed work.** One entry each, with merge commit (short SHA permitted
+   here) and the preservation obligation it creates: `#652` / PR `#714` (edge
+   arena, `2c030fd1`); `#705` (typed redirect boundary, closed; H6 context);
+   `#699` / ADR-027; `#753` / ADR-034; `#754` (JSON excerpt guard); `#696`
+   (clock seam); and any further in-scope commit between `79545e12` and the pin.
+6. **Findings.** The remaining parts of H1 to H4 as observed facts with
+   citations, and numbered observations `OBS-n`, each labelled *observed* with
+   an owning task. Seed from `Artefacts and notes`; re-verify each at the pin.
+7. **Compatibility obligations.** `CO-1` to `CO-14` as listed under
+   `Artefacts and notes`, each with its evidence (existing tests, snapshots,
+   ADRs) and the tasks it binds.
+8. **Trace matrix.** Two tables. "Changes": one row per task that changes an
+   inventoried item (26.1.2, 26.2.1, 26.2.2, 26.2.3, 26.3.1, 26.3.2, 27.1.1,
+   27.1.2, 27.1.3, 27.2.1, 27.2.2, 27.2.3, and 28.1.2 for exception mapping),
+   with columns `Task`, `Register items`, `Findings`, and `Obligations`.
+   "Consumes": one row per task that only reads the inventory (28.1.1, the rest
+   of phase 28 transitively, 27.3.1, 27.3.2, and 29.2.1). Then an "Excluded"
+   list for any task in the dependency closure that has no row, each with a
+   reason, and an "Unchanged" list of register items no task changes.
+9. **Consuming this inventory.** The rule that a consuming ExecPlan cites
+   register identifiers in its `Conformance basis`, runs
+   `git log <pin>..HEAD -- src build.rs tests test_support benches` first, and
+   re-sweeps any in-scope file that changed.
+10. **Refreshing this inventory.** A refresh produces a new pinned revision of
+    the whole document, keeps existing identifiers, and never reuses retired
+    ones.
+
+### Contract test
+
+Create `tests/hexagonal_inventory_contract_tests.rs` modelled on
+`tests/execplan_status_contract_tests.rs`: a `//!` module comment, a
+`repo_root()` helper returning a `cap_std::fs_utf8::Dir`, and pure helpers,
+each with a `///` comment:
+
+- `section(text, heading) -> Option<&str>` returns the body of a `##`
+  section up to the next `##` heading.
+- `pins(text) -> BTreeSet<String>` returns every 40-character lowercase
+  hexadecimal token.
+- `declared_pin(text) -> Option<String>` reads the `Pin:` line.
+- `task_ids(text) -> BTreeSet<String>` returns identifiers matching
+  `\b\d+\.\d+\.\d+\b` (callers pass only the relevant section).
+- `roadmap_tasks(roadmap) -> BTreeMap<String, BTreeSet<String>>` parses each
+  `- [ ] N.N.N.` or `- [x] N.N.N.` task and the identifiers named in its
+  `Dependencies:` bullet, including continuation lines, up to the next bullet
+  at the same or lower indentation.
+- `dependents_of(tasks, root) -> BTreeSet<String>` computes the transitive
+  closure of tasks whose dependencies reach `root`.
+- `register_ids(text) -> Vec<String>` returns the first-column identifiers of
+  the register tables.
+
+Use `regex` (already a dev-dependency) for tokenization, `rstest` for
+parameterized cases, and `pretty_assertions::assert_eq` for set comparisons so
+failures show the difference. Every test returns `anyhow::Result<()>`. Keep the
+file under 400 lines. `tests/integration_test_wiring_tests.rs` discovers
+top-level test files automatically; confirm it passes.
 
 ## Milestones and plateaus
 
 ### EP-M0: entry gate and pin
 
-- Identifier and outcome: EP-M0. The prerequisites are confirmed, and the pin
-  is declared in `Decision log`.
-- Requirements and gaps: roadmap dependency "acceptance of RFC 0026";
-  `RM-26.1.1-S1` ("at the implementation head").
-- Acceptance evidence: EV-ENTRY: the RFC 0026 and ADR-035 status lines read
-  `Accepted` (or the user's explicit waiver is recorded in `Decision log`); the
-  pin SHA, subject, and date are recorded; the list of commits between
-  `ebcedaef` and the pin touching in-scope paths is recorded.
-- Conformance check: no file has changed yet.
+- Identifier and outcome: EP-M0. The gate from D-6 is satisfied (or, under
+  Option B, recorded as pending for EP-M4); the pin is declared; the branch is
+  rebased onto it.
+- Requirements and gaps: `RM-26.1.1-D`, `RM-26.1.1-S1`.
+- Acceptance evidence: EV-ENTRY: the ADR-035 status read with
+  `git show "$PIN":docs/adr-035-semantic-compiler-boundaries.md`; the pin's
+  SHA, subject, and date; and the in-scope commits between `ebcedaef` and the
+  pin.
+- Conformance check: no file changed except this plan.
 - Recovery: if the gate fails, set `Status: BLOCKED` and stop.
 - Remaining gaps: everything else.
 - Compatibility decision: none.
 
-### EP-M1: register
+### EP-M1: contract test, red then green
 
-- Identifier and outcome: EP-M1. `docs/hexagonal-hardening-inventory.md`
-  exists with sections 1 to 4 (pin, scope, method, register and appendix).
-- Requirements and gaps: `RM-26.1.1-S1`, `RM-26.1.1-A2`, `RFC26-CM1`.
-- Acceptance evidence: EV-SWEEP (empty unregistered difference), EV-REVERSE
-  (zero misses), EV-SEEDED (six plants reported, test plant not reported),
-  EV-PIN, and EV-GATES.
-- Conformance check: no source change; no tool committed; single pin; every
-  API-reachable mutator from D-4 is present.
-- Recovery: the document is additive; revert the commit to retry. The seeded
-  controls run in a disposable export under `/tmp`, so they leave no state.
-- Remaining gaps: findings, obligations, trace matrix, integration.
+- Identifier and outcome: EP-M1. The contract test exists; its fixture cases
+  pass; its real-document case passes against a skeleton inventory containing
+  the pin, section headings, and empty tables with an "Excluded" list naming
+  every dependent task as "pending EP-M3".
+- Requirements and gaps: `RM-26.1.1-A1` (mechanism).
+- Acceptance evidence: EV-RED (before the skeleton exists, the real-document
+  test fails with a message naming `docs/hexagonal-hardening-inventory.md`),
+  EV-CONTRACT on the skeleton, and EV-GATES.
+- Conformance check: the test reads only `docs/`; no dependency added.
+- Recovery: revert the commit.
+- Remaining gaps: register, findings, matrix.
 - Compatibility decision: none.
 
-### EP-M2: findings, obligations, and trace matrix
+### EP-M2: register
 
-- Identifier and outcome: EP-M2. Inventory sections 5 to 9 are complete.
+- Identifier and outcome: EP-M2. Inventory sections 1 to 4 are complete.
+- Requirements and gaps: `RM-26.1.1-S1`, `RM-26.1.1-A2`, `RFC26-CM1`.
+- Acceptance evidence: EV-ORACLE and EV-SWEEP (empty unregistered sets),
+  EV-SEEDED (P1 to P8 found, P9 classified as test), EV-REVERSE (zero misses),
+  EV-CONTRACT, and EV-GATES.
+- Conformance check: no tracked source change; scratch directories deleted;
+  single pin; every D-4 API-reachable item present.
+- Recovery: additive; revert to retry. Scratch exports are recreated from
+  `git archive` every time.
+- Remaining gaps: findings, obligations, matrix, integration.
+- Compatibility decision: none.
+
+### EP-M3: findings, obligations, and trace matrix
+
+- Identifier and outcome: EP-M3. Sections 5 to 10 are complete, and the
+  "pending EP-M3" exclusions are replaced by real rows or reasoned exclusions.
 - Requirements and gaps: `RM-26.1.1-S2`, `RM-26.1.1-A1`, `ADR35-RISK`,
   `RFC26-CM2`, `RFC26-H1` to `RFC26-H4`.
-- Acceptance evidence: EV-FINDINGS (every H1 to H4 part and every `OBS-n`
-  carries citations and an owning task; `#652` appears only as landed work),
-  EV-TRACE (empty identifier difference and a reviewed matrix), and EV-GATES.
-- Conformance check: findings are labelled observed, no policy is decided, and
-  each obligation traces to an ADR, RFC clause, or test that already exists.
-- Recovery: additive edits; revert to retry.
-- Remaining gaps: integration and roadmap update.
+- Acceptance evidence: EV-FINDINGS, EV-CONTRACT, and EV-GATES.
+- Conformance check: findings labelled observed; no policy decided; each
+  obligation traced to an ADR, RFC clause, or existing test.
+- Recovery: additive; revert to retry.
+- Remaining gaps: integration.
 - Compatibility decision: none.
 
-### EP-M3: documentation integration and completion
+### EP-M4: integration and completion
 
-- Identifier and outcome: EP-M3. The inventory is discoverable and the roadmap
+- Identifier and outcome: EP-M4. The inventory is discoverable and the roadmap
   records completion.
-- Requirements and gaps: `RM-26.1.1` done.
+- Requirements and gaps: `RM-26.1.1` done; `RM-26.1.1-D` satisfied.
 - Edits:
-  - `docs/contents.md`: add an entry for the inventory beside the roadmap
-    entry for `roadmap-hexagonal-hardening.md`.
-  - `docs/roadmap-hexagonal-hardening.md`: change `- [ ] 26.1.1.` to
-    `- [x] 26.1.1.` and add a link to the inventory in the task's bullets,
-    keeping the existing text.
-  - `docs/rfcs/0026-hexagonal-domain-hardening.md`: in "Current state and audit
-    reconciliation", add one sentence stating that the implementation baseline
-    for phases 26 and 27 is the pinned inventory, leaving the historical
-    `79545e12` audit text intact.
-  - `docs/netsuke-design.md`: in the Stage 5 "FUTURE" note, add a pointer to
-    the inventory's H1 finding.
-  - `docs/developers-guide.md`: in "Internal support module boundaries" (or
-    the nearest section about IR ownership), add a short paragraph saying that
-    phase-26 and phase-27 changes to inventoried constructors or mutators must
-    cite the inventory's register identifier in their ExecPlan, and that a
-    refresh follows the inventory's own procedure.
-  - This ExecPlan: set `Status: COMPLETE` and complete
-    `Outcomes & retrospective`.
-- Acceptance evidence: EV-GATES on the final tree; links resolve (checked by
-  `make markdownlint` and by reading the rendered links).
-- Conformance check: `docs/users-guide.md` is unchanged (no user-visible
-  change); no ADR added (D-5); roadmap wording otherwise unchanged.
+  - `docs/contents.md`: add the inventory beside the
+    `roadmap-hexagonal-hardening.md` entry.
+  - `docs/roadmap-hexagonal-hardening.md`: `- [ ] 26.1.1.` becomes
+    `- [x] 26.1.1.`, with a link to the inventory; wording otherwise unchanged.
+  - `docs/rfcs/0026-hexagonal-domain-hardening.md`: one sentence in "Current
+    state and audit reconciliation" naming the pinned inventory as the
+    implementation baseline; the `79545e12` audit text stays.
+  - `docs/netsuke-design.md`: a pointer from the Stage 5 "FUTURE" note to the
+    inventory's H1 finding.
+  - `docs/developers-guide.md`: a "Test suite map" entry for
+    `tests/hexagonal_inventory_contract_tests.rs`.
+  - The inventory: the "commits since the pin" list.
+  - This plan: `Status: COMPLETE`; `Outcomes & retrospective`.
+- Acceptance evidence: EV-GATES on the final tree.
+- Conformance check: `docs/users-guide.md` unchanged; no ADR added; under D-6
+  Option B, ADR-035 reads `Accepted` at `origin/main` before the checkbox is
+  ticked, otherwise set `Status: BLOCKED` and stop.
 - Recovery: revert the integration commit.
-- Remaining gaps: none for 26.1.1; 26.1.2 begins from the inventory.
+- Remaining gaps: none; 26.1.2 starts from the inventory.
 - Compatibility decision: none.
 
 ## Concrete steps
 
-Run every command from the repository root,
-`/home/leynos/.lody/repos/github---leynos---netsuke/worktrees/87392da2-6f4c-47f5-8990-bf106b4279fe`,
-unless stated otherwise.
+Run commands from the repository root unless stated otherwise. Shell variables
+do not persist between separate tool invocations, so each block below sets the
+variables it uses.
 
-EP-M0, entry gate and pin:
+EP-M0:
 
 ```bash
 git fetch origin
-git rev-parse origin/main
-sed -n '1,12p' docs/rfcs/0026-hexagonal-domain-hardening.md | grep -n Status
-sed -n '1,8p' docs/adr-035-semantic-compiler-boundaries.md
-git log --oneline ebcedaef..origin/main -- src/ast src/ir src/ninja_gen src/ninja_gen*.rs \
-  src/graph_view src/runner src/cli src/manifest src/localization src/diagnostic_json*.rs \
-  src/hasher.rs src/recipe_shell.rs
+PIN="$(git rev-parse origin/main)"; echo "$PIN"
+git show "$PIN":docs/adr-035-semantic-compiler-boundaries.md | sed -n '1,8p'
+git log --oneline "ebcedaef..$PIN" -- src build.rs tests test_support benches
+git rebase "$PIN" 26-1-1-record-model-and-consumer-inventory
 ```
 
-Expected: the status lines read `Accepted`. If either reads `Proposed`, stop
-(Entry tolerance). Record `PIN=<sha>`.
+Expected: ADR-035 reads `Accepted` under Option A, or either value under Option
+B. Record `PIN` in `Decision log`.
 
-EP-M1, export the pinned tree to a scratch directory so that no working-tree
-edit, untracked file, or other agent's change can contaminate the sweep:
+EP-M1, red:
 
 ```bash
-PIN=<sha>
-SCRATCH=/tmp/inventory-26-1-1-$PIN
-rm -rf "$SCRATCH" && mkdir -p "$SCRATCH"
-git archive "$PIN" src | tar -x -C "$SCRATCH"
-cd "$SCRATCH"
+cargo nextest run --test hexagonal_inventory_contract_tests 2>&1 \
+  | tee /tmp/red-netsuke-26-1-1-record-model-and-consumer-inventory.out
 ```
 
-Run each forward sweep and save its output with `tee`:
+Expected: the fixture cases pass and `real_inventory_is_consistent` fails with
+an error naming `docs/hexagonal-hardening-inventory.md`. Then add the skeleton
+and re-run; expect all cases to pass.
+
+EP-M2, oracle. Create a full export under the ignored `target/` directory:
 
 ```bash
-T='Action|BuildEdge|BuildGraph|EdgeId|Recipe|Rule|Target|NetsukeManifest|StringOrList|DependencyOrder'
-rg -n --type rust "\b($T)\s*\{" src | tee /tmp/inv-literals.out
-rg -n --type rust "\bSelf\s*\{" src/ast src/ir src/ninja_gen* src/runner | tee /tmp/inv-self.out
-rg -n --type rust "impl(<[^>]*>)?\s+([\w:]+\s+for\s+)?($T)\b" src | tee /tmp/inv-impls.out
-rg -n --type rust -B3 "pub (struct|enum) ($T)\b" src | rg 'derive' | tee /tmp/inv-derives.out
-rg -n --type rust "fn \w+(<[^>]*>)?\(\s*&mut self" src/ast src/ir src/ninja_gen src/runner \
-  | tee /tmp/inv-mut-self.out
-F='actions|default_targets|recipe|action_id|phony|always|explicit_outputs'
-F="$F|implicit_outputs|inputs|implicit_deps|order_only_deps"
-M='insert|push|extend|remove|clear|entry|get_mut|retain'
-rg -n --type rust "\.($F)\s*(\.($M)\b|=[^=])" src | tee /tmp/inv-field-writes.out
-rg -n --type rust "Recipe::(Command|Script|Rule)" src | tee /tmp/inv-recipe-matches.out
-rg -n --type rust "LocalizedMessage|localization::message\(" src/ir src/ninja_gen* src/manifest src/runner \
-  | tee /tmp/inv-diag.out
-rg -n --type rust "RecipeShell" src | tee /tmp/inv-shell.out
-rg -n --type rust "cli\.\w+" src/runner | tee /tmp/inv-cli-fields.out
+PIN="<pin>"; ROOT="$(pwd)"
+SCRATCH="$ROOT/target/inventory-26-1-1/$PIN"
+rm -rf "$SCRATCH" && mkdir -p "$SCRATCH/tree"
+git archive "$PIN" | tar -x -C "$SCRATCH/tree"
 ```
 
-Classify each hit as production, test, doctest, or Kani by reading the file's
-module declaration in its parent (AX-3), then subtract the register. Expected:
-the unregistered production set is empty. Cross-check every `pub` mutator with
-CodeGraph (`codegraph_get_callers` on its `nodeId` after
-`codegraph_reindex_workspace`) and record callers.
-
-EV-SEEDED, in the scratch export only: apply the six production plants and one
-test plant listed under OB-FWD, re-run the sweeps, and confirm the difference
-lists exactly the six production plants. Then delete the scratch directory:
+In `$SCRATCH/tree` only, add `#[deprecated(note = "inventory")]` to every
+field, variant, inherent method, and associated function of the items named in
+A1 to A7, and to each free function named there. Then:
 
 ```bash
-rm -rf "$SCRATCH"
+PIN="<pin>"; ROOT="$(pwd)"; SCRATCH="$ROOT/target/inventory-26-1-1/$PIN"
+cd "$SCRATCH/tree" && CARGO_TARGET_DIR="$SCRATCH/target" \
+  cargo check --workspace --all-targets --all-features --message-format=json \
+  > "/tmp/oracle-netsuke-26-1-1-$PIN.json"
+jq -r 'select(.reason == "compiler-message")
+  | select(.message.code.code == "deprecated")
+  | .message.spans[] | select(.is_primary)
+  | "\(.file_name):\(.line_start):\(.text[0].text | ltrimstr(" "))"' \
+  "/tmp/oracle-netsuke-26-1-1-$PIN.json" | sort -u \
+  > "/tmp/oracle-sites-netsuke-26-1-1-$PIN.out"
+wc -l "/tmp/oracle-sites-netsuke-26-1-1-$PIN.out"
 ```
 
-EV-REVERSE, back in the repository root: for each register row, run
-`git grep -n '<symbol>' "$PIN" -- '<path>'` and confirm a hit at or around the
-cited line. Record "N rows checked, 0 misses".
+Classify each site as constructor, mutator, or consumer, and as production or
+not: list test-only modules first with
+`rg -n -A1 '#\[cfg\((test|kani)\)\]' src | rg 'mod \w+'`, resolve each
+`#[path = ..]`, and treat inline `#[cfg(test)] mod` blocks as test code. Then
+subtract the register; expect an empty set.
 
-EV-PIN:
+EP-M2, targeted sweep for code the host build does not compile:
 
 ```bash
-rg -o 'blob/[0-9a-f]{40}' docs/hexagonal-hardening-inventory.md | sort -u
+PIN="<pin>"; ROOT="$(pwd)"; TREE="$ROOT/target/inventory-26-1-1/$PIN/tree"
+T='Action|BuildEdge|BuildGraph|EdgeId|Recipe|RawRecipe|Rule|Target|NetsukeManifest|StringOrList|DependencyOrder'
+rg -n --type rust -l 'cfg\((kani|windows|target_os|not\(unix\)|unix)' "$TREE/src" "$TREE/build.rs" \
+  | tee "/tmp/sweep-files-netsuke-26-1-1-$PIN.out"
+rg -n --type rust "\b(Self|$T)(::\w+)?\s*[{(]|&mut\s+($T)\b|mem::(take|replace|swap)" \
+  $(cat "/tmp/sweep-files-netsuke-26-1-1-$PIN.out") \
+  | tee "/tmp/sweep-sites-netsuke-26-1-1-$PIN.out"
 ```
 
-Expected: exactly one line, `blob/<PIN>`.
+Classify the hits that lie inside uncompiled `cfg` regions and add them to the
+register (production) or the appendix (Kani). Doctest sites are listed from
+`rg -n '^\s*//[/!] .*\b($T)\b' src`. Optionally cross-check implementations and
+receivers with rustdoc JSON
+(`cargo rustdoc --lib -- -Z unstable-options --output-format json
+--document-private-items`)
+and public mutators with CodeGraph callers.
 
-EV-TRACE:
+EV-SEEDED: hand the nine plants from OB-FWD and the prediction to an
+`alchemist` agent, which applies them in a *second* export
+(`$ROOT/target/inventory-26-1-1/$PIN-seeded`) and records them in
+`/tmp/seeded-netsuke-26-1-1-$PIN.out`. Re-run the oracle and sweep there,
+classify blind, and compare. Expected: P1 to P8 unregistered production sites,
+P9 test only. Then delete both exports:
 
 ```bash
-comm -3 \
-  <(rg -o '\b2[678]\.[0-9]+\.[0-9]+\b' docs/roadmap-hexagonal-hardening.md | sort -u) \
-  <(rg -o '\b2[678]\.[0-9]+\.[0-9]+\b' docs/hexagonal-hardening-inventory.md | sort -u)
+PIN="<pin>"; rm -rf "$(pwd)/target/inventory-26-1-1"
 ```
 
-Expected: only tasks deliberately outside the matrix appear (27.3.x, 28.1.2
-onward), and each is named in the inventory's "not changed by this programme"
-paragraph or is out of scope because it does not depend on 26.1.1.
+EV-REVERSE: for each register row, `git grep -n '<symbol>' "$PIN" -- '<path>'`;
+record "N rows checked, 0 misses", and confirm a fictitious row is reported.
 
-After every edit to Markdown:
+After every Markdown edit:
 
 ```bash
 make fmt 2>&1 | tee /tmp/fmt-netsuke-26-1-1-record-model-and-consumer-inventory.out
 git --no-pager diff --no-ext-diff --stat
 ```
 
-Gates, delegated to `scrutineer`, sequentially, after each milestone:
+Gates, through `scrutineer`, sequentially, after each milestone:
 
 ```bash
 make check-fmt 2>&1 | tee /tmp/check-fmt-netsuke-26-1-1-record-model-and-consumer-inventory.out
@@ -785,114 +945,167 @@ make markdownlint 2>&1 | tee /tmp/markdownlint-netsuke-26-1-1-record-model-and-c
 make nixie 2>&1 | tee /tmp/nixie-netsuke-26-1-1-record-model-and-consumer-inventory.out
 ```
 
-Expected: each exits `0`.
-
-Commit after each milestone with an imperative subject, for example
-`Record the pinned semantic-boundary register (26.1.1)`.
+Expected: each exits `0`. Commit after each milestone with an imperative
+subject, for example `Record the pinned semantic-boundary register (26.1.1)`.
 
 ## Validation and acceptance
 
-Acceptance is behaviour a reviewer can verify:
+- `cargo nextest run --test hexagonal_inventory_contract_tests` passes; before
+  the inventory skeleton exists, `real_inventory_is_consistent` fails naming
+  the missing file (EV-RED).
+- Choosing any task in the dependency closure of 26.1.1, a reviewer finds its
+  trace-matrix row (or reasoned exclusion), follows a register identifier to a
+  `path:line` that exists at the pin, and reads a named obligation.
+- The "Method" section records oracle and sweep counts with empty unregistered
+  sets and a seeded-fault result of eight found and one correctly classified as
+  test.
+- `#652` / `#714` appear only under "Landed work" and in `CO-14`.
+- Roadmap item 26.1.1 is checked (subject to D-6) and links to the inventory.
 
-- Opening `docs/hexagonal-hardening-inventory.md` shows one pin; running the
-  EV-PIN command prints one SHA.
-- Choosing any task from 26.1.2 to 27.2.3 in the roadmap, a reviewer finds its
-  row in the trace matrix, follows at least one register identifier to a
-  `path:line` that exists at the pin, and reads at least one named
-  compatibility obligation.
-- Re-running the recorded sweep at the pin yields the recorded counts and no
-  unregistered production site.
-- The inventory lists `#652` / `#714` only under "Landed work" and as
-  preservation obligations.
-- Roadmap item 26.1.1 is checked and links to the inventory.
-
-Red-Green-Refactor does not apply to a documentation-only change (D-2). Its
-nearest observable substitute is the controls: EV-SEEDED and the fictitious-row
-and deleted-row checks must each *fail* on the seeded scratch copy before the
-register is accepted, and pass on the real one.
+Red-Green-Refactor applies to the contract test (EV-RED, then EV-CONTRACT, then
+refactor with the test re-run). For the inventory itself, the seeded controls
+are the red stage: they must fail on seeded input before the result on the real
+tree is trusted.
 
 Quality criteria:
 
-- Tests: `make test` passes unchanged (no test added or removed).
-- Verification: OB-FWD, OB-REV, OB-TRACE, OB-652, and OB-PIN discharged with
-  recorded evidence.
-- Lint and type checking: `make check-fmt`, `make typecheck`, `make lint`,
+- Tests: `make test` passes, including the new contract test.
+- Verification: OB-FWD, OB-REV, OB-INTEGRITY, OB-652, and OB-GATES discharged.
+- Lint and types: `make check-fmt`, `make typecheck`, `make lint`,
   `make markdownlint`, and `make nixie` exit `0`.
-- Performance and security: not applicable; no code or dependency changes.
+- Performance and security: no production change or dependency; the scratch
+  build runs once per pin and never concurrently with a gate.
 
 ## Idempotence and recovery
 
-Every step is repeatable. The scratch export is recreated from `git archive`
-each time and deleted afterwards. The inventory is a new file, and the other
-edits are small insertions; reverting a milestone commit restores the prior
-state. If `make fmt` reflows the new document unexpectedly, reread the diff and
-rephrase rather than fighting the formatter. Do not use `git stash` (the stash
-is shared with other worktrees); use a work-in-progress commit instead.
+Every step is repeatable. Scratch exports are recreated from `git archive` and
+deleted afterwards; they live under the ignored `target/` directory, never in
+the working tree. The inventory and test are new files; the other edits are
+small insertions; reverting a milestone commit restores the prior state. Do not
+use `git stash` (the stash is shared between worktrees); use a work-in-progress
+commit instead.
 
 ## Artefacts and notes
 
-Planning-time observations at `ebcedaef`. They are hypotheses for EP-M1 to
-re-verify at the pin, not results to copy.
+Planning-time observations at `ebcedaef`, to re-verify at the pin.
 
-- H1 remains. `Action` (`src/ir/graph.rs:253-270`) derives `Serialize` and
-  `Clone`, has all-`pub` fields, and stores `recipe: Recipe` from `crate::ast`.
-  Its only production literal is in `register_action`
-  (`src/ir/from_manifest_support.rs:54-61`). `BuildEdge`
-  (`src/ir/graph.rs:273-295`) has all-`pub` fields and one production literal in
-  `process_targets` (`src/ir/from_manifest.rs:165-175`). `BuildGraph`
-  (`src/ir/graph.rs:39-49`) derives `Default` and exposes `pub actions` and
-  `pub default_targets`. `BuildGraph::replace_edge_for_output`
-  (`src/ir/graph.rs:162-176`) is `pub` with test-only callers
-  (`src/ir/cycle_issue322_property_tests.rs`, `src/ir/cycle_analyse_tests.rs`).
-- The dependency-only sentinel is
-  `Recipe::Command { command: StringOrList::Empty }`, produced by `Recipe`'s
-  `Deserialize` when no recipe field is present (`src/ast/mod.rs:222`) and
-  recognized by `Recipe::is_dependency_only` (`src/ast/mod.rs:180-186`). The
-  backend skips it in `write_action_rules` and rejects it in
-  `reject_empty_command_recipe`.
-- Action identity: `ActionHasher::hash` (`src/hasher.rs:58-66`) hashes the
-  canonical JSON of the whole `Action`, so any change to the stored recipe type
-  changes every action hash unless its serialization is byte-identical.
-- Rule delegation: a rule's recipe may itself be `Recipe::Rule`; see
-  `Surprises & discoveries`. Duplicate rule names are silently last-wins in
-  `process_rules` (`src/ir/from_manifest.rs:99-103`).
-- H2 remains. `BuildGraph` retains no interpreter. `from_manifest_for_shell`
-  (`src/ir/from_manifest.rs:64-67`) and `ninja_gen::generate_with_shell`
-  (`src/ninja_gen/explicit_shell.rs:17-24`, re-exported publicly at
-  `src/ninja_gen/mod.rs:37`) take the interpreter independently; `generate` and
-  `generate_into` use `RecipeShell::host_default()`. Only the runner path
-  (`GraphGenerationContext.recipe_shell`,
-  `src/runner/graph_generation.rs:23,56-69`) threads one value through both.
-- H3 remains. `execute_build` and `execute_ninja_tool`
-  (`src/runner/mod.rs:192-240,275-328`) interleave generation, dyndep
-  publication, temporary manifest creation, and Ninja spawn, reading `Cli`
-  throughout; `NinjaBuildRequest` and `NinjaToolRequest`
-  (`src/runner/process/request.rs:21-54`) are already free of `Cli`.
-- H4 remains. `IrGenError` variants `RuleNotFound`, `MultipleRules`,
-  `EmptyRule`, `DuplicateOutput`, `CircularDependency`, `ActionSerialisation`,
-  and `InvalidCommand` pair structured fields with a `LocalizedMessage`
-  (`src/ir/graph_error.rs:39-231`). `DuplicateOutput` is constructed at two
-  sites with different argument shapes (`src/ir/graph.rs:66-70`, a single
-  output; `src/ir/from_manifest_support.rs:156-171`, a list).
-  `localize_recipe_error` classifies an error by
-  `to_string().starts_with(EMPTY_COMMAND_LIST_ERROR)`
-  (`src/manifest/registration.rs:15-23`). `IrGenError` and `NinjaGenError`
-  derive no `miette::Diagnostic` code. Every runner error exits with status 1.
-- No RFC 0027 policy or exception file exists; no H1 to H4 exception entry
-  exists to retire.
+Remaining H1: `Action` (`src/ir/graph.rs:252-270`) derives
+`Debug, Clone, PartialEq, Serialize`, has all-`pub` fields, and stores
+`recipe: Recipe` from `crate::ast`; its only production literal is in
+`register_action` (`src/ir/from_manifest_support.rs:54-61`). `BuildEdge`
+(`src/ir/graph.rs:273-295`) has all-`pub` fields and one production literal in
+`process_targets` (`src/ir/from_manifest.rs:165-175`). `BuildGraph`
+(`src/ir/graph.rs:39-49`) derives `Default` and exposes `pub actions` and
+`pub default_targets`. The dependency-only sentinel is
+`Recipe::Command { command: StringOrList::Empty }` (`src/ast/mod.rs:222`),
+recognized by `Recipe::is_dependency_only` (`src/ast/mod.rs:180-186`).
+
+Remaining H2: `BuildGraph` retains no interpreter. `from_manifest_for_shell`
+(`src/ir/from_manifest.rs:63-67`, `#[doc(hidden)] pub`) and
+`ninja_gen::generate_with_shell` (`src/ninja_gen/explicit_shell.rs:17-24`,
+re-exported at `src/ninja_gen/mod.rs:37`) take the interpreter independently;
+`generate` and `generate_into` use `RecipeShell::host_default()`. The runner's
+`build` and `generate` paths thread one value through both stages
+(`src/runner/graph_generation.rs:23,56-69`); `graph` and `help targets` do not
+(see `Surprises & discoveries`).
+
+Remaining H3: `runner::execute_build` and `runner::execute_ninja_tool`
+(`src/runner/mod.rs:192-240,275-328`) interleave generation, dyndep
+publication, temporary-manifest creation, and Ninja spawn, reading `Cli`
+throughout. `NinjaBuildRequest` and `NinjaToolRequest`
+(`src/runner/process/request.rs:21-54`) are already free of `Cli`.
+`StderrMode::from_json_enabled(cli.json)` lets a presentation flag decide
+stream routing. `open_effective_dir(cli)` re-derives directory authority from
+`cli.directory` on each call.
+
+Remaining H4: `IrGenError` (`src/ir/graph_error.rs:39-231`) pairs structured
+fields with a `LocalizedMessage` in `RuleNotFound`, `MultipleRules`,
+`EmptyRule`, `DuplicateOutput`, `CircularDependency`, `ActionSerialisation`, and
+`InvalidCommand`; `InvalidManifest` carries a `&'static str`. `NinjaGenError`
+mixes `LocalizedMessage` variants with fixed English `#[error]` text. Neither
+enum is `#[non_exhaustive]` or carries a `miette` code, so the JSON `code` is
+null for them. `localize_recipe_error` classifies by
+`to_string().starts_with(EMPTY_COMMAND_LIST_ERROR)`
+(`src/manifest/registration.rs:15-23`).
+
+Seed observations (`OBS-n`): OBS-1 rule-to-rule delegation reaches the backend
+(26.1.2, 26.2.2). OBS-2 duplicate rule names are silently last-wins in
+`process_rules` (`src/ir/from_manifest.rs:99-103`) (26.1.2). OBS-3
+`DuplicateOutput` is built at two sites with different argument shapes
+(`src/ir/graph.rs:66-70`; `src/ir/from_manifest_support.rs:156-162`) (27.1.1).
+OBS-4 `MissingAction` is built at two sites (`src/ninja_gen/mod.rs`,
+`src/ninja_gen/dyndep.rs`) (27.1.1). OBS-5 the `EMPTY_COMMAND_LIST_ERROR`
+string match (27.1.2). OBS-6 IR and Ninja errors have no diagnostic code
+(27.1.3). OBS-7 `generate_with_shell` and the host-default `generate` paths
+accept an unchecked shell (26.3.1). OBS-8 `graph` and `help targets` lower with
+the host default shell (26.3.1). OBS-9 the `src/hasher.rs` comment claims
+sorted keys (26.2.3). OBS-10 public fields, `Default`, `insert_edge` without an
+action-existence check, and `replace_edge_for_output` can create dangling or
+swapped `action_id` values (26.2.1). OBS-11 `assert_shell_command` panics only
+in debug builds (26.2.2). OBS-12 `render.rs` renders the `rule:` selector and
+mutates authored types in place (26.1.2, 26.2.1). OBS-13 the `cfg(kani)`
+`insert_edge` returns `EdgeId` unconditionally (26.2.3). OBS-14 the error enums
+are exhaustive and publicly constructible (27.1.1). OBS-15 `StderrMode` follows
+`cli.json` (27.2.1). OBS-16 `open_effective_dir` re-derives authority per call
+(27.2.2).
+
+Seed obligations (`CO-n`): CO-1 manifest acceptance and rejection, including
+`MISSING_RECIPE_ERROR`, `EMPTY_COMMAND_LIST_ERROR`, and the mutual-exclusion
+message. CO-2 generated Ninja bytes and repeated-run determinism on both
+emission paths (`generate*` and the dyndep bundle). CO-3 action identity: the
+hash covers field declaration order (`preserve_order`), variant tag names,
+`skip_serializing_if`, and interpolated shell text; any change needs a rebuild
+rationale. CO-4 graph rendering (DOT and HTML golden snapshots) and the
+success-result JSON envelope (`schema_version` 1) for `build`, `generate`,
+`clean`, and `graph`; there is no JSON graph export. CO-5 diagnostics: existing
+codes, today's null codes, the JSON diagnostic schema, the `#754` excerpt
+guard, human-mode printing of the outermost context, and exit codes (1 for
+runtime errors; for argument errors, 2 in human mode and 1 on the JSON path).
+CO-6 localization: `src/localization/keys.rs` and the Fluent catalogues stay in
+sync (audited by `build.rs`). CO-7 ADR-014 separation of shell quoting and
+Ninja escaping, and the ADR-027 and ADR-034 placeholder contract. CO-8 ADR-011
+and ADR-012 dyndep publication and retention, with the lease spanning spawn and
+pruning. CO-9 `POLONIUS-REFUSED(id-is-data)`. CO-10 Kani harness
+synchronization across every `cfg(kani)` file (at planning time:
+`src/ast/mod.rs`, `src/ir/cmd_interpolate/mod.rs`, `src/ir/cycle_detector.rs`,
+`src/ir/cycle.rs`, `src/ir/cycle_support.rs`, `src/ir/from_manifest.rs`,
+`src/ir/from_manifest_support.rs`, `src/ir/graph_kani_map.rs`,
+`src/ir/graph.rs`, `src/ir/sort_utils.rs`, and the `*verification.rs` modules).
+CO-11 configuration layering precedence, keys, and `NETSUKE_*` variables through
+`ortho_config`. CO-12 the quickstart and unannotated manifests. CO-13 library
+API: pre-1.0 and published as `netsuke-build`; every changed or removed `pub`
+item gets a CHANGELOG "**Breaking:**" entry, with no shims. CO-14 canonical
+edge arena invariants from `#652`: alias identity, atomic duplicate rejection,
+and no per-output cloning.
 
 ## Interfaces and dependencies
 
-No Rust interface, crate, or tool is added or changed. The deliverable is one
-new Markdown document and small edits to five existing ones. Tools used, all
-already present: `git`, `rg`, CodeGraph (MCP), `make`, `mdtablefix` (through
-`make fmt`/`make check-fmt`), `markdownlint-cli2` and `typos` (through
-`make markdownlint`), and `nixie` (through `make nixie`).
+No production interface or dependency changes. The new test uses existing
+dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
+`pretty_assertions`. The helper signatures are listed under "Contract test" in
+`Plan of work`. Tools used: `git`, `rg`, `jq`, `cargo`, CodeGraph (MCP), `make`,
+`mdtablefix`, `markdownlint-cli2`, `typos`, and `nixie`.
 
 ## Revision note
 
 - Revision 1 (2026-09-27): initial draft from six-way reconnaissance at
-  `ebcedaef`. Awaiting expert review and user approval.
+  `ebcedaef`.
+- Revision 2 (2026-09-27): revised after an expert design review whose
+  verdict was "revise". The primary site method is now the compiler (D-7),
+  because revision 1's text sweeps missed generic trait implementations,
+  `Self::Variant` constructions, tuple constructors, `&mut` free-function
+  mutation, and `retain`, and its seeded plants could not fail. Added the
+  document-integrity contract test (D-2) and moved EV-PIN and EV-TRACE into it,
+  restricting task extraction to the trace-matrix section and deriving the
+  expected set from the roadmap's dependency closure. Replaced the RFC-status
+  gate with the D-6 choice. Widened the inventoried item set (render mutators,
+  library entry points, `ShellText`, `NinjaValue`, runner contexts,
+  `build.rs`), tightened the definitions (no `Clone` constructor; visibility
+  classes; `&mut T` functions as mutators), corrected the obligations (no JSON
+  graph export; `preserve_order` hashing; exit codes; CHANGELOG practice), and
+  added observations OBS-8 to OBS-16. Moved scratch builds from `/tmp` to the
+  ignored `target/` directory and made every command self-contained. The
+  remaining work is unchanged in kind: approval, then EP-M0 to EP-M4.
 
 [rfc-0026]: ../rfcs/0026-hexagonal-domain-hardening.md
 [adr-035]: ../adr-035-semantic-compiler-boundaries.md
