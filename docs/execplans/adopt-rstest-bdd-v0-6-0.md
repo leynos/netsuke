@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 Roadmap item: none. Origin: `leynos/rstest-bdd` v0.6.0 release and its
 `docs/v0-6-0-migration-guide.md`.
@@ -146,7 +146,9 @@ the conflict in `Decision log` before proceeding.
   condition and is recorded as **unavailable**, not as a pass. Logs are in
   `### Gate logs`. Inventory comparison: 254 scenario names before and after,
   identical as sets.
-- [ ] Push and open a draft pull request.
+- [x] (2026-09-26) Commit as `c68cd30f`, push, and open draft PR
+  [#805](https://github.com/leynos/netsuke/pull/805) against `main`. Not merged
+  and no release published, per the session's instructions.
 
 ## Surprises & discoveries
 
@@ -884,6 +886,14 @@ separate and are named with the `-m5` suffix.
 The work session that produced this migration is recorded at
 <https://lody.ai/leynos/sessions/7bb1d019-44e1-4cc0-b860-e7ac1b312667>.
 
+The delivered revision is `c68cd30f` on `adopt-rstest-bdd-v0-6-0`, pushed to
+`origin` and opened as draft pull request
+[#805](https://github.com/leynos/netsuke/pull/805). Two commits carry the work:
+`e62af317` imports the authoritative documentation byte-for-byte and drafts
+this plan, and `c68cd30f` performs the dependency bump, adds the INV-3
+regression guard, corrects the developer guidance, and closes the plan's living
+sections. Both are pushed; the pull request is a draft and has not been merged.
+
 ## Revision note
 
 2026-09-26 — initial draft, written after reconnaissance established the
@@ -896,3 +906,10 @@ plan's living sections. `## Outcomes & retrospective` was written and the
 test count, both superseded once the regression test was added. The `-m3` sweep
 is not cited anywhere, because a concurrent writer touched this document
 mid-sweep and invalidated its freeze.
+
+2026-09-26 — deliverable revision. Committed as `c68cd30f`, pushed, and opened
+as draft PR [#805](https://github.com/leynos/netsuke/pull/805). `Status:` moved
+to `COMPLETE` and the delivery recorded in `### Session provenance`. Because
+these edits shifted the revision after the `-m4` sweep, the Markdown-scoped
+gates were re-run on it; those `-m5` logs are the ones that describe the
+revision now pushed. Both pass.
