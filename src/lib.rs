@@ -27,6 +27,7 @@ pub mod output_prefs;
 pub mod recipe_shell;
 mod result_json;
 pub mod runner;
+mod shell_word;
 #[cfg(test)]
 mod snapshot_test_support;
 pub mod status;

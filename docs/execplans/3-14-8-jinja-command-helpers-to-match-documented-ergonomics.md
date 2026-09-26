@@ -1048,7 +1048,7 @@ fn compact_filter(values: &Value) -> Result<Value, Error>;
 exceed 400, convert it to a directory module with
 `src/stdlib/collections/compact.rs`.
 
-### `src/stdlib/config/mod.rs`
+### `src/stdlib/config/`
 
 The configuration stores the **dialect**, not the interpreter. `StdlibConfig`
 does not care which interpreter runs the recipe; it cares which quoting rule to
@@ -1056,6 +1056,13 @@ apply, and `RecipeShell` is a three-variant type that would be collapsed to two
 immediately. Storing the wider type would leave a `recipe_shell()` accessor
 inviting a question the configuration can no longer answer honestly, because
 `Posix` and `Bash` are indistinguishable downstream.
+
+The field is declared on `StdlibConfig` in `config/mod.rs`, but the builder and
+accessor live in a sibling `config/recipe_shell.rs`, following the clustering
+`config/which.rs` and `config/ambient.rs` already use. This is a deviation from
+the original text, which placed them in `config/mod.rs`: that file was at 383
+lines against AGENTS.md's 400-line cap, and the addition pushed it to 405. As
+delivered, `config/mod.rs` returns to 393 and the sibling holds the rest.
 
 ```rust
 /// Shell dialect the recipe-text filters quote for.
@@ -1073,8 +1080,20 @@ pub fn with_recipe_shell(mut self, shell: RecipeShell) -> Self {
 }
 
 /// Return the dialect the recipe-text filters quote for.
+///
+/// Compiled in test builds only until EP-M4 supplies the caller.
+#[cfg(test)]
 pub(crate) const fn dialect(&self) -> ShellDialect;
 ```
+
+The `#[cfg(test)]` on the accessor is deliberate and temporary. EP-M3's Green
+step requires the field and the builder, and its tests read the field back
+through the accessor; but a `pub(crate)` item with no production reader is dead
+code, and no attribute marks it dormant truthfully — the tests would make a
+`dead_code` *expectation* unfulfilled in the `--all-targets` profile the gates
+run, while the same expectation in the lib-only profile is fulfilled. The `pub`
+builder has no such problem, because `pub` items are never dead. EP-M4 removes
+the gate in the commit that registers the filters.
 
 `StdlibConfig::new` initializes it to `RecipeShell::host_default().dialect()`.
 
@@ -1285,9 +1304,11 @@ that make the diagnostics locale-stable. Roughly 385 catalogue lines. See R1.
 ## Verification plan
 
 Verification is co-designed with the implementation: the split between
-`policy.rs` (whether a value may be quoted) and `quoting.rs` (how it is
-encoded) exists precisely so the encoding obligation can be discharged against
-a real shell while the policy obligation stays a cheap total function.
+`is_recipe_admissible` (whether a value may be quoted) and `quote_word` (how it
+is encoded) — both in `src/shell_word.rs`, not in the `policy.rs`/`quoting.rs`
+pair an earlier draft proposed — exists precisely so the encoding obligation
+can be discharged against a real shell while the policy obligation stays a
+cheap total function.
 
 ### Non-trivial axioms
 
@@ -2166,7 +2187,16 @@ Quality criteria — what "done" means:
   `tests/shell_filter_property_tests.rs` and
   `tests/stdlib_manifest_query_tests.rs` pass, and the five new
   `tests/features/stdlib.feature` scenarios pass through `tests/bdd_tests.rs`.
-  `tests/documentation_examples_tests.rs` passes with the new example id.
+  Those five are `shell_quote makes a metacharacter-bearing value one sh word`,
+  `shell_join quotes each element separately`,
+  `shell_quote rejects an unknown dialect and names the accepted set`,
+  `shell_quote rejects a value containing a line feed`, and
+  `shell_quote rejects a positional dialect`. They are distinct from the file's
+  pre-existing `shell filter` scenarios (the `shell` *command* filter added
+  long before this plan) and from EP-M2's two `compact` scenarios, so a grep
+  for "shell" in that file over-counts: check the scenario names, not the
+  substring. `tests/documentation_examples_tests.rs` passes with the new
+  example id.
 - **Verification**: OBL-SH-ROUNDTRIP, OBL-PS-ROUNDTRIP, OBL-ONE-WORD,
   OBL-JOIN-SPLIT, OBL-COMPACT, OBL-ENV-DEFAULT, OBL-DIALECT-TOTAL,
   OBL-NINJA-STABLE, OBL-NO-ESCAPE, and OBL-QUERY-SURFACE are each discharged,
@@ -2377,11 +2407,161 @@ catalogue has the key; there is no partial state to clean up.
       from `""` and an unedited expectation would have been validated against a
       run in which it passed for the wrong reason; the property carries that
       case instead.
-- [ ] EP-M3 shared recipe-shell quoting seam.
+- [x] EP-M3 shared recipe-shell quoting seam. `src/shell_word.rs` holds the
+      single `quote_word` encoder, `is_recipe_admissible`, and `ShellDialect`;
+      `quote_path` in `src/ir/cmd_interpolate/mod.rs:138` is a one-line
+      delegation; `RecipeShell::dialect()` maps the three interpreters onto the
+      two dialects; `validate_ninja_value` in `src/ninja_gen_escape.rs:47`
+      delegates to the shared predicate rather than carrying its own copy; the
+      `//!` header states the leaf position required by the milestone's refactor
+      step. Generated Ninja is unchanged — see the commit entry below for the
+      non-vacuity evidence. Epistemic note: the delivery moved one item the
+      milestone's Green step had not asked for, and deferred one that
+      `OBL-DIALECT-TOTAL` implies. `ShellDialect::ALL`/`as_str`/`parse` were
+      written here and then removed: they exist only to serve the recipe-text
+      filters' `dialect` keyword argument, whose consumer arrives in EP-M4, and
+      no attribute could mark them dormant without lying in one profile —
+      `--all-targets` (the profile the gates use) compiles the unit tests that
+      call them, so a `dead_code` *expectation* there is unfulfilled and warns,
+      while the same expectation in the lib-only profile is fulfilled. The trio
+      therefore lands with its consumer. `OBL-DIALECT-TOTAL`'s artefact is
+      consequently `src/shell_word.rs`'s test module **as EP-M4 leaves it**; the
+      test shipped here covers only the `RecipeShell` → `ShellDialect` half,
+      which is the half EP-M3 makes true. The error-text enumeration half of
+      that obligation cannot exist before the filter that renders it.
+
+  Two plan defects surfaced while discharging the Green step. First, the
+  milestone requires `StdlibConfig::with_recipe_shell` (lines 1878, 1890,
+  1901) while `Surprises and discoveries` says EP-M4 adds the `dialect`
+  field (line 2572) — the two cannot both hold. Resolved in favour of the
+  milestone text, because EP-M4's own Red step *uses* the builder at line 1931
+  and a Red step cannot use an API the Green step has not yet added. Second,
+  `src/stdlib/config/mod.rs` was already at 383 lines against AGENTS.md's
+  400-line cap, and the field plus builder pushed it to 405, so the
+  recipe-shell builder and its accessor went into a new sibling
+  `src/stdlib/config/recipe_shell.rs` — the same clustering `which.rs` and
+  `ambient.rs` already use, and the same remedy the plan's own line 2572
+  prescribes. The accessor is `#[cfg(test)]` until EP-M4 supplies its caller: a
+  `pub(crate)` item with no reader is dead code, and neither `allow` nor
+  `expect` marks it dormant truthfully, since the new tests make an `expect`
+  unfulfilled in the `--all-targets` profile the gates run while the lib-only
+  profile fulfils it. The `pub` builder needs no such treatment — `pub` items
+  are never dead. EP-M4 removes the gate with the caller.
 - [ ] EP-M4 `shell_quote` and `shell_join`.
 - [ ] EP-M5 documentation, ADR-027, roadmap tick.
 
 ## Surprises & discoveries
+
+- Observation: **`shell-quote`'s `Sh` encoder is a *suffix*-quoting encoder,
+  not a canonically enclosing one.** It leaves the safe prefix bare and quotes
+  only the remainder: `a b` → `a' b'`, `it's` → `it\'s`, `a\tb` → `a'<TAB>b'`,
+  `a\b` → `a'\b'`. Evidence: measured through the real dependency — the
+  workspace pins `shell-quote 0.7.2` with
+  `default-features = false, features = ["sh"]` (`Cargo.toml:138`), and a
+  scratch crate at that exact version and feature set printed the table;
+  `/bin/sh` independently decodes `a' b'` back to `a b` and `it\'s` back to
+  `it's`. Impact: EP-M3's unit table was first written with *invented*
+  expectations (`'a b'`, `'it'\''s'`) taken from a different major version of
+  the crate probed with default features, and two of three cases failed against
+  correct production code. The table now pins measured values and its doc
+  comment says so. The same wrong belief had also reached `quote_word`'s **doc
+  comment**, which claimed the encoder "emits the shortest form that decodes
+  back to `value` — bare where that is safe, and single-quoted otherwise";
+  prose asserting a shape nobody had measured. It now describes suffix-quoting
+  and names round-tripping as the contract. The general trap: the obligation is
+  round-tripping (`OBL-SH-ROUNDTRIP` says exactly that), not a canonical form,
+  so any test asserting a specific *shape* must be measured rather than derived
+  — and a probe must match the dependency's version **and** feature flags,
+  because `shell-quote` 0.6 with defaults emits `'it\047s'` while 0.7.2 with
+  `features = ["sh"]` emits `it\'s`. Confidence: verified by execution, both
+  directions.
+
+- Observation: **the `no_expect_outside_tests` rule bit a third time, in the
+  file this milestone added, while both earlier fixes were still in the plan.**
+  `src/stdlib/config/recipe_shell.rs`'s test helper `config()` unwrapped two
+  `Result`s, and Whitaker's lint keys off the nearest enclosing function — a
+  `#[cfg(test)]` module's non-`#[test]` helper is not test code, exactly as the
+  entry above records for `src/manifest/tests/env_function.rs`. Evidence: the
+  first-ever completed `make lint-whitaker` run on this branch, at
+  `src/stdlib/config/recipe_shell.rs:76,78`, reporting "The call originates
+  within function `config` which is not recognised as a test." Impact: this is
+  the most instructive failure of the milestone, because the rule was *already
+  written down twice in this very document* — once for EP-M1 and once in the
+  observation above — and the new code still repeated it. A recorded lesson
+  does not prevent a recurrence; only a running gate does, and `lint-whitaker`
+  had never once executed on this branch because `lint-clippy` aborted
+  `make lint` ahead of it on both prior runs. The fix follows the established
+  shape: `config()` now returns `anyhow::Result<StdlibConfig>` via
+  `StdlibConfig::from_current_dir()` — the same constructor `config_tests.rs`
+  uses — and each `#[test]` unwraps, so the `expect` sits where the lint
+  recognises it. Confidence: verified by `make lint-whitaker` exiting 0.
+
+- Observation: **`make fmt` is not sufficient to make an edited execplan pass
+  `markdownlint`; MD046 needs a structural fix, and `mdtablefix` can *create*
+  an MD013 violation while clearing others.** Three distinct tools act on this
+  one file and they do not agree. `mdtablefix --wrap` refills prose to its own
+  width, so a hand-wrapped line is not stable; and a wrapped paragraph inside a
+  list item is read by `markdownlint` as an *indented code block* (MD046) when
+  it sits at the same 6-space indent as its neighbours, because only the first
+  line of a paragraph may be a lazy continuation of the list item. Re-indenting
+  that paragraph from 6 spaces to 2 clears MD046. Evidence: bisected against
+  the pinned `markdownlint-cli2 v0.22.1` — `head -2429` plus a 6-space
+  paragraph reproduces MD046, the same input at 2 spaces does not, and neither
+  fires when the list item is shorter or when the paragraph follows a blank
+  line directly after the bullet. Impact: the previous seven-gate run reported
+  MD046 at `docs/execplans/…md:2430` and MD013 at `:2483`; both survived a
+  `make fmt` because `make fmt` runs `mdtablefix` (which re-wraps) but not
+  `markdownlint --fix` for a rule it cannot fix positionally, and the MD013
+  line *moved and grew* (81 → 84) once `mdtablefix` reflowed the paragraph
+  around it. Fixing MD013 therefore required changing the prose (splitting a
+  long code span into two shorter ones), not re-wrapping it — a positional fix
+  would be undone by the next `mdtablefix` run. Confidence: verified by
+  bisection against the pinned linter.
+
+- Observation: **`typos.toml` is regenerated from shared, gitignored state that
+  this worktree does not own, so restoring it is futile.** `make spelling`
+  rewrote the file on every run of this session — +14 ignore patterns, all of
+  which come from `.typos-oxendict-base.toml` (untracked, gitignored, shared
+  across worktrees) rather than from this branch: 13 of the 14 match nothing in
+  this tree, and the one that does (`currentColor`) is pre-existing in
+  `src/graph_view/render_html/style.rs`. Evidence: `git restore -- typos.toml`
+  followed by a single `make spelling` re-added exactly the same 14 lines, and
+  the base file's mtime predates the run. Impact: the earlier decision to
+  restore the file after each gate — made to avoid importing unrelated lines
+  into an EP-M3 commit — does not hold, because the next gate reproduces them;
+  and `AGENTS.md` says the file is regenerated on every run and never drift
+  checked in CI. The file is therefore left regenerated and is kept out of the
+  milestone commit rather than being fought. Confidence: verified by the
+  restore-and-rerun experiment.
+
+- Observation: **an edit that replaced a doc comment left an orphaned fragment
+  that no gate would have caught.** Reworking `shell_word.rs` to drop the
+  deferred `ShellDialect` helper methods replaced the block *between* the
+  `is_recipe_admissible` doc comment and the function, and took the doc's
+  opening summary line with it — leaving a bare `///` followed by "Newline,
+  carriage return, and NUL cannot: …", a sentence with no antecedent. Evidence:
+  the file state at `cargo fmt` time; `rustfmt`, `clippy`, and `cargo doc` all
+  accept an orphaned `///` fragment, and `missing_docs` is satisfied by the
+  *presence* of a doc comment regardless of whether it parses as prose. Impact:
+  EP-M3's own deliverable included a summary-less public-ish predicate whose
+  docs read as a non-sequitur, and it survived a full seven-gate run and a
+  CodeRabbit pass. The lesson is that comment-adjacent deletions need a read of
+  the *resulting* comment, not a diff review of the removed lines. Confidence:
+  verified by reading the file.
+
+- Observation: **`src/stdlib/config/mod.rs` had less headroom than the plan
+  recorded, and the 400-line cap forced a module split.** The plan's own
+  measurement note — the observation in this section beginning
+  "`src/manifest/render.rs` is now **exactly 400 lines**" — recorded 383 lines
+  at `0ba6672f` and warned to re-measure rather than trust the count.
+  Re-measuring at EP-M3 gave the same 383, and the `dialect` field plus
+  `with_recipe_shell` builder pushed it to 405 — over AGENTS.md's hard cap.
+  Evidence: `wc -l src/stdlib/config/mod.rs` before and after. Impact: the
+  recipe-shell concern moved to a new sibling
+  `src/stdlib/config/recipe_shell.rs`, following the clustering `which.rs` and
+  `ambient.rs` already establish; `mod.rs` returned to 393. The cap applies to
+  every source file including tests, so this was not optional. Confidence:
+  verified by `wc -l` and a passing `RUSTFLAGS="-D warnings" cargo check`.
 
 - Observation: **D4's `is_undefined` arm is unreachable, so the shipped
   `env_default_from_kwargs` is a two-arm match, not the three-arm sketch.**
@@ -2683,6 +2863,56 @@ To be filled during implementation. Required entries:
    are not yet run.
 2. The name of the snapshot that failed during the OBL-NINJA-STABLE
    non-vacuity check, and the transcript showing it passing again after revert.
+
+   **Entry 2 — OBL-NINJA-STABLE non-vacuity (2026-09-19, EP-M3).** Baseline
+   first: `cargo nextest run --all-features --test ninja_snapshot_tests` →
+   `7 tests run: 7 passed, 0 skipped`. The break replaced `quote_word`'s `Sh`
+   arm with `format!("\"{value}\"").into_bytes()` — a double-quoted word where
+   the minimal quoter emits a single-quoted one, the exact defect the plan's
+   method names. Five of the seven snapshots failed; the first, and the name
+   this entry exists to record — `7 tests run: 3 passed, 4 failed, 0 skipped`:
+
+   ```text
+   FAIL [   0.136s] netsuke-build::ninja_snapshot_tests conditional_manifest_ninja_snapshot
+       Snapshot file: tests/snapshots/ninja/ninja_snapshot_tests__conditional_manifest_ninja.snap
+       Source: tests/ninja_snapshot_tests.rs:141
+   snapshot assertion for 'conditional_manifest_ninja' failed in line 141
+   ```
+
+   The other three failures were `implicit_deps_manifest_ninja` (line 264),
+   `command_available_manifest_ninja` (line 197), and `touch_manifest_ninja`
+   (line 69). The three that passed were
+   `conditional_action_deps::conditional_action_deps_ninja_snapshot`,
+   `dependency_only_manifest_ninja_snapshot`, and
+   `multi_command_manifest_ninja_snapshot` — the last of which carries a
+   multi-entry command list and yet does not discriminate, because it never
+   reaches the encoder at all: `tests/data/multi_command.yml` declares no
+   `ins:` /`outs:` and uses no `{{ ins }}`/`{{ outs }}` placeholder, so
+   `CommandBindings::new` is handed empty slices and `quote_path` has no path
+   to quote. Its three recipe entries are the only commands in the file and all
+   three are literal shell text. That is a real limit on what this check
+   proves: it demonstrates the snapshot suite notices *a* quoting change, not
+   that it covers every quoting path. A fixture that dropped
+   `">{{ outs }}"`-style text through the four POSIX quote contexts would
+   discriminate; none of the seven does. Reverting the arm and re-running
+   returned `7 tests run: 7 passed, 0 skipped`.
+
+   **`make test-nextest`, not `cargo nextest run --all-features`, needs to be
+   the acceptance evidence** — this run selected one integration binary to keep
+   the check cheap and targeted, and the milestone's stated acceptance evidence
+   is the whole suite. The scoped run is what proves the *snapshots* respond;
+   the full gate run below proves nothing else moved.
+
+   Insta writes a `.snap.new` beside each failure. Four were produced and all
+   four were deleted before the revert run, so no rejection artefact could be
+   mistaken for a pending snapshot.
+   `git status --short src/snapshots tests/snapshots` printed nothing after the
+   revert run.
+
+   Provenance note: the break was made, observed, and reverted in this
+   worktree, and the transcript above is quoted from
+   `/tmp/ninja-snapshot-nonvacuity-…out`, not reconstructed.
+
 3. The transcript of each negative control failing as designed
    (naive double-quote quoter, naive `join(" ")`, naive truthiness `compact`,
    POSIX-quoted input fed to the PowerShell decoder).
@@ -2842,6 +3072,124 @@ To be filled during implementation. Required entries:
    across seven locales. As with EP-M1's four rejected translation findings,
    each rejected item is recorded so the decision is auditable rather than
    silent.
+
+   **Entry 6 (continued) — EP-M2 review pass (2026-09-19, 12:48–12:54).** Run by
+   `scrutineer` as `coderabbit review --agent`, exit 0, no rate limiting,
+   `review_completed`, 17 findings over 58 files. Raw JSONL is
+   `/tmp/coderabbit-netsuke-3-14-8-jinja-epm2.out`. The `reviewedFiles` list is
+   the proof of revision: it covers the EP-M1 and EP-M2 files
+   (`src/manifest/env_reader.rs`, `src/stdlib/collections.rs`,
+   `tests/std_filter_tests/collection_filters/compact_tests.rs`, all 35
+   catalogues, and the plan) and contains **no** EP-M3 file, confirming the
+   review ran against `d8b01bd2` and that EP-M3's edits are not yet reviewed.
+
+   Of the 17 findings, none was applied, and the reason is the same in every
+   case: **each describes a state the tree is not in.** They fall into four
+   groups.
+
+   *Rejected against a settled decision (1 finding — 11).* Finding 11 (major)
+   reads `src/stdlib/collections.rs:119` and asks that the guard accept only
+   `ValueKind::Seq` rather than `Seq | Iterable`, adding a
+   `Value::make_iterable` regression test. **The guard is correct as written
+   and the finding is declined.** Decision D8 states that `compact` and
+   `shell_join` accept "only `ValueKind::Seq` and `ValueKind::Iterable`; every
+   other kind, `Map`, `String`, `None`, and `Undefined` included, raises an
+   error naming the received kind", and EP-M4's Green step repeats that
+   acceptance verbatim. The shipped predicate is
+   `!matches!(kind, ValueKind::Seq | ValueKind::Iterable)`, which is exactly
+   the decision. Narrowing to `Seq` alone would reject the sequence-shaped
+   values minijinja hands back for some generators, which is the opposite of
+   D8's intent — D8 exists to reject *maps and strings*, not to reject
+   iterables. The reviewer's premise is a misreading of the guard's polarity,
+   not a defect in it.
+
+   *(Superseded — my first draft of this entry claimed the tree "already
+   accepts only `Seq`" and dismissed the finding as stale. That was wrong:
+   `src/stdlib/collections.rs:119` reads
+   `ValueKind::Seq | ValueKind::Iterable`, so the reviewer described the code
+   accurately. The finding is still declined, but on the grounds above — the
+   code matches a recorded decision, not because the reviewer misread the tree.
+   Recorded because the error was mine and the distinction is the whole point
+   of keeping this log.)*
+
+   *Already satisfied (4 findings — 13, 16, and the pair 12/15).* Findings 13
+   and 16 (both major) read EP-M3's conformance check — "exactly one
+   recipe-shell quoting implementation remains" — as a claim about
+   `QuoteRefExt::quoted` **call sites**, find two, and ask that the requirement
+   be tightened to "zero outside the two exemptions". The reading is the error:
+   the sentence constrains *implementations of recipe-shell quoting*, and it is
+   satisfied. There are indeed two `.quoted(` sites, both intended —
+   `src/shell_word.rs:65`, the single sanctioned encoder, and
+   `src/stdlib/command/quote.rs:100`, whose divergence is the `cmd.exe` quoting
+   the same conformance check requires to stay untouched. Note also that at
+   EP-M3 neither site carries an `#[expect]`: the `clippy.toml` entry and both
+   attributes land in EP-M4, because adding the entry in EP-M3 would
+   immediately make `quote.rs` a violation and force an edit that EP-M3's
+   conformance check forbids. Findings 12 and 15 (both major) ask that the
+   EP-M4 acceptance checklist name `tests/shell_filter_composition_tests.rs`
+   and obligations OBL-CONTEXT / OBL-JOIN-QUOTE-AGREE / OBL-KIND-GATE /
+   OBL-COMPOSITION, and that a scenario count be corrected from five to eight.
+   The checklist edit is unnecessary: those items are already named in EP-M4's
+   own Red and Acceptance-evidence steps;
+   `tests/shell_filter_composition_tests.rs` and all four obligations appear at
+   `Validation and acceptance` lines 1946-1948. The scenario count is the one
+   claim with substance, and measurement **rejects both figures**: the
+   reviewer's "eight" is wrong, but the plan's bare "five new
+   `tests/features/stdlib.feature` scenarios" is ambiguous in a way that
+   invites exactly the reviewer's error. `tests/features/stdlib.feature` today
+   has 43 scenarios, of which five contain "shell" — but those five are the
+   pre-existing `shell` *command* filter (`shell filter transforms text…`,
+   `…reports command failures`, `…enforces command output limits`,
+   `…streams large output…`, `…enforces command stream limits`), present since
+   before this plan and unrelated to `shell_quote`. The reviewer's eight is 5
+   pre-existing shell + 2 `compact` + 1, i.e. a substring count. EP-M4's
+   behavioural block lists five genuinely new `shell_quote`/`shell_join`
+   scenarios, so the plan's number is right for the intended reading; the fix
+   applied here names those five scenarios explicitly so the number can be
+   checked rather than recounted. The lesson generalizes: **a scenario count in
+   this plan must be identified by name, because "shell" matches two unrelated
+   filters.**
+
+   *False premise (finding 14, counted once in the locale group above).* The
+   Czech finding asserts a defect at "both referenced locations". There is only
+   one: `locales/cs/messages.ftl` has a single
+   `manifest.env.default_not_string` entry, and the only other match anywhere
+   is this plan's quotation of that line. A finding whose premise is a count
+   that does not hold cannot be actioned as written — and it is the second time
+   this reviewer has reported a multiplicity that the tree does not have (see
+   EP-M1's four locale findings, entry 6), which is worth watching if the
+   pattern recurs.
+
+   *Evaluator preference over a settled decision (9 findings — 3, 5, 6, 7, 8,
+   9, 14, and 2/4).* Seven are locale rewording requests — Dutch (3), Danish
+   (5), German (6), Spanish (7), Welsh (8), Greek (9), and Czech (14) — all
+   touching one message, `manifest.env.default_not_string`, and each asking for
+   a different wording. They are declined on the same two grounds the EP-M1
+   locale findings were: `docs/translators-guide.md` §7 makes leaving Netsuke's
+   own identifiers untranslated the policy — `default` is a keyword users type,
+   and it is untranslated in all 35 catalogues including the `en-US` source —
+   and the `{ $kind }`-after-participle shape is the pre-existing house idiom,
+   already used by `stdlib.collections.flatten` in the same catalogues.
+   Findings 2 and 4 ask for per-test `///` comments in
+   `tests/std_filter_tests/collection_filters/{mod,group_by_tests}.rs`; both
+   files carry module-level `//!` docs, and `compact_tests.rs` — the file EP-M2
+   actually wrote — already has per-test docs.
+
+   *Wording (3 findings — 1/17, and 10).* Findings 1 and 17 (duplicates) ask
+   that `tests/stdlib_manifest_query_tests.rs:196` parse JSON rather than
+   substring-match. Finding 10 asks that `src/manifest/env_telemetry.rs`'s
+   module doc add a validation-order clause. Both are defensible improvements
+   to pre-existing code outside EP-M2's scope; neither describes a defect. They
+   are left for a future pass rather than bundled into a milestone whose
+   conformance check fixes its scope.
+
+   Group totals: 1 (finding 11) + 4 (13, 16, 12, 15) + 9 (3, 5, 6, 7, 8, 9, 14,
+   2, 4) + 3 (1, 17, 10) = 17. Disposition: **17 findings, 0 applied, 1 real
+   plan ambiguity recorded and fixed (the scenario count in
+   `Validation and acceptance`), 1 rejected on a false premise (finding 14's
+   "both locations").** The rejection rate tracks EP-M1's and has the same
+   cause — the reviewer reasons over the plan's *described* future state and
+   over evaluator preferences, not over the tree it was given.
 
 ## Revision note
 
