@@ -34,6 +34,10 @@ _If you are upgrading: see the
   `.cargo/config.toml`; install it with `make install-build-tools`, which
   replaces `install-dev-fast`, as `check-build-tools` replaces `dev-fast-check`
   ([#733](https://github.com/leynos/netsuke/issues/733))
+- Move the unstable Rust API documentation and its code examples from the
+  users' guide to the developers' guide, so the users' guide covers only the
+  Netsukefile manifest and the command line
+  ([#804](https://github.com/leynos/netsuke/pull/804))
 - Stop logging rendered manifest values and the manifest syntax tree in verbose
   output; log bounded structural counts instead
   ([#649](https://github.com/leynos/netsuke/issues/649), [#657](https://github.com/leynos/netsuke/issues/657))

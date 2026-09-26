@@ -1,7 +1,9 @@
-//! Loads fenced examples from user-facing Markdown for executable tests.
+//! Loads fenced examples from project Markdown for executable tests.
 //!
 //! Each fence in `README.md`, `docs/users-guide.md`, and the template
-//! standard-library guide must be preceded by a `tested-example` marker.
+//! standard-library guide must be preceded by a `tested-example` marker. The
+//! developers' guide holds many illustrative fences, so only its marked fences
+//! are loaded: the Rust API snippets that mirror executable doctests.
 //! Integration and behavioural tests share this module so they exercise the
 //! published text rather than copied fixtures.
 
@@ -12,15 +14,28 @@ use tempfile::{TempDir, tempdir};
 use test_support::fs as test_fs;
 use test_support::netsuke::NetsukeRun;
 
-const DOCUMENT_PATHS: &[&str] = &[
-    "README.md",
-    "docs/users-guide.md",
-    "docs/stdlib-yaml-and-jinja-guide.md",
+const DOCUMENTS: &[(&str, FencePolicy)] = &[
+    ("README.md", FencePolicy::RequireMarkers),
+    ("docs/users-guide.md", FencePolicy::RequireMarkers),
+    (
+        "docs/stdlib-yaml-and-jinja-guide.md",
+        FencePolicy::RequireMarkers,
+    ),
+    ("docs/developers-guide.md", FencePolicy::MarkedOnly),
 ];
 const MARKER_PREFIX: &str = "<!-- tested-example: ";
 const MARKER_SUFFIX: &str = " -->";
 static EMPTY_MARKER: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| format!("{MARKER_PREFIX}{}", MARKER_SUFFIX.trim_start()));
+
+/// How a document treats a fence without a `tested-example` marker.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FencePolicy {
+    /// Reject an unmarked fence: every example in the document is tested.
+    RequireMarkers,
+    /// Skip an unmarked fence and its body: only marked fences are tested.
+    MarkedOnly,
+}
 
 #[derive(Clone, Copy)]
 struct Cursor {
@@ -53,8 +68,8 @@ pub struct DocumentedExample {
 /// a fence is unmarked or unterminated, or an identifier is duplicated.
 pub fn load_documented_examples() -> Result<Vec<DocumentedExample>> {
     let mut examples = Vec::new();
-    for path in DOCUMENT_PATHS {
-        examples.extend(load_document(path)?);
+    for &(path, policy) in DOCUMENTS {
+        examples.extend(load_document(path, policy)?);
     }
 
     let mut ids = HashSet::new();
@@ -113,16 +128,23 @@ pub fn assert_success(run: &NetsukeRun, context: &str) -> Result<()> {
     Ok(())
 }
 
-fn load_document(path: &'static str) -> Result<Vec<DocumentedExample>> {
+fn load_document(path: &'static str, policy: FencePolicy) -> Result<Vec<DocumentedExample>> {
     let repository_root = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let contents = test_fs::read_to_string(repository_root.join(path))
         .with_context(|| format!("read {path}"))?;
-    parse_document(path, &contents)
+    parse_document_with_policy(path, &contents, policy)
 }
 
-pub(crate) fn parse_document(
+/// Parse a document, treating unmarked fences according to `policy`.
+///
+/// # Errors
+///
+/// Returns an error when a marker is malformed, a fence is unterminated, an
+/// identifier is duplicated, or `policy` requires a missing marker.
+pub(crate) fn parse_document_with_policy(
     source: &'static str,
     contents: &str,
+    policy: FencePolicy,
 ) -> Result<Vec<DocumentedExample>> {
     let mut lines = contents.lines().enumerate();
     let mut examples = Vec::new();
@@ -138,6 +160,10 @@ pub(crate) fn parse_document(
             );
             ensure!(ids.insert(id), "duplicate tested-example identifier '{id}'");
             examples.push(read_marked_example(&cursor, id, &mut lines)?);
+        } else if policy == FencePolicy::MarkedOnly && line.starts_with("```") {
+            // Consume the unmarked body so a marker-like line inside it is
+            // never read as a marker.
+            read_fence_body(source, line_index, &mut lines)?;
         } else {
             reject_invalid_example_line(&cursor, line)?;
         }
