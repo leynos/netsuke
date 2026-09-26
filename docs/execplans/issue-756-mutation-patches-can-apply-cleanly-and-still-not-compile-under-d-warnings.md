@@ -1919,9 +1919,10 @@ approaches the ceiling, as `makefile_recipes.py` itself records having done.
   path the file already spelled as `SANDBOX_NAME` under `target/`. The fix
   removes the redundant constant rather than reconciling the two, so the
   directory created and the directory emptied are now built from one name.
-  Before deleting it I checked that nothing outside the file consumed it — the
-  constant was `pub(super)`, so an in-crate consumer was possible — and found
-  zero hits repo-wide; the derived path is byte-identical to the old literal.
+  Before deleting it, the file was checked for consumers outside it — the
+  constant was `pub(super)`, so an in-crate consumer was possible — and there
+  are zero hits repo-wide; the derived path is byte-identical to the old
+  literal.
 
   The second was `fail` in the oracle's runner, annotated `-> None` while its
   body ends in a raise. That is the same class of defect this branch exists to
@@ -1931,9 +1932,9 @@ approaches the ceiling, as `makefile_recipes.py` itself records having done.
   convention already (`scripts/tests/test_doc_coverage.py` uses it twice) and
   needs no new dependency, since `typing` is imported as `typ` throughout.
 
-  **The gate caught me twice on the second fix, and both times the rule was
-  right.** Widening the one-line docstring into a body gave ruff's pydocstyle
-  checks something to inspect, and `docstring-missing-exception` fired naming
+  **The gate caught the second fix twice, and both times the rule was right.**
+  Widening the one-line docstring into a body gave ruff's pydocstyle checks
+  something to inspect, and `docstring-missing-exception` fired naming
   `SystemExit` — the raise the old annotation had hidden from the checker as
   well as from callers. Adding a NumPy-style `Raises` section, matching the
   house format in `scripts/coverage_artifact_archive.py`, satisfies it. The
