@@ -8,12 +8,13 @@ proceeds.
 
 Status: DRAFT
 
-Revision 3. See `Revision note` at the foot of this document. This plan was
+Revision 4. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
-revised after two rounds of expert design review. It must not be implemented
-until it is approved and the approver has chosen an entry-gate option in
-decision D-6.
+revised after two rounds of expert design review, then rebased onto `b0e8547f`
+("Set v0.1.0-beta4 release version and status (#804)"). It must not be
+implemented until it is approved and the approver has chosen an entry-gate
+option in decision D-6.
 
 ## Purpose / big picture
 
@@ -165,10 +166,13 @@ Netsuke processes a manifest in stages (see `docs/netsuke-design.md`, Section
   callers at the planning head.
 - **Compatibility obligation.** A behaviour a later migration must preserve,
   or change deliberately with an explained rationale. Netsuke is pre-1.0
-  (`0.1.0-beta3`) and publishes to crates.io as `netsuke-build` with library
-  target `netsuke` (ADR-007, Accepted). Rust source APIs therefore carry no
-  compatibility commitment, but the project records source-breaking changes in
-  `CHANGELOG.md` as "**Breaking:**" entries (for example, the `#652` entry).
+  (`0.1.0-beta4` on `main` since #804) and publishes to crates.io as
+  `netsuke-build` with library target `netsuke` (ADR-007, Accepted). Rust
+  source APIs therefore carry no compatibility commitment, which the
+  developers' guide states outright ("Unstable Rust API for embedders": the
+  Netsukefile format and the graph export are the only committed surfaces), but
+  the project records source-breaking changes in `CHANGELOG.md` as
+  "**Breaking:**" entries (for example, the `#652` entry).
 - **Oracle.** The compiler-based site discovery described in
   `Verification plan` (OB-FWD).
 
@@ -204,9 +208,10 @@ Read these before starting, in this order:
    `docs/adr-035-semantic-compiler-boundaries.md`.
 4. `docs/rfcs/0027-executable-architecture-contract.md`, "Proposed checker".
 5. `docs/netsuke-design.md`, Sections 1.2, 3.2, 5, 6.1, and 7.
-6. `docs/developers-guide.md`, "Test suite map", "IR dependency classes",
-   "Graph view projection and renderer adapters", and "Internal support module
-   boundaries".
+6. `docs/developers-guide.md`, "Unstable Rust API for embedders" (the
+   documented, tested embedder surfaces), "Test suite map", "IR dependency
+   classes", "Graph view projection and renderer adapters", and "Internal
+   support module boundaries".
 7. `docs/documentation-style-guide.md` (tables, headings, ExecPlan status
    vocabulary) and `docs/contents.md`.
 8. For the contract test: `docs/rust-testing-with-rstest-fixtures.md`,
@@ -374,6 +379,9 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
 - [x] (2026-09-27) Closing review of revision 2; revision 3 fixes the
   oracle's trait-implementation blind spot, the Kani-only file gap, the
   empty-list flood, the vacuous empty-pin case, and site-identifier collisions.
+- [x] (2026-09-27) Rebased onto `origin/main` at `b0e8547f` (#728, #804);
+  the three plan commits replayed unchanged. Folded in #804's developers' guide
+  section "Unstable Rust API for embedders" (D-10).
 - [ ] Plan approved by the user, with a D-6 option chosen.
 - [ ] EP-M0: entry gate passed and pin declared.
 - [ ] EP-M1: contract test red, then green against a skeleton inventory.
@@ -524,6 +532,17 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   contract test. Rationale: an evergreen guide should not carry a convention
   tied to one pinned snapshot. Date/Author: 2026-09-27, planning agent, after
   review.
+- Decision D-10: treat #804's developers' guide section "Unstable Rust API
+  for embedders" as an upstream artefact. It states that every Rust API is
+  private in intent and unstable, and that the Netsukefile format and graph
+  export are the only committed surfaces; it also documents, with tested
+  snippets, embedder entry points the programme will change. The plan therefore
+  cites it in CO-4 and CO-13, adds `manifest::from_str_with_env` and
+  `manifest::process_env_reader` to A1, and signposts it. Rationale: the
+  section is the project's own statement of what compatibility means for these
+  types, and its snippets are executable, so later tasks that change those APIs
+  must update it. Date/Author: 2026-09-27, planning agent, after rebasing onto
+  `b0e8547f`.
 
 ## Outcomes & retrospective
 
@@ -661,7 +680,9 @@ Create `docs/hexagonal-hardening-inventory.md` with these sections, in order:
      Recipe, RawRecipe, StringOrList, DependencyOrder}`; `Recipe`'s
      `Deserialize`; `StringOrList`'s three `From` impls; `deserialize_actions`
      (forces `phony = true`); `NetsukeManifest::validate_recipes`;
-     `Recipe::is_dependency_only`; `manifest::from_str`; `from_path`;
+     `Recipe::is_dependency_only`; `manifest::from_str`,
+     `manifest::from_str_with_env`, and `manifest::process_env_reader`;
+     `from_path`;
      `render_manifest` and every `&mut` helper in `src/manifest/render.rs`;
      `serde_json::from_value` into `NetsukeManifest` in `src/manifest/mod.rs`;
      `help_query::manifest_for_graph_validation` (`retain` on `actions` and
@@ -1108,8 +1129,9 @@ message. CO-2 generated Ninja bytes and repeated-run determinism on both
 emission paths (`generate*` and the dyndep bundle). CO-3 action identity: the
 hash covers field declaration order (`preserve_order`), variant tag names,
 `skip_serializing_if`, and interpolated shell text; any change needs a rebuild
-rationale. CO-4 graph rendering (DOT and HTML golden snapshots) and the
-success-result JSON envelope (`schema_version` 1) for `build`, `generate`,
+rationale. CO-4 graph rendering (DOT and HTML golden snapshots; the developers'
+guide names the graph export as one of Netsuke's two committed surfaces) and
+the success-result JSON envelope (`schema_version` 1) for `build`, `generate`,
 `clean`, and `graph`; there is no JSON graph export. CO-5 diagnostics: existing
 codes, today's null codes, the JSON diagnostic schema, the `#754` excerpt
 guard, human-mode printing of the outermost context, and exit codes (1 for
@@ -1127,9 +1149,13 @@ synchronization across every `cfg(kani)` file (at planning time:
 CO-11 configuration layering precedence, keys, and `NETSUKE_*` variables through
 `ortho_config`. CO-12 the quickstart and unannotated manifests. CO-13 library
 API: pre-1.0 and published as `netsuke-build`; every changed or removed `pub`
-item gets a CHANGELOG "**Breaking:**" entry, with no shims. CO-14 canonical
-edge arena invariants from `#652`: alias identity, atomic duplicate rejection,
-and no per-output cloning.
+item gets a CHANGELOG "**Breaking:**" entry, with no shims; and a change to an
+API described in the developers' guide's "Unstable Rust API for embedders"
+section (for example `BuildGraph::insert_edge`, `manifest::from_str_with_env`,
+or the Ninja request types) updates that section and its tested `devguide-*`
+snippets registered in `tests/documentation_examples_tests.rs` in the same
+change. CO-14 canonical edge arena invariants from `#652`: alias identity,
+atomic duplicate rejection, and no per-output cloning.
 
 ## Interfaces and dependencies
 
@@ -1172,6 +1198,12 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   in; 27.3.x optional), and record the load-bound packaging-test timeout seen
   while gating the second revision. The remaining work is unchanged: approval,
   then EP-M0 to EP-M4.
+
+- Revision 4 (2026-09-27): rebased onto `b0e8547f`. Folded in #804's
+  developers' guide section "Unstable Rust API for embedders" (D-10): cited in
+  CO-4 and CO-13, signposted, and its extra manifest entry points added to A1.
+  Updated the crate version to `0.1.0-beta4`. The remaining work is unchanged:
+  approval, then EP-M0 to EP-M4.
 
 [rfc-0026]: ../rfcs/0026-hexagonal-domain-hardening.md
 [adr-035]: ../adr-035-semantic-compiler-boundaries.md
