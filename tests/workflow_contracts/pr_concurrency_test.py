@@ -267,3 +267,26 @@ def test_no_other_workflow_cancels_a_run(workflows: Workflows) -> None:
     assert not cancelling, (
         f"these workflows run on no pull request but may cancel a run: {cancelling}"
     )
+
+
+#: The release lane's concurrency, exactly. One group per tag ref keeps two
+#: releases of the same tag from running at once; ``False`` queues the newer
+#: behind the one in progress instead of abandoning a half-published release.
+RELEASE_CONCURRENCY: typ.Final = {
+    "group": "release-${{ github.ref }}",
+    "cancel-in-progress": False,
+}
+
+
+def test_the_release_lane_queues_rather_than_cancels(workflows: Workflows) -> None:
+    """``release.yml`` serializes per ref and never cancels a running release.
+
+    The clause above treats a missing ``cancel-in-progress`` as not
+    cancelling, so it passes with the release block deleted, and then two
+    pushes of one tag would publish concurrently. This pins the block itself.
+    """
+    declared = _concurrency(workflows.get("release.yml", {}))
+    assert declared == RELEASE_CONCURRENCY, (
+        f"release.yml must declare concurrency {RELEASE_CONCURRENCY!r}, "
+        f"found {declared!r}"
+    )

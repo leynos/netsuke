@@ -52,9 +52,12 @@ name: Release Binary
         value: ${{ jobs.metadata.outputs.wix_extension_version }}
 
 # A release never cancels a run in progress: a second push of the same tag
-# would otherwise abandon a half-published release. It queues instead. A
-# superseded dry run is still cancelled, because release-dry-run.yml's own
-# group cancels the whole caller run, this called workflow included.
+# would otherwise abandon a half-published release. It queues instead. The
+# queue holds one pending run (GitHub's default `queue: single`), so a third
+# push of the tag replaces the second while it waits; the newest push is the
+# one to publish, so that is wanted. A superseded dry run is still cancelled,
+# because release-dry-run.yml's own group cancels the whole caller run, this
+# called workflow included.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false

@@ -1479,11 +1479,15 @@ called jobs included.
 No other workflow cancels a run in progress. `coverage-main.yml` publishes the
 trunk's coverage, `mutation-testing.yml` serializes per ref, and `release.yml`
 queues rather than cancels, because a second push of the same tag would
-otherwise abandon a half-published release. `release.yml` cancelled until
-September 2026; that change is behavioural, and for pull requests it changes
-nothing, since the dry run's caller-level group already supersedes the older
-run. The `pull_request_target` Dependabot merge workflow is out of scope:
-cancelling a merge mid-flight is a hazard with no minutes to win.
+otherwise abandon a half-published release. The group keeps GitHub's default
+`queue: single`, so at most one run waits: a third push of the tag replaces the
+second while it is pending, and the newest push is the one that publishes.
+`queue: max` would publish every intermediate push in turn, which nothing needs.
+`release.yml` cancelled until September 2026; that change is behavioural, and
+for pull requests it changes nothing, since the dry run's caller-level group
+already supersedes the older run. The `pull_request_target` Dependabot merge
+workflow is out of scope: cancelling a merge mid-flight is a hazard with no
+minutes to win.
 
 `tests/workflow_contracts/pr_concurrency_test.py` holds the rule. It reads
 every workflow at test setup through `workflow_loading.py`, which refuses a
@@ -1509,7 +1513,10 @@ as the fallback, the run identifier ahead of the number, the block removed, the
 trigger renamed to `pull_request_target`, a duplicated block, a quoted `on`
 beside the unquoted key, the `github.workflow` prefix dropped, and the casefold
 removed from the comparison. `cancel-in-progress: true` restored on
-`release.yml` fails `test_no_other_workflow_cancels_a_run`.
+`release.yml` fails `test_no_other_workflow_cancels_a_run`. That clause reads a
+missing `cancel-in-progress` as not cancelling, so
+`test_the_release_lane_queues_rather_than_cancels` also pins `release.yml`'s
+block exactly; deleting the block fails it.
 
 ## Quality gates
 
