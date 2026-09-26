@@ -11,6 +11,7 @@ import re
 import shlex
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the cargo boundary is this package's job.
 import sys
+import typing as typ
 
 #: One `export NAME=value` line of `cargo llvm-cov show-env --export-prefix`
 #: output. This pattern only *locates* the assignment and names it; the value
@@ -69,8 +70,20 @@ def _decode_value(assignment: str) -> str:
 LLVM_COV_TARGET_DIR = "CARGO_LLVM_COV_TARGET_DIR"
 
 
-def fail(message: str) -> None:
-    """Report ``message`` on stderr and exit non-zero."""
+def fail(message: str) -> typ.NoReturn:
+    """Report ``message`` on stderr and exit non-zero.
+
+    Annotated `NoReturn` rather than `None` because the raise is unconditional:
+    a caller that reads the two as equivalent would treat the lines after a
+    `fail` call as reachable and keep a value widened that the guard was meant
+    to narrow. Measured on the pinned `ty`: with `None` the checker rejects an
+    `int | None` used after such a guard, and with `NoReturn` it accepts it.
+
+    Raises
+    ------
+    SystemExit
+        Always, with status ``1``, after naming the failure on standard error.
+    """
     print(f"::error title=Nextest anchored filters::{message}", file=sys.stderr)
     raise SystemExit(1)
 
