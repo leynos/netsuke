@@ -69,7 +69,9 @@ from whole_run_ordering import whole_run_ordering_faults
 #: changing a condition changes when it runs at all.
 #:
 #: `ci.yml` also runs on pushes, where the trunk lane covers the same
-#: ground, so its coverage step is conditional on the pull request.
+#: ground, so its coverage step is conditional on the pull request. Its
+#: nightly schedule exists for the Kani proofs alone, so the job skips on
+#: that trigger, which never reaches the pull-request step anyway.
 #: Keyed by workflow, job and step, because a job may run the coverage
 #: action twice and the steps need not carry the same condition; keying
 #: by job alone let the second overwrite the first. The entry pins a step
@@ -78,7 +80,7 @@ from whole_run_ordering import whole_run_ordering_faults
 REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str, str], tuple[object, object]]] = {
     ("ci.yml", "build-test", "Test and Measure Coverage"): (
         "github.event_name == 'pull_request'",
-        None,
+        "github.event_name != 'schedule'",
     ),
     ("coverage-main.yml", "coverage-upload", "Test and Measure Coverage"): (
         None,

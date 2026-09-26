@@ -229,6 +229,9 @@ operator, user, and contributor references are easier to find.
   Runtime annotation introspection declared unsupported for the workflow
   contract tests, with the loader gate's stale `TYPE_CHECKING` claim corrected
   and a revisit gate that reopens on a real consumer.
+- [ADR-039](adr-039-change-scoped-kani-gate.md): Change-scoped Kani proofs,
+  running the required `kani-smoke` harnesses on a pull request only when a
+  derived proof input changes, and in full on `main` and nightly.
 
 ## Proposals
 

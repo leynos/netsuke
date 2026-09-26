@@ -137,7 +137,9 @@ output and some leaf files so the long-lived structure remains visible.
 - `tests/features_unix/`: Unix-specific behavioural feature files.
 - `tests/snapshots/`: Checked-in integration-test snapshots.
 - `tools/kani/`: Kani formal-verification harness configuration and related
-  local tooling.
+  local tooling, including `proof-scope.toml`, the paths whose change runs the
+  Kani proofs on a pull request (see
+  [ADR-039](adr-039-change-scoped-kani-gate.md)).
 - `tools/mold/`: Pinned `mold` linker release version and the SHA-256 checksums
   used to verify the downloaded release artefacts.
 

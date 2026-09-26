@@ -14,8 +14,9 @@ Skipping it is only safe while three things hold, and each is asserted here:
    answer (`ready_for_review`), where no gate run would cover it.
 2. `release` still needs it, so publication cannot proceed without it.
 3. The pull request still runs the same smoke: `ci.yml` calls the Windows gate
-   unconditionally, `build-test-windows` carries no condition of its own, and
-   its smoke invocation is the release job's, token for token.
+   on every event but the nightly Kani schedule, `build-test-windows` carries
+   no condition of its own, and its smoke invocation is the release job's,
+   token for token.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -49,6 +50,12 @@ DRY_RUN_SKIP = (
     "needs.metadata.outputs.dry_run != 'true' "
     "|| github.event.action == 'ready_for_review'"
 )
+
+#: The only condition `ci.yml` may put on its Windows gate. The nightly
+#: schedule exists for the Kani proofs alone (ADR-039), and this expression is
+#: true on every other event, so every pull request still calls the gate.
+#: Compared whole, so any other condition fails.
+WINDOWS_GATE_CONDITION = "github.event_name != 'schedule'"
 
 #: The pull-request event types the dry run answers that `ci.yml` does not.
 #: The smoke must run for each of them, because no gate run covers it.
@@ -140,15 +147,16 @@ def test_publication_still_needs_the_smoke() -> None:
 def test_the_pull_request_runs_the_same_smoke() -> None:
     """Hold the pull-request gate to the smoke the dry run no longer runs.
 
-    Unconditional at both levels, and the same invocation token for token. If
-    any of these drifted, a pull request would reach its merge without the
-    smoke the dry run used to give it.
+    Called on every pull request, unconditional inside the gate, and the same
+    invocation token for token. If any of these drifted, a pull request would
+    reach its merge without the smoke the dry run used to give it.
     """
     windows_call = workflow_job(load_workflow(CI_WORKFLOW_PATH), "windows")
     condition, called = windows_call.get("if"), windows_call.get("uses")
-    # Key absence, not a null value: GitHub reads an empty `if` as false.
-    assert "if" not in windows_call, (
-        f"ci.yml must call the Windows gate on every run, got {condition!r}"
+    # Key absence, or the schedule exclusion exactly: GitHub reads an empty
+    # `if` as false, so a null value is refused like any other condition.
+    assert "if" not in windows_call or condition == WINDOWS_GATE_CONDITION, (
+        f"ci.yml must call the Windows gate on every pull request, got {condition!r}"
     )
     assert called == "./.github/workflows/ci-windows.yml", (
         f"ci.yml's windows job must call ci-windows.yml, got {called!r}"
