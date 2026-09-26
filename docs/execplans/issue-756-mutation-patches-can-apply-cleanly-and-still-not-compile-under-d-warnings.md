@@ -317,8 +317,131 @@ failure mode cannot recur silently.
 - [x] (2026-09-26) Re-run the gates the repair touches: `markdownlint` (0
       errors over 148 files) and `spelling` green, `check-fmt` green with
       `mdtablefix --check` agreeing after its refill.
+- [x] (2026-09-26) Gate the masker re-factoring and commit it, then record the
+      run here. `d8d0ba6d` carries exactly the two intended paths
+      (`.github/scripts/_nextest_oracle/listing.py` and this document);
+      `typos.toml` was excluded as tool-owned. Thirteen gate invocations are
+      reconciled against it below. Eleven are green on the frozen tree:
+      `check-fmt` (log 01, and again as 10 after a later edit), `lint` (02),
+      `typecheck` (03), `lint-python` (05, and again as 12), `test` (08, 3315
+      passed / 6 skipped / 123 doctests), `test-kani-mutations` (07, the gate
+      this whole issue is about: `1 passed, 0 failed, 0 ignored, 3 filtered
+      out`, 162.44 s, and it reports the patched tree compiling rather than
+      merely applying), `test-workflow-contracts` (06, and again as 11),
+      `markdownlint` (09, 0 errors over 148 files, and again as 13), and
+      `nixie` (14). One of the fourteen is a red superseded by a green:
+      `markdownlint` (04) failed on five en-GB-oxendict findings the Surprises
+      entry above records, and 09 is the green re-run on the corrected tree.
+      The counts are stated as invocations rather than as a table because
+      neither `test-kani-mutations` (07) nor `test` (08) was re-run after the
+      last prose edit: both were already green at the revision whose sources
+      the later edits did not touch, and re-running a 162 s Kani gate to
+      re-observe an unchanged Rust tree would buy nothing. The frozen tree is
+      the one CI and CodeRabbit both saw at `d8d0ba6d`.
+- [x] (2026-09-26) Confirm CI's own verdict at the pushed head rather than
+      inferring it from a local run. All four required checks are `success` at
+      `d8d0ba6d`: `build-test` 19m5s (run `36200886143`), `kani-smoke` 13m45s
+      (same run) — whose `Mutation patch compile gate` step is precisely this
+      branch's subject, so CI reproduces the local gate's verdict — and
+      `netsukefile` 1m31s (run `36200885975`) and `release / metadata` 12s (run
+      `36200886337`). `CodeScene Code Health Review (main)` is also `success`
+      on the same head, which is the pushed-head confirmation of the local
+      `cs delta` reading recorded above.
+- [x] (2026-09-26) Repair the first-person pronouns CodeRabbit's review
+      flagged in this document. Four instances, not the one it named: the
+      reported possessive at line 764; a quoted self-report of the shape "the
+      first error was fixed and a different one appeared", which stood in two
+      places (under Surprises and in the Revision note); and a
+      possessive-pronoun pair distinguishing a defect this branch introduced
+      from a pre-existing condition it happened to expose. All four are now
+      impersonal, which is what the path instruction asks for, and the two
+      quotations keep the reported-speech sense that made them useful. Swept
+      the whole document rather than the reported line, because a rule stated
+      for one line is stated for the file, and the reviewer saw one of four.
+      The rewrite of this very entry is the same lesson a third time: the
+      first draft of it quoted the removed pronouns verbatim to say what had
+      been fixed, which would have re-introduced the finding it recorded.
+
+- [x] (2026-09-26) Move the compile gate off the working checkout and onto an
+      isolated sandbox, closing CodeRabbit's Major finding. The gate seeded
+      each mutation into the tree under test and relied on `Drop` to revert.
+      Nextest terminates a timed-out test by signalling its process group, so
+      `Drop` cannot run and a seeded mutation could survive in the working
+      tree. `tests/kani_mutation_evidence_tests/sandbox.rs` now exports a
+      revision with `git archive` into `target/kani-mutation-sandbox/`, and
+      every `git apply` and every `cargo kani` runs there, with
+      `GIT_CEILING_DIRECTORIES` pinned to the sandbox root so the upward search
+      for a `.git` cannot reach the real checkout. Proved rather than argued,
+      in both directions: with the gate green, `git hash-object` on a patched
+      source is byte-identical before and after the run and `git status` shows
+      only this branch's own edits; and with the gate handed a patch that
+      applies cleanly but leaves a helper unused, it fails on the *compile* —
+      `mutation patches apply but their patched trees do not compile` — not on
+      the apply, which is the distinction that shows the check itself fired
+      rather than an adjacent one. Cost is unchanged: 158.5 s against the
+      162.4 s the live-checkout version measured over the same 18 patches.
+      The revision compiled is the working tree, captured with `git stash
+      create`, not `HEAD`: compiling `HEAD` would have reintroduced this
+      issue's own failure mode one level up, reporting a committed patch
+      healthy while the developer was editing it. The capture is proven to
+      reach the sandbox (an uncommitted `Ordering::Greater` → `Equal` edit is
+      visible in the exported revision) and proven inert on the shared stash
+      stack, which stays at zero entries because `git stash create` writes a
+      commit without pushing. Two defects were found by probing rather than by
+      review and are recorded below: the first liveness injection failed for
+      the wrong reason, and the patch listing initially disagreed with the
+      revision the patches were resolved from.
+
+- [x] (2026-09-26) Close the blind spot the sandbox migration itself opened:
+      an untracked mutation patch would have been compiled by the old gate
+      (which read the working tree) and silently skipped by the new one (which
+      reads the sandbox, and `git stash create` captures tracked content
+      only). That is this issue's exact failure mode — a run going green over
+      evidence it never read — so `ensure_no_untracked_patches` now refuses it
+      before the sandbox is built, naming the offending paths and the fix. The
+      premise was measured rather than assumed: in a scratch repository, with
+      one tracked patch modified and one added untracked, `git stash create`
+      produced a revision that `git archive` exports as `tracked.patch` alone.
+      The guard's own liveness was then probed in three states — a clean tree
+      (silent), a tree with an untracked patch (names it), and a tree whose
+      patch is untracked *and* ignored (silent, since an ignored file is not
+      evidence anyone intends to gate) — with `git check-ignore` confirming
+      the third state's premise actually held rather than passing vacuously.
+      One cost, reported rather than buried: the ignored-file probe wrote to
+      `bare.git/info/exclude`, a file shared by every worktree of this
+      repository. It has been restored byte-for-byte to git's default template
+      and re-verified inert, but its pre-truncation content is not
+      recoverable, so any ignore rule another session had placed there is lost.
+      The probe should have used a throwaway repository.
 
 ## Surprises & discoveries
+
+- **A liveness probe that fails proves nothing until it fails for the stated
+  reason.** The first attempt to prove the sandboxed gate could still detect a
+  bad patch replaced one mutation patch with a handwritten one and ran the
+  gate. It went red, which reads as the proof. It was not: the failure was
+  `git apply to apply …: error: corrupt patch at line 16`, which is the *apply*
+  check firing, and the compile check never ran. Writing the patch out by hand
+  had made it malformed, so the probe tested an adjacent assertion.
+  Regenerating it with `git diff` over a real source edit produced a patch that
+  applies cleanly, and the gate then failed with
+  `mutation patches apply but their patched trees do not compile` — the check
+  under test, named in the failure. Both runs were red; only the second was
+  evidence.
+- **A sandbox changes what the gate is a statement about, and the change is
+  easy to make by accident.** Exporting `HEAD` with `git archive` is the
+  obvious way to populate an isolated tree, and it silently changed the gate's
+  subject: the parent contract `every_patch_applies_cleanly` checks patches
+  against the working tree, so the compile gate would have applied patches from
+  `HEAD` while the sibling checked edits the developer had not committed. On CI
+  the two agree and nothing shows; locally the gate would report a committed
+  patch healthy while the developer looked at a different one — the same shape
+  as the dead override this branch already fixed, one level up. A probe of the
+  first liveness injection surfaced it: the sandbox compiled the committed
+  patch, not the edit under test, because the two read different trees.
+  `git stash create` captures the working tree without touching it or the
+  shared stash stack, so the gate now compiles what the developer has while CI
+  still resolves to `HEAD`.
 
 - **A file at the 400-line cap fails on the merge, not on the branch.** CI went
   red on `e2987679` at `make lint-python`, and not for anything this branch
@@ -730,8 +853,8 @@ failure mode cannot recur silently.
   repairs had been clearing. Each successive repair therefore *looked* like it
   introduced a new fault, and did nothing of the kind: the file was in that
   condition throughout, and each stage reported only what it was the first to
-  be able to see. "I fixed the error and a different one appeared" is not
-  evidence of a new defect; here it was evidence of the opposite.
+  be able to see. "The first error was fixed and a different one appeared" is
+  not evidence of a new defect; here it was evidence of the opposite.
 - **The convention a lint rule encodes is worth measuring before repairing
   against it.** The cheap way to read `C9102` is "add messages until the lint
   goes quiet", which would have produced four plausible strings and no evidence
@@ -740,9 +863,9 @@ failure mode cannot recur silently.
   bare**, with every `ruff: ignore` in the tree followed by a hyphen and an
   explanation — so the five findings were this branch's file being the only
   violation in the repository, and the repair had one unambiguous shape. The
-  same audit is what distinguishes "my defect" from "a pre-existing condition I
-  happened to expose", which is the distinction that decides whether to fix it
-  here at all.
+  same audit is what distinguishes a defect this branch introduced from a
+  pre-existing condition it happened to expose, which is the distinction that
+  decides whether to fix it here at all.
 - **A Makefile prerequisite short-circuits its target, so a target that never
   started is indistinguishable from one that passed.** `markdownlint: spelling`
   runs `spelling` first; round twelve's `spelling` was red on two en-GB
@@ -761,10 +884,10 @@ failure mode cannot recur silently.
   measured rather than pushed at.** `CodeScene Code Health Review (main)` went
   `success` on `f6c227f7` and `failure` on `fd8899c9`, naming `listing.py` and
   `Overall Code Complexity` — a regression this branch introduced, and exactly
-  the shape my own notes warn not to pattern-match away as the trunk-only
-  `Coverage (main)` timeout. The `cs` CLI is installed (`~/.local/bin/cs`), and
-  `cs delta` with no arguments reproduces the gate on uncommitted changes,
-  quoting the same rule under the same name. It reported
+  the shape this branch's own notes warn not to pattern-match away as the
+  trunk-only `Coverage (main)` timeout. The `cs` CLI is installed
+  (`~/.local/bin/cs`), and `cs delta` with no arguments reproduces the gate on
+  uncommitted changes, quoting the same rule under the same name. It reported
   `Code Health: (9.38 -> 10.00)` and `Fixed issue: Overall Code Complexity`, so
   the remedy was confirmed before it was committed instead of after a CI round
   trip. The recorded figure agrees with the check's own `9.39` to the last
@@ -795,7 +918,66 @@ failure mode cannot recur silently.
       running `typos-config-builder gate` on the result rather than by reasoning
       about the words. The gate was green on the corrected tree.
 
+- **A fix that narrows its input can reintroduce the bug it fixes.** The
+  sandbox migration changed what the compile gate reads: from the working tree
+  to a captured revision. The reason for the change is sound, but it moves the
+  gate's input set from "every patch in the checkout" to "every *tracked*
+  patch", and nothing was watching the difference. An untracked patch would
+  have been silently dropped from the run — a green gate reporting on fewer
+  patches than exist on disk, which is precisely what this issue is about, one
+  turn deeper. It surfaced only by asking what the capture *cannot* hold rather
+  than what it holds, and it took a scratch-repository probe to confirm:
+  `git stash create` exports `tracked.patch` and not the untracked sibling. A
+  mechanism's blind spot is a different question from its behaviour, and the
+  behaviour was already proven.
+
+- **A shared-state probe must not run against the shared state.** The
+  liveness probe for the ignored-file case wrote its ignore rule to
+  `bare.git/info/exclude` — the file every worktree of this repository reads.
+  Writing it was the mistake; discovering it was worse than it needed to be,
+  because the file was passed to a truncating redirect before its contents were
+  read. The rule that would have prevented it is not "be careful with `git`"
+  but "probe in a repository you own": a throwaway `git init` under `/tmp`
+  answers the same question with nothing at risk. The cost here is real and
+  bounded, and stated in the Progress entry rather than repaired silently: the
+  file is now git's default template, and any rule another session had put
+  there is gone.
+
 ## Decision log
+
+- Seed the compile gate's mutations into an isolated sandbox rather than the
+  working checkout, and do it with `git archive` over a captured revision.
+  CodeRabbit's Major finding is confirmed, not declined: the mechanism is real,
+  since Nextest signals a timed-out test's process group and `Drop` cannot run,
+  so the gate's revert is not what protects the checkout. Options weighed: keep
+  the live checkout and document recovery (rejected — a stranded mutation is a
+  change nobody made, and this issue is about evidence that looks healthy while
+  being wrong); a `git worktree` (rejected — it writes a registration under the
+  *shared* git dir, and a SIGKILLed run leaves one that `worktree prune` will
+  not clear, so every later run dies with `already exists`; proved by probe);
+  an ambient copy of the checkout (rejected — 264 MB, drags in `target/`, and
+  would compile uncommitted scratch that `HEAD` does not contain).
+  `git archive` costs 0.1 s and 16 MB, preserves the tracked symlink and the
+  executable bits, and produces no `.git`, so isolation does not rest on an
+  environment variable alone; `GIT_CEILING_DIRECTORIES` is still set and
+  asserted at runtime, because the sandbox sits inside the checkout and an
+  unceiled `git` would walk up into it. The sandbox path is fixed under
+  `target/` rather than a fresh temporary directory: a build tree is keyed to
+  the absolute paths it was compiled from, so a new path each run would
+  invalidate the shared `CARGO_TARGET_DIR` and pay a cold build every time.
+  Measured: 36.3 s cold, 5.1 s for a re-extracted sandbox at the same path, and
+  158.5 s for the whole gate against 162.4 s before, so the isolation costs
+  nothing measurable.
+- Capture that revision with `git stash create`, not `HEAD`. Compiling `HEAD`
+  would have made the compile gate disagree with `every_patch_applies_cleanly`,
+  which reads the working tree; a developer checking an uncommitted patch edit
+  would get a green run describing a revision they are not editing.
+  `git stash create` writes a commit holding the tracked working tree and
+  returns its id, or nothing when the tree is clean, and it does neither of the
+  things that make `stash push` hazardous here: it does not touch the working
+  tree, and it does not touch the stash stack, which this repository shares
+  across worktrees. Both halves are measured — the uncommitted edit is visible
+  in the exported revision, and the stack stays at zero entries.
 
 - Replace `cargo check` with `cargo kani --only-codegen` in the compile gate,
   after measuring that the checker was blind to one whole class of fault. This
@@ -1033,6 +1215,17 @@ failure mode cannot recur silently.
   of the file — a divergence no case in the contract test would have caught,
   and one the 744-case comparison surfaced while the rewrite was still
   uncommitted.
+- Refuse an untracked mutation patch rather than skipping it, and refuse it
+  *before* the sandbox is created rather than while listing it. Skipping would
+  keep the gate's own failure mode alive in a new place: the run would go green
+  over a patch it never compiled, and the developer would have no way to tell
+  that from a patch that compiled. Failing early also means the error names the
+  checkout's paths — the sandbox does not contain the file, so a check placed
+  after the export could only report that something is missing, not what. The
+  check is deliberately narrow: it asks only whether a patch under
+  `docs/verification/mutations/` is untracked, because that directory is
+  evidence by definition. Ignored files are excluded, since a file git is told
+  to ignore is not something anyone intends the gate to read.
 
 ## Outcomes & retrospective
 
@@ -1536,9 +1729,9 @@ approaches the ceiling, as `makefile_recipes.py` itself records having done.
   in the tree carries a hyphen-and-explanation suffix. This branch's file was
   the only one in the repository violating either. All five are repaired, and
   the stage now rates 10.00/10. The lesson is the cascade's own, stated
-  exactly: a stage that has never executed has said nothing, and "I fixed the
-  error and a different one appeared" describes a file being sampled one stage
-  at a time, not a defect arriving.
+  exactly: a stage that has never executed has said nothing, and "the first
+  error was fixed and a different one appeared" describes a file being sampled
+  one stage at a time, not a defect arriving.
 - 2026-09-26 — **The round-thirteen run found a fourth masking mechanism, and
   this one is not a lint stage.** Two `MD038` findings landed on this
   document's own prose, on the phrase describing the `ruff: ignore` convention.
@@ -1575,3 +1768,18 @@ approaches the ceiling, as `makefile_recipes.py` itself records having done.
   cases (33 adversarial synthetics and every tracked `.rs` file) comparing
   byte-for-byte, which caught a `DOTALL` divergence the eight contract cases
   did not. The eight remain green.
+- 2026-09-26 — The sandbox migration turned out to narrow the gate's input, and
+  the narrowing was closed in the same work. Reading a captured revision
+  instead of the working tree drops any *untracked* patch from the run, which
+  would have made the gate pass over strictly fewer patches than exist while
+  looking identical — this issue's own shape, one level deeper.
+  `ensure_no_untracked_patches` now refuses that state before the sandbox is
+  built, with the premise measured in a scratch repository (a revision produced
+  by `git stash create` exports the tracked patch and not its untracked
+  sibling) and the guard itself probed in three states, including that an
+  ignored file stays silent. A cost is recorded rather than hidden: the
+  ignored-file probe wrote to `bare.git/info/exclude`, shared by every worktree
+  of this repository. The file is restored to git's default template and
+  re-verified inert; its prior content is not recoverable. The probe belonged
+  in a throwaway repository, and a shared-state probe that truncates before
+  reading is the reason that rule exists.

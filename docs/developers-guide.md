@@ -3212,14 +3212,37 @@ A fourth check is gated, because it costs one Kani codegen per patch:
 `compile_guard::every_patched_tree_compiles_under_denied_warnings` applies each
 patch, compiles the patched tree under `-D warnings`, and reverts it through a
 fallible `revert()` whose failure is aggregated and reported, so a failed
-reverse cannot pass quietly as a green run with a mutation still in the working
-tree. A `Drop` guard remains as the unwind fallback for an assertion failure
-mid-patch. Run it with `make test-kani-mutations`, which drives nextest with
+reverse cannot pass quietly as a green run with a mutation still applied. A
+`Drop` guard remains as the unwind fallback for an assertion failure mid-patch.
+Run it with `make test-kani-mutations`, which drives nextest with
 `--run-ignored ignored-only`; `kani-smoke` runs the same target on every pull
 request. Applying cleanly is not enough on its own: `make kani-full` denies
 warnings, so a patch that seeds its fault by leaving a binding or helper unused
 is a hard compile error, `cargo kani` never reaches the harness, and the patch
 contributes no evidence while still looking healthy to `git apply --check`.
+
+The tree it patches is not the checkout it runs in. `sandbox.rs` exports the
+current revision with `git archive` into `target/kani-mutation-sandbox/`, and
+both the `git apply` and the `cargo kani` run there. That is what makes the
+revert a tidiness step rather than a safety one: nextest terminates a timed-out
+test by signalling its process group, so `Drop` cannot run, and a mutation
+seeded into the working checkout would survive the run as a change nobody made.
+An isolated copy is simply discarded, so termination cannot leave one behind.
+`GIT_CEILING_DIRECTORIES` is pinned to the sandbox root, because the sandbox
+sits inside the checkout and an unceiled `git` would walk up into the real
+repository; the gate asserts that the sandbox resolves no repository before it
+applies anything. The revision is the working tree captured with
+`git stash create`, not `HEAD`, so an uncommitted patch edit is what gets
+compiled — compiling `HEAD` would report a committed patch healthy while the
+developer was editing it, the same shape as the dead override below. On CI the
+tree is clean and the capture resolves to `HEAD`.
+
+One consequence of reading a captured revision rather than the working tree: a
+patch that is untracked cannot be compiled, because the capture holds tracked
+content only. The gate refuses that state rather than ignoring it, so `git add`
+a new patch before running `make test-kani-mutations`. A patch that is both
+untracked and ignored is not reported — an ignored file is not evidence the
+gate was asked to read.
 
 The gate compiles through the Kani frontend (`cargo kani --only-codegen`)
 rather than `cargo check`, and it runs in `kani-smoke` rather than
