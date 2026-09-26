@@ -1644,9 +1644,9 @@ approaches the ceiling, as `makefile_recipes.py` itself records having done.
   contribution to zero rather than by dropping the entry that mattered, and
   verified with the repository's own pylint wrapper over a real merge tree
   (10.00/10 across every `.py` file this branch touches), liveness-checked at
-  1. Two probe traps are recorded under `Surprises & discoveries`, of which
-  `git write-tree` writing the *index* is the one that nearly produced a false
-  confirmation.
+  404 lines. Two probe traps are recorded under `Surprises & discoveries`, of
+  which `git write-tree` writing the *index* is the one that nearly produced a
+  false confirmation.
 - 2026-09-25 — A correction worth keeping because of its shape rather than its
   size: the four-line comment removed to reclaim the cap margin was described
   here and in the pull request as restating the docstring above it. It did not.
@@ -1806,3 +1806,38 @@ approaches the ceiling, as `makefile_recipes.py` itself records having done.
   real transient state and then read a forecast out of it, presenting the
   forecast as an observation. A claim about the present that a future event can
   overturn should say when it was made and what would falsify it.
+- 2026-09-26 — A `coderabbit review --agent` pass was run against `ebd70e4e`
+  and returned seven findings, all `minor` or `trivial`, none `major`. Every
+  premise was checked before it was acted on and all seven were real, spread
+  over five sites, and `git diff` confirmed four of the five files were this
+  branch's own — so this was not inherited drift. Two sites were introduced by
+  this branch's own earlier commits (`fd8899c9` and `c6363342`), which is worth
+  recording plainly: the gate findings had been cleared round after round while
+  these sat inside the reviewed set.
+
+  One finding was **declined as stated and fixed another way**, and the reason
+  matters more than the fix. The reviewer's remedy for `patch_paths` was to
+  "apply the same filter here" — skip anything without a `.patch` suffix. That
+  would have made the gate green over fewer patches than the directory holds,
+  which is this issue's exact failure mode one turn deeper: silent shrinkage
+  rather than silent success. The sibling contract `patch_stems` already had
+  the right shape, refusing a stray by name, so the fix mirrors it and the
+  message names the offending path.
+
+  Two further lessons. First, `shlex.split` had to be applied to the whole
+  `NAME=value` word and not to the captured value: the fragment `\'` is
+  unterminated once the surrounding quotes are stripped, so the obvious
+  spelling of the fix raises on exactly the input it was written for. Verified
+  against the real shell across six shapes, including the apostrophe case and
+  the live `show-env` output. Second, a fix can be correct and still wrong in
+  shape — `shlex.split` also needed to refuse an unquoted value containing
+  whitespace by name, because truncating at the first space would export a
+  plausible-looking wrong path, the same class of fault as the escaping bug.
+
+  The `404` figure restored to the entry above was eaten by
+  `mdtablefix --renumber` because it began a wrapped continuation line, where
+  the pass reads a numeral followed by a period as an ordered-list marker and
+  renumbers it. The lost content was a measurement rather than a list number.
+  The repair keeps the numeral mid-line, which is where the pass cannot read it
+  as a marker; `make check-fmt` is what proves the repair holds, since it runs
+  the same pass that caused the damage.

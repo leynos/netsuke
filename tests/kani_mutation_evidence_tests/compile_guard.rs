@@ -232,6 +232,11 @@ fn compile_patched_tree(sandbox: &Sandbox, target_dir: &Utf8Path) -> Result<Opti
 /// evidence on disk. [`ensure_no_untracked_patches`] rejects that state before
 /// this runs, so the only patches that can be missing here are ones that do
 /// not exist.
+///
+/// A non-`.patch` entry is refused rather than skipped, matching the sibling
+/// contract's `patch_stems`. Skipping would leave this gate green over fewer
+/// patches than the directory holds — this issue's own failure mode, one turn
+/// deeper — so the directory is kept restricted to mutation evidence instead.
 fn patch_paths(sandbox: &Sandbox) -> Result<Vec<Utf8PathBuf>> {
     let mutations = Dir::open_ambient_dir(sandbox.tree().join(MUTATIONS_DIR), ambient_authority())
         .with_context(|| format!("open {MUTATIONS_DIR} in the sandbox"))?;
@@ -242,7 +247,14 @@ fn patch_paths(sandbox: &Sandbox) -> Result<Vec<Utf8PathBuf>> {
     {
         let entry = entry_result.context("read mutations directory entry")?;
         let name = entry.file_name().context("read mutation patch name")?;
-        paths.push(Utf8Path::new(MUTATIONS_DIR).join(name));
+        let path = Utf8Path::new(MUTATIONS_DIR).join(&name);
+        ensure!(
+            Utf8Path::new(&name).extension() == Some("patch"),
+            "{path} is not a .patch file; keep the directory restricted to \
+             mutation evidence, because every entry here is passed to \
+             `git apply` as a patch",
+        );
+        paths.push(path);
     }
     paths.sort();
     Ok(paths)
