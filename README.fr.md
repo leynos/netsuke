@@ -62,7 +62,7 @@ Netsuke nécessite actuellement :
 
 ### Installation
 
-La dernière préversion publiée est Netsuke v0.1.0-beta3, disponible sur
+La dernière préversion publiée est Netsuke v0.1.0-beta4, disponible sur
 crates.io. Lorsque
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) est
 disponible, préférez-le : il récupère un binaire de version prêt à l'emploi et
@@ -82,7 +82,7 @@ cargo +nightly-2026-08-23 install netsuke-build
 ```
 
 Des installateurs prêts à l'emploi sont disponibles depuis la version GitHub
-[v0.1.0-beta3](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3) :
+[v0.1.0-beta4](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta4) :
 
 | Plateforme | Architectures                       | Paquets                         |
 | ---------- | ----------------------------------- | ------------------------------- |
@@ -96,7 +96,7 @@ l'utilisation de l'installateur macOS ou Windows. Le MSI Windows s'installe dans
 `C:\Program Files\netsuke` et ne met pas à jour `PATH`. Des fichiers de somme
 de contrôle SHA-256 accompagnent les binaires autonomes ainsi que les fichiers
 d'aide et de licence intégrés. Les paquets d'installation n'ont pas de fichiers
-de somme de contrôle associés dans la v0.1.0-beta3. Consultez le
+de somme de contrôle associés dans la v0.1.0-beta4. Consultez le
 [guide de l'utilisateur](docs/users-guide.md#install-netsuke) pour les
 commandes spécifiques à chaque plateforme et la configuration sous Windows.
 
@@ -141,7 +141,7 @@ ______________________________________________________________________
 
 ## Ce qui fonctionne aujourd'hui
 
-Le compilateur de système de build principal de Netsuke v0.1.0-beta3 fournit :
+Le compilateur de système de build principal de Netsuke v0.1.0-beta4 fournit :
 
 - l'analyse de manifestes YAML 1.2 avec validation des clés en double et du
   schéma ;
@@ -163,12 +163,15 @@ Le compilateur de système de build principal de Netsuke v0.1.0-beta3 fournit :
 - une configuration en couches, une sortie localisée, des préférences
   d'accessibilité, un suivi de progression, la mesure du temps par étape, et
   des résultats ou diagnostics JSON versionnés ;
+- une évaluation bornée des manifestes, des politiques d'accès au réseau et à
+  `env()` contrôlées par l'opérateur, et des filtres de lecture de fichiers
+  bornés ;
 - une couverture de tests unitaires, comportementaux, d'intégration, par
   propriétés, par snapshot, et une couverture initiale de vérification Kani.
 
-La version beta3 prend également en charge les agrégats d'actions et de cibles
-ne comportant que des dépendances : les nœuds dotés d'une liste `deps` non vide
-peuvent omettre une recette.
+Depuis la beta3, Netsuke prend également en charge les agrégats d'actions et de
+cibles ne comportant que des dépendances : les nœuds dotés d'une liste `deps`
+non vide peuvent omettre une recette.
 
 ______________________________________________________________________
 
@@ -299,7 +302,7 @@ ______________________________________________________________________
 
 ## État de la version et du développement
 
-La version v0.1.0-beta3 constitue un aperçu utile pour les premiers
+La version v0.1.0-beta4 constitue un aperçu utile pour les premiers
 utilisateurs, et non une déclaration selon laquelle Netsuke serait achevé ou
 que chaque interface serait stable. Le pipeline du compilateur et le flux de
 build local ordinaire sont substantiels ; l'interface en ligne de commande, le
@@ -309,7 +312,7 @@ vocabulaire de configuration et le modèle de recette avancé restent pré-stabl
 que certains noms de commandes, options, schémas de diagnostic et détails de
 manifeste changent avant la version 1.0.
 
-Les limitations suivantes s'appliquent à la beta3.
+Les limitations suivantes s'appliquent à la beta4.
 
 Les limitations connues comprennent :
 
@@ -333,6 +336,10 @@ La version beta3 corrige la limitation du dollar shell de la beta2 grâce à un
 ordinaires peuvent être écrites normalement. Les manifestes beta2 utilisant des
 expressions littérales de dollar shell nécessitent une migration ; voir la
 [limite de sécurité du guide de l'utilisateur](docs/users-guide.md#review-the-safety-boundary).
+La beta4 applique le même traitement à `$in` et `$out` dans les recettes
+`script:`; les manifestes beta3 qui s'en servaient pour substituer des chemins
+doivent utiliser `{{ ins }}` et `{{ outs }}` à la place ; voir le
+[guide de migration](docs/v0-1-0-migration-guide.md).
 
 Consultez
 [sécurité et interpolation des commandes](#sécurité-et-interpolation-des-commandes)

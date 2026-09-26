@@ -60,7 +60,7 @@ Atualmente, o Netsuke requer:
 
 ### Instalação
 
-A versão prévia mais recente publicada é o Netsuke v0.1.0-beta3, disponível no
+A versão prévia mais recente publicada é o Netsuke v0.1.0-beta4, disponível no
 crates.io. Onde o
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) estiver
 disponível, prefira-o: ele busca um binário de release pré-compilado e evita o
@@ -80,7 +80,7 @@ cargo +nightly-2026-08-23 install netsuke-build
 ```
 
 Instaladores pré-compilados estão disponíveis na
-[release v0.1.0-beta3 do GitHub](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3):
+[release v0.1.0-beta4 do GitHub](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta4):
 
 | Plataforma | Arquiteturas                       | Pacotes                        |
 | ---------- | ---------------------------------- | ------------------------------ |
@@ -94,7 +94,7 @@ usar o instalador do macOS ou do Windows. O MSI do Windows instala em
 `C:\Program Files\netsuke` e não atualiza o `PATH`. Arquivos de checksum
 SHA-256 acompanham os binários independentes e os arquivos de ajuda e licença
 preparados. Os pacotes instaladores não têm arquivos de checksum associados na
-v0.1.0-beta3. Veja o [guia do usuário](docs/users-guide.md#install-netsuke)
+v0.1.0-beta4. Veja o [guia do usuário](docs/users-guide.md#install-netsuke)
 para comandos específicos de cada plataforma e para a configuração no Windows.
 
 Para instalar o checkout atual do código-fonte com o Cargo:
@@ -138,7 +138,7 @@ ______________________________________________________________________
 
 ## O que funciona hoje
 
-O compilador de sistema de build principal do Netsuke v0.1.0-beta3 oferece:
+O compilador de sistema de build principal do Netsuke v0.1.0-beta4 oferece:
 
 - análise de manifestos YAML 1.2 com validação de chaves duplicadas e de
   esquema;
@@ -159,10 +159,12 @@ O compilador de sistema de build principal do Netsuke v0.1.0-beta3 oferece:
 - configuração em camadas, saída localizada, preferências de acessibilidade,
   relatório de progresso, tempos de estágio e resultados ou diagnósticos JSON
   versionados;
+- avaliação limitada de manifestos, políticas de acesso à rede e a `env()`
+  controladas pelo operador e filtros de leitura de arquivos limitados;
 - cobertura de testes unitários, comportamentais, de integração, de
   propriedade, de snapshot e verificação inicial com Kani.
 
-A release beta3 também oferece suporte a agregados de ações e alvos
+Desde a beta3, o Netsuke também oferece suporte a agregados de ações e alvos
 apenas-de-dependência: nós com uma lista `deps` não vazia podem omitir uma
 receita.
 
@@ -288,7 +290,7 @@ ______________________________________________________________________
 
 ## Status da release e do desenvolvimento
 
-A release v0.1.0-beta3 é uma prévia útil para adotantes iniciais, não uma
+A release v0.1.0-beta4 é uma prévia útil para adotantes iniciais, não uma
 declaração de que o Netsuke está concluído ou de que todas as interfaces são
 estáveis. O pipeline do compilador e o fluxo de trabalho comum de build local
 já são substanciais; a interface de linha de comando, o vocabulário de
@@ -297,7 +299,7 @@ configuração e o modelo avançado de receitas permanecem pré-estáveis.
 Fixe a versão do Netsuke em automações e espere que alguns nomes de comando,
 flags, esquemas de diagnóstico e detalhes de manifesto mudem antes da 1.0.
 
-As limitações a seguir se aplicam à beta3.
+As limitações a seguir se aplicam à beta4.
 
 Limitações conhecidas incluem:
 
@@ -318,6 +320,10 @@ sensível ao Ninja, de modo que expressões de shell comuns podem ser escritas
 normalmente. Manifestos da beta2 que usam expressões literais de cifrão de
 shell exigem migração; veja a
 [fronteira de segurança do guia do usuário](docs/users-guide.md#review-the-safety-boundary).
+A beta4 aplica o mesmo tratamento a `$in` e `$out` em receitas `script:`;
+manifestos da beta3 que os usavam para substituição de caminhos devem usar
+`{{ ins }}` e `{{ outs }}` no lugar deles; veja o
+[guia de migração](docs/v0-1-0-migration-guide.md).
 
 Consulte
 [segurança e interpolação de comandos](#segurança-e-interpolação-de-comandos) e

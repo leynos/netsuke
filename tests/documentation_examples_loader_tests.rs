@@ -3,7 +3,7 @@
 pub mod documentation_examples;
 
 use anyhow::{Result, ensure};
-use documentation_examples::{manifest_workspace, parse_document};
+use documentation_examples::{FencePolicy, manifest_workspace, parse_document_with_policy};
 use proptest::prelude::*;
 use rstest::rstest;
 
@@ -37,11 +37,60 @@ fn malformed_documented_examples_are_rejected(
     #[case] contents: &str,
     #[case] expected_message: &str,
 ) -> Result<()> {
-    let error = parse_document("fixture.md", contents)
+    let error = parse_document_with_policy("fixture.md", contents, FencePolicy::RequireMarkers)
         .expect_err("malformed documented example should be rejected");
     ensure!(
         error.to_string().contains(expected_message),
         "expected '{expected_message}' in '{error}'"
+    );
+    Ok(())
+}
+
+/// A marked-only document loads its marked fences and skips the rest.
+///
+/// The developers' guide holds many illustrative fences; only the marked ones
+/// are contracts, so an unmarked fence must neither fail the load nor appear
+/// among the examples.
+#[test]
+fn marked_only_documents_skip_unmarked_fences() -> Result<()> {
+    let contents = concat!(
+        "```sh\nmake test\n```\n",
+        "<!-- tested-example: kept -->\n```rust\nlet x = 1;\n```\n",
+    );
+    let examples = parse_document_with_policy("fixture.md", contents, FencePolicy::MarkedOnly)?;
+    let ids = examples
+        .iter()
+        .map(|example| example.id.as_str())
+        .collect::<Vec<_>>();
+    ensure!(ids == ["kept"], "unexpected examples: {ids:?}");
+    Ok(())
+}
+
+/// A marker-like line inside an unmarked fence is body text, not a marker.
+///
+/// A document may quote the marker syntax in a code block, as the developers'
+/// guide does when it describes the loader; reading that line as a marker
+/// would register a phantom example.
+#[test]
+fn marked_only_documents_ignore_markers_inside_unmarked_fences() -> Result<()> {
+    let contents = "```markdown\n<!-- tested-example: quoted -->\n```\n";
+    let examples = parse_document_with_policy("fixture.md", contents, FencePolicy::MarkedOnly)?;
+    ensure!(examples.is_empty(), "unexpected examples: {examples:?}");
+    Ok(())
+}
+
+/// An unterminated unmarked fence still fails a marked-only document.
+///
+/// Skipping a fence must not hide a malformed document, which would otherwise
+/// swallow every marked example after it.
+#[test]
+fn marked_only_documents_reject_unterminated_unmarked_fences() -> Result<()> {
+    let error =
+        parse_document_with_policy("fixture.md", "```sh\nmake test\n", FencePolicy::MarkedOnly)
+            .expect_err("unterminated fence should be rejected");
+    ensure!(
+        error.to_string().contains("fence is not terminated"),
+        "unexpected error: {error}"
     );
     Ok(())
 }
@@ -73,7 +122,7 @@ proptest! {
             "<!-- tested-example: {id} -->\n```{language}\n{body}```\n"
         );
 
-        match parse_document("property.md", &document) {
+        match parse_document_with_policy("property.md", &document, FencePolicy::RequireMarkers) {
             Ok(examples) => match examples.as_slice() {
                 [example] => {
                     prop_assert_eq!(example.id.as_str(), id.as_str());
@@ -99,7 +148,7 @@ proptest! {
             ),
             id, first_body, id, second_body,
         );
-        let result = parse_document("property.md", &document);
+        let result = parse_document_with_policy("property.md", &document, FencePolicy::RequireMarkers);
 
         prop_assert!(result.is_err());
         if let Err(error) = result {
@@ -120,7 +169,7 @@ proptest! {
         let document = format!(
             "<!-- tested-example: {id} -->\n```{language}\n{body}\n"
         );
-        let result = parse_document("property.md", &document);
+        let result = parse_document_with_policy("property.md", &document, FencePolicy::RequireMarkers);
 
         prop_assert!(result.is_err());
         if let Err(error) = result {

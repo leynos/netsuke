@@ -186,6 +186,274 @@ capture helper. They assert the counter, duration sample, and completion event
 for a successful fixture query, a missing-manifest failure, and an invalid
 manifest failure classified as the non-`RunnerError` `other` category.
 
+## Unstable Rust API for embedders
+
+The [users' guide](users-guide.md) documents Netsuke's user interface: the
+Netsukefile manifest format and the command-line interface. Rust code examples
+and the Rust API surfaces below belong here instead.
+
+Netsuke is a build tool, not a library: the Netsukefile format and the graph
+export are the only surfaces it commits to, and every Rust API named in this
+section is private in intent and unstable, liable to change or disappear in any
+beta release. It is documented here for the benefit of anyone who calls it
+anyway, with that caveat understood.
+
+### Environment reader for manifest parsing
+
+`env()` does not read `std::env::var` directly. Manifest parsing goes through
+an injectable `EnvReader` seam, so callers that need deterministic `env()`
+results — test suites, and any program driving Netsuke's unstable Rust API —
+can supply their own reader instead of mutating the process environment.
+
+- `netsuke::manifest::from_str` parses a manifest using the live process
+  environment.
+- `netsuke::manifest::from_str_with_env` takes an explicit `EnvReader`,
+  letting the caller control every value `env()` returns.
+- `netsuke::manifest::process_env_reader` builds the process-backed reader
+  that `from_str` uses by default.
+
+A missing variable still fails the parse with a Jinja "undefined" error, and a
+non-Unicode value still fails with an "invalid operation" error; only the
+source of the values changes.
+
+<!-- tested-example: devguide-env-reader-snippet -->
+
+```rust
+use netsuke::manifest::{EnvReader, from_str_with_env};
+use std::sync::Arc;
+
+let reader: EnvReader = Arc::new(|_| Ok(String::from("release")));
+let yaml = concat!(
+    "netsuke_version: \"1.0.0\"\n",
+    "targets:\n",
+    "  - name: \"{{ env('PROFILE') }}\"\n",
+    "    command: echo hi\n",
+);
+let manifest = from_str_with_env(yaml, &reader).expect("parse");
+assert!(format!("{:?}", manifest.targets[0].name).contains("release"));
+```
+
+This snippet mirrors the executable doctest on `from_str_with_env` in the API
+documentation.
+
+### Ninja invocation with an explicit environment
+
+A program calling Netsuke's Rust API can invoke Ninja without touching its own
+process environment. `netsuke::runner::CommandEnv` carries child environment
+overrides as data — `inherit()` changes nothing, `with_var` and `with_path` set
+variables for the spawned command only — and the explicit request forms
+`run_ninja_with` and `run_ninja_tool_with` accept a request naming the program,
+build file, targets or tool, that environment, and a `stderr_mode: StderrMode`
+policy routing the child's standard streams: `Suppress` drains both streams
+(keeping JSON diagnostics machine-readable), while `Forward` relays them to the
+caller. The convenience wrappers `run_ninja` and `run_ninja_tool` behave
+identically with an inherited environment, deriving the policy from the CLI's
+JSON setting. Overrides are additive: variables not named are inherited from
+the calling process, and the injected `PATH` governs what commands Ninja
+launches will see. Relative program names remain valid and resolve through that
+child `PATH`; supply an absolute or otherwise resolved `program` only when
+executable selection must stay isolated from the injected `PATH`.
+
+The request itself is a named type: `netsuke::runner::NinjaBuildRequest` for a
+build and `netsuke::runner::NinjaToolRequest` for `ninja -t <tool>`. Both
+borrow their fields, so one `CommandEnv` and one `NinjaProcessOptions` can
+serve several invocations. The
+[v0.1.0 migration guide](v0-1-0-migration-guide.md) summarizes these additions
+and explains the path-type change. The `program` and `build_file` fields are
+borrowed `&Utf8Path`; `NinjaProcessOptions::working_dir` is an
+`Option<Utf8PathBuf>`.
+
+The `options: &options` field and associated `NinjaProcessOptions` shape shown
+here are beta3 additions. Published beta2 request types use `cli: &cli`
+instead, so beta2 callers must not assume this API shape is available in that
+release.
+
+<!-- tested-example: devguide-ninja-request-snippet -->
+
+```rust
+use netsuke::runner::{
+    BuildTargets, CommandEnv, NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest,
+    StderrMode, run_ninja_tool_with, run_ninja_with,
+};
+use camino::Utf8Path;
+
+let options = NinjaProcessOptions::default();
+let targets = BuildTargets::default();
+// `with_path` replaces the child's `PATH` outright, so compose the whole
+// value first. The calling process is never modified.
+let path = std::env::join_paths(["/opt/toolchain/bin", "/usr/bin"])
+    .expect("separator-free entries always join");
+let env = CommandEnv::inherit()
+    .with_var("NINJA_STATUS", "[%f/%t] ")
+    .with_path(&path);
+
+let build = NinjaBuildRequest {
+    program: Utf8Path::new("/usr/bin/ninja"),
+    options: &options,
+    build_file: Utf8Path::new("build.ninja"),
+    targets: &targets,
+    env: &env,
+    // `Suppress` in JSON diagnostics mode keeps the child's output out of
+    // the machine-readable streams; `Forward` relays it to the caller.
+    stderr_mode: StderrMode::Forward,
+};
+let clean = NinjaToolRequest {
+    program: Utf8Path::new("/usr/bin/ninja"),
+    options: &options,
+    build_file: Utf8Path::new("build.ninja"),
+    tool: "clean",
+    env: &env,
+    stderr_mode: StderrMode::Forward,
+};
+
+if std::env::var_os("NETSUKE_GUIDE_RUN").is_some() {
+    run_ninja_with(&build).expect("run ninja");
+    run_ninja_tool_with(&clean).expect("run ninja -t clean");
+}
+```
+
+The convenience wrappers `run_ninja` and `run_ninja_tool` keep their child
+environment behaviour, but their `program` and `build_file` parameters now use
+`&Utf8Path`; `run_with_ninja_program` accepts the same path type. The request
+bundles use `options: &options` instead of `cli: &cli` and gained the required
+`stderr_mode` field, so a caller that constructs `NinjaBuildRequest`/
+`NinjaToolRequest` directly must supply both. Each release records such
+additions in [`CHANGELOG.md`](../CHANGELOG.md), which is where Netsuke
+signposts Rust API changes — with no stability promise attached to them ahead
+of 1.0.
+
+### Verbose timing sink
+
+Rust callers that wrap a `StatusReporter` can send verbose timing summaries to
+an owned sink with `VerboseTimingReporter::with_writer`:
+
+The writer/completion behaviour described here is a beta3 addition. Published
+beta2 callers must not assume this timing-writer behaviour;
+`VerboseTimingReporter::new` remains the stderr-writing default.
+
+<!-- tested-example: devguide-verbose-timing-reporter -->
+
+```rust
+use netsuke::output_prefs::resolve;
+use netsuke::status::{SilentReporter, VerboseTimingReporter};
+
+let reporter = VerboseTimingReporter::with_writer(
+    Box::new(SilentReporter),
+    resolve(None),
+    Vec::<u8>::new(),
+);
+```
+
+The generic writer must implement `Write + Send` and is owned by the timing
+reporter. `VerboseTimingReporter::new` remains the default API and writes to
+`io::Stderr`. On the first completion, the wrapped reporter receives its
+completion event before the timing summary is written synchronously to the
+sink. A blocking sink therefore blocks only that completion call; later stage,
+progress, and completion events remain suppressed. Re-entrant calls observe the
+completed state, and summary lines retain their rendered order. Write errors
+are ignored, matching the existing accessible reporter contract; applications
+can observe them through the bounded timing sink telemetry emitted by their
+configured metrics and tracing backends.
+
+### Clock provider for `now()`
+
+The clock seam serves the forthcoming testing framework. It is not yet a
+user-facing feature, so the users' guide does not describe it.
+
+`now()` does not read the host clock directly. It reads through an injectable
+`ClockProvider` seam held by `StdlibConfig`, so tests and other callers can pin
+the instant instead of racing a real clock. The default remains the ambient
+host clock, so existing templates and manifests are unaffected.
+
+- `StdlibConfig::with_clock` accepts a `ClockProvider`, replacing the wall-clock
+  source that `now()` reads.
+- `fixed_clock(instant)` builds a provider that always reports `instant`.
+- `system_clock()` builds the host-backed provider that the default
+  configuration uses.
+- `ClockInstant` re-exports the provider's timestamp type, so a caller can name
+  that type without adding its own `time` dependency.
+
+Registration captures the adapter that holds the provider, and each `now()`
+call invokes it to read the instant afresh, so a provider that yields a
+different instant on each call is observed by successive `now()` evaluations.
+Readings are normalized to UTC, and an explicit `offset=` argument re-expresses
+the same instant in the requested offset rather than changing it.
+
+Manifest-query registration still refuses `now()`, so the seam does not widen
+what a manifest query may evaluate.
+
+<!-- tested-example: devguide-clock-snippet -->
+
+```rust
+use minijinja::Environment;
+use netsuke::stdlib::{self, StdlibConfig, fixed_clock};
+use time::macros::datetime;
+
+let instant = datetime!(2026-06-08 12:00:00 UTC);
+let config = StdlibConfig::from_current_dir()
+    .expect("open workspace")
+    .with_clock(fixed_clock(instant));
+
+let mut env = Environment::new();
+stdlib::register_with_config(&mut env, config).expect("register stdlib");
+let rendered = env.render_str("{{ now() }}", ()).expect("render");
+assert_eq!(rendered, "2026-06-08T12:00:00Z");
+```
+
+This snippet mirrors the executable doctest on `with_clock` in the API
+documentation.
+
+### Canonical build graph
+
+`BuildGraph` stores each logical build edge once. Every output alias, explicit
+or implicit, resolves through the graph's output index to that one edge, so a
+multi-output target is not copied once per output.
+
+Callers add edges with `BuildGraph::insert_edge`, which rejects a duplicate
+output with `IrGenError::DuplicateOutput` before mutating the graph. Callers
+read edges with `edges()` and resolve a path with `edge_id_for_output` or
+`target_for_output`.
+
+Code that previously read or wrote the graph's target map directly must move to
+those methods. Like every Rust API named here, this surface is unstable and
+carries no stability promise.
+
+### Cached configuration merge
+
+Programs using Netsuke's unstable Rust API can retain the layers from one
+discovery pass and observe the subsequent merge. Construct
+`CachedMergeInput::new(cli, matches, env, discovered)` with the parsed CLI
+values, an injected `ConfigEnvProvider`, and `DiscoveryOutcome::into_layers()`;
+then pass it to `cli::merge_with_cached_file_layers_with_observer(input)`. The
+function returns the merge result alongside bounded events; replay those events
+through `MergeObserver`, such as `TracingMergeObserver`. Another caller can
+provide its own `MergeObserver` implementation. Observers receive bounded
+`MergeEvent` values: layer application and failure states, file `path_hash` and
+layer counts, CLI override leaf keys, and validation `key`/`reason` fields.
+Configuration values and raw paths are never included. Ordinary
+`merge_with_config*` and `merge_with_cached_file_layers` calls discard their
+collected events and do not emit merge tracing.
+
+The observer-based cached discovery and merge flow described here is a beta3
+improvement. Published beta2 already provides `merge_with_cached_file_layers`,
+but not this observer-based flow.
+
+### Glob path query
+
+`manifest::glob_paths(pattern, base)` returns matching UTF-8 file paths without
+the shell-safety validation that the Jinja `glob()` helper applies. Each caller
+must validate or escape matched paths before passing them to a command sink.
+`Some(&Utf8Path)` anchors relative patterns and strips that base from results;
+absolute patterns ignore the base, while `None` resolves relative patterns
+against the process working directory.
+
+### File-read budget
+
+The `contents`, `linecount`, `hash`, and `digest` filters share an 8 MiB
+default byte budget per read. Hosts embedding Netsuke can raise or lower it with
+`StdlibConfig::with_file_max_read_bytes` before registering the standard
+library; a per-call `max_bytes` argument can only narrow that budget.
+
 ## Localization
 
 `src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.
@@ -3839,6 +4107,13 @@ immediately before its opening fence. The shared
 `tests/documentation_examples/mod.rs` loader owns this marker format and may be
 called only by documentation-focused integration or behavioural tests. It
 rejects unmarked fences, duplicate identifiers and unterminated examples.
+
+This guide is loaded under the `FencePolicy::MarkedOnly` policy instead. Its
+many illustrative fences stay unmarked and are skipped, bodies included, while
+the marked `devguide-*` Rust snippets in
+[Unstable Rust API for embedders](#unstable-rust-api-for-embedders) are loaded
+and pinned to the doctests they mirror. The users' guide carries no Rust
+examples: its interface is the Netsukefile manifest and the command line.
 
 `tests/documentation_examples_tests.rs` loads the exact fenced text, generates
 Ninja for the registered accepting manifest cases and each complete manifest
@@ -7816,8 +8091,8 @@ example `render_edges` in `src/ninja_gen/dyndep.rs`, plus `path_syntax.rs` and
 `mod.rs` — and `src/ir/cycle*` resolves dependencies through the output index.
 
 This guide is not the API reference: the unstable Rust API is recorded here for
-callers who use it anyway, and the [users' guide](users-guide.md) carries the
-caller-facing description.
+callers who use it anyway, and [Canonical build graph](#canonical-build-graph)
+carries the caller-facing description.
 
 ## IR cycle detection
 
