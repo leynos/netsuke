@@ -388,6 +388,21 @@ was at 282-295, `RM-6.8.3` at 1103-1110, `DD-4.4` at 1233-1307, `DD-4.5` at
 line number is therefore in the `0ba6672f` frame; a citation whose file has
 since grown is a pointer, not a claim, and the section heading is authoritative.
 
+Those anchors were **not** re-taken again at the `ebcedaef` rebase, and the
+distinction matters. A citation into a *reference* document — an ADR, a design
+chapter, the roadmap — is a pointer whose target the plan does not control, so
+re-taking it after upstream moves the file is the honest repair. A citation
+into a line of **this branch's own source** is a different object: it names a
+line this branch wrote, so a drift there means the branch's own commit changed
+shape and is a finding rather than housekeeping. Both `cmd_interpolate/mod.rs`
+and `ninja_gen_escape.rs` are files the branch edits, and both were re-checked
+against post-rebase `HEAD`: `validate_ninja_value` stayed at
+`src/ninja_gen_escape.rs:47`, and `quote_path` moved `138` → `137` solely
+because upstream's version of `cmd_interpolate/mod.rs` carries a three-line
+module header where the merge-base had four. That citation was corrected in
+place; the absence of any other correction is the claim that no other
+branch-owned line number moved.
+
 `ADR-026` is a new upstream artefact for this plan. It bounds the `env()` port
 that EP-M1 extends and is the governing decision for `EnvAccessPolicy`.
 
@@ -2409,7 +2424,7 @@ catalogue has the key; there is no partial state to clean up.
       case instead.
 - [x] EP-M3 shared recipe-shell quoting seam. `src/shell_word.rs` holds the
       single `quote_word` encoder, `is_recipe_admissible`, and `ShellDialect`;
-      `quote_path` in `src/ir/cmd_interpolate/mod.rs:138` is a one-line
+      `quote_path` in `src/ir/cmd_interpolate/mod.rs:137` is a one-line
       delegation; `RecipeShell::dialect()` maps the three interpreters onto the
       two dialects; `validate_ninja_value` in `src/ninja_gen_escape.rs:47`
       delegates to the shared predicate rather than carrying its own copy; the
@@ -2447,11 +2462,69 @@ catalogue has the key; there is no partial state to clean up.
   unfulfilled in the `--all-targets` profile the gates run while the lib-only
   profile fulfils it. The `pub` builder needs no such treatment — `pub` items
   are never dead. EP-M4 removes the gate with the caller.
+- [x] (2026-09-27) Branch rebased onto `origin/main` (`ebcedaef`, previously
+      `0ba6672f`), 40 commits of drift. Pre-rebase head `be2733a1` is retained
+      at `refs/backup/3-14-8-pre-rebase-20260927` and its 15 patch-ids were
+      captured before the rewrite. All 15 commits replayed; **no tree was
+      dropped**. Fourteen are byte-identical, which `git range-diff` reports
+      with `=` and a matching `git patch-id --stable` digest for each. Only
+      EP-M3 differs (`!`), because it is the one commit whose resolution has
+      content, and it differs **only** across the three keep-both regions of
+      `src/stdlib/config/mod.rs`; its per-commit `--stat` is unchanged at eight
+      files, 659 insertions, 22 deletions. `git merge-tree --write-tree` had
+      predicted exactly one conflicting path against four auto-merged ones, and
+      that is what happened. The conflict is a pure adjacent-addition collision:
+      upstream added `mod clock;`, the `time::WallClock` import, a `clock:
+      WallClock` field and its `WallClock::default()` initialiser in the same
+      three regions where EP-M3 adds `mod recipe_shell;`, the `RecipeShell` and
+      `ShellDialect` imports, a `dialect: ShellDialect` field and its
+      `RecipeShell::host_default().dialect()` initialiser. Both sides were kept
+      at every region, so the resolution is the union of two independent
+      additions and neither side's work is amended. The merged file is 397
+      lines against AGENTS.md's 400-line cap — 6 more than upstream's 391
+      because EP-M3's five lines land in a file that was already the binding
+      constraint on this milestone, and 3 lines of headroom remain. Each
+      auto-merge was read rather than trusted: upstream's four are `Arc`-reader
+      plumbing in `src/manifest/mod.rs`, a `Kwargs`-taking `env` stub in
+      `src/stdlib/register.rs`, a `time_functions` module declaration in
+      `tests/std_filter_tests.rs`, and doc-comment/vocabulary renames in
+      `src/ir/cmd_interpolate/mod.rs`; no hunk range of theirs overlaps EP-M3's,
+      and the only semantic pairing is that upstream's deletion of
+      `try_match_dollar_placeholder` leaves the `find_substitution` call EP-M3
+      depends on intact, which was confirmed by grep before continuing.
 - [ ] EP-M4 `shell_quote` and `shell_join`.
 - [ ] EP-M5 documentation, ADR-027, roadmap tick.
 
 ## Surprises & discoveries
 
+- Observation: **A rebase is lossless in proportion to how little it has to
+  resolve, and that proportion is measurable rather than assumed.** Fourteen of
+  fifteen commits replayed to identical trees; the fifteenth carried a real
+  three-region resolution and is the only one whose patch-id moved.
+  `git range-diff <old-range> <new-range>` states this directly — `=` for a
+  replay that reproduced the commit, `!` for one that did not — and pairing it
+  with `git patch-id --stable` per commit gives the same verdict from an
+  independent mechanism, so a disagreement between the two would itself be a
+  finding. Impact: the review that follows a rebase can be scoped to the
+  commits marked `!`, because the `=` commits are provably the trees that were
+  already gated. A per-commit `--stat` is the second check, not the first: it
+  is cheap and it catches a resolution that changed the *size* of a commit, but
+  it cannot see a same-size content change, which is exactly what `range-diff`
+  exists to show. Recorded because "rebasing discards your gated commit" is
+  only half the story: it discards the *guarantee*, and the range-diff is what
+  tells you how much of it has to be re-earned.
+- Observation: **`git diff <pre-rebase-sha> HEAD` is not the post-rebase
+  change report, and reads as a catastrophic one.** Comparing the pre-rebase
+  head against the rebased head diffs across two different bases, so it reports
+  every file upstream changed as though it were the rebase's doing — 2.1 MB of
+  output on this branch, listing `Cargo.lock`, the READMEs, and the workflow
+  files. Those are upstream's 40 commits arriving underneath, not any change to
+  this branch's work. Impact: nearly filed as "the rebase rewrote two hundred
+  files". The correct instruments are `git range-diff` for "did my commits
+  survive", and `git diff be2733a1..<pre-rebase-EP-M3>` — or simply the
+  per-commit `--stat` — for "what did the resolution add". Both were
+  substituted before anything was concluded; the 2.1 MB figure appears here
+  only because it is the tell for this specific mistake.
 - Observation: **`shell-quote`'s `Sh` encoder is a *suffix*-quoting encoder,
   not a canonically enclosing one.** It leaves the safe prefix bare and quotes
   only the remainder: `a b` → `a' b'`, `it's` → `it\'s`, `a\tb` → `a'<TAB>b'`,
