@@ -2321,7 +2321,7 @@ narrowly excluded because `std::fs::canonicalize` preserves the absolute
 comparison keys and cross-directory symlink behaviour that `cap_std` rejects.
 For ordinary man-page and completion generation, the build script compiles its
 inline `cli` facade: the four-file slice containing `src/cli/command.rs`,
-`src/cli/config.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`. The
+`src/cli/config/mod.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`. The
 `command.rs` module owns the Clap command schema and default-command behaviour,
 including `Cli::with_default_command()`, while runtime discovery remains
 deliberately outside the slice. The broader `netsuke::cli::discovery` module
@@ -3047,8 +3047,8 @@ When release-validation requirements or documentation paths change, update
 `cli::Cli::command()` for man-page generation and the key registry in
 `src/localization/keys.rs` for the Fluent audit. Rather than declaring
 `src/cli/mod.rs` and inheriting the whole subtree, it declares an inline `cli`
-module naming exactly four files — `src/cli/command.rs`, `src/cli/config.rs`,
-`src/cli/help.rs`, and `src/cli/validation.rs`.
+module naming exactly four files — `src/cli/command.rs`,
+`src/cli/config/mod.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`.
 
 That slice is a maintained boundary, not an accident:
 
@@ -3056,11 +3056,11 @@ That slice is a maintained boundary, not an accident:
   behaviour, including `Cli::with_default_command()`. Runtime behaviour on
   `Cli` belongs in `src/cli/preferences.rs`, and the localisation-aware parsing
   entry point belongs in `src/cli/parser/mod.rs`.
-- `src/cli/no_input.rs` owns the existing `NoInput` configuration value;
-  `src/cli/config.rs` re-exports it so the public configuration shape and the
-  build-script schema remain unchanged.
+- `src/cli/config/no_input.rs` owns the existing `NoInput` configuration value;
+  `src/cli/config/mod.rs` re-exports it so the public configuration shape and
+  the build-script schema remain unchanged.
 - `src/cli/validation.rs` holds the shared limits and error constructor that
-  `src/cli/config.rs` needs, so neither file has to reach up into
+  `src/cli/config/mod.rs` needs, so neither file has to reach up into
   `src/cli/mod.rs`.
 - `src/cli/help.rs` holds the `help` subcommand's data types, which are part of
   the Clap schema but do not need the runtime help renderer.
@@ -3073,7 +3073,7 @@ inside the build-script crate. Widening it — for example by making
 `src/cli/command.rs` depend on the merge or discovery layers — reintroduces
 unreachable items and, with them, the module-wide `#[expect(dead_code)]`
 suppressions that issue #513 removed. Those suppressions also masked genuinely
-dead code: an unused `pub` item in `src/cli/config.rs` is reported by the
+dead code: an unused `pub` item in `src/cli/config/mod.rs` is reported by the
 build-script crate but not by the library because the library exports that
 module publicly.
 
@@ -3081,11 +3081,11 @@ A dependency added outside the slice surfaces as a build-script compile error.
 Prefer moving the new code into a sibling module over widening the slice.
 
 Manifest resource-budget code remains on the runtime side of this boundary.
-`src/cli/command.rs` and the private `manifest_budget_config` submodule
-included through `src/cli/config.rs` contribute the CLI schema, defaults, and
-validation needed by the build script's generated help artefacts. `build.rs`
-directly declares only the four root files named above; the budget-config path
-is an included submodule of `config.rs`, not a fifth directly declared
+`src/cli/command.rs` and the private `config::budget` submodule included through
+`src/cli/config/mod.rs` contribute the CLI schema, defaults, and validation
+needed by the build script's generated help artefacts. `build.rs` directly
+declares only the four root files named above; the budget-config path is an
+included submodule of `config/mod.rs`, not a fifth directly declared
 build-script source. The runtime `ManifestBudgetLimits`, `ManifestBudget`, and
 manifest-loading adapters are library code and are deliberately not imported by
 `build.rs`; adding a runtime budget dependency must not widen the build

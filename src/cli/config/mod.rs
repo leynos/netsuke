@@ -10,17 +10,12 @@ use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 
-#[path = "config_validation.rs"]
-mod config_validation;
-#[path = "manifest_budget_config.rs"]
-mod manifest_budget_config;
-#[path = "no_input.rs"]
+mod budget;
 mod no_input;
+mod validation;
 pub use no_input::NoInput;
-#[path = "policy_definitions.rs"]
 pub(super) mod policy_definitions;
-use config_validation::{validate_jobs, validate_manifest_path, validate_non_interactive};
-use manifest_budget_config::{
+use budget::{
     DEFAULT_MANIFEST_EVALUATION_FUEL, DEFAULT_MANIFEST_EXPANDED_ENTRIES,
     DEFAULT_MANIFEST_FOREACH_CARDINALITY, DEFAULT_MANIFEST_FUEL, DEFAULT_MANIFEST_RENDERED_BYTES,
     DEFAULT_MANIFEST_RENDERED_VALUE_BYTES, DEFAULT_MANIFEST_SOURCE_BYTES, validate_manifest_budget,
@@ -30,6 +25,7 @@ pub(super) use policy_definitions::{
     PROGRESS_POLICY_DEFINITIONS,
 };
 use policy_definitions::{definition_for, parse_policy};
+use validation::{validate_jobs, validate_manifest_path, validate_non_interactive};
 /// Colour-output policy accepted by layered configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
@@ -343,11 +339,10 @@ fn default_manifest_path() -> Utf8PathBuf {
 
 /// Fixed reason reported when merged configuration enables interactive input.
 ///
-/// Defined here rather than in [`config_validation`] because
+/// Defined here rather than in [`validation`] because
 /// `merge_observability` maps the rejected `no_input` key to this text without
 /// depending on the validation slice.
 pub(crate) const NO_INPUT_VALIDATION_REASON: &str =
     "no_input = false is unsupported because Netsuke has no interactive mode";
 #[cfg(test)]
-#[path = "config_tests.rs"]
 mod tests;

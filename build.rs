@@ -50,15 +50,11 @@ const FALLBACK_DATE: &str = "1970-01-01";
 mod cli {
     //! The Clap schema slice of `src/cli`, mirroring `src/cli/mod.rs`.
 
-    #[path = "config.rs"]
     pub mod config;
-    #[path = "validation.rs"]
     mod validation;
 
-    #[path = "help.rs"]
     mod help;
 
-    #[path = "command.rs"]
     mod command;
 
     pub use command::Cli;
@@ -174,8 +170,11 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
 fn emit_rerun_directives() {
     // Only the modules this script actually compiles need to trigger a rerun.
     println!("cargo:rerun-if-changed=src/cli/command.rs");
-    println!("cargo:rerun-if-changed=src/cli/config.rs");
-    println!("cargo:rerun-if-changed=src/cli/manifest_budget_config.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/mod.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/validation.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/budget.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/no_input.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/policy_definitions.rs");
     println!("cargo:rerun-if-changed=src/cli/help.rs");
     println!("cargo:rerun-if-changed=src/cli/validation.rs");
     println!("cargo:rerun-if-changed=src/host/pattern.rs");

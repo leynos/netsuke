@@ -29,18 +29,21 @@ const REQUIRED_EXTERNS: &[&str] = &[
 ];
 
 /// The exact module declarations that the fixture mirrors from `build.rs`.
-const BUILD_SLICE_MODULES: &[(&str, &str)] = &[
-    ("config.rs", "pub mod config;"),
-    ("validation.rs", "mod validation;"),
-    ("help.rs", "mod help;"),
-    ("command.rs", "mod command;"),
+const BUILD_SLICE_MODULES: &[&str] = &[
+    "pub mod config;",
+    "mod validation;",
+    "mod help;",
+    "mod command;",
 ];
 
 /// The CLI source paths that the build-script facade compiles and tracks.
 const BUILD_SLICE_RERUN_PATHS: &[&str] = &[
     "src/cli/command.rs",
-    "src/cli/config.rs",
-    "src/cli/manifest_budget_config.rs",
+    "src/cli/config/mod.rs",
+    "src/cli/config/validation.rs",
+    "src/cli/config/budget.rs",
+    "src/cli/config/no_input.rs",
+    "src/cli/config/policy_definitions.rs",
     "src/cli/help.rs",
     "src/cli/validation.rs",
 ];
@@ -213,15 +216,14 @@ fn assert_fixture_matches_build_source(build_script: &str) -> io::Result<()> {
             io::Error::other("could not locate the end of build.rs's cli module slice")
         })?;
 
-    for (path, declaration) in BUILD_SLICE_MODULES {
-        let expected = format!("#[path = \"{path}\"]\n    {declaration}");
-        if !declared_slice.contains(&expected) {
+    for declaration in BUILD_SLICE_MODULES {
+        if !declared_slice.contains(declaration) {
             return Err(io::Error::other(format!(
-                "build.rs's cli slice no longer matches the UI fixture: missing {expected:?}",
+                "build.rs's cli slice no longer matches the UI fixture: missing {declaration:?}",
             )));
         }
     }
-    if declared_slice.matches("#[path = ").count() != BUILD_SLICE_MODULES.len() + 1 {
+    if declared_slice.matches("#[path = ").count() != 1 {
         return Err(io::Error::other(
             "build.rs's cli slice contains a different set of path modules than the UI fixture",
         ));
@@ -232,10 +234,8 @@ fn assert_fixture_matches_build_source(build_script: &str) -> io::Result<()> {
 #[test]
 fn fixture_contract_accepts_crlf_build_script_source() -> io::Result<()> {
     let mut build_script = String::from("#[path = \"src/cli\"]\r\nmod cli {\r\n");
-    for (path, declaration) in BUILD_SLICE_MODULES {
-        build_script.push_str("    #[path = \"");
-        build_script.push_str(path);
-        build_script.push_str("\"]\r\n    ");
+    for declaration in BUILD_SLICE_MODULES {
+        build_script.push_str("    ");
         build_script.push_str(declaration);
         build_script.push_str("\r\n");
     }

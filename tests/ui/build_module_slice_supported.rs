@@ -13,13 +13,9 @@ mod host_pattern;
 mod cli {
     //! The production CLI modules compiled by `build.rs`.
 
-    #[path = "config.rs"]
     pub mod config;
-    #[path = "validation.rs"]
     mod validation;
-    #[path = "help.rs"]
     mod help;
-    #[path = "command.rs"]
     mod command;
 
     pub use command::Cli;

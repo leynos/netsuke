@@ -1,7 +1,7 @@
 //! Canonical domain definitions for configuration policy values.
 //!
 //! This module centralizes policy spellings, variants, and descriptions without
-//! importing Clap. The CLI-only [`super::policy_values`] adapter projects these
+//! importing Clap. The CLI-only [`super::super::policy_values`] adapter projects these
 //! definitions into `PossibleValue` metadata.
 
 use super::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};

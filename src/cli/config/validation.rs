@@ -1,6 +1,6 @@
 //! Post-merge validation for the layered CLI configuration.
 //!
-//! Keeping these checks in their own module lets [`super::config`] remain
+//! Keeping these checks in their own module lets [the parent configuration module] remain
 //! within the repository's module-size boundary while the merged
 //! [`CliConfig`] still rejects unsupported values at configuration
 //! composition rather than later during runner setup.

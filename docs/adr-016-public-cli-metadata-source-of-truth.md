@@ -85,7 +85,7 @@ configuration setting.
 - Release-help composition:
   [`src/cli/release_help/mod.rs`](../src/cli/release_help/mod.rs)
 - Layered configuration metadata:
-  [`src/cli/config.rs`](../src/cli/config.rs)
+  [`src/cli/config/mod.rs`](../src/cli/config/mod.rs)
 - Selector precedence and fail-closed loading:
   [`src/cli/discovery/mod.rs`](../src/cli/discovery/mod.rs)
 - Generator metadata root:
