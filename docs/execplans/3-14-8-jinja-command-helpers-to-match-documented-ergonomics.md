@@ -2924,6 +2924,27 @@ catalogue has the key; there is no partial state to clean up.
   `build-test`. None of that is a substitute for the deterministic gates, which
   is why the fixes above are gated before any re-review is requested.
 
+- [x] (2026-09-27) The gate run at `fbbeeeb7` found one failure, in the split
+      this entry describes: a trailing blank line after the root file's final
+      `}`, rejected by `cargo fmt --all -- --check`. Fixed in `10b76e45`.
+
+  **Why it is worth recording.** `cargo check --test
+  stdlib_manifest_query_tests` passed, the six tests passed, and `make lint`
+  passed — the file was correct by every measure except the one gate that reads
+  trailing whitespace. Removing one line from the end of a file is exactly the
+  edit a line-oriented split invites, and `sed -n '1,220p'` produced it by
+  keeping the separator blank line that had followed the last block. **A file
+  split is a formatting change, not just a move**, so the formatting gate has to
+  see it; a compile-and-test check cannot.
+
+  **A second shape worth naming.** The gate logs for this run record
+  `SHA_BEFORE=fbbeeeb7` on every line but `SHA_AFTER=0ac808fa` on `lint`,
+  because the documentation-correction commit landed while the run was in
+  flight. The logs are honest — they record both — but a reader scanning only
+  `SHA_BEFORE` would attribute a `lint` result to the wrong tree. Any commit
+  made during a gate run invalidates that run's provenance, even when the delta
+  is harmless; the whole set must be re-run against the final HEAD.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
