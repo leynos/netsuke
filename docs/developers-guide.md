@@ -2410,9 +2410,11 @@ overridden for a downloaded artefact in another directory.
 The configuration in `pyproject.toml` mirrors the df12 estate policy in
 [episodic](https://github.com/leynos/episodic); only path-shaped settings are
 local. The file deliberately declares no `[project]` table, so `uv` never
-treats this Rust workspace as a Python project. The Pylint command from
-`pylint-pypy-shim` runs on CPython 3.14 so it parses every repository-owned
-source, with the message set enabled in `pyproject.toml`; the
+treats this Rust workspace as a Python project. A pinned Pylint
+(`PYLINT_VERSION`) runs through `uv tool run --managed-python` on CPython 3.14,
+the Python baseline, so it parses every repository-owned source, with the
+message set enabled in `pyproject.toml` and `syntax-error` left enabled so a
+module it cannot parse fails the lint; the
 [df12-python-lints](https://github.com/leynos/df12-python-lints) messages
 (structural pattern matching, assert messages, suppression hygiene, snapshot
 discipline, and the baseline-gated R9112/C9112 checks) need CPython 3.14 and
