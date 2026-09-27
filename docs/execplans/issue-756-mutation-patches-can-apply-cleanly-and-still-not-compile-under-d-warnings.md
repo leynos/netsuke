@@ -2230,3 +2230,43 @@ approaches the ceiling, as `makefile_recipes.py` itself records having done.
   its rules) and why the first gate report read for this batch, at the `-11`
   suffix, was two days stale and had to be discarded in favour of the `-2`
   batch actually running.
+- 2026-09-27 — After the pushed head, `main` advanced by one commit (`3b6cde60`,
+  the squash merge of `#748`), so the branch no longer sat on the base GitHub
+  would merge it into. The branch was **not** rebased a third time, and the
+  reasoning is recorded in the PR body: every checkout in `.github/workflows/`
+  is a bare `actions/checkout` with no `ref:` input, so on a `pull_request`
+  event CI takes the synthetic merge commit. That was verified rather than
+  assumed — `refs/pull/766/merge` is `e70219de`, whose tree `97db084e` is
+  byte-identical to the locally computed `git merge-tree HEAD origin/main`, and
+  `ci.yml` runs this branch's gates (`make test-kani-mutations`,
+  `make test-workflow-contracts`) on it. CI therefore already tests the
+  post-merge tree. The merge was then audited rather than trusted, by round
+  two's own lesson: no file in the merge is absent from both inputs and none is
+  missing that an input has; every target-only path is byte-identical to
+  `main`; the 11 head lines the merge drops from `docs/developers-guide.md` are
+  all incoming-side text this branch itself replaced, with all 181 lines it
+  adds present verbatim; repeat counts in the merge equal the inputs' for both
+  shared files, so the duplicate-pair defect did not recur; the incoming
+  commit's touched modules and this branch's imports are disjoint; and the
+  merged tree parses, with `test-kani-mutations:` appearing exactly once in the
+  merged `Makefile`. The PR is set to squash merge, so the branch's commit
+  shape does not survive into `main` either way — a third replay would have
+  rewritten every SHA again and invalidated the review provenance a second time
+  for no additional correctness.
+- 2026-09-27 — Closed the last unchecked Progress item. Its own body already
+  said "Fixed by `06f7b0bb`", and the fix was by then verified twice over
+  (`make test-workflow-contracts` green at `814 passed, 2 skipped, 0 failed`,
+  in both the `-2` and `-3` batches), so an unchecked box beside a claim of
+  repair was an inaccuracy in the living document rather than outstanding work.
+  The plan is now 38 checked and none outstanding. The delta was one character,
+  so it was gated in the Markdown-only scope, `make check-fmt` and
+  `make markdownlint`, both green, with the file byte-identical before and
+  after (sha256 `6acec8e9…`), proving `mdtablefix` did not rewrite it.
+- 2026-09-27 — Recorded the round-three merge audit and the two-Codex-thread
+  disposition in the PR body, and posted the resolution record to the PR with
+  the CodeRabbit and Codex threads' dispositions, each verified by reading the
+  current tree. `netsukefile` had failed on the pushed head at step 12,
+  `sccache --zero-stats`, "Timed out waiting for server startup", with every
+  build step after it skipped: runner infrastructure, not code. Confirmed
+  transient against history — eleven of the previous twelve runs of that
+  workflow passed — and re-run rather than worked around.
