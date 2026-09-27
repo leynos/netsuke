@@ -215,5 +215,4 @@ fn record_config_load_metrics(elapsed: Duration, succeeded: bool) {
 }
 
 #[cfg(test)]
-#[path = "config_load_metrics_tests.rs"]
-mod config_load_metrics_tests;
+mod tests;

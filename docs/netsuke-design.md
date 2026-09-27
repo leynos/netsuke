@@ -3329,8 +3329,8 @@ then replays the outcome's deferred diagnostics and passes the cached layers to
 merge events alongside the result, which `config_load::resolve_configuration`
 replays through `cli::TracingMergeObserver`. The ordinary query functions do
 not install a recorder or emit tracing. `src/observability.rs` owns the phase
-recorder and bounded phase/outcome vocabulary, while `src/config_load.rs` owns
-the startup-attempt series. The application installs an in-process
+recorder and bounded phase/outcome vocabulary, while `src/config_load/mod.rs`
+owns the startup-attempt series. The application installs an in-process
 `DebuggingRecorder`; it does not open a metrics listener as a side effect of a
 command invocation.
 

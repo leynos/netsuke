@@ -375,5 +375,4 @@ proptest! {
     }
 }
 
-#[path = "config_load_context_env_tests.rs"]
 mod context_env_tests;

@@ -48,7 +48,6 @@ mod startup_tracing;
 #[path = "test_tracing_capture.rs"]
 mod test_tracing_capture;
 
-#[path = "config_load.rs"]
 mod config_load;
 use startup_tracing::StartupWriter;
 

@@ -8762,7 +8762,7 @@ application-owned recorder boundary and end-of-run snapshot policy.
 
 ### Configuration-load boundary contract
 
-`ConfigurationLoadContext` in `src/config_load.rs` is the private
+`ConfigurationLoadContext` in `src/config_load/mod.rs` is the private
 startup-orchestration input bundle: parsed `cli::Cli`, parsed `ArgMatches`,
 fallback `DiagMode`, and `StartupWriter`. `resolve_configuration` owns one
 configuration-load attempt. It starts the injected clock immediately before

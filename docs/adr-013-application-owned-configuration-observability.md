@@ -109,7 +109,7 @@ may include both phase-level and startup-attempt entries.
 - Phase-level observability:
   [`src/observability.rs`](../src/observability.rs)
 - Configuration-load orchestration:
-  [`src/config_load.rs`](../src/config_load.rs), which composes
+  [`src/config_load/mod.rs`](../src/config_load/mod.rs), which composes
   `cli::resolve_json_and_layers_outcome_with_env` and
   `cli::merge_with_cached_file_layers_with_observer`, then replays its bounded
   events through `cli::TracingMergeObserver`
