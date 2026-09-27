@@ -19,7 +19,18 @@ DISPARATE_PREFIX_EXCEPTIONS: dict[tuple[str, str], tuple[frozenset[str], str]] =
 
 
 def sibling_prefix_groups(source_root: Path) -> dict[tuple[str, str], frozenset[str]]:
-    """Find directories with two or more Rust files sharing a first prefix."""
+    """Find directories with two or more Rust files sharing a first prefix.
+
+    Parameters
+    ----------
+    source_root : Path
+        Root of the Rust source tree to inspect.
+
+    Returns
+    -------
+    dict[tuple[str, str], frozenset[str]]
+        Exact sibling filenames keyed by relative directory and prefix.
+    """
     groups: dict[tuple[str, str], set[str]] = defaultdict(set)
     for source in source_root.rglob("*.rs"):
         if source.stem in IGNORED_MODULE_NAMES:
@@ -35,7 +46,18 @@ def sibling_prefix_groups(source_root: Path) -> dict[tuple[str, str], frozenset[
 
 
 def prefixed_files_beside_directory(source_root: Path) -> list[str]:
-    """Find prefixed sibling files left beside their directory module."""
+    """Find prefixed sibling files left beside their directory module.
+
+    Parameters
+    ----------
+    source_root : Path
+        Root of the Rust source tree to inspect.
+
+    Returns
+    -------
+    list[str]
+        Sorted relative paths to files beside a matching directory module.
+    """
     violations = []
     for module_root in source_root.rglob("mod.rs"):
         directory = module_root.parent
@@ -51,7 +73,21 @@ def assert_module_layout(
     source_root: Path,
     exceptions: dict[tuple[str, str], tuple[frozenset[str], str]],
 ) -> None:
-    """Reject new prefix groups, stale exceptions, and adjacent prefixed files."""
+    """Reject new prefix groups, stale exceptions, and adjacent prefixed files.
+
+    Parameters
+    ----------
+    source_root : Path
+        Root of the Rust source tree to inspect.
+    exceptions : dict[tuple[str, str], tuple[frozenset[str], str]]
+        Exact sibling filenames and rationale for each coincidental prefix.
+
+    Raises
+    ------
+    AssertionError
+        If a group lacks an exception, an exception is stale, or a prefixed
+        file remains beside its directory module.
+    """
     groups = sibling_prefix_groups(source_root)
     errors = []
     for key, filenames in sorted(groups.items()):
@@ -68,7 +104,8 @@ def assert_module_layout(
         f"prefixed sibling beside directory module: {sibling}"
         for sibling in prefixed_files_beside_directory(source_root)
     )
-    assert not errors, "\n".join(errors)
+    if errors:
+        raise AssertionError("\n".join(errors))
 
 
 def test_repository_modules_follow_directory_layout() -> None:
