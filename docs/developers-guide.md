@@ -6571,7 +6571,7 @@ module boundary follows that split. `register_env_function` in
 `manifest.env.default_not_string` diagnostic, and rejects leftover keyword
 arguments by delegating to MiniJinja's `Kwargs::assert_all_used` — all before
 any lookup happens. The closure then delegates to `env_var_with_default` in
-`src/manifest/env_reader.rs`, which owns the leaf half: it evaluates the
+`src/manifest/env/reader.rs`, which owns the leaf half: it evaluates the
 requested name against the policy before invoking `EnvReader`, reads through
 the reader, and resolves the three-way result — value, absence, or undecodable
 bytes — substituting a supplied fallback for absence and raising a fixed,
@@ -7983,8 +7983,8 @@ values and a series missing a label.
 
 ### Manifest environment-lookup telemetry
 
-`src/manifest/env_telemetry.rs` owns telemetry for the `env()` lookup boundary.
-`env_var_with_default` in `src/manifest/env_reader.rs` is the only place an
+`src/manifest/env/telemetry.rs` owns telemetry for the `env()` lookup boundary.
+`env_var_with_default` in `src/manifest/env/reader.rs` is the only place an
 `env()` call reaches: it evaluates the access policy, reads through the
 injected reader, and maps failures to Jinja errors, so it also hands each
 result to `record_env_lookup`, which returns that result unchanged and counts

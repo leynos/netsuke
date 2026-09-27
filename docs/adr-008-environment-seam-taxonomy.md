@@ -54,7 +54,7 @@ whether it is expected to grow:
    (#487).
 - **`EnvReader` `Arc` closures**, for a boundary whose registration point
    requires `Send + Sync`. The manifest `env()` Jinja helper
-   (`src/manifest/env_reader.rs`) reads through an injected `EnvReader`, a
+   (`src/manifest/env/reader.rs`) reads through an injected `EnvReader`, a
    shared `Fn(&str) -> Result<String, EnvReadError>` (a manifest-owned error
    type distinguishing an absent variable from a non-UTF-8 one, so the helper
    does not expose the process adapter's `VarError`); `minijinja` requires
@@ -186,7 +186,7 @@ resolution entirely rather than setting the variable for a child to read.
   [`src/runner/mod.rs`](../src/runner/mod.rs) is the companion injected seam
   that lets callers select the resolved Ninja executable directly, without
   going through `NETSUKE_NINJA` resolution at all
-- `EnvReader`: [`src/manifest/env_reader.rs`](../src/manifest/env_reader.rs)
+- `EnvReader`: [`src/manifest/env/reader.rs`](../src/manifest/env/reader.rs)
   (manifest `env()` Jinja helper)
 - Clock seam: [`src/stdlib/time/clock.rs`](../src/stdlib/time/clock.rs)
   (`ClockProvider`, `system_clock`, `fixed_clock`); `StdlibConfig::with_clock`

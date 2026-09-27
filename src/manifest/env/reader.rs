@@ -12,7 +12,7 @@ use crate::localization::{self, keys};
 
 use super::{
     EnvAccessPolicy,
-    env_telemetry::{self, record_env_lookup},
+    telemetry::{self, record_env_lookup},
 };
 
 /// Manifest-owned failure returned by an [`EnvReader`].
@@ -83,12 +83,12 @@ impl<'a> ManifestEnvironment<'a> {
     }
 
     /// Return the reader used by the manifest `env()` helper.
-    pub(super) const fn reader(&self) -> &'a EnvReader {
+    pub(in crate::manifest) const fn reader(&self) -> &'a EnvReader {
         self.reader
     }
 
     /// Return the access policy evaluated before each environment read.
-    pub(super) const fn access_policy(&self) -> &EnvAccessPolicy {
+    pub(in crate::manifest) const fn access_policy(&self) -> &EnvAccessPolicy {
         &self.access_policy
     }
 }
@@ -114,7 +114,7 @@ pub fn process_env_reader() -> EnvReader {
 
 /// Construct a reader that prevents template queries from disclosing host
 /// environment values.
-pub(super) fn disabled_env_reader() -> EnvReader {
+pub(in crate::manifest) fn disabled_env_reader() -> EnvReader {
     Arc::new(|_| Err(EnvReadError::NotPresent))
 }
 
@@ -132,7 +132,7 @@ pub(super) fn disabled_env_reader() -> EnvReader {
 /// tells the author which `env()` call failed.
 ///
 /// Every lookup is also counted once through
-/// [`env_telemetry::record_env_lookup`], so an operator can measure the
+/// [`telemetry::record_env_lookup`], so an operator can measure the
 /// blocked rate the access policy produces. The counter carries only the
 /// bounded outcome, never the name or the value. A substituted fallback is
 /// *not* a fifth outcome: the lookup genuinely succeeded, so it is counted as
@@ -144,7 +144,7 @@ pub(super) fn disabled_env_reader() -> EnvReader {
 /// `None`, and an `InvalidOperation` error when the value is not valid UTF-8 —
 /// the latter regardless of `fallback`, because a present-but-undecodable
 /// value is a configuration fault rather than an absence.
-pub(super) fn env_var_with_default(
+pub(in crate::manifest) fn env_var_with_default(
     name: &str,
     policy: &EnvAccessPolicy,
     fallback: Option<String>,
@@ -153,7 +153,7 @@ pub(super) fn env_var_with_default(
     if policy.evaluate(name).is_err() {
         tracing::debug!(failure_kind = "blocked", "manifest env lookup failed");
         return record_env_lookup(
-            env_telemetry::OUTCOME_BLOCKED,
+            telemetry::OUTCOME_BLOCKED,
             Err(Error::new(
                 ErrorKind::InvalidOperation,
                 localization::message(keys::MANIFEST_ENV_BLOCKED).to_string(),
@@ -162,12 +162,12 @@ pub(super) fn env_var_with_default(
     }
 
     match read_env(name) {
-        Ok(value) => record_env_lookup(env_telemetry::OUTCOME_SUCCESS, Ok(value)),
+        Ok(value) => record_env_lookup(telemetry::OUTCOME_SUCCESS, Ok(value)),
         Err(EnvReadError::NotPresent) => substitute_fallback(fallback),
         Err(EnvReadError::NotUnicode) => {
             tracing::debug!(failure_kind = "not_unicode", "manifest env lookup failed");
             record_env_lookup(
-                env_telemetry::OUTCOME_NOT_UNICODE,
+                telemetry::OUTCOME_NOT_UNICODE,
                 Err(Error::new(
                     ErrorKind::InvalidOperation,
                     localization::message(keys::MANIFEST_ENV_INVALID_UTF8).to_string(),
@@ -188,7 +188,7 @@ fn substitute_fallback(fallback: Option<String>) -> Result<String, Error> {
         || {
             tracing::debug!(failure_kind = "not_present", "manifest env lookup failed");
             record_env_lookup(
-                env_telemetry::OUTCOME_NOT_PRESENT,
+                telemetry::OUTCOME_NOT_PRESENT,
                 Err(Error::new(
                     ErrorKind::UndefinedError,
                     localization::message(keys::MANIFEST_ENV_MISSING).to_string(),
@@ -200,7 +200,7 @@ fn substitute_fallback(fallback: Option<String>) -> Result<String, Error> {
                 fallback_used = true,
                 "manifest env lookup substituted default"
             );
-            record_env_lookup(env_telemetry::OUTCOME_SUCCESS, Ok(value))
+            record_env_lookup(telemetry::OUTCOME_SUCCESS, Ok(value))
         },
     )
 }

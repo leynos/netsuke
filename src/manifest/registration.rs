@@ -8,7 +8,7 @@
 
 use super::{
     EnvAccessPolicy, EnvReader, ManifestError, ManifestName, ManifestValue,
-    env_reader::env_var_with_default,
+    env::env_var_with_default,
     glob::{GlobBaseCache, expand_manifest_template_glob},
     map_data_error,
 };

@@ -8,8 +8,8 @@
 use super::{
     EnvAccessPolicy, ExpansionReportObserver, ManifestBudgetLimits, ManifestEnvironment,
     ManifestLoadStage, ManifestName, ManifestParse, NetsukeManifest, StdlibConfig,
-    StdlibRegistration, env_reader::disabled_env_reader, from_str_named,
-    loading::trace_expansion_report, notify_stage, workspace::open_manifest_workspace,
+    StdlibRegistration, env::disabled_env_reader, from_str_named, loading::trace_expansion_report,
+    notify_stage, workspace::open_manifest_workspace,
 };
 use crate::{localization, localization::keys, stdlib::NetworkPolicy};
 use anyhow::{Context, Result};

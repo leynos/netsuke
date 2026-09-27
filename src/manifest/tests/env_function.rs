@@ -11,7 +11,7 @@
 //! covered in `tests/manifest_env_tests.rs`. Here `default` has already been
 //! reduced to an `Option<String>`, so the `none` and absent cases are one case.
 
-use crate::manifest::{EnvAccessPolicy, EnvReadError, env_reader::env_var_with_default};
+use crate::manifest::{EnvAccessPolicy, EnvReadError, env::env_var_with_default};
 use minijinja::{Error, ErrorKind};
 use rstest::rstest;
 

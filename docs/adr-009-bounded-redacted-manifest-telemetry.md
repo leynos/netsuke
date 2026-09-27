@@ -19,7 +19,7 @@ needed for these paths, two risks had to be weighed against each other:
   values — is caller-controlled and unbounded. Recording it directly in a
   metric label produces unbounded cardinality in the metric series, and
   recording it in a trace risks leaking secrets because environment variable
-  names routinely identify credentials (`src/manifest/env_reader.rs` already
+  names routinely identify credentials (`src/manifest/env/reader.rs` already
   applies this rule to `env()` lookup failures).
 - Interleaving spans and metric emission with the evaluation logic in
   `render_template` and the macro-invocation callback would make those
@@ -88,7 +88,7 @@ variable names never reach a span field or a metric label.
   `Debug` form is a fixed enum variant name; the `Display` text of a
   `minijinja::Error` can embed manifest content such as variable names.
 - **Matches the existing environment-name redaction rule.** `env_var_with` in
-  `src/manifest/env_reader.rs` already omits the variable name from both
+  `src/manifest/env/reader.rs` already omits the variable name from both
   tracing and the returned Jinja error, for the same reason: manifest-supplied
   names routinely identify credentials.
 
@@ -148,7 +148,7 @@ variable names never reach a span field or a metric label.
 - Macro-invocation boundary composition:
   [`src/manifest/jinja_macros/invocation.rs`](../src/manifest/jinja_macros/invocation.rs)
 - Matching environment-name redaction rule:
-  [`src/manifest/env_reader.rs`](../src/manifest/env_reader.rs)
+  [`src/manifest/env/reader.rs`](../src/manifest/env/reader.rs)
 - Tests:
   [`src/manifest/tests/macros_telemetry.rs`](../src/manifest/tests/macros_telemetry.rs),
   [`src/manifest/tests/macro_invocation_telemetry.rs`](../src/manifest/tests/macro_invocation_telemetry.rs)
@@ -180,12 +180,12 @@ interpolated through `env()`, from crossing into tracing or metrics.
 ## Addendum — 2026-09-18: Manifest environment-lookup boundary
 
 The manifest `env()` port now counts every lookup at the registered call
-boundary in `src/manifest/env_reader.rs::env_var_with`, so a refusal by the
+boundary in `src/manifest/env/reader.rs::env_var_with`, so a refusal by the
 access policy recorded in
 [ADR-026](adr-026-manifest-environment-access-policy.md) is measurable as well
 as observable.
 
-`src/manifest/env_telemetry.rs::record_env_lookup` returns the lookup result
+`src/manifest/env/telemetry.rs::record_env_lookup` returns the lookup result
 unchanged and increments `netsuke_manifest_env_lookups_total`, labelled by the
 closed `outcome` vocabulary `success`, `blocked`, `not_present`, and
 `not_unicode`. The `describe_counter!` registration is guarded by

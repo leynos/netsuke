@@ -5,7 +5,7 @@
 //! produces — reaches the bounded counter exactly once, and that nothing a
 //! manifest supplies reaches a label.
 
-use crate::manifest::{EnvAccessPolicy, EnvReadError, env_reader::env_var_with_default};
+use crate::manifest::{EnvAccessPolicy, EnvReadError, env::env_var_with_default};
 use metrics::SharedString;
 use metrics_util::{
     CompositeKey, MetricKind,

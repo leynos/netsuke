@@ -1,7 +1,7 @@
 //! Bounded telemetry for the manifest `env()` lookup boundary.
 //!
 //! Every `env()` call reaches exactly one place:
-//! [`super::env_reader::env_var_with_default`] evaluates the access policy,
+//! [`super::reader::env_var_with_default`] evaluates the access policy,
 //! reads through the injected reader, and maps failures to Jinja errors. That
 //! single boundary is therefore also the single telemetry point, and each
 //! lookup is counted once under a closed `outcome` vocabulary.

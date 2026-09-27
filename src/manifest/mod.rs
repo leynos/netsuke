@@ -47,8 +47,8 @@ pub use budget::ManifestBudgetLimits;
 pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
 };
+pub use env::{EnvReadError, EnvReader, ManifestEnvironment, process_env_reader};
 pub use env_policy::{EnvAccessPolicy, EnvPolicyViolation};
-pub use env_reader::{EnvReadError, EnvReader, ManifestEnvironment, process_env_reader};
 pub(crate) use expand::expand_foreach_with_budget;
 pub use glob::glob_paths;
 pub use load_stage::ManifestLoadStage;
@@ -244,9 +244,8 @@ pub(crate) fn from_str_with_limits(
         &mut None,
     )
 }
-mod env_reader;
-mod env_telemetry;
-pub use env_telemetry::{ENV_LOOKUP_OUTCOME_VALUES, ENV_LOOKUP_TOTAL};
+mod env;
+pub use env::{ENV_LOOKUP_OUTCOME_VALUES, ENV_LOOKUP_TOTAL};
 #[cfg(test)]
 mod tests;
 mod workspace;

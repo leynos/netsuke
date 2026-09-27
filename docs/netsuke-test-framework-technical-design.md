@@ -167,7 +167,7 @@ have invented:
   template for the "unavailable under test" messages in §5.5; the test mode
   reuses the mechanism with its own message keys rather than intercepting
   MiniJinja's unknown-function error.
-- `disabled_env_reader` (`src/manifest/env_reader.rs:79`) already provides
+- `disabled_env_reader` (`src/manifest/env/reader.rs:115`) already provides
   a reader that refuses every lookup. The test reader is that reader with the
   case's declared variables layered over it (§5.1).
 - `src/manifest/query.rs` is the precedent module for a capability-scoped
@@ -252,7 +252,7 @@ Each seam follows the ADR-008 taxonomy; two exist, two are new.
 
 ### 5.1. Environment (existing)
 
-`EnvReader` (`src/manifest/env_reader.rs:56`) is an
+`EnvReader` (`src/manifest/env/reader.rs:59`) is an
 `Arc<dyn Fn(&str) -> Result<String, EnvReadError> + Send + Sync>`. The runner
 builds one from the case's `given.env` map: declared names return their values,
 `unset` names and everything else return `EnvReadError::NotPresent`. The host
