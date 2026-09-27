@@ -64,6 +64,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "stdlib-file-tests-manifest",
     "stdlib-host-context-manifest",
     "stdlib-jinja-syntax-manifest",
+    "stdlib-optional-rustflags-manifest",
     "stdlib-path-and-collection-manifest",
     "stdlib-time-manifest",
     "stdlib-yaml-syntax-manifest",
@@ -196,6 +197,7 @@ fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
 #[case("guide-serial-dependency-order-manifest")]
 #[case("stdlib-yaml-syntax-manifest")]
 #[case("stdlib-jinja-syntax-manifest")]
+#[case("stdlib-optional-rustflags-manifest")]
 fn documented_manifest_generates_ninja(#[case] example_id: &str) -> Result<()> {
     let workspace = manifest_workspace(example_id)?;
     let run = run_netsuke_in(workspace.path(), &["--progress", "never", "generate"])?;

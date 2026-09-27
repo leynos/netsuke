@@ -20,6 +20,10 @@ use minijinja::{
 use crate::localization::{self, keys};
 use crate::shell_word::{self, ShellDialect};
 
+mod dialect_telemetry;
+
+pub use dialect_telemetry::{DIALECT_SOURCE_VALUES, DIALECT_VALUES, SHELL_QUOTE_DIALECT_TOTAL};
+
 /// Register the pure recipe-text filters on an environment.
 ///
 /// `default` is the dialect used when a call omits its `dialect` keyword
@@ -111,10 +115,24 @@ fn encode_one(dialect: ShellDialect, text: &str) -> Result<String, Error> {
 /// and fail as merely unknown rather than as the wrong type (D4).
 fn resolve_dialect(default: ShellDialect, kwargs: &Kwargs) -> Result<ShellDialect, Error> {
     let Some(value) = kwargs.get::<Option<Value>>("dialect")? else {
-        return Ok(default);
+        // The omitted-dialect population is the one this counter exists to
+        // make visible: its rendered text is host-dependent and unstable.
+        return Ok(dialect_telemetry::record_dialect(
+            default.telemetry_name(),
+            dialect_telemetry::SOURCE_DEFAULT,
+            default,
+        ));
     };
     let raw = value.as_str().unwrap_or("");
-    ShellDialect::parse(raw).ok_or_else(|| dialect_invalid_error(&value))
+    ShellDialect::parse(raw)
+        .map(|dialect| {
+            dialect_telemetry::record_dialect(
+                dialect.telemetry_name(),
+                dialect_telemetry::SOURCE_EXPLICIT,
+                dialect,
+            )
+        })
+        .ok_or_else(|| dialect_invalid_error(&value))
 }
 
 /// Report the rejected `dialect` value and enumerate every accepted name.

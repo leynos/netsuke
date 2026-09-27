@@ -35,6 +35,16 @@ impl ShellDialect {
         }
     }
 
+    /// Return the dialect's name as a metric label.
+    ///
+    /// A `'static` value that is one of the closed set a recorder admits, so a
+    /// counter series stays bounded. Distinct from [`Self::as_str`] only in
+    /// intent: that one is the spelling a manifest writes and may gain
+    /// synonyms, this one must not.
+    pub(crate) const fn telemetry_name(self) -> &'static str {
+        self.as_str()
+    }
+
     /// Parse one `dialect` keyword argument, case-insensitively.
     ///
     /// Deliberately rejects `bash`. See decision D3: `RecipeShell::Bash` maps
@@ -140,6 +150,25 @@ mod tests {
         let name = dialect.as_str();
         assert_eq!(ShellDialect::parse(name), Some(dialect));
         assert_eq!(ShellDialect::parse(&name.to_uppercase()), Some(dialect));
+    }
+
+    /// The telemetry name is exactly the spelling a manifest writes.
+    ///
+    /// [`ShellDialect::telemetry_name`] exists so the metric label vocabulary
+    /// is a decision separate from the keyword-argument spelling. This pins the
+    /// two together today, so the day a synonym is added to `as_str` the test
+    /// asks whether the label set should widen too, rather than letting the
+    /// counter emit a value the recorder does not admit. That failure is
+    /// silent: an unadmitted series returns a noop handle and records nothing.
+    #[rstest]
+    fn the_telemetry_name_is_the_manifest_spelling() {
+        for dialect in ShellDialect::ALL {
+            assert_eq!(
+                dialect.telemetry_name(),
+                dialect.as_str(),
+                "telemetry_name must name the same dialect as_str does"
+            );
+        }
     }
 
     /// Names outside `ALL` are rejected rather than guessed at.

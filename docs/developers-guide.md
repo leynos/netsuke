@@ -582,7 +582,17 @@ Every user-facing string is a Fluent message keyed from
 `src/localization/keys.rs`. Adding one means adding the constant, adding the
 message to all 35 catalogues, and keeping its `{ $variables }` identical across
 them: the build audit rejects a missing key, an orphaned key, or a variable set
-that differs from `en-US`. The audit lives in `build_l10n_audit/`, split into
+that differs from `en-US`.
+
+A *diagnostic* message whose text carries a bracketed code such as
+`[netsuke::jinja::shell::args]` must have that code copied **verbatim** into
+every catalogue. The code is part of the message text rather than a field, so a
+translator who rewords, translates, or re-punctuates the bracket is not
+producing a translation — the code is an identifier a reader greps for, and the
+localized catalogues assert on the exact spelling. Copy the bracketed span
+unchanged and translate only the prose around it.
+
+The audit lives in `build_l10n_audit/`, split into
 `keys.rs` and `scanner.rs` (the `define_keys!` scanner, with `byte_index.rs`
 for its byte-position bookkeeping), `ftl.rs` (catalogues), `metadata.rs` (the
 Cargo metadata), and `compare.rs` (the rules). Because build scripts are not
@@ -740,16 +750,26 @@ failed subcommand's stderr on its own stdout, build runs retain only a fixed
 512-byte stdout tail and use its parsed marker only after a non-zero exit.
 Ordinary child stdout streams forward directly and must not use this tail.
 
-The lowest-layer POSIX shell-word quoting used for input/output paths during IR
-lowering is `shell_quote::QuoteRefExt::quoted(Sh)`. It performs minimal,
-fragmented shell quoting, which is appropriate for a literal shell word but not
-for the command-list `eval` payload. That renderer requires a canonical
-single-quoted payload so existing generated Ninja list text remains
-byte-for-byte stable, and the delimiter/boundary tests continue to hold. Keep
-that quoting in the deliberately local `shell_single_quote` function; it is not
-a general-purpose helper. Neither quoting path is the platform-specific
-`src/stdlib/command/quote.rs` implementation behind the `command.quote`
-template wrapper, which must retain its `cmd.exe` quoting behaviour on Windows.
+The lowest-layer shell-word quoting used for input/output paths during IR
+lowering, and for the `shell_quote` and `shell_join` template filters, is
+[`src/shell_word.rs`](../src/shell_word.rs). It is the single encoding of a
+recipe shell word, and a constraint test holds the delegation to one call site
+per layer rather than to convention. It performs minimal, fragmented shell
+quoting — `shell-quote`'s `Sh` encoder leaves the longest safe prefix bare and
+quotes only the remainder, so `a b` encodes as `a' b'` and not `'a b'` — which
+is appropriate for a literal shell word but not for the command-list `eval`
+payload. That renderer requires a canonical single-quoted payload so existing
+generated Ninja list text remains byte-for-byte stable, and the
+delimiter/boundary tests continue to hold. Keep that quoting in the
+deliberately local `shell_single_quote` function; it is not a general-purpose
+helper, and it is the one remaining quoter outside `src/shell_word.rs`.
+
+The third path is the platform-specific `src/stdlib/command/child_argument.rs`
+implementation behind the `command.quote` template wrapper. That file was named
+`quote.rs` before this milestone; the rename records that it answers a narrower
+question than the other two — how one argument is spelled for the interpreter a
+structured command will run under, including `cmd.exe` on Windows — and is
+therefore deliberately distinct from the recipe-shell word encoding.
 
 Attributed list failures emit the bounded tracing fields `command_list_action`
 (a fixed-width action fingerprint) and `command_list_entry` (the one-based
@@ -7766,6 +7786,53 @@ reaches exactly one bounded series, while
 `src/observability_recorder_tests.rs` proves the production recorder retains
 the four bounded series and rejects an out-of-vocabulary outcome, an extra
 label, and a series missing its label.
+
+### Recipe-text dialect telemetry
+
+`src/stdlib/recipe_text/dialect_telemetry.rs` owns telemetry for the dialect
+boundary. Both `shell_quote` and `shell_join` reach exactly one place when they
+decide which encoding to apply — `resolve_dialect` in
+`src/stdlib/recipe_text/mod.rs` — so that boundary is also the single telemetry
+point. `record_dialect` returns the resolved dialect unchanged and counts the
+resolution exactly once, whether the call site named a dialect or omitted it.
+
+The counter is `netsuke_manifest_shell_quote_dialect_total`, with two labels.
+`dialect` is drawn from the closed set `sh` and `powershell`, and `source` from
+`explicit` and `default`. Both are the module constants `DIALECT_VALUES` and
+`DIALECT_SOURCE_VALUES`, re-exported through `netsuke::stdlib`, so the series
+count is fixed at four by the module rather than by anything a manifest
+supplies. Nothing else is recorded: no template source, no manifest text, and
+no rendered value.
+
+The `source` label is the reason the series exists. A call that omits `dialect`
+receives a host- and configuration-dependent default, so the rendered text of
+such a manifest can change between hosts or releases with no manifest edit —
+ADR-041 records this as the accepted cost of the two-dialect surface. Nothing
+else aggregates that population: the affected manifests are otherwise
+indistinguishable from those that pin the dialect, and the difference is
+invisible in the generated Ninja. Counting it makes the exposed set measurable,
+which turns "pin your dialect" from advice into something an operator can size.
+The counter's description is registered once per process behind a `Once`.
+
+The application recorder in `src/observability_recorder.rs` admits the series:
+`SHELL_QUOTE_DIALECT_TOTAL` is listed in `accepts_name` and matched in
+`accepts_counter_registration` against exactly those two label sets, so the
+counter survives into the process snapshot rather than being discarded as a
+noop handle. **The admission step is the silent one**: an unadmitted name or
+label value yields a `Counter::noop` handle, so the build, the lint, and every
+other test still pass while the counter records nothing. The test for it
+therefore drives the real filters under a local recorder and asserts the
+increments arrive, rather than recording the series by hand — a hand-recorded
+series would pass even if no filter ever called the recorder.
+
+Tests sit beside the boundary: the `tests` module in
+`src/stdlib/recipe_text/dialect_telemetry.rs` pins the label vocabularies to
+`ShellDialect::ALL`, the set the encoder can actually produce, since the
+recorder imports them as `'static` arrays that cannot be derived from that enum
+at compile time. `src/observability_recorder_dialect_tests.rs` drives both
+filters through `shell_quote_dialect_total` under the production recorder and
+proves the four bounded series are retained while an out-of-vocabulary value, a
+missing label, and an unlabelled series are rejected.
 
 ## Digest rendering
 

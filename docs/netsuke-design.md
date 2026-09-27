@@ -725,7 +725,7 @@ exec:
 The renderer must treat each argument as one argv element and quote it for the
 selected backend. List-valued expressions should be supported without forcing
 authors to pre-tokenize flags into strings. This avoids accidental word
-splitting and reduces the need for `shell_escape` in ordinary recipes.
+splitting and reduces the need for `shell_quote` in ordinary recipes.
 
 #### Execution feedback
 
@@ -1294,9 +1294,17 @@ providing a secure bridge to the underlying system.
   a denied name never obtains a process value. Each lookup, including a
   refusal, is counted once on the bounded `netsuke_manifest_env_lookups_total`
   series recorded by [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md),
-  which carries only the `outcome` label and never the name or its value. The
-  `default` argument is planned; the current implementation only accepts the
-  variable name. The planned manifest-level `env` block in
+  which carries only the `outcome` label and never the name or its value. A
+  `default=` keyword argument supplies the value to use when the variable is
+  absent, which keeps `PATH`-style optional configuration out of the manifest's
+  control flow; it is accepted only as a string, and a non-string default raises
+  the `manifest.env.default_not_string` detail under the
+  `[netsuke::jinja::env::args]` code rather than stringifying the value. The
+  default is consulted for a *missing* variable only. An undecodable value is
+  still an error, because substituting there would hide a host fault the author
+  did not ask to tolerate, and a variable the access policy denies is still
+  refused, because a default is a fallback for absence and not a bypass. The
+  planned manifest-level `env` block in
   [§2.6](#26-planned-recipe-ergonomics-and-execution-feedback) controls the
   environment Netsuke applies when actions run.
 
@@ -1358,21 +1366,38 @@ providing a secure bridge to the underlying system.
 In addition to functions, custom filters provide a concise, pipe-based syntax
 for transforming data within templates.
 
-- `| shell_escape`: A filter that takes a string or list and escapes it for
-  safe inclusion as a single argument in a shell command. This is a
-  non-negotiable security feature to prevent command injection vulnerabilities.
-  The implementation will use the `shell-quote` crate for robust, shell-aware
-  quoting.[^22] This filter is planned and must be reconciled with structured
-  `exec` recipes so users do not need it for ordinary argv construction.
+- `| shell_quote`: A filter that takes a string and encodes it as exactly one
+  shell word for a named dialect, so the value survives a shell's word
+  splitting as a single argument. This is a non-negotiable security feature to
+  prevent command injection vulnerabilities; hand-rolled escaping in a manifest
+  is where injection lives, and the manifest author is the party least able to
+  verify it. It is implemented once, in `src/shell_word.rs`, over the
+  `shell-quote` crate's `sh` encoder and a PowerShell single-quoted encoder, and
+  both the IR lowering path and this filter delegate there.[^22] The dialect is
+  named by a `dialect` keyword argument taking `sh` or `powershell`, defaulting
+  to the dialect implied by the active recipe shell;
+  [ADR-041](adr-041-canonical-recipe-shell-quoting-surface.md) records why the
+  argument exists, why `bash` is refused, and why the default is the surface's
+  one unstable axis. The filter is *not* a licence to stop preferring
+  structured `exec` recipes, which need no quoting at all: it serves the
+  manifests that still need shell syntax. Its output is correct only in unquoted
+  argv position, and it does not detect an author interpolating it inside a
+  shell's own double quotes, where the quoter's quotes become data.
 
-- `| shell_join`: A planned filter that accepts a list of arguments and returns
-  one shell-safe command fragment. Each list element is quoted as a separate
-  argument. This is for deliberate shell recipes; structured `exec` recipes
-  remain preferred when no shell syntax is needed.
+- `| shell_join`: A filter that accepts a list of arguments and returns one
+  shell-safe command fragment, joining each encoded element with exactly one
+  space so the shell re-splits it into the original sequence. Every element must
+  be a string, and no element is ever dropped — `['']` renders as one empty
+  word, which is why `compact` is a separate filter rather than a flag here. It
+  does not flatten nested lists. This is for deliberate shell recipes;
+  structured `exec` recipes remain preferred when no shell syntax is needed.
 
-- `| compact`: A planned collection filter that removes empty strings and null
-  values while preserving order. It supports patterns such as constructing
-  `RUSTFLAGS` from an optional user override without handwritten shell tests.
+- `| compact`: A collection filter that removes `none`, undefined, and empty
+  strings while preserving order. It drops nothing else: `0`, `false`, `[]`,
+  `{}`, and a whitespace-only string are all retained, which is what
+  distinguishes it from MiniJinja's `select`. It supports patterns such as
+  constructing `RUSTFLAGS` from an optional user override without handwritten
+  shell tests, which is how the two filters above compose with it.
 
 - `| to_path`: A filter that converts a string into a platform-native path
   representation, handling `/` and `\` separators correctly.
@@ -3921,7 +3946,7 @@ goal.
   - **Tasks:**
 
     1. Implement the full suite of custom Jinja functions (`glob`, `env`, etc.)
-       and filters (`shell_escape`).
+       and filters (`shell_quote`).
 
     2. Mandate the use of `shell-quote` for all command variable substitutions.
 

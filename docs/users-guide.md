@@ -515,7 +515,14 @@ list of strings.
 
 Netsuke quotes paths inserted through `{{ ins }}` and `{{ outs }}`. Other Jinja
 values render as ordinary command text and are not automatically shell-quoted.
-The `shell_escape` filter described in older drafts is not implemented in beta4.
+Use the `shell_quote` filter to encode one value as a single shell word, and
+`shell_join` to encode a list as a command line. Both take a `dialect` of `sh`
+or `powershell` and otherwise use the dialect implied by the recipe's shell, so
+the default differs between Unix and Windows; pin `dialect` when the generated
+text must be byte-stable. Both are correct only in unquoted argv position. See
+[Build shell recipe text](stdlib-yaml-and-jinja-guide.md#build-shell-recipe-text)
+for the full contract, and "Write recipes that work on Windows" below for why
+the default differs.
 
 Cycle detection follows `sources` and `deps`. Order-only dependencies enforce
 ordering but do not participate in cycle detection.
@@ -798,8 +805,12 @@ Both helpers accept:
   a checkout-controlled executable, so use it only when that trust boundary is
   intended.
 
-The `env(name)` function reads one required environment variable. Beta4 does
-not accept a default argument; an absent or non-Unicode value is an error.
+The `env(name)` function reads one environment variable, and
+`env(name, default='...')` supplies the value to use when it is absent. The
+default is consulted only for a missing variable: a non-Unicode value is still
+an error, and a variable refused by the access policy is still refused. The
+default must be a string; a number, boolean, list, or map is rejected rather
+than stringified.
 
 #### `which` resolver observability
 

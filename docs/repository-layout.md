@@ -34,6 +34,7 @@ output and some leaf files so the long-lived structure remains visible.
 │   ├── ninja_gen/
 │   ├── runner/
 │   ├── snapshots/
+│   ├── shell_word.rs
 │   └── stdlib/
 ├── test_support/
 ├── tests/
@@ -123,8 +124,19 @@ output and some leaf files so the long-lived structure remains visible.
   `dyndep_generation_telemetry.rs`, and `process/dyndep_telemetry.rs`.
 - `src/snapshots/`: Checked-in `insta` snapshots for source-level snapshot
   tests.
+- `src/shell_word.rs`: The single encoding of one string as a recipe shell
+  word, for a named dialect. It is a leaf: IR lowering, Ninja rendering, and
+  the template filters all depend on it, and it depends on nothing above them.
+  See the [developers guide](developers-guide.md) for the paths that
+  deliberately do *not* route through it.
 - `src/stdlib/`: Netsuke standard library modules exposed to manifest
   rendering.
+- `src/stdlib/command/`: Structured-command wrappers, including
+  `child_argument.rs` (renamed from `quote.rs`), which spells one argument for
+  the interpreter a structured command runs under, including `cmd.exe`.
+- `src/stdlib/recipe_text/`: The template-facing `shell_quote` and `shell_join`
+  filters, with their dialect telemetry. The filter adapter validates arguments
+  and resolves the dialect; the encoding itself is `src/shell_word.rs`.
 - `test_support/`: Shared Rust test-support crate used by integration and
   behavioural tests.
 - `tests/`: Integration tests, behavioural tests, test data, fixtures, and

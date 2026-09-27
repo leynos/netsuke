@@ -181,9 +181,9 @@ dialect, because `sh` output is valid Bash. The name is refused because the
 that Netsuke does not compile in; accepting the name now would lock in a
 meaning that a real `bash` dialect would later have to break.
 
-Every `shell_escape` reference in the design and user guides is rewritten to
-name `shell_quote`, and the filter is implemented once, in `src/shell_word.rs`,
-with the template filters and the IR lowering path both delegating to it.
+Every `shell_escape` reference in the design and user guides is replaced by
+`shell_quote`, and the filter is implemented once, in `src/shell_word.rs`, with
+the template filters and the IR lowering path both delegating to it.
 
 ## Rationale
 
@@ -228,7 +228,11 @@ that a future reader who prefers it knows it was weighed rather than missed.
 - `RecipeShell::Bash` maps to the `sh` dialect today. If a real `bash` dialect
   is added, that mapping changes, which is a concrete instance of the point
   above.
-- The name `shell_escape` no longer appears in the design or user guides.
+- The name `shell_escape` no longer appears in the design or user guides, which
+  name `shell_quote` only. It is retained here, in `RM-6.8.3`, and in
+  `RFC-0006-8.9` / `RFC-0006-13.3`, because those are the records of the
+  supersession itself; a reader who arrives holding the old name finds the
+  decision rather than a gap.
 - `src/shell_word.rs` is the single implementation of recipe-shell word
   quoting, and a constraint test holds the delegation to one call site per
   layer rather than to a convention.

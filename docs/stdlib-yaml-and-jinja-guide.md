@@ -200,6 +200,10 @@ Collection filters are pure and preserve input order.
   preserving first-seen key order. Missing attributes are errors. Example:
   `{{ ([{'kind': 'tool'}, {'kind': 'tool'}] | group_by('kind')).tool | length }}`
   produces `2`.
+- `values | compact` removes `none`, undefined, and empty strings, preserving
+  order. It drops nothing else: `0`, `false`, `[]`, `{}`, and a whitespace-only
+  string are retained. Example: `{{ ['a', none, '', 'b'] | compact | join(',') }}`
+  produces `a,b`.
 
 The following complete manifest exercises every path and collection filter. Its
 filesystem inputs are created by the documentation test before Netsuke is run.
@@ -317,6 +321,66 @@ defaults:
   - stdlib-time.txt
 ```
 
+## Build shell recipe text
+
+A recipe becomes shell text, so a value interpolated into a command is split on
+whitespace and re-read by the shell unless it is encoded first. `shell_quote`
+and `shell_join` perform that encoding; they are the supported alternative to
+hand-rolled escaping and to shell parameter expansion, neither of which works
+across shells.
+
+- `value | shell_quote(dialect='sh')` renders `value` as exactly one shell word
+  for the named dialect. The value must be a string; numbers, booleans,
+  sequences, mappings, `none`, and undefined are all errors rather than being
+  stringified. The empty string renders as `''`, not as nothing. Tab, escape,
+  and non-ASCII text are preserved; NUL, carriage return, and line feed are
+  rejected, because a Ninja binding is single-line by construction.
+- `values | shell_join(dialect='sh')` renders a list as one command line, with
+  exactly one space between elements. Every element must be a string, and no
+  element is dropped — `['']` renders as one empty word, which is why `compact`
+  is a separate filter rather than an option here. Nested lists are not
+  flattened.
+- `dialect` accepts `sh` and `powershell`. Omit it and the dialect is the one
+  implied by the recipe's shell: `sh` on Unix, `powershell` on Windows. Pin it
+  when the generated text must be byte-stable, because the default depends on
+  the host and on configuration. `bash` is deliberately not accepted; `sh`
+  output is valid Bash, and a real `bash` dialect would mean something different
+  if it were added later.
+- `compact` is the usual companion. `env('RUSTFLAGS', default='')` yields an
+  empty string when the variable is unset, and `compact` removes it, so the
+  shell word count does not change with the host's environment.
+
+Both filters are pure given a dialect, and both have no function form: they are
+filters only. **Their output is correct only in unquoted argv position.** A
+value interpolated inside the shell's own double quotes is *data* to the shell,
+so the quotes these filters emit would arrive literally and corrupt the
+argument. Neither filter can detect that mistake, and neither protects a value
+you interpolate somewhere other than as a complete argv word.
+
+The following manifest constructs a `RUSTFLAGS` value from an optional
+environment override without any shell parameter expansion, and pins
+`dialect='sh'` so its output is the same on every host.
+
+<!-- tested-example: stdlib-optional-rustflags-manifest -->
+
+```yaml
+netsuke_version: "1.0.0"
+
+vars:
+  base_flags:
+    - -D
+    - warnings
+
+targets:
+  - name: rustflags.txt
+    command: >-
+      printf 'RUSTFLAGS=%s\n' {{ [base_flags | join(' '), env('RUSTFLAGS', default='')]
+        | compact | join(' ') | shell_quote(dialect='sh') }} > {{ outs }}
+
+defaults:
+  - rustflags.txt
+```
+
 ## Run commands and inspect the host
 
 These helpers observe the host and should appear only in trusted manifests.
@@ -341,9 +405,13 @@ These helpers observe the host and should appear only in trusted manifests.
 - `command_available(name, **options)` accepts the same options as `which` but
   returns `true` or `false` for ordinary misses. Example:
   `{{ command_available('guide-tool', cwd_mode='never') }}`.
-- `env(name)` returns one required Unicode environment variable. There is no
-  default-value argument; a missing or non-Unicode value is an error. Example:
-  `{{ env('NETSUKE_STDLIB_TOKEN') }}`.
+- `env(name)` returns one environment variable, and `env(name, default='...')`
+  returns `default` instead when the variable is missing. The default is
+  consulted only for a missing variable: a non-Unicode value is still an error,
+  and a variable refused by the access policy is still refused. The default must
+  be a string; a number, boolean, list, or map is rejected rather than
+  stringified. Examples: `{{ env('NETSUKE_STDLIB_TOKEN') }}` and
+  `{{ env('CC', default='cc') }}`.
 - `glob(pattern)` returns matching workspace paths. It is host-observing;
   matches and separator syntax depend on workspace contents and platform.
   Example: `{{ glob('fixtures/*.txt') | join(',') }}`.
