@@ -698,14 +698,22 @@ Hard invariants. Violating one requires escalation, not a workaround.
   plus native `--binary` patches of both series under
   `/tmp/rebase-697-recovery/`. Recorded identities: `old_base=96aefc9c`,
   `old_head=0190f3aa`, `target=aa764819`, `new_head=ada8b994`.
-- [x] (2026-09-28) **Fourth CodeRabbit pass, at `658b8157`, three findings, all
-  actioned at `797178c9`.** Review `5332303125` returned `CHANGES_REQUESTED`
-  against the branch head itself — not a stale SHA — with three inline comments
-  (`4117169304`, `4117169313`, `4117169325`), one per touched file. Unlike the
-  earlier passes there was nothing to refuse and nothing ambiguous; each was
-  confirmed against the artefact it describes before being accepted, and each
-  fix is committed with its confirmation rather than the reasoning left in
-  review replies.
+- [x] (2026-09-28) **CodeRabbit reviewed the pull request itself, at
+  `658b8157`: three findings, all actioned at `797178c9`.** Review `5332303125`
+  returned `CHANGES_REQUESTED` against the branch head — not a stale SHA, as
+  every earlier CodeRabbit signal on this branch had been — with three inline
+  comments (`4117169304`, `4117169313`, `4117169325`), one per touched file.
+  Nothing was ambiguous and nothing had to be refused; each was confirmed
+  against the artefact it describes before being accepted, and each fix is
+  committed with its confirmation rather than the reasoning left in a review
+  reply.
+
+  This is the first CodeRabbit response the plan records that came from the
+  *pull request* rather than from a locally run `coderabbit review --agent`,
+  and it arrived unprompted. It is therefore not numbered against the earlier
+  passes: those were milestone-scoped (`EP-M1` second pass, `EP-M2` third pass)
+  and this one is not tied to a milestone, so an ordinal would assert a lineage
+  the plan does not record.
 
   `ADR-040`'s worked specimen still described `from_yaml_all` as rejecting
   every `from_yaml` condition. That is the wording RFC 0013 §5.6 had already
