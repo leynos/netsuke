@@ -1,5 +1,7 @@
 //! Focused resource-budget regression tests for manifest evaluation.
 
+mod boundary;
+
 use super::super::{
     ManifestBudgetLimits, from_path_for_manifest_query_with_limits, from_str_with_limits,
 };
