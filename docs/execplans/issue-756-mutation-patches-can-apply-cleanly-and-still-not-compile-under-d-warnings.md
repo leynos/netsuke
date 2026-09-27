@@ -564,7 +564,7 @@ failure mode cannot recur silently.
       `range-diff` compares patches and this was a base-content collision.
       Read the two entries together; this one alone would teach the wrong
       lesson.
-- [ ] (2026-09-27) **The round-2 replay was not clean, and the audit above did
+- [x] (2026-09-27) **The round-2 replay was not clean, and the audit above did
       not catch it.** The full gate suite failed `make test-workflow-contracts`
       with two failures from one cause: `kani-smoke` carried *two* copies of
       `Install the build standard` and `Install cargo-nextest`. `c298a643`
