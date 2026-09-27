@@ -151,7 +151,7 @@ lower-trust layer may restrict but not widen" uniform across policy surfaces.
 - Enforcement at the `env()` registration boundary and the localized
   diagnostic: [`src/manifest/env/reader.rs`](../src/manifest/env/reader.rs)
 - Project-request capture and quarantine:
-  [`src/cli/discovery_project_policy.rs`](../src/cli/discovery_project_policy.rs)
+  [`src/cli/discovery/project_policy.rs`](../src/cli/discovery/project_policy.rs)
 - Configuration composition into the policy:
   [`src/cli_policy.rs`](../src/cli_policy.rs)
 - Loader plumbing:

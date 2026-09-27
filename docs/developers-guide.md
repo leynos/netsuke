@@ -2930,7 +2930,7 @@ configuration fields; `Cli::command()` supplies parser-only flags such as
 configuration fields and adds parser-only help metadata without adding an
 environment or file source. It omits the structural `cmds` container. Keep
 `--config` selector precedence and fail-closed loading in
-`src/cli/discovery.rs`, as required by [ADR 004]. Keep `-C/--directory`
+`src/cli/discovery/mod.rs`, as required by [ADR 004]. Keep `-C/--directory`
 project-discovery rooting and manifest lookup in that discovery boundary, as
 required by [ADR 014]. During ordinary Cargo builds, `build.rs` generates the
 local manual page and shell completions, and audits the localization keys.
@@ -3011,7 +3011,7 @@ when adding, renaming, or removing user-facing options. Changes to CLI
 documentation metadata should be covered by `rstest` workflow/script contract
 tests, plain `#[rstest]` parametrized cases for exhaustive state-enumeration
 unit tests, and `rstest-bdd` release-help scenarios.
-`src/cli/config_path_precedence_tests.rs` is the canonical exhaustive
+`src/cli/discovery/path_precedence_tests.rs` is the canonical exhaustive
 state-enumeration example.
 
 When a future parser-only flag needs generated help, inject it through
@@ -4823,14 +4823,14 @@ all valid inputs.
 - Environment-dependent properties must use injected providers. When the
   contract itself requires ambient discovery, configure a child process with
   `env_clear()` followed by `Command::env`; do not mutate the harness process.
-- Canonical example: `src/cli/config_path_precedence_tests.rs` -
+- Canonical example: `src/cli/discovery/path_precedence_tests.rs` -
   `resolve_config_path_obeys_precedence_invariant` asserts the
   `explicit_config_path` selector-precedence invariant for generated optional
   paths.
 - Layer-precedence and replay transitions are also property-tested:
   `tests/cli_tests/merge_precedence_proptests.rs` asserts scalar precedence and
   list appending for arbitrary file, environment, and CLI layer combinations,
-  and `src/cli/discovery_replay_proptests.rs` proves repeated
+  and `src/cli/discovery/replay_proptests.rs` proves repeated
   discovery-diagnostic replays stay identical without re-reading the
   environment.
 
@@ -4841,7 +4841,7 @@ unit tests where a small fixed set of cases must all be verified.
 
 - Annotate the test function with `#[rstest]` and supply cases via
   `#[case(...)]` parameters.
-- Canonical example: `src/cli/config_path_precedence_tests.rs` -
+- Canonical example: `src/cli/discovery/path_precedence_tests.rs` -
   `resolve_config_path_precedence` enumerates all four combinations of
   `--config` and `NETSUKE_CONFIG` presence.
 
@@ -6508,7 +6508,7 @@ Tests that snapshot tracing output with `insta` should normalize
 runtime-dependent fields, such as the bounded `path_hash` correlation
 identifier, to a stable placeholder before asserting the snapshot, and assert
 the real value separately with its own check. See
-`src/cli/discovery_tracing_tests.rs` for this pattern.
+`src/cli/discovery/tracing_tests.rs` for this pattern.
 
 ## `TestWorld` field groups
 
@@ -7344,16 +7344,16 @@ revalidating every redirect against the policy.
 
 ### Configuration discovery module layout
 
-`src/cli/discovery.rs` attaches several small `#[path = "..."]` modules that
-split diagnostics, path comparison, and tests out of the main discovery flow:
+`src/cli/discovery/mod.rs` declares small child modules for diagnostics, path
+comparison, and tests alongside the main discovery flow:
 
-- `discovery_diagnostics.rs` — bounded tracing helpers (`path_hash`,
+- `discovery/diagnostics.rs` — bounded tracing helpers (`path_hash`,
   `short_hash`, `debug_config_path`, `debug_optional_config_path`,
   `debug_project_layer_deduplication`, `warn_explicit_config_load_failed`) and
   the `ConfigLoadFailureKind` enum used to classify a load failure without
   retaining error text. The de-duplication event records discovered, project,
   and appended layer counts after filtering without exposing paths.
-- `discovery_paths.rs` — `normalized_path_key` resolves a path to a
+- `discovery/paths.rs` — `normalized_path_key` resolves a path to a
   comparable, canonicalized form and returns canonicalization errors to its
   caller. The discovery-side `comparison_key` fallback uses the original path
   literally when resolution fails, continues discovery, and emits a bounded
@@ -7365,21 +7365,21 @@ split diagnostics, path comparison, and tests out of the main discovery flow:
   `std::fs::canonicalize`. Keep it confined to this comparison boundary:
   selectors remain pure path queries, OrthoConfig supplies the layer path, and
   tracing remains at the orchestration boundary.
-- `discovery_event_assertions.rs` — shared test-only helpers:
+- `discovery/event_assertions.rs` — shared test-only helpers:
   `capture_events` runs a closure under a TRACE capturing subscriber,
   `find_event` locates one emitted event by substring, and `EventAssertion`
   bundles an event with its path to assert bounded `path_hash` and presence
   fields, the absence of raw paths, file names and formatted error text, and to
   normalize the hash before an `insta` snapshot.
-- `discovery_tracing_tests.rs` — tests selector precedence
+- `discovery/tracing_tests.rs` — tests selector precedence
   (`--config` versus `NETSUKE_CONFIG`), the removed legacy
   `NETSUKE_CONFIG_PATH` alias, and event-schema snapshots for both selection
   and explicit load failures.
-- `discovery_layer_tests.rs` — tests the explicit-path versus automatic
+- `discovery/layer_tests.rs` — tests the explicit-path versus automatic
   discovery branches and project-scope handling in the one discovery pass.
 
 Both test modules import `capture_events`, `find_event`, and `EventAssertion`
-from `discovery_event_assertions` rather than duplicating them. The `insta`
+from `discovery::event_assertions` rather than duplicating them. The `insta`
 snapshot calls themselves stay in the test modules because snapshot names bind
 to the test module's path, not to a shared helper module.
 

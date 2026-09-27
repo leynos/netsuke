@@ -108,7 +108,7 @@ operator-established ceiling.
 - [`src/manifest/jinja_macros/`](../src/manifest/jinja_macros/)
 - [`src/manifest/budget/adapter.rs`](../src/manifest/budget/adapter.rs)
 - [`src/manifest/loading.rs`](../src/manifest/loading.rs)
-- [`src/cli/discovery_layers.rs`](../src/cli/discovery_layers.rs)
+- [`src/cli/discovery/layers.rs`](../src/cli/discovery/layers.rs)
 - [`src/cli/manifest_budget_policy.rs`](../src/cli/manifest_budget_policy.rs)
 
 ## Addendum A: Corrected guarantee and residual risk (2026-09-16)

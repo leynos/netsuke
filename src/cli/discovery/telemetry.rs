@@ -3,7 +3,7 @@
 //! Discovery is a query that reads the environment and filesystem once and
 //! returns loaded layers plus deferred diagnostics. The span, counter, and
 //! duration histogram live here so the pure discovery flow in
-//! [`super::discovery`] stays readable and every emitted field stays bounded:
+//! [the parent discovery module] stays readable and every emitted field stays bounded:
 //! only the outcome and a coarse error category ever reach a subscriber.
 //!
 //! Discovery defers its granular diagnostics to the composition boundary

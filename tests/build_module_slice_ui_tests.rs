@@ -48,7 +48,7 @@ const BUILD_SLICE_RERUN_PATHS: &[&str] = &[
 /// Runtime-only modules that must not widen the build-script module slice.
 const RUNTIME_ONLY_RERUN_PATHS: &[&str] = &[
     "src/cli/diag/mod.rs",
-    "src/cli/discovery.rs",
+    "src/cli/discovery/mod.rs",
     "src/cli/merge.rs",
     "src/cli/parser/mod.rs",
     "src/cli/parsing.rs",

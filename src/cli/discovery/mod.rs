@@ -12,31 +12,21 @@ use std::sync::Arc;
 use super::command::Cli;
 use crate::host_pattern::HostPattern;
 
-#[path = "discovery_budget_request.rs"]
 mod budget_request;
 pub(crate) use budget_request::ProjectManifestBudgetRequest;
 
-#[path = "discovery_environment.rs"]
 mod environment;
 pub use environment::{EnvProvider, StdEnvProvider};
 
-#[path = "discovery_diagnostics.rs"]
 mod diagnostics;
-#[path = "discovery_json.rs"]
 mod json;
-#[path = "discovery_layers.rs"]
 mod layers;
-#[path = "discovery_paths.rs"]
 mod paths;
-#[path = "discovery_project_policy.rs"]
 mod project_policy;
 
-#[path = "discovery_selector.rs"]
 mod selector;
-#[path = "discovery_trace.rs"]
 mod trace;
 
-#[path = "discovery_telemetry.rs"]
 mod telemetry;
 use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning};
 use layers::collect_file_layers_with_normalizer_and_trace;
@@ -51,7 +41,6 @@ use std::path::PathBuf;
 pub use telemetry::record_discovery_outcome;
 use trace::{DiscoveryDiagnostics, DiscoveryTrace, FileLayerTrace};
 
-#[path = "discovery_merge_layers.rs"]
 mod merge_layers;
 pub(crate) use merge_layers::push_discovered_file_layers;
 /// Name of the environment variable that selects the configuration file.
@@ -341,40 +330,30 @@ pub(crate) fn collect_diag_file_layers_with_env(
 }
 
 #[cfg(test)]
-#[path = "discovery_event_assertions.rs"]
 mod event_assertions;
 
 #[cfg(test)]
-#[path = "discovery_tracing_tests.rs"]
 mod tracing_tests;
 
 #[cfg(test)]
-#[path = "discovery_helper_proptests.rs"]
 mod helper_proptests;
 
 #[cfg(test)]
-#[path = "discovery_layer_replay_tests.rs"]
 mod layer_replay_tests;
 #[cfg(test)]
-#[path = "discovery_layer_selector_tests.rs"]
 mod layer_selector_tests;
 #[cfg(test)]
-#[path = "discovery_layer_tests.rs"]
 mod layer_tests;
 #[cfg(test)]
-#[path = "discovery_replay_proptests.rs"]
 mod replay_proptests;
 
 /// Tests for explicit config-path precedence. Enumerated cases cover every
 /// combination of `--config` and `NETSUKE_CONFIG` presence; a proptest property
 /// test asserts the invariant for generated path values.
 #[cfg(test)]
-#[path = "config_path_precedence_tests.rs"]
-mod config_path_precedence_tests;
+mod path_precedence_tests;
 #[cfg(test)]
-#[path = "discovery_unit_tests.rs"]
 mod unit_tests;
 
 #[cfg(test)]
-#[path = "discovery_budget_tests.rs"]
 mod budget_tests;

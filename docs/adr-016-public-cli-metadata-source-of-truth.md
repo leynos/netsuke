@@ -18,7 +18,7 @@ omits public, localized CLI documentation.
 
 The parser-only selectors must not become layered configuration sources. ADR
 004 assigns `--config` precedence, explicit-file loading, and fail-closed
-behaviour to `src/cli/discovery.rs`, while ADR 014 assigns `-C/--directory`
+behaviour to `src/cli/discovery/mod.rs`, while ADR 014 assigns `-C/--directory`
 project-discovery rooting and manifest lookup to the same discovery boundary.
 Putting either policy into OrthoConfig would reverse the established ownership
 boundary.
@@ -87,7 +87,7 @@ configuration setting.
 - Layered configuration metadata:
   [`src/cli/config.rs`](../src/cli/config.rs)
 - Selector precedence and fail-closed loading:
-  [`src/cli/discovery.rs`](../src/cli/discovery.rs)
+  [`src/cli/discovery/mod.rs`](../src/cli/discovery/mod.rs)
 - Generator metadata root:
   [`Cargo.toml`](../Cargo.toml) (`root_type = "netsuke::cli::ReleaseHelpCli"`)
 - Design narrative: [Netsuke design §8.5](netsuke-design.md#85-manual-pages)

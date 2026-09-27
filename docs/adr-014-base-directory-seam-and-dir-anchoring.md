@@ -39,7 +39,7 @@ shell's original working directory and is deliberately independent of `-C`.
   or `NETSUKE_CONFIG` resolves against the shell's original working directory.
   `-C` scopes automatic project discovery and manifest lookup; it never
   re-anchors an explicit selector. See ADR-004 for the selection machinery and
-  `src/cli/discovery.rs` for the implementation.
+  `src/cli/discovery/mod.rs` for the implementation.
 - **In-process environment mutation is banned and gated.** `clippy.toml` and
   `test_support/clippy.toml` disallow `std::env::set_var`, `remove_var`, and
   `set_current_dir` across the workspace targets, and `make lint` runs Clippy
@@ -75,7 +75,7 @@ shell's original working directory and is deliberately independent of `-C`.
   (`resolve_absolute_workspace_root`).
 - Composition boundary: `src/runner/mod.rs` and `src/runner/help/query.rs`.
 - Explicit-selector independence:
-  [`src/cli/discovery.rs`](../src/cli/discovery.rs); ADR-004.
+  [`src/cli/discovery/mod.rs`](../src/cli/discovery/mod.rs); ADR-004.
 - Gate: `make lint` runs Clippy with `clippy.toml` and
   `test_support/clippy.toml`, which contain the disallowed-method policy.
 

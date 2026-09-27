@@ -3523,7 +3523,7 @@ flowchart LR
   N --> O[Run Netsuke with final behaviour]
 ```
 
-Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
+Netsuke configuration discovery is implemented in `src/cli/discovery/mod.rs`.
 Explicit file selection is handled by `selector::resolve_config_selector(...)`,
 which applies the precedence `--config` > `NETSUKE_CONFIG`.
 `discover_file_layers(...)` performs one overall discovery pass, applying the
@@ -3739,10 +3739,10 @@ existing CLI Fluent keys onto published configuration fields, omits the
 structural `cmds` container, and adds both selectors as help-only metadata with
 no environment or file source. It must not add selector precedence,
 configuration loading, or discovery policy to OrthoConfig. Those
-responsibilities remain in `src/cli/discovery.rs`: [ADR 004] governs `--config`
-precedence and fail-closed selected-file loading, while [ADR 014] governs
-`-C/--directory` project-discovery rooting and manifest lookup. This boundary
-avoids a duplicate CLI model and is recorded in [ADR 016].
+responsibilities remain in `src/cli/discovery/mod.rs`: [ADR 004] governs
+`--config` precedence and fail-closed selected-file loading, while [ADR 014]
+governs `-C/--directory` project-discovery rooting and manifest lookup. This
+boundary avoids a duplicate CLI model and is recorded in [ADR 016].
 
 Manual pages are generated under
 `target/orthohelp/<target>/release/man/man1/netsuke.1`. Windows targets also

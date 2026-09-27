@@ -107,7 +107,7 @@ arithmetic that can overflow. The sites are:
 - `src/stdlib/time/format.rs`
 - `src/stdlib/command/quote.rs`
 - `src/ninja_gen/mod.rs`
-- `src/cli/discovery_layers.rs`
+- `src/cli/discovery/layers.rs`
 
 Coverage must also include the supported `Recipe::Rule` rejection path in
 `src/ninja_gen/mod.rs`: `NamedAction::write_into` calls
