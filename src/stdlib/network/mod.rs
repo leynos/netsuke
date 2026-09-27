@@ -372,5 +372,4 @@ mod observability_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
-#[path = "tests_support.rs"]
-mod tests_support;
+use self::tests::support as tests_support;

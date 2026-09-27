@@ -25,23 +25,23 @@ use tempfile::tempdir;
 use test_support::fs;
 use url::Url;
 
-use super::telemetry::FETCH_DURATION;
-use super::{FetchContext, NetworkConfig, NetworkPolicy, fetch, open_cache_dir};
+use super::super::telemetry::FETCH_DURATION;
+use super::super::{FetchContext, NetworkConfig, NetworkPolicy, fetch, open_cache_dir};
 use crate::localization;
 use crate::stdlib::{DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES};
 
 /// Username the network tests place in a fixture URL's userinfo.
-pub(super) const REDIRECT_USER: &str = "redirect-user";
+pub(in crate::stdlib::network) const REDIRECT_USER: &str = "redirect-user";
 /// Password the network tests place in a fixture URL's userinfo.
-pub(super) const REDIRECT_SECRET: &str = "redirect-secret";
+pub(in crate::stdlib::network) const REDIRECT_SECRET: &str = "redirect-secret";
 
-pub(super) type CacheWorkspace = (tempfile::TempDir, Arc<Dir>, Utf8PathBuf);
+pub(in crate::stdlib::network) type CacheWorkspace = (tempfile::TempDir, Arc<Dir>, Utf8PathBuf);
 
 /// Creates a temporary cache workspace returning the tempdir, an ambient
 /// authority directory handle wrapped in `Arc`, and the UTF-8 path for cache
 /// assertions in fetch tests.
 #[fixture]
-pub(super) fn cache_workspace() -> Result<CacheWorkspace> {
+pub(in crate::stdlib::network) fn cache_workspace() -> Result<CacheWorkspace> {
     let temp = tempdir().context("create fetch cache tempdir")?;
     let temp_path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
         .map_err(|path| anyhow!("tempdir path not valid UTF-8: {path:?}"))?;
@@ -67,7 +67,7 @@ pub(super) fn cache_workspace() -> Result<CacheWorkspace> {
 ///
 /// Returns an error when the composed string is not a well-formed URL or does
 /// not accept userinfo.
-pub(super) fn credentialed_url(host: &str, path: &str) -> Result<Url> {
+pub(in crate::stdlib::network) fn credentialed_url(host: &str, path: &str) -> Result<Url> {
     let mut url = Url::parse(&format!("http://{host}{path}"))
         .with_context(|| format!("credentialed URL should parse: http://{host}{path}"))?;
     url.set_username(REDIRECT_USER)
@@ -82,7 +82,7 @@ pub(super) fn credentialed_url(host: &str, path: &str) -> Result<Url> {
 /// # Errors
 ///
 /// Returns an error when this URL cannot be composed or credentialed.
-pub(super) fn credentialed_current_url() -> Result<Url> {
+pub(in crate::stdlib::network) fn credentialed_current_url() -> Result<Url> {
     credentialed_url("allowed.example", "/start")
 }
 
@@ -95,7 +95,7 @@ pub(super) fn credentialed_current_url() -> Result<Url> {
 /// # Errors
 ///
 /// Returns an error when this URL cannot be composed or credentialed.
-pub(super) fn credentialed_target_url() -> Result<Url> {
+pub(in crate::stdlib::network) fn credentialed_target_url() -> Result<Url> {
     credentialed_url("blocked.example", "/next")
 }
 
@@ -120,7 +120,7 @@ pub(super) fn credentialed_target_url() -> Result<Url> {
 ///
 /// Returns an error when `fixture_url` is not a well-formed URL or does not name
 /// a host.
-pub(super) fn credentialed_loopback_url(fixture_url: &str) -> Result<Url> {
+pub(in crate::stdlib::network) fn credentialed_loopback_url(fixture_url: &str) -> Result<Url> {
     let mut url = Url::parse(fixture_url)
         .with_context(|| format!("fixture URL should parse: {fixture_url}"))?;
     url.set_username(REDIRECT_USER)
@@ -132,7 +132,7 @@ pub(super) fn credentialed_loopback_url(fixture_url: &str) -> Result<Url> {
 }
 
 /// Builds a test `FetchContext` with the provided cache root and default policy.
-pub(super) fn make_context(root: Arc<Dir>) -> FetchContext {
+pub(in crate::stdlib::network) fn make_context(root: Arc<Dir>) -> FetchContext {
     make_context_with(
         root,
         NetworkPolicy::default(),
@@ -140,7 +140,11 @@ pub(super) fn make_context(root: Arc<Dir>) -> FetchContext {
     )
 }
 
-pub(super) fn make_context_with(root: Arc<Dir>, policy: NetworkPolicy, limit: u64) -> FetchContext {
+pub(in crate::stdlib::network) fn make_context_with(
+    root: Arc<Dir>,
+    policy: NetworkPolicy,
+    limit: u64,
+) -> FetchContext {
     let config = NetworkConfig {
         cache_root: root,
         cache_relative: Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR),
@@ -151,7 +155,7 @@ pub(super) fn make_context_with(root: Arc<Dir>, policy: NetworkPolicy, limit: u6
 }
 
 /// Computes `limit + offset` as a `usize` for oversized-response fixtures.
-pub(super) fn limit_with_offset(limit: u64, offset: u64) -> Result<usize> {
+pub(in crate::stdlib::network) fn limit_with_offset(limit: u64, offset: u64) -> Result<usize> {
     let total = limit
         .checked_add(offset)
         .context("test limit plus offset should not overflow")?;
@@ -159,7 +163,7 @@ pub(super) fn limit_with_offset(limit: u64, offset: u64) -> Result<usize> {
 }
 
 /// Write an entry to the cache directory and assert it exists within the workspace.
-pub(super) fn assert_cache_entry_exists(
+pub(in crate::stdlib::network) fn assert_cache_entry_exists(
     dir: Dir,
     cache_relative: &Utf8Path,
     workspace: &Utf8Path,
@@ -177,7 +181,7 @@ pub(super) fn assert_cache_entry_exists(
 }
 
 /// Asserts that `open_cache_dir` rejects the `path` with an error message containing `expected`.
-pub(super) fn assert_open_cache_dir_rejects(
+pub(in crate::stdlib::network) fn assert_open_cache_dir_rejects(
     root: &Dir,
     path: &Utf8Path,
     expected: &str,
@@ -191,7 +195,7 @@ pub(super) fn assert_open_cache_dir_rejects(
 }
 
 /// Asserts that `fetch` rejects `url` under `policy` without marking the template impure.
-pub(super) fn assert_fetch_policy_rejection(
+pub(in crate::stdlib::network) fn assert_fetch_policy_rejection(
     root: Arc<Dir>,
     policy: NetworkPolicy,
     url: &str,
@@ -219,7 +223,10 @@ pub(super) fn assert_fetch_policy_rejection(
     Ok(())
 }
 
-pub(super) fn cache_relative_error(key: &'static str, path: Option<&str>) -> String {
+pub(in crate::stdlib::network) fn cache_relative_error(
+    key: &'static str,
+    path: Option<&str>,
+) -> String {
     let message = path.map_or_else(
         || localization::message(key),
         |value| localization::message(key).with_arg("path", value),
@@ -228,7 +235,7 @@ pub(super) fn cache_relative_error(key: &'static str, path: Option<&str>) -> Str
 }
 
 /// One captured metric sample: its name, labels, and value.
-pub(super) struct Sample {
+pub(in crate::stdlib::network) struct Sample {
     /// Metric name the sample was recorded under.
     name: String,
     /// Labels attached to the sample, in insertion order.
@@ -238,12 +245,12 @@ pub(super) struct Sample {
 }
 
 /// Build one label pair for a captured sample.
-pub(super) fn label(name: &str, value: &str) -> (String, String) {
+pub(in crate::stdlib::network) fn label(name: &str, value: &str) -> (String, String) {
     (name.to_owned(), value.to_owned())
 }
 
 /// Convert raw snapshot entries into samples, keeping the recorder's order.
-pub(super) fn collect_samples(
+pub(in crate::stdlib::network) fn collect_samples(
     entries: Vec<(
         metrics_util::CompositeKey,
         Option<metrics::Unit>,
@@ -269,7 +276,7 @@ pub(super) fn collect_samples(
 ///
 /// The recorder exposes no ordering guarantee, so the totals are keyed by
 /// labels and compared as maps.
-pub(super) fn counter_totals(
+pub(in crate::stdlib::network) fn counter_totals(
     samples: &[Sample],
     name: &str,
 ) -> BTreeMap<Vec<(String, String)>, u64> {
@@ -290,7 +297,7 @@ pub(super) fn counter_totals(
 /// # Errors
 ///
 /// Returns an error when the recorded totals differ from `expected`.
-pub(super) fn assert_counter_totals(
+pub(in crate::stdlib::network) fn assert_counter_totals(
     samples: &[Sample],
     name: &str,
     expected: &BTreeMap<Vec<(String, String)>, u64>,
@@ -309,7 +316,7 @@ pub(super) fn assert_counter_totals(
 ///
 /// Returns an error when the duration series is missing, labelled, not a
 /// histogram, or does not hold exactly one observation.
-pub(super) fn fetch_duration_seconds(samples: &[Sample]) -> Result<Vec<f64>> {
+pub(in crate::stdlib::network) fn fetch_duration_seconds(samples: &[Sample]) -> Result<Vec<f64>> {
     let durations = samples
         .iter()
         .filter(|sample| sample.name == FETCH_DURATION)

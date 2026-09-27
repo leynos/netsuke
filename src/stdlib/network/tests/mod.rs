@@ -1,5 +1,7 @@
 //! Integration tests for network functions.
 
+pub(super) mod support;
+
 use super::*;
 
 use anyhow::{Context, Result, anyhow, ensure};

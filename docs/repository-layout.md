@@ -292,10 +292,11 @@ snapshot-producing cases stay in the parent module: insta derives a snapshot's
 filename from the module path that asserted it, and the files under
 `src/snapshots/network_redirect/` keep stable names.
 
-### `src/stdlib/network/tests_support.rs`
+### `src/stdlib/network/tests/support.rs`
 
-Shared support for the network tests, declared by `src/stdlib/network/mod.rs`
-through `#[path = "tests_support.rs"]`. It owns the shared `REDIRECT_USER` and
+Shared support for the network tests, declared by
+`src/stdlib/network/tests/mod.rs` through `mod support;` and reached by sibling
+tests through the parent alias. It owns the shared `REDIRECT_USER` and
 `REDIRECT_SECRET` constants and the URL helpers that apply them.
 `credentialed_url` preserves the caller's path; the current and target helpers,
 `credentialed_current_url` and `credentialed_target_url`, use `/start` and
