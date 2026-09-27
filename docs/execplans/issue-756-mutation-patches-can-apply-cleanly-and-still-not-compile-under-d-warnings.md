@@ -557,7 +557,38 @@ failure mode cannot recur silently.
       context line inside three mutation patches' payload, reported identically
       against the pre-rebase branch, so they are patch content rather than merge
       damage — which is worth stating, because `--check` cannot tell the two
-      apart.
+      apart. **What follows supersedes this reading's central claim.** The
+      audit listed here is necessary but was not sufficient, and the entry
+      below records the defect it let through: everything above is true and
+      still missed a duplicated step pair that failed two contracts, because
+      `range-diff` compares patches and this was a base-content collision.
+      Read the two entries together; this one alone would teach the wrong
+      lesson.
+- [ ] (2026-09-27) **The round-2 replay was not clean, and the audit above did
+      not catch it.** The full gate suite failed `make test-workflow-contracts`
+      with two failures from one cause: `kani-smoke` carried *two* copies of
+      `Install the build standard` and `Install cargo-nextest`. `c298a643`
+      (#768) added a pair for `make test-kani-scope-wrapper`; this branch's
+      `73d18518` adds its own pair for the mutation compile gate, because when
+      it was authored its base (`30c50e27`) had neither step. The replay put
+      both in the job with no textual conflict to stop it, since the two
+      additions sit at different positions. Fixed by `06f7b0bb`, which keeps
+      the earlier pair and drops the later one — a job shares one filesystem,
+      so the first pair already installs what the gate needs — and moves the
+      deleted steps' reasons into the gate's own comment so the pair is not
+      re-added. The lesson is about the audit, not the resolution: `range-diff`
+      reported all 49 commits `=` and was *correct*, because every patch
+      replayed identically. It compares patches, and a patch that applied
+      cleanly against one base means something different against a base that
+      already contained its change. Only three of the contracts that read the
+      job noticed. `nextest_lane_mold_test.py` uses `next(...)` and was
+      satisfied by the first match throughout, so a duplicate-tolerant reader
+      cannot witness the duplicate it tolerates; the two that fired use
+      `named_step()`, which asserts exactly one step by name, and an exact
+      single-install comparison. This is issue #756's own failure mode one
+      level up — a check that looks healthy while contributing nothing — and
+      it arrived through the same door: a reader that could not see the shape
+      it was reading.
 
 ## Surprises & discoveries
 
@@ -2127,3 +2158,22 @@ approaches the ceiling, as `makefile_recipes.py` itself records having done.
   commits `=`, which is stronger than the usual audit and is available here
   precisely because the replay is linear and none of the intervening commits
   had to be reworked.
+- 2026-09-27 — The entry above is **wrong about the third conflict, and there
+  was a third**. It describes two conflicts because those are the two git
+  stopped on; a third arrived without stopping anything. `c298a643` had already
+  added `Install the build standard` and `Install cargo-nextest` to
+  `kani-smoke` for the scope wrapper, and this branch's `73d18518` adds the
+  same pair for the mutation gate — written when its base had neither. The two
+  additions sit at different positions, so they merged cleanly into a job
+  carrying both, and no conflict marker, no failing gate at commit time, and no
+  `range-diff` line could see it: range-diff compares patches, and every patch
+  did replay identically. `make test-workflow-contracts` found it two failures
+  deep, both from the duplicate. The general form is worth more than the
+  instance. A clean automatic merge proves the text did not meet; it does not
+  prove the *change* did not meet, because a patch adds a step, or an import,
+  or a case, and a commit can add the second copy on a different line without
+  any text in common. Duplicates of this kind are also invisible to
+  duplicate-tolerant readers by construction — `nextest_lane_mold_test.py`
+  takes the first match and was satisfied throughout — so the contracts that
+  could see it were exactly the ones asserting a count. `06f7b0bb` removes
+  the later pair and records the reasons in the gate's own comment.
