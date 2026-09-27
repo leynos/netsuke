@@ -144,5 +144,4 @@ fn describe_metrics() {
 }
 
 #[cfg(test)]
-#[path = "telemetry_tests.rs"]
 mod tests;

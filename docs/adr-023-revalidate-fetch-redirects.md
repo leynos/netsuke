@@ -79,13 +79,13 @@ The adapter emits four bounded metric families and nothing else:
   `policy_rejected`.
 
 Every label value comes from a closed set declared in
-[`src/stdlib/network/telemetry.rs`](../src/stdlib/network/telemetry.rs), so the
-number of series is fixed by the code and never by input. No series carries a
-URL, host, location, or userinfo, which keeps the counter cardinality bounded
-under ADR-009's redaction contract. The library only emits these series.
-Installing a recorder and deciding what to retain stays the application's
-decision under ADR-013, so no stdlib fetch series is added to the in-process
-recorder allowlist.
+[`src/stdlib/network/telemetry/mod.rs`](../src/stdlib/network/telemetry/mod.rs),
+so the number of series is fixed by the code and never by input. No series
+carries a URL, host, location, or userinfo, which keeps the counter cardinality
+bounded under ADR-009's redaction contract. The library only emits these
+series. Installing a recorder and deciding what to retain stays the
+application's decision under ADR-013, so no stdlib fetch series is added to the
+in-process recorder allowlist.
 
 ## Alternatives considered
 
@@ -112,7 +112,7 @@ recorder allowlist.
   [`src/stdlib/network/redirect/mod.rs`](../src/stdlib/network/redirect/mod.rs),
   tested by [adapter tests](../src/stdlib/network/redirect/tests/mod.rs)
 - The metric names and their closed label vocabularies in
-  [`src/stdlib/network/telemetry.rs`](../src/stdlib/network/telemetry.rs),
+  [`src/stdlib/network/telemetry/mod.rs`](../src/stdlib/network/telemetry/mod.rs),
   tested by [telemetry tests](../src/stdlib/network/telemetry_tests.rs)
 - Policy evaluation in
   [`src/stdlib/network/policy/mod.rs`](../src/stdlib/network/policy/mod.rs)
@@ -161,7 +161,7 @@ The invariants the original decision relies on do not change:
   only, exactly as the variants they replace did.
 - **Metric cardinality.** `location_missing` and `location_invalid` remain in
   the closed `redirect_failure` vocabulary of
-  [`src/stdlib/network/telemetry.rs`](../src/stdlib/network/telemetry.rs). The
-  adapter still records both reasons, so the series count stays fixed by the
-  code. The two Fluent keys and their messages are reused unchanged in every
-  locale, so the user-visible text is unchanged too.
+  [`src/stdlib/network/telemetry/mod.rs`](../src/stdlib/network/telemetry/mod.rs).
+  The adapter still records both reasons, so the series count stays fixed by
+  the code. The two Fluent keys and their messages are reused unchanged in
+  every locale, so the user-visible text is unchanged too.

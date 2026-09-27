@@ -7238,7 +7238,7 @@ recording the value that distinguished it.
 
 The fetch boundary emits four bounded metric families, described once per
 process through `Once`-guarded `describe_counter!` and `describe_histogram!`
-calls in `src/stdlib/network/telemetry.rs`, matching the pattern in
+calls in `src/stdlib/network/telemetry/mod.rs`, matching the pattern in
 `stdlib::which::cache`:
 
 - `netsuke_stdlib_fetch_total` — a counter labelled `outcome=success|failure`.
@@ -7292,8 +7292,8 @@ parsed one would have to name a transport failure in its own vocabulary. So
 `CredentialsNotRemovable`, `LimitExceeded`, `Loop`, and `Policy` — while
 `location_missing` and `location_invalid` are `redirect_failure` reasons the
 adapter records. Both reasons stay in the closed vocabulary of
-[`src/stdlib/network/telemetry.rs`](../src/stdlib/network/telemetry.rs) because
-the adapter still emits them.
+[`src/stdlib/network/telemetry/mod.rs`](../src/stdlib/network/telemetry/mod.rs)
+because the adapter still emits them.
 
 The per-hop ordering is the security-relevant part. The adapter dispatches a
 GET, classifies the status, resolves the `Location` value against the URL whose
