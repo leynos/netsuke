@@ -241,8 +241,8 @@ the other stdlib command keys rather than introducing a separate key namespace.
 
 ISO-8601 rendering for the standard-library time values, owned by
 `src/stdlib/time/mod.rs` (which declares `mod format;`). It renders offset
-datetimes and UTC offsets to ISO-8601 while stripping the zero fractional part,
-and exposes the `TimeDeltaValue` and `TimestampValue` MiniJinja object types
+datetimes and UTC offsets to ISO-8601 without a zero-valued fractional part. It
+also exposes the `TimeDeltaValue` and `TimestampValue` MiniJinja object types
 the parent predicates downcast. Only the time module may import it.
 
 ### `src/status_indicatif.rs`
@@ -393,8 +393,8 @@ when it serves more than one command-interpolation property test.
 ### `src/ir/cmd_interpolate/power_shell_tests.rs`
 
 This test-only module owns the command-interpolation cases for protected
-PowerShell contexts. Keep those cases here so the parent test module stays
-below the 400-line cap; production code must not depend on this test module.
+PowerShell contexts. Keep those cases here to hold the parent test module below
+the 400-line cap; production code must not depend on this test module.
 
 ## Placement conventions
 
