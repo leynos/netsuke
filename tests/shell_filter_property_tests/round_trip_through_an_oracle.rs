@@ -11,15 +11,18 @@
 //! [`the_generated_corpus_spans_the_quoting_boundary`] shows the generator
 //! reaches the inputs where a wrong answer would show.
 use super::property_support::{
-    POWERSHELL, decode_power_shell_literal, decode_through_posix_shell, encoded_sh, posix_shell,
-    quote_value, word,
+    POWERSHELL, decode_power_shell_literal, encoded_sh, quote_value, word,
 };
 use anyhow::{Context, Result, ensure};
 use proptest::prelude::*;
 use proptest::test_runner::{FileFailurePersistence, TestRunner};
-// The only `#[rstest]` case here is the `#[cfg(unix)]` control, so an
-// unconditional import is an unused-import error on Windows, where
+// The POSIX harness belongs to the `#[cfg(unix)]` obligation and the control
+// beside it. Those items are themselves gated in `property_support`, so naming
+// them from an ungated `use` would not even resolve on Windows, where
 // `-D warnings` is a merge gate.
+#[cfg(unix)]
+use super::property_support::{decode_through_posix_shell, posix_shell};
+// Likewise the only `#[rstest]` case here is the `#[cfg(unix)]` control.
 #[cfg(unix)]
 use rstest::rstest;
 use std::cell::Cell;
@@ -29,6 +32,17 @@ use std::process::Command;
 // OBL-SH-ROUNDTRIP
 // ---------------------------------------------------------------------------
 
+// The obligation is `#[cfg(unix)]` because it needs a real `/bin/sh`, which the
+// Windows merge gate (`make SHELL=bash test` on `windows-latest`) does not
+// provide. That gate compiles and runs the `#[cfg(windows)]` tree under
+// `-D warnings`, so a test that cannot run there must be removed by `cfg`
+// rather than left to fail at run time: a `TestCaseError::fail` on a host with
+// no `sh` reports the whole job red for a reason no host change can fix. What
+// Windows loses is the *round trip*; [`the_generated_corpus_spans_the_quoting_boundary`]
+// still exercises `Sh` encoding there, and
+// [`the_power_shell_model_matches_the_real_interpreter`] runs against a real
+// `powershell.exe`.
+#[cfg(unix)]
 proptest! {
     // 64 cases, not 128: every case forks a shell, and the whole file must
     // finish inside the 10s budget the milestones set for it. The corpus is
@@ -45,13 +59,11 @@ proptest! {
     /// A real shell reads back exactly what was quoted.
     #[test]
     fn sh_quoting_round_trips_through_a_real_shell(value in word()) {
-        let Some(shell) = posix_shell() else {
-            // No POSIX shell on this host: the obligation is undischarged here
-            // and the `#[cfg(unix)]` companion below says so explicitly. Failing
-            // rather than passing keeps the gap visible — a silent return would
-            // report green for a property that never ran.
-            return Err(TestCaseError::fail("no POSIX shell available"));
-        };
+        // No `None` arm: this module compiles only on Unix, where `posix_shell`
+        // finds one of the well-known paths. Returning an error here instead
+        // would put the whole Windows job red for an unrunnable test, which is
+        // the defect this gate replaced.
+        let shell = posix_shell().expect("a POSIX shell on a Unix host");
         let encoded = encoded_sh(&value)
             .map_err(|error| TestCaseError::fail(format!("{error:#}")))?;
         let decoded = decode_through_posix_shell(&shell, &encoded)

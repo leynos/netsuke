@@ -12,11 +12,21 @@
 //! metacharacters, would be vanishingly rare and a property would pass on a
 //! sample that never exercised quoting at all.
 
-use anyhow::{Context, Result, bail, ensure};
-use camino::Utf8PathBuf;
+use anyhow::{Context, Result, bail};
+// `ensure!` is used only by `run_posix_shell`, which is itself `#[cfg(unix)]`:
+// keeping the import unconditional is an unused-import error on Windows, where
+// `-D warnings` is a merge gate.
+#[cfg(unix)]
+use anyhow::ensure;
 use minijinja::{Environment, context, value::Value};
 use netsuke::stdlib::StdlibConfig;
 use proptest::prelude::*;
+// The interpreter lookups below are Unix-only, so their types and the
+// process handle are too: an unconditional import is an unused-import
+// error on Windows, where `-D warnings` is a merge gate.
+#[cfg(unix)]
+use camino::Utf8PathBuf;
+#[cfg(unix)]
 use std::process::Command;
 
 /// The dialect names the filters accept, spelled as call sites must spell them.
@@ -79,6 +89,9 @@ pub(super) fn non_empty_word() -> impl Strategy<Value = String> {
 ///
 /// Homebrew's macOS `sh` lives outside the default `PATH` some CI runners set,
 /// so the well-known absolute paths are tried after the `PATH` lookup.
+// This helper runs a real POSIX shell, so it exists only where one does; the
+// Windows merge gate would otherwise see it as dead code under `-D warnings`.
+#[cfg(unix)]
 pub(super) fn posix_shell() -> Option<Utf8PathBuf> {
     for candidate in ["/bin/sh", "/usr/bin/sh", "/usr/local/bin/sh"] {
         let path = Utf8PathBuf::from(candidate);
@@ -90,6 +103,9 @@ pub(super) fn posix_shell() -> Option<Utf8PathBuf> {
 }
 
 /// Run `script` under a real POSIX shell and return its stdout.
+// This helper runs a real POSIX shell, so it exists only where one does; the
+// Windows merge gate would otherwise see it as dead code under `-D warnings`.
+#[cfg(unix)]
 pub(super) fn run_posix_shell(shell: &Utf8PathBuf, script: &str) -> Result<String> {
     let output = Command::new(shell.as_str())
         .arg("-c")
@@ -162,6 +178,9 @@ pub(super) fn decode_power_shell_literal(text: &str) -> Result<String> {
 /// script's argument rather than splicing it into the script keeps the harness
 /// honest: the shell parses the word from argument position, which is exactly
 /// where a recipe's word sits.
+// This helper runs a real POSIX shell, so it exists only where one does; the
+// Windows merge gate would otherwise see it as dead code under `-D warnings`.
+#[cfg(unix)]
 pub(super) fn decode_through_posix_shell(shell: &Utf8PathBuf, encoded: &str) -> Result<String> {
     let script = format!(r"printf %s {encoded}");
     run_posix_shell(shell, &script)
