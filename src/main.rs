@@ -45,7 +45,6 @@ mod observability;
 mod startup_tracing;
 
 #[cfg(test)]
-#[path = "test_tracing_capture.rs"]
 mod test_tracing_capture;
 
 mod config_load;

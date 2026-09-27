@@ -32,6 +32,5 @@ mod snapshot_test_support;
 pub mod status;
 pub mod stdlib;
 #[cfg(test)]
-#[path = "test_tracing_capture.rs"]
 pub(crate) mod test_tracing_capture;
 pub mod theme;
