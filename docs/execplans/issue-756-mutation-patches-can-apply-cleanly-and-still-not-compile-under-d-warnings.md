@@ -496,6 +496,34 @@ failure mode cannot recur silently.
       paths from `git diff --name-only origin/main...HEAD` compare as identical
       sets, and the reviewed revision matches the pushed head before and after
       the run. The docstyle finding is therefore cleared.
+- [x] (2026-09-27) Rebased the 46-commit series onto `origin/main`
+      (`96b89ca9b51b020a30bf92a8668d37182398c299`), from the true branch point
+      `30c50e27ab50975322c1f2de8db7b427baf68059`. Old head
+      `2e31ae0ebd99e5f9af16202b669cddc6a31f1267`, new head
+      `198fa6981a28ff77552773212fad365ea79f49ac`. One conflict, in
+      `.github/workflows/ci.yml`, resolved in favour of both sides: `main`'s
+      fork-fallback `runs-on` expression is kept whole, and this branch's
+      `timeout-minutes: 30` now sits beneath it. The two changes are orthogonal
+      — the branch never touched `runs-on` — so the resolution is a union
+      rather than a compromise, and the contract that derives worker bounds
+      reads `owned_runner(runs-on)` deliberately, so the fork arm is not what
+      the lane's vCPU declaration is measured against.
+      Recovery refs were created before the replay, under
+      `refs/recovery/issue756-*-20260927T154716Z`. The series replayed linear
+      with zero merges; `git range-diff` reports 36 of the 46 commits
+      byte-identical and exactly two that differ, both expected: commit 9
+      carries the resolution above, and commit 38 loses only its `typos.toml`
+      hunk because `main` had already made that identical edit — both sides
+      produced blob `f72c0ebc`, so the hunk auto-resolved to nothing and the
+      commit's other four files replayed intact. A `.gitattributes` rule
+      arriving mid-replay would have been able to select a merge driver, so the
+      replay was gated on one: no commit in the replay or the target delta
+      touches that file, and `git check-attr merge` reports `unspecified` for
+      all 148 paths across both deltas. The semantic audit the driver policy
+      requires was run regardless, since a text merge can still lose work:
+      every branch addition is byte-identical under its rebased patch, all 115
+      main-only paths are byte-identical at the new head, and no file gained a
+      repeated block.
 
 ## Surprises & discoveries
 
