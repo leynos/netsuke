@@ -6,7 +6,7 @@ pub mod locale_catalogues;
 mod cli_localization;
 #[path = "../../src/localization/mod.rs"]
 pub mod localization;
-#[path = "../../src/host_pattern.rs"]
+#[path = "../../src/host/pattern.rs"]
 mod host_pattern;
 
 #[path = "../../src/cli"]

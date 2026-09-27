@@ -3064,8 +3064,8 @@ That slice is a maintained boundary, not an accident:
   `src/cli/mod.rs`.
 - `src/cli/help.rs` holds the `help` subcommand's data types, which are part of
   the Clap schema but do not need the runtime help renderer.
-- `src/host_pattern.rs` covers pattern syntax; matching a concrete hostname
-  against a parsed pattern lives in `src/host_matching.rs`, which the build
+- `src/host/pattern.rs` covers pattern syntax; matching a concrete hostname
+  against a parsed pattern lives in `src/host/matching.rs`, which the build
   script does not compile.
 
 Keeping the slice narrow is what lets rustc's unused-item analysis run normally

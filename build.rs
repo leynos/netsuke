@@ -43,8 +43,8 @@ const FALLBACK_DATE: &str = "1970-01-01";
 // `src/cli/command.rs` holds command-schema and default-command behaviour,
 // including `Cli::with_default_command`, with runtime preferences in
 // `src/cli/preferences.rs` and the localisation-aware parsing entry point in
-// `src/cli/parser.rs`; matching logic is split out of `src/host_pattern.rs`
-// into `src/host_matching.rs`. Adding a dependency on anything outside this
+// `src/cli/parser.rs`; matching logic is split out of `src/host/pattern.rs`
+// into `src/host/matching.rs`. Adding a dependency on anything outside this
 // slice will surface here as a compile error, which is the intended signal.
 #[path = "src/cli"]
 mod cli {
@@ -67,7 +67,8 @@ mod cli {
 
 #[path = "src/cli_localization.rs"]
 mod cli_localization;
-#[path = "src/host_pattern.rs"]
+// The build-script slice compiles pattern syntax without runtime matching.
+#[path = "src/host/pattern.rs"]
 mod host_pattern;
 
 /// The locale registry, shared with the library crate.
@@ -177,7 +178,7 @@ fn emit_rerun_directives() {
     println!("cargo:rerun-if-changed=src/cli/manifest_budget_config.rs");
     println!("cargo:rerun-if-changed=src/cli/help.rs");
     println!("cargo:rerun-if-changed=src/cli/validation.rs");
-    println!("cargo:rerun-if-changed=src/host_pattern.rs");
+    println!("cargo:rerun-if-changed=src/host/pattern.rs");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_DESCRIPTION");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_AUTHORS");

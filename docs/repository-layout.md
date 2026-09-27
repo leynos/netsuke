@@ -111,6 +111,8 @@ output and some leaf files so the long-lived structure remains visible.
   generation, packaging, and formal checks.
 - `src/`: Main `netsuke-build` Rust package source code.
 - `src/cli/`: Command-line configuration, parsing, validation, and merge logic.
+- `src/host/`: Shared host-pattern syntax and runtime hostname matching;
+  the build script compiles only the pattern module.
 - `src/ir/`: Intermediate representation generation, interpolation, graph, and
   cycle logic.
 - `src/localization/`: Localization key definitions and runtime localization

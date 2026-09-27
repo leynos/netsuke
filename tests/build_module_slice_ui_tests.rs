@@ -52,7 +52,7 @@ const RUNTIME_ONLY_RERUN_PATHS: &[&str] = &[
     "src/cli/merge.rs",
     "src/cli/parser.rs",
     "src/cli/parsing.rs",
-    "src/host_matching.rs",
+    "src/host/matching.rs",
 ];
 
 /// Verify the production build-script module root and its runtime boundary.
@@ -263,12 +263,12 @@ fn build_script_rerun_directives_match_the_compiled_module_slice() -> io::Result
     }
     if rerun_paths
         .iter()
-        .filter(|path| **path == "src/host_pattern.rs")
+        .filter(|path| **path == "src/host/pattern.rs")
         .count()
         != 1
     {
         return Err(io::Error::other(
-            "build.rs must track src/host_pattern.rs exactly once",
+            "build.rs must track src/host/pattern.rs exactly once",
         ));
     }
     for &path in RUNTIME_ONLY_RERUN_PATHS {
