@@ -39,6 +39,13 @@ NEXTEST_CONFIG = REPO_ROOT / ".config" / "nextest.toml"
 #: returns each selector as written.
 ANCHORED_SELECTOR = "test(/^{name}($|::)/)"
 
+#: The same selector with the branches of its closing test transposed, which
+#: denotes the same set and is admitted by the contracts that admit this one.
+#: Declared beside `ANCHORED_SELECTOR` because it is the other way a caller may
+#: be asked to spell an anchored filter, and a caller that writes only one is
+#: not thereby writing a different selector.
+TRANSPOSED_ANCHORED_SELECTOR = "test(/^{name}(::|$)/)"
+
 #: The selector this repository repaired away from, asserted to select nothing.
 LEGACY_SELECTOR = "test(={name})"
 
@@ -58,16 +65,36 @@ FILTER_LINE = re.compile(
 #: narrower one is blind to a filter the contracts admit.
 MODULE_PATH = r"(?:[a-z0-9_]+::)*"
 
+#: The two spellings of the anchored selector's closing test. `($|::)` reads
+#: "the name ends, or a module separator follows"; `(::|$)` spells that same set
+#: with its branches transposed. Both denote one filter, and the contracts that
+#: admit the configuration admit both, so a reader matching only one is narrower
+#: than the grammar it exists to read, and drops every filter written in the
+#: other.
+#:
+#: That is this package's own failure mode, worn by the reader. A dropped filter
+#: is examined by nothing, and the run exits 0 having verified fewer tests than
+#: the configuration declares with nothing in the transcript to say so. The
+#: narrow reading also *misreports*: a configuration whose anchored filters are
+#: all written this way yields no name at all, and the caller then refuses the
+#: run for holding no anchored filter -- accusing the file of a fault it does
+#: not have. `_top_level_alternatives` already treats the two spellings as one
+#: set when deciding what may separate alternatives, so matching only one of
+#: them here contradicts this module's own reading.
+ANCHORED_TAIL = r"\(\$\|::\)|\(::\|\$\)"
+
 #: An anchored selector, capturing the bare test name it names. The module path
 #: is matched but deliberately outside the capture: the callers comparing names
 #: key on the bare name the Rust sources yield, and capturing the prefix would
-#: report every module-scoped test as one this package has never seen.
+#: report every module-scoped test as one this package has never seen. The tail
+#: is alternated and non-capturing for the same reason, so the name group stays
+#: bare whichever way the configuration spelled the suffix.
 #:
 #: The whole match is still available -- `finditer` exposes it as group 0 -- and
 #: a reader that must *replay* a selector takes it, because a selector rebuilt
 #: from the bare name would silently drop the module path the file wrote.
 ANCHORED_SELECTOR_IN_CONFIG = re.compile(
-    rf"test\(/\^{MODULE_PATH}(?P<name>[a-z0-9_]+)\(\$\|::\)/\)"
+    rf"test\(/\^{MODULE_PATH}(?P<name>[a-z0-9_]+)(?:{ANCHORED_TAIL})/\)"
 )
 
 #: The rejected whole-name selector, capturing the bare test name it names. Read
