@@ -3788,6 +3788,46 @@ recorded for whoever hits them next.
   cheap and worth repeating whenever this tool rewrites prose, because
   `--renumber` and `--wrap` both rewrite text the author wrote.
 
+- [x] (2026-09-27) All seven gates green at `31ea3dc8`, and the branch is ready
+  to push. The run is recorded here with its figures because the three runs
+  that preceded it were each red on a *different* gate, and the sequence is the
+  useful part of the record.
+
+  `check-fmt` 2 s, `lint` 14 s, `typecheck` <1 s, `markdownlint` 14 s,
+  `doc-coverage` 7 s, `test` 279 s, `nixie` 1 s. `make lint` passed with all
+  four cascade stages confirmed run, so its problem count is exact and the
+  lower-bound caveat does not apply. `make test` ran 3578 nextest tests (3578
+  passed, 5 skipped) and both `Doc-tests` targets. `doc-coverage` is 98.83%
+  (4815/4872) against an 80% threshold.
+
+  **Three red runs, three different gates — and each one was masked by the one
+  before it.** `check-fmt` aborted at its first command on a rustfmt diff,
+  hiding `ruff format --check` and `mdtablefix --check`. Once the rustfmt diff
+  was fixed, `mdtablefix --check` ran for the first time and failed.
+  `markdownlint` aborted in its `spelling` prerequisite, hiding
+  `markdownlint-cli2` entirely. Each repair was necessary and none was
+  sufficient, which is exactly what "a gate reports a lower bound" means in
+  practice. A repair pass should therefore re-run the whole gate from the start
+  rather than resuming at the stage that failed — resuming would have left
+  `mdtablefix` unmeasured for a third time.
+
+  **The load-sensitive test did not flake.** The 300 s-capped
+  `packaged_manifest_retains_build_script_sources` passed at 197.470 s against
+  its cap, some 102 s of headroom, on a host whose 1-minute load reached 61.33
+  on 24 cores while two mutation-testing containers from another agent were up.
+  It was tracked across three runs here — 217.5 s, then 197.5 s — because the
+  plan's own note says such a timeout must be read as load-induced rather than
+  as a code failure, and that reading is only defensible against recorded
+  numbers.
+
+  **Nothing was assumed from the previous run.** The gate logs at the canonical
+  `/tmp` paths are keyed by *branch*, not by revision, so a run on one commit
+  overwrites the evidence for another. This run found a peer session's logs for
+  the parent commit occupying those same paths and set them aside before its
+  own run rewrote them. The general hazard is worth recording beside the
+  rebase-provenance rule: a log file is only evidence for the revision it
+  names, and the path alone does not name one.
+
 ## Blocked / open questions
 
 ### Gate run at `6719ddcb` (2026-09-27) — RED, four of seven
