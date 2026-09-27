@@ -258,3 +258,12 @@ fn project_scope_layers(project_file: Option<&Path>) -> OrthoResult<Vec<MergeLay
         Err(err) => Err(err),
     }
 }
+
+#[cfg(test)]
+mod property_tests;
+#[cfg(test)]
+mod replay_tests;
+#[cfg(test)]
+mod selector_tests;
+#[cfg(test)]
+mod tests;

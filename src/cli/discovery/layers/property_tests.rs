@@ -6,8 +6,8 @@
 //! number of replays, so repeated `emit_diagnostics` calls cannot drift, drain
 //! events, or re-read the environment.
 
-use super::layer_tests::{CountingEnv, LayerScenario, replay_events, scenario_cli};
-use super::*;
+use super::super::*;
+use super::tests::{CountingEnv, LayerScenario, replay_events, scenario_cli};
 use proptest::prelude::*;
 use tempfile::tempdir;
 

@@ -4,9 +4,9 @@
 //! composition boundary replays its retained, bounded events without another
 //! environment lookup.
 
-use super::event_assertions::{EventAssertion, find_event};
-use super::layer_tests::{CountingEnv, LayerScenario, replay_events, scenario_cli};
-use super::*;
+use super::super::event_assertions::{EventAssertion, find_event};
+use super::super::*;
+use super::tests::{CountingEnv, LayerScenario, replay_events, scenario_cli};
 use anyhow::{Context, Result, ensure};
 use tempfile::tempdir;
 

@@ -2,8 +2,10 @@
 //!
 //! These cover explicit-versus-discovery collection and the project-scope second pass.
 //! Selector precedence and event-schema snapshots live in the tracing test module.
-use super::paths::{FailingPathNormalizer, FsPathNormalizer, PathNormalizer, normalized_path_key};
-use super::*;
+use super::super::paths::{
+    FailingPathNormalizer, FsPathNormalizer, PathNormalizer, normalized_path_key,
+};
+use super::super::*;
 use crate::cli::test_support::TestEnv;
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
@@ -12,8 +14,8 @@ use pretty_assertions::assert_eq;
 use rstest::rstest;
 use tempfile::{TempDir, tempdir};
 
-use super::event_assertions::{capture_events, find_event};
-use super::layers::collect_file_layers_with_normalizer;
+use super::super::event_assertions::{capture_events, find_event};
+use super::collect_file_layers_with_normalizer;
 use std::cell::Cell;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

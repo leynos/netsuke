@@ -4,8 +4,8 @@
 //! process working directory even when `-C/--directory` is supplied; an
 //! absolute selector is always used unchanged. End-to-end tests place a
 //! decoy at the `-C` location to prove the selector is not rebased.
-use super::paths::{FsPathNormalizer, normalized_path_key};
-use super::*;
+use super::super::paths::{FsPathNormalizer, normalized_path_key};
+use super::super::*;
 use crate::cli::test_support::TestEnv;
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;

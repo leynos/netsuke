@@ -338,15 +338,6 @@ mod tracing_tests;
 #[cfg(test)]
 mod helper_proptests;
 
-#[cfg(test)]
-mod layer_replay_tests;
-#[cfg(test)]
-mod layer_selector_tests;
-#[cfg(test)]
-mod layer_tests;
-#[cfg(test)]
-mod replay_proptests;
-
 /// Tests for explicit config-path precedence. Enumerated cases cover every
 /// combination of `--config` and `NETSUKE_CONFIG` presence; a proptest property
 /// test asserts the invariant for generated path values.
