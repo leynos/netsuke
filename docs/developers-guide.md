@@ -7826,7 +7826,7 @@ missing label, and an unlabelled series are rejected.
 
 ## Digest rendering
 
-`src/hex.rs` (`netsuke::hex`) is the single owner of lowercase hexadecimal
+`src/hex/mod.rs` (`netsuke::hex`) is the single owner of lowercase hexadecimal
 rendering for the whole workspace, including the `test_support` crate. It
 exposes two functions:
 
@@ -7846,7 +7846,7 @@ from production output.
 The module is unit-tested across the full `u8` range rather than with a handful
 of vectors, because leading-zero and casing regressions are exactly what
 example-based tests miss. A per-byte sweep cannot see faults that need more
-than one byte to appear, so `src/hex_property_tests.rs` adds `proptest`
+than one byte to appear, so `src/hex/property_tests.rs` adds `proptest`
 coverage over arbitrary slices: two digits per byte, lowercase output, a decode
 round trip, agreement with `push_lower_hex_byte`, and distribution over
 concatenation. That last property is what pins each byte's encoding as
