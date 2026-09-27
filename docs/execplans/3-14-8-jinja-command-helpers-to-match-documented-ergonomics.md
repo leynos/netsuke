@@ -3534,6 +3534,72 @@ catalogue has the key; there is no partial state to clean up.
   figures, and its absence here was invisible precisely because the wrong
   artefact answered the question that was asked.
 
+- [x] (2026-09-27) The seven-gate set is green at `77089f0a`, and a fresh
+      CodeRabbit pass at `67938852` returned one finding, which is **declined**
+      on a verified premise mismatch.
+
+  The gates:
+  `SHA_BEFORE == SHA_AFTER == 77089f0a9c0979282e9b7f0008e720a80b3e0c74`,
+  `DIRTY_BEFORE == DIRTY_AFTER == 0` on all seven, every one `EXIT=0`. The run
+  was deliberately *not* scoped to the docs-only delta, so `lint`, `typecheck`,
+  and `test` re-ran on a tree whose Rust surface is unchanged from the
+  previously gated revision. `make lint` is a four-stage cascade that aborts at
+  the first failure, so its green means all four stages issued verdicts rather
+  than that the first one passed. `markdownlint`'s `spelling` prerequisite ran
+  and passed before `markdownlint-cli2` touched the corpus, which matters
+  because a red prerequisite means `markdownlint` never ran at all. Per-gate
+  evidence is in the `.rc.meta` sidecars; the superseded `67938852` logs were
+  preserved as `.prior-20260927T1202` rather than overwritten.
+
+  **The review.** `coderabbit review --agent` at `67938852`, exit 0,
+  `review_completed`, 358 s, no rate limiting, **1 finding** — artefact
+  `/tmp/coderabbit-702-67938852-3513609.54F6/`, identified by
+  `reviewed_sha=67938852` in its `local-run-meta.txt`. The delta between that
+  revision and the gated `77089f0a` is two commits touching only this file, so
+  the finding was not reviewed as part of the green set and is dispositioned
+  here instead.
+
+  **Finding 1 — `docs/repository-layout.md:127-131`, drop "Ninja rendering"
+  from the `src/shell_word.rs` dependency list — declined.** The finding has
+  two premises and they do not stand or fall together, which is exactly the
+  shape that makes a premise mismatch easy to miss.
+
+  *Its true premise:* one quoter does remain outside `src/shell_word.rs`.
+  `src/ninja_gen_command_list.rs:387` defines a local `shell_single_quote`, and
+  `docs/developers-guide.md:810` calls it "the one remaining quoter outside
+  `src/shell_word.rs`". So the bullet is right to defer those paths to the
+  developers guide.
+
+  *Its false premise:* that Ninja rendering does not *depend* on the module. It
+  does. `src/ninja_gen_escape.rs:48` calls
+  `crate::shell_word::is_recipe_admissible`, and that predicate sits on the
+  writer's path — `ninja_gen/mod.rs` calls `validate_action_recipe` and
+  `validate_action_metadata`, and both reach it through
+  `ninja_gen_validation.rs`. The module doc at `src/shell_word.rs:3-4` states
+  the same fact: "This is a leaf below IR lowering, Ninja rendering, and the
+  standard library: all three may depend on it."
+
+  The bullet's claim is about the *module dependency graph*; the reviewer's
+  evidence is about the *quoting route*. They are different relations over the
+  same pair of modules, and the bullet's closing sentence already carries the
+  route caveat the finding asks for. Applying the proposed edit verbatim would
+  make `docs/repository-layout.md:127-131` contradict `src/shell_word.rs:3-4`.
+  **Declined, and no edit made.**
+
+  **A note on the first attempt, recorded because the failure mode is this
+  plan's recurring one.** The review's attempt 1 failed in 9 s with exit 1:
+  "This PR contains 481 files, which is 181 over the limit of 300". The cause
+  was a stale `refs/heads/main` in the scratch clone's shared origin — the CLI
+  diffed against a months-old base and inflated 109 files to 485. This is [[
+  netsuke-worktree-base-may-be-stale]] in a new place: a base ref read from a
+  shared clone is not the base ref the PR has, and the resulting number is
+  wrong in a way that looks like a size limit rather than a provenance error.
+  The runner also mid-run reported "7 findings" from its own `jq -r | wc -l`
+  that pretty-printed one object across seven lines; the true count is 1,
+  confirmed three ways including the `complete` event's own `findings: 1`. Both
+  are recorded rather than tidied away, for the same reason as the paragraphs
+  above: a count that came from a tool's formatting is not a count.
+
 - [x] (2026-09-27) The seven-gate set is green at `c7720535`, the revision that
       carries the corrected disposition log.
 
