@@ -8,7 +8,7 @@ be kept up to date as work proceeds.
 
 Status: COMPLETE
 
-Revision 2.30. See `Revision note` at the foot of this document.
+Revision 2.31. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -87,12 +87,15 @@ The run completed with all 15 harnesses reporting `VERIFICATION:- SUCCESSFUL`
 and zero `FAILED` lines, resolving the Revision 2.24 exit-124 shortfall: the
 earlier failure was the wrapper's five-minute cap under sequential scheduling,
 not a working-tree defect, and the supported `--jobs 4 --output-format terse`
-pair clears it. That cap did not in fact bind. `timeout` signals only its
-direct child, and `--scope` detaches the payload into its own cgroup, so the
-prefix capped the launcher while the suite ran to completion under it. It has
-been replaced by `-p RuntimeMaxSec=` on the scope, which systemd enforces
-against the cgroup and which kills the whole process tree. The two figures to
-cite are therefore the scope's own lifetime, 5m03s, and CI's
+pair clears it. Revision 2.25 reached for a `timeout` prefix as the cap, and
+that choice did not in fact bind. The prefix itself reaches the payload — GNU
+`timeout` signals the supervised command's process group, and under `--scope`
+the payload's parent is the `timeout` process itself — but the prefix's
+`--kill-after=` grace is added to its deadline, so the bound it enforces is the
+sum of the two rather than the nominal figure. It has been replaced by
+`-p RuntimeMaxSec=` and `-p TimeoutStopSec=20s` on the scope, which systemd
+enforces against the cgroup and which stops the whole process tree. The two
+figures to cite are therefore the scope's own lifetime, 5m03s, and CI's
 `Run Kani harnesses` step, 5m19s in `CI` run `35647353965` on `99cbdf32`. Log:
 `/tmp/kani-full-<branch>.out`, where `<branch>` is the current branch name as
 reported by `git branch --show-current`.
@@ -344,11 +347,11 @@ you must follow:
   realistic fault that the harness must reject.
 - **Resource capping.** Roadmap 4.2.2 established that uncapped local Kani runs
   OOM-killed developer machines. Every Kani command runs inside the
-  `systemd-run` wrapper in `Concrete steps`, whose `RuntimeMaxSec` property is
-  what enforces the cap, with the Kani `LD_LIBRARY_PATH` set. Without that
-  `LD_LIBRARY_PATH`, `cargo kani` and Cargo build scripts fail to load
-  `libLLVM` with an opaque linker error. This is the single most likely place
-  to get stuck.
+  `systemd-run` wrapper in `Concrete steps`, whose `RuntimeMaxSec` and
+  `TimeoutStopSec` properties are what enforce the cap, with the Kani
+  `LD_LIBRARY_PATH` set. Without that `LD_LIBRARY_PATH`, `cargo kani` and Cargo
+  build scripts fail to load `libLLVM` with an opaque linker error. This is the
+  single most likely place to get stuck.
 
 The pre-existing inventory is thirteen harnesses across
 `src/ir/from_manifest_verification.rs` (four) and
@@ -1199,29 +1202,53 @@ optional: without it `cargo kani` and Cargo build scripts fail to load
 `libLLVM` with an opaque linker error, and that is the most common way to lose
 an hour on this task.
 
-The cap is carried by `-p RuntimeMaxSec=`, which systemd enforces against the
-scope's cgroup, so reaching it stops the whole process tree. Do not reintroduce
-a `timeout` prefix: `timeout` signals only its immediate child, and `--scope`
-detaches the payload into its own cgroup, so a prefix caps the launcher while
-the verifier runs on. `set -o pipefail` is needed because a pipeline's status
-is otherwise `tee`'s, which masks a failing `make`.
+The cap is carried by the pair `-p RuntimeMaxSec=8m` and
+`-p TimeoutStopSec=20s`. `RuntimeMaxSec` is the runtime cap, which systemd
+enforces against the scope's cgroup, so reaching it puts the scope into a
+failure state and starts the stop over the whole process tree; `TimeoutStopSec`
+is the stop grace that follows it, in which systemd sends `SIGTERM` and
+escalates to `SIGKILL` only when the grace expires. The effective bound is
+therefore the sum of the two — 8m20s with these figures. An unpinned stop
+timeout hands that decision to the host default, 90 seconds on the reference
+host, and a payload that ignores `SIGTERM` can then overrun the nominal cap by
+that much: one sleeping for 200 seconds under `RuntimeMaxSec=3s` alone was
+killed at 93 seconds, and at 23 seconds once `TimeoutStopSec=20s` was pinned.
+
+`tee` sits inside the scope, and that is deliberate. The pipeline travels as
+the scope's payload, so the captured file is exactly the output the cap
+governs: a run stopped by `RuntimeMaxSec` leaves a capture that ends where the
+budget ran out, rather than one the scope can no longer reach.
+`set -o pipefail` is set in that same shell, because a pipeline written outside
+the scope cannot carry it in. A pipeline's status is otherwise `tee`'s, zero
+whenever the capture succeeded, so a failing verifier would be masked by a
+successful capture.
+
+Do not reintroduce a `timeout` prefix in place of `RuntimeMaxSec`. The prefix
+does reach the verifier: GNU `timeout` signals the supervised command's process
+group rather than only its immediate child, and under `--scope` the payload's
+parent is the `timeout` process itself, so the two share one. Two other limits
+still make it the worse bound: the `--kill-after=` grace is added to the
+deadline rather than nested inside it, and a descendant that leaves the process
+group by `setsid` or a double fork escapes a process-group signal altogether,
+while the scope's cgroup stop does not depend on signal propagation.
 
 ```bash
-set -o pipefail
 systemd-run \
     --user \
     --scope \
     --expand-environment=no \
     -p RuntimeMaxSec=8m \
+    -p TimeoutStopSec=20s \
     -p CPUQuota=200% \
     -p MemoryMax=8G \
     -p MemorySwapMax=0 \
     -p TasksMax=96 \
     -p IOWeight=20 \
     /usr/bin/nice -n 15 \
-    env LD_LIBRARY_PATH="$HOME/.kani/kani-0.67.0/toolchain/lib:$HOME/.kani/kani-0.67.0/lib" \
-    make kani-ir \
-  2>&1 | tee /tmp/kani-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out
+    bash -c 'set -o pipefail; \
+      env LD_LIBRARY_PATH="$HOME/.kani/kani-0.67.0/toolchain/lib:$HOME/.kani/kani-0.67.0/lib" \
+      make kani-ir 2>&1 \
+      | tee /tmp/kani-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out'
 ```
 
 To iterate on a single harness, add
@@ -1525,9 +1552,10 @@ outside this local completion boundary and must be reported separately by CI.
   were valid: CI evidence for `99cbdf32` was recorded once the runs completed,
   two pre-rebase SHAs were replaced by their replayed twins, and the Kani
   wrapper's cap was made to bind — `-p RuntimeMaxSec=8m` on the scope replaces a
-  `timeout` prefix that capped only the launcher `systemd-run` leaves behind.
-  One finding misattributed the `-D warnings` change to `00f48f77`; `2c030fd1`
-  is correct and the text stands.
+  `timeout` prefix whose `--kill-after=` grace was added to its deadline.
+  Revision 2.31 corrected the mechanism this entry originally stated and
+  completed the reconciliation. One finding misattributed the `-D warnings`
+  change to `00f48f77`; `2c030fd1` is correct and the text stands.
 
 ## Surprises & discoveries
 
@@ -2160,19 +2188,22 @@ third finding read the runtime as inconsistent with the documented
 `timeout --kill-after=20s 5m` prefix, and it was right to. The 2026-09-20 run's
 scope recorded a 303-second lifetime (`21:41:15` started, `21:46:18` "Consumed
 7min 53.192s CPU time"), so the suite completed under a nominally 300-second
-cap. The cause is that `timeout` signals only its direct child while `--scope`
-detaches the payload into its own cgroup, so the prefix capped the launcher,
-not the work; the pipeline's status was `tee`'s besides. The wrapper now sets
-`-p RuntimeMaxSec=8m` on the scope, which systemd enforces against the cgroup
-and which kills the whole process tree, and the inert prefix is gone. This
-plan's `5m03s` wall-clock claim is withdrawn in favour of the scope's lifetime
-and CI's directly measured `Run Kani harnesses` step, and a stale
-`Makefile line 17` citation for `KANI_FLAGS` is corrected to line 44.
+cap. The mechanism this revision first gave for that overrun was wrong, and
+Revision 2.31 corrects it: the prefix did reach the payload, but its
+`--kill-after=` grace is added to the prefix's deadline rather than nested
+inside it, so the bound it enforced was `5m + 20s` rather than 5m. The
+pipeline's status was `tee`'s besides. The wrapper now sets
+`-p RuntimeMaxSec=8m` and `-p TimeoutStopSec=20s` on the scope, which systemd
+enforces against the cgroup and which stops the whole process tree, and the
+prefix is gone. This plan's `5m03s` wall-clock claim is withdrawn in favour of
+the scope's lifetime and CI's directly measured `Run Kani harnesses` step, and
+a stale `Makefile line 17` citation for `KANI_FLAGS` is corrected to line 44.
 `set -o pipefail` is now part of the documented invocation, so a failing `make`
-is no longer masked by the pipeline's `tee`. The same inert wrapper is
+is no longer masked by the pipeline's `tee`. The same incomplete wrapper was
 prescribed by
-`docs/execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md`; it belongs
-to roadmap 4.2.2 and is raised rather than edited, per `OBL-PATCHES`, as #765.
+`docs/execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md`; it
+belonged to roadmap 4.2.2 and was raised rather than edited, per `OBL-PATCHES`,
+as #765.
 
 The fourth finding claimed that `-D warnings` entered `kani-full` via
 `00f48f77` rather than `2c030fd1`; that is false and the text is unchanged.
@@ -2184,3 +2215,30 @@ finding's `-S KANI_RUSTFLAGS` query finds only `00f48f77` because that is when
 the flag was factored into a named variable; the mechanism predates the
 factoring and is behaviourally unchanged by it. The completion state is
 unchanged: header `COMPLETE`, roadmap `[x]`.
+
+**Revision 2.31 (2026-09-25, issue #765).** The wrapper in `Concrete steps` was
+brought into agreement with the corrected command in roadmap 4.2.2, and the
+mechanism Revision 2.30 gave for the 2026-09-20 overrun was corrected. That
+mechanism — that `timeout` signals only its direct child while `--scope`
+detaches the payload into its own cgroup, so the prefix capped the launcher
+rather than the work — does not reproduce on the reference host (systemd 257).
+Probing the topology shows the payload's parent is the `timeout` process itself
+and the two share one process group, and `timeout -s TERM 3 bash -c "sleep 60"`
+inside a scope returns at 3.03s with status 124, so the prefix does reach the
+verifier. The genuine defects the correction removes are narrower: the
+`--kill-after=` grace is added to the prefix's deadline rather than nested
+inside it, so a payload that ignores the first signal is bounded by `5m + 20s`;
+and a descendant that leaves the process group by `setsid` or a double fork
+escapes a process-group signal altogether, while the scope's cgroup stop does
+not depend on signal propagation. The command now adds `-p TimeoutStopSec=20s`
+beside `-p RuntimeMaxSec=8m`, moves `tee` inside the scope by giving `bash -c`
+the whole pipeline, and sets `pipefail` in that same shell. The effective bound
+is the sum of the pair, 8m20s, and that arithmetic is now stated rather than
+implied: an unpinned stop timeout reproduced a 93-second overshoot on a
+3-second cap against the host's 90-second default, against 23 seconds once the
+grace was pinned. Three dependent passages were reconciled to the new form —
+the Progress account of the exit-124 shortfall, the `Resource capping`
+constraint, and the 2026-09-21 progress entry — and the `OBL-PATCHES`
+escalation to #765 is retained as history even though its subject is now edited
+here, because it records why 4.2.3 waited for 4.2.2. No obligation, criterion,
+or completion state changes: header `COMPLETE`, roadmap `[x]`.
