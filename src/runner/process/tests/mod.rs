@@ -26,7 +26,6 @@ use std::time::Duration;
 use tracing_subscriber::filter::LevelFilter;
 
 #[cfg(unix)]
-#[path = "public_ninja_execution_tests.rs"]
 mod public_ninja_execution_tests;
 
 /// Open a capability directory rooted at an owned UTF-8 temporary directory.
