@@ -87,8 +87,11 @@ pub(super) fn non_empty_word() -> impl Strategy<Value = String> {
 
 /// Locate `sh`, or `None` when the host has no POSIX shell.
 ///
-/// Homebrew's macOS `sh` lives outside the default `PATH` some CI runners set,
-/// so the well-known absolute paths are tried after the `PATH` lookup.
+/// Three well-known absolute paths are probed in order, with no `PATH` lookup:
+/// the point is to find a shell the runner cannot fail to have, and consulting
+/// `PATH` would make the result depend on the environment this suite is
+/// meant to be independent of. The absolute list also covers Homebrew's macOS
+/// `sh`, which lives outside the `PATH` some CI runners set.
 // This helper runs a real POSIX shell, so it exists only where one does; the
 // Windows merge gate would otherwise see it as dead code under `-D warnings`.
 #[cfg(unix)]
