@@ -377,5 +377,4 @@ fn render_runtime_error_json(err: &anyhow::Error) -> serde_json::Result<String> 
 }
 
 #[cfg(test)]
-#[path = "main_tests.rs"]
 mod tests;

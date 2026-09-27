@@ -620,7 +620,7 @@ the paths where `clap` calls `Error::exit` and never returns —
 `parse_cli_or_exit` — settlement happens first, because nothing after that call
 would otherwise run.
 
-Unit tests in `src/main_tests.rs` drive `startup_filter` and the real
+Unit tests in `src/tests.rs` drive `startup_filter` and the real
 `startup_localizer` to check the buffered warning and the level it is gated by.
 `tests/startup_diagnostics_tests.rs` runs the built binary end to end,
 including the configuration-driven JSON path, because the behaviour under test
