@@ -17,7 +17,6 @@ use std::collections::{HashMap, HashSet};
 use crate::ast::Recipe;
 
 #[cfg(kani)]
-#[path = "graph_kani_map.rs"]
 mod kani_map;
 
 #[cfg(kani)]
@@ -294,7 +293,6 @@ pub struct BuildEdge {
     pub always: bool,
 }
 
-#[path = "graph_error.rs"]
-mod graph_error;
+mod error;
 
-pub use graph_error::IrGenError;
+pub use error::IrGenError;

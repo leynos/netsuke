@@ -30,7 +30,7 @@ The implementation baseline is Netsuke commit
 `79545e124b4a13dbe8352fd23df97619a91a0b5c`, inspected on 2026-09-19. The audit
 identifiers H1 to H6 are local finding identifiers, not issue numbers.
 
-- H1: [`ir::Action`](../../src/ir/graph.rs) still stores `ast::Recipe`.
+- H1: [`ir::Action`](../../src/ir/graph/mod.rs) still stores `ast::Recipe`.
   Successful lowering should instead yield a domain operation that cannot
   contain unresolved rule references or a dependency-only empty-command
   sentinel. Lowering may import both representations; model definitions must

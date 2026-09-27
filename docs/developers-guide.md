@@ -666,7 +666,7 @@ domain projection lives in [`src/graph_view`](../src/graph_view) and follows
 the hexagonal port/adapter pattern:
 
 - [`GraphView`](../src/graph_view/mod.rs) is the deterministic projection of
-  [`BuildGraph`](../src/ir/graph.rs). It is constructed once, sorts every
+  [`BuildGraph`](../src/ir/graph/mod.rs). It is constructed once, sorts every
   collection (nodes, edges, default targets), and is invariant under `HashMap`
   insertion order. The shuffled-insertion proptest in
   [`src/graph_view/tests/mod.rs`](../src/graph_view/tests/mod.rs) covers this
@@ -2713,7 +2713,7 @@ select a branch in that control to exercise a feature branch.
 The caller passes two configuration inputs, each carrying intent:
 
 - `exclude-globs` — `src/ir/cycle_verification.rs`,
-  `src/ir/from_manifest_verification.rs`, `src/ir/graph_kani_map.rs`, and
+  `src/ir/from_manifest_verification.rs`, `src/ir/graph/kani_map.rs`, and
   `src/ir/cmd_interpolate/verification.rs`: modules gated behind
   `#[cfg(kani)] mod` declarations. `cargo-mutants` does not evaluate that cfg,
   so mutants inserted there would compile to nothing and survive as noise
@@ -4013,7 +4013,7 @@ Table: Kani harnesses for Netsuke's intermediate-representation invariants.
 | `canonicalize_four_node_cycle_is_canonical`                 | `src/ir/cycle_verification.rs`           | Four-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.  | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                               |
 | `canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes` | `src/ir/cycle_verification.rs`           | The path-bearing wrapper agrees with the `u8` kernel for both two-node path orderings.                  | `#[kani::unwind(6)]`  | Drives production `canonicalize_cycle(Vec<Utf8PathBuf>)` once per concrete two-node ordering and compares the result with the kernel's `u8` output.                       |
 
-Under `cfg(kani)`, `src/ir/graph.rs::IrHashMap` is a fixed-capacity
+Under `cfg(kani)`, `src/ir/graph/mod.rs::IrHashMap` is a fixed-capacity
 deterministic compatibility layer used by production IR code under proof. Under
 ordinary builds it is a type alias to `std::collections::HashMap`, so the public
 `netsuke::ir` API remains unchanged.
@@ -8653,9 +8653,10 @@ beside it. The named cases sit in `tests/env_path_tests.rs`.
 
 ## Canonical build-edge storage
 
-`BuildGraph` in `src/ir/graph.rs`, re-exported through `src/ir/mod.rs`, stores
-each logical build edge once. `src/ir/graph.rs` holds the authoritative live
-contract. The fields are `pub actions: IrHashMap<String, Action>`, a private
+`BuildGraph` in `src/ir/graph/mod.rs`, re-exported through `src/ir/mod.rs`,
+stores each logical build edge once. `src/ir/graph/mod.rs` holds the
+authoritative live contract. The fields are
+`pub actions: IrHashMap<String, Action>`, a private
 `edges: EdgeArena<BuildEdge>` arena, a private
 `targets: IrHashMap<Utf8PathBuf, EdgeId>` output index, and
 `pub default_targets: Vec<Utf8PathBuf>`. Both aliases live in the same module:

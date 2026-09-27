@@ -352,7 +352,7 @@ and agents.
   - [ ] Add parser, IR, Ninja output, and user-guide coverage once the feature
     is implemented.
   - Note: the IR sink already exists but is unwired. `Action.depfile` and
-    `Action.deps_format` are defined in `src/ir/graph.rs` and emitted by
+    `Action.deps_format` are defined in `src/ir/graph/mod.rs` and emitted by
     `src/ninja_gen.rs`; only manifest parsing and population from `deps_from`
     remain.
 - [x] 3.14.7. Escape backend dollar syntax after Netsuke placeholder lowering.

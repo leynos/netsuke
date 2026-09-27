@@ -30,7 +30,7 @@ KANI_EXCLUDES = (
     "src/ir/cycle_verification.rs",
     "src/ir/cmd_interpolate/verification.rs",
     "src/ir/from_manifest_verification.rs",
-    "src/ir/graph_kani_map.rs",
+    "src/ir/graph/kani_map.rs",
 )
 
 #: The exact caller configuration; assert the whole block so an added or

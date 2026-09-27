@@ -2220,17 +2220,18 @@ the Ninja build system, which consists of "Action" nodes (commands) and
 "Target" nodes (files).[^7] This close mapping simplifies the final code
 generation step.
 
-The authoritative live IR contract is [src/ir/graph.rs](../src/ir/graph.rs),
-re-exported through [src/ir/mod.rs](../src/ir/mod.rs). There is no top-level IR
-file in the current codebase. Fields and types marked `FUTURE` in the snippet
-below are forward-looking IR sketches rather than implemented Rust definitions.
+The authoritative live IR contract is
+[src/ir/graph/mod.rs](../src/ir/graph/mod.rs), re-exported through
+[src/ir/mod.rs](../src/ir/mod.rs). There is no top-level IR file in the current
+codebase. Fields and types marked `FUTURE` in the snippet below are
+forward-looking IR sketches rather than implemented Rust definitions.
 `Action.env`, `EnvBinding`, and the `Exec` recipe variant capture the intended
 lowering target for roadmap tasks `3.14.9` and `3.14.10`.
 
 Rust
 
 ```rust
-// In src/ir/graph.rs
+// In src/ir/graph/mod.rs
 
 use std::collections::HashMap;
 use camino::Utf8PathBuf;
@@ -2263,7 +2264,7 @@ pub struct BuildGraph {
 pub struct Action {
     pub recipe: Recipe,
     pub description: Option<String>,
-    // FUTURE: planned Action.env extension; not present in src/ir/graph.rs yet.
+    // FUTURE: planned Action.env extension; not present in src/ir/graph/mod.rs yet.
     pub env: HashMap<String, EnvBinding>,
     pub depfile: Option<String>, // Template for the .d file path, e.g., "$out.d"
     pub deps_format: Option<String>, // "gcc" or "msvc"
@@ -2627,15 +2628,16 @@ default my_app
 
 ### 5.5 Design Decisions
 
-The live IR structures defined in [src/ir/graph.rs](../src/ir/graph.rs), and
-re-exported through [src/ir/mod.rs](../src/ir/mod.rs), are minimal containers
-that mirror Ninja's conceptual model while remaining backend-agnostic.
-`BuildGraph` collects actions in a hash map, canonical edges in an
-insertion-ordered arena, and output aliases in a `Utf8PathBuf` to `EdgeId` hash
-map. Actions hold the parsed `Recipe` and optional execution metadata.
-`BuildEdge` connects inputs to outputs using an action identifier and carries
-the `phony` and `always` flags verbatim from the manifest. No Ninja-specific
-placeholders are stored in the IR to keep the representation portable.
+The live IR structures defined in
+[src/ir/graph/mod.rs](../src/ir/graph/mod.rs), and re-exported through
+[src/ir/mod.rs](../src/ir/mod.rs), are minimal containers that mirror Ninja's
+conceptual model while remaining backend-agnostic. `BuildGraph` collects
+actions in a hash map, canonical edges in an insertion-ordered arena, and
+output aliases in a `Utf8PathBuf` to `EdgeId` hash map. Actions hold the parsed
+`Recipe` and optional execution metadata. `BuildEdge` connects inputs to
+outputs using an action identifier and carries the `phony` and `always` flags
+verbatim from the manifest. No Ninja-specific placeholders are stored in the IR
+to keep the representation portable.
 
 - Actions are deduplicated using a SHA-256 hash of a canonical JSON
   serialization of their recipe, inputs, and outputs. Because commands embed
@@ -2952,7 +2954,7 @@ context and polished user output.[^27]
 Rust
 
 ```rust
-// In src/ir/graph.rs use thiserror::Error; use camino::Utf8PathBuf;
+// In src/ir/graph/error.rs use thiserror::Error; use camino::Utf8PathBuf;
 
 #[derive(Debug, Error)]
 pub enum IrGenError {
@@ -3221,7 +3223,7 @@ the targets listed in the `defaults` section of the manifest are built.
   self-contained, offline-safe HTML document with a server-rendered SVG, an
   accessible textual outline, and a `<noscript>` fallback. The renderer
   adapters consume a canonical [`GraphView`](../src/graph_view/mod.rs)
-  projection of [`BuildGraph`](../src/ir/graph.rs); deterministic output is
+  projection of [`BuildGraph`](../src/ir/graph/mod.rs); deterministic output is
   guaranteed because the projection sorts every collection at the IR boundary.
   Ninja is not invoked.
 
