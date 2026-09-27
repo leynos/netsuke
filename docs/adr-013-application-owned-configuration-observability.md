@@ -115,7 +115,7 @@ may include both phase-level and startup-attempt entries.
   events through `cli::TracingMergeObserver`
 - Configuration query implementations:
   [`src/cli/diag/mod.rs`](../src/cli/diag/mod.rs) and
-  [`src/cli/merge.rs`](../src/cli/merge.rs)
+  [`src/cli/merge/mod.rs`](../src/cli/merge/mod.rs)
 - Design narrative:
   [`docs/netsuke-design.md`](netsuke-design.md)
 - Metric names, phase boundaries, and local-recorder testing:

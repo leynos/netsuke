@@ -112,7 +112,7 @@ Netsuke uses a private typed conversion at the Ninja writer boundary:
   and [`src/ninja_gen_validation.rs`](../src/ninja_gen_validation.rs)
 - Placeholder lowering:
   [`src/ir/cmd_interpolate/mod.rs`](../src/ir/cmd_interpolate/mod.rs) and
-  [`src/ir/from_manifest/support/mod.rs`](../src/ir/from_manifest/support/mod.rs)
+  [`from_manifest` support](../src/ir/from_manifest/support/mod.rs)
 - Differential coverage:
   [`tests/ninja_dollar_escaping_tests.rs`](../tests/ninja_dollar_escaping_tests.rs)
 

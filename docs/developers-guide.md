@@ -536,7 +536,7 @@ library; a per-call `max_bytes` argument can only narrow that budget.
 ## Localization
 
 `src/locale/catalogues.rs` is the authoritative registry of shipped catalogues.
-It sits at the crate root, not under `localization/`, because `localization`
+It sits under `src/locale/`, not under `localization/`, because `localization`
 builds its default localizer through `cli_localization`, and `cli_localization`
 reads the registry; a registry inside `localization` would close that into a
 module cycle. `localization::locales` re-exports it, so the older path still
