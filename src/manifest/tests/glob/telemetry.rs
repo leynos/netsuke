@@ -3,7 +3,7 @@
 //! This test reaches `from_str` rather than glob's private query and recorder,
 //! pinning that the adapter records the bounded observations it receives.
 
-use super::super::from_str;
+use crate::manifest::from_str;
 use crate::test_tracing_capture::with_test_subscriber;
 use anyhow::{Context, Result, ensure};
 use metrics::SharedString;

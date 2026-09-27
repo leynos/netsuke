@@ -1,6 +1,6 @@
 //! Security regression coverage for filesystem paths exposed by Jinja `glob()`.
 
-use super::super::from_str;
+use crate::manifest::from_str;
 #[cfg(unix)]
 use crate::snapshot_test_support::snapshot_settings;
 use anyhow::{Context, Result, ensure};

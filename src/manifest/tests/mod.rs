@@ -13,5 +13,4 @@ mod workspace_property;
 
 mod env;
 mod expansion_telemetry;
-mod glob_security;
-mod glob_telemetry;
+mod glob;
