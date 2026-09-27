@@ -581,7 +581,7 @@ Stop and escalate — do not improvise — when any of these is reached.
   `///` comment or `make doc-coverage` drops below 80%. Severity: low.
   Likelihood: medium. Mitigation: write the doc comment with the function, not
   afterwards.
-- **R8 — Manifest-query surface drift. Realised, and one instance fixed.**
+- **R8 — Manifest-query surface drift. Realized, and one instance fixed.**
   There is no parity test between `register_with_config` and
   `register_manifest_query`. Severity: medium. Likelihood: medium — confirmed,
   not merely estimated. Mitigation: EP-M2 and EP-M4 each add an explicit
@@ -2545,35 +2545,43 @@ catalogue has the key; there is no partial state to clean up.
       profile does not compile `#[cfg(test)]` modules, so it would not have
       proved the split sound.
 - [x] (2026-09-27) The split above was performed by hand-retyping the cluster
-      rather than by moving the text, and three closures drifted. Only one was
-      caught, and the reason is worth recording because it generalises.
+    rather than by moving the text, and three closures drifted. Only one was
+    caught, and the reason is worth recording because it generalizes.
 
-      | Stub | Pre-image (`HEAD~1:180-291`) | As first committed | Caught? |
-      | --- | --- | --- | --- |
-      | `digest` | `(_value: String, _length: Option<usize>, _algorithm: Option<String>)` | `(_state: &State, _value: Value, _algorithm: String, _encoding: Option<String>)` | yes |
-      | `linecount` | `Result<usize, Error>` | `Result<u64, Error>` | no |
-      | `hash` | `add_filter(_value: String, _algorithm: Option<String>)` | `add_function(_value: Value, _kwargs: Kwargs)` | no |
+    Three closures changed against the pre-image at
+    `719e7beb:src/stdlib/register.rs:180-291` (cited by that commit's hash, not
+    as `HEAD~1`, which stopped naming it the moment the split was committed).
+    `digest` gained an arity: the pre-image took
+    `(_value: String, _length: Option<usize>, _algorithm: Option<String>)` and
+    the committed form took `(_state: &State, _value: Value, _algorithm:
+    String, _encoding: Option<String>)`. `linecount` changed return type,
+    `Result<usize, Error>` to `Result<u64, Error>`. `hash` changed
+    registration kind and arity, from `add_filter(_value: String,
+    _algorithm: Option<String>)` to `add_function(_value: Value, _kwargs:
+    Kwargs)`.
 
-      Only `digest` failed, because an arity mismatch raises during argument
-      binding, before the stub body runs, so it produced "missing argument"
-      rather than the helper's name. `linecount` and `hash` changed types and
-      registration kind while `case_11_hash` still passed *with `hash`
-      registered as a function*: the case asserted only that the error text
-      contains the helper's name, and MiniJinja's own `unknown filter: hash`
-      contains it too. The assertion could not distinguish "deliberately
-      disabled" from "never registered at all" — so a name-only assertion
-      silently accepted a stub that had stopped being a stub.
+    Only `digest` was caught. It failed because an arity mismatch raises
+    during argument binding, before the stub body runs, so it produced
+    "missing argument"
+    rather than the helper's name. `linecount` and `hash` changed types and
+    registration kind while `case_11_hash` still passed *with `hash`
+    registered as a function*: the case asserted only that the error text
+    contains the helper's name, and MiniJinja's own `unknown filter: hash`
+    contains it too. The assertion could not distinguish "deliberately
+    disabled" from "never registered at all" — so a name-only assertion
+    silently accepted a stub that had stopped being a stub.
 
-      Fixing that assertion to require the marker exposed a second vacuous
-      case, `case_13_file_test`, which had been passing for the wrong reason
-      since before this branch: `register_file_tests` is reachable only from
-      `register_read_only_helpers`, so `'x' is file` failed as "unknown test:
-      test file is unknown". File tests call `symlink_metadata`, so they do
-      disclose host state and belong in the disabled set; stubs are now
-      registered for them, with the names taken from the parent's `FILE_TESTS`
-      rather than retyped, so the two lists cannot drift. That the compiler
-      enforces the wiring is a useful property: with the stub registration
-      removed, the now-unused function is a `-D warnings` error.
+    Fixing that assertion to require the marker exposed a second vacuous
+    case, `case_13_file_test`, which had been passing for the wrong reason
+    since before this branch: `register_file_tests` is reachable only from
+    `register_read_only_helpers`, so `'x' is file` failed as "unknown test:
+    test file is unknown". File tests call `symlink_metadata`, so they do
+    disclose host state and belong in the disabled set; stubs are now
+    registered for them, with the names taken from the parent's `FILE_TESTS`
+    rather than retyped, so the two lists cannot drift. That the compiler
+    enforces the wiring is a useful property: with the stub registration
+    removed, the now-unused function is a `-D warnings` error.
+
 - [ ] EP-M4 `shell_quote` and `shell_join`.
 - [ ] EP-M5 documentation, ADR-027, roadmap tick.
 
@@ -2585,8 +2593,8 @@ catalogue has the key; there is no partial state to clean up.
   function, MiniJinja reported `unknown filter: hash` — which contains `hash`,
   so the case passed. The assertion was written to prove the helper was
   *deliberately disabled*, and it was satisfied by the helper not existing. The
-  general shape: when a test checks for an artifact's name, any error that
-  names the artifact passes, including the "it isn't there" error. Impact: the
+  general shape: when a test checks for an artefact's name, any error that
+  names the artefact passes, including the "it isn't there" error. Impact: the
   `hash` drift reached a full green gate set, and the one case that failed
   (`digest`) failed for an unrelated reason, so the suite looked like it had
   caught the class when it had caught one instance. The fix is to assert the
@@ -2960,6 +2968,33 @@ recorded for whoever hits them next.
   by reference, return the error and let the caller branch via `let … else` —
   over sprinkling `#[expect]`, which `clippy.toml` deliberately steers toward
   so that migrated sites re-warn once. Confidence: verified.
+
+- Observation: **A task-list item's continuation body is indented two spaces,
+  not six, and at six it becomes an indented code block.** MD046 anchors on the
+  *first* block style markdownlint sees, and this file's first code block is
+  fenced, so every later indented block is a violation. For `- [x] text` the
+  content column is 2, because the `[x]` is inline text rather than a list
+  marker; a paragraph indented 6 is 4 beyond content, which CommonMark reads as
+  an indented code block. The trap is that the *first* paragraph after the item
+  escapes: it continues the item's own open paragraph lazily, so any
+  indentation works and the construct looks fine. Only a paragraph that follows
+  a blank line is re-evaluated as a new block, so the error surfaces not where
+  the bad indentation is written but at the first blank-line-separated
+  paragraph after it. Impact: the real file reported one error at line 2551,
+  while isolated probe files of the identical *visible* shape passed with zero
+  — the difference being that a probe with no preceding fenced block never
+  establishes "fenced" as the house style, so `consistent` mode has nothing to
+  compare against and the indented block is accepted. The probe has to contain
+  the fence to be a probe. Verified by threshold: at 4 and 5 spaces the
+  paragraph is a list continuation, at 6 and 7 it is a code block.
+
+## Blocked / open questions
+
+None outstanding. Six gates (`check-fmt`, `lint`, `typecheck`, `doc-coverage`,
+`test`, `nixie`) are green at `b2808b3b`; that run's logs remain valid evidence
+because this change is documentation-only. `markdownlint` was the seventh and
+last red gate, aborting at `spelling` and masking an MD046 behind it; both are
+now cleared and the gate is re-run against the new head.
 
 ## Outcomes & retrospective
 
