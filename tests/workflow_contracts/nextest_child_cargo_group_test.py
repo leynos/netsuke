@@ -299,6 +299,27 @@ def test_the_anchored_form_is_the_one_the_contracts_admit(tmp_path: Path) -> Non
     assert not unaccepted_test_selectors(config_for(anchored)), (
         "the anchored form must be admitted"
     )
+    # A test declared in a submodule is named `module::name` at run time, so a
+    # filter for it must carry the module path. Two properties matter together,
+    # and the second is the one that is easy to get wrong: the form must be
+    # admitted, AND the name it yields must stay BARE. Every consumer compares
+    # that name against `declared_test_names`, which computes no module path at
+    # all, so a grammar that captured the prefix would report every
+    # module-scoped test as unresolved. Widening the character class to admit
+    # `:` instead of skipping a non-capturing prefix is exactly that mistake.
+    qualified = "test(/^compile_guard::scratch_case_fixture($|::)/)"
+    assert filter_test_names(config_for(qualified)) == {"scratch_case_fixture"}, (
+        "a module-qualified filter must yield the bare name, not the qualified "
+        "one: the declared-test corpus it is checked against carries no module "
+        "path, so capturing the prefix would fail that comparison"
+    )
+    assert not unaccepted_test_selectors(config_for(qualified)), (
+        "the module-qualified form must be admitted, or the configuration "
+        "cannot express a filter for a test declared in a submodule at all"
+    )
+    assert filter_test_names(
+        config_for("test(/^compile_guard::plain_module($|::)/)")
+    ) == {"plain_module"}, "a module-qualified name must still be extracted"
     # The whole-name form is rejected too, by the pattern that reads a name out
     # of it: `test_no_filter_uses_the_exact_name_form` consumes that pattern, so
     # that form is reported there by name and is deliberately left out of this
