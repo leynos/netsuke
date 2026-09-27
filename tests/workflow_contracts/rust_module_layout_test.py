@@ -82,11 +82,10 @@ def assert_module_layout(
     exceptions : dict[tuple[str, str], tuple[frozenset[str], str]]
         Exact sibling filenames and rationale for each coincidental prefix.
 
-    Raises
-    ------
-    AssertionError
-        If a group lacks an exception, an exception is stale, or a prefixed
-        file remains beside its directory module.
+    Notes
+    -----
+    An assertion failure lists missing or stale exceptions and misplaced
+    prefixed files.
     """
     groups = sibling_prefix_groups(source_root)
     errors = []
@@ -104,8 +103,7 @@ def assert_module_layout(
         f"prefixed sibling beside directory module: {sibling}"
         for sibling in prefixed_files_beside_directory(source_root)
     )
-    if errors:
-        raise AssertionError("\n".join(errors))
+    assert not errors, "\n".join(errors)
 
 
 def test_repository_modules_follow_directory_layout() -> None:
