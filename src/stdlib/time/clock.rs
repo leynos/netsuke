@@ -86,7 +86,7 @@ pub fn fixed_clock(instant: OffsetDateTime) -> ClockProvider {
 /// Named `WallClock` to keep it distinct from the monotonic-clock vocabulary
 /// already in the crate: `monotony::MonotonicClock`, the `Clock` generic
 /// parameter in `src/runner/process/mod.rs`, and the private
-/// `type MonotonicClock` in `src/status_timing.rs`.
+/// `type MonotonicClock` in `src/status/timing/mod.rs`.
 #[derive(Clone)]
 pub(crate) struct WallClock {
     /// Provider consulted on every `now()` evaluation.

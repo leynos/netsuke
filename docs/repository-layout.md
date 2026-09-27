@@ -250,15 +250,14 @@ datetimes and UTC offsets to ISO-8601 without a zero-valued fractional part. It
 also exposes the `TimeDeltaValue` and `TimestampValue` MiniJinja object types
 the parent predicates downcast. Only the time module may import it.
 
-### `src/status_indicatif.rs`
+### `src/status/indicatif.rs`
 
 The `indicatif`-backed progress reporter and rendering helpers, owned by
-`src/status.rs` through its private
-`#[path = "status_indicatif.rs"] mod indicatif;` declaration. It provides the
-crate's `IndicatifReporter` export and the shared stage/completion rendering
-helpers used by the accessible reporter. Only `status.rs` and its test module
-may reach this private support module; callers use the reporter re-export from
-`status`.
+`src/status/mod.rs` through its private `mod indicatif;` declaration. It
+provides the crate's `IndicatifReporter` export and the shared stage/completion
+rendering helpers used by the accessible reporter. Only `status/mod.rs` and its
+test module may reach this private support module; callers use the reporter
+re-export from `status`.
 
 ### `src/stdlib/which/env/path_support.rs`
 

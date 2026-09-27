@@ -46,14 +46,11 @@ impl From<&'static str> for LocalizationKey {
     }
 }
 
-#[path = "status_pipeline.rs"]
 mod pipeline;
-#[path = "status_timing.rs"]
 mod timing;
 pub use pipeline::{PipelineStage, report_pipeline_stage};
 pub use timing::VerboseTimingReporter;
 
-#[path = "status_indicatif.rs"]
 mod indicatif;
 pub use self::indicatif::IndicatifReporter;
 use self::indicatif::{format_completion_line, stage_label, task_progress_update};
@@ -147,7 +144,6 @@ impl StatusReporter for SilentReporter {
 }
 
 #[cfg(test)]
-#[path = "status_tests.rs"]
 mod tests;
 // The test module reaches these through `use super::*`; expose them only in
 // test builds so the production build neither warns nor carries their weight.

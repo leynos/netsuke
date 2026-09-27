@@ -3393,11 +3393,11 @@ matches a real directory change. Error scenarios are validated using clap's
 `ErrorKind` enumeration in unit tests and via rstest-bdd behavioural
 steps/scenarios.
 
-Real-time stage reporting now uses a six-stage model in `src/status.rs` backed
-by `indicatif::MultiProgress` for standard terminals. The reporter keeps one
-persistent summary line per stage and updates each line through localized state
-labels (`pending`, `in progress`, `done`, `failed`) plus localized stage text.
-During Stage 6, Netsuke parses Ninja status lines of the form
+Real-time stage reporting now uses a six-stage model in `src/status/mod.rs`
+backed by `indicatif::MultiProgress` for standard terminals. The reporter keeps
+one persistent summary line per stage and updates each line through localized
+state labels (`pending`, `in progress`, `done`, `failed`) plus localized stage
+text. During Stage 6, Netsuke parses Ninja status lines of the form
 `[current/total] ...` and emits localized task progress updates. It retains a
 fixed, bounded number of bytes for each candidate line. An oversized line is
 ignored for progress purposes until its newline, while every byte continues to

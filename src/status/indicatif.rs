@@ -89,7 +89,7 @@ pub struct IndicatifReporter {
     /// Output preferences controlling prefixes and indentation.
     prefs: OutputPrefs,
     /// The mutable progress state, locked per update. Crate-visible so
-    /// `status_tests.rs` can white-box the rendered messages.
+    /// `status/tests.rs` can white-box the rendered messages.
     pub(crate) state: Mutex<IndicatifState>,
 }
 

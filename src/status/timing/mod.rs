@@ -354,18 +354,13 @@ fn format_duration(duration: Duration) -> String {
     format!("{}ns", duration.as_nanos())
 }
 
-#[path = "status_timing_concurrency_tests.rs"]
 #[cfg(test)]
 mod concurrency_tests;
-#[path = "status_timing_format_tests.rs"]
 #[cfg(test)]
 mod format_tests;
-#[path = "status_timing_lifecycle_tests.rs"]
 #[cfg(test)]
 mod lifecycle_tests;
-#[path = "status_timing_telemetry_tests.rs"]
 #[cfg(test)]
 mod telemetry_tests;
-#[path = "status_timing_tests.rs"]
 #[cfg(test)]
 mod tests;
