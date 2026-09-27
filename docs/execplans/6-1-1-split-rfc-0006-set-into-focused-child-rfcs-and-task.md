@@ -698,6 +698,61 @@ Hard invariants. Violating one requires escalation, not a workaround.
   plus native `--binary` patches of both series under
   `/tmp/rebase-697-recovery/`. Recorded identities: `old_base=96aefc9c`,
   `old_head=0190f3aa`, `target=aa764819`, `new_head=ada8b994`.
+- [x] (2026-09-28) **Fourth CodeRabbit pass, at `658b8157`, three findings, all
+  actioned at `797178c9`.** Review `5332303125` returned `CHANGES_REQUESTED`
+  against the branch head itself — not a stale SHA — with three inline comments
+  (`4117169304`, `4117169313`, `4117169325`), one per touched file. Unlike the
+  earlier passes there was nothing to refuse and nothing ambiguous; each was
+  confirmed against the artefact it describes before being accepted, and each
+  fix is committed with its confirmation rather than the reasoning left in
+  review replies.
+
+  `ADR-040`'s worked specimen still described `from_yaml_all` as rejecting
+  every `from_yaml` condition. That is the wording RFC 0013 §5.6 had already
+  been corrected away from, so the specimen and the artefact it previews had
+  disagreed since that correction. The ADR calls the specimen non-normative and
+  tells the reader that RFC 0013's copy is the normative one — but a reader
+  editing RFC 0013 may well copy from the ADR, and the sentence is the same
+  *claim*, not a summary of it, so a divergence is a defect in either
+  direction. It now matches RFC 0013 §5.6 byte for byte, verified by extracting
+  the bullet from both files.
+
+  The coverage map could reserve one RFC number twice, and no check would
+  notice. `Map::ownership` permits a repeated helper when both rows carry the
+  same number, which is exactly what a duplicate reservation produces, so the
+  one guard with a view of the whole map was blind to the shape. Downstream,
+  `registries::parse_all` keys on a number over `children.contains`, and both
+  the status and registry checks match rows with `find`/`any` — so one child
+  RFC would have silently represented two capability groups. `parse` now tracks
+  reserved numbers in a `BTreeSet` and rejects a repeat. The guard was proven
+  live both ways rather than only made to pass: with a row mutated `0015` →
+  `0014` it fails the run with the duplicate message, and with `map.rs` reverted
+  to `658b8157` that same mutation passes **all fifteen** checks, the
+  one-owner test among them. Both probes ran against the live document, and RFC
+  0006 was restored to `HEAD` afterwards and confirmed by md5
+  (`90c5787133429ec0a8ef66c1d936b265`).
+
+  `Delimiter::opening` accepted any indentation before a fence. The module
+  claims `CommonMark` in the same doc comment, and `CommonMark` allows at most
+  three leading spaces; four or more is an indented code block. The cost of the
+  unbounded form is asymmetric. A line indented deeply enough to be ordinary
+  code content to every other Markdown tool would open a block here and swallow
+  every heading and table beneath it — the silent truncation `Fences` exists to
+  prevent — whereas the bound's own cost is a *loud* one: a fence nested in a
+  list item sits at the item's content column, four spaces for an ordered
+  marker, and is legal `CommonMark` this line-level predicate cannot see. The
+  corpus carries every fence at column zero, so the loud error is the one the
+  documents avoid today and the silent one is the one they face tomorrow. The
+  bound is now three spaces and the doc comment states both sides of the trade.
+
+  No gate covered this. `mdtablefix` is lenient through indent 6, and this
+  repository's `markdownlint` config sets no MD046 key, so MD046 runs in
+  "consistent" mode and a document whose only code block is indented passes.
+  Three new unit tests in `mod fence_tests` pin the boundary that no document
+  exercises: the 0–3 accept / 4–8 reject sweep, that a rejected opener leaves
+  the structure below it readable, and that an indented *closer* still closes.
+
+  `cargo nextest run --test rfc_stdlib_coverage_tests` → 18 passed, 0 skipped.
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
 - [ ] `EP-M6` RFC 0016, pattern and version predicates (step 6.5).
@@ -1348,6 +1403,71 @@ tracked; the derivation it performs is reimplemented in the coverage test at
   `make fmt` ran again and touched none of the three, and
   `mdtablefix --renumber` did not eat the `- [x] (2026-09-25)` progress
   entries, which is the failure mode that tool is known for.
+
+- Observation: a non-normative copy of a normative section is still a copy, and
+  nothing checks the two against each other. `ADR-040` carries RFC 0013's
+  section 5 as a worked specimen and says in terms that RFC 0013's copy is the
+  normative one. The specimen's `from_yaml_all` bullet nevertheless still read
+  "rejects every `from_yaml` condition" — the precise wording RFC 0013 §5.6 was
+  corrected away from when RFC 0006 §8.1 was read properly, since a
+  zero-document stream is an empty sequence rather than an error. So the
+  divergence was introduced by the correction itself: it was applied to the
+  artefact and not to the specimen that previews it, and the two then disagreed
+  for eleven days across three gate runs and three review passes. Evidence:
+  CodeRabbit's fourth pass flagged the ADR line; extracting the bullet from both
+  files showed the ADR's copy to be the pre-correction text. Impact: this is not
+  a stale comment. The specimen is the only worked example a `EP-M4` to `EP-M10`
+  author has, and it is a full section rather than a summary, so the ADR is what
+  gets copied. A second copy of a normative text needs either a check or an
+  explicit pointer to the artefact as the single source — the ADR already has
+  the pointer and it was not enough, so the rule this records is narrower:
+  **when a correction is applied to an artefact, grep for its other copies in
+  the same commit.** Neither `make check-fmt` nor `make lint` compares two
+  documents' prose, and no review pass before this one had both copies in view.
+
+- Observation: the ownership check could not see the one collision its own
+  subject matter is named for. The coverage map must contain exactly one row per
+  capability group, `D2` allocates RFC numbers lazily *because* they collide,
+  and the plan re-enumerates remote heads before each child commit for exactly
+  that reason — yet `parse` had no duplicate-number guard, and nothing else
+  noticed one either. Evidence: `Map::ownership` inserts every claimed helper
+  into one map keyed by name and errors only when the *same helper* is claimed
+  by two *different* numbers, so two rows sharing a number are not a conflict to
+  it; downstream, `registries::parse_all` filters on `children.contains`, and
+  both the status and registry checks match rows with `find`/`any`. A
+  mutation of row `0015` to `0014` therefore passed all fifteen checks, one
+  child silently representing two capability groups. Impact: three separate
+  guards each had a partial view and each assumed another had the whole one.
+  The duplicate-number guard now sits in `parse`, the only place both rows are
+  visible before they are separated into `Map::rows`. The general lesson is the
+  converse of the ADR one: a check keyed on the *aggregate* (helpers → owner)
+  cannot enforce a property of the *members* (one number per row), and the
+  subject matter's own history of collisions is a hint about which property
+  deserves a direct guard rather than an emergent one.
+
+- Observation: three of this repository's Markdown tools disagree about where a
+  fence may begin, and the disagreement runs in the direction that hides a
+  defect. `CommonMark` allows up to three leading spaces before an opening
+  fence; `Delimiter::opening` accepted any amount; `mdtablefix`, the gating
+  tool, is lenient through indent 6 by way of `trim_start()`; and this
+  repository's `markdownlint` config sets no MD046 key, so MD046 runs in
+  "consistent" mode. Evidence: `Delimiter::opening` read `line.trim_start()`;
+  an indentation sweep showed `mdtablefix` leaving a table untouched at every
+  indent 0–6, and `markdownlint` reporting zero errors for a 4-space-indented
+  fence. Impact: a document whose only code block is indented passes every gate,
+  so the leniency was invisible by construction rather than by accident — and
+  the failure it permits is the silent one, an indented run of backticks
+  swallowing every heading and table beneath it. The fix aligns the predicate
+  with `CommonMark` and the module's own doc-comment claim, which is also what
+  the shipped sibling reader in `tests/documentation_examples/mod.rs` does
+  (column zero only, stricter than `CommonMark`). The cost is named in the doc
+  comment rather than hidden: a fence nested in a list item is at the item's
+  content column and this line-level predicate will not recognise it. That
+  error is loud — the body is handed to the heading and table scans and
+  misparses — and the corpus has **zero** indented fences across all 24 scanned
+  files, so no document needs the nested form today. Three unit tests in `mod
+  fence_tests` pin the boundary, because a corpus with no instance of a shape
+  cannot test the predicate for it.
 
 ## Decision log
 
