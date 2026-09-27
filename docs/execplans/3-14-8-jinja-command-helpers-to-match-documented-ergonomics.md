@@ -3611,13 +3611,13 @@ recorded for whoever hits them next.
   rather than assumed: 11 `beta4` occurrences, and one deliberately historical
   `beta3` in the note describing the *older* release.
 
-  **Rebase-before-gate ordering matters, and it is the reverse of the
-  intuitive one.** The pre-rebase gate run was void the moment the replay
-  landed, so the gates were re-run on `338df305` *before* any finding repair
-  was committed. That ordering is deliberate: it separates "this branch is
-  green on current main" from "this branch is green with the review fixes", so
-  a failure in the second run cannot be mistaken for a rebase artefact. All
-  seven reported PASS at `338df305`.
+  **Rebase-before-gate ordering matters, and it is the reverse of the intuitive
+  one.** The pre-rebase gate run was void the moment the replay landed, so the
+  gates were re-run on `338df305` *before* any finding repair was committed.
+  That ordering is deliberate: it separates "this branch is green on current
+  main" from "this branch is green with the review fixes", so a failure in the
+  second run cannot be mistaken for a rebase artefact. All seven reported PASS
+  at `338df305`.
 
   **The PR was `CONFLICTING`, and a conflicting PR runs no CI at all.** No
   workflow run existed for the pre-rebase head `a2311ee7`; the push that
@@ -3671,18 +3671,18 @@ recorded for whoever hits them next.
 
   **Refused, with the evidence that refuses them.** Three findings asked for
   catalogue changes on the strength of the reviewer's reading of the target
-  language. Each was checked against its own file, and each was contradicted
-  by that file's *pre-existing* text: for Scottish Gaelic, Hindi, Indonesian,
-  and Korean, the flagged wording in the new string matched the same
-  catalogue's existing `stdlib.command.quote.line_break` rendering on
-  `origin/main`, and Korean's `열` additionally matched the existing `flatten`
-  and `compact` strings. The styleguide requires the opposite of the finding —
-  quality checklist item 5, "Message families remain parallel … renders
-  identically across the family" — so changing one member to satisfy one
-  reading would have broken the parallelism the styleguide mandates. The
-  change was refused and the reason recorded rather than silently dropped.
-  Only the Gaelic item survived that test, and it survived as a genuinely
-  *new* error, not as a parallelism break.
+  language. Each was checked against its own file, and each was contradicted by
+  that file's *pre-existing* text: for Scottish Gaelic, Hindi, Indonesian, and
+  Korean, the flagged wording in the new string matched the same catalogue's
+  existing `stdlib.command.quote.line_break` rendering on `origin/main`, and
+  Korean's `열` additionally matched the existing `flatten` and `compact`
+  strings. The styleguide requires the opposite of the finding — quality
+  checklist item 5, "Message families remain parallel … renders identically
+  across the family" — so changing one member to satisfy one reading would have
+  broken the parallelism the styleguide mandates. The change was refused and
+  the reason recorded rather than silently dropped. Only the Gaelic item
+  survived that test, and it survived as a genuinely *new* error, not as a
+  parallelism break.
 
   **One finding was already fixed.** The `recognise` → `recognize` item in
   `compact_property.rs:91` had been corrected on an earlier pass; the review
@@ -3690,22 +3690,22 @@ recorded for whoever hits them next.
   assumed from the thread's state.
 
   **Liveness of both behaviour fixes was proved, not argued.** Reverting the
-  `is_blank` guard made the new byte-array test fail with "the surviving
-  length was 0"; reverting `resolve_dialect` made both new BDD scenarios fail.
-  Both were then restored and re-verified green. A test never seen to fail is
-  a hypothesis about the code, not evidence about it.
+  `is_blank` guard made the new byte-array test fail with "the surviving length
+  was 0"; reverting `resolve_dialect` made both new BDD scenarios fail. Both
+  were then restored and re-verified green. A test never seen to fail is a
+  hypothesis about the code, not evidence about it.
 
-  **A note on the localized-key cost.** Finding 1 is the only one that grew
-  the catalogue surface, by one key across 35 files. That cost is real and was
+  **A note on the localized-key cost.** Finding 1 is the only one that grew the
+  catalogue surface, by one key across 35 files. That cost is real and was
   accepted deliberately: the alternative — reusing `dialect_invalid` — keeps
-  the catalogue smaller while making the diagnostic lie about which mistake
-  the author made. Two diagnostics a reader acts on differently should not
-  share a message.
+  the catalogue smaller while making the diagnostic lie about which mistake the
+  author made. Two diagnostics a reader acts on differently should not share a
+  message.
 
-  **Two Gherkin assertions were rewritten rather than a step invented.**
-  The first draft of the type-error scenarios asserted the message did *not*
-  contain "powershell". No such step exists — `tests/bdd/steps/stdlib/` has
-  only `the stdlib error contains {expected:string}` — so the assertion became
+  **Two Gherkin assertions were rewritten rather than a step invented.** The
+  first draft of the type-error scenarios asserted the message did *not*
+  contain "powershell". No such step exists — `tests/bdd/steps/stdlib/` has only
+  `the stdlib error contains {expected:string}` — so the assertion became
   `contains "must be a string"`, which is stronger anyway: it proves the
   type-error path was taken, whereas the absence of "powershell" would also
   hold if the filter had failed for some unrelated reason.
@@ -3729,15 +3729,15 @@ recorded for whoever hits them next.
      spelling in each case, per the en-GB-oxendict rule.
 
   **Both failures masked work that was never run, and that is the point worth
-  carrying.** `check-fmt` aborted inside its first command, so `ruff format
-  --check` and `mdtablefix --check` did not execute. `markdownlint` aborted in
-  `spelling`, so `markdownlint-cli2` never ran against *any* Markdown file —
-  which means the Markdown-lint verdict for this revision was **unknown**, not
-  passed, and it had been unknown for the whole branch. Neither gate's
-  failure says anything about the stages behind it. The general rule this plan
-  keeps rediscovering: a gate that aborts reports a lower bound on the work
-  remaining, and the correct reading of "one gate failed" is "the stages after
-  the failure are unmeasured".
+  carrying.** `check-fmt` aborted inside its first command, so
+  `ruff format --check` and `mdtablefix --check` did not execute.
+  `markdownlint` aborted in `spelling`, so `markdownlint-cli2` never ran
+  against *any* Markdown file — which means the Markdown-lint verdict for this
+  revision was **unknown**, not passed, and it had been unknown for the whole
+  branch. Neither gate's failure says anything about the stages behind it. The
+  general rule this plan keeps rediscovering: a gate that aborts reports a
+  lower bound on the work remaining, and the correct reading of "one gate
+  failed" is "the stages after the failure are unmeasured".
 
   **A note on the spelling gate's tolerance, verified rather than assumed.**
   The gate flagged exactly two forms, while the same added prose contains
