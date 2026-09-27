@@ -5027,6 +5027,9 @@ Group shared-prefix modules under `<prefix>/mod.rs` with prefix-free children
 declared by plain `mod` statements. Rename genuinely unrelated prefix matches
 instead. The [layout guide](repository-layout.md#placement-conventions) defines
 the placement and visibility rules and indexes support-module owners.
+`make test-workflow-contracts` runs the Rust module-layout contract. Its
+explicit exception table requires the exact sibling file set and a reason for
+each disparate-concern prefix; remove entries when their files are renamed.
 
 ## Behavioural testing strategy
 
