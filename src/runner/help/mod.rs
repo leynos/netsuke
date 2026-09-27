@@ -299,6 +299,3 @@ fn json_entries<'entry>(
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-mod telemetry_tests;

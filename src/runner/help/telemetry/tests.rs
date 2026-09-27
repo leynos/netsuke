@@ -1,7 +1,7 @@
 //! Telemetry coverage for the `netsuke help targets` orchestration boundary.
 
-use super::telemetry::{HELP_TARGETS_DURATION, HELP_TARGETS_TOTAL};
-use super::*;
+use super::super::*;
+use super::{HELP_TARGETS_DURATION, HELP_TARGETS_TOTAL};
 use crate::cli::Cli;
 use crate::localization::set_localizer_for_tests;
 use crate::status::SilentReporter;

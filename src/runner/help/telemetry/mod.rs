@@ -74,3 +74,6 @@ fn describe_help_targets_metrics() {
         );
     });
 }
+
+#[cfg(test)]
+mod tests;

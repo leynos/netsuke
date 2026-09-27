@@ -244,8 +244,8 @@ which recipe a normal build executes.
 
 ### Help-target query telemetry
 
-`src/runner/help/telemetry.rs` is the observability boundary around the pure
-manifest and catalogue query within `netsuke help targets`.
+`src/runner/help/telemetry/mod.rs` is the observability boundary around the
+pure manifest and catalogue query within `netsuke help targets`.
 `instrument_help_targets` wraps that query and records the fixed metrics
 `netsuke_runner_help_targets_total` and
 `netsuke_runner_help_targets_duration_seconds`. It also opens the
