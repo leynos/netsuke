@@ -20,26 +20,21 @@ use camino::Utf8PathBuf;
 use itertools::Itertools;
 use std::fmt::Write;
 
+pub(crate) mod command_list;
+mod error;
 mod explicit_shell;
-#[path = "../ninja_gen_command_list.rs"]
-pub(crate) mod ninja_gen_command_list;
-#[path = "../ninja_gen_error.rs"]
-mod ninja_gen_error;
 
-#[path = "../ninja_gen_escape.rs"]
-mod ninja_gen_escape;
-#[path = "../ninja_gen_recipe_shell.rs"]
-mod ninja_gen_recipe_shell;
-#[path = "../ninja_gen_validation.rs"]
-mod ninja_gen_validation;
+mod escape;
+mod recipe_shell;
+mod validation;
 
 pub use crate::recipe_shell::RecipeShell;
+use command_list::{ActionId, CommandListEntry, command_list_entry};
+pub use error::NinjaGenError;
+use escape::{ShellText, escape_metadata_value};
 pub use explicit_shell::generate_with_shell;
-use ninja_gen_command_list::{ActionId, CommandListEntry, command_list_entry};
-pub use ninja_gen_error::NinjaGenError;
-use ninja_gen_escape::{ShellText, escape_metadata_value};
-use ninja_gen_recipe_shell::escape_posix_script;
-use ninja_gen_validation::{validate_action_metadata, validate_action_recipe};
+use recipe_shell::escape_posix_script;
+use validation::{validate_action_metadata, validate_action_recipe};
 /// Write `key = value` to a Ninja file when `opt` holds a value.
 ///
 /// The indented assignment is emitted only for present values, so optional
@@ -384,11 +379,8 @@ impl NamedAction<'_> {
     }
 }
 #[cfg(test)]
-#[path = "../ninja_gen_property_tests.rs"]
 mod property_tests;
 #[cfg(test)]
-#[path = "../ninja_gen_test_support.rs"]
 mod test_support;
 #[cfg(test)]
-#[path = "../ninja_gen_tests.rs"]
 mod tests;

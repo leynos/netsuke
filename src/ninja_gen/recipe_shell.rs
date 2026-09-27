@@ -3,7 +3,7 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 use super::NinjaGenError;
-use super::ninja_gen_escape::{NinjaValue, ShellText, escape_ninja_value};
+use super::escape::{NinjaValue, ShellText, escape_ninja_value};
 use crate::recipe_shell::RecipeShell;
 
 /// Leave space for Windows' terminating command-line NUL character.
@@ -206,7 +206,7 @@ mod tests {
         MAX_POWER_SHELL_RECIPE_BYTES, POWER_SHELL_COMMAND_PREFIX,
         POWER_SHELL_RESPONSE_FILE_COMMAND, RecipeShell, RenderedRecipeCommand, windows_argument,
     };
-    use crate::ninja_gen::ninja_gen_escape::ShellText;
+    use crate::ninja_gen::escape::ShellText;
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     use proptest::prelude::*;
 

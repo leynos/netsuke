@@ -1,9 +1,7 @@
 //! Validate recipes and metadata before Ninja rendering.
 
-use super::ninja_gen_command_list::{
-    CommandListEntry, CommandListEntryError, command_list_entry_error,
-};
-use super::{NinjaGenError, RecipeShell, ninja_gen_escape::validate_ninja_value};
+use super::command_list::{CommandListEntry, CommandListEntryError, command_list_entry_error};
+use super::{NinjaGenError, RecipeShell, escape::validate_ninja_value};
 use crate::ast::{Recipe, StringOrList};
 
 /// Reject recipes the generated shell cannot execute with stable semantics.

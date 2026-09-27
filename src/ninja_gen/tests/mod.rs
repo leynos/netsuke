@@ -390,5 +390,4 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     Ok(ninja)
 }
 
-#[path = "ninja_gen_tests/power_shell.rs"]
 mod power_shell;

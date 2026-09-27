@@ -18,9 +18,7 @@ use crate::{
 use camino::Utf8PathBuf;
 use std::collections::{HashMap, HashSet};
 
-#[path = "ninja_gen_property_tests/dependency_only.rs"]
 mod dependency_only;
-#[path = "ninja_gen_property_tests/ninja_oracle.rs"]
 mod ninja_oracle;
 use ninja_oracle::scalar_graph;
 

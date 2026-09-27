@@ -4,7 +4,6 @@ use sha2::{Digest, Sha256};
 
 use crate::hex::to_lower_hex;
 
-#[path = "ninja_gen_command_list_scanner.rs"]
 mod scanner;
 
 use scanner::background_operator_count;
@@ -393,5 +392,4 @@ fn shell_single_quote(command: CommandListEntry<'_>) -> String {
 }
 
 #[cfg(test)]
-#[path = "ninja_gen_command_list_tests.rs"]
 mod tests;
