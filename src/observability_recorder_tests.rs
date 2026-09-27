@@ -37,6 +37,10 @@ mod ninja_status_tests;
 #[path = "observability_recorder_env_lookup_tests.rs"]
 mod env_lookup_tests;
 
+/// Cover the bounded `which` resolver counter series separately.
+#[path = "observability_recorder_which_tests.rs"]
+mod which_tests;
+
 /// Define the rejected label variants for recipe-shell resolution metrics.
 const INVALID_RECIPE_SHELL_RESOLUTION_SERIES: [MetricLabels; 3] = [
     [
