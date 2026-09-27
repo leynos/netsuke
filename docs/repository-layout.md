@@ -157,12 +157,12 @@ output and some leaf files so the long-lived structure remains visible.
 
 ## Internal support module ownership
 
-### `src/ir/cycle_support.rs`
+### `src/ir/cycle/support.rs`
 
-`src/ir/cycle.rs` owns this support module and declares it `pub(super)`, so it
-is nameable only within `ir`. Its `pub(in crate::ir)` comparisons are likewise
-limited to the IR implementation; they must not be re-exported from the crate
-or used by non-IR modules.
+`src/ir/cycle/mod.rs` owns this support module and declares it `pub(super)`, so
+it is nameable only within `ir`. Its `pub(in crate::ir)` comparisons are
+likewise limited to the IR implementation; they must not be re-exported from
+the crate or used by non-IR modules.
 
 `first_byte_cmp` owns the bounded string-comparison semantics for Kani builds.
 Under `cfg(kani)`, it orders non-empty strings by their first UTF-8 byte,
@@ -191,16 +191,15 @@ the local sorting algorithms dependency-free and deterministic so the Kani
 harnesses in `src/ir/from_manifest_verification.rs` can verify bounded symbolic
 input, and do not move them out to a shared utility crate.
 
-### `src/ir/cycle_detector.rs`
+### `src/ir/cycle/detector.rs`
 
-The depth-first traversal state machine, owned by `src/ir/cycle.rs` through its
-private `#[path = "cycle_detector.rs"] mod detector;` declaration. It provides
-`CycleDetector`, `VisitState`, and traversal result types used by the production
-`analyse` entry point and its Kani presence-only variant. The module is
-private to `ir::cycle`; its test and verification children reach the types
-through the parent module's private re-exports. Keep graph traversal state
-here, while path comparison and cycle canonicalization remain owned by
-`cycle_support.rs`.
+The depth-first traversal state machine, owned by `src/ir/cycle/mod.rs` through
+its private `mod detector;` declaration. It provides `CycleDetector`,
+`VisitState`, and traversal result types used by the production `analyse` entry
+point and its Kani presence-only variant. The module is private to `ir::cycle`;
+its test and verification children reach the types through the parent module's
+private re-exports. Keep graph traversal state here, while path comparison and
+cycle canonicalization remain owned by `src/ir/cycle/support.rs`.
 
 ### `src/diagnostic_json_support.rs`
 

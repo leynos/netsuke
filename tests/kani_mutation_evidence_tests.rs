@@ -111,7 +111,7 @@ fn declared_function_name(declaration: &str) -> Option<String> {
 ///
 /// The repository convention wires harness bodies as `mod verification`
 /// declared by the sibling module they verify, so
-/// `src/ir/cycle_verification.rs` maps to `ir::cycle::verification`, while
+/// `src/ir/cycle/verification.rs` maps to `ir::cycle::verification`, while
 /// `src/ir/cmd_interpolate/verification.rs` maps to
 /// `ir::cmd_interpolate::verification`.
 fn module_path_for_source(relative: &Utf8Path) -> Result<String> {

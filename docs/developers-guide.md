@@ -2712,7 +2712,7 @@ select a branch in that control to exercise a feature branch.
 
 The caller passes two configuration inputs, each carrying intent:
 
-- `exclude-globs` — `src/ir/cycle_verification.rs`,
+- `exclude-globs` — `src/ir/cycle/verification.rs`,
   `src/ir/from_manifest_verification.rs`, `src/ir/graph/kani_map.rs`, and
   `src/ir/cmd_interpolate/verification.rs`: modules gated behind
   `#[cfg(kani)] mod` declarations. `cargo-mutants` does not evaluate that cfg,
@@ -3983,7 +3983,7 @@ private production-owned `canonicalize_cycle_by` kernel over `u8` cycles for
 N=2, N=3, and N=4, plus one direct adapter harness that checks
 `canonicalize_cycle(Vec<Utf8PathBuf>)` agrees with that kernel for a two-node
 path cycle. Larger path-bearing canonicalization coverage remains owned by the
-`cycle_property_tests.rs` Proptest suite.
+`src/ir/cycle/property_tests/mod.rs` Proptest suite.
 
 Command-interpolation Kani proofs drive the allocation-free marker-matching
 helper, not the full scanner. The helper operates on the scanner's private
@@ -4003,15 +4003,15 @@ Table: Kani harnesses for Netsuke's intermediate-representation invariants.
 | `missing_rule_shape_is_rejected`                            | `src/ir/from_manifest_verification.rs`   | A missing single rule reaches `IrGenError::RuleNotFound` and preserves target and rule names.           | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with symbolic target and rule names and an empty rule map.                                                                               |
 | `shell_variable_prefix_does_not_match`                      | `src/ir/cmd_interpolate/verification.rs` | Literal `$in` and `$out` prefixes remain shell text rather than selecting a Netsuke marker.             | `#[kani::unwind(32)]` | Covers every symbolic `$` position in the bounded window, including truncated starts.                                                                                     |
 | `marker_token_match_is_exact`                               | `src/ir/cmd_interpolate/verification.rs` | The real `INS_TOKEN` and `OUTS_TOKEN` match exact text, irrespective of adjacent identifier characters. | `#[kani::unwind(34)]` | Drives both concrete marker constants through `find_substitution`, including prefix, suffix, near-miss, and truncation cases.                                             |
-| `self_dependency_reports_cycle`                             | `src/ir/cycle_verification.rs`           | A self-dependency is reported as a cycle by production traversal.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`, which reuses `CycleDetector::visit` in boolean mode.                                                                                  |
-| `two_node_cycle_reports_cycle_a_first`                      | `src/ir/cycle_verification.rs`           | A two-node cycle is reported when the `a` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; the separate insertion-order harnesses cover deterministic map-entry traversal under the Kani map.                                    |
-| `two_node_cycle_reports_cycle_b_first`                      | `src/ir/cycle_verification.rs`           | A two-node cycle is reported when the `b` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; this complements the `a`-first harness, so the proof is not tied to one insertion order.                                              |
-| `direct_missing_dependency_does_not_report_cycle`           | `src/ir/cycle_verification.rs`           | A single target with an absent dependency is not reported as a cycle.                                   | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that a missing direct dependency does not enter the cycle branch.                                                           |
-| `transitive_missing_dependency_does_not_report_cycle`       | `src/ir/cycle_verification.rs`           | A two-target chain whose deeper dependency is absent is not reported as a cycle.                        | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that an absent dependency below another target does not synthesize a false cycle.                                           |
-| `canonicalize_two_node_cycle_is_canonical`                  | `src/ir/cycle_verification.rs`           | Two-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.   | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs. Direct `Utf8PathBuf` proof attempts exceeded the local 8 GiB cap.             |
-| `canonicalize_three_node_cycle_is_canonical`                | `src/ir/cycle_verification.rs`           | Three-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation. | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                               |
-| `canonicalize_four_node_cycle_is_canonical`                 | `src/ir/cycle_verification.rs`           | Four-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.  | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                               |
-| `canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes` | `src/ir/cycle_verification.rs`           | The path-bearing wrapper agrees with the `u8` kernel for both two-node path orderings.                  | `#[kani::unwind(6)]`  | Drives production `canonicalize_cycle(Vec<Utf8PathBuf>)` once per concrete two-node ordering and compares the result with the kernel's `u8` output.                       |
+| `self_dependency_reports_cycle`                             | `src/ir/cycle/verification.rs`           | A self-dependency is reported as a cycle by production traversal.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`, which reuses `CycleDetector::visit` in boolean mode.                                                                                  |
+| `two_node_cycle_reports_cycle_a_first`                      | `src/ir/cycle/verification.rs`           | A two-node cycle is reported when the `a` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; the separate insertion-order harnesses cover deterministic map-entry traversal under the Kani map.                                    |
+| `two_node_cycle_reports_cycle_b_first`                      | `src/ir/cycle/verification.rs`           | A two-node cycle is reported when the `b` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; this complements the `a`-first harness, so the proof is not tied to one insertion order.                                              |
+| `direct_missing_dependency_does_not_report_cycle`           | `src/ir/cycle/verification.rs`           | A single target with an absent dependency is not reported as a cycle.                                   | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that a missing direct dependency does not enter the cycle branch.                                                           |
+| `transitive_missing_dependency_does_not_report_cycle`       | `src/ir/cycle/verification.rs`           | A two-target chain whose deeper dependency is absent is not reported as a cycle.                        | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that an absent dependency below another target does not synthesize a false cycle.                                           |
+| `canonicalize_two_node_cycle_is_canonical`                  | `src/ir/cycle/verification.rs`           | Two-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.   | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs. Direct `Utf8PathBuf` proof attempts exceeded the local 8 GiB cap.             |
+| `canonicalize_three_node_cycle_is_canonical`                | `src/ir/cycle/verification.rs`           | Three-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation. | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                               |
+| `canonicalize_four_node_cycle_is_canonical`                 | `src/ir/cycle/verification.rs`           | Four-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.  | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                               |
+| `canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes` | `src/ir/cycle/verification.rs`           | The path-bearing wrapper agrees with the `u8` kernel for both two-node path orderings.                  | `#[kani::unwind(6)]`  | Drives production `canonicalize_cycle(Vec<Utf8PathBuf>)` once per concrete two-node ordering and compares the result with the kernel's `u8` output.                       |
 
 Under `cfg(kani)`, `src/ir/graph/mod.rs::IrHashMap` is a fixed-capacity
 deterministic compatibility layer used by production IR code under proof. Under
@@ -4861,10 +4861,10 @@ variants, and `parallel` remains the default. The ordering policy applies only
 to a manifest `deps` list; never infer it from the number or shape of graph
 edges, and do not apply it to inputs or order-only dependencies.
 
-`src/ir/cycle.rs::CycleDetector::visit` traverses `inputs` and `implicit_deps`
-when detecting cycles. It intentionally does not traverse `order_only_deps`,
-because order-only dependencies express scheduling order rather than rebuild
-freshness.
+`src/ir/cycle/mod.rs::CycleDetector::visit` traverses `inputs` and
+`implicit_deps` when detecting cycles. It intentionally does not traverse
+`order_only_deps`, because order-only dependencies express scheduling order
+rather than rebuild freshness.
 
 ### Serial dependency bundles
 
@@ -8705,10 +8705,10 @@ carries the caller-facing description.
 
 ### Module: `ir::cycle`
 
-`src/ir/cycle.rs` provides the cycle-detection entry point for the IR target
-graph. It delegates depth-first traversal to the private sibling
-`src/ir/cycle_detector.rs` and path lookup/canonicalization helpers to
-`src/ir/cycle_support.rs`.
+`src/ir/cycle/mod.rs` provides the cycle-detection entry point for the IR
+target graph. It delegates depth-first traversal to the private sibling
+`src/ir/cycle/detector.rs` and path lookup/canonicalization helpers to
+`src/ir/cycle/support.rs`.
 
 **Entry point:** `analyse(graph: &BuildGraph) -> CycleDetectionReport`
 

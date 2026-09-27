@@ -19,19 +19,15 @@ use camino::Utf8PathBuf;
 use super::graph::BuildGraph;
 
 #[cfg(test)]
-#[path = "cycle_property_tests.rs"]
-mod cycle_property_tests;
+mod property_tests;
 
-#[path = "cycle_support.rs"]
 pub(super) mod support;
 
-#[path = "cycle_detector.rs"]
 mod detector;
 use self::detector::CycleDetector;
 use self::detector::VisitState;
 
 #[cfg(test)]
-#[path = "cycle_tests.rs"]
 mod tests;
 
 /// The result of a cycle-detection pass over the target graph.
@@ -72,5 +68,4 @@ pub(crate) fn contains_cycle(graph: &BuildGraph) -> bool {
 }
 
 #[cfg(kani)]
-#[path = "cycle_verification.rs"]
 mod verification;

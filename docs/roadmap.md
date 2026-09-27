@@ -1967,8 +1967,8 @@ the accepted size and performance budgets.
     64 MiB, and every property run to 256 cases; retain each counterexample as
     a checked-in regression that the blocking suite replays.
   - Exercise every supported command path that can reach the seven production
-    `debug_assert*` sites in `src/ir/cycle_support.rs`,
-    `src/ir/cycle_detector.rs`, `src/ir/cmd_interpolate/mod.rs`,
+    `debug_assert*` sites in `src/ir/cycle/support.rs`,
+    `src/ir/cycle/detector.rs`, `src/ir/cmd_interpolate/mod.rs`,
     `src/stdlib/time/format.rs`, `src/stdlib/command/quote.rs`,
     `src/ninja_gen/mod.rs`, and `src/cli/discovery_layers.rs`, plus selected
     arithmetic boundaries, valid inputs, and intentionally rejected inputs.

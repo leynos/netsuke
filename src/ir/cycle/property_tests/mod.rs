@@ -10,10 +10,8 @@ use super::analyse;
 use super::detector::CycleDetector;
 use super::support::{canonicalize_cycle, canonicalize_cycle_by};
 
-#[path = "cycle_analyse_tests.rs"]
 mod analyse_tests;
 
-#[path = "cycle_issue322_property_tests.rs"]
 mod issue322_property_tests;
 
 fn path(name: &str) -> camino::Utf8PathBuf {

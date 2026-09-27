@@ -1,7 +1,7 @@
-diff --git a/src/ir/cycle_support.rs b/src/ir/cycle_support.rs
+diff --git a/src/ir/cycle/support.rs b/src/ir/cycle/support.rs
 index 59012331..cb8bbc46 100644
---- a/src/ir/cycle_support.rs
-+++ b/src/ir/cycle_support.rs
+--- a/src/ir/cycle/support.rs
++++ b/src/ir/cycle/support.rs
 @@ -107,7 +107,7 @@ pub(super) fn canonicalize_cycle_by<T: Clone>(
  /// The input must contain at least two nodes; the first and last node are
  /// expected to be identical (the standard DFS cycle representation).
