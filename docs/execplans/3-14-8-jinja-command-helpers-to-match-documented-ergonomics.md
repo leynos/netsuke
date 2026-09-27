@@ -3203,6 +3203,35 @@ catalogue has the key; there is no partial state to clean up.
   `#[path]`-under-`src/` shape recorded earlier for the Whitaker test-module
   split.
 
+- [x] (2026-09-27) The seven-gate set is green at `323169b4`, and the tree was
+      frozen before the runner was summoned rather than after.
+
+  `SHA_BEFORE == SHA_AFTER == 323169b46bcf2dd9c80a04be73365a0fec8f7aee` on all
+  seven gates, every one `EXIT=0`, `PROVENANCE=valid`, and — the point of this
+  run — `DIRTY_BEFORE = DIRTY_AFTER = 0` on every one, confirmed still clean
+  after the final gate. This is the first run on this branch with no provenance
+  caveat attached. `check-fmt` exercised all three stages including the
+  `mdtablefix --wrap` refill, which the preceding entry's edit had made
+  necessary: `167 files left unchanged`. `test` ran 3578/3578 nextest (5
+  skipped) plus the doctest targets, and `doc-coverage` held 98.83%.
+
+  **The sequencing fix is the content here.** The previous entry records
+  dirtying the tree two seconds into a run; this one is the correction applied
+  as practice rather than as resolution — the edit was committed first, the
+  tree confirmed empty with `git status --porcelain`, and only then was the
+  runner started. That is cheaper than the alternative in both directions: no
+  reverted edit to re-apply, and no judgement call afterwards about whether a
+  mid-run change mattered.
+
+  **One honest limit on what this run proves, stated because the runner raised
+  it.** The delta is Markdown-only, so `lint` and `test` exercised build
+  artefacts cached from `c3078c1f` rather than recompiling cold. That is
+  expected and correct for a documentation commit — the Rust tree is unchanged
+  from `c3078c1f`, which was itself verified green on the same seven gates, and
+  the Rust-bearing commits behind it were gated in their turn. But this run is
+  not fresh evidence that the Rust tree compiles from cold, and it should not
+  be cited as such.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
