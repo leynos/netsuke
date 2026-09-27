@@ -748,7 +748,7 @@ The lowering stages have deliberately separate responsibilities:
   independently. Every entry sees the same cloned recipe context, including
   target variables and delayed `ins`/`outs` markers. A rendering error for a
   list includes its one-based entry position.
-- `src/ir/from_manifest_support.rs` prepares one shell-quoted input/output
+- `src/ir/from_manifest/support/mod.rs` prepares one shell-quoted input/output
   binding set for the recipe, then interpolates every scalar or list entry with
   that set. Both recipe kinds recognize the same `{{ ins }}` and `{{ outs }}`
   markers; POSIX lexical scanning can preserve their internal tokens in
@@ -2713,7 +2713,7 @@ select a branch in that control to exercise a feature branch.
 The caller passes two configuration inputs, each carrying intent:
 
 - `exclude-globs` — `src/ir/cycle/verification.rs`,
-  `src/ir/from_manifest_verification.rs`, `src/ir/graph/kani_map.rs`, and
+  `src/ir/from_manifest/verification.rs`, `src/ir/graph/kani_map.rs`, and
   `src/ir/cmd_interpolate/verification.rs`: modules gated behind
   `#[cfg(kani)] mod` declarations. `cargo-mutants` does not evaluate that cfg,
   so mutants inserted there would compile to nothing and survive as noise
@@ -3997,10 +3997,10 @@ Table: Kani harnesses for Netsuke's intermediate-representation invariants.
 
 | Harness                                                     | Module                                   | Property                                                                                                | Bound                 | Notes                                                                                                                                                                     |
 | ----------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `duplicate_output_always_rejected`                          | `src/ir/from_manifest_verification.rs`   | A duplicate path in one target is detected and the reported duplicate path is preserved.                | `#[kani::unwind(12)]` | Drives production `find_duplicates` with symbolic duplicate names. Full manifest lowering reaches action hashing before duplicate assertions become tractable under Kani. |
-| `empty_rule_shape_is_rejected`                              | `src/ir/from_manifest_verification.rs`   | An empty rule selector reaches `IrGenError::EmptyRule` and preserves the target name.                   | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with a symbolic target name and a minimal rule map.                                                                                      |
-| `multiple_rule_shape_is_rejected`                           | `src/ir/from_manifest_verification.rs`   | A multi-rule selector reaches `IrGenError::MultipleRules` and preserves sorted rule names.              | `#[kani::unwind(8)]`  | Drives production `resolve_rule` with symbolic rule ordering over short bounded names.                                                                                    |
-| `missing_rule_shape_is_rejected`                            | `src/ir/from_manifest_verification.rs`   | A missing single rule reaches `IrGenError::RuleNotFound` and preserves target and rule names.           | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with symbolic target and rule names and an empty rule map.                                                                               |
+| `duplicate_output_always_rejected`                          | `src/ir/from_manifest/verification.rs`   | A duplicate path in one target is detected and the reported duplicate path is preserved.                | `#[kani::unwind(12)]` | Drives production `find_duplicates` with symbolic duplicate names. Full manifest lowering reaches action hashing before duplicate assertions become tractable under Kani. |
+| `empty_rule_shape_is_rejected`                              | `src/ir/from_manifest/verification.rs`   | An empty rule selector reaches `IrGenError::EmptyRule` and preserves the target name.                   | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with a symbolic target name and a minimal rule map.                                                                                      |
+| `multiple_rule_shape_is_rejected`                           | `src/ir/from_manifest/verification.rs`   | A multi-rule selector reaches `IrGenError::MultipleRules` and preserves sorted rule names.              | `#[kani::unwind(8)]`  | Drives production `resolve_rule` with symbolic rule ordering over short bounded names.                                                                                    |
+| `missing_rule_shape_is_rejected`                            | `src/ir/from_manifest/verification.rs`   | A missing single rule reaches `IrGenError::RuleNotFound` and preserves target and rule names.           | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with symbolic target and rule names and an empty rule map.                                                                               |
 | `shell_variable_prefix_does_not_match`                      | `src/ir/cmd_interpolate/verification.rs` | Literal `$in` and `$out` prefixes remain shell text rather than selecting a Netsuke marker.             | `#[kani::unwind(32)]` | Covers every symbolic `$` position in the bounded window, including truncated starts.                                                                                     |
 | `marker_token_match_is_exact`                               | `src/ir/cmd_interpolate/verification.rs` | The real `INS_TOKEN` and `OUTS_TOKEN` match exact text, irrespective of adjacent identifier characters. | `#[kani::unwind(34)]` | Drives both concrete marker constants through `find_substitution`, including prefix, suffix, near-miss, and truncation cases.                                             |
 | `self_dependency_reports_cycle`                             | `src/ir/cycle/verification.rs`           | A self-dependency is reported as a cycle by production traversal.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`, which reuses `CycleDetector::visit` in boolean mode.                                                                                  |
@@ -4847,14 +4847,15 @@ unit tests where a small fixed set of cases must all be verified.
 
 ## IR dependency classes
 
-`src/ir/from_manifest.rs` lowers manifest `sources` into `BuildEdge.inputs`,
-manifest `deps` into `BuildEdge.implicit_deps`, and manifest `order_only_deps`
-into `BuildEdge.order_only_deps`. Keep those classes separate: recipe
-interpolation (`{{ ins }}`) receives only `BuildEdge.inputs`, while
-`src/ninja_gen/mod.rs` renders implicit deps with Ninja's single-pipe separator.
+`src/ir/from_manifest/mod.rs` lowers manifest `sources` into
+`BuildEdge.inputs`, manifest `deps` into `BuildEdge.implicit_deps`, and manifest
+`order_only_deps` into `BuildEdge.order_only_deps`. Keep those classes
+separate: recipe interpolation (`{{ ins }}`) receives only `BuildEdge.inputs`,
+while `src/ninja_gen/mod.rs` renders implicit deps with Ninja's single-pipe
+separator.
 
 `ast::DependencyOrder` is the closed manifest enum responsible for YAML and
-Serde. `src/ir/from_manifest.rs` explicitly converts it to the
+Serde. `src/ir/from_manifest/mod.rs` explicitly converts it to the
 serialization-free `ir::DependencyOrder` stored in
 `BuildEdge::dependency_order`; both types have matching `Parallel` and `Serial`
 variants, and `parallel` remains the default. The ordering policy applies only

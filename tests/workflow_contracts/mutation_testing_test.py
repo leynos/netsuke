@@ -29,7 +29,7 @@ EXPECTED_USES_PATH = "leynos/shared-actions/.github/workflows/mutation-cargo.yml
 KANI_EXCLUDES = (
     "src/ir/cycle/verification.rs",
     "src/ir/cmd_interpolate/verification.rs",
-    "src/ir/from_manifest_verification.rs",
+    "src/ir/from_manifest/verification.rs",
     "src/ir/graph/kani_map.rs",
 )
 

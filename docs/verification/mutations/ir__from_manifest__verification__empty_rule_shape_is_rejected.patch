@@ -1,7 +1,7 @@
-diff --git a/src/ir/from_manifest_support.rs b/src/ir/from_manifest_support.rs
+diff --git a/src/ir/from_manifest/support/mod.rs b/src/ir/from_manifest/support/mod.rs
 index f1337074..88aa7d87 100644
---- a/src/ir/from_manifest_support.rs
-+++ b/src/ir/from_manifest_support.rs
+--- a/src/ir/from_manifest/support/mod.rs
++++ b/src/ir/from_manifest/support/mod.rs
 @@ -254,8 +254,9 @@ pub(super) fn resolve_rule(
  
  /// Build the empty-rule error for a target that selected no rule.

@@ -22,7 +22,6 @@ use super::super::{
     graph::{Action, BuildEdge, BuildGraph, IrGenError, IrHashMap},
 };
 
-#[path = "sort_utils.rs"]
 mod sort_utils;
 
 /// The `{{ ins }}`/`{{ outs }}` substitution views for one action under construction.
@@ -368,5 +367,4 @@ pub(super) fn get_target_display_name(paths: &[Utf8PathBuf]) -> String {
 }
 
 #[cfg(test)]
-#[path = "from_manifest_support_tests.rs"]
 mod tests;

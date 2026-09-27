@@ -1018,7 +1018,7 @@ interpreted only at the manifest-to-IR boundary.*
 `as_single` build on it. Path conversion deliberately does not live here. The
 AST models the manifest's surface syntax, in which `sources`, `deps` and
 `order_only_deps` are plain strings; only manifest-to-IR lowering decides they
-name files on disk, so `src/ir/from_manifest_support.rs::to_paths` performs
+name files on disk, so `src/ir/from_manifest/support/mod.rs::to_paths` performs
 that interpretation at the boundary. Keeping `camino` out of `src/ast/mod.rs`
 stops filesystem concerns leaking into the domain model.
 

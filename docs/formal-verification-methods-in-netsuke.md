@@ -352,7 +352,7 @@ into a proof-first shape that its current architecture does not need.
   current continuous integration workflow.
 [^4]: [`README.md`](../README.md) describes Netsuke as a compiler from YAML and
   Jinja to Ninja, with deterministic graph generation and Ninja execution.
-[^5]: [`src/ir/from_manifest.rs`](../src/ir/from_manifest.rs) defines
+[^5]: [`src/ir/from_manifest/mod.rs`](../src/ir/from_manifest/mod.rs) defines
   `BuildGraph::from_manifest`, duplicate-output rejection, rule resolution, and
   cycle reporting.
 [^6]: [`src/ninja_gen.rs`](../src/ninja_gen.rs) sorts actions, edges, and

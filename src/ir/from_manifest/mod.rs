@@ -19,7 +19,6 @@ use super::{
     graph::{BuildEdge, BuildGraph, DependencyOrder, IrGenError, IrHashMap},
 };
 
-#[path = "from_manifest_support.rs"]
 mod support;
 
 #[cfg(kani)]
@@ -221,7 +220,6 @@ impl BuildGraph {
 }
 
 #[cfg(kani)]
-#[path = "from_manifest_verification.rs"]
 mod verification;
 
 impl From<crate::ast::DependencyOrder> for DependencyOrder {

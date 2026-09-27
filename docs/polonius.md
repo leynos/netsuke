@@ -69,17 +69,17 @@ well — the owned style was habit, so they carry no toolchain caveat:
 Owned style retained deliberately. The constraint, not the borrow checker, is
 load-bearing; each site carries the matching source tag:
 
-| Site                                                     | Tag                               | Constraint                                                                                                                                                                                      |
-| -------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/ir/from_manifest_support.rs` — `register_action`    | `POLONIUS-REFUSED(id-is-data)`    | The action hash is persistent IR identity: stored on every `BuildEdge` and named in the generated Ninja file. Remains owned unless callers demonstrate a need for the canonical interned value. |
-| `src/stdlib/which/cache.rs` — `WhichResolver::try_cache` | `POLONIUS-REFUSED(lock-boundary)` | Cache hits are cloned out of the LRU because references cannot outlive the `MutexGuard`; the resolver is shared across evaluation sites.                                                        |
-| `src/stdlib/collections.rs` — `GroupedValues::new`       | `POLONIUS-REFUSED(miss-dominant)` | First-wins string-key registration almost always inserts, so the owned-key `entry` form pays nothing on the rare hit.                                                                           |
+| Site                                                      | Tag                               | Constraint                                                                                                                                                                                      |
+| --------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/ir/from_manifest/support/mod.rs` — `register_action` | `POLONIUS-REFUSED(id-is-data)`    | The action hash is persistent IR identity: stored on every `BuildEdge` and named in the generated Ninja file. Remains owned unless callers demonstrate a need for the canonical interned value. |
+| `src/stdlib/which/cache.rs` — `WhichResolver::try_cache`  | `POLONIUS-REFUSED(lock-boundary)` | Cache hits are cloned out of the LRU because references cannot outlive the `MutexGuard`; the resolver is shared across evaluation sites.                                                        |
+| `src/stdlib/collections.rs` — `GroupedValues::new`        | `POLONIUS-REFUSED(miss-dominant)` | First-wins string-key registration almost always inserts, so the owned-key `entry` form pays nothing on the rare hit.                                                                           |
 
 ## Non-candidates reviewed and cleared
 
 Scanner suspects that turned out not to be NLL residue:
 
-- `src/ir/from_manifest_support.rs` — the `contains_key`/`insert` guard in
+- `src/ir/from_manifest/support/mod.rs` — the `contains_key`/`insert` guard in
   `register_action` keeps no reference, so it already compiles under NLL
   (write-only guarding); the refusal above covers the owned hash it returns.
 - `src/ir/cycle/mod.rs:238` — the doc comment on `visit_known_edge` blaming the

@@ -122,7 +122,7 @@ manifest policy. It requires a separately approved design.
 
 - Manifest and IR contract: [`src/ast/mod.rs`](../src/ast/mod.rs),
   [`src/ir/graph/mod.rs`](../src/ir/graph/mod.rs), and
-  [`src/ir/from_manifest.rs`](../src/ir/from_manifest.rs)
+  [`src/ir/from_manifest/mod.rs`](../src/ir/from_manifest/mod.rs)
 - Ninja bundle generation:
   [`src/ninja_gen/dyndep.rs`](../src/ninja_gen/dyndep.rs)
 - Atomic sidecar materialization:

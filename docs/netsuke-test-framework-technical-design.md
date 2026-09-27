@@ -594,7 +594,7 @@ compositions of public library functions:
 - `load_manifest` → `manifest::from_str_named`-equivalent entry with
   `ManifestLoadOptions` (§4.3);
 - `build_graph` → `BuildGraph::from_manifest`
-  (`src/ir/from_manifest.rs:49`) over the loaded manifest;
+  (`src/ir/from_manifest/mod.rs:49`) over the loaded manifest;
 - `generate_ninja` → `ninja_gen::generate` over the built graph.
 
 `BuildGraph::from_manifest` lowers path placeholders for
