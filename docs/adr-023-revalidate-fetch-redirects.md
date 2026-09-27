@@ -102,32 +102,28 @@ recorder allowlist.
 
 - Pure redirect decisions about an already-resolved target — the hop limit, loop
   detection, cross-origin credential removal, and the ordering of the policy
-  check — in
-  [`src/stdlib/network/redirect/chain/mod.rs`](../src/stdlib/network/redirect/chain/mod.rs),
+  check — in [redirect chain](../src/stdlib/network/redirect/chain/mod.rs),
   with unit and property tests in
-  [`src/stdlib/network/redirect/chain/tests.rs`](../src/stdlib/network/redirect/chain/tests.rs)
+  [chain tests](../src/stdlib/network/redirect/chain/tests.rs)
 - The fetch adapter that composes the transport, the chain budget, telemetry,
   and localized diagnostics. It reads the supported redirect statuses and
   resolves the `Location` header into a typed target before the chain sees it,
   in
   [`src/stdlib/network/redirect/mod.rs`](../src/stdlib/network/redirect/mod.rs),
-  tested by
-  [`src/stdlib/network/redirect/tests/mod.rs`](../src/stdlib/network/redirect/tests/mod.rs)
+  tested by [adapter tests](../src/stdlib/network/redirect/tests/mod.rs)
 - The metric names and their closed label vocabularies in
   [`src/stdlib/network/telemetry.rs`](../src/stdlib/network/telemetry.rs),
-  tested by
-  [`src/stdlib/network/telemetry_tests.rs`](../src/stdlib/network/telemetry_tests.rs)
+  tested by [telemetry tests](../src/stdlib/network/telemetry_tests.rs)
 - Policy evaluation in
   [`src/stdlib/network/policy/mod.rs`](../src/stdlib/network/policy/mod.rs)
 - The original-URL cache key in
   [`src/stdlib/network/cache.rs`](../src/stdlib/network/cache.rs)
 - End-to-end coverage of every supported redirect status, the method used at
   each hop, and multi-hop refusal in
-  [`tests/std_filter_tests/network_redirect_chain_tests.rs`](../tests/std_filter_tests/network_redirect_chain_tests.rs),
+  [chain tests](../tests/std_filter_tests/network_redirect_chain_tests.rs),
   with two-server and cache coverage in
-  [`tests/std_filter_tests/network_redirect_tests.rs`](../tests/std_filter_tests/network_redirect_tests.rs)
-  and
-  [`src/stdlib/network/redirect/cache_tests.rs`](../src/stdlib/network/redirect/cache_tests.rs)
+  [redirect tests](../tests/std_filter_tests/network_redirect_tests.rs) and
+  [cache tests](../src/stdlib/network/redirect/cache_tests.rs)
 
 ## Addendum — 2026-09-18: resolve the Location header at the transport boundary
 

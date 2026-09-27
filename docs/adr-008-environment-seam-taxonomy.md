@@ -177,11 +177,11 @@ resolution entirely rather than setting the variable for a child to read.
 ## Implementation references
 
 - Workspace switch state:
-  [`src/stdlib/which/workspace_switch.rs`](../src/stdlib/which/workspace_switch.rs)
+  [workspace switch](../src/stdlib/which/workspace_switch.rs)
 - `EnvSnapshot`: [`src/stdlib/which/env/mod.rs`](../src/stdlib/which/env/mod.rs)
 - Cache fingerprint: [`src/stdlib/which/cache.rs`](../src/stdlib/which/cache.rs)
 - `mockable::Env` seam:
-  [`src/runner/process/ninja/program.rs`](../src/runner/process/ninja/program.rs);
+  [Ninja resolver](../src/runner/process/ninja/program.rs);
   `runner::run_with_ninja_program` in
   [`src/runner/mod.rs`](../src/runner/mod.rs) is the companion injected seam
   that lets callers select the resolved Ninja executable directly, without
