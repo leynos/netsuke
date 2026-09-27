@@ -1212,7 +1212,7 @@ therefore the sum of the two — 8m20s with these figures. An unpinned stop
 timeout hands that decision to the host default, 90 seconds on the reference
 host, and a payload that ignores `SIGTERM` can then overrun the nominal cap by
 that much: one sleeping for 200 seconds under `RuntimeMaxSec=3s` alone was
-killed at 94 seconds, and at 23 seconds once `TimeoutStopSec=20s` was pinned.
+killed at 93 seconds, and at 23 seconds once `TimeoutStopSec=20s` was pinned.
 
 `tee` sits inside the scope, and that is deliberate. The pipeline travels as
 the scope's payload, so the captured file is exactly the output the cap
@@ -2267,17 +2267,22 @@ alone did not bound the payload at its nominal figure.
 The command now pairs `-p RuntimeMaxSec=8m` with `-p TimeoutStopSec=20s`, moves
 `tee` inside the scope by giving `bash -c` the whole pipeline, and sets
 `pipefail` in that same shell. The effective bound is the sum of the pair,
-8m20s, and that arithmetic is now stated rather than implied. Independently
-reproduced here: a 3-second cap carried a `SIGTERM`-ignoring payload for 94
-seconds against the host's 90-second default stop timeout, and 23 seconds once
-the grace was pinned; `timeout --kill-after=8s 3` likewise ran 11 seconds, and
-a scope set to `RuntimeMaxSec=45s` with `TimeoutStopSec=5s` ran 50. The
-group-escape claim was measured rather than assumed: against a prefix firing
-`SIGTERM` at 3 seconds, a descendant left in its inherited process group died
-with the payload, one that called `setsid()` survived, and one created by a
-double fork without changing group membership died too — so it is the group
-change, not the extra fork, that escapes the signal. Revision 2.30 named the
-double fork alongside `setsid`, and that half of the claim was wrong.
+8m20s, and that arithmetic is now stated rather than implied. Reproduced
+independently for this revision, with a `trap '' TERM` payload looping on
+`sleep 1`: a 3-second cap carried it for 94 seconds against the host's
+90-second default stop timeout, and 23 seconds once the grace was pinned;
+`timeout --kill-after=8s 3` likewise ran 11 seconds, and a scope set to
+`RuntimeMaxSec=45s` with `TimeoutStopSec=5s` ran 50. The `Concrete steps`
+figure for the unpinned case is 93 seconds rather than this run's 94, because
+the two were separate reproductions and the overshoot is a scheduler tick wide
+in either direction; both lie just past the 90-second default, which is the
+property the figure illustrates. The group-escape claim was measured rather
+than assumed: against a prefix firing `SIGTERM` at 3 seconds, a descendant left
+in its inherited process group died with the payload, one that called
+`setsid()` survived, and one created by a double fork without changing group
+membership died too — so it is the group change, not the extra fork, that
+escapes the signal. Revision 2.30 named the double fork alongside `setsid`, and
+that half of the claim was wrong.
 
 This correction was raised as issue #769 from PR #768, and #768 has since
 landed on `main` as `c298a643`, bringing the same correction to both plans. The
@@ -2297,7 +2302,7 @@ mechanism under test. That is also why the claim survived review: a probe that
 reports "survived" for a reason other than the one under test looks like
 confirmation. The corrected wording is carried to the two other files that
 restate it — `docs/developers-guide.md`, which cites these plans as its probe
-evidence, and the 4.2.2 plan, which states it in four places — in the commit
+evidence, and the 4.2.2 plan, which states it in three places — in the commit
 that follows this one.
 
 No obligation, criterion, or completion state changes: header `COMPLETE`,
