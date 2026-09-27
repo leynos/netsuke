@@ -23,7 +23,6 @@ use test_support::{EnLocalizer, en_localizer};
 
 use crate::snapshot_test_support::diagnostic_json_snapshot_settings as snapshot_settings;
 
-#[path = "diagnostic_json_shape_tests.rs"]
 mod shape_tests;
 
 /// Parses a JSON string into a [`serde_json::Value`].

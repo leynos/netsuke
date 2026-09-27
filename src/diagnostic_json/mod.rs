@@ -12,9 +12,8 @@ use std::process::ExitCode;
 
 use crate::json_envelope::{GeneratorInfo, SCHEMA_VERSION};
 
-#[path = "diagnostic_json_support.rs"]
-mod diagnostic_json_support;
-use self::diagnostic_json_support::{
+mod support;
+use self::support::{
     DiagnosticSource, DiagnosticSpan, collect_diagnostic_causes, collect_error_causes,
     diagnostic_help, diagnostic_url, extract_source_and_labels, fallback_payload, severity_name,
 };
@@ -153,6 +152,5 @@ impl DiagnosticEntry {
     }
 }
 
-#[path = "diagnostic_json_tests.rs"]
 #[cfg(test)]
 mod tests;

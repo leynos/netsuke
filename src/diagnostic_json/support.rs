@@ -1,7 +1,7 @@
 //! Private helpers for [`super`]'s JSON diagnostic document.
 //!
 //! The span extraction, cause collection, and fallback-payload machinery keeps
-//! `diagnostic_json.rs` within the repository's 400-line cap. Nothing here is
+//! `diagnostic_json/mod.rs` within the repository's 400-line cap. Nothing here is
 //! reachable from outside the diagnostic document module.
 
 use std::error::Error as StdError;

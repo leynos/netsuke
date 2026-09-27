@@ -228,7 +228,6 @@ fn render_manifest_parse_diagnostic_omits_yaml_snippet(en_localizer: EnLocalizer
 /// that the helper agreed with the current dependencies. They live here to keep
 /// this module within the repository's 400-line cap; the child reaches the
 /// helpers above through `super::*`, exactly as this parent does.
-#[path = "diagnostic_json_excerpt_tests.rs"]
 #[cfg(test)]
 mod excerpt_tests;
 

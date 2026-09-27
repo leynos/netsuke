@@ -8254,11 +8254,12 @@ whitespace-only `when` values, or type mismatches in the iterable.
 
 `src/runner/dispatch.rs` is private to `runner::run` and owns command routing
 plus successful JSON-result emission. `src/result_json.rs` owns only the
-success envelope; diagnostic serialization remains in `src/diagnostic_json.rs`.
-Both modules reuse only schema-version and generator metadata from the private
-`src/json_envelope.rs` module. Within process execution, `forward_stdout` is
-the single composition point for choosing status-aware or plain child-output
-draining, and its callers select either the terminal or a JSON-mode sink.
+success envelope; diagnostic serialization remains in
+`src/diagnostic_json/mod.rs`. Both modules reuse only schema-version and
+generator metadata from the private `src/json_envelope.rs` module. Within
+process execution, `forward_stdout` is the single composition point for
+choosing status-aware or plain child-output draining, and its callers select
+either the terminal or a JSON-mode sink.
 
 `ExecutionContext` is the private dispatch context shared by build and clean
 handlers. `run_with_ninja_program` constructs it after resolving output mode
