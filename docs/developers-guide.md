@@ -6295,12 +6295,13 @@ one explicitly, so a test can drive the **real registration path** — the same
 `Environment`, the same `add_function("env", ..)` call — without touching the
 process.
 
-`manifest::EnvAccessPolicy` is the manifest-domain policy for this port. It
-stores exact variable names in separate allow and block collections. An empty
-allowlist is default-allow; a non-empty allowlist activates default-deny, and
-block entries take precedence over allow entries. Names are compared using the
-host environment's semantics: case-sensitive on other platforms and
-case-insensitive on Windows. The policy has no glob or pattern matching.
+[`manifest::EnvAccessPolicy`](../src/manifest/access_policy/mod.rs) is the
+manifest-domain policy for this port. It stores exact variable names in
+separate allow and block collections. An empty allowlist is default-allow; a
+non-empty allowlist activates default-deny, and block entries take precedence
+over allow entries. Names are compared using the host environment's semantics:
+case-sensitive on other platforms and case-insensitive on Windows. The policy
+has no glob or pattern matching.
 
 `manifest::ManifestEnvironment<'a>` bundles the caller-owned `EnvReader` with
 the owned `EnvAccessPolicy` used for one manifest load. The on-disk loader's

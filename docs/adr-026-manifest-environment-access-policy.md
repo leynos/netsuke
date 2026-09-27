@@ -147,7 +147,7 @@ lower-trust layer may restrict but not widen" uniform across policy surfaces.
 ## Implementation references
 
 - Policy domain type:
-  [`src/manifest/env_policy/mod.rs`](../src/manifest/env_policy/mod.rs)
+  [`src/manifest/access_policy/mod.rs`](../src/manifest/access_policy/mod.rs)
 - Enforcement at the `env()` registration boundary and the localized
   diagnostic: [`src/manifest/env/reader.rs`](../src/manifest/env/reader.rs)
 - Project-request capture and quarantine:

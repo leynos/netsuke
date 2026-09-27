@@ -425,6 +425,10 @@ redacted invocations, and `list_failure_telemetry.rs` measures attributed
 command-list failures. Each remains directly under `process/` with a name for
 its own concern.
 
+`manifest/access_policy/` owns the pure exact-name environment-access policy;
+`manifest/env/` owns environment reads and their telemetry. Keep the policy
+beside the I/O module so its rules remain independent of the reader adapter.
+
 When adding a justified `#[path]` support module, keep it private to its owner,
 give it a `//!` header stating the split reason and ownership, cap its visible
 surface at `pub(super)` unless a documented internal caller requires wider

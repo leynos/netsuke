@@ -16,11 +16,11 @@ use anyhow::Result;
 use minijinja::{Environment, UndefinedBehavior};
 use serde::de::Error as _;
 
+mod access_policy;
 mod budget;
 pub(crate) use budget::adapter::budget_exhaustion_message;
 use budget::adapter::{BudgetErrorExt, from_str_named};
 mod diagnostics;
-mod env_policy;
 mod expand;
 // `glob_paths` is the module's only boundary: every other item, including the
 // `GlobEntryResult` alias, stays module-private. Denying `unreachable_pub`
@@ -42,12 +42,12 @@ pub type ManifestValue = serde_json::Value;
 /// JSON object mapping string keys to manifest values.
 pub type ManifestMap = serde_json::Map<String, ManifestValue>;
 use self::jinja_macros::register_manifest_macros_with_budget;
+pub use access_policy::{EnvAccessPolicy, EnvPolicyViolation};
 pub use budget::ManifestBudgetLimits;
 pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
 };
 pub use env::{EnvReadError, EnvReader, ManifestEnvironment, process_env_reader};
-pub use env_policy::{EnvAccessPolicy, EnvPolicyViolation};
 pub(crate) use expand::expand_foreach_with_budget;
 pub use glob::glob_paths;
 pub use load_stage::ManifestLoadStage;
