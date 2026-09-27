@@ -589,6 +589,18 @@ failure mode cannot recur silently.
       level up — a check that looks healthy while contributing nothing — and
       it arrived through the same door: a reader that could not see the shape
       it was reading.
+- [x] (2026-09-27) Re-ran the full eight-gate suite at `3a892c7f` and cleared
+      its single failure. Seven passed; `make check-fmt` was red on the
+      Revision note entry that `3a892c7f` itself had added, whose last two
+      lines sat short of the 80-column wrap: `mdtablefix --check` wanted
+      `+2 -2` there. The two lines are 76 and 74 columns, so it was a
+      paragraph rewrap rather than an over-long line, and only
+      `mdtablefix --check` could see it — `make markdownlint` passed at the
+      same revision, 167 files and 0 errors, because the fault is width and
+      not lint. Fixed by rewrapping, which leaves 166 files unchanged.
+      `make test-workflow-contracts` was green at `814 passed, 2 skipped,
+      0 failed`, the two-predicted-failures remediation with no other count
+      moving.
 
 ## Surprises & discoveries
 
@@ -1151,6 +1163,39 @@ failure mode cannot recur silently.
   reached its assertions. The same shape appears in this branch's other
   evidence — the `-tf1` sweep's failure proved nothing about the Markdown rules
   either, in the opposite direction.
+- **A gate log is evidence about the revision that produced it, and the
+  filename does not say which revision that was.** The `tee` convention names
+  the branch, so every batch on a branch reads the same set of paths and the
+  only thing that separates two batches is a numeric suffix chosen by whoever
+  dispatched them. Read the wrong suffix and the result looks like a complete,
+  self-consistent gate report: it carries a real command line, real counts, a
+  real exit status, and no error of any kind. While the second batch was still
+  running, the `-11` suffix held a *two-day-old* report from 2026-09-25
+  (`test-workflow-contracts`: 613 passed, 2 skipped, exit 0) and the live batch
+  was writing to `-2` (19:43 onward, `814 passed`). Both files exist and both
+  parse; only `stat` and the log's own embedded UTC stamp (`END_UTC=` for the
+  scripted batches) distinguish them. The `-11` figure was discarded — it
+  predates the duplicate-pair fix and the two contracts this branch added,
+  which is exactly why its passed count is 613 rather than 814. The same trap
+  has a second form: a *passing* figure from a batch that ran before a fix
+  cannot justify the fix. Read the timestamp and the revision, not the suffix,
+  and prefer a marker the producing script wrote into the log itself over any
+  inference from the file's name.
+- **A gate that covers a path can still not be the gate that covers the
+  property.** `make markdownlint` and `make check-fmt` both read the ExecPlan
+  and disagreed: `markdownlint-cli2` reported 167 files and 0 errors at the
+  same revision where `mdtablefix --check` reported the file would be
+  reformatted. Neither is wrong — markdownlint asserts lint *rules*, and the
+  fault was a paragraph that had drifted from its 80-column wrap, which is not
+  one of them. This is the reason both targets exist, and the reason a green
+  Markdown gate cannot be cited as coverage for a width rule. It also has a
+  cheaper diagnostic: `mdtablefix --diff` (in place of `--check`) prints the
+  exact hunks without touching the tree, and `--check` plus `--diff` together
+  are rejected as mutually exclusive, so the probe has to be the plain
+  invocation rather than the check. Verified on a scratch `git init` under
+  `/tmp`, because the Makefile's invocation carries `--git --include-untracked`
+  and a `--check` run in a non-repository directory selects nothing and exits 0
+  — a green result that proves only that no file was selected.
 
 ## Decision log
 
@@ -2175,5 +2220,13 @@ approaches the ceiling, as `makefile_recipes.py` itself records having done.
   any text in common. Duplicates of this kind are also invisible to
   duplicate-tolerant readers by construction — `nextest_lane_mold_test.py`
   takes the first match and was satisfied throughout — so the contracts that
-  could see it were exactly the ones asserting a count. `06f7b0bb` removes
-  the later pair and records the reasons in the gate's own comment.
+  could see it were exactly the ones asserting a count. `06f7b0bb` removes the
+  later pair and records the reasons in the gate's own comment.
+- 2026-09-27 — Re-ran the full eight-gate suite at `3a892c7f` before
+  publication. Seven passed; `make check-fmt` was red on the entry immediately
+  above, which had left two lines short of the 80-column wrap. The fix is the
+  rewrap; the entries added here record why neither sibling gate could see it
+  (`markdownlint` was green at 167 files, 0 errors, since width is not one of
+  its rules) and why the first gate report read for this batch, at the `-11`
+  suffix, was two days stale and had to be discarded in favour of the `-2`
+  batch actually running.
