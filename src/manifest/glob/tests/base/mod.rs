@@ -1,6 +1,6 @@
 //! Tests for the injected base directory that anchors relative glob patterns.
 //!
-//! [`super::glob_paths`] accepts an optional base: relative patterns are joined
+//! [`super::super::glob_paths`] accepts an optional base: relative patterns are joined
 //! onto it before matching and the base is stripped from the results. These
 //! tests cover the two invariants of that anchoring — the base is not applied
 //! twice, and a symlinked base is followed rather than rejected.
@@ -75,3 +75,5 @@ fn glob_paths_follows_a_symlinked_base() -> Result<()> {
     );
     Ok(())
 }
+
+mod property;

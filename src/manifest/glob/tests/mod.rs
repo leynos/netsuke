@@ -6,13 +6,11 @@
 //! through, [`diagnostics`] covers the counters and events it records,
 //! [`property`] covers the prefix and relativisation invariants the fixed
 //! cases are examples of, [`base`] covers the injected base directory that
-//! anchors relative patterns, and [`base_property`] exercises those anchoring
+//! anchors relative patterns, and [`base::property`] exercises those anchoring
 //! invariants through the production [`super::glob_paths`] boundary across
 //! arbitrary safe nesting.
 
-#[cfg(unix)]
 mod base;
-mod base_property;
 mod capability;
 mod diagnostics;
 mod diagnostics_support;

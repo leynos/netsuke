@@ -1,5 +1,5 @@
 //! Property tests for injected-base glob expansion through the production
-//! [`super::glob_paths`] boundary.
+//! [`super::super::super::glob_paths`] boundary.
 //!
 //! The fixed cases in the sibling modules pin individual anchoring shapes.
 //! These cover the invariants those shapes are examples of, across arbitrary
@@ -13,7 +13,7 @@
 //! production `glob_paths` function; the environment and working directory of
 //! the test process are never mutated.
 
-use super::super::glob_paths;
+use super::super::super::glob_paths;
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use minijinja::ErrorKind;
