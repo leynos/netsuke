@@ -9,9 +9,9 @@ use ortho_config::declarative::LayerComposition;
 use ortho_config::{MergeComposer, OrthoError, OrthoResult};
 use std::sync::Arc;
 
-use super::command::Cli;
-use super::config::CliConfig;
-use super::discovery::{
+use super::super::command::Cli;
+use super::super::config::CliConfig;
+use super::super::discovery::{
     DiscoveredLayers, EnvProvider, ProjectFetchPolicyRequest, ProjectManifestBudgetRequest,
 };
 

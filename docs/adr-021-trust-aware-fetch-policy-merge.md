@@ -109,7 +109,7 @@ loaded through `extends` remain ordinary file layers by design.
   [`src/stdlib/network/policy/reconciliation.rs`][reconciliation-module]
 - Configuration composition and observer event:
   [`src/cli/merge.rs`](../src/cli/merge.rs) and
-  [`src/cli/merge_observability.rs`](../src/cli/merge_observability.rs)
+  [`src/cli/merge/observability.rs`](../src/cli/merge/observability.rs)
 - Runtime policy evaluation:
   [`src/cli_policy.rs`](../src/cli_policy.rs)
 - User-facing policy guidance:

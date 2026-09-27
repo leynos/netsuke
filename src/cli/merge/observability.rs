@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use crate::stdlib::FetchPolicyReconciliationOutcome;
 
-use super::config::NO_INPUT_VALIDATION_REASON;
+use super::super::config::NO_INPUT_VALIDATION_REASON;
 
 /// Fixed reason reported when a merged parallel job count is out of range.
 const JOBS_VALIDATION_REASON: &str = "job count is outside the supported range";

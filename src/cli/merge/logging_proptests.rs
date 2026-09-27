@@ -3,7 +3,7 @@
 //! The logging observer must identify arbitrary nested override keys without
 //! serializing or retaining the caller-controlled leaf values.
 
-use super::merge_observability::collect_override_leaf_paths;
+use super::observability::collect_override_leaf_paths;
 use proptest::prelude::*;
 use serde_json::{Map, Value};
 

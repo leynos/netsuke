@@ -21,6 +21,16 @@
 //! Diagnostic JSON resolution lives in [`super::diag`] so it can run before
 //! the full merge.
 
+mod apply;
+mod input;
+mod observability;
+
+pub use input::CachedMergeInput;
+pub use observability::{MergeEvent, MergeObserver, TracingMergeObserver};
+
+#[cfg(test)]
+mod logging_proptests;
+
 use clap::ArgMatches;
 use clap::parser::ValueSource;
 use ortho_config::figment::Figment;
@@ -29,7 +39,11 @@ use serde::Serialize;
 
 use serde_json::{Map, Value, json};
 
-use super::MergeEvent;
+use self::apply::apply_config;
+use self::input::MergeComposition;
+use self::observability::{
+    collect_override_leaf_paths, is_empty_configuration_value, validation_rejection_reason,
+};
 use super::command::{Cli, Commands};
 use super::config::CliConfig;
 use super::discovery::{
@@ -39,11 +53,6 @@ use super::discovery::{
 use super::environment::EnvironmentLayer;
 use super::fetch_policy::reconcile_fetch_policy;
 use super::manifest_budget_policy::reconcile_manifest_budget;
-use super::merge_apply::apply_config;
-use super::merge_input::{CachedMergeInput, MergeComposition};
-use super::merge_observability::{
-    collect_override_leaf_paths, is_empty_configuration_value, validation_rejection_reason,
-};
 use super::validation::validation_error;
 
 mod command_overrides;

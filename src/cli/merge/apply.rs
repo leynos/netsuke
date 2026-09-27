@@ -3,8 +3,8 @@
 //! Keeps post-merge command/default resolution separate from layer collection
 //! so merge orchestration remains compact and independently understandable.
 
-use super::command::{BuildArgs, Cli, Commands, InteractionArgs};
-use super::config::{BuildConfig, CliConfig};
+use super::super::command::{BuildArgs, Cli, Commands, InteractionArgs};
+use super::super::config::{BuildConfig, CliConfig};
 
 /// Apply merged configuration over parsed CLI input to build the runtime CLI.
 pub(super) fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
