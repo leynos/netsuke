@@ -4702,7 +4702,7 @@ modules under `tests/cli_tests/`:
   `AccessibilityPolicy`, `json`, `NO_COLOR`, and `TERM`/output mode) against a
   handwritten truth model, using one flat Cartesian-product sweep plus a
   proptest. It adds coverage only; the production resolution in `src/theme.rs`
-  and `src/output_prefs.rs` is not changed.
+  and `src/output/prefs/mod.rs` is not changed.
 - `merge_targets_proptests.rs` holds the handwritten proptest strategies (no
   `#[derive(Arbitrary)]`) for the `default_targets` append-in-discovery-order
   invariant and scalar merge ordering (defaults → file → environment → CLI).

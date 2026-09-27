@@ -2,7 +2,7 @@
 //! enum domain.
 //!
 //! Verifies the consolidated display-policy resolution in `src/theme.rs` and
-//! `src/output_prefs.rs`, honouring the established precedence (explicit theme
+//! `src/output/prefs/mod.rs`, honouring the established precedence (explicit theme
 //! preference, then emoji policy, then `NO_COLOR`, then output mode) over the
 //! full `EmojiPolicy`, `ColourPolicy`, `ProgressPolicy`, `AccessibilityPolicy`,
 //! `json` and `NO_COLOR` domain.

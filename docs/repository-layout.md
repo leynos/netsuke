@@ -118,6 +118,8 @@ output and some leaf files so the long-lived structure remains visible.
 - `src/manifest/`: Manifest parsing, expansion, rendering, diagnostics, and
   manifest-specific tests.
 - `src/ninja_gen/`: Ninja rendering and staged-dyndep bundle generation.
+- `src/output/`: Terminal output mode and formatting preferences, exposed
+  through the historical `output_mode` and `output_prefs` module paths.
 - `src/runner/`: Process execution, path handling, runner errors, command
   orchestration, capability-injected dyndep publication, and bounded generation
   and publication telemetry, including `graph/generation_telemetry.rs`,

@@ -1,5 +1,5 @@
 ---
-source: src/output_prefs_tests.rs
+source: src/output/prefs/tests.rs
 expression: rendered
 ---
 error_prefix:   ✖ Error:

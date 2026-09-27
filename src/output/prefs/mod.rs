@@ -279,5 +279,4 @@ where
 }
 
 #[cfg(test)]
-#[path = "output_prefs_tests.rs"]
 mod tests;

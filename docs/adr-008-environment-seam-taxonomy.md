@@ -35,14 +35,14 @@ whether it is expected to grow:
    The module owns a private function that takes an
    `FnOnce(&str) -> Result<String, env::VarError>` (or the equivalent
    `OsString`-typed form) instead of calling `std::env::var` itself. Examples:
-   the `resolve_with` variants in `output_mode.rs` and `output_prefs.rs`
-   described earlier in the developer guide. A related but distinct pattern
-   injects a resolved *value* rather than a closure: the `stdlib::path`
-   home-directory resolver's `HomeDirectory` enum (`Ambient`/`Missing`/
-   `Explicit`) lets a caller supply the home directory directly, so the
-   process-reading `home_from_env` ladder in `src/stdlib/path/path_utils.rs`
-   remains a directly annotated composition root rather than gaining its own
-   `_with` closure parameter.
+   the `resolve_with` variants in `src/output/mode.rs` and
+   `src/output/prefs/mod.rs` described earlier in the developer guide. A
+   related but distinct pattern injects a resolved *value* rather than a
+   closure: the `stdlib::path` home-directory resolver's `HomeDirectory` enum
+   (`Ambient`/`Missing`/ `Explicit`) lets a caller supply the home directory
+   directly, so the process-reading `home_from_env` ladder in
+   `src/stdlib/path/path_utils.rs` remains a directly annotated composition
+   root rather than gaining its own `_with` closure parameter.
 - **The `mockable::Env` trait**, for a boundary mocked across many tests or
    expected to grow further inputs. `resolve_ninja_program_utf8_with` in
    `src/runner/process/ninja/program.rs` takes `&impl Env`; production supplies
@@ -163,7 +163,7 @@ resolution entirely rather than setting the variable for a child to read.
 
 - **A single shared `Env` trait for every boundary.** Rejected: forcing
   `mockable::Env` (or an equivalent trait object) on single-variable,
-  single-caller sites such as `output_mode.rs`'s `resolve_with` would add
+  single-caller sites such as `src/output/mode.rs`'s `resolve_with` would add
   indirection with no matching test-surface benefit, and would blur the "one
   variable or one precedence ladder" ownership rule this ADR reaffirms.
 - **Reading the parent process's environment for child-process tests.**
