@@ -3393,6 +3393,57 @@ recorded for whoever hits them next.
   run for `93b4ce1b` is in flight and will be recorded in its own entry rather
   than overwriting it.
 
+- [x] (2026-09-27) The Windows-only compile break that no Linux gate could
+  see, found while requesting the EP-M4 review.
+
+  Scrutineer ran `coderabbit review --agent` against base `ebcedaef` at head
+  `83981593` and returned ten findings. While capturing the CodeRabbit check
+  status it incidentally found **CI was red at that exact head**: run
+  `36290229944` failed `Windows / lint-windows` and
+  `Windows / build-test-windows`, both with
+  `E0425: cannot find function quote in this scope` at
+  `src/stdlib/command/child_argument.rs:156` and `:169`. This branch's rename
+  (`R080`, `quote.rs` to `child_argument.rs` and `quote` to
+  `quote_child_argument`) updated both definitions and the non-Windows test
+  module but missed the `#[cfg(all(windows, test))]` module below them, which
+  called bare `quote` twice. Fixed in `45b2fd87`.
+
+  **No gate in the seven-target set could see it.** The module is
+  `cfg(windows)`, so `make lint` (clippy and both Whitaker passes) and
+  `make test` never compile it; `check-fmt` is the only gate that even parses
+  it, and rustfmt does not resolve names. The earlier "all seven gates green"
+  verdict was therefore accurate and still said nothing about this code. The
+  gate set is Linux-complete, not platform-complete, and the recorded
+  consequence is that a green seven-gate run must not be reported as "CI will
+  pass".
+
+  Verified by two **liveness-checked** oracles. A green run from an unprobed
+  oracle is void, so each was first shown to reproduce the defect:
+
+  1. A standalone probe crate compiling `child_argument.rs` verbatim under
+     `--target x86_64-pc-windows-msvc --all-targets`. Against the unpatched
+     file it reproduces CI's two `E0425`s exactly; against the patched file it
+     exits 0. The liveness direction is what makes the green direction mean
+     anything.
+  2. The real crate with `#[cfg(all(windows, test))]` rewritten to
+     `#[cfg(test)]` and the complementary arms inverted, so the Windows module
+     compiles on Linux. An injected call to a nonexistent function is caught;
+     the unmodified file compiles clean under `-D warnings`.
+
+  This matches the recorded note that `netsuke` cannot be cross-compiled here
+  (`ring`'s build script fails for want of `lib.exe`, before this crate is
+  reached), so forcing the gate is the local substitute, and for this purpose
+  it is strictly better than the cross-check because it reaches `cfg(windows)`
+  test code that a cross-check of the library would not.
+
+  A sweep of the whole PR diff found no second instance: the diff contains two
+  renames, the other being a test-file split, and no other changed file has a
+  cfg-gated module.
+
+  **Consequence for EP-M5.** The CodeRabbit findings are documentation and
+  test-size work, but the CI failure outranked them and was fixed first. The
+  review's own findings are recorded in `Blocked / open questions`.
+
 ## Blocked / open questions
 
 None outstanding. All seven gates are green at `149685d3`, with no failing
