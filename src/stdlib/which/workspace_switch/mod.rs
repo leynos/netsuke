@@ -63,5 +63,4 @@ impl WorkspaceSwitch {
 }
 
 #[cfg(test)]
-#[path = "lookup/workspace/fallback_tests.rs"]
-mod fallback_tests;
+mod tests;

@@ -6871,7 +6871,7 @@ explicit root `--json` flag bypasses environment parsing.
 
 #### Workspace fallback switch seam
 
-`src/stdlib/which/workspace_switch.rs` is a leaf module holding the
+`src/stdlib/which/workspace_switch/mod.rs` is a leaf module holding the
 `NETSUKE_WHICH_WORKSPACE` name and the domain state `WorkspaceSwitch` (`Value`,
 `Absent`, `NotUnicode`) with its `enabled()` decision. The variable is read by
 `EnvSnapshot::capture` through the injected `mockable::Env` provider and stored
