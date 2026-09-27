@@ -7,6 +7,7 @@ Run through ``make test-workflow-contracts``.
 """
 
 from collections import defaultdict
+from itertools import chain
 from pathlib import Path
 
 import pytest
@@ -34,19 +35,24 @@ def sibling_prefix_groups(source_root: Path) -> dict[tuple[str, str], frozenset[
         slash identifies a directory module.
     """
     groups: dict[tuple[str, str], set[str]] = defaultdict(set)
-    for source in source_root.rglob("*.rs"):
-        if source.stem in IGNORED_MODULE_NAMES:
-            continue
-        directory = source.parent.relative_to(source_root).as_posix()
-        prefix = source.stem.partition("_")[0]
-        groups[directory, prefix].add(source.name)
-    for module_root in source_root.rglob("mod.rs"):
-        module_directory = module_root.parent
-        if module_directory == source_root:
-            continue
-        parent = module_directory.parent.relative_to(source_root).as_posix()
-        prefix = module_directory.name.partition("_")[0]
-        groups[parent, prefix].add(f"{module_directory.name}/")
+    file_modules = (
+        (source.parent, source.stem, source.name)
+        for source in source_root.rglob("*.rs")
+        if source.stem not in IGNORED_MODULE_NAMES
+    )
+    directory_modules = (
+        (
+            module_root.parent.parent,
+            module_root.parent.name,
+            f"{module_root.parent.name}/",
+        )
+        for module_root in source_root.rglob("mod.rs")
+        if module_root.parent != source_root
+    )
+    for parent, module_name, sibling_name in chain(file_modules, directory_modules):
+        directory = parent.relative_to(source_root).as_posix()
+        prefix = module_name.partition("_")[0]
+        groups[directory, prefix].add(sibling_name)
     return {
         key: frozenset(filenames)
         for key, filenames in groups.items()
