@@ -1473,16 +1473,16 @@ survived, one that called `setpgid()` survived, and one created by a double
 fork alone died. Getting to that reading took five probe generations, and the
 reasons were independent. The payload's `trap '' TERM` is inherited across
 `fork` and `exec` and a non-interactive shell cannot reset an inherited
-disposition, so in generations 1–3 every descendant was immune and the cases
-read ALIVE whatever group they were in, masking the mechanism under test; the
-descendants that survived did so for a reason unrelated to the one being
-tested. Separately, a generation without a surviving positive control cannot
-tell a DEAD verdict from a broken probe, and the readings from those runs were
-void for that reason. The fifth generation removed the mask — each descendant
-resets its disposition to `SIG_DFL` from Python, which can — and kept a control
-that survived, so group membership became the single variable deciding
-survival. The wording now names the group change rather than the extra fork.
-The same correction is made to the two other documents that restate the claim,
-`docs/developers-guide.md` and roadmap 4.2.3, whose Revision 2.32 records it.
-Nothing in this plan's scope, obligations, or completion state is affected:
-status remains `COMPLETE`.
+disposition, so in generations 1–3 every descendant was immune and a surviving
+case proved nothing about the group it was in, masking the mechanism under
+test. Generation 1's two runs of the same script disagreed with each other,
+which is what an unstable probe looks like. Separately, a generation without a
+surviving positive control cannot tell a DEAD verdict from a broken probe, and
+the readings from those runs were void for that reason. The fifth generation
+removed the mask — each descendant resets its disposition to `SIG_DFL` from
+Python, which can — and kept a control that survived, so group membership
+became the single variable deciding survival. The wording now names the group
+change rather than the extra fork. The same correction is made to the two other
+documents that restate the claim, `docs/developers-guide.md` and roadmap 4.2.3,
+whose Revision 2.32 records it. Nothing in this plan's scope, obligations, or
+completion state is affected: status remains `COMPLETE`.

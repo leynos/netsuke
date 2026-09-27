@@ -2279,17 +2279,17 @@ new session.
 Reaching that reading took five probe generations, for two separate reasons.
 The payload's `trap '' TERM` is inherited across `fork` and `exec` and a
 non-interactive shell cannot reset an inherited disposition, so in generations
-1–3 every descendant was immune and the cases read ALIVE whatever group they
-were in — the survivors survived for a reason unrelated to the one under test,
-so the verdicts decided nothing. Separately, a generation whose positive
-control dies cannot distinguish a real DEAD from a broken probe, and readings
-taken under a dead control are void on that ground alone. The fifth generation
-removed the mask, by having each descendant reset its disposition to `SIG_DFL`
-from Python, which can, and kept a control that survived; group membership was
-then the single variable deciding survival. That is also why the claim survived
-review: a probe that reports "survived" for a reason other than the one under
-test looks like confirmation, and only a case that *can* die makes the reading
-meaningful.
+1–3 every descendant was immune and a surviving case proved nothing about the
+group it was in. Generation 1's two runs of the same script disagreed with each
+other, which is what an unstable probe looks like. Separately, a generation
+whose positive control dies cannot distinguish a real DEAD from a broken probe,
+and readings taken under a dead control are void on that ground alone. The
+fifth generation removed the mask, by having each descendant reset its
+disposition to `SIG_DFL` from Python, which can, and kept a control that
+survived; group membership was then the single variable deciding survival. That
+is also why the claim survived review: a probe that reports "survived" for a
+reason other than the one under test looks like confirmation, and only a case
+that *can* die makes the reading meaningful.
 
 The other limit on the prefix is the additive grace, and it was reproduced for
 this revision alongside the escape cases. With a `trap '' TERM` payload looping
