@@ -314,7 +314,7 @@ only. Keep fixture assertions here and production test-helper behaviour in
 The raw-response payload for the local HTTP fixture. `HttpResponse` composes a
 response: a status line, a header block ending in a blank line, and a
 `Content-Length` that matches the body it carries. It does not validate the
-status or header values a caller supplies, so it is not a guard against a
+status or header values that callers supply, so it is not a guard against a
 status that is not three digits or a value containing a line break.
 `RawHttpResponse` is the stronger separation: it emits bytes verbatim, so a
 case can present a status line, header block, or framing no client accepts. The
