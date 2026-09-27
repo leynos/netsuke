@@ -2990,11 +2990,29 @@ recorded for whoever hits them next.
 
 ## Blocked / open questions
 
-None outstanding. Six gates (`check-fmt`, `lint`, `typecheck`, `doc-coverage`,
-`test`, `nixie`) are green at `b2808b3b`; that run's logs remain valid evidence
-because this change is documentation-only. `markdownlint` was the seventh and
-last red gate, aborting at `spelling` and masking an MD046 behind it; both are
-now cleared and the gate is re-run against the new head.
+None outstanding. All seven gates are green at `149685d3`, with no failing
+prerequisite and no abort, so every sub-target is *verified* rather than merely
+unverified:
+
+| Gate                | Result | Duration | Note                                                                        |
+| ------------------- | ------ | -------- | --------------------------------------------------------------------------- |
+| `make check-fmt`    | pass   | 2s       | `cargo fmt`, Ruff over 123 files, mdtablefix 165 unchanged                  |
+| `make lint`         | pass   | 14s      | clippy, whitaker (both invocations), pylint 10.00/10, yamllint + actionlint |
+| `make typecheck`    | pass   | 1s       | `ty check` and `cargo check --all-targets --all-features`                   |
+| `make markdownlint` | pass   | 12s      | `spelling` passed, then MDLINT 0 errors over 165 files                      |
+| `make doc-coverage` | pass   | 8s       | 98.82% (4772/4829) against the 80% threshold                                |
+| `make test`         | pass   | 391s     | nextest 3471/3471 passed, 5 skipped; 129 doctests                           |
+| `make nixie`        | pass   | 1s       | all diagrams validated                                                      |
+
+`make test-podman` was not run: no path under `ansible/` is in the change
+surface.
+
+One provenance gap:
+`origin/3-14-8-jinja-command-helpers-to-match-documented-ergonomics` resolved to
+`719e7beb` during that run, four commits behind local head, so `b74a780c`,
+`00177f74`, `b2808b3b` and `149685d3` are unpushed and no CI run can exist for
+them. The green verdict above therefore rests on local gate evidence alone
+until the branch is pushed.
 
 ## Outcomes & retrospective
 
