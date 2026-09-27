@@ -9,7 +9,7 @@ from release_admission_test_support import (
     METRICS_VALIDATOR,
     _run_gate,
     assert_failure_trace_sequence,
-    assert_identifiers_excluded_from_values,
+    assert_identifiers_excluded_from_records,
     expected_gate_labels,
     expected_operation_labels,
     operation_duration,
@@ -101,20 +101,12 @@ def _assert_malformed_revision_is_a_bounded_mismatch(
     forbidden_revisions = {
         candidate for candidate in (revision, revision.rstrip("\n")) if candidate
     }
-    for record in metrics:
-        labels = record["labels"]
-        assert isinstance(labels, dict), "every emitted metric must retain labels"
-        assert_identifiers_excluded_from_values(
-            labels.values(),
-            forbidden_revisions,
-            "malformed revisions must never become metric label values",
-        )
-    for trace in traces:
-        assert_identifiers_excluded_from_values(
-            trace.values(),
-            forbidden_revisions,
-            "malformed revisions must never become trace field values",
-        )
+    assert_identifiers_excluded_from_records(
+        metrics,
+        traces,
+        identifiers=forbidden_revisions,
+        subject="malformed revisions",
+    )
 
 
 def _assert_malformed_revision_stops_followup_requests(

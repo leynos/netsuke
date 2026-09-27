@@ -20,6 +20,15 @@ def assert_identifiers_excluded_from_values(
 ) -> None:
     """Assert generated identifiers are absent from string values.
 
+    Parameters
+    ----------
+    values
+        Metric-label or trace-field values to inspect; non-string values are ignored.
+    identifiers
+        Identifiers that must not occur as substrings of any value.
+    message
+        Failure message prefix retained in the assertion diagnostic.
+
     Notes
     -----
     Use this helper for one metric-label or trace-field value collection at a
@@ -41,6 +50,57 @@ def assert_identifiers_excluded_from_values(
         if identifier in value
     ]
     assert not matches, f"{message}; matching identifier/value pairs: {matches!r}"
+
+
+def assert_identifiers_excluded_from_records(
+    metrics: cabc.Iterable[dict[str, object]],
+    traces: cabc.Iterable[dict[str, object]],
+    identifiers: set[str],
+    subject: str,
+) -> None:
+    """Assert identifiers are absent from metric labels and trace fields.
+
+    Parameters
+    ----------
+    metrics
+        Parsed release-admission metric records to inspect.
+    traces
+        Parsed release-admission trace records to inspect.
+    identifiers
+        Identifiers that must not occur as substrings in string values.
+    subject
+        Noun phrase used in metric-label and trace-field failure messages.
+
+    Notes
+    -----
+    Keep record traversal and the metric-label shape check shared across the
+    release-admission runtime tests.
+
+    Examples
+    --------
+    Check both telemetry channels in one call::
+
+        assert_identifiers_excluded_from_records(
+            [{"labels": {"operation": "resolve_tag_commit"}}],
+            [{"event": "operation_complete"}],
+            {"run-7"},
+            "generated identifiers",
+        )
+    """
+    for record in metrics:
+        labels = record["labels"]
+        assert isinstance(labels, dict), "every emitted metric must retain labels"
+        assert_identifiers_excluded_from_values(
+            labels.values(),
+            identifiers,
+            f"{subject} must never become metric label values",
+        )
+    for trace in traces:
+        assert_identifiers_excluded_from_values(
+            trace.values(),
+            identifiers,
+            f"{subject} must never become trace field values",
+        )
 
 
 def assert_failure_trace_sequence(

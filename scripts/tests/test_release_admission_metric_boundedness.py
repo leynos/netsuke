@@ -28,7 +28,7 @@ from release_admission_test_support import (
     FailureCase,
     _run_gate,
     assert_failure_trace_sequence,
-    assert_identifiers_excluded_from_values,
+    assert_identifiers_excluded_from_records,
     expected_gate_labels,
     expected_operation_labels,
     operation_duration,
@@ -93,20 +93,9 @@ def _assert_identifiers_are_excluded(
     identifiers: set[str],
 ) -> None:
     """Verify generated identifiers are absent from metric labels and traces."""
-    for record in metrics:
-        labels = record["labels"]
-        assert isinstance(labels, dict), "every emitted metric must retain labels"
-        assert_identifiers_excluded_from_values(
-            labels.values(),
-            identifiers,
-            "generated identifiers must never become metric label values",
-        )
-    for trace in traces:
-        assert_identifiers_excluded_from_values(
-            trace.values(),
-            identifiers,
-            "generated identifiers must never become trace field values",
-        )
+    assert_identifiers_excluded_from_records(
+        metrics, traces, identifiers, subject="generated identifiers"
+    )
 
 
 @pytest.mark.parametrize(
