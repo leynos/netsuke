@@ -73,7 +73,7 @@ shell's original working directory and is deliberately independent of `-C`.
   (`expand_glob`, `glob_paths`, `strip_base`) and
   [`src/manifest/workspace.rs`](../src/manifest/workspace.rs)
   (`resolve_absolute_workspace_root`).
-- Composition boundary: `src/runner/mod.rs` and `src/runner/help_query.rs`.
+- Composition boundary: `src/runner/mod.rs` and `src/runner/help/query.rs`.
 - Explicit-selector independence:
   [`src/cli/discovery.rs`](../src/cli/discovery.rs); ADR-004.
 - Gate: `make lint` runs Clippy with `clippy.toml` and

@@ -21,9 +21,7 @@ use crate::theme::ThemeContext;
 use super::process;
 use telemetry::instrument_help_targets;
 
-#[path = "help_query.rs"]
 mod query;
-#[path = "help_telemetry.rs"]
 mod telemetry;
 
 #[cfg(test)]
@@ -300,9 +298,7 @@ fn json_entries<'entry>(
 }
 
 #[cfg(test)]
-#[path = "help_tests.rs"]
 mod tests;
 
 #[cfg(test)]
-#[path = "help_telemetry_tests.rs"]
 mod telemetry_tests;

@@ -1,5 +1,5 @@
 ---
-source: src/runner/help_tests.rs
+source: src/runner/help/tests.rs
 expression: rendered
 ---
 Actions:

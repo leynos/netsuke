@@ -107,9 +107,9 @@ request types. Keep environment selection at this process boundary: do not add
 process-wide environment mutation to callers or tests.
 
 `netsuke help targets` is deliberately a different runner path. The dispatch
-layer routes `HelpTopic::Targets` to `src/runner/help.rs`, which resolves and
-runs the manifest loading, expansion, and rendering stages, then always builds
-and validates a `BuildGraph` before rendering the deterministic
+layer routes `HelpTopic::Targets` to `src/runner/help/mod.rs`, which resolves
+and runs the manifest loading, expansion, and rendering stages, then always
+builds and validates a `BuildGraph` before rendering the deterministic
 action-then-target catalogue. An invalid graph aborts before the catalogue is
 rendered. It must not generate a Ninja file, call a Ninja subprocess, execute a
 recipe, or create build outputs. Its Jinja environment is a restricted,
@@ -244,13 +244,13 @@ which recipe a normal build executes.
 
 ### Help-target query telemetry
 
-`src/runner/help_telemetry.rs` is the observability boundary around the pure
+`src/runner/help/telemetry.rs` is the observability boundary around the pure
 manifest and catalogue query within `netsuke help targets`.
 `instrument_help_targets` wraps that query and records the fixed metrics
 `netsuke_runner_help_targets_total` and
 `netsuke_runner_help_targets_duration_seconds`. It also opens the
 `runner.help_targets` span and emits a bounded `Completed help targets query`
-event when the query finishes. The command boundary in `src/runner/help.rs`
+event when the query finishes. The command boundary in `src/runner/help/mod.rs`
 owns status reporting and rendering after the query succeeds.
 
 Telemetry labels use only the fixed `outcome` values `success` and `error`, and
