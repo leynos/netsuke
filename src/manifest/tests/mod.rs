@@ -11,8 +11,7 @@ mod vars_reserved_property;
 mod workspace;
 mod workspace_property;
 
-mod env_function;
-mod env_telemetry;
+mod env;
 mod expansion_telemetry;
 mod glob_security;
 mod glob_telemetry;

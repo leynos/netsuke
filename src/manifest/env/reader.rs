@@ -10,10 +10,8 @@ use mockable::{DefaultEnv, Env};
 
 use crate::localization::{self, keys};
 
-use super::{
-    EnvAccessPolicy,
-    telemetry::{self, record_env_lookup},
-};
+use super::super::EnvAccessPolicy;
+use super::telemetry::{self, record_env_lookup};
 
 /// Manifest-owned failure returned by an [`EnvReader`].
 ///

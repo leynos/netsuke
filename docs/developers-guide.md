@@ -6602,7 +6602,7 @@ nor its value may appear in that diagnostic or trace.
     Jinja calls. Covering the leaf mapper alone would leave that untested,
     which is the gap the earlier process-mutating tests existed to fill.
   - **Unit tests may call `env_var_with_default` directly** to cover error
-    mapping. `src/manifest/tests/env_function.rs` does so deliberately: the
+    mapping. `src/manifest/tests/env/function.rs` does so deliberately: the
     present, absent, and non-UTF-8 branches are cheaper to drive at the leaf,
     and the non-UTF-8 case is unreachable through a real environment without
     platform-specific `OsString` surgery.
@@ -8017,7 +8017,7 @@ counter survives into the process snapshot rather than being discarded as a
 noop handle, while any other label name, label count, or out-of-vocabulary
 value is rejected.
 
-Tests sit beside the boundary: `src/manifest/tests/env_telemetry.rs` drives
+Tests sit beside the boundary: `src/manifest/tests/env/telemetry.rs` drives
 `env_var_with_default` against a local debugging recorder and asserts each
 outcome reaches exactly one bounded series, while
 `recorder_retains_bounded_env_lookup_series` in
