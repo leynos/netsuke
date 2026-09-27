@@ -323,5 +323,4 @@ where
     clippy::too_many_arguments,
     reason = "rstest parameterized tests need multiple parameters"
 )]
-#[path = "theme_tests.rs"]
 mod tests;

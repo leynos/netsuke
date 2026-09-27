@@ -3425,7 +3425,7 @@ Timing summaries are completion diagnostics. They are suppressed when verbose
 mode is off and also suppressed on failed runs so failures do not imply a
 successful pipeline completion.
 
-Theme resolution for CLI output is centralized in `src/theme.rs`. Netsuke
+Theme resolution for CLI output is centralized in `src/theme/mod.rs`. Netsuke
 derives an internal theme preference from the `--emoji` policy
 (`emoji = always` selects Unicode, `never` selects ASCII, and `auto` falls back
 to the mode default) and hands the resulting symbol and spacing tokens to
