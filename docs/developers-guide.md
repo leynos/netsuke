@@ -669,7 +669,8 @@ the hexagonal port/adapter pattern:
   [`BuildGraph`](../src/ir/graph.rs). It is constructed once, sorts every
   collection (nodes, edges, default targets), and is invariant under `HashMap`
   insertion order. The shuffled-insertion proptest in
-  [`src/graph_view/tests.rs`](../src/graph_view/tests.rs) covers this invariant.
+  [`src/graph_view/tests/mod.rs`](../src/graph_view/tests/mod.rs) covers this
+  invariant.
 - `NodePathRegistry` owns graph-path deduplication. Its borrowed `entry_ref`
   lookup avoids cloning existing paths; conversion to `BTreeMap` at the
   projection boundary restores deterministic ordering. This registry is

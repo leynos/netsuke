@@ -114,7 +114,7 @@ Specifically:
   [`docs/execplans/3-4-5-extend-graph-subcommand-with-an-html-renderer.md`](execplans/3-4-5-extend-graph-subcommand-with-an-html-renderer.md)
 - Production code: [`src/graph_view`](../src/graph_view), runner
   dispatch in [`src/runner/mod.rs`](../src/runner/mod.rs).
-- Tests: [`src/graph_view/tests.rs`](../src/graph_view/tests.rs),
+- Tests: [`src/graph_view/tests/mod.rs`](../src/graph_view/tests/mod.rs),
   [`src/graph_view/render_html/tests.rs`](../src/graph_view/render_html/tests.rs),
   [`tests/runner_graph_tests.rs`](../tests/runner_graph_tests.rs),
   [`tests/features_unix/graph.feature`](../tests/features_unix/graph.feature).

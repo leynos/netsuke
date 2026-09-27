@@ -1,6 +1,6 @@
 //! Unit tests for [`super::GraphView`]: node and edge classification,
 //! canonical ordering, and golden renderer snapshots. Shared fixtures live in
-//! `tests_support.rs`; property tests live in `tests_property.rs`.
+//! `support.rs`; property tests live in `property.rs`.
 
 use anyhow::Result;
 use insta::assert_snapshot;
@@ -11,9 +11,7 @@ use crate::snapshot_test_support::snapshot_settings;
 
 use super::{EdgeClass, GraphView, NodeKind};
 
-#[path = "tests_property.rs"]
 mod property;
-#[path = "tests_support.rs"]
 mod support;
 
 use support::{EdgeFixture, add_edge, make_action, p, render_dot, render_html};
