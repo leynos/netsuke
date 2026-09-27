@@ -51,10 +51,10 @@ Specifically:
   `HashMap` iteration order. A proptest confirms equivalence under reversed
   insertion order across freshly seeded `HashMap`s.
 - A `GraphRenderer` port (in
-  [`src/graph_view/render.rs`](../src/graph_view/render.rs)) defines the
-  contract
+  [`src/graph_view/render/mod.rs`](../src/graph_view/render/mod.rs)) defines
+  the contract
   `render(&self, view: &GraphView, sink: &mut dyn io::Write) -> Result<(), GraphRenderError>`.
-- [`DotRenderer`](../src/graph_view/render_dot.rs) and
+- [`DotRenderer`](../src/graph_view/render/dot.rs) and
   [`HtmlRenderer`](../src/graph_view/render_html/mod.rs) implement that port.
   The HTML adapter is split across focused modules under
   [`src/graph_view/render_html/`](../src/graph_view/render_html/).

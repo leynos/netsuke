@@ -675,11 +675,11 @@ the hexagonal port/adapter pattern:
   lookup avoids cloning existing paths; conversion to `BTreeMap` at the
   projection boundary restores deterministic ordering. This registry is
   internal to graph projection and must not become a general application map.
-- [`GraphRenderer`](../src/graph_view/render.rs) is the trait every renderer
+- [`GraphRenderer`](../src/graph_view/render/mod.rs) is the trait every renderer
   adapter implements. The contract is intentionally minimal:
   `render(&self, view: &GraphView, sink: &mut dyn io::Write) -> Result<(), GraphRenderError>`.
   Adapters consume `GraphView` only — they never touch `BuildGraph` directly.
-- [`DotRenderer`](../src/graph_view/render_dot.rs) emits Graphviz DOT.
+- [`DotRenderer`](../src/graph_view/render/dot.rs) emits Graphviz DOT.
 - [`HtmlRenderer`](../src/graph_view/render_html/mod.rs) emits a self-contained
   HTML page (server-rendered SVG, accessible textual outline, and a
   `<noscript>` fallback containing the DOT source verbatim).

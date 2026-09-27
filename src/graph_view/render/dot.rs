@@ -4,8 +4,8 @@ use std::io::Write;
 
 use camino::Utf8Path;
 
-use super::render::{GraphRenderError, GraphRenderer};
-use super::{EdgeClass, GraphView, NodeKind};
+use super::super::{EdgeClass, GraphView, NodeKind};
+use super::{GraphRenderError, GraphRenderer};
 
 /// Render adapter producing Graphviz DOT output.
 #[derive(Debug, Default, Clone, Copy)]

@@ -4,6 +4,8 @@
 //! [`GraphRenderer`] and consumes a [`GraphView`] plus a polymorphic
 //! [`std::io::Write`] sink.
 
+pub mod dot;
+
 use std::io;
 
 use thiserror::Error;
