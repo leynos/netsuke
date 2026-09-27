@@ -310,8 +310,10 @@ Each goal is phrased so that an observer can check it.
    orchestration.
 3. **G3 — Domain agnosticism.** Netsuke builds anything a command can build and
    ships no blessed language or toolchain in its core.
-4. **G4 — Deterministic plans.** Given the same manifest, environment, and
-   filesystem state, Netsuke produces a byte-identical Ninja plan.
+4. **G4 — Deterministic plans.** Given the same manifest, environment,
+   filesystem state, and any network, clock, or subprocess reads a template
+   helper performs while rendering, Netsuke produces a byte-identical Ninja
+   plan; G6 makes those extra inputs visible rather than forbidding them.
 5. **G5 — Inspect before execute.** Users and agents can list, render, graph,
    and validate the full plan, including which entries are conditional, without
    running a recipe.
