@@ -2886,22 +2886,33 @@ catalogue has the key; there is no partial state to clean up.
      ` le b` context is a following `b` in an unrelated message, and nothing
      `bhaidht` appears in any catalogue.
   4. *`locales/id/messages.ftl:294`, `retur kereta`* (minor) — **declined.**
-     The reviewer asks for `karakter CR`, and the wording is genuinely awkward
-     Indonesian. But the tree already renders "carriage return" as a *calque*
-     in 30-odd locales — `Wagenrücklauf`, `retorno de carro`, `retour chariot`,
-     `повернення каретки`, `キャリッジリターン` — and `id` is not the outlier.
-     More decisively, the same wording already ships at
-     `stdlib.command.quote.line_break` (line 277; line 275 on `origin/main`,
-     unchanged by this branch), and the styleguide requires message families to
-     stay parallel. **`CR` appears in 0 of 35 catalogues**, so the proposed term
-     would be a one-locale abbreviation introduced into a project-wide family
-     that has a settled form. Changing only my new line would leave two `id`
-     messages that describe the same control characters in two different
+     The reviewer asks for `karakter CR` on the grounds that the current term
+     is not unambiguously readable as "carriage return". The wording is
+     genuinely awkward Indonesian, but it is the established form of a
+     **project-wide family**, which is what settles it.
+
+     Measured across all 35 catalogues, "carriage return" is rendered as a
+     calque or loan in every one; none uses an abbreviation. Four locales share
+     `id`'s construction of a carriage word plus a `retur` word: `ro`
+     `retur de car`, `da` `vognretur`, `nb` `vognretur`, `sv` `vagnretur`.
+     Romanian is the sharpest case because it carries the *same two-message
+     family in the same shape* — `stdlib.command.quote.line_break` (line 277)
+     and `stdlib.shell.quote.control_character` (line 294) — so `id`'s pairing
+     is not an `id` defect but the family's ordinary form. **`CR` appears in
+     0 of 35 catalogues.**
+
+     Against that, `karakter CR` would be a one-locale abbreviation introduced
+     into a family with a settled shape. And the finding cannot be applied
+     locally: the same wording already ships at
+     `stdlib.command.quote.line_break` (line 277 here, line 275 on
+     `origin/main`, untouched by this branch), and the styleguide requires
+     message families to stay parallel. Changing only the new line would leave
+     two `id` messages describing the same control characters in two
      vocabularies; changing both would edit a line `origin/main` owns and this
-     branch has no other reason to touch. Neither is worth it for a wording
-     preference, so the finding is declined with the reasoning recorded here
-     rather than actioned. Should a later locale pass adopt `karakter CR`, it
-     should do so for the family at once, and move both lines together.
+     branch has no other reason to touch. Neither is worth a wording
+     preference, so the disposition is "move both or not at all", and the
+     reasoning is recorded here rather than actioned. Should a later locale
+     pass adopt `karakter CR`, it should move both lines together.
   5. *`docs/localization-glossary.md:1217`, `keyword` argument* (minor) —
      **fixed.** Valid and a real defect: the row read "the `keyword` argument of
      `shell_quote`/`shell_join` takes this term", but neither filter has a
