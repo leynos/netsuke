@@ -1,12 +1,12 @@
 //! Tests for the bounded home-resolution counter.
 //!
-//! Split from `home_tests`, which covers the ladders and the tracing events;
+//! Split from `tests`, which covers the ladders and the tracing events;
 //! these cases pin the metric alone. A local `DebuggingRecorder` captures the
 //! samples without touching the global recorder, so they stay as isolated as
 //! the ladder cases. Both labels are drawn from closed sets in `path_utils`,
 //! so the assertions below pin the series a dashboard would group by.
 
-use super::path_utils::{EXPANDUSER_HOME_TOTAL, expanduser};
+use super::super::path_utils::{EXPANDUSER_HOME_TOTAL, expanduser};
 use crate::stdlib::config::types::HomeDirectory;
 use metrics_util::MetricKind;
 use metrics_util::debugging::{DebugValue, DebuggingRecorder};

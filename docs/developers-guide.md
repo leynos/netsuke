@@ -7475,7 +7475,7 @@ the series count is fixed by the code, never by the environment: `outcome` is
 above. It increments exactly once per resolution whatever the outcome, so the
 counter totals resolutions rather than events — the failure path emits a second
 *debug event* but no second sample. Both the success and failure cases are
-pinned by tests in `src/stdlib/path/home_tests.rs`, which capture samples
+pinned by tests in `src/stdlib/path/home/tests.rs`, which capture samples
 through a local `metrics_util` `DebuggingRecorder` rather than the global one.
 
 The events carry no paths and no environment values: neither the resolved home,

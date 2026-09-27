@@ -18,9 +18,9 @@
 //! the two, which would otherwise be unreachable from the Unix CI host.
 //!
 //! The bounded counter `resolve_home` increments is covered separately, in
-//! `home_metrics_tests`.
+//! `metrics_tests`.
 
-use super::path_utils::{HomeSource, posix_home_from, windows_home_from};
+use super::super::path_utils::{HomeSource, posix_home_from, windows_home_from};
 use crate::stdlib::config::types::HomeDirectory;
 use rstest::rstest;
 
@@ -39,7 +39,7 @@ mod expanduser_behaviour {
     //! provide. Cases whose branch never consults the environment pass
     //! `|_| None` to prove they do not.
 
-    use super::super::path_utils::expanduser;
+    use super::super::super::path_utils::expanduser;
     use super::HomeDirectory;
     use crate::test_tracing_capture::with_test_subscriber;
     use rstest::rstest;
