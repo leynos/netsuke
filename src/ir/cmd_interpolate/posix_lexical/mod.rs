@@ -9,6 +9,9 @@ use std::collections::VecDeque;
 
 use super::{CommandBindings, Placeholder, QuoteContext, find_substitution};
 
+#[cfg(test)]
+mod tests;
+
 /// Track POSIX regions whose contents are not executable shell syntax.
 pub(super) struct PosixLexicalState {
     /// Record whether text through the next newline is a shell comment.

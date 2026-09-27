@@ -324,9 +324,6 @@ const _: () = assert!(
 );
 
 #[cfg(test)]
-#[path = "posix_lexical_tests.rs"]
-mod posix_lexical_tests;
-#[cfg(test)]
 mod property_tests;
 
 #[cfg(kani)]

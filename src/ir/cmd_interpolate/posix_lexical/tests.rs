@@ -1,6 +1,8 @@
 //! Unit tests for POSIX heredoc delimiter interpolation.
 
-use super::*;
+use super::super::{
+    CommandBindings, INS_TOKEN, OUTS_TOKEN, RecipeShell, interpolate_script_with_bindings,
+};
 
 use camino::Utf8PathBuf;
 

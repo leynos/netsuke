@@ -4968,7 +4968,7 @@ The sibling `src/ir/cmd_interpolate/substitution.rs` owns
 after analysing its shell context. Keep this split private to `ir`; it is an
 implementation boundary, not a public command-template API.
 
-The private `src/ir/cmd_interpolate/posix_lexical.rs` helper owns the
+The private `src/ir/cmd_interpolate/posix_lexical/mod.rs` helper owns the
 single-pass recognition of POSIX comments and heredoc inert regions. It copies
 those comments and heredoc bodies byte-for-byte, so internal marker tokens in
 them are not expanded and can remain in the generated recipe; markers in
