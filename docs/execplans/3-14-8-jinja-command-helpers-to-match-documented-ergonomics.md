@@ -3636,6 +3636,47 @@ catalogue has the key; there is no partial state to clean up.
   the branch tip ahead of this file's most recent SHA citation should read the
   CI checks on the tip directly rather than inferring a gap.
 
+- [x] (2026-09-27) The recursion above is closed: `c286919b` is the last commit,
+      and the seven-gate run at it is the gate of record.
+
+  `SHA_BEFORE == SHA_AFTER == c286919b249d0a8440031bbeca140088b618aeb1`,
+  `DIRTY_BEFORE == DIRTY_AFTER == 0`, and `EXIT=0` on all seven gates, read
+  from the `.rc.meta` sidecars rather than from the runner's prose; no
+  `.refused` marker exists, which is the runner's own signal that every gate
+  started on the expected revision. The `5f793f01` run survives as
+  `.prior-20260927T122631`.
+
+  **This entry is itself a fifth move of the same kind, and the recursion ends
+  here by declaration rather than by another run.** The paragraph above named
+  the mechanism clearly and then failed to escape it: writing any entry about a
+  gate run commits, and committing moves HEAD past the revision the entry
+  names. There is no formulation of "the last gate run is at the branch tip"
+  that survives being written down, because the writing is the counter-example.
+  The honest terminal state is therefore stated rather than proved: **the last
+  revision verified by all seven gates is `c286919b`**; every commit after it
+  carries only prose in this file, and its Rust, YAML, Python, and catalogue
+  content is byte-identical to what the seven gates passed. Anyone who needs
+  verification for a later tip should read its CI checks directly, which cover
+  the same four required contexts on every push, instead of expecting a further
+  local gate run — there will not be one, because it would move HEAD again and
+  the sequence above shows where that leads.
+
+  **The stale review is not a merge gate, and this plan said so before the
+  error was made elsewhere.** Nothing in `main-required-checks` (ruleset
+  `18427981`) requires a review: its rules are `required_status_checks` and
+  `deletion` only, over four contexts — `build-test`, `kani-smoke`,
+  `netsukefile`, `release / metadata` — with no `pull_request` rule at all, and
+  `main` has no classic protection either. The stale `CHANGES_REQUESTED`
+  (`5328262147`, pinned to `94b9b247`, 73 commits behind and not an ancestor)
+  still sets `reviewDecision`, and the earlier `BLOCKED` reading was the
+  *pending* `build-test`, exactly as the entry above records. Once that check
+  and `Windows / lint-windows` completed, the pull request read
+  `mergeable: MERGEABLE` / `mergeStateStatus: CLEAN` with zero failures across
+  all 20 checks on `c286919b`. **A red `reviewDecision` is not the same thing
+  as a merge block, and reading it as one is the error to avoid here** — it is
+  resolved by dismissing the review or resuming the app, neither of which is
+  work this plan owes.
+
 - [x] (2026-09-27) The seven-gate set is green at `c7720535`, the revision that
       carries the corrected disposition log.
 
