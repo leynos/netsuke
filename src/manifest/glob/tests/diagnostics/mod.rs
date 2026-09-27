@@ -4,14 +4,14 @@
 //! a subscriber scoped to the call. The recorder and subscriber are both
 //! thread-local, so no test-wide lock is needed.
 
+use self::support::{
+    BASE_CACHE, EXPANSIONS, SKIPPED, Snapshot, TEMPLATE_EXPANSION_DURATION, TEMPLATE_EXPANSIONS,
+    counter_value, counter_value_with_labels, has_histogram, recorded,
+};
 #[cfg(unix)]
 use super::super::MAX_UNREACHABLE_SYMLINK_SAMPLES;
 use super::super::{
     GlobBaseCache, GlobExpansion, PreparedGlob, expand_manifest_template_glob, glob_paths,
-};
-use super::diagnostics_support::{
-    BASE_CACHE, EXPANSIONS, SKIPPED, Snapshot, TEMPLATE_EXPANSION_DURATION, TEMPLATE_EXPANSIONS,
-    counter_value, counter_value_with_labels, has_histogram, recorded,
 };
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
@@ -19,7 +19,7 @@ use rstest::rstest;
 use tempfile::tempdir;
 use test_support::fs as test_fs;
 
-#[path = "template_modes.rs"]
+mod support;
 mod template_modes;
 
 /// Expand and record at the manifest adapter's telemetry boundary.

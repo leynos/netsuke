@@ -4,7 +4,7 @@
 //! outcomes without widening the telemetry-free direct query tests.
 
 use super::super::super::{GlobBaseCache, GlobExpansion, expand_manifest_template_glob};
-use super::super::diagnostics_support::{
+use super::support::{
     BASE_CACHE, TEMPLATE_EXPANSION_DURATION, TEMPLATE_EXPANSIONS, counter_value,
     counter_value_with_labels, has_histogram, recorded,
 };

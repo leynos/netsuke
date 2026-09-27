@@ -13,7 +13,6 @@
 mod base;
 mod capability;
 mod diagnostics;
-mod diagnostics_support;
 mod expansion;
 mod pattern;
 mod property;
