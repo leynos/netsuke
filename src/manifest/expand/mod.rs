@@ -288,5 +288,4 @@ fn expand_static_target(
 }
 
 #[cfg(test)]
-#[path = "../expand_tests.rs"]
 mod tests;

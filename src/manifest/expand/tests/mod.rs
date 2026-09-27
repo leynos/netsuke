@@ -4,33 +4,22 @@ use super::*;
 use minijinja::Environment;
 use rstest::fixture;
 
-#[path = "expand_test_cases/tracing_capture.rs"]
 mod a_tracing_capture;
-#[path = "expand_test_cases/action_condition_cases.rs"]
 mod action_condition_cases;
 
-#[path = "expand_test_cases/command_available_no_shell_cases.rs"]
 mod command_available_no_shell_cases;
-#[path = "expand_test_cases/command_available_selection_cases.rs"]
 mod command_available_selection_cases;
-#[path = "expand_test_cases/condition_cases.rs"]
 mod condition_cases;
 
-#[path = "expand_test_cases/description_cases.rs"]
 mod description_cases;
 
-#[path = "expand_test_cases/foreach_property_cases.rs"]
 mod foreach_property_cases;
 
-#[path = "expand_test_cases/foreach_laziness_cases.rs"]
 mod foreach_laziness_cases;
 
-#[path = "expand_test_cases/structure_cases.rs"]
 mod structure_cases;
 
-#[path = "expand_test_cases/property_cases.rs"]
 mod property_cases;
-#[path = "expand_test_cases/target_command_available_cases.rs"]
 mod target_command_available_cases;
 
 /// Build the restricted template environment used by manifest-query tests.
