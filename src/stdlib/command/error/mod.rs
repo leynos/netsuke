@@ -11,7 +11,6 @@ use super::{
 };
 use crate::localization::{self, keys};
 
-#[path = "error_support.rs"]
 mod support;
 use self::support::{ExitDetails, LimitExceeded, append_exit_status, append_stderr};
 

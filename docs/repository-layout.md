@@ -233,14 +233,14 @@ through `render_error_json` so the guard cannot pass by inspecting nothing; the
 snapshot-producing cases stay in `src/diagnostic_json/tests/mod.rs` because
 insta derives a snapshot's filename from the module path that asserted it.
 
-### `src/stdlib/command/error_support.rs`
+### `src/stdlib/command/error/support.rs`
 
 Detail types and message-append helpers for command-failure rendering in
-`src/stdlib/command/error.rs`, which declares
-`#[path = "error_support.rs"] mod support;`. It owns `ExitDetails`,
-`LimitExceeded`, `append_exit_status`, and `append_stderr`, and is reachable
-only from that error module. Keep the localized-message keys it uses alongside
-the other stdlib command keys rather than introducing a separate key namespace.
+`src/stdlib/command/error/mod.rs`, which declares `mod support;`. It owns
+`ExitDetails`, `LimitExceeded`, `append_exit_status`, and `append_stderr`, and
+is reachable only from that error module. Keep the localized-message keys it
+uses alongside the other stdlib command keys rather than introducing a separate
+key namespace.
 
 ### `src/stdlib/time/format.rs`
 
