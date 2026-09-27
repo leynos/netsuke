@@ -155,7 +155,6 @@ fn json_from_env(env: &impl EnvProvider) -> OrthoResult<Option<bool>> {
 }
 
 #[cfg(test)]
-#[path = "diag_quarantined_policy_tests.rs"]
 mod quarantined_policy_tests;
 
 #[cfg(test)]
