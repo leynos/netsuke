@@ -42,7 +42,7 @@ pub(crate) fn register_filters(env: &mut Environment<'_>, default: ShellDialect)
 
 /// Encode one value as a single shell word.
 ///
-/// The subject must be a string. MiniJinja's `String` argument type would
+/// The subject must be a string. `MiniJinja`'s `String` argument type would
 /// stringify a number or a mapping instead, silently quoting the *rendering* of
 /// a value the author meant literally — see D4.
 fn quote_for_recipe(
@@ -55,7 +55,7 @@ fn quote_for_recipe(
     let dialect = resolve_dialect(default, kwargs)?;
     kwargs.assert_all_used()?;
     let text = subject_as_str("shell_quote", value, keys::STDLIB_SHELL_QUOTE_NOT_STRING)?;
-    Ok(encode_one(dialect, text)?)
+    encode_one(dialect, text)
 }
 
 /// Encode every member of a sequence as its own shell word.
@@ -106,7 +106,7 @@ fn encode_one(dialect: ShellDialect, text: &str) -> Result<String, Error> {
 /// default.
 ///
 /// Read as `Option<Value>` and type-checked rather than as `Option<String>`:
-/// MiniJinja's `String` argument type converts a number or a boolean with
+/// `MiniJinja`'s `String` argument type converts a number or a boolean with
 /// `to_string`, so `dialect=3` would silently become the dialect named `"3"`
 /// and fail as merely unknown rather than as the wrong type (D4).
 fn resolve_dialect(default: ShellDialect, kwargs: &Kwargs) -> Result<ShellDialect, Error> {
@@ -114,11 +114,11 @@ fn resolve_dialect(default: ShellDialect, kwargs: &Kwargs) -> Result<ShellDialec
         return Ok(default);
     };
     let raw = value.as_str().unwrap_or("");
-    ShellDialect::parse(raw).ok_or_else(|| dialect_invalid_error(value))
+    ShellDialect::parse(raw).ok_or_else(|| dialect_invalid_error(&value))
 }
 
 /// Report the rejected `dialect` value and enumerate every accepted name.
-fn dialect_invalid_error(value: Value) -> Error {
+fn dialect_invalid_error(value: &Value) -> Error {
     args_error(
         localization::message(keys::STDLIB_SHELL_DIALECT_INVALID)
             .with_arg("dialect", value.to_string())
@@ -135,12 +135,12 @@ fn accepted_dialects() -> String {
         .join(", ")
 }
 
-/// Reject a positional argument, which MiniJinja would otherwise report with a
+/// Reject a positional argument, which `MiniJinja` would otherwise report with a
 /// bare `TooManyArguments` carrying no machine-readable code.
 ///
 /// `dialect` is the only option either filter takes, and it is keyword-only so
 /// a call site reads as self-describing. The `Rest<Value>` parameter exists
-/// solely to observe the leftover positional here: without it MiniJinja raises
+/// solely to observe the leftover positional here: without it `MiniJinja` raises
 /// during argument binding, before the filter body can attach D9's code, and
 /// the diagnostic loses the `[netsuke::jinja::shell::args]` prefix that the
 /// localised catalogues assert on.

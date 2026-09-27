@@ -132,6 +132,8 @@ fn render_with(template: &str, dialect: &str, subject: &Value) -> Result<String>
     };
     let mut env = Environment::new();
     netsuke::stdlib::register_with_config(&mut env, config)?;
+    // The `?` converts `minijinja::Error` into the `anyhow::Error` this helper
+    // returns, so it is load-bearing rather than a `needless_question_mark`.
     Ok(env.render_str(template, context! { value => subject, values => subject })?)
 }
 
@@ -657,7 +659,7 @@ struct Rejected {
     description: &'static str,
 }
 
-/// Build a MiniJinja value that is iterable but not a `Seq`.
+/// Build a `MiniJinja` value that is iterable but not a `Seq`.
 ///
 /// `range(3)` is the template-visible form of this: it is an object reporting
 /// `ObjectRepr::Iterable`, so `ValueKind` calls it `iterator` and the gate
@@ -969,7 +971,7 @@ fn quoted_output_survives_manifest_rendering_verbatim(#[case] value: &str) -> Re
 ///
 /// This is the negative control that proves the assertion above can detect
 /// escaping. The manifest pipeline renders through an unnamed template, so
-/// MiniJinja's default callback leaves `<` alone; forcing the callback on shows
+/// `MiniJinja`'s default callback leaves `<` alone; forcing the callback on shows
 /// what the assertion would have caught, and confirms the escape route exists
 /// rather than having been removed in some future version.
 #[test]

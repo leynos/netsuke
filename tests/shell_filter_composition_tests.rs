@@ -133,6 +133,9 @@ fn list_manifest(entry: &str, value: &str) -> String {
 fn generate(source: &str, shell: RecipeShell) -> Result<String> {
     let parsed = manifest::from_str(source)?;
     let graph = netsuke::ir::BuildGraph::from_manifest_for_shell(&parsed, shell)?;
+    // The `?` converts `NinjaGenError` into the `anyhow::Error` this helper
+    // returns, so it is load-bearing: `clippy::needless_question_mark` does not
+    // flag it, because it is not needless.
     Ok(generate_with_shell(&graph, shell)?)
 }
 

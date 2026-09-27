@@ -33,6 +33,7 @@ impl RecipeShell {
     ///
     /// It reads no environment, so it cannot fail. On Windows it returns
     /// [`RecipeShell::PowerShell`]; elsewhere, [`RecipeShell::Posix`].
+    #[must_use]
     pub const fn host_default() -> Self {
         if cfg!(windows) {
             Self::PowerShell
