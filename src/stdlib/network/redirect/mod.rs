@@ -4,7 +4,7 @@
 //! and the localized diagnostics. It also owns the `Location` header parse:
 //! reading a response header is transport work, so an absent or unparsable
 //! header is diagnosed here rather than inside the chain. Every *decision*
-//! about the resolved target comes from [`super::redirect_chain`], so the
+//! about the resolved target comes from [`chain`], so the
 //! redirect state machine is testable without a socket and this module stays a
 //! thin composition of transport, metrics, and user-facing text.
 
@@ -20,12 +20,12 @@ use minijinja::Error;
 use ureq::BodyReader;
 use url::Url;
 
-use super::redirect_chain::{RedirectChain, RedirectRejection};
 use super::telemetry;
 use super::{NetworkPolicy, network_policy_rejection_reason};
+use chain::{RedirectChain, RedirectRejection};
 
+mod chain;
 /// Keep the localized diagnostics and their shared redaction below the cap.
-#[path = "redirect_support.rs"]
 mod support;
 
 #[cfg(test)]
@@ -382,8 +382,8 @@ const fn failure_category(rejection: &RedirectRejection) -> &'static str {
 }
 
 #[cfg(test)]
-#[path = "redirect_error_tests.rs"]
+mod cache_tests;
+#[cfg(test)]
 mod error_tests;
 #[cfg(test)]
-#[path = "redirect_adapter_tests.rs"]
 mod tests;

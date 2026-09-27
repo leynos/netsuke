@@ -5141,28 +5141,28 @@ lookup modules retain their existing access through `which::env`'s narrow
 `pub(super)` re-exports. The split is purely to keep the environment snapshot
 adapter below the 400-line cap, not a new resolution boundary.
 
-### `src/stdlib/network/redirect_support.rs`
+### `src/stdlib/network/redirect/support.rs`
 
 Localized diagnostics for failed and refused fetch hops, owned by
-`src/stdlib/network/redirect.rs`, which declares it through a `#[path]`
-attribute. It owns `fetch_failed_error`, `location_failure_error`,
-`rejection_error`, and the `redacted_url` helper every diagnostic renders
-through. Only `redirect` imports it. The split is purely to keep the redirect
-adapter — the HTTP client, the chain budget, the bounded telemetry, and the
-`Location` header parse — below the 400-line cap, not a new boundary: nothing
-in it decides anything, and it must never grow a helper that inspects a header,
-a status, or a chain, because those are the adapter's concerns.
+`src/stdlib/network/redirect/mod.rs` through its `mod support;` declaration. It
+owns `fetch_failed_error`, `location_failure_error`, `rejection_error`, and the
+`redacted_url` helper every diagnostic renders through. Only `redirect` imports
+it. The split keeps the redirect adapter — the HTTP client, the chain budget,
+the bounded telemetry, and the `Location` header parse — below the 400-line
+cap, not a new boundary: nothing in it decides anything, and it must never grow
+a helper that inspects a header, a status, or a chain, because those are the
+adapter's concerns.
 
-### `src/stdlib/network/redirect_location_tests.rs`
+### `src/stdlib/network/redirect/tests/location.rs`
 
 Unit tests for the adapter's `Location` header parse and its diagnostics,
-declared by `src/stdlib/network/redirect_adapter_tests.rs` through a `#[path]`
-attribute. It pins the resolver, the closed `redirect_failure` reason each
-header failure is counted under, the localized message it renders, and the four
-bounded trace fields the refusal logs. The snapshot-producing cases stay in the
-parent module: insta derives a snapshot's filename from the module path that
-asserted it, and the files under `src/snapshots/network_redirect/` keep stable
-names.
+declared under `src/stdlib/network/redirect/tests/mod.rs` with the
+directory-module path `tests::location`. It pins the resolver, the closed
+`redirect_failure` reason each header failure is counted under, the localized
+message it renders, and the four bounded trace fields the refusal logs. The
+snapshot-producing cases stay in the parent module: insta derives a snapshot's
+filename from the module path that asserted it, and the files under
+`src/snapshots/network_redirect/` keep stable names.
 
 ### `src/stdlib/network/tests_support.rs`
 
@@ -7521,15 +7521,15 @@ emitters is covered.
 ### Fetch redirect architecture
 
 Redirect handling splits along an ownership boundary.
-[`src/stdlib/network/redirect_chain.rs`](../src/stdlib/network/redirect_chain.rs)
+[`src/stdlib/network/redirect/chain/mod.rs`](../src/stdlib/network/redirect/chain/mod.rs)
 is a transport-independent state machine holding every pure decision: hop
 accounting, loop detection, cross-origin credential stripping, and per-hop
 network-policy evaluation. It performs no I/O and builds no user-facing text.
-[`src/stdlib/network/redirect.rs`](../src/stdlib/network/redirect.rs) is the
-thin adapter that owns the HTTP client, the bounded telemetry, the `Location`
-header parse, and the localized diagnostics, and applies the chain's decisions.
-A new redirect rule belongs in the chain module; a new transport, metric, or
-message belongs in the adapter.
+[`src/stdlib/network/redirect/mod.rs`](../src/stdlib/network/redirect/mod.rs)
+is the thin adapter that owns the HTTP client, the bounded telemetry, the
+`Location` header parse, and the localized diagnostics, and applies the chain's
+decisions. A new redirect rule belongs in the chain module; a new transport,
+metric, or message belongs in the adapter.
 
 That boundary decides where a redirect fails. A `Location` header is an HTTP
 response fact, so the adapter reads and resolves it and owns the "absent" and

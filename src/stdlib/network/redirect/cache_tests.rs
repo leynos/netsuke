@@ -9,8 +9,8 @@ use std::sync::{
 use test_support::http::{self, HttpResponse};
 use url::Url;
 
-use super::tests_support::{CacheWorkspace, cache_workspace, make_context_with};
-use super::*;
+use super::super::tests_support::{CacheWorkspace, cache_workspace, make_context_with};
+use super::super::*;
 use crate::stdlib::DEFAULT_FETCH_MAX_RESPONSE_BYTES;
 use minijinja::value::{Kwargs, Value};
 

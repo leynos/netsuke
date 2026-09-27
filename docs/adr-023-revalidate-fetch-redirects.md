@@ -103,15 +103,16 @@ recorder allowlist.
 - Pure redirect decisions about an already-resolved target — the hop limit, loop
   detection, cross-origin credential removal, and the ordering of the policy
   check — in
-  [`src/stdlib/network/redirect_chain.rs`](../src/stdlib/network/redirect_chain.rs),
+  [`src/stdlib/network/redirect/chain/mod.rs`](../src/stdlib/network/redirect/chain/mod.rs),
   with unit and property tests in
-  [`src/stdlib/network/redirect_chain_tests.rs`](../src/stdlib/network/redirect_chain_tests.rs)
+  [`src/stdlib/network/redirect/chain/tests.rs`](../src/stdlib/network/redirect/chain/tests.rs)
 - The fetch adapter that composes the transport, the chain budget, telemetry,
   and localized diagnostics. It reads the supported redirect statuses and
   resolves the `Location` header into a typed target before the chain sees it,
-  in [`src/stdlib/network/redirect.rs`](../src/stdlib/network/redirect.rs),
+  in
+  [`src/stdlib/network/redirect/mod.rs`](../src/stdlib/network/redirect/mod.rs),
   tested by
-  [`src/stdlib/network/redirect_adapter_tests.rs`](../src/stdlib/network/redirect_adapter_tests.rs)
+  [`src/stdlib/network/redirect/tests/mod.rs`](../src/stdlib/network/redirect/tests/mod.rs)
 - The metric names and their closed label vocabularies in
   [`src/stdlib/network/telemetry.rs`](../src/stdlib/network/telemetry.rs),
   tested by
@@ -126,7 +127,7 @@ recorder allowlist.
   with two-server and cache coverage in
   [`tests/std_filter_tests/network_redirect_tests.rs`](../tests/std_filter_tests/network_redirect_tests.rs)
   and
-  [`src/stdlib/network/redirect_tests.rs`](../src/stdlib/network/redirect_tests.rs)
+  [`src/stdlib/network/redirect/cache_tests.rs`](../src/stdlib/network/redirect/cache_tests.rs)
 
 ## Addendum — 2026-09-18: resolve the Location header at the transport boundary
 
@@ -135,10 +136,10 @@ The decision above is unchanged. This addendum settles a review follow-up from
 the transport/domain boundary, not about the policy check the decision adds.
 The adapter now resolves the `Location` header and owns the "absent" and
 "present but unparsable" diagnostics, and
-[`RedirectChain::advance`](../src/stdlib/network/redirect_chain.rs) receives an
-already-resolved `Url` instead of a raw header string. The chain no longer
-parses the header, so its `RedirectRejection` vocabulary is reduced to the four
-redirect *decisions* it actually makes: `CredentialsNotRemovable`,
+[`RedirectChain::advance`](../src/stdlib/network/redirect/chain/mod.rs)
+receives an already-resolved `Url` instead of a raw header string. The chain no
+longer parses the header, so its `RedirectRejection` vocabulary is reduced to
+the four redirect *decisions* it actually makes: `CredentialsNotRemovable`,
 `LimitExceeded`, `Loop`, and `Policy`.
 
 The rationale is the dependency rule. A `Location` header is an HTTP response

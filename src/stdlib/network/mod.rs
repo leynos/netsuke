@@ -8,7 +8,6 @@
 mod cache;
 mod policy;
 mod redirect;
-mod redirect_chain;
 mod telemetry;
 /// Network policy that controls which schemes and hosts the fetch helper may reach.
 pub use self::policy::NetworkPolicy;
@@ -370,8 +369,6 @@ impl FetchContext {
 
 #[cfg(test)]
 mod observability_tests;
-#[cfg(test)]
-mod redirect_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

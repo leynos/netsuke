@@ -19,7 +19,7 @@ use test_support::{
 };
 use tracing_subscriber::filter::LevelFilter;
 
-use super::super::redirect_chain::FETCH_REDIRECT_LIMIT;
+use super::chain::FETCH_REDIRECT_LIMIT;
 use super::*;
 
 use super::super::tests_support::{
@@ -261,7 +261,6 @@ fn every_rejection_diagnostic_is_snapshotted(en_localizer: EnLocalizer) -> Resul
 /// The header parse is the one adapter concern the pure chain cannot reach, so
 /// its cases live together. They still run as part of `redirect`'s tests: the
 /// child reaches the adapter through `super::*`, exactly as this parent does.
-#[path = "redirect_location_tests.rs"]
 mod location;
 
 /// Both header failures are snapshotted under their closed category.

@@ -1,6 +1,6 @@
 //! Transport-independent decisions for one policy-checked fetch redirect chain.
 //!
-//! The adapter in [`super::redirect`] owns the HTTP client, the telemetry, the
+//! The adapter in [`super`] owns the HTTP client, the telemetry, the
 //! `Location` header parse, and the localized diagnostics. This module owns the
 //! decisions those concerns wrap: hop accounting, loop detection, cross-origin
 //! credential stripping, and the per-hop network-policy evaluation. Every target
@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 
 use url::Url;
 
-use super::{NetworkPolicy, NetworkPolicyViolation};
+use super::super::{NetworkPolicy, NetworkPolicyViolation};
 
 /// Maximum number of redirects accepted for one `fetch` request.
 pub(super) const FETCH_REDIRECT_LIMIT: usize = 5;
@@ -198,5 +198,4 @@ fn redact_cross_origin_userinfo(
 }
 
 #[cfg(test)]
-#[path = "redirect_chain_tests.rs"]
 mod tests;

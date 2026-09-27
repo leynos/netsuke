@@ -1,6 +1,6 @@
 //! Localized diagnostics for failed and refused fetch hops.
 //!
-//! This private support module is owned exclusively by [`super::redirect`]. It
+//! This private support module is owned exclusively by [`super`]. It
 //! renders the message a failure becomes and the redaction every message
 //! shares, which keeps the adapter — the HTTP client, the chain budget, the
 //! telemetry, and the `Location` header parse — below the repository's
@@ -9,7 +9,7 @@
 //!
 //! The split is by concern, not by size. Nothing here decides anything: every
 //! input is a failure or refusal the adapter already produced, so the redirect
-//! *decisions* stay in [`super::super::redirect_chain`] and the closed
+//! *decisions* stay in [`super::chain`] and the closed
 //! telemetry category that names each one stays with the adapter. Keep it that
 //! way — a helper that needs to inspect a header, a status, or a chain belongs
 //! in the adapter.
@@ -17,8 +17,8 @@
 use minijinja::{Error, ErrorKind};
 use url::Url;
 
-use super::super::redirect_chain::RedirectRejection;
 use super::LocationFailure;
+use super::chain::RedirectRejection;
 use crate::localization::{self, keys};
 
 /// Build the localized diagnostic for a fetch that could not complete.
