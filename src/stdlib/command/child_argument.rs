@@ -124,9 +124,10 @@ pub(super) fn quote_child_argument(arg: &str) -> Result<String, QuoteError> {
 #[cfg(all(windows, test))]
 mod tests {
     //! Unit tests for the Windows `cmd.exe` quoting rules implemented by
-    //! `quote` in the parent module. Gated on `windows` because it exercises
-    //! the `cfg(windows)` branch of `quote`, so it does not run on other
-    //! platforms; see `non_windows_tests` below for the Unix counterpart.
+    //! `quote_child_argument` in the parent module. Gated on `windows` because
+    //! it exercises the `cfg(windows)` branch of `quote_child_argument`, so it
+    //! does not run on other platforms; see `non_windows_tests` below for the
+    //! Unix counterpart.
     use super::*;
     use anyhow::{Result, ensure};
 
@@ -153,10 +154,10 @@ mod tests {
         ];
 
         for (input, expected) in success_cases {
-            let actual = quote(input)?;
+            let actual = quote_child_argument(input)?;
             ensure!(
                 actual == expected,
-                "quote({input:?}) -> {actual:?}, expected {expected:?}"
+                "quote_child_argument({input:?}) -> {actual:?}, expected {expected:?}"
             );
         }
 
@@ -166,12 +167,12 @@ mod tests {
         ];
 
         for (input, expected) in error_cases {
-            let err = quote(input).expect_err(&format!(
-                "quote({input:?}) succeeded but expected error {expected:?}"
+            let err = quote_child_argument(input).expect_err(&format!(
+                "quote_child_argument({input:?}) succeeded but expected error {expected:?}"
             ));
             ensure!(
                 err == expected,
-                "quote({input:?}) returned error {err:?}, expected {expected:?}"
+                "quote_child_argument({input:?}) returned error {err:?}, expected {expected:?}"
             );
         }
         Ok(())
