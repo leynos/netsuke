@@ -10,7 +10,7 @@ use minijinja::Environment;
 use rstest::rstest;
 use test_support::exec::write_exec_with_content;
 
-use super::{actions, expand_foreach};
+use super::super::{actions, expand_foreach};
 use crate::{
     manifest::ManifestValue,
     stdlib::{self, StdlibConfig},

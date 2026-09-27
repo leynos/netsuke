@@ -9,7 +9,7 @@ use googletest::prelude::*;
 use minijinja::Environment;
 use rstest::rstest;
 
-use super::{actions, expand_foreach};
+use super::super::{actions, expand_foreach};
 use crate::{
     manifest::ManifestValue,
     stdlib::{self, StdlibConfig, StdlibState},

@@ -7,8 +7,7 @@ use rstest::fixture;
 mod a_tracing_capture;
 mod action_condition_cases;
 
-mod command_available_no_shell_cases;
-mod command_available_selection_cases;
+mod command_available;
 mod condition_cases;
 
 mod description_cases;
