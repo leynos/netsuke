@@ -11,7 +11,7 @@ use ortho_config::docs::{CliMetadata, DocMetadata, FieldMetadata, OrthoConfigDoc
 use std::collections::HashSet;
 
 use super::{Cli, CliConfig};
-use crate::{cli_l10n::top_level_flag_help_key, localization::keys};
+use crate::{cli::l10n::top_level_flag_help_key, localization::keys};
 
 /// Documentation root used by release help generators.
 ///

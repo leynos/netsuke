@@ -208,5 +208,4 @@ pub fn build_localizer(preferred_locale: Option<&str>) -> Box<dyn Localizer> {
 }
 
 #[cfg(test)]
-#[path = "cli_localization_tracing_tests.rs"]
 mod tracing_tests;

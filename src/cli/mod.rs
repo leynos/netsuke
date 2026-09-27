@@ -18,6 +18,8 @@ mod diag;
 mod discovery;
 mod environment;
 mod help;
+pub(crate) mod l10n;
+pub mod localization;
 mod merge;
 mod parser;
 mod parsing;

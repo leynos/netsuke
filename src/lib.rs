@@ -5,8 +5,7 @@
 
 pub mod ast;
 pub mod cli;
-mod cli_l10n;
-pub mod cli_localization;
+pub use cli::localization as cli_localization;
 pub mod diagnostic_json;
 pub(crate) mod diagnostics;
 pub mod graph_view;

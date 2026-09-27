@@ -5,7 +5,6 @@ use clap::Command;
 use ortho_config::{LocalizationArgs, Localizer};
 use std::ffi::OsString;
 
-#[path = "cli_l10n_flag_keys.rs"]
 mod flag_keys;
 pub(crate) use flag_keys::top_level_flag_help_key;
 use flag_keys::{build_flag_help_key, generate_flag_help_key, graph_flag_help_key};

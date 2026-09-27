@@ -209,7 +209,7 @@ fn assert_fixture_matches_build_source(build_script: &str) -> io::Result<()> {
         .get(slice_start..)
         .and_then(|slice| {
             slice
-                .find("#[path = \"src/cli_localization.rs\"]")
+                .find("#[path = \"src/cli/localization/mod.rs\"]")
                 .and_then(|slice_end| slice.get(..slice_end))
         })
         .ok_or_else(|| {
@@ -239,7 +239,7 @@ fn fixture_contract_accepts_crlf_build_script_source() -> io::Result<()> {
         build_script.push_str(declaration);
         build_script.push_str("\r\n");
     }
-    build_script.push_str("}\r\n#[path = \"src/cli_localization.rs\"]\r\n");
+    build_script.push_str("}\r\n#[path = \"src/cli/localization/mod.rs\"]\r\n");
 
     assert_fixture_matches_build_source(&build_script)
 }

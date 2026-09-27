@@ -5,7 +5,7 @@
 
 use crate::cli;
 use crate::cli::Cli;
-use crate::cli_l10n::parse_bool_hint;
+use crate::cli::l10n::parse_bool_hint;
 use ortho_config::LanguageIdentifier;
 use std::ffi::OsString;
 use std::str::FromStr;

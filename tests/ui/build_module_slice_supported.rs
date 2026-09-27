@@ -2,7 +2,7 @@
 
 #[path = "../../src/locale/catalogues.rs"]
 pub mod locale_catalogues;
-#[path = "../../src/cli_localization.rs"]
+#[path = "../../src/cli/localization/mod.rs"]
 mod cli_localization;
 #[path = "../../src/localization/mod.rs"]
 pub mod localization;

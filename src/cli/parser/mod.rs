@@ -31,8 +31,8 @@ use super::policy::values::{
     emoji_policy_possible_values, progress_policy_possible_values,
 };
 use super::value_parser::LocalizedValueParser;
-use crate::cli_l10n::localize_command;
-pub use crate::cli_l10n::{json_hint_from_args, locale_hint_from_args};
+use crate::cli::l10n::localize_command;
+pub use crate::cli::l10n::{json_hint_from_args, locale_hint_from_args};
 use crate::cli_localization::build_localizer;
 use crate::localization::keys;
 

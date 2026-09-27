@@ -61,7 +61,7 @@ mod cli {
     pub use config::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
 }
 
-#[path = "src/cli_localization.rs"]
+#[path = "src/cli/localization/mod.rs"]
 mod cli_localization;
 // The build-script slice compiles pattern syntax without runtime matching.
 #[path = "src/host/pattern.rs"]
@@ -81,7 +81,7 @@ pub mod locale_catalogues;
 mod build_l10n_audit;
 /// Message rendering, shared with the library crate.
 ///
-/// Exposed as `crate::localization`, which `cli`, `cli_l10n`, and
+/// Exposed as `crate::localization`, which `cli`, `cli::l10n`, and
 /// `host_pattern` reach for `localization::keys` when building the clap
 /// command for man-page generation. Public so its `locales` re-export stays
 /// reachable at `crate::localization::locales`.
