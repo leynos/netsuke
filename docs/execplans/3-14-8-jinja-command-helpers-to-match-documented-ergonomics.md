@@ -3478,6 +3478,33 @@ catalogue has the key; there is no partial state to clean up.
   independent — an omitted finding leaves no trace in the list, an invented one
   has no counterpart in the log, and a claimed-but-absent edit has neither.
 
+  **A fourth failure mode, found while re-verifying this entry: the checks can
+  be run against the wrong artefact, and still return a number.** The second
+  check was re-run as a spot audit and grepped
+  `/tmp/coderabbit-netsuke-3-14-8-jinja-epm2.out` — a review of *this branch*
+  from 2026-09-19 that happens to contain exactly **17** findings, the same
+  count as the review being dispositioned. It reported "17 findings" and "0
+  occurrences of the fabricated items" and read as a clean confirmation. It
+  confirmed nothing: that review's files (`locales/nl`, `da`, `cy`, `el`,
+  `src/stdlib/collections.rs`) do not overlap this block's at all, and it
+  predates the review by eight days.
+
+  The real artefact is `/tmp/coderabbit-702-75e0b671-2937165/`, identified by
+  its `local-run-meta.txt` (`reviewed_sha=75e0b671`, `exit=0`, `duration=877s`,
+  `findings=17`) and parsed from its `findings-index.tsv`, one finding per line
+  as `severity`, file, and text. Re-run against that file, all seventeen items
+  trace, the 10/7 split covers the list exactly with no overlap, both duplicate
+  pairs are same-file, and the declined locale items are genuinely untouched —
+  `locales/` differs from `origin/main` by 490 insertions and **0 deletions**,
+  with the main-owned precedents the declines cite present verbatim at `de:342`
+  and `cs:342`.
+
+  A scratch directory holds one review per branch per round, so a filename
+  match and an agreeing count are both coincidence-prone; the `reviewed_sha` is
+  the identity. This is the same discipline the gate-run entries above apply to
+  figures, and its absence here was invisible precisely because the wrong
+  artefact answered the question that was asked.
+
 - [x] (2026-09-27) The seven-gate set is green at `c7720535`, the revision that
       carries the corrected disposition log.
 
