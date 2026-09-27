@@ -201,6 +201,23 @@ pub(super) const fn cwd_mode_label(mode: CwdMode) -> &'static str {
 }
 
 /// Describe the resolver's counters once per process.
+///
+/// The guard is once per process throughout this codebase, so it is the
+/// convention rather than a choice made here. `observability` owns the recorder
+/// and guards its own descriptions the same way, so a process-scoped guard is
+/// plainly sufficient for the recorder the descriptions are meant for.
+///
+/// That recorder is installed at startup: `main` calls `init_metrics` before it
+/// parses arguments, so the global recorder is in place before any resolution.
+/// The one description pass therefore reaches it, and guarding the pass keeps a
+/// resolved lookup from describing its counters on every increment.
+///
+/// A recorder installed after the guard has fired does not receive them. A test
+/// that swaps in a local recorder late therefore reads the counters without
+/// their descriptions; the `which` cases discard the description when they read
+/// a snapshot, so nothing observes the difference. Left as it is: the scope
+/// that matters is the shipped one, and a recorder-aware guard would put work
+/// on the resolution path to serve a test.
 fn describe_which_metrics() {
     static DESCRIBE: Once = Once::new();
     DESCRIBE.call_once(|| {
