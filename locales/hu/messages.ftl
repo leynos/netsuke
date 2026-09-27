@@ -287,6 +287,16 @@ stdlib.command.output.mode.streaming = folyamatos átvitel
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = A shell_quote sztringet várt, de ezt kapta: { $kind }.
+stdlib.shell.quote.control_character = Nullabájtot, kocsivisszát vagy soremelést tartalmazó érték nem idézőjelezhető.
+stdlib.shell.dialect_invalid = Ismeretlen shell-dialektus: { $dialect }; a várt értékek: { $accepted }.
+stdlib.shell.join.not_sequence = A shell_join sorozatot várt, de ezt kapta: { $kind }.
+stdlib.shell.join.item_not_string = A(z) { $index }. shell_join-elem típusa { $kind }, nem sztring.
+stdlib.shell.positional_option = A(z) { $filter } a beállításait kulcsszóként várja; írja ezt: { $example }.
+
 # Az útvonalakat kezelő segédfüggvény diagnosztikája.
 stdlib.path.io.failed = A(z) „{ $action }” művelet sikertelen ehhez: { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = A(z) „{ $action }” művelet sikertelen ehhez: { $path }: { $detail }.

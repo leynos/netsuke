@@ -287,6 +287,16 @@ stdlib.command.output.mode.streaming = धारा
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote ने एक स्ट्रिंग की अपेक्षा की, किंतु { $kind } प्राप्त हुआ।
+stdlib.shell.quote.control_character = शून्य बाइट, गाड़ी वापसी या पंक्ति परिवर्तन वाले मान को उद्धृत नहीं किया जा सकता।
+stdlib.shell.dialect_invalid = अज्ञात शेल बोली { $dialect }; इनमें से एक अपेक्षित थी: { $accepted }।
+stdlib.shell.join.not_sequence = shell_join ने अनुक्रम की अपेक्षा की, किंतु { $kind } प्राप्त हुआ।
+stdlib.shell.join.item_not_string = shell_join का आइटम { $index } { $kind } है, स्ट्रिंग नहीं।
+stdlib.shell.positional_option = { $filter } अपने विकल्प कीवर्ड के रूप में लेता है; { $example } लिखें।
+
 # पथ सहायक के निदान।
 stdlib.path.io.failed = { $path } पर क्रिया “{ $action }” विफल रही ({ $label })।
 stdlib.path.io.failed_with_detail = { $path } पर क्रिया “{ $action }” विफल रही: { $detail }।

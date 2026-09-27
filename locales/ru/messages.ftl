@@ -287,6 +287,16 @@ stdlib.command.output.mode.streaming = потоковая передача
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote ожидал строку, но получил { $kind }.
+stdlib.shell.quote.control_character = Значение, содержащее нулевой байт, возврат каретки или перевод строки, нельзя заключить в кавычки.
+stdlib.shell.dialect_invalid = Неизвестный диалект оболочки { $dialect }; ожидается один из { $accepted }.
+stdlib.shell.join.not_sequence = shell_join ожидал последовательность, но получил { $kind }.
+stdlib.shell.join.item_not_string = Элемент { $index } в shell_join имеет тип { $kind }, а не строку.
+stdlib.shell.positional_option = { $filter } принимает параметры по ключевым словам; напишите { $example }.
+
 # Диагностика помощника для путей.
 stdlib.path.io.failed = Не удалось выполнить действие «{ $action }» для { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Не удалось выполнить действие «{ $action }» для { $path }: { $detail }.

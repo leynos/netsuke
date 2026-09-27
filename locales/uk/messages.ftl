@@ -287,6 +287,16 @@ stdlib.command.output.mode.streaming = потокова передача
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote очікував рядок, але отримав { $kind }.
+stdlib.shell.quote.control_character = Значення, що містить нульовий байт, повернення каретки або переведення рядка, не можна взяти в лапки.
+stdlib.shell.dialect_invalid = Невідомий діалект оболонки { $dialect }; очікується один із { $accepted }.
+stdlib.shell.join.not_sequence = shell_join очікував послідовність, але отримав { $kind }.
+stdlib.shell.join.item_not_string = Елемент { $index } у shell_join має тип { $kind }, а не рядок.
+stdlib.shell.positional_option = { $filter } приймає параметри за ключовими словами; напишіть { $example }.
+
 # Діагностика помічника для шляхів.
 stdlib.path.io.failed = Не вдалося виконати дію «{ $action }» для { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Не вдалося виконати дію «{ $action }» для { $path }: { $detail }.

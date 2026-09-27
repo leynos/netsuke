@@ -287,6 +287,16 @@ stdlib.command.output.mode.streaming = streaming
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote expects a string, received { $kind }.
+stdlib.shell.quote.control_character = A value containing a null byte, carriage return, or line feed cannot be quoted.
+stdlib.shell.dialect_invalid = Unknown shell dialect { $dialect }; expected one of { $accepted }.
+stdlib.shell.join.not_sequence = shell_join expects a sequence, received { $kind }.
+stdlib.shell.join.item_not_string = shell_join item { $index } is { $kind }, not a string.
+stdlib.shell.positional_option = { $filter } takes its options by keyword; write { $example }.
+
 # Path helper diagnostics.
 stdlib.path.io.failed = { $action } failed for { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } failed for { $path }: { $detail }.

@@ -13,7 +13,6 @@
 
 use super::StdlibConfig;
 use crate::recipe_shell::RecipeShell;
-#[cfg(test)]
 use crate::shell_word::ShellDialect;
 
 impl StdlibConfig {
@@ -47,16 +46,8 @@ impl StdlibConfig {
 
     /// Return the dialect the recipe-text filters quote for.
     ///
-    /// Compiled in test builds only until EP-M4 registers the filters that call
-    /// it. The restriction is deliberate: a `pub(crate)` accessor with no reader
-    /// is dead code, and no attribute marks it dormant honestly, because the
-    /// tests below would make a `dead_code` expectation unfulfilled in exactly
-    /// the `--all-targets` profile the gates use while the same expectation in
-    /// the lib-only profile is fulfilled. Gating on `test` keeps the tests that
-    /// verify the builder and ships no dead accessor; EP-M4 removes the gate in
-    /// the commit that adds the production caller. The builder above needs no
-    /// such treatment because it is `pub`, and `pub` items are never dead.
-    #[cfg(test)]
+    /// Read by `register_read_only_helpers`, which resolves the default once
+    /// per environment rather than per call.
     pub(crate) const fn dialect(&self) -> ShellDialect {
         self.dialect
     }

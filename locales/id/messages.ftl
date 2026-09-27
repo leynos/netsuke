@@ -287,6 +287,16 @@ stdlib.command.output.mode.streaming = penstriman
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote mengharapkan string, tetapi menerima { $kind }.
+stdlib.shell.quote.control_character = Nilai yang memuat byte nol, retur kereta, atau ganti baris tidak dapat diberi tanda kutip.
+stdlib.shell.dialect_invalid = Dialek shell tidak dikenal { $dialect }; diharapkan salah satu dari { $accepted }.
+stdlib.shell.join.not_sequence = shell_join mengharapkan urutan, tetapi menerima { $kind }.
+stdlib.shell.join.item_not_string = Item { $index } pada shell_join bertipe { $kind }, bukan string.
+stdlib.shell.positional_option = { $filter } mengambil opsinya sebagai kata kunci; tulis { $example }.
+
 # Diagnostik pembantu jalur.
 stdlib.path.io.failed = Tindakan "{ $action }" gagal untuk { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Tindakan "{ $action }" gagal untuk { $path }: { $detail }.

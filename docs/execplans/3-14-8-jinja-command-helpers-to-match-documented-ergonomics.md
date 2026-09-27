@@ -2597,6 +2597,64 @@ catalogue has the key; there is no partial state to clean up.
     enforces the wiring is a useful property: with the stub registration
     removed, the now-unused function is a `-D warnings` error.
 
+- [x] (2026-09-27) Gate run at `17e8386a`, the commit that cleared the
+    CodeRabbit review. Six of seven gates green: `check-fmt` 8 s, `lint`
+    129 s with all four prerequisites and all five `lint-python` stages
+    verified as actually run, `typecheck` 17 s, `markdownlint` 14 s (165
+    files, 0 errors), `doc-coverage` 40 s (98.82%, 4772/4829), `nixie` 3 s.
+    `make test` was **red**: `test-nextest` aborted with Error 100 after
+    `packaged_manifest_retains_build_script_sources` hit the 300 s nextest
+    termination cap, so `doctest` never ran and is unverified.
+
+    This was recorded rather than waved away, because "not ours" is not the
+    same claim as "intermittent". What was measured: the test ran in the
+    serialized `nested-cargo-builds` group, which bounds concurrency but not
+    queueing; a preserved log of the previous head shows the identical test
+    passing at 213.380 s with `cargo publish --dry-run completed
+    elapsed_seconds=212.57`, so effectively the whole test is one cold build
+    with 87 s of headroom; the timed-out run never reached that log line, so
+    it was killed mid-build; host load was 53.07, with two sibling netsuke
+    worktrees running their own `make lint` and `make test`; and the branch
+    touches neither `Cargo.toml` nor `Cargo.lock`, so the dependency graph
+    that cold build compiles is byte-identical to the base and cannot have
+    grown.
+
+    The decisive point is that this test spans 243 s at load ~5 (passes) to
+    over 300 s at load 52 (timeout) on an unchanged commit on this host. A
+    local re-run is therefore evidence about the host, not about the branch.
+    CI is the stable oracle, and it runs the `Doc-tests` blocks independently
+    of the local fail-fast, so it settles `doctest` as well. The branch was
+    pushed fast-forward (`94b9b247` to `17e8386a`) and CI was asked to cover
+    exactly this commit.
+
+- [x] (2026-09-27) EP-M4 catalogue work. The eight `stdlib.shell.*` keys now
+    exist in all 35 catalogues, and `cargo check --all-targets --all-features`
+    passes: the build-script localization audit that had been reporting "missing
+    in <every locale>" for all eight is green.
+
+    The two wrapper keys (`stdlib.shell.args_error`, `stdlib.shell.unquotable`)
+    are byte-identical to en-GB, because `tests/locale_catalogue_tests.rs` pins
+    the bracketed code and the audit compares placeholder sets, not prose. The
+    six text keys are translated per `docs/localization-styleguide.md`.
+
+    The RTL marking is computed, not hand-applied. `tests/locale_direction_tests.rs`
+    requires every rendered fragment of ar/fa/he to open with U+200F or a
+    right-to-left character, so the prefix is needed exactly when the first
+    character is neither. That is the same rule whether the value is a wrapper
+    (`‏[netsuke::jinja::shell::args] { $details }`) or a sentence opening on an
+    identifier, and it is a different rule from `DIRECTION_NEUTRAL`, which
+    exempts a key outright. `stdlib.which.args_error` is exempt; these eight are
+    not, so `args_error` and `unquotable` carry the mark in all three. The six
+    text keys split: `dialect_invalid` and `control_character` open on native
+    script and need nothing, and the other four open on `shell_quote`,
+    `shell_join` or `{ $filter }` in some locales and on native script in others
+    — in `ar` the four all begin in Arabic, so only `positional_option` (which
+    opens on the `{ $filter }` placeable) takes the mark.
+
+    A placeable-parity check over all 35 catalogues confirms each key's
+    `{ $name }` set is identical everywhere, and each locale's key order and key
+    count (8) match en-US.
+
 - [ ] EP-M4 `shell_quote` and `shell_join`.
 - [ ] EP-M5 documentation, ADR-027, roadmap tick.
 
@@ -2647,6 +2705,23 @@ catalogue has the key; there is no partial state to clean up.
   exists to show. Recorded because "rebasing discards your gated commit" is
   only half the story: it discards the *guarantee*, and the range-diff is what
   tells you how much of it has to be re-earned.
+- Observation: **A plan's citation can go stale while its conclusion stays
+  true, which is the failure mode a re-check is for.** The "Enforcing exactly
+  one implementation" section names two `.quoted(` imports, at
+  `src/ir/cmd_interpolate/mod.rs:12` and `src/stdlib/command/quote.rs:6`. The
+  first path does not exist and has not for some time; the real pair is
+  `src/shell_word.rs:15` and `src/stdlib/command/quote.rs:6`, the latter since
+  renamed to `child_argument.rs` by this milestone. The count is still two and
+  the reasoning still holds — the two call sites are the shared implementation
+  and the one delegation to it — but the stated reason ("exactly two sites")
+  is now true for a different set of paths than the text claims. Impact: the
+  plan was written from a survey of the pre-EP-M3 tree and one of its file
+  paths was already wrong when it was written, so nothing in the branch would
+  have caught it; only a fresh grep does. The mitigation for EP-M5 is to cite
+  by symbol (`shell_word::quote_word`, `quote_child_argument`) rather than by
+  `path:line`, which is the same lesson as the line-number-citation rule
+  already recorded elsewhere in this repository: anchors that survive edits are
+  names, not positions.
 - Observation: **`git diff <pre-rebase-sha> HEAD` is not the post-rebase
   change report, and reads as a catastrophic one.** Comparing the pre-rebase
   head against the rebased head diffs across two different bases, so it reports

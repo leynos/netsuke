@@ -14,6 +14,7 @@ mod config_types;
 mod io_helpers;
 mod network;
 mod path;
+mod recipe_text;
 mod register;
 mod time;
 mod which;

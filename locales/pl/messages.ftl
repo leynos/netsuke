@@ -287,6 +287,16 @@ stdlib.command.output.mode.streaming = strumieniowanie
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote oczekiwał ciągu, ale otrzymał { $kind }.
+stdlib.shell.quote.control_character = Wartości zawierającej bajt zerowy, powrót karetki lub znak nowego wiersza nie można ująć w cudzysłów.
+stdlib.shell.dialect_invalid = Nieznany dialekt powłoki { $dialect }; oczekiwano jednego z { $accepted }.
+stdlib.shell.join.not_sequence = shell_join oczekiwał sekwencji, ale otrzymał { $kind }.
+stdlib.shell.join.item_not_string = Element { $index } w shell_join ma typ { $kind }, a nie ciąg.
+stdlib.shell.positional_option = { $filter } przyjmuje opcje jako słowa kluczowe; zapisz { $example }.
+
 # Diagnostyka pomocnika ścieżek.
 stdlib.path.io.failed = Operacja „{ $action }” nie powiodła się dla { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Operacja „{ $action }” nie powiodła się dla { $path }: { $detail }.

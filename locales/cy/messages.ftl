@@ -287,6 +287,16 @@ stdlib.command.output.mode.streaming = ffrydio
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = Roedd shell_quote yn disgwyl llinyn ond cafodd { $kind }.
+stdlib.shell.quote.control_character = Ni ellir rhoi gwerth sy'n cynnwys beit nwl, dychweliad cerbyd neu doriad llinell mewn dyfynodau.
+stdlib.shell.dialect_invalid = Tafodiaith plisgyn anhysbys { $dialect }; disgwylir un o { $accepted }.
+stdlib.shell.join.not_sequence = Roedd shell_join yn disgwyl dilyniant ond cafodd { $kind }.
+stdlib.shell.join.item_not_string = Mae eitem { $index } shell_join yn { $kind }, nid yn llinyn.
+stdlib.shell.positional_option = Mae { $filter } yn cymryd ei opsiynau fel allweddair; ysgrifennwch { $example }.
+
 # Diagnosteg y cynorthwyydd llwybrau.
 stdlib.path.io.failed = Methodd y weithred ‘{ $action }’ ar gyfer { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Methodd y weithred ‘{ $action }’ ar gyfer { $path }: { $detail }.

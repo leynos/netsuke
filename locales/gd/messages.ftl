@@ -287,6 +287,16 @@ stdlib.command.output.mode.streaming = sruthadh
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = Bha dùil aig shell_quote ri sreang ach fhuair e { $kind }.
+stdlib.shell.quote.control_character = Chan urrainnear luach le beit neoni, tilleadh-carbaid no briseadh-loidhne a chur ann an comharran-labhairt.
+stdlib.shell.dialect_invalid = Dual-chainnt sligean neo-aithnichte { $dialect }; bha dùil ri aon de { $accepted }.
+stdlib.shell.join.not_sequence = Bha dùil aig shell_join ri sreath ach fhuair e { $kind }.
+stdlib.shell.join.item_not_string = Tha nì { $index } aig shell_join na { $kind }, chan e sreang.
+stdlib.shell.positional_option = Bidh { $filter } a' gabhail a roghainnean mar fhacal-àirde; sgrìobh { $example }.
+
 # Breithneachadh cuidiche nan slighean.
 stdlib.path.io.failed = Dh'fhàillig an gnìomh “{ $action }” airson { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Dh'fhàillig an gnìomh “{ $action }” airson { $path }: { $detail }.

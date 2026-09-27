@@ -15,19 +15,39 @@
 use shell_quote::{QuoteRefExt, Sh};
 
 /// The shell dialect a word is encoded for.
-///
-/// Deliberately carries no `parse`/`as_str`/`ALL` table yet. Those exist to
-/// serve the recipe-text filters' `dialect` keyword argument, and they arrive
-/// with that consumer in EP-M4; adding them here would be dead code no profile
-/// could attribute correctly, since the unit tests below would make a
-/// `dead_code` expectation unfulfilled exactly in the `--all-targets` profile
-/// the gates use.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ShellDialect {
     /// POSIX `sh` word quoting, also correct for Bash and Z Shell.
     Sh,
     /// Windows PowerShell single-quoted string quoting.
     PowerShell,
+}
+
+impl ShellDialect {
+    /// Every dialect, in the order errors enumerate them.
+    pub(crate) const ALL: &'static [Self] = &[Self::Sh, Self::PowerShell];
+
+    /// Return the `dialect` keyword-argument spelling of this dialect.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Sh => "sh",
+            Self::PowerShell => "powershell",
+        }
+    }
+
+    /// Parse one `dialect` keyword argument, case-insensitively.
+    ///
+    /// Deliberately rejects `bash`. See decision D3: `RecipeShell::Bash` maps
+    /// to `Sh` because `Sh` output is valid Bash, but the `shell-quote` crate's
+    /// `Bash` encoder emits a different `$'...'` form that Netsuke does not
+    /// compile in. Accepting the name now would lock in a meaning a real
+    /// `bash` dialect would have to break.
+    pub(crate) fn parse(raw: &str) -> Option<Self> {
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|dialect| raw.eq_ignore_ascii_case(dialect.as_str()))
+    }
 }
 
 /// Report whether `value` can survive as part of a single-line recipe.
@@ -52,14 +72,11 @@ pub(crate) fn is_recipe_admissible(value: &str) -> bool {
 /// contract is therefore round-tripping, not any particular shape — every output
 /// decodes back to `value` under a POSIX shell. The table in
 /// `sh_quoting_is_minimal` pins the shapes this version actually produces.
-///
-/// This call site is *not* yet marked with a `clippy::disallowed_methods`
-/// expectation, because `clippy.toml` does not disallow `QuoteRefExt::quoted`
-/// until EP-M4 adds that entry alongside the second expectation in
-/// `src/stdlib/command/quote.rs`. Adding the entry in EP-M3 would immediately
-/// make that second site a violation and force an edit to a file this
-/// milestone's conformance check requires to stay untouched, so the entry, both
-/// expectations, and the call sites they sanction land together.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "The one sanctioned implementation of recipe-shell word quoting; \
+              shell_word exists so every other call site delegates here."
+)]
 pub(crate) fn quote_word(dialect: ShellDialect, value: &str) -> String {
     if dialect == ShellDialect::PowerShell {
         return format!("'{}'", value.replace('\'', "''"));
@@ -94,6 +111,53 @@ mod tests {
         #[case] expected: ShellDialect,
     ) {
         assert_eq!(shell.dialect(), expected);
+    }
+
+    /// Every dialect names itself, and `ALL` enumerates each exactly once.
+    ///
+    /// `ALL` is what the `dialect_invalid` diagnostic renders, so a dialect
+    /// missing from it would be unnameable and unparseable at once.
+    #[rstest]
+    fn dialect_names_are_unique_and_complete() {
+        let names = ShellDialect::ALL
+            .iter()
+            .map(|dialect| dialect.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec!["sh", "powershell"]);
+        let unique: std::collections::BTreeSet<_> = names.iter().collect();
+        assert_eq!(
+            unique.len(),
+            names.len(),
+            "every dialect must have a distinct spelling: {names:?}"
+        );
+    }
+
+    /// Every name in `ALL` parses, case-insensitively, and round-trips.
+    #[rstest]
+    fn every_dialect_name_parses(
+        #[values(ShellDialect::Sh, ShellDialect::PowerShell)] dialect: ShellDialect,
+    ) {
+        let name = dialect.as_str();
+        assert_eq!(ShellDialect::parse(name), Some(dialect));
+        assert_eq!(ShellDialect::parse(&name.to_uppercase()), Some(dialect));
+    }
+
+    /// Names outside `ALL` are rejected rather than guessed at.
+    ///
+    /// `bash` is the case that matters: D3 declines it deliberately, because
+    /// `shell-quote`'s `Bash` encoder emits a `$'...'` form Netsuke does not
+    /// compile in. `zsh` and `sh`-adjacent spellings are near misses that a
+    /// prefix or alias match would wrongly accept.
+    #[rstest]
+    #[case::bash("bash")]
+    #[case::cmd("cmd")]
+    #[case::zsh("zsh")]
+    #[case::pwsh("pwsh")]
+    #[case::powershell_exe("powershell.exe")]
+    #[case::empty("")]
+    #[case::whitespace(" sh ")]
+    fn unknown_dialect_names_are_rejected(#[case] raw: &str) {
+        assert_eq!(ShellDialect::parse(raw), None, "parse({raw:?})");
     }
 
     /// The admissibility rule rejects exactly the three control characters.

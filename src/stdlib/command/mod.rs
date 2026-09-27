@@ -43,13 +43,13 @@
 //! Never allow untrusted input to control command strings or patterns, as this
 //! enables arbitrary code execution.
 
+mod child_argument;
 mod config;
 mod context;
 mod error;
 mod execution;
 mod filters;
 mod pipes;
-mod quote;
 mod result;
 #[cfg(test)]
 mod tests_support;

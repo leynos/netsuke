@@ -287,6 +287,16 @@ stdlib.command.output.mode.streaming = strømming
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote ventet en streng, men fikk { $kind }.
+stdlib.shell.quote.control_character = En verdi som inneholder en nullbyte, vognretur eller linjeskift kan ikke settes i anførselstegn.
+stdlib.shell.dialect_invalid = Ukjent shell-dialekt { $dialect }; ventet en av { $accepted }.
+stdlib.shell.join.not_sequence = shell_join ventet en sekvens, men fikk { $kind }.
+stdlib.shell.join.item_not_string = Element { $index } i shell_join er { $kind }, ikke en streng.
+stdlib.shell.positional_option = { $filter } tar alternativene sine som nøkkelord; skriv { $example }.
+
 # Diagnostikk for stihjelperen.
 stdlib.path.io.failed = { $action } mislyktes for { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } mislyktes for { $path }: { $detail }.

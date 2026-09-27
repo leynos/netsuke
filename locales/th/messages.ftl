@@ -287,6 +287,16 @@ stdlib.command.output.mode.streaming = การส่งเป็นสาย�
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote คาดหวังสตริง แต่ได้รับ { $kind }
+stdlib.shell.quote.control_character = ค่าที่มีไบต์ศูนย์ ปัดแคร่ หรือขึ้นบรรทัดใหม่ไม่สามารถใส่เครื่องหมายอัญประกาศได้
+stdlib.shell.dialect_invalid = ไม่รู้จักไดอาเล็กต์ของเชลล์ { $dialect } คาดว่าจะเป็นหนึ่งใน { $accepted }
+stdlib.shell.join.not_sequence = shell_join คาดหวังลำดับ แต่ได้รับ { $kind }
+stdlib.shell.join.item_not_string = รายการ { $index } ของ shell_join เป็น { $kind } ไม่ใช่สตริง
+stdlib.shell.positional_option = { $filter } รับตัวเลือกเป็นคีย์เวิร์ด เขียน { $example }
+
 # การวินิจฉัยของตัวช่วยด้านเส้นทาง
 stdlib.path.io.failed = การกระทำ “{ $action }” ล้มเหลวสำหรับ { $path } ({ $label })
 stdlib.path.io.failed_with_detail = การกระทำ “{ $action }” ล้มเหลวสำหรับ { $path }: { $detail }

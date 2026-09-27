@@ -287,6 +287,16 @@ stdlib.command.output.mode.streaming = Streaming
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote erwartet eine Zeichenkette, erhielt aber { $kind }.
+stdlib.shell.quote.control_character = Ein Wert mit Nullbyte, Wagenrücklauf oder Zeilenumbruch kann nicht in Anführungszeichen gesetzt werden.
+stdlib.shell.dialect_invalid = Unbekannter Shell-Dialekt { $dialect }; erwartet wird einer von { $accepted }.
+stdlib.shell.join.not_sequence = shell_join erwartet eine Sequenz, erhielt aber { $kind }.
+stdlib.shell.join.item_not_string = Element { $index } von shell_join ist { $kind }, keine Zeichenkette.
+stdlib.shell.positional_option = { $filter } nimmt seine Optionen als Schlüsselwort an; schreiben Sie { $example }.
+
 # Diagnosen des Pfadhelfers.
 stdlib.path.io.failed = { $action } für { $path } fehlgeschlagen ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } für { $path } fehlgeschlagen: { $detail }.

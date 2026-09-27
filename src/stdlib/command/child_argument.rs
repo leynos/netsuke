@@ -39,7 +39,7 @@ impl std::error::Error for QuoteError {}
 /// Returns [`QuoteError::ContainsLineBreak`] when `arg` contains a newline or
 /// carriage return.
 #[cfg(windows)]
-pub(super) fn quote(arg: &str) -> Result<String, QuoteError> {
+pub(super) fn quote_child_argument(arg: &str) -> Result<String, QuoteError> {
     if arg.chars().any(|ch| matches!(ch, '\n' | '\r')) {
         return Err(QuoteError::ContainsLineBreak);
     }
@@ -87,12 +87,26 @@ pub(super) fn quote(arg: &str) -> Result<String, QuoteError> {
 
 /// Quote an argument for the platform shell, rejecting line breaks.
 ///
+/// This is the *second* sanctioned caller of `shell_quote`'s quoter, and its
+/// divergence from [`crate::shell_word::quote_word`] is deliberate: this
+/// function encodes one `cmd.exe`/`exec` child argument rather than recipe
+/// text, and the two boundaries do not share an admissibility rule. It rejects
+/// only `\n` and `\r` — not NUL, which `is_recipe_admissible` also rejects —
+/// because a child argument reaches `Command::arg`, which tolerates a NUL-free
+/// argument of any shape, while recipe text must survive a Ninja binding. See
+/// ADR-014 for the Ninja side of that split.
+///
 /// # Errors
 ///
 /// Returns [`QuoteError::ContainsLineBreak`] when `arg` contains a newline or
 /// carriage return.
 #[cfg(not(windows))]
-pub(super) fn quote(arg: &str) -> Result<String, QuoteError> {
+#[expect(
+    clippy::disallowed_methods,
+    reason = "Sanctioned second call site: quoting one child argument, not \
+              recipe text; see the admissibility divergence above."
+)]
+pub(super) fn quote_child_argument(arg: &str) -> Result<String, QuoteError> {
     if arg.chars().any(|ch| matches!(ch, '\n' | '\r')) {
         return Err(QuoteError::ContainsLineBreak);
     }
@@ -170,14 +184,15 @@ mod non_windows_tests {
     use super::*;
 
     #[test]
-    fn quote_rejects_line_breaks_on_unix() {
-        let err = quote("line\nbreak").expect_err("line feeds should be rejected");
+    fn quote_child_argument_rejects_line_breaks_on_unix() {
+        let err =
+            quote_child_argument("line\nbreak").expect_err("line feeds should be rejected");
         assert_eq!(err, QuoteError::ContainsLineBreak);
     }
 
     #[test]
-    fn quote_wraps_arguments_with_spaces() {
-        let quoted = quote("needs space").expect("quote should succeed");
+    fn quote_child_argument_wraps_arguments_with_spaces() {
+        let quoted = quote_child_argument("needs space").expect("quote should succeed");
         assert_ne!(quoted, "needs space", "quote should escape spaces");
         assert!(
             quoted.contains('\'') || quoted.contains('"'),

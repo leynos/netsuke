@@ -288,6 +288,16 @@ stdlib.command.output.mode.streaming = flux
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote attendait une chaîne mais a reçu { $kind }.
+stdlib.shell.quote.control_character = Une valeur contenant un octet nul, un retour chariot ou un saut de ligne ne peut pas être protégée par des guillemets.
+stdlib.shell.dialect_invalid = Dialecte de shell inconnu { $dialect } ; attendu l'un de { $accepted }.
+stdlib.shell.join.not_sequence = shell_join attendait une séquence mais a reçu { $kind }.
+stdlib.shell.join.item_not_string = L'élément { $index } de shell_join est { $kind }, et non une chaîne.
+stdlib.shell.positional_option = { $filter } prend ses options par mot-clé ; écrivez { $example }.
+
 # Diagnostics de l'assistant de chemins.
 stdlib.path.io.failed = { $action } a échoué pour { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } a échoué pour { $path } : { $detail }.

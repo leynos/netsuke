@@ -287,6 +287,16 @@ stdlib.command.output.mode.streaming = streamen
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote verwachtte een tekenreeks, maar kreeg { $kind }.
+stdlib.shell.quote.control_character = Een waarde met een nulbyte, regelterugloop of regeleinde kan niet tussen aanhalingstekens worden gezet.
+stdlib.shell.dialect_invalid = Onbekend shell-dialect { $dialect }; verwacht een van { $accepted }.
+stdlib.shell.join.not_sequence = shell_join verwachtte een reeks, maar kreeg { $kind }.
+stdlib.shell.join.item_not_string = Element { $index } van shell_join is { $kind }, geen tekenreeks.
+stdlib.shell.positional_option = { $filter } neemt zijn opties als trefwoord; schrijf { $example }.
+
 # Diagnostiek van de padhelper.
 stdlib.path.io.failed = { $action } is mislukt voor { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } is mislukt voor { $path }: { $detail }.

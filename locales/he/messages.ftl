@@ -287,6 +287,16 @@ stdlib.command.output.mode.streaming = הזרמה
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = ‏[netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = ‏[netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = ‏shell_quote ציפה למחרוזת אך קיבל { $kind }.
+stdlib.shell.quote.control_character = לא ניתן להקיף במרכאות ערך המכיל בייט אפס, החזרת גרר או מעבר שורה.
+stdlib.shell.dialect_invalid = דיאלקט מעטפת לא מוכר { $dialect }; צפוי אחד מבין { $accepted }.
+stdlib.shell.join.not_sequence = ‏shell_join ציפה לרצף אך קיבל { $kind }.
+stdlib.shell.join.item_not_string = הפריט { $index } ב-shell_join הוא { $kind }, לא מחרוזת.
+stdlib.shell.positional_option = ‏{ $filter } מקבל את אפשרויותיו כמילת מפתח; כתבו { $example }.
+
 # אבחון עוזר הנתיבים.
 stdlib.path.io.failed = הפעולה „{ $action }” נכשלה עבור { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = הפעולה „{ $action }” נכשלה עבור { $path }: { $detail }.
