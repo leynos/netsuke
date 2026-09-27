@@ -355,7 +355,8 @@ into a proof-first shape that its current architecture does not need.
 [^5]: [`src/ir/from_manifest/mod.rs`](../src/ir/from_manifest/mod.rs) defines
   `BuildGraph::from_manifest`, duplicate-output rejection, rule resolution, and
   cycle reporting.
-[^6]: [`src/ninja_gen.rs`](../src/ninja_gen.rs) sorts actions, edges, and
+[^6]: [`src/ninja_gen/mod.rs`](../src/ninja_gen/mod.rs) sorts actions, edges,
+      and
   default targets to keep emitted Ninja text deterministic.
 [^7]: [`src/ir/cycle/mod.rs`](../src/ir/cycle/mod.rs) defines cycle analysis and
   `canonicalize_cycle`.
