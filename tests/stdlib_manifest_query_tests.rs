@@ -246,7 +246,7 @@ const PROBE_SEPARATOR: &str = "@";
 /// element separately, and the two dialect families differ in kind: `sh`
 /// *fragments* around the metacharacter, leaving the longest safe prefix bare,
 /// while PowerShell encloses each whole element in single quotes.
-fn expected_explicit_fields() -> [(usize, &'static str, &'static str); 4] {
+const fn expected_explicit_fields() -> [(usize, &'static str, &'static str); 4] {
     [
         (0, "sh shell_join", "target-cpu'=native' a' b'"),
         (1, "powershell shell_join", "'target-cpu=native' 'a b'"),

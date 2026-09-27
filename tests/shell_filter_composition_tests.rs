@@ -74,6 +74,20 @@ fn posix_shell() -> Option<Utf8PathBuf> {
     None
 }
 
+/// Report that this host provides no POSIX shell, then end the case.
+///
+/// The execution cases below have no subject on a host without `sh`, so they
+/// say so rather than returning a silent pass: a suite that reports green while
+/// quietly skipping its subject would hide the same regression on a host that
+/// has one.
+#[expect(
+    clippy::print_stderr,
+    reason = "test harness: an unavailable interpreter must be visible in the captured test output instead of the case passing silently"
+)]
+fn skip_without_posix_shell() {
+    eprintln!("skipped: no POSIX shell on this host");
+}
+
 /// Run `script` under a real POSIX shell and return its stdout.
 fn run_posix_shell(shell: &Utf8PathBuf, script: &str) -> Result<String> {
     let output = Command::new(shell.as_str())
@@ -91,9 +105,17 @@ fn run_posix_shell(shell: &Utf8PathBuf, script: &str) -> Result<String> {
 }
 
 /// Prefix every line of `text` with `by` spaces.
+///
+/// Built with `push_str` in a `fold` rather than `map(..).collect()`: the
+/// workspace denies `clippy::format_collect`, which flags exactly that shape.
 fn indent(text: &str, by: usize) -> String {
     let pad = " ".repeat(by);
-    text.lines().map(|line| format!("{pad}{line}\n")).collect()
+    text.lines().fold(String::new(), |mut indented, line| {
+        indented.push_str(&pad);
+        indented.push_str(line);
+        indented.push('\n');
+        indented
+    })
 }
 
 /// The whole manifest source for one composition case.
@@ -167,6 +189,11 @@ fn decode_bash_transport(binding: &str) -> Result<String> {
 
     // Windows argument quoting: a backslash before a `"` is an escape, and the
     // run of backslashes before the closing quote is halved.
+    //
+    // The halving is written `>> 1` and the parity test `is_multiple_of`,
+    // because the workspace denies `clippy::integer_division` and
+    // `clippy::integer_division_remainder_used`: a literal `/` or `%` here
+    // would fail the build. Both spell the arithmetic the sentence above names.
     let mut decoded = String::with_capacity(inner.len());
     let mut backslashes = 0usize;
     for character in inner.chars() {
@@ -174,8 +201,8 @@ fn decode_bash_transport(binding: &str) -> Result<String> {
             backslashes += 1;
             continue;
         }
-        if character == '"' && backslashes % 2 == 1 {
-            decoded.push_str(&"\\".repeat(backslashes / 2));
+        if character == '"' && !backslashes.is_multiple_of(2) {
+            decoded.push_str(&"\\".repeat(backslashes >> 1));
             decoded.push('"');
         } else {
             decoded.push_str(&"\\".repeat(backslashes));
@@ -183,7 +210,7 @@ fn decode_bash_transport(binding: &str) -> Result<String> {
         }
         backslashes = 0;
     }
-    decoded.push_str(&"\\".repeat(backslashes / 2));
+    decoded.push_str(&"\\".repeat(backslashes >> 1));
     Ok(decoded)
 }
 
@@ -197,19 +224,24 @@ fn decode_power_shell_transport(binding: &str) -> Result<String> {
     let payload = binding
         .strip_prefix(POWER_SHELL_PREFIX)
         .with_context(|| format!("PowerShell transport should start with the prefix: {binding}"))?;
-    let bytes = base64::engine::general_purpose::STANDARD
+    let decoded_bytes = base64::engine::general_purpose::STANDARD
         .decode(payload.trim())
         .context("PowerShell payload should be valid base64")?;
+    // `as_chunks` rather than `chunks_exact(2)`, and the `%` test replaced by
+    // `is_multiple_of`: the workspace denies `chunks_exact_to_as_chunks`,
+    // `integer_division_remainder_used`, `integer_division`,
+    // `little_endian_bytes` and `indexing_slicing`.
+    let (pairs, remainder) = decoded_bytes.as_chunks::<2>();
     ensure!(
-        bytes.len() % 2 == 0,
+        remainder.is_empty(),
         "UTF-16LE payload should have an even byte count, got {}",
-        bytes.len()
+        decoded_bytes.len()
     );
-    let units = bytes
-        .chunks_exact(2)
-        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+    let code_units = pairs
+        .iter()
+        .map(|[low, high]| u16::from(*low) | (u16::from(*high) << 8))
         .collect::<Vec<_>>();
-    String::from_utf16(&units).context("PowerShell payload should be valid UTF-16")
+    String::from_utf16(&code_units).context("PowerShell payload should be valid UTF-16")
 }
 
 /// Every scalar recipe, whatever its transport, carries the quoted value.
@@ -255,7 +287,7 @@ fn scalar_recipes_carry_the_quoted_value(#[case] shell: RecipeShell) -> Result<(
 #[case::bash(RecipeShell::Bash)]
 fn scalar_recipes_execute_to_the_intended_argument(#[case] shell: RecipeShell) -> Result<()> {
     let Some(interpreter) = posix_shell() else {
-        eprintln!("skipped: no POSIX shell on this host");
+        skip_without_posix_shell();
         return Ok(());
     };
     let source = scalar_manifest(
@@ -291,7 +323,7 @@ fn scalar_recipes_execute_to_the_intended_argument(#[case] shell: RecipeShell) -
 #[rstest]
 fn removing_the_dollar_doubling_changes_the_recipe_word() -> Result<()> {
     let Some(interpreter) = posix_shell() else {
-        eprintln!("skipped: no POSIX shell on this host");
+        skip_without_posix_shell();
         return Ok(());
     };
     let source = scalar_manifest(
@@ -373,7 +405,7 @@ fn command_list_recipes_carry_the_quoted_value(#[case] shell: RecipeShell) -> Re
 #[case::bash(RecipeShell::Bash)]
 fn command_list_recipes_execute_to_the_intended_argument(#[case] shell: RecipeShell) -> Result<()> {
     let Some(interpreter) = posix_shell() else {
-        eprintln!("skipped: no POSIX shell on this host");
+        skip_without_posix_shell();
         return Ok(());
     };
     let source = list_manifest(
@@ -405,14 +437,16 @@ fn command_list_recipes_execute_to_the_intended_argument(#[case] shell: RecipeSh
 #[rstest]
 fn joined_output_lowers_to_separate_arguments() -> Result<()> {
     let Some(interpreter) = posix_shell() else {
-        eprintln!("skipped: no POSIX shell on this host");
+        skip_without_posix_shell();
         return Ok(());
     };
     let values = ["alpha", "beta gamma", "delta"];
-    let yaml_list = values
-        .iter()
-        .map(|value| format!("    - \"{value}\"\n"))
-        .collect::<String>();
+    let yaml_list = values.iter().fold(String::new(), |mut list, value| {
+        list.push_str("    - \"");
+        list.push_str(value);
+        list.push_str("\"\n");
+        list
+    });
     let source = format!(
         "netsuke_version: \"1.0.0\"\nvars:\n  parts:\n{yaml_list}targets:\n  - name: out\n    command: |\n      printf '{SENTINEL}%s\\n' {{{{ parts | shell_join }}}}\n    description: composition\n",
     );
@@ -420,10 +454,12 @@ fn joined_output_lowers_to_separate_arguments() -> Result<()> {
     let script = command_binding(&ninja)?.replace("$$", "$");
 
     let observed = run_posix_shell(&interpreter, &script)?;
-    let expected = values
-        .iter()
-        .map(|value| format!("{SENTINEL}{value}\n"))
-        .collect::<String>();
+    let expected = values.iter().fold(String::new(), |mut text, value| {
+        text.push_str(SENTINEL);
+        text.push_str(value);
+        text.push('\n');
+        text
+    });
     ensure!(
         observed == expected,
         "the interpreter read {observed:?} from {script:?}, expected {expected:?}"
@@ -442,7 +478,7 @@ fn an_inadmissible_value_is_refused_before_generation() -> Result<()> {
     // A line feed cannot live in one Ninja command binding, and the filter
     // refuses it at the template rather than letting the renderer discover it.
     let source = manifest_with(
-        &format!("command: |\n  printf '%s\\n' {{{{ seam_value | shell_quote }}}}\n"),
+        "command: |\n  printf '%s\\n' {{ seam_value | shell_quote }}\n",
         "line one\nline two",
     );
     match generate(&source, RecipeShell::Posix) {

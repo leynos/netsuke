@@ -16,7 +16,9 @@
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 use minijinja::{AutoEscape, Environment, context, value::Value};
-use netsuke::manifest::{self, EnvReader, ManifestEnvironment};
+use netsuke::manifest::{
+    self, EnvAccessPolicy, EnvReader, ManifestBudgetLimits, ManifestEnvironment,
+};
 use netsuke::stdlib::{NetworkPolicy, StdlibConfig};
 use proptest::prelude::*;
 use proptest::test_runner::{FileFailurePersistence, TestRunner};
@@ -124,10 +126,10 @@ fn run_posix_shell(shell: &Utf8PathBuf, script: &str) -> Result<String> {
 /// string escape, and the resulting diagnostic would be an escaping bug in the
 /// test harness masquerading as one in the filter.
 fn render_with(template: &str, dialect: &str, subject: &Value) -> Result<String> {
-    let config = StdlibConfig::from_current_dir()?;
+    let base = StdlibConfig::from_current_dir()?;
     let config = match dialect {
-        SH => config.with_recipe_shell(netsuke::recipe_shell::RecipeShell::Posix),
-        POWERSHELL => config.with_recipe_shell(netsuke::recipe_shell::RecipeShell::PowerShell),
+        SH => base.with_recipe_shell(netsuke::recipe_shell::RecipeShell::Posix),
+        POWERSHELL => base.with_recipe_shell(netsuke::recipe_shell::RecipeShell::PowerShell),
         other => bail!("unknown test dialect {other}"),
     };
     let mut env = Environment::new();
@@ -168,7 +170,7 @@ fn decode_power_shell_literal(text: &str) -> Result<String> {
 /// honest: the shell parses the word from argument position, which is exactly
 /// where a recipe's word sits.
 fn decode_through_posix_shell(shell: &Utf8PathBuf, encoded: &str) -> Result<String> {
-    let script = format!(r#"printf %s {encoded}"#);
+    let script = format!(r"printf %s {encoded}");
     run_posix_shell(shell, &script)
 }
 
@@ -232,8 +234,11 @@ fn the_posix_harness_rejects_a_naive_quoter() -> Result<()> {
     let witness = "$HOME 'x'";
     let naive = format!("\"{witness}\"");
     let decoded = decode_through_posix_shell(&shell, &naive)?;
-    assert_ne!(
-        decoded, witness,
+    // `ensure!` rather than `assert_ne!` throughout this file: the workspace
+    // denies `clippy::panic_in_result_fn`, so a `Result`-returning test reports
+    // a failure by returning it.
+    ensure!(
+        decoded != witness,
         "the harness accepted a naive double-quoting; it is not measuring quoting"
     );
     Ok(())
@@ -347,7 +352,10 @@ proptest! {
 #[test]
 fn the_power_shell_decoder_rejects_posix_quoting() -> Result<()> {
     let posix = encoded_sh("a b")?;
-    assert_eq!(posix, "a' b'", "POSIX quoting changed shape");
+    ensure!(
+        posix == "a' b'",
+        "POSIX quoting changed shape: {posix:?}, so the witness is no longer a bare word"
+    );
     let decoded = decode_power_shell_literal(&posix);
     ensure!(
         decoded.is_err(),
@@ -409,6 +417,10 @@ fn run_power_shell(script: &str) -> Result<Option<String>> {
 /// on it there; this case discharges the gap wherever an interpreter exists
 /// (Windows CI, or a host with PowerShell Core installed).
 #[test]
+#[expect(
+    clippy::print_stderr,
+    reason = "test harness: an unavailable interpreter must be visible in the captured test output instead of the case passing silently"
+)]
 fn the_power_shell_model_matches_the_real_interpreter() -> Result<()> {
     for value in ["a b", "it's", "$HOME", "", "a\"b", "中", "x\ty"] {
         let encoded = quote_value(value, POWERSHELL)?;
@@ -445,7 +457,7 @@ proptest! {
             .map_err(|error| TestCaseError::fail(format!("{error:#}")))?;
         let words = split(&encoded)
             .map_err(|error| TestCaseError::fail(format!("{error:#}")))?;
-        prop_assert_eq!(&words, &[value.clone()],
+        prop_assert_eq!(&words, std::slice::from_ref(&value),
             "quoted {:?} as {:?}", value, encoded);
     }
 }
@@ -510,21 +522,22 @@ proptest! {
 #[rstest]
 fn shell_join_distinguishes_an_empty_list_from_one_empty_word() -> Result<()> {
     let empty_list = join_values(&[], SH)?;
-    assert_eq!(empty_list, "", "an empty list renders as the empty string");
-    assert_eq!(
-        split(&empty_list)?,
-        Vec::<String>::new(),
+    ensure!(
+        empty_list.is_empty(),
+        "an empty list renders as the empty string: {empty_list:?}"
+    );
+    ensure!(
+        split(&empty_list)?.is_empty(),
         "the empty string splits into no words"
     );
 
     let one_empty_word = join_values(&[String::new()], SH)?;
-    assert_eq!(
-        one_empty_word, "''",
-        "one empty word renders as a quoted pair"
+    ensure!(
+        one_empty_word == "''",
+        "one empty word renders as a quoted pair: {one_empty_word:?}"
     );
-    assert_eq!(
-        split(&one_empty_word)?,
-        vec![String::new()],
+    ensure!(
+        split(&one_empty_word)? == [String::new()],
         "the quoted pair splits into one empty word"
     );
     Ok(())
@@ -573,15 +586,16 @@ fn the_join_corpus_spans_the_quoting_boundary() {
 fn a_naive_join_fails_the_split_round_trip() -> Result<()> {
     let values = vec!["a b".to_owned(), "-C".to_owned()];
     let naive = values.join(" ");
-    assert_eq!(naive, "a b -C");
-    assert_ne!(
-        split(&naive)?,
-        values,
+    ensure!(
+        naive == "a b -C",
+        "the naive join should be the plain space join: {naive:?}"
+    );
+    ensure!(
+        split(&naive)? != values,
         "the naive join should not round-trip, or the control proves nothing"
     );
-    assert_eq!(
-        split(&join_values(&values, SH)?)?,
-        values,
+    ensure!(
+        split(&join_values(&values, SH)?)? == values,
         "the filter's own join should round-trip the same input"
     );
     Ok(())
@@ -637,7 +651,11 @@ fn the_agreement_property_has_elements_that_need_quoting() -> Result<()> {
         quoted != "a b",
         "the witness should require quoting, otherwise this proves nothing"
     );
-    assert_eq!(join_values(&values, SH)?, format!("{quoted} plain"));
+    let joined = join_values(&values, SH)?;
+    ensure!(
+        joined == format!("{quoted} plain"),
+        "the join should be the quoted witness followed by the plain word: {joined:?}"
+    );
     Ok(())
 }
 
@@ -867,7 +885,7 @@ fn try_iter_would_have_accepted_three_of_the_rejected_subjects() -> Result<()> {
             .try_iter()
             .with_context(|| format!("{name} should be iterable, or this control proves nothing"))?
             .count();
-        assert!(
+        ensure!(
             items > 0,
             "{name} should yield members, or this control proves nothing"
         );
@@ -922,12 +940,12 @@ fn rendered_description(value: &str) -> Result<String> {
     )?;
     let manifest_path = workspace.path().join("Netsukefile");
     let reader: EnvReader = netsuke::manifest::process_env_reader();
-    let environment = ManifestEnvironment::new(&reader, Default::default());
+    let environment = ManifestEnvironment::new(&reader, EnvAccessPolicy::default());
     let loaded = manifest::from_path_with_policy_and_environment_and_limits(
         &manifest_path,
         NetworkPolicy::default(),
         &environment,
-        Default::default(),
+        ManifestBudgetLimits::default(),
         netsuke::recipe_shell::RecipeShell::Posix,
         None,
     )?;
@@ -1036,7 +1054,7 @@ fn generated_command(value: &str, template: &str) -> Result<String> {
         ],
     )?;
     ensure!(run.success, "generation failed: {}", run.stderr);
-    let ninja = std::fs::read_to_string(workspace.path().join("out.ninja"))
+    let ninja = test_support::fs::read_to_string(workspace.path().join("out.ninja"))
         .context("read generated Ninja")?;
     ninja
         .lines()
@@ -1111,8 +1129,8 @@ fn the_two_interpolation_positions_differ() -> Result<()> {
         CONTEXT_VALUE,
         "printf '%s\\n' \"{{ seam_value | shell_quote(dialect='sh') }}\"",
     )?;
-    assert_ne!(
-        unquoted, quoted,
+    ensure!(
+        unquoted != quoted,
         "the two positions produced the same command, so the pair proves nothing"
     );
     Ok(())
