@@ -97,5 +97,4 @@ pub(super) fn reject_reparse_point(metadata: &Metadata, path: &Utf8Path) -> Resu
 }
 
 #[cfg(test)]
-#[path = "windows_reparse_tests.rs"]
 mod tests;

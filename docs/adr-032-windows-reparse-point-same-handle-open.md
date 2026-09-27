@@ -218,7 +218,7 @@ The guarantee is carried at three layers: a compile-time assertion, a unit
 test, and an integration test.
 
 The compile-time layer is a `const _: () = { ... }` block in
-`windows_reparse_tests.rs`. Runtime tests in that file execute only on a
+`windows_reparse/tests.rs`. Runtime tests in that file execute only on a
 Windows host, so a regression could reach a merge on the strength of a green
 Linux run; a `const` assertion has no such dependency, because rustc evaluates
 it whenever the module is compiled, and `Windows / lint-windows` compiles it on
@@ -320,7 +320,7 @@ included.** `Windows / lint-windows` runs `make lint-clippy`, which expands to
 `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and
 then Whitaker's dylint suite over the same target and feature selection.
 `--all-targets` pulls in the library's `cfg(test)` module and the integration
-test targets, so `windows_reparse.rs`, `windows_reparse_tests.rs`, and the
+test targets, so `windows_reparse/mod.rs`, `windows_reparse/tests.rs`, and the
 junction fixture in `file_type_tests.rs` are all compiled on Windows itself,
 under `-D warnings`. That job is green on this head. It is the only route that
 compiles the Windows-gated lines with the platform's own toolchain rather than
