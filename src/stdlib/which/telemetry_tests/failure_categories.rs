@@ -337,10 +337,10 @@ fn an_uninspectable_path_is_an_error_rather_than_a_miss() -> Result<()> {
     // The control. The same resolver, asked for the same path once the mode is
     // back, resolves it, so the failure above was the permission and nothing
     // else: the case cannot be passing because the fixture was never there.
-    let resolved = resolver.resolve(tool.as_str(), &options(CwdMode::Never))?;
+    let control = resolver.resolve(tool.as_str(), &options(CwdMode::Never))?;
     ensure!(
-        resolved == [tool],
-        "the restored fixture should resolve to itself: {resolved:?}"
+        control == [tool],
+        "the restored fixture should resolve to itself: {control:?}"
     );
     Ok(())
 }
