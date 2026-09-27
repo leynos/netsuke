@@ -112,11 +112,32 @@ struct Delimiter {
 impl Delimiter {
     /// Read `line` as a fence delimiter, if it is one.
     ///
+    /// The indent bound is `CommonMark`'s: an opening fence may carry up to
+    /// three leading spaces, and four or more is an indented code block rather
+    /// than a fence. A leading tab is rejected for the same reason — it advances
+    /// to a tab stop four columns wide, so it is never fence indentation.
+    ///
+    /// This predicate is line-level and so has no container context, which makes
+    /// every bound here a heuristic and this one no exception: a fence nested in
+    /// a list item sits at the item's content column, four spaces for an ordered
+    /// marker, and is legal `CommonMark` that this rule does not recognise. The
+    /// trade is taken deliberately, because the two errors are not equally
+    /// costly. Missing a fence hands its body to the heading and table scans,
+    /// which misreads structure and fails loudly — the corpus carries every
+    /// fence at column zero, so no document has yet needed the nested form.
+    /// Accepting any indentation does the opposite: an arbitrary run of
+    /// backticks, indented deeply enough to be ordinary code content to every
+    /// other tool, opens a block here and swallows the structure below it, and
+    /// [`Fences`] exists precisely to stop that happening silently.
+    ///
     /// `None` also covers a backtick fence whose info string itself contains a
     /// backtick, which `CommonMark` forbids — that shape is an inline code span
     /// opening a line, not a fence.
     fn opening(line: &str) -> Option<Self> {
-        let trimmed = line.trim_start();
+        let trimmed = line.trim_start_matches(' ');
+        if line.len() - trimmed.len() > 3 {
+            return None;
+        }
         let (character, run) = fence_run(trimmed);
         if run < 3 || !matches!(character, '`' | '~') {
             return None;
@@ -201,5 +222,74 @@ mod heading_tests {
         assert_eq!(heading_depth("####### seven"), None);
         assert_eq!(heading_depth("no leading hash"), None);
         assert_eq!(heading_depth("   # indented above three"), None);
+    }
+}
+
+#[cfg(test)]
+mod fence_tests {
+    //! Unit tests for [`Fences`](super::Fences) and its opening rule.
+    //!
+    //! The indent bound is pinned here rather than only exercised through a
+    //! document, because the corpus carries every fence at column zero today:
+    //! nothing in `docs/rfcs` or `docs/roadmap.md` has an indented fence, so a
+    //! document-level test cannot tell the correct bound from an unbounded one.
+
+    use super::Fences;
+
+    /// `CommonMark` permits at most three leading spaces before an opening
+    /// fence, and no leading tab.
+    #[test]
+    fn only_column_zero_to_three_opens_a_fence() {
+        for spaces in 0..=3 {
+            let line = format!("{}```text", " ".repeat(spaces));
+            assert!(
+                Fences::default().mark(&line),
+                "{spaces} spaces is legal fence indentation"
+            );
+        }
+        for spaces in 4..=8 {
+            let line = format!("{}```text", " ".repeat(spaces));
+            assert!(
+                !Fences::default().mark(&line),
+                "{spaces} spaces is an indented code block, not a fence"
+            );
+        }
+        assert!(
+            !Fences::default().mark("\t```text"),
+            "a leading tab advances to a four-column tab stop, so it is not fence indentation"
+        );
+    }
+
+    /// A rejected opener leaves the state closed, so the structure below it is
+    /// still read as structure.
+    ///
+    /// This is the consequence the bound exists for: were the deep line treated
+    /// as an opening fence, every heading and table under it would be reported
+    /// as fenced content and dropped from the scan.
+    #[test]
+    fn a_rejected_opener_hides_nothing() {
+        let mut fences = Fences::default();
+        assert!(!fences.mark("    ```text"));
+        assert!(
+            !fences.mark("### 5.1. Registry"),
+            "a heading under a rejected opener is still structure"
+        );
+        assert!(!fences.mark("| a | b |"));
+    }
+
+    /// The bound applies to the opening fence only.
+    ///
+    /// A block opened at column zero still closes on a longer run, including one
+    /// indented within the three-space allowance, so tightening the opener did
+    /// not make a legal close unreadable.
+    #[test]
+    fn an_indented_closer_still_closes() {
+        let mut fences = Fences::default();
+        assert!(fences.mark("```text"));
+        assert!(fences.mark("   ```"), "an indented closer ends the block");
+        assert!(
+            !fences.mark("### 5.1. Registry"),
+            "structure after the close is structure again"
+        );
     }
 }

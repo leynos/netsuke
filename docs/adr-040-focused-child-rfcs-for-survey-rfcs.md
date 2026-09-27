@@ -373,8 +373,11 @@ helpers and the two serializers do not share a rejection set.
   `unsupported_key` for a sequence or mapping key, `special_tag`, `merge_key`,
   `alias_budget`, and `document_count` for a stream that is not exactly one
   document.
-- `from_yaml_all` accepts a string and rejects every `from_yaml` condition,
-  except that the input-length and node budgets apply to the whole stream
+- `from_yaml_all` accepts a string and applies every per-document condition from
+  `from_yaml` to each document. `document_count` is the one condition it does
+  **not** inherit: RFC 0006 section 8.1 makes a stream of zero documents an
+  empty sequence, not an error, and multi-document input is the whole point of
+  the helper. The input-length and node budgets apply to the whole stream
   rather than to each document.
 - `to_yaml` accepts any value except undefined. It rejects `undefined_input`
   and `indent_out_of_range` outright, plus `unsupported_key` when

@@ -18,7 +18,7 @@
 //! prose punctuation is harder to review than one that spells out `only` and
 //! `except`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result, ensure};
 
@@ -118,8 +118,24 @@ pub(super) fn parse(repo: &Repo, sections: &BTreeMap<String, Vec<String>>) -> Re
     );
 
     let mut parsed = Vec::new();
+    let mut numbers: BTreeSet<String> = BTreeSet::new();
     for row in &rows {
-        parsed.push(parse_row(row, sections)?);
+        let parsed_row = parse_row(row, sections)?;
+        // One child RFC per capability group is the split's central rule, and
+        // this is the only place a second row could claim a number already
+        // taken. `ownership` does not catch it: it permits a repeated helper
+        // when both rows carry the same number, which is exactly the shape a
+        // duplicate reservation produces. `parse_all` would then find at most
+        // one registry for that number, and both the status and registry checks
+        // match rows with `find`/`any`, so one child would silently represent
+        // two groups.
+        ensure!(
+            numbers.insert(parsed_row.number.clone()),
+            "the coverage map reserves RFC {} more than once; \
+             each child RFC owns exactly one capability group",
+            parsed_row.number
+        );
+        parsed.push(parsed_row);
     }
     Ok(Map { rows: parsed })
 }
