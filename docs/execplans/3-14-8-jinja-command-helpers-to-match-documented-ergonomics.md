@@ -2655,6 +2655,60 @@ catalogue has the key; there is no partial state to clean up.
     `{ $name }` set is identical everywhere, and each locale's key order and key
     count (8) match en-US.
 
+- [x] (2026-09-27) EP-M4 runner plumbing, with its negative control recorded.
+    `ExecutionContext.graph_generation.recipe_shell` now reaches the filters:
+    `ManifestLoadInputs` carries it (resolved once by the runner and passed in,
+    not re-read), `graph_generation::generate_ninja_with_shell` supplies it,
+    `graph::handle_graph` takes the `ExecutionContext` instead of only the
+    reporter, and `ManifestLoadMode::Full` carries it into the `StdlibConfig`
+    built in `src/manifest/query.rs`. The public
+    `manifest::from_path_with_policy_and_environment_and_limits` gained a
+    `RecipeShell` parameter — the foreseen tolerance-2 breach — and
+    `RecipeShell::host_default` went from `pub(crate)` to `pub` to complete it,
+    because a caller with no resolved interpreter otherwise has no way to name
+    a valid value for the new parameter. The convenience wrappers in
+    `path_loaders.rs` pass `host_default()` and so keep their old behaviour.
+    The query path is unchanged: `ManifestLoadMode::ManifestQuery` still
+    carries no shell, so the deliberate divergence is exactly as planned.
+
+    `src/runner/tests/shell_seam_tests.rs` (six cases) is the acceptance
+    evidence, and its negative control was run rather than argued. Reverting
+    only the plumbing — deleting `.with_recipe_shell(recipe_shell)` from the
+    build seam in `src/manifest/query.rs` while leaving
+    `StdlibConfig::with_recipe_shell` and `recipe_text` intact — left the suite
+    at 5 passed, 1 failed:
+
+    ```text
+    running 6 tests
+    test runner::tests::shell_seam_tests::build_loader_quotes_for_the_resolved_posix_shell::case_1 ... ok
+    test runner::tests::shell_seam_tests::shell_join_is_registered_on_the_build_surface ... ok
+    test runner::tests::shell_seam_tests::build_loader_quotes_for_the_resolved_posix_shell::case_2 ... ok
+    test runner::tests::shell_seam_tests::omitted_dialect_follows_the_loader_shell ... FAILED
+    test runner::tests::shell_seam_tests::bash_and_posix_render_identically_through_the_loader ... ok
+    test runner::tests::shell_seam_tests::an_unknown_dialect_is_rejected_with_its_code ... ok
+
+    failures:
+
+    ---- runner::tests::shell_seam_tests::omitted_dialect_follows_the_loader_shell stdout ----
+    Error: the default dialect did not follow the loader; both rendered "a' b'"
+
+    test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 1433 filtered out; finished in 0.01s
+    ```
+
+    The five survivors are the point of the exercise, not a gap. Every one of
+    them names its dialect explicitly, so none of them *should* notice reverted
+    plumbing — and they did not. Only `omitted_dialect_follows_the_loader_shell`,
+    which asks the same template of two different loaders and requires the two
+    to disagree, can see the difference. That is what makes it the load-bearing
+    assertion, and it is why the suite is written so that exactly one case
+    carries the burden: a suite where every case failed on a revert could not
+    distinguish "the plumbing is missing" from "the filters are broken".
+
+    The compile also produced one warning during the control — `unused_variables`
+    on the now-ignored `recipe_shell` field — which is a useful independent
+    signal that the field is genuinely threaded rather than merely present.
+    Restoring the line returned the suite to 6 passed.
+
 - [ ] EP-M4 `shell_quote` and `shell_join`.
 - [ ] EP-M5 documentation, ADR-027, roadmap tick.
 

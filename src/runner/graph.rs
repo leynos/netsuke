@@ -18,12 +18,12 @@ use crate::graph_view::render_dot::DotRenderer;
 use crate::graph_view::render_html::HtmlRenderer;
 use crate::localization::{self, keys};
 use crate::result_json;
-use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
+use crate::status::{LocalizationKey, PipelineStage, report_pipeline_stage};
 
 use super::path_helpers::{
     ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path,
 };
-use super::{generation, load_manifest_with_stage_reporting, process};
+use super::{ExecutionContext, generation, load_manifest_with_stage_reporting, process};
 
 /// Render the build graph in-process and write the selected artefact.
 ///
@@ -37,8 +37,9 @@ use super::{generation, load_manifest_with_stage_reporting, process};
 pub(super) fn handle_graph(
     cli: &Cli,
     args: &GraphArgs,
-    reporter: &dyn StatusReporter,
+    context: &ExecutionContext<'_>,
 ) -> Result<()> {
+    let reporter = context.reporter;
     info!(
         target: "netsuke::subcommand",
         subcommand = "graph",
@@ -47,7 +48,8 @@ pub(super) fn handle_graph(
     );
     let manifest_path = resolve_manifest_path(cli)?;
     ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
-    let inputs = generation::ManifestLoadInputs::from_cli(cli)?;
+    let inputs =
+        generation::ManifestLoadInputs::from_cli(cli, context.graph_generation.recipe_shell)?;
     let manifest = load_manifest_with_stage_reporting(&manifest_path, &inputs, reporter)?;
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
     let graph = generation::build_graph(&manifest)?;

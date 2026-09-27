@@ -24,7 +24,16 @@ pub enum RecipeShell {
 
 impl RecipeShell {
     /// Return the interpreter Netsuke selects when no Windows override exists.
-    pub(crate) const fn host_default() -> Self {
+    ///
+    /// This is the value to pass to the manifest loaders when no override has
+    /// been resolved. They require a [`RecipeShell`] rather than deriving one
+    /// so that a caller which *has* resolved `NETSUKE_WINDOWS_SHELL` can make
+    /// the template filters agree with the interpreter it will execute under;
+    /// this is the answer for a caller that has not.
+    ///
+    /// It reads no environment, so it cannot fail. On Windows it returns
+    /// [`RecipeShell::PowerShell`]; elsewhere, [`RecipeShell::Posix`].
+    pub const fn host_default() -> Self {
         if cfg!(windows) {
             Self::PowerShell
         } else {

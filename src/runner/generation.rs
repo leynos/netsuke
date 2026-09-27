@@ -45,22 +45,35 @@ pub(crate) struct ManifestLoadInputs {
     pub(super) env_access_policy: EnvAccessPolicy,
     /// Resource ceilings applied to manifest evaluation.
     pub(super) budget_limits: manifest::ManifestBudgetLimits,
+    /// Interpreter whose quoting rules the manifest's `shell_quote` and
+    /// `shell_join` filters follow.
+    pub(super) recipe_shell: crate::recipe_shell::RecipeShell,
 }
 
 impl ManifestLoadInputs {
     /// Resolve the trusted configuration bounding one build manifest load.
     ///
+    /// `recipe_shell` is passed in rather than derived here because the runner
+    /// resolves it once, before dispatch, and the same value then governs
+    /// lowering, rendering, and template expansion. Deriving it a second time
+    /// would let a `NETSUKE_WINDOWS_SHELL` change between the two readings
+    /// produce text quoted for one shell and executed by another.
+    ///
     /// # Errors
     ///
     /// Returns an error when the merged network policy or the merged resource
     /// ceilings are invalid.
-    pub(super) fn from_cli(cli: &Cli) -> Result<Self> {
+    pub(super) fn from_cli(
+        cli: &Cli,
+        recipe_shell: crate::recipe_shell::RecipeShell,
+    ) -> Result<Self> {
         Ok(Self {
             network_policy: cli
                 .network_policy()
                 .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?,
             env_access_policy: cli.env_access_policy(),
             budget_limits: cli.manifest_budget_limits()?,
+            recipe_shell,
         })
     }
 }
@@ -110,6 +123,7 @@ pub(super) fn load_manifest_with_limits(
 ///     network_policy: NetworkPolicy::default(),
 ///     env_access_policy: EnvAccessPolicy::default(),
 ///     budget_limits: manifest::ManifestBudgetLimits::default(),
+///     recipe_shell: crate::recipe_shell::RecipeShell::host_default(),
 /// };
 /// let manifest = load_manifest_for_build_with_limits(
 ///     Utf8Path::new("Netsukefile"),
@@ -137,6 +151,7 @@ pub(super) fn load_manifest_for_build_with_limits(
         inputs.network_policy.clone(),
         &environment,
         inputs.budget_limits,
+        inputs.recipe_shell,
         on_stage,
     )
     .with_context(|| {

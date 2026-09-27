@@ -21,6 +21,9 @@ use tracing_subscriber::filter::LevelFilter;
 
 mod manifest_structure_telemetry_tests;
 
+#[path = "shell_seam_tests.rs"]
+mod shell_seam_tests;
+
 const MINIMAL_MANIFEST: &str = concat!(
     "netsuke_version: \"1.0.0\"\n",
     "targets:\n",
