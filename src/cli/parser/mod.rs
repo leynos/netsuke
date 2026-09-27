@@ -203,5 +203,4 @@ fn configure_validation_parsers(
 }
 
 #[cfg(test)]
-#[path = "parser_tests.rs"]
 mod tests;

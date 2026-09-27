@@ -39,7 +39,7 @@ help; it does not make domain policy types depend on Clap.
 
 Only the CLI command-composition path may construct `LocalizedValueParser`.
 Production construction currently belongs to
-`src/cli/parser.rs::configure_validation_parsers`, which attaches the
+`src/cli/parser/mod.rs::configure_validation_parsers`, which attaches the
 localization-aware validators and their policy metadata to one command tree.
 The shared command factory is the composition path for runtime parsing, help,
 man pages, and shell completions: it starts with `Cli::command()`, applies
@@ -3055,7 +3055,7 @@ That slice is a maintained boundary, not an accident:
 - `src/cli/command.rs` holds the Clap command schema and default-command
   behaviour, including `Cli::with_default_command()`. Runtime behaviour on
   `Cli` belongs in `src/cli/preferences.rs`, and the localisation-aware parsing
-  entry point belongs in `src/cli/parser.rs`.
+  entry point belongs in `src/cli/parser/mod.rs`.
 - `src/cli/no_input.rs` owns the existing `NoInput` configuration value;
   `src/cli/config.rs` re-exports it so the public configuration shape and the
   build-script schema remain unchanged.
@@ -5356,7 +5356,7 @@ optional `NO_COLOR` lookup behaviour.
 
 ### Localized CLI help snapshot boundary
 
-`src/cli/parser_tests.rs` exclusively owns the private
+`src/cli/parser/tests.rs` exclusively owns the private
 `render_localized_long_help` helper. It builds, localizes, renders, and
 normalizes help as a pure CQRS query with no filesystem I/O. Its only permitted
 callers are `localized_help_includes_config_flag`, `localized_help_snapshot`,

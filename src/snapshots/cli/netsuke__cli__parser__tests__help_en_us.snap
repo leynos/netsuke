@@ -1,5 +1,5 @@
 ---
-source: src/cli/parser_tests.rs
+source: src/cli/parser/tests.rs
 expression: rendered_help
 ---
 Netsuke transforms YAML + Jinja manifests into reproducible Ninja graphs and runs Ninja with safe defaults.

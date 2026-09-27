@@ -771,8 +771,8 @@ zombies survive the run.
 
 ## 10. CLI integration
 
-`src/cli/parser.rs` gains `Commands::Test(TestArgs)` with the flags from the UX
-design §12. Like `GraphArgs`, the purely per-invocation flags are
+`src/cli/parser/mod.rs` gains `Commands::Test(TestArgs)` with the flags from
+the UX design §12. Like `GraphArgs`, the purely per-invocation flags are
 `#[serde(skip)]`ed out of OrthoConfig layering; candidates for config-file
 defaults (`jobs`, display policy) follow the existing precedence rules.
 `src/runner/dispatch.rs` routes the variant to `testing::run`, which owns
@@ -931,7 +931,7 @@ Existing modules touched: `src/manifest/mod.rs` (options entry point,
 (test-mode loader entry beside the query entry), `src/stdlib/register.rs`
 (test-mode registration), `src/stdlib/time/` (clock seam), `src/stdlib/config/`
 (clock in `StdlibConfig`), `src/ast/mod.rs` (optional `tests` field),
-`src/cli/parser.rs` and `src/runner/dispatch.rs` (command wiring),
+`src/cli/parser/mod.rs` and `src/runner/dispatch.rs` (command wiring),
 `src/localization/keys.rs` (strings). Errors are semantic `thiserror` enums per
 module, composed into the runner's reporting. The supervisor reuses the
 `wait_timeout`-then-kill-then-reap pattern already proven in

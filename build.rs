@@ -43,7 +43,7 @@ const FALLBACK_DATE: &str = "1970-01-01";
 // `src/cli/command.rs` holds command-schema and default-command behaviour,
 // including `Cli::with_default_command`, with runtime preferences in
 // `src/cli/preferences.rs` and the localisation-aware parsing entry point in
-// `src/cli/parser.rs`; matching logic is split out of `src/host/pattern.rs`
+// `src/cli/parser/mod.rs`; matching logic is split out of `src/host/pattern.rs`
 // into `src/host/matching.rs`. Adding a dependency on anything outside this
 // slice will surface here as a compile error, which is the intended signal.
 #[path = "src/cli"]

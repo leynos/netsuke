@@ -50,7 +50,7 @@ const RUNTIME_ONLY_RERUN_PATHS: &[&str] = &[
     "src/cli/diag/mod.rs",
     "src/cli/discovery.rs",
     "src/cli/merge.rs",
-    "src/cli/parser.rs",
+    "src/cli/parser/mod.rs",
     "src/cli/parsing.rs",
     "src/host/matching.rs",
 ];

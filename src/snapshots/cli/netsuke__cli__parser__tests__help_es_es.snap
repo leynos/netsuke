@@ -1,5 +1,5 @@
 ---
-source: src/cli/parser_tests.rs
+source: src/cli/parser/tests.rs
 expression: rendered_help
 ---
 Netsuke transforma manifiestos YAML + Jinja en grafos Ninja reproducibles y ejecuta Ninja con valores seguros.
