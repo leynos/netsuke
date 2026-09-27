@@ -1,4 +1,6 @@
 //! Tests covering manifest macro parsing and registration.
+mod telemetry;
+
 use super::super::jinja_macros::{
     call_macro_value, parse_macro_name, register_macro, register_manifest_macros, render_template,
 };

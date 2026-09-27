@@ -97,7 +97,7 @@ variable names never reach a span field or a metric label.
 - New telemetry fields for these two boundaries must be added to
   `telemetry.rs` and reviewed against the redaction contract before merging;
   they must not be added ad hoc at the render or invocation call sites.
-- `src/manifest/tests/macros_telemetry.rs` and
+- `src/manifest/tests/macros/telemetry.rs` and
   `src/manifest/tests/macro_invocation_telemetry.rs` pin the counter and
   histogram names, the bounded label vocabulary, and the render/invocation
   boundary split using a local `metrics_util::debugging::DebuggingRecorder` and
@@ -150,7 +150,7 @@ variable names never reach a span field or a metric label.
 - Matching environment-name redaction rule:
   [`src/manifest/env/reader.rs`](../src/manifest/env/reader.rs)
 - Tests:
-  [`src/manifest/tests/macros_telemetry.rs`](../src/manifest/tests/macros_telemetry.rs),
+  [`src/manifest/tests/macros/telemetry.rs`](../src/manifest/tests/macros/telemetry.rs),
   [`src/manifest/tests/macro_invocation_telemetry.rs`](../src/manifest/tests/macro_invocation_telemetry.rs)
 - Developer guide:
   [`docs/developers-guide.md`](developers-guide.md#manifest-telemetry-template-render-and-macro-invocation)

@@ -4,7 +4,7 @@
 //! touching the global recorder, and the tracing capture asserts the
 //! error event stays free of template content.
 
-use super::super::jinja_macros::{register_macro, render_template};
+use super::super::super::jinja_macros::{register_macro, render_template};
 use crate::ast::MacroDefinition;
 use crate::test_tracing_capture::with_test_subscriber;
 use anyhow::{Result as AnyResult, ensure};

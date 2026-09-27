@@ -8141,13 +8141,13 @@ registry itself.
 
 Per `AGENTS.md`, this module emits through `metrics` and `tracing` but must not
 install a global recorder or subscriber; only the application does that, at
-startup. Tests follow the same rule: `src/manifest/tests/macros_telemetry.rs`
+startup. Tests follow the same rule: `src/manifest/tests/macros/telemetry.rs`
 (the render boundary) and `src/manifest/tests/macro_invocation_telemetry.rs`
 (the macro-invocation boundary) each drive a local
 `metrics_util::debugging::DebuggingRecorder` through
 `metrics::with_local_recorder`, and capture tracing events with the workspace's
 `with_test_subscriber` helper (see [`tracing_capture`](#tracing_capture)), so
-neither test touches process-wide state. Extend `macros_telemetry.rs` for
+neither test touches process-wide state. Extend `macros/telemetry.rs` for
 render-boundary coverage and `macro_invocation_telemetry.rs` for
 invocation-boundary coverage. The latter also runs a proptest,
 `macro_telemetry_stays_bounded_for_arbitrary_macros`, which asserts the

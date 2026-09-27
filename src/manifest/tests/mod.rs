@@ -3,7 +3,6 @@
 mod budget;
 mod macro_invocation_telemetry;
 mod macros;
-mod macros_telemetry;
 mod stages;
 mod vars;
 mod workspace;
