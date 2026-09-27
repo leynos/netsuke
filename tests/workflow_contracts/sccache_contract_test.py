@@ -53,7 +53,7 @@ def _assert_sccache_contract(workflow_name: str, job_name: str) -> None:
     sccache_inputs = require_mapping(
         sccache_install.get("with"), "sccache installer inputs"
     )
-    assert sccache_inputs.get("tool") == "sccache@0.16.0", (
+    assert sccache_inputs.get("tool") == "sccache@0.17.0", (
         "sccache must use the exact tested release"
     )
     assert sccache_inputs.get("fallback") == "none", (
