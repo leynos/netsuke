@@ -3340,6 +3340,59 @@ recorded for whoever hits them next.
   is that the payload survives the encoding, and stating which arm executes is
   what keeps the suite from claiming coverage it does not have.
 
+- [x] (2026-09-27) EP-M4 test-suite lint remediation, and the EP-M5
+  reconnaissance recorded before starting it.
+
+  `fdc5ff8f` fixed the seven clippy errors the first `make lint` reported, but
+  that output was truncated mid-stream. A full capture showed **31**, across
+  three targets rather than one — the property suite, the composition suite,
+  and the query suite. Two of the three had never been linted at all, because
+  `lint-clippy` aborts at the first failing crate and the property suite was
+  the one it happened to compile first. `93b4ce1b` clears them: 13
+  `panic_in_result_fn` converted to `ensure!`, five `print_stderr` skip
+  messages funnelled through one `#[expect]`-carrying helper, five
+  `format_collect` folds, the PowerShell transport decode rewritten to mirror
+  the production decoder in `ninja_gen_recipe_shell.rs`, `is_multiple_of` and
+  `>> 1` where `/` and `%` are denied outright, and a `std::fs` read that
+  Whitaker rejects as bypassing the capability policy. Verified by `make lint`
+  and `make check-fmt` passing and the three targets running 63/63 with nothing
+  skipped.
+
+  **EP-M5 reconnaissance.** The milestone is untouched: no `adr-041`, no doc
+  edits, `shell_escape` still appears at 13 sites. Several of the milestone's
+  own citations are stale, and one of its items has already been discharged by
+  an earlier milestone:
+
+  - Item 4's `docs/netsuke-design.md:687-688` now lands in the "Execution
+    feedback" prose, which is unrelated; the `shell_escape` at `:728` is the
+    real target and the plan's own instruction to "re-locate by content" is what
+    saves it.
+  - Item 15's `docs/roadmap.md:343-356` and `:1162-1169` have drifted to
+    `365-382` and `1185-1196`.
+  - Item 5's `docs/users-guide.md:489-491` has drifted to `:518`.
+  - Item 2 — the `env(name, default=…)` contract for §4.4 — is **already
+    shipped**: EP-M1 landed `env_default_from_kwargs` in
+    `src/manifest/registration.rs`, keyed on `MANIFEST_ENV_DEFAULT_NOT_STRING`.
+    The design-doc rewrite still has to describe it; nothing has to be built.
+  - Item 9's env-substitution counter is the one item the plan itself invites
+    dropping ("if that sentence cannot be written, drop the counter and record
+    the decision"). The reason to drop it is legible: the counter would be
+    admitted by `accepts_name`/`accepts_counter_registration`, so it would
+    *pass* every gate while measuring nothing an operator can distinguish from
+    "no substitutions happened" — `record_env_lookup` already counts every
+    lookup as `success`, and EP-M1's `tracing::debug!` already records each
+    substitution individually. Decision: drop it, ship the
+    `shell_quote_dialect_total` counter, record the reasoning here.
+  - The `tested-example` markers are scanned in exactly three files
+    (`tests/documentation_examples/mod.rs`, the `DOCUMENTS` list), so item 7's
+    new example belongs in `docs/stdlib-yaml-and-jinja-guide.md`, which is
+    already one of them.
+
+  `Blocked / open questions` below still cites the `149685d3` gate table. That
+  table is a historical record of an earlier plateau, not the current HEAD; the
+  run for `93b4ce1b` is in flight and will be recorded in its own entry rather
+  than overwriting it.
+
 ## Blocked / open questions
 
 None outstanding. All seven gates are green at `149685d3`, with no failing
