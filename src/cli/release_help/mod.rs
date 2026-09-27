@@ -209,7 +209,6 @@ fn release_help_about_key(name: &str) -> Option<&'static str> {
 }
 
 #[cfg(test)]
-#[path = "release_help_metadata_tests.rs"]
 mod metadata_tests;
 
 #[cfg(test)]
@@ -262,7 +261,7 @@ mod tests {
     #[test]
     fn cargo_metadata_selects_the_clap_documentation_adapter() {
         assert!(
-            include_str!("../../Cargo.toml")
+            include_str!("../../../Cargo.toml")
                 .contains("root_type = \"netsuke::cli::ReleaseHelpCli\""),
             "cargo-orthohelp should load the metadata that includes Clap subcommands"
         );

@@ -83,7 +83,7 @@ configuration setting.
 ## Implementation references
 
 - Release-help composition:
-  [`src/cli/release_help.rs`](../src/cli/release_help.rs)
+  [`src/cli/release_help/mod.rs`](../src/cli/release_help/mod.rs)
 - Layered configuration metadata:
   [`src/cli/config.rs`](../src/cli/config.rs)
 - Selector precedence and fail-closed loading:
