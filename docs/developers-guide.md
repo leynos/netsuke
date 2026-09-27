@@ -27,7 +27,7 @@ tracks sequencing only; it must not replace ADR-003 or the CLI design document
 as the durable architecture record.
 
 [adr-003-cli]: adr-003-agent-consistent-human-first-cli.md
-[reconciliation-module]: ../src/stdlib/network/policy/reconciliation.rs
+[reconciliation-module]: ../src/stdlib/network/policy/reconciliation/mod.rs
 
 ### CLI parsing and command-composition boundary
 
@@ -6645,7 +6645,7 @@ and accumulated validation errors while extracting primary-only fetch requests
 and chain-wide budget narrowing requests.
 
 The network-policy domain module
-[`src/stdlib/network/policy/reconciliation.rs`][reconciliation-module] owns
+[`src/stdlib/network/policy/reconciliation/mod.rs`][reconciliation-module] owns
 reconciliation. It accepts domain-shaped operator inputs and a project request,
 returns the reconciled policy and a bounded outcome, and has no tracing or
 metrics side effects. The CLI adapter extracts fetch-policy fields from

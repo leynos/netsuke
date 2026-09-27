@@ -106,7 +106,7 @@ loaded through `extends` remain ordinary file layers by design.
 - Discovery, provenance, and project-request capture:
   [`src/cli/discovery/layers.rs`](../src/cli/discovery/layers.rs)
 - Domain reconciliation:
-  [`src/stdlib/network/policy/reconciliation.rs`][reconciliation-module]
+  [`src/stdlib/network/policy/reconciliation/mod.rs`][reconciliation-module]
 - Configuration composition and observer event:
   [`src/cli/merge.rs`](../src/cli/merge.rs) and
   [`src/cli/merge/observability.rs`](../src/cli/merge/observability.rs)
@@ -122,4 +122,4 @@ loaded through `extends` remain ordinary file layers by design.
 
 [adr-004]: adr-004-explicit-config-selection-outside-orthoconfig.md
 [adr-010]: adr-010-scope-glob-capability-to-literal-prefix.md
-[reconciliation-module]: ../src/stdlib/network/policy/reconciliation.rs
+[reconciliation-module]: ../src/stdlib/network/policy/reconciliation/mod.rs

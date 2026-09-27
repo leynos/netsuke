@@ -156,5 +156,4 @@ const fn default_deny_decision(
 }
 
 #[cfg(test)]
-#[path = "reconciliation_tests.rs"]
 mod tests;
