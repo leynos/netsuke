@@ -1,6 +1,6 @@
 //! Compile-fail fixture for a runtime import outside the `build.rs` slice.
 
-#[path = "../../src/locale_catalogues.rs"]
+#[path = "../../src/locale/catalogues.rs"]
 pub mod locale_catalogues;
 #[path = "../../src/cli_localization.rs"]
 mod cli_localization;

@@ -79,7 +79,7 @@ mod host_pattern;
 /// module cannot be re-exported from a public path. The build script itself
 /// reads `SUPPORTED_LOCALES` to emit one `rerun-if-changed` directive per
 /// catalogue.
-#[path = "src/locale_catalogues.rs"]
+#[path = "src/locale/catalogues.rs"]
 pub mod locale_catalogues;
 
 mod build_l10n_audit;
@@ -186,7 +186,7 @@ fn emit_rerun_directives() {
     println!("cargo:rerun-if-env-changed=TARGET");
     println!("cargo:rerun-if-env-changed=PROFILE");
     println!("cargo:rerun-if-changed=src/localization/keys.rs");
-    println!("cargo:rerun-if-changed=src/locale_catalogues.rs");
+    println!("cargo:rerun-if-changed=src/locale/catalogues.rs");
     println!("cargo:rerun-if-changed=Cargo.toml");
     // The locale registry owns the catalogue list, so the rerun directives are
     // derived from it rather than repeated by hand.

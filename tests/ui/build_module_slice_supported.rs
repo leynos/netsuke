@@ -1,6 +1,6 @@
 //! Compile-pass fixture for the production `build.rs` CLI module slice.
 
-#[path = "../../src/locale_catalogues.rs"]
+#[path = "../../src/locale/catalogues.rs"]
 pub mod locale_catalogues;
 #[path = "../../src/cli_localization.rs"]
 mod cli_localization;

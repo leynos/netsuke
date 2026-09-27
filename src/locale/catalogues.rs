@@ -69,7 +69,7 @@ macro_rules! define_locales {
         pub const SUPPORTED_LOCALES: &[LocaleCatalogue] = &[
             $(LocaleCatalogue {
                 tag: $tag,
-                resource: include_str!(concat!("../locales/", $tag, "/messages.ftl")),
+                resource: include_str!(concat!("../../locales/", $tag, "/messages.ftl")),
             }),+
         ];
     };

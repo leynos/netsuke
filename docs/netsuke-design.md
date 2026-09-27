@@ -3294,7 +3294,7 @@ its tracing filter before this merge and turns it off for JSON diagnostics,
 preserving machine-readable stderr.
 
 CLI help and clap errors are localized via Fluent resources; locale resolution
-is handled in `src/locale_resolution.rs` in two phases. Before the
+is handled in `src/locale/resolution.rs` in two phases. Before the
 configuration merge, `startup_localizer` (`src/main.rs`) resolves the locale
 used for help and clap errors, with the precedence `--locale` ->
 `NETSUKE_LOCALE` -> system locale -> `en-US`; configuration cannot take part
@@ -3346,7 +3346,7 @@ full metric names, phase boundaries, and test-recorder rules are documented in
 the configuration-load observability section of the
 [developer's guide](developers-guide.md).
 
-`src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.
+`src/locale/catalogues.rs` is the authoritative registry of shipped catalogues.
 A `define_locales!` macro embeds `locales/<tag>/messages.ftl` for each declared
 tag, so a registry entry without a catalogue fails to compile. Every other
 surface reads that registry rather than repeating the list: the build-time
