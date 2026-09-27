@@ -4920,7 +4920,7 @@ never after a failed clean. Do not introduce age-based cleanup or mutate an
 existing content-addressed sidecar. See
 [ADR-012](adr-012-bound-dyndep-sidecar-retention.md) for the durable policy.
 
-`src/runner/graph/generation_telemetry.rs` owns runner-boundary manifest-to-IR
+`src/runner/graph/generation/telemetry.rs` owns runner-boundary manifest-to-IR
 graph-generation telemetry, while `src/runner/dyndep/generation_telemetry.rs`
 owns dyndep bundle-generation telemetry and
 `src/runner/process/dyndep/telemetry.rs` owns publication telemetry. They may
@@ -4945,10 +4945,10 @@ composition here; callers must not measure graph-generation time with `Instant`
 or add manifest-controlled values to telemetry.
 
 The runner-internal `GraphGenerationContext` in
-`src/runner/graph/generation.rs` groups the selected `RecipeShell` and injected
-monotonic clock solely for this graph-generation composition path. It is not a
-general runner context, shared state container, or reusable public API; keep
-unrelated runner inputs and concerns outside it.
+`src/runner/graph/generation/mod.rs` groups the selected `RecipeShell` and
+injected monotonic clock solely for this graph-generation composition path. It
+is not a general runner context, shared state container, or reusable public
+API; keep unrelated runner inputs and concerns outside it.
 
 The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that
@@ -8330,7 +8330,7 @@ macro bodies, or descriptions, because rendered manifest values can carry
 secret material interpolated through `env()`.
 
 `record_manifest_structure(manifest: &NetsukeManifest)` is the single entry
-point, called only from `src/runner/graph/generation.rs` inside
+point, called only from `src/runner/graph/generation/mod.rs` inside
 `generate_ninja_with_shell`, immediately after manifest loading by
 `load_manifest_with_stage_reporting` and before graph construction. It emits one
 `TRACE` span named `runner.manifest.structure`, one `TRACE` event with the

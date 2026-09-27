@@ -4,6 +4,8 @@
 //! clock, pipeline reporting, and observability. It keeps the pure generation
 //! queries in [`super::super::generation`] free of runner infrastructure.
 
+mod telemetry;
+
 use super::super::manifest_structure_telemetry::record_manifest_structure;
 use super::super::{
     Cli, Context, LocalizationKey, PipelineStage, Result, StatusReporter, dyndep, generation,
@@ -52,7 +54,7 @@ pub(in crate::runner) fn generate_ninja_with_shell(
     record_manifest_structure(&manifest);
 
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
-    let graph = super::generation_telemetry::instrument_graph_generation(
+    let graph = self::telemetry::instrument_graph_generation(
         graph_generation.clock,
         graph_generation.recipe_shell,
         || generation::build_graph_for_shell(&manifest, graph_generation.recipe_shell),

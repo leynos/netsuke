@@ -8,7 +8,6 @@
 //! `-C/--directory` resolution for relative `--output` paths.
 
 pub(super) mod generation;
-mod generation_telemetry;
 
 use anyhow::{Context, Result};
 use std::path::Path;
