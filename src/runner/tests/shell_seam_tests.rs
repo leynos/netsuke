@@ -64,7 +64,8 @@ const DIALECT_SENSITIVE_TEMPLATE: &str = "{{ 'a b' | shell_quote(dialect='sh') }
 /// merely something non-empty. It does *not* show the *resolved* interpreter
 /// reaches the filters — the pin makes the rendered text independent of the
 /// loader — which is why `omitted_dialect_follows_the_loader_shell` carries
-/// that half, and why the file's opening comment names that case load-bearing.
+/// that half, and its own comment calls itself the load-bearing case for
+/// exactly that reason.
 #[rstest]
 #[case(RecipeShell::Posix)]
 #[case(RecipeShell::Bash)]
