@@ -124,3 +124,6 @@ pub(super) fn record_file_read<T>(
 pub(super) fn record_unresolved_read<T>(filter: &'static str, err: Error) -> Result<T, Error> {
     record_file_read(filter, None, Err(err))
 }
+
+#[cfg(test)]
+mod tests;

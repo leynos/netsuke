@@ -1565,7 +1565,7 @@ Implementation notes:
   `linecount` validates UTF-8 incrementally as it counts, so a file that is not
   text is rejected rather than silently counted as opaque bytes.
 - Each of the four filter closures records its call through
-  `src/stdlib/path/read_telemetry.rs`: one sample of the bounded counter
+  `src/stdlib/path/read_telemetry/mod.rs`: one sample of the bounded counter
   `netsuke_stdlib_file_read_total`, labelled `filter` (`contents`, `linecount`,
   `hash`, or `digest`) and `outcome` (`ok` or `rejected`), plus a
   `stdlib.file_read.read` debug event carrying the same two facts with the

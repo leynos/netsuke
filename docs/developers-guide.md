@@ -7934,14 +7934,14 @@ boundary.
 
 ### File-read telemetry
 
-`src/stdlib/path/read_telemetry.rs` owns telemetry for the four file-reading
-filters. Each filter closure hands its result to `record_file_read`, which
-returns that result unchanged, so a call that reaches the boundary is recorded
-exactly once whatever its outcome; a rendered value, a read rejected by the
-byte budget, the file-type policy, or invalid UTF-8, and a refusal that came
-before any read was attempted are each counted once. A malformed keyword value
-or an undeclared keyword is refused by `path_call_limits` or
-`kwargs.assert_all_used()` and reaches the counter through
+`src/stdlib/path/read_telemetry/mod.rs` owns telemetry for the four
+file-reading filters. Each filter closure hands its result to
+`record_file_read`, which returns that result unchanged, so a call that reaches
+the boundary is recorded exactly once whatever its outcome; a rendered value, a
+read rejected by the byte budget, the file-type policy, or invalid UTF-8, and a
+refusal that came before any read was attempted are each counted once. A
+malformed keyword value or an undeclared keyword is refused by
+`path_call_limits` or `kwargs.assert_all_used()` and reaches the counter through
 `record_unresolved_read`, whose entry point passes no limits; the debug event
 for a call refused before its keywords resolved therefore carries `filter` and
 `outcome` alone, since there is no effective budget or symlink policy to
@@ -7973,7 +7973,7 @@ noop handle, while any other label name, label count, or out-of-vocabulary
 value is rejected. This is the same allowlist that gates the configuration,
 runner, and manifest-filtering series.
 
-Tests sit beside the module: `src/stdlib/path/read_telemetry_tests.rs` drives
+Tests sit within the module: `src/stdlib/path/read_telemetry/tests.rs` drives
 the registered filters against a local debugging recorder and asserts the
 emitted series and the bounded debug event, while
 `recorder_retains_bounded_file_read_series` in

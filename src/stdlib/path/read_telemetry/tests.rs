@@ -18,8 +18,8 @@ use rstest::rstest;
 use tempfile::TempDir;
 use tracing_subscriber::filter::LevelFilter;
 
-use super::filters;
-use super::read_telemetry::{
+use super::super::filters;
+use super::{
     FILE_READ_EVENT, FILE_READ_TOTAL, FILTER_CONTENTS, FILTER_DIGEST, FILTER_HASH,
     FILTER_LINECOUNT, OUTCOME_OK, OUTCOME_REJECTED,
 };
