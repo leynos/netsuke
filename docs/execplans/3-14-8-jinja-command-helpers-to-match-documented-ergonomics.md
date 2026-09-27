@@ -457,7 +457,7 @@ RM-3.14.8 -> DD-4.5 (shell_join) -> EP-M4 -> tests::shell_join::shlex_roundtrip
 UG-WIN + ADR-014 -> EP-M3, EP-M4 -> tests::shell_quote::dialect_follows_recipe_shell
 RM-3.14.8 (RUSTFLAGS) -> DD-2.6 -> EP-M5
     -> tests::documentation_examples::stdlib-optional-rustflags-manifest
-RM-6.8.3 -> EP-M3 (name and dialect adopted early) -> ADR-027
+RM-6.8.3 -> EP-M3 (name and dialect adopted early) -> ADR-041
 ```
 
 ## Constraints
@@ -883,7 +883,7 @@ other six channels, which today have nothing.
   writer boundary.
 - For `dialect='powershell'` on a non-Windows host, one class weaker: the
   guarantee rests on a handwritten inverse model until the Windows job runs.
-  ADR-027 must say so in those words.
+  ADR-041 must say so in those words.
 - **It is opt-in and silent when omitted.** Nothing detects
   `command: cc {{ glob(...) | join(' ') }}` and warns. A control that works
   only when the author remembers it is a primitive, not a control.
@@ -892,7 +892,7 @@ other six channels, which today have nothing.
   `user_flags`. The guide must not let an author believe that quoting one
   substitution makes a recipe safe.
 
-The claim to write in ADR-027 and in "Validation and acceptance", replacing any
+The claim to write in ADR-041 and in "Validation and acceptance", replacing any
 unqualified repetition of `DD-4.5`:
 
 > `shell_quote` and `shell_join` are safe primitives, not enforced controls.
@@ -1817,7 +1817,7 @@ Load these skills before writing code: `rust-router` (then whichever single
 follow-on it routes to — most likely `rust-types-and-apis` for the
 `ShellDialect` surface and `rust-errors` for the policy error),
 `rust-unit-testing`, `proptest`, `hexagonal-architecture`,
-`arch-decision-records` (for ADR-027), `en-gb-oxendict`, and `commit-message`.
+`arch-decision-records` (for ADR-041), `en-gb-oxendict`, and `commit-message`.
 
 Then confirm three facts against the working tree, because the plan depends on
 them:
@@ -1831,10 +1831,23 @@ them:
    branch shows no collision with the number this plan picks. **Checked at
    `0ba6672f`: `adr-026` is now the highest, so the planned `adr-021` was
    already taken twice over — by the upstream fetch-policy ADR and by five
-   later ones. This plan's ADR is renumbered to `adr-027` and every reference
+   later ones. This plan's ADR is renumbered to `adr-041` and every reference
    updated.** Re-check at rebase time: the numbering history in this repository
    includes several genuine collisions, so the number is a claim to verify, not
    a constant.
+
+   **Re-checked at `48ea13a3`: renumbered again, to `adr-041`.** The earlier
+   renumber to `adr-027` has itself gone stale:
+   `docs/adr-027-command-placeholder-contract.md` exists and is an unrelated
+   decision, so the number was already occupied at the moment it was chosen.
+   `adr-038` is the highest in this worktree. The lesson from the previous
+   renumber applies unchanged, and is why the sweep now reaches past `origin`:
+   the two numbers immediately above `adr-038` are both in flight elsewhere —
+   `adr-039` on `jm5/kani-change-scoped-gate` and `adr-040` on
+   `6-1-1-split-rfc-0006-set-into-focused-child-rfcs-and-task` — and neither is
+   on `main`. Picking the next free number from this worktree alone would have
+   produced a collision. `adr-041` is free across every ref, local and remote,
+   and across all 26 worktrees.
 3. `cargo tree -i shell-quote` shows the `sh` feature only. **Checked at
    `0ba6672f`: confirmed** via `Cargo.toml:137`
    (`default-features = false, features = ["sh"]`).
@@ -2051,11 +2064,11 @@ See R11 and constraint 10. The two are therefore one milestone.
 
 - Identifier and outcome: every document that described these helpers as
   planned or unimplemented now describes what ships, a worked `RUSTFLAGS`
-  example is executed by the test suite, ADR-027 records D1-D3, and the roadmap
+  example is executed by the test suite, ADR-041 records D1-D3, and the roadmap
   entry is ticked.
 - Requirements: all of `RM-3.14.8`; `RM-3.14.8` bullet 4 specifically.
 - Work:
-   1. Write `docs/adr-027-canonical-recipe-shell-quoting-surface.md` following
+   1. Write `docs/adr-041-canonical-recipe-shell-quoting-surface.md` following
      the Y-Statement shape of `docs/adr-008-environment-seam-taxonomy.md`
      (`# Architecture decision record (ADR): …`, then `## Status`, `## Date`,
      `## Context and problem statement`, `## Decision`, `## Consequences`).
@@ -2069,7 +2082,7 @@ See R11 and constraint 10. The two are therefore one milestone.
      contract, including the empty-string rule and the non-UTF-8 rule.
    3. `docs/netsuke-design.md` §4.5: rename `shell_escape` to `shell_quote`,
      record the two-dialect set and the host-default rule, drop "planned" from
-     `shell_join` and `compact`, and link ADR-027.
+     `shell_join` and `compact`, and link ADR-041.
    4. `docs/netsuke-design.md:687-688` and `:3876-3877`: rename `shell_escape`.
      Re-locate the second by content, not by number: it is the "Implement the
      full suite of custom Jinja functions (`glob`, `env`, etc.) and filters
@@ -2259,7 +2272,7 @@ Quality criteria — what "done" means:
   OBL-NINJA-STABLE, OBL-NO-ESCAPE, and OBL-QUERY-SURFACE are each discharged,
   with their negative controls observed failing at least once and recorded in
   `Artefacts and notes`. AXIOM-2's residual gap on non-Windows hosts is stated
-  in ADR-027.
+  in ADR-041.
 - **Lint and typecheck**: `make check-fmt`, `make typecheck`, `make lint`, and
   `make doc-coverage` all exit zero. `make markdownlint` and `make nixie` pass.
 - **Performance**: no benchmark threshold applies.
@@ -2755,7 +2768,49 @@ catalogue has the key; there is no partial state to clean up.
     `stdlib_manifest_query_tests` (6), `shell_filter_property_tests` (44),
     `shell_filter_composition_tests` (13) and `bdd_tests` (281), in 5.8 s.
 
-- [ ] EP-M5 documentation, ADR-027, roadmap tick.
+- [x] EP-M4 close-out: the Windows merge gate the Linux gates cannot see.
+
+  `make test` on this host reports 3554 tests run, 3554 passed, 5 skipped, and
+  the property suite alone is 44/44 — the same count the plan recorded before
+  the split, so the extraction lost no coverage. Neither number says anything
+  about Windows, and CI said something different:
+  `Windows / build-test-windows` was failing on `45b2fd87` and `d11ad3bb` on
+  `sh_quoting_round_trips_through_a_real_shell` with
+  `no POSIX shell available`. That is CodeRabbit finding #6, which an earlier
+  pass had set aside on the grounds that the finding's *arithmetic* was wrong;
+  the arithmetic was an aside and the substance was right. The test was also
+  not inherited from `main` — `tests/shell_filter_property_tests.rs` does not
+  exist there and was added by this branch at `43d9f24c` — so this was this
+  branch's own regression, not a pre-existing defect.
+
+  The obligation is now `#[cfg(unix)]`, which is what the plan specified for it
+  all along: "property test executing a real `/bin/sh` subprocess,
+  `#[cfg(unix)]`". Gating it there rather than leaving the
+  `TestCaseError::fail` in place is the point — a host that cannot run a test
+  must not report it as failed, because no change to the code under test can
+  make that green.
+
+  The cascade is the part worth recording, and the local probe found all of it
+  before CI did. Gating the `proptest!` block turned four further items into
+  errors on the non-Unix tree: two now-unused imports in the round-trip module
+  (the `posix_shell`/`decode_through_posix_shell` pair the property used),
+  three helpers in `property_support` that are reachable *only* from Unix-gated
+  suites (`posix_shell`, `run_posix_shell`, `decode_through_posix_shell`) and
+  so become dead code, and — once those were gated — the `ensure!` macro they
+  were the last users of. The imports each need `#[cfg(unix)]` as well, and for
+  a sharper reason than the unused-import error: naming an item that is itself
+  `#[cfg(unix)]` from an ungated `use` does not resolve at all.
+
+  Verified against the pre-image rather than argued: the non-Unix tree compiles
+  clean under
+  `RUSTFLAGS="-D warnings" cargo check --test
+  shell_filter_property_tests --all-features`
+  with the gates swapped, and the same invocation with a deliberate unused
+  import appended fails with exit 101, so the green result is a measurement and
+  not an oracle that was never consulted. The Linux side re-runs 44/44 with the
+  gates restored.
+
+- [ ] EP-M5 documentation, ADR-041, roadmap tick.
 
 ## Surprises & discoveries
 
@@ -3023,7 +3078,7 @@ catalogue has the key; there is no partial state to clean up.
   isolation. Impact: drives OBL-CONTEXT, the corrected transcripts, and the
   guide precondition. It also explains why `{{ ins }}`/`{{ outs }}` are handled
   by a shell-context tracker rather than a filter — the tracker is the stronger
-  mechanism, and ADR-027 should name it as the intended successor.
+  mechanism, and ADR-041 should name it as the intended successor.
 - Observation: `Value::try_iter()` is not a sequence check.
   Evidence: `minijinja-2.24.0/src/value/mod.rs::try_iter` returns an empty
   iterator for `None` and `Undefined`, characters for a string, and an object's
@@ -3475,7 +3530,7 @@ until the branch is pushed.
 To be completed at EP-M5. Before setting this plan to `COMPLETE`, reconcile
 every discovery against the `Conformance basis`:
 
-- D2 is a deviation from `RFC-0006-8.9`. It must be recorded in ADR-027 and the
+- D2 is a deviation from `RFC-0006-8.9`. It must be recorded in ADR-041 and the
   RFC amended, or the plan stays `BLOCKED`.
 - `RM-6.8.3` is materially reduced by D1 and D2. Record the reduction as a note
   on that roadmap entry; do not tick it, because its `dialect` value set is
