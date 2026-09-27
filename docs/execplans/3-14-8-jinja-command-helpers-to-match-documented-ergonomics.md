@@ -3321,11 +3321,11 @@ catalogue has the key; there is no partial state to clean up.
      (`src/ir/from_manifest.rs:137-141`) — so a `command:` probe produces no
      `description` line to read, and this was confirmed by generating a Ninja
      file from the probe manifest and finding none. It *is* reachable by moving
-     the probe onto a rule, which I measured; and doing so genuinely closes a
-     gap, because the explicit-dialect agreement between the two surfaces is
-     currently pinned on the query side only. That is a real follow-on, not a
-     review fix, and it is recorded in `Surprises & discoveries` rather than
-     smuggled into a triage commit.
+     the probe onto a rule, which a generation probe confirmed; and doing so
+     genuinely closes a gap, because the explicit-dialect agreement between the
+     two surfaces is currently pinned on the query side only. That is a real
+     follow-on, not a review fix, and it is recorded in
+     `Surprises & discoveries` rather than smuggled into a triage commit.
   7. *`tests/stdlib_manifest_query_tests.rs:212-214`, substring assertion* —
      **fixed.** Valid. It compared a rendered description with `contains`, which
      a duplicated or truncated description would satisfy; it now parses the
