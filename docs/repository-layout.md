@@ -215,7 +215,7 @@ size split, not a second schema owner.
 
 The source-excerpt guard over rendered diagnostic documents, declared by
 `src/diagnostic_json_shape_tests.rs` through a `#[path]` attribute. The guard
-walks a document's causes *and* those of its nested `related` entries, because
+walks a document's causes *and* those of its nested `related` entries because
 the serializer renders a related diagnostic as a full entry of the same shape;
 a top-level-only walk would leave those cause chains unguarded. It covers the
 diagnostic paths, where a normalized cause renders the failing location through
@@ -225,8 +225,8 @@ path is deliberately not normalized: `render_error_json` leaves `source`,
 channel a plain error has, and `causes` is documented as the error-cause chain
 itself. One case drives a real excerpt through `render_error_json` so the guard
 cannot pass by inspecting nothing; the snapshot-producing cases stay in
-`src/diagnostic_json_tests.rs`, because insta derives a snapshot's filename
-from the module path that asserted it.
+`src/diagnostic_json_tests.rs` because insta derives a snapshot's filename from
+the module path that asserted it.
 
 ### `src/stdlib/command/error_support.rs`
 
@@ -274,7 +274,7 @@ owns `fetch_failed_error`, `location_failure_error`, `rejection_error`, and the
 it. The split keeps the redirect adapter — the HTTP client, the chain budget,
 the bounded telemetry, and the `Location` header parse — below the 400-line
 cap, not a new boundary: nothing in it decides anything, and it must never grow
-a helper that inspects a header, a status, or a chain, because those are the
+a helper that inspects a header, a status, or a chain because those are the
 adapter's concerns.
 
 ### `src/stdlib/network/redirect/tests/location.rs`
