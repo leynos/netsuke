@@ -153,7 +153,7 @@ lower-trust layer may restrict but not widen" uniform across policy surfaces.
 - Project-request capture and quarantine:
   [`src/cli/discovery/project_policy.rs`](../src/cli/discovery/project_policy.rs)
 - Configuration composition into the policy:
-  [`src/cli_policy.rs`](../src/cli_policy.rs)
+  [`src/cli/policy/mod.rs`](../src/cli/policy/mod.rs)
 - Loader plumbing:
   [`src/manifest/path_loaders.rs`](../src/manifest/path_loaders.rs) and
   [`src/manifest/query.rs`](../src/manifest/query.rs)

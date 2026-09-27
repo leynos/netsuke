@@ -26,7 +26,7 @@ use super::parsing::{
     parse_accessibility_policy, parse_color_policy, parse_emoji_policy, parse_host_pattern,
     parse_jobs, parse_locale, parse_progress_policy, parse_scheme, parse_utf8_path,
 };
-use super::policy_values::{
+use super::policy::values::{
     accessibility_policy_possible_values, colour_policy_possible_values,
     emoji_policy_possible_values, progress_policy_possible_values,
 };

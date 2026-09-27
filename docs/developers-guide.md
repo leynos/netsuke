@@ -56,7 +56,7 @@ the configured command before `parse_with_localizer_from` calls
 parse errors and keeps possible-value metadata on every rendered command tree.
 The `src/cli/parsing.rs` helpers and the domain policy types remain
 Clap-independent. Do not move Clap types or `TypedValueParser` implementations
-into domain configuration types. The `src/cli/policy_values.rs` module owns the
+into domain configuration types. The `src/cli/policy/values.rs` module owns the
 Clap-only conversion from the canonical policy definitions to `PossibleValue`
 metadata; it must not become a second source of policy names or descriptions.
 

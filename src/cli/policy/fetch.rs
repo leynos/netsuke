@@ -1,7 +1,7 @@
 //! Adapt merged configuration to the pure network-policy reconciliation domain.
 
-use super::config::CliConfig;
-use super::discovery::ProjectFetchPolicyRequest;
+use super::super::config::CliConfig;
+use super::super::discovery::ProjectFetchPolicyRequest;
 use crate::stdlib::FetchPolicyReconciliationOutcome;
 use crate::stdlib::reconciliation::{OperatorFetchPolicy, ProjectFetchPolicy, reconcile};
 
@@ -9,7 +9,7 @@ use crate::stdlib::reconciliation::{OperatorFetchPolicy, ProjectFetchPolicy, rec
 ///
 /// Discovery supplies the primary quarantined request. The domain owns the trust
 /// decision and returns value-free outcome data for the merge observer.
-pub(super) fn reconcile_fetch_policy(
+pub(in crate::cli) fn reconcile_fetch_policy(
     mut config: CliConfig,
     project_request: Option<ProjectFetchPolicyRequest>,
 ) -> (CliConfig, FetchPolicyReconciliationOutcome) {

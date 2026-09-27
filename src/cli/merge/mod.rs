@@ -51,8 +51,7 @@ use super::discovery::{
     push_discovered_file_layers,
 };
 use super::environment::EnvironmentLayer;
-use super::fetch_policy::reconcile_fetch_policy;
-use super::manifest_budget_policy::reconcile_manifest_budget;
+use super::policy::{reconcile_fetch_policy, reconcile_manifest_budget};
 use super::validation::validation_error;
 
 mod command_overrides;

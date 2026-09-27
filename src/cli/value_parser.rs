@@ -4,7 +4,7 @@
 //! so that Clap's value validation can emit localized error messages. It also
 //! carries optional [`PossibleValue`] metadata so the CLI adapter can advertise
 //! accepted values in `--help` output without coupling the domain enums to
-//! Clap (see [`super::policy_values`]).
+//! Clap (see [`super::policy::values`]).
 
 use clap::builder::PossibleValue;
 use clap::builder::TypedValueParser;

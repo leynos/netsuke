@@ -140,8 +140,7 @@ fn nested_project_chain_reconciles_with_operator_limit(
         manifest_fuel: 17,
         ..crate::cli::config::CliConfig::default()
     };
-    let resolved =
-        crate::cli::manifest_budget_policy::reconcile_manifest_budget(operator, &request);
+    let resolved = crate::cli::policy::reconcile_manifest_budget(operator, &request);
     ensure!(
         resolved.manifest_fuel == expected,
         "project budget must reconcile to {expected}"

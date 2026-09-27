@@ -6,8 +6,8 @@
 
 use clap::builder::PossibleValue;
 
-use super::config::policy_definitions::PolicyDefinition;
-use super::config::{
+use super::super::config::policy_definitions::PolicyDefinition;
+use super::super::config::{
     ACCESSIBILITY_POLICY_DEFINITIONS, COLOUR_POLICY_DEFINITIONS, EMOJI_POLICY_DEFINITIONS,
     PROGRESS_POLICY_DEFINITIONS,
 };

@@ -5,14 +5,14 @@
 
 use tracing::debug;
 
-use super::config::CliConfig;
-use super::discovery::ProjectManifestBudgetRequest;
+use super::super::config::CliConfig;
+use super::super::discovery::ProjectManifestBudgetRequest;
 
 /// Reconcile project budget requests with merged operator ceilings.
 ///
 /// Project configuration may narrow a limit, but never widen a limit supplied
 /// by defaults, user configuration, the environment, or the command line.
-pub(super) fn reconcile_manifest_budget(
+pub(in crate::cli) fn reconcile_manifest_budget(
     mut operator_limits: CliConfig,
     project_request: &ProjectManifestBudgetRequest,
 ) -> CliConfig {

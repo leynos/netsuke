@@ -111,7 +111,7 @@ loaded through `extends` remain ordinary file layers by design.
   [`src/cli/merge.rs`](../src/cli/merge.rs) and
   [`src/cli/merge/observability.rs`](../src/cli/merge/observability.rs)
 - Runtime policy evaluation:
-  [`src/cli_policy.rs`](../src/cli_policy.rs)
+  [`src/cli/policy/mod.rs`](../src/cli/policy/mod.rs)
 - User-facing policy guidance:
   [`users-guide.md`](users-guide.md#configure-network-access)
 
