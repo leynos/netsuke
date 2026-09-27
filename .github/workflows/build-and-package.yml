@@ -110,7 +110,7 @@ jobs:
       # over when this revision does.
       # tests/workflow_contracts/cache_ownership_test.py holds this value
       # equal to the `uses:` pin below.
-      RUST_BUILD_RELEASE_PIN: a5765019912a8ab6882b12db049c7cde635f3a85
+      RUST_BUILD_RELEASE_PIN: 4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
       # rust-build-release-v1 still nests a Node 20 setup-uv action, and the
       # promoted Node 24 runtime aborts inside libuv on Windows. The escape
       # hatch predates the move to GitHub-hosted Windows runners and is
@@ -134,7 +134,7 @@ jobs:
           python-version: ${{ inputs['python-version'] }}
 
       - name: Build release binary
-        uses: leynos/shared-actions/.github/actions/rust-build-release@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/rust-build-release@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
         with:
           target: ${{ inputs.target }}
           bin-name: ${{ env.BIN_NAME }}

@@ -43,28 +43,15 @@ jobs:
       # derived from that one number.
       LINUX_LANE_VCPUS: '2'
       BUILD_JOBS: -j 2
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: 'true'
-      # Sized for two build shapes, matching the merge gate.
-      SCCACHE_CACHE_SIZE: 4G
+      # sccache is setup-rust's: it names the wrapper, starts and zeroes the
+      # server, and picks the backend from the runner (shared-actions ADR
+      # 0005). See "Compiler cache" in docs/developers-guide.md.
       NETSUKE_RUNNER_IMAGE: ubuntu2204
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - name: Export sccache credentials
-        # Before the installer, so before anything can start the server: a
-        # server started without these stays on local disk all job.
-        # Only on the owned arm. This action clears the v2 switch and
-        # exports Ubicloud's proxy address; a fork's pull request runs on a
-        # GitHub-hosted runner where that address is GitHub's own or empty,
-        # and the verification step below then fails the job outright
-        # because `SCCACHE_GHA_ENABLED` is true. The hosted arm keeps
-        # GitHub's native cache configuration, which sccache reads for
-        # itself.
-        if: github.event.pull_request.head.repo.fork != true
-        uses: ./.github/actions/sccache-gha-credentials
       - name: Render cache keys
         # This lane owns its own key family: nothing else in the repository
         # runs on Ubuntu 22.04, so a 24.04 archive must never reach it. The
@@ -118,22 +105,18 @@ jobs:
             printf -- '- tools key: `%s` hit: `%s`\n' \
               "${TOOLS_CACHE_KEY}" "${TOOLS_HIT:-false}"
           } | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Install sccache
-        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73  # v2.87.17
-        with:
-          tool: sccache@0.16.0
-          fallback: none
       - name: Setup Rust
+        id: setup-rust
         # Pinned to the shared-actions revision that adds `cache-provider`.
-        uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           cache-provider: external
-          use-sccache: 'false'
+          # `any`: a fork's pull request falls back to a GitHub-hosted
+          # runner, where setup-rust picks local disk instead of failing.
+          expect-cache: any
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
-      - name: Reset sccache statistics
-        run: sccache --zero-stats
       - name: Install the build standard
         # `make build` below is gated on `check-build-tools` and links with the
         # pinned `mold`, so it must be present before the first compile rather
@@ -219,11 +202,13 @@ jobs:
         run: scripts/assert-file-absent.sh unused.txt
       - name: Show sccache statistics
         if: always()
+        env:
+          SCCACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: |
           sccache --show-stats | tee sccache-stats.txt
           sccache --show-stats --stats-format=json > sccache-stats.json
           {
-            printf '### sccache\n\n```text\n'
+            printf '### sccache\n\n- backend: %s\n\n```text\n' "${SCCACHE_BACKEND:-none}"
             cat sccache-stats.txt
             printf '```\n'
           } | tee -a "$GITHUB_STEP_SUMMARY"

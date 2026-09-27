@@ -1,9 +1,11 @@
-"""Hold the compiler-cache contract for every job that compiles Rust.
+"""Hold the compiler-cache contract for the jobs that wire sccache themselves.
 
-sccache arrives as a checksum-verified prebuilt binary, exactly one backend is
-active per job, and every compiling job resets its counters before building and
-reports them afterwards even on failure. Zero compile requests is a failed
-integration, not a quiet no-op, so the statistics are part of the contract.
+Those are the GitHub-hosted Windows lanes. sccache arrives there as a
+checksum-verified prebuilt binary, exactly one backend is active per job, and
+every compiling job resets its counters before building and reports them
+afterwards even on failure. Zero compile requests is a failed integration, not
+a quiet no-op, so the statistics are part of the contract. The Linux lanes hand
+sccache to `setup-rust`, which `setup_rust_sccache_test.py` holds.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -11,15 +13,12 @@ Run via ``make test-workflow-contracts``.
 import pytest
 from action_references import require_external_action_sha
 from cache_contract_data import (
-    ACTION_DIR,
-    SCCACHE_CREDENTIAL_JOBS,
     SCCACHE_EXEMPT_LANE,
     SCCACHE_LOCAL_DIR_JOBS,
     SCCACHE_WRAPPER_JOBS,
     WORKFLOW_DIR,
     cache_steps,
     declared_paths,
-    lane_steps,
 )
 from sccache_compile_step_data import is_compile_step
 from workflow_loading import (
@@ -76,17 +75,7 @@ def _assert_sccache_contract(workflow_name: str, job_name: str) -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("workflow_name", "job_name"),
-    [
-        ("ci.yml", "build-test"),
-        ("ci-windows.yml", "lint-windows"),
-        ("ci-windows.yml", "build-test-windows"),
-        ("netsukefile-test.yml", "netsukefile"),
-        ("coverage-main.yml", "coverage-upload"),
-        ("release.yml", "windows-native-recipe-smoke"),
-    ],
-)
+@pytest.mark.parametrize(("workflow_name", "job_name"), SCCACHE_WRAPPER_JOBS)
 def test_compiling_jobs_report_sccache_statistics(
     workflow_name: str, job_name: str
 ) -> None:
@@ -124,31 +113,6 @@ def test_statistics_bracket_every_compile_step(
     assert max(compile_indices) < show_index, (
         f"{workflow_name} {job_name} must report sccache statistics after "
         "the last compile step"
-    )
-
-
-def test_linux_gate_selects_exactly_one_sccache_backend() -> None:
-    """Require the local-directory fallback to be wired but disabled.
-
-    The GitHub Actions backend needs no archive of its own, so enabling both
-    would give the compiler cache two owners. One repository variable selects
-    between them.
-    """
-    workflow = load_workflow(WORKFLOW_DIR / "ci.yml")
-    env = require_mapping(
-        workflow_job(workflow, "build-test").get("env"), "build-test env"
-    )
-    assert env.get("SCCACHE_GHA_ENABLED") == (
-        "${{ vars.NETSUKE_SCCACHE_LOCAL_DIR == 'true' && 'false' || 'true' }}"
-    ), "the sccache backend must be selected by one repository variable"
-
-    steps = lane_steps(ACTION_DIR / "linux-gate-cache" / "action.yml", None)
-    local_steps = [
-        step for step in steps if "sccache-local'] == 'true'" in str(step.get("if"))
-    ]
-    assert len(local_steps) == 2, (
-        "the local-directory backend must be wired for restore and save only, "
-        f"got {local_steps!r}"
     )
 
 
@@ -256,26 +220,4 @@ def test_orthohelp_probes_before_installing() -> None:
     )
     assert "cargo install" not in script, (
         "the retired source-build fallback must not return"
-    )
-
-
-@pytest.mark.parametrize(("workflow_name", "job_name"), SCCACHE_CREDENTIAL_JOBS)
-def test_the_backend_flag_accompanies_the_wrapper(
-    workflow_name: str, job_name: str
-) -> None:
-    """Require the backend flag beside the wrapper on every Ubicloud lane.
-
-    `setup-rust` sets neither, so a job that names the wrapper without the
-    flag gets a compiler cache on local disk that no archive retains and no
-    later run reads.
-    """
-    job = workflow_job(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
-    env = require_mapping(job.get("env"), f"{job_name} env")
-    assert env.get("RUSTC_WRAPPER") == "sccache", (
-        f"{workflow_name} {job_name} must compile through sccache"
-    )
-    flag = str(env.get("SCCACHE_GHA_ENABLED", ""))
-    assert flag, f"{workflow_name} {job_name} must set SCCACHE_GHA_ENABLED"
-    assert "true" in flag, (
-        f"{workflow_name} {job_name} must enable the backend, got {flag!r}"
     )

@@ -29,6 +29,7 @@ from cache_contract_data import (
     RUST_BUILD_RELEASE_PIN_WORKFLOW,
     SETUP_RUST_ACTION,
     SETUP_RUST_DELEGATING_JOBS,
+    SETUP_RUST_SCCACHE_JOBS,
     SOURCE_BUILD_EXCEPTIONS,
     TARGET_ARCHIVE_OWNERS,
     TRUNK_TRIGGERED_WORKFLOWS,
@@ -264,7 +265,10 @@ def test_shared_actions_delegate_cache_ownership_to_the_caller(
     `setup-rust` caches `target/${BUILD_PROFILE}` and `generate-coverage`
     caches the whole `target` tree whenever their `cache-provider` is
     `github`, so passing `external` is what keeps a build tree out of every
-    lane this repository owns.
+    lane this repository owns. A lane that wires its own compiler cache must
+    also keep `setup-rust`'s off, or the job has two; a lane in
+    `SETUP_RUST_SCCACHE_JOBS` is the one place `setup-rust` owns it instead,
+    which `setup_rust_sccache_test.py` holds.
     """
     workflow = load_workflow(WORKFLOW_DIR / workflow_name)
     setup = named_step(job_steps(workflow, job_name), "Setup Rust")
@@ -275,6 +279,8 @@ def test_shared_actions_delegate_cache_ownership_to_the_caller(
     assert inputs.get("cache-provider") == EXTERNAL_CACHE_PROVIDER, (
         f"{workflow_name} {job_name} must disable setup-rust's GitHub cache"
     )
+    if (workflow_name, job_name) in SETUP_RUST_SCCACHE_JOBS:
+        return
     assert inputs.get("use-sccache") == "false", (
         f"{workflow_name} {job_name} must not enable a second sccache owner"
     )

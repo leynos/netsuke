@@ -1079,20 +1079,15 @@ mapping is proved by a mutation that sends `netsukefile` to `ubuntu-latest`:
 hosted, Linux, and the right answer for every other lane, so nothing but a
 per-lane expectation separates it.
 
-The sccache credential export is guarded on the same arm. The action at
-`.github/actions/sccache-gha-credentials` clears sccache's v2 switch and
-publishes Ubicloud's proxy address, which is correct only on a Ubicloud runner.
-On a fork's GitHub-hosted run that address is GitHub's own or empty, and the
-action's own verification step then fails the job, because
-`SCCACHE_GHA_ENABLED` is `true`. Both lanes that carry the export and a fork
-arm declare `if: github.event.pull_request.head.repo.fork != true`;
-`coverage-upload` carries the export and no fork arm, so its export is
-unconditional and the contract asserts that too. A guard there would switch the
-export off on the only runs the lane has.
-`test_the_credential_export_runs_on_the_owned_arm_alone` reads both cases, and
-asserts the guard is satisfiable as well as present: `== true` in place of
-`!= true` disables the export on this repository's own branches while every
-other assertion about it goes on passing.
+The compiler cache follows the same arm without a guard of its own.
+`setup-rust` selects sccache's backend from the runner the job landed on, so a
+fork's run on a GitHub-hosted runner gets local disk and a run on Ubicloud gets
+the cache proxy. The two lanes with a fork arm, `build-test` and `netsukefile`,
+therefore pass `expect-cache: any`, and `coverage-upload`, which has no fork
+arm, passes `expect-cache: ubicloud`, so a missing proxy fails it rather than
+letting it compile cold. `setup_rust_sccache_test.py` derives each lane's value
+from its placement, so moving `coverage-upload` onto a fork arm fails the
+contract until its value moves too.
 
 Every other Ubicloud lane keeps its plain label, and the contract asserts that
 too, so the expression does not spread by imitation. `coverage-upload` is push
@@ -1240,43 +1235,48 @@ Cargo download store would break the single-owner rule. The coverage job does
 not cache its uv stores, because they live under `~/.local/share`, which the
 merge gate's Whitaker cache owns.
 
-The compiler cache is sccache 0.16.0, installed as a checksum-verified prebuilt
-binary through the pinned `taiki-e/install-action` with `fallback: none`,
-including on the packaging lane: a `RUSTC_WRAPPER` naming a binary nobody
-installed is what produced "sccache: error: failed to spawn Command" there.
+The compiler cache is sccache. On the Linux lanes, `build-test`, `netsukefile`
+and `coverage-upload`, it belongs to `setup-rust`, as
+[ADR 0005 in `leynos/shared-actions`][sa-adr-0005] decides. The action names
+the wrapper, starts and zeroes the server, and selects the backend from the
+runner. On Ubicloud it exports the cache-proxy credentials and clears
+`ACTIONS_CACHE_SERVICE_V2`, which sccache would otherwise read as a request for
+GitHub's v2 service; the proxy serves v1. Every compilation then reads and
+writes Ubicloud's store directly, with no archive. Each lane's statistics
+report prints the action's `cache-backend` output, because `Cache location`
+reads `ghac` for the proxy and GitHub's own service alike.
 
-The Ubicloud and macOS lanes use sccache's GitHub Actions backend, which needs
-no archive of its own. The GitHub-hosted Windows lanes do not: on that backend
-the Windows gate recorded 643 failed writes out of 643, and the packaging build
-68, which is GitHub rate limiting. Those lanes keep `SCCACHE_DIR` in a
-workspace directory that the cache action owns, under a rolling key with a
-prefix restore-key, and set no `SCCACHE_GHA_ENABLED` at all. On a Ubicloud
-runner those objects land in Ubicloud's own store, confirmed on 2026-09-03 by
-finding `sccache/...` keys from another repository's Ubicloud run in the
-console listing; an earlier reading that the backend wrote to GitHub was a
-misattribution of a Windows lane's objects. Setting the repository variable
-`NETSUKE_SCCACHE_LOCAL_DIR` to `true` switches the Linux gate to the
-local-directory backend and enables cache step B instead. Exactly one backend
-is ever active. `SCCACHE_CACHE_SIZE` is 4 GB rather than the usual 2 GB,
-because one store now holds two build shapes.
+That retired a hand-rolled arrangement with five parts, and each would now
+override the action's choice without a word: a job-level `RUSTC_WRAPPER`,
+`SCCACHE_GHA_ENABLED`, `SCCACHE_DIR` and `SCCACHE_CACHE_SIZE`; a local
+`sccache-gha-credentials` action run straight after checkout; a pinned
+`taiki-e/install-action` sccache install; `use-sccache: false` on `setup-rust`,
+because its `mozilla-actions/sccache-action` step re-exported
+`ACTIONS_CACHE_SERVICE_V2` and GitHub's results address as its last act and
+sent the server past the proxy; and a local-directory fallback behind the
+repository variable `NETSUKE_SCCACHE_LOCAL_DIR`, archived by the Linux gate
+cache. `setup-rust` now clears the switch itself and restores the cleared value
+after that step runs, so the clobber cannot recur, and the fallback is the
+action's own hosted arm. `setup_rust_sccache_test.py` holds all of it: each
+Linux lane calls a pinned `setup-rust` once with sccache on, the id
+`setup-rust` and the `expect-cache` its placement allows; no retired piece
+survives in those lanes or in the Linux gate cache; and the statistics report
+follows the last compile under `if: always()` and names the backend. Fixtures
+prove the retired-piece reader both catches each form and leaves the report and
+other tool installs alone.
 
-Every lane on the GitHub Actions backend exports `ACTIONS_RESULTS_URL` and
-`ACTIONS_RUNTIME_TOKEN` through
-[`sccache-gha-credentials`](../.github/actions/sccache-gha-credentials)
-immediately after checkout. `use-sccache: false` stops the shared Rust setup
-action that would otherwise publish them: `mozilla-actions/sccache-action`
-re-exports `ACTIONS_CACHE_SERVICE_V2` and GitHub's own results address to
-`GITHUB_ENV` as its last act, clobbering this export and sending the server
-past Ubicloud's proxy to GitHub, where writes are rate-limited. A composite
-`run` step does see the reserved variables; an earlier reading that the runner
-withholds them from shell steps was a misattribution, corrected against
-shared-actions runs 33854048777 and 33854213968. The ordering matters as much
-as the export: `--zero-stats`, `--start-server`, and the first wrapped `rustc`
-all start the server, and a server started without those variables stays in
-local-disk mode for the whole job and reports zero compile requests. That
-symptom has bitten this repository before, so a contract test asserts the
-export runs immediately after checkout and before anything that could start the
-server.
+The GitHub-hosted Windows lanes keep their own arrangement. On sccache's GitHub
+Actions backend the Windows gate recorded 643 failed writes out of 643, and the
+packaging build 68, which is GitHub rate limiting, so those lanes keep
+`SCCACHE_DIR` in a workspace directory that `windows-gate-cache` owns, under a
+rolling key with a prefix restore-key, install sccache through the pinned
+`taiki-e/install-action` with `fallback: none`, and set no
+`SCCACHE_GHA_ENABLED`. `setup-rust`'s hosted arm would do the same, but it owns
+the directory only when it owns the job's other caches too
+(`cache-provider: github`), and `windows-gate-cache` owns those here, so the
+Windows lanes pass `use-sccache: false` and keep the local arm
+`sccache_contract_test.py` describes. `SCCACHE_CACHE_SIZE` is 4 GB there rather
+than the usual 2 GB, because one store holds two build shapes.
 
 Both instrumented lanes set `RUN_RUST_CARGO_WAIT_TIMEOUT` to `1800`. The shared
 coverage action wraps `cargo llvm-cov nextest` in a watchdog which defaulted to
@@ -1300,19 +1300,21 @@ same value, parametrized over `COVERAGE_PRODUCERS`, so a producer added there
 is covered without being listed again. The upstream default is reported as
 [leynos/shared-actions#451](https://github.com/leynos/shared-actions/issues/451).
 
-Every merge-gate job that compiles Rust sets `RUSTC_WRAPPER=sccache`, including
-the coverage job and the Netsukefile compatibility build. The release packaging
-lanes are the exception and run uncached, for two independent reasons: on
-Windows sccache re-spawns rustc with the aarch64 target's `--extern` and `-L`
-list and exceeds the operating system's command-line limit, and elsewhere the
-lane's server would be started inside the nested setup action, which is exactly
-the clobber described above. Reproducing the gate's export, install and
-run-step start sequence for a lane that runs only on tag pushes and the dry run
-would not pay back. That lane must therefore stay free of `RUSTC_WRAPPER`,
+Every merge-gate job that compiles Rust reaches the compiler cache: the Linux
+lanes through `setup-rust`, the Windows lanes through `RUSTC_WRAPPER=sccache`.
+The release packaging lanes are the exception and run uncached, for two
+independent reasons: on Windows sccache re-spawns rustc with the aarch64
+target's `--extern` and `-L` list and exceeds the operating system's
+command-line limit, and elsewhere the lane's server would be started inside the
+nested setup action, whose older pinned `setup-rust` still carries the clobber
+described above. Reproducing the gate's export, install and run-step start
+sequence for a lane that runs only on tag pushes and the dry run would not pay
+back. That lane must therefore stay free of `RUSTC_WRAPPER`,
 `SCCACHE_GHA_ENABLED` and `SCCACHE_DIR` entirely, and
 `tests/workflow_contracts/sccache_contract_test.py` requires all three to be
 absent rather than merely empty. Every compiling job that does use the compiler
-cache resets the counters with `sccache --zero-stats` before building and emits
+cache starts from zeroed counters, which `setup-rust` provides on the Linux
+lanes and an explicit `sccache --zero-stats` on the Windows lanes, and emits
 both human-readable and JSON statistics afterwards under `if: always()`; zero
 compile requests is a failed integration, not a quiet no-op. Kani is the one
 exception, because its verifier bundle ships prebuilt.
@@ -1322,7 +1324,10 @@ than GitHub with `ubi gh leynos/netsuke list-cache-entries`. That command only
 works once the Ubicloud GitHub App covers this repository; see "GitHub Actions
 runner placement" for that prerequisite.
 
-Most `leynos/shared-actions` references are pinned to
+`setup-rust` is pinned to `4fb8eb7ad52454678a0662865d81d3cd17aa6e0e`, the merge
+of leynos/shared-actions#523 that makes it choose sccache's backend from the
+runner; every `setup-rust` reference holds that one pin. Most other
+`leynos/shared-actions` references are pinned to
 `e041cb75c35c3524201a32d5e57c87408fbd5874`. That revision introduces
 `cache-provider: external`; installs `whitaker-installer` and `cargo-nextest`
 from checksum-verified official releases with no source fallback; adds the
@@ -9357,3 +9362,6 @@ this one stops the tiers inverting.
 
 When test strategy or behavioural test usage changes, update this file in the
 same change-set, so the documented approach remains aligned with the codebase.
+
+[sa-adr-0005]:
+https://github.com/leynos/shared-actions/blob/main/docs/adr/0005-runner-aware-sccache-backend.md
