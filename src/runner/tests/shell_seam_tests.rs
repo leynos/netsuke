@@ -38,8 +38,7 @@ fn render_description_with_shell(shell: RecipeShell, template: &str) -> Result<S
     );
     let (_temp, manifest_path) = write_manifest(&manifest)?;
     let inputs = generation::ManifestLoadInputs::from_cli(&Cli::default(), shell)?;
-    let loaded =
-        generation::load_manifest_for_build_with_limits(&manifest_path, &inputs, None)?;
+    let loaded = generation::load_manifest_for_build_with_limits(&manifest_path, &inputs, None)?;
     Ok(loaded
         .targets
         .first()

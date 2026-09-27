@@ -40,8 +40,8 @@ const POWERSHELL: &str = "powershell";
 /// a control character the encoder must carry literally.
 const ALPHABET: &[char] = &[
     'a', 'b', 'z', 'A', 'Z', '0', '9', '_', '-', '.', '/', ',', ' ', '\t', '\'', '"', '$', '`',
-    '\\', '*', '?', ';', '&', '|', '<', '>', '(', ')', '[', ']', '{', '}', '#', '~', '!', '=',
-    ':', '@', '%', '^', '+', 'é', '中', '\u{80}', '\u{a0}',
+    '\\', '*', '?', ';', '&', '|', '<', '>', '(', ')', '[', ']', '{', '}', '#', '~', '!', '=', ':',
+    '@', '%', '^', '+', 'é', '中', '\u{80}', '\u{a0}',
 ];
 
 /// The expansion-and-quote witness the plan names as its worst case.
@@ -301,9 +301,9 @@ impl Corpus {
             with_space: self.with_space + usize::from(value.contains(' ')),
             with_control: self.with_control
                 + usize::from(
-                    value
-                        .chars()
-                        .any(|character| character.is_control() && !matches!(character, '\n' | '\r')),
+                    value.chars().any(|character| {
+                        character.is_control() && !matches!(character, '\n' | '\r')
+                    }),
                 ),
             empty: self.empty + usize::from(value.is_empty()),
             quoted: self.quoted + usize::from(needed_quoting),
@@ -370,7 +370,13 @@ const POWER_SHELL_CANDIDATES: &[&str] = &["powershell.exe", "pwsh", "powershell"
 fn run_power_shell(script: &str) -> Result<Option<String>> {
     for candidate in POWER_SHELL_CANDIDATES {
         let output = match Command::new(candidate)
-            .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script])
+            .args([
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                script,
+            ])
             .output()
         {
             Ok(output) => output,
@@ -510,7 +516,10 @@ fn shell_join_distinguishes_an_empty_list_from_one_empty_word() -> Result<()> {
     );
 
     let one_empty_word = join_values(&[String::new()], SH)?;
-    assert_eq!(one_empty_word, "''", "one empty word renders as a quoted pair");
+    assert_eq!(
+        one_empty_word, "''",
+        "one empty word renders as a quoted pair"
+    );
     assert_eq!(
         split(&one_empty_word)?,
         vec![String::new()],
@@ -764,7 +773,7 @@ fn sequence_filters_reject_non_sequences(
         "none",
         "an undefined name",
         "a number",
-        "a boolean",
+        "a boolean"
     )]
     description: &str,
 ) -> Result<()> {
@@ -845,7 +854,10 @@ fn assert_no_stringification(reported: &str, description: &str) {
 #[test]
 fn try_iter_would_have_accepted_three_of_the_rejected_subjects() -> Result<()> {
     for (subject, name) in [
-        (Value::from_iter(std::iter::once(("a", Value::from(1)))), "a mapping"),
+        (
+            Value::from_iter(std::iter::once(("a", Value::from(1)))),
+            "a mapping",
+        ),
         (Value::from("abc"), "a string"),
         (iterable_object(), "an iterable object"),
     ] {
@@ -861,8 +873,11 @@ fn try_iter_would_have_accepted_three_of_the_rejected_subjects() -> Result<()> {
     // And the gate refuses a mapping anyway, which is the contrast: the
     // rejection is the kind check's doing, not the value being uniterable.
     ensure!(
-        rejection("compact", &Value::from_iter(std::iter::once(("a", Value::from(1)))))?
-            .contains("map"),
+        rejection(
+            "compact",
+            &Value::from_iter(std::iter::once(("a", Value::from(1))))
+        )?
+        .contains("map"),
         "compact must reject a mapping rather than iterate its keys"
     );
     Ok(())
@@ -1010,7 +1025,9 @@ fn generated_command(value: &str, template: &str) -> Result<String> {
         workspace.path(),
         &[
             "--file",
-            manifest_path.to_str().context("manifest path should be UTF-8")?,
+            manifest_path
+                .to_str()
+                .context("manifest path should be UTF-8")?,
             "generate",
             "--output",
             "out.ninja",

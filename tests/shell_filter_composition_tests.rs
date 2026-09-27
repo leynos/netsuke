@@ -30,7 +30,7 @@ use base64::Engine as _;
 use camino::Utf8PathBuf;
 use netsuke::{
     manifest,
-    ninja_gen::{generate_with_shell, RecipeShell},
+    ninja_gen::{RecipeShell, generate_with_shell},
 };
 use rstest::rstest;
 use std::process::Command;
@@ -93,9 +93,7 @@ fn run_posix_shell(shell: &Utf8PathBuf, script: &str) -> Result<String> {
 /// Prefix every line of `text` with `by` spaces.
 fn indent(text: &str, by: usize) -> String {
     let pad = " ".repeat(by);
-    text.lines()
-        .map(|line| format!("{pad}{line}\n"))
-        .collect()
+    text.lines().map(|line| format!("{pad}{line}\n")).collect()
 }
 
 /// The whole manifest source for one composition case.
@@ -160,7 +158,9 @@ fn decode_bash_transport(binding: &str) -> Result<String> {
     let inner = argument
         .strip_prefix('"')
         .and_then(|rest| rest.strip_suffix('"'))
-        .with_context(|| format!("Bash transport argument should be one quoted word: {argument}"))?;
+        .with_context(|| {
+            format!("Bash transport argument should be one quoted word: {argument}")
+        })?;
 
     // Windows argument quoting: a backslash before a `"` is an escape, and the
     // run of backslashes before the closing quote is halved.

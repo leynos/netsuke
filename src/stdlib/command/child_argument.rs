@@ -185,8 +185,7 @@ mod non_windows_tests {
 
     #[test]
     fn quote_child_argument_rejects_line_breaks_on_unix() {
-        let err =
-            quote_child_argument("line\nbreak").expect_err("line feeds should be rejected");
+        let err = quote_child_argument("line\nbreak").expect_err("line feeds should be rejected");
         assert_eq!(err, QuoteError::ContainsLineBreak);
     }
 
