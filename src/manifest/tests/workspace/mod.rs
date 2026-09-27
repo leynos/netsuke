@@ -1,4 +1,6 @@
 //! Tests covering manifest workspace resolution and filesystem helpers.
+mod property;
+
 use super::super::{
     EnvAccessPolicy, EnvReadError, EnvReader, ManifestEnvironment, from_path_for_manifest_query,
     from_path_with_policy_and_environment, open_manifest_workspace,

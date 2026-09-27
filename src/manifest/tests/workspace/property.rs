@@ -1,6 +1,6 @@
 //! Property tests for manifest workspace-root resolution.
 //!
-//! The fixed cases in `workspace.rs` pin a few shapes; these cover the
+//! The fixed cases in `workspace/mod.rs` pin a few shapes; these cover the
 //! invariants those shapes are examples of, across arbitrary relative and
 //! absolute parents and optional bases: an absolute parent wins outright, a
 //! relative parent joins onto an absolute base verbatim, and a missing or
@@ -14,7 +14,7 @@
 //! gives every platform a genuinely absolute `D:\...`-style (or `/...`)
 //! anchor.
 
-use super::super::workspace::resolve_absolute_workspace_root;
+use super::super::super::workspace::resolve_absolute_workspace_root;
 use camino::Utf8PathBuf;
 use proptest::{prelude::*, test_runner::TestCaseError};
 use std::path::{MAIN_SEPARATOR_STR, Path};

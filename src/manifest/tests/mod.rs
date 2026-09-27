@@ -6,7 +6,6 @@ mod macros;
 mod stages;
 mod vars;
 mod workspace;
-mod workspace_property;
 
 mod env;
 mod expansion_telemetry;
