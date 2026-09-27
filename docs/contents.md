@@ -232,6 +232,9 @@ operator, user, and contributor references are easier to find.
   Runtime annotation introspection declared unsupported for the workflow
   contract tests, with the loader gate's stale `TYPE_CHECKING` claim corrected
   and a revisit gate that reopens on a real consumer.
+- [ADR-041](adr-041-canonical-recipe-shell-quoting-surface.md): `shell_quote`
+  and `shell_join` as the canonical recipe quoting surface, with two dialects
+  and a host-dependent default.
 
 ## Proposals
 
