@@ -33,7 +33,6 @@ mod jinja_macros;
 mod load_stage;
 mod loading;
 mod parse_with_config;
-#[path = "path_loaders.rs"]
 mod path_loaders;
 mod query;
 mod registration;
