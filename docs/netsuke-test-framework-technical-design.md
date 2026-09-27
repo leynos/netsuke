@@ -268,13 +268,14 @@ shape (an `Arc` closure, because MiniJinja registration requires `Send + Sync`):
 pub type ClockProvider = Arc<dyn Fn() -> OffsetDateTime + Send + Sync>;
 ```
 
-It lives in `src/stdlib/time/clock.rs` with `system_clock()`, the production
-adapter wrapping `OffsetDateTime::now_utc`, and `fixed_clock(instant)`, the
-deterministic adapter. The seam is held in `StdlibConfig` alongside the existing
-`path_override` and `home_directory` knobs — the clock's single owner — and
-`with_clock` is the injection point; `register_functions` captures the provider
-when it installs `now()`, so each evaluation reads the provider again, and no
-provider-less call path can bypass it.
+It lives in `src/stdlib/time/clock/mod.rs` with `system_clock()`, the
+production adapter wrapping `OffsetDateTime::now_utc`, and
+`fixed_clock(instant)`, the deterministic adapter. The seam is held in
+`StdlibConfig` alongside the existing `path_override` and `home_directory`
+knobs — the clock's single owner — and `with_clock` is the injection point;
+`register_functions` captures the provider when it installs `now()`, so each
+evaluation reads the provider again, and no provider-less call path can bypass
+it.
 
 `StdlibConfig` stores the provider in a private `WallClock` container, a
 mechanical addition this design did not name. It confines a handwritten `Debug`

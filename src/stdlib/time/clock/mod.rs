@@ -154,3 +154,6 @@ impl fmt::Debug for WallClock {
             .finish_non_exhaustive()
     }
 }
+
+#[cfg(test)]
+mod tests;

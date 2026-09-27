@@ -1,7 +1,7 @@
 //! Shared fixtures and helpers for the stdlib time tests.
 //!
 //! Evaluation and value-inspection boilerplate lives here so the behaviour
-//! tests in the `tests` module and the clock-seam tests in the `clock_tests`
+//! tests in the `tests` module and the clock-seam tests in the `clock::tests`
 //! module can both stay focused on what they assert.
 
 use super::*;

@@ -3,7 +3,7 @@
 //! applies caller-provided offsets, rejects malformed offsets, and that helper
 //! functions expose consistent object wrappers for downstream template
 //! evaluation. Tests that pin *where* `now()` reads its instant from live in
-//! `super::clock_tests`.
+//! `super::clock::tests`.
 use super::*;
 use anyhow::{Result, anyhow, ensure};
 use minijinja::{ErrorKind, context};

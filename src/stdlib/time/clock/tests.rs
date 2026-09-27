@@ -4,9 +4,9 @@
 //! when no provider is configured, and the injected provider otherwise; plus
 //! the guarantee that manifest-query registration never acquires a clock.
 //! Behaviour that is independent of the clock's source — offset parsing,
-//! formatting, `timedelta` — lives in `super::tests`.
+//! formatting, `timedelta` — lives in `super::super::tests`.
 
-use super::*;
+use super::super::*;
 use anyhow::{Context, Result, bail, ensure};
 use googletest::prelude::*;
 use minijinja::{Environment, ErrorKind, context};
@@ -18,7 +18,7 @@ use std::sync::{
 };
 use time::{OffsetDateTime, macros::datetime};
 
-use super::tests_support::{env, eval_expression, value_as_timestamp};
+use super::super::tests_support::{env, eval_expression, value_as_timestamp};
 
 /// Build an environment whose `now()` always reports `instant`.
 fn env_with_fixed_clock(instant: OffsetDateTime) -> Environment<'static> {

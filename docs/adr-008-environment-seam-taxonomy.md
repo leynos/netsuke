@@ -188,7 +188,7 @@ resolution entirely rather than setting the variable for a child to read.
   going through `NETSUKE_NINJA` resolution at all
 - `EnvReader`: [`src/manifest/env/reader.rs`](../src/manifest/env/reader.rs)
   (manifest `env()` Jinja helper)
-- Clock seam: [`src/stdlib/time/clock.rs`](../src/stdlib/time/clock.rs)
+- Clock seam: [`src/stdlib/time/clock/mod.rs`](../src/stdlib/time/clock/mod.rs)
   (`ClockProvider`, `system_clock`, `fixed_clock`); `StdlibConfig::with_clock`
   in [`src/stdlib/config/clock.rs`](../src/stdlib/config/clock.rs) is the
   injection point, and [`src/stdlib/register.rs`](../src/stdlib/register.rs)
