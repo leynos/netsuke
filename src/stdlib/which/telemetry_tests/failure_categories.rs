@@ -4,9 +4,16 @@
 //! the failure taxonomy: the outcome `not_found` under the category
 //! `not_found`. Two further points are reachable through the resolver and are
 //! pinned nowhere else. Each is driven here end to end — the counter series,
-//! the resolver span, and the failure event — and each names the category it
-//! expects as its own literal, so nothing in this file can pass by reading the
-//! search miss's spelling back out of the code under test.
+//! the resolver span, and the failure event.
+//!
+//! Every expected label is written here as its externally reported spelling,
+//! not imported from the module that emits it. That is deliberate and it is the
+//! whole value of these cases: the resolver builds both the constant and the
+//! recorded label from the same `&str`, so an expectation taken from that
+//! constant is the implementation compared against itself. Renaming `not_found`
+//! to something else would move both sides at once and leave the case green
+//! while every dashboard and alert that reads the old spelling broke. Pinning
+//! the literal is what makes a rename fail here instead of in production.
 //!
 //! The two are the direct-path miss, which is a miss that was never a search,
 //! and the executable-probe failure, which is not a miss at all: the resolver
@@ -29,21 +36,11 @@ use camino::Utf8PathBuf;
 use metrics_util::debugging::DebuggingRecorder;
 use tracing::level_filters::LevelFilter;
 
-/// The three names only the POSIX probe-failure case reads.
-///
-/// Gated with that case rather than folded into the list above, so a host that
-/// cannot run it does not carry them as unused imports — which the repository's
-/// warning-free test build would reject.
-#[cfg(unix)]
-use super::super::telemetry::{CATEGORY_IS_EXECUTABLE, RESOLUTION_OUTCOME_ERROR};
 use super::super::{
     WhichResolver,
     options::CwdMode,
     resolve_error::ResolveError,
-    telemetry::{
-        CACHE_OUTCOME_MISS, CATEGORY_DIRECT_NOT_FOUND, RESOLUTION_OUTCOME_NOT_FOUND,
-        WHICH_CACHE_TOTAL, WHICH_RESOLUTION_TOTAL,
-    },
+    telemetry::{WHICH_CACHE_TOTAL, WHICH_RESOLUTION_TOTAL},
 };
 use super::outcome_series::{Sample, Samples};
 use super::tracing_capture::FAILURE_MESSAGE;
@@ -60,6 +57,14 @@ use camino::Utf8Path;
 /// is what sends the lookup down the direct-path branch rather than into a
 /// `PATH` search.
 const ABSENT_DIRECT_PATH: &str = "./absent-tool";
+
+/// The externally reported `cache_outcome` for a cold miss.
+///
+/// Written out rather than imported, for the reason the module document gives:
+/// `cache.rs` records this value from the same constant the resolver exports, so
+/// an expectation taken from that constant would move with it. The literal is
+/// what makes a rename of the recorded spelling fail here.
+const CACHE_MISS: &str = "miss";
 
 /// The executable the probe-failure case is driven with.
 ///
@@ -133,7 +138,7 @@ fn read_resolution(resolver: &WhichResolver, command: &str, cwd_mode: CwdMode) -
 /// find one.
 fn expected_span_fields(expected: &ExpectedFailure) -> Vec<String> {
     let mut fields = vec![
-        format!("cache_outcome={CACHE_OUTCOME_MISS:?}"),
+        format!("cache_outcome={CACHE_MISS:?}"),
         format!("cwd_mode={:?}", expected.cwd_mode),
         format!("error_category={:?}", expected.category),
         format!("result={:?}", expected.outcome),
@@ -152,7 +157,7 @@ fn expected_span_fields(expected: &ExpectedFailure) -> Vec<String> {
 fn assert_failure_counters(expected: &ExpectedFailure, observed: &Observed) -> Result<()> {
     let mode = expected.cwd_mode;
     ensure!(
-        observed.samples.of(WHICH_CACHE_TOTAL) == [Sample::once(mode, CACHE_OUTCOME_MISS, None)],
+        observed.samples.of(WHICH_CACHE_TOTAL) == [Sample::once(mode, CACHE_MISS, None)],
         "{mode}: the failed lookup should be one cold miss: {:?}",
         observed.samples.of(WHICH_CACHE_TOTAL)
     );
@@ -275,8 +280,8 @@ fn a_direct_path_miss_carries_the_category_that_separates_it_from_a_search() -> 
     assert_failure(
         &ExpectedFailure {
             cwd_mode: "never",
-            outcome: RESOLUTION_OUTCOME_NOT_FOUND,
-            category: CATEGORY_DIRECT_NOT_FOUND,
+            outcome: "not_found",
+            category: "direct_not_found",
         },
         &recorded,
     )?;
@@ -324,8 +329,8 @@ fn an_uninspectable_path_is_an_error_rather_than_a_miss() -> Result<()> {
     assert_failure(
         &ExpectedFailure {
             cwd_mode: "never",
-            outcome: RESOLUTION_OUTCOME_ERROR,
-            category: CATEGORY_IS_EXECUTABLE,
+            outcome: "error",
+            category: "is_executable",
         },
         &recorded,
     )?;
