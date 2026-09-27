@@ -3252,14 +3252,16 @@ catalogue has the key; there is no partial state to clean up.
 
   **Dispositions.** 17 raw findings, 15 distinct: findings 11 and 15 are one
   German request filed twice against the same line, and 10 and 16 one Czech
-  request. Ten raw findings are applied, none of them a duplicate; seven are
-  declined, of which five are distinct — one Indonesian wording request, two
-  against `dialect_probes.rs`, and the Czech and German case-frame pair. Items
-  are keyed to the review's own numbering, taken from its JSONL log.
-  `coderabbit review --agent` ran for 877 s, exit 0, `review_completed`, no
-  rate limiting (5 of 10 quota units spent), while the GitHub app remained
-  **auto-paused** on this branch — its `success` status on `75e0b671` reads
-  "Review paused", which is a pause indicator and not a verdict.
+  request. Items are keyed to the review's own numbering, taken from its JSONL
+  log. Of the seven declined, five are distinct — the Indonesian wording
+  request, findings 5 and 6 against `dialect_probes.rs`, and the Czech and
+  German case-frame pair — and two are the *second filing* of a finding whose
+  first filing was also declined, so no distinct request is double-counted on
+  either side. `coderabbit review --agent` ran for 877 s, exit 0,
+  `review_completed`, no rate limiting (5 of 10 quota units spent), while the
+  GitHub app remained **auto-paused** on this branch — its `success` status on
+  `75e0b671` reads "Review paused", which is a pause indicator and not a
+  verdict.
 
   1. *`locales/id/messages.ftl:294`, `retur kereta` → `karakter CR`* —
      **declined, and already declined once.** The requested string appears in
