@@ -2990,6 +2990,49 @@ catalogue has the key; there is no partial state to clean up.
   `make markdownlint` are the only two gates with jurisdiction here, and they
   are not optional on a documentation commit.
 
+- [x] (2026-09-27) The seven-gate set is green at `bb6bfa49`, and that commit is
+      pushed. The push then exposed a **separate, advisory** concern:
+      `CodeScene Code Health Review (main)` had been failing on this branch for
+      its last six heads, on `tests/shell_filter_property_tests/property_support.rs`
+      — a file added by `6f41c6f3`, which was already on the branch before the
+      five commits this entry describes. Reproduced locally and dispositioned
+      as an exemption in `.codescene/code-health-rules.json`.
+
+  **The finding is real, and it is not fixable by refactoring.** `cs delta`
+  reports `String Heavy Function Arguments`, 75.0% of arguments to 10 functions
+  being strings against a 39.0% threshold. Independent counting of the file's
+  `pub(super) fn` signatures agrees exactly: 9 `&str` of 12 parameters, 10
+  functions. The tempting remedy is to type the `dialect: &str` selectors as
+  `RecipeShell`, which is what production stores
+  (`src/stdlib/config/recipe_shell.rs`). Measured, that is not enough: typing
+  both selectors that take one moves the ratio 75.0% → 58.3%. Even typing all
+  three dialect-bearing parameters only reaches 50.0%, because six of the
+  twelve parameters take adversarial text *by design* — an unconstrained
+  template, a shell word drawn from a metacharacter alphabet, the encoder's
+  output read back through a POSIX shell, a PowerShell literal to decode, a
+  script to run. A harness whose subject matter is text the filters must not
+  assume well-formed cannot reach 39% while still testing what it exists to
+  test.
+
+  **Why an exemption rather than a refactor.** CodeScene names the missing
+  domain language as the defect, and here the strings *are* the domain: the
+  suite's whole purpose is to hand the filters inputs that are not well-formed
+  words. The repository already carries this exact rule, at weight 0.0, for
+  `src/ir/cmd_interpolate_property_support.rs` — a file of the same shape, whose
+  `matching_content_path_doc` gives the same reason (private test-only
+  strategies and oracles over deliberately adversarial values). The new entry
+  follows that precedent and its documented convention that each rule set be
+  narrowly scoped and justified in `matching_content_path_doc`. It is scoped to
+  one 200-line file, added by a 10-line purely additive JSON edit, and it
+  states the measured alternative rather than asserting that none exists.
+
+  **This concern does not gate the branch.** The `main-required-checks` ruleset
+  (`18427981`) requires exactly `build-test`, `kani-smoke`, `netsukefile`, and
+  `release / metadata`, all four of which passed. Code health is advisory here.
+  It is recorded because it is branch-specific rather than repo-wide noise —
+  `cs delta` is PR-scoped, and a survey of the other open pull requests found
+  10 of 11 passing it, so dismissing it as background would have been wrong.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
