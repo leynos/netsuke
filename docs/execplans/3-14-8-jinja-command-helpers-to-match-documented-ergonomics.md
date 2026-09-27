@@ -3595,6 +3595,121 @@ recorded for whoever hits them next.
   `tests/manifest_env_tests/default_argument.rs`. The full sweep and the
   reasoning are in `Blocked / open questions`.
 
+- [x] (2026-09-27) Rebase onto `96b89ca9`, the seven gates green at `338df305`,
+  and the review findings dispositioned. This entry is the record of the
+  post-review repair pass; the dispositions are itemised so a later reader can
+  re-check them without replaying the review.
+
+  **The rebase and what it cost.** Forty-three commits replayed onto
+  `origin/main` at `96b89ca9`. Exactly one conflict, in `docs/users-guide.md`,
+  in two regions. Both were resolved by keeping this branch's text, because
+  main's side of each hunk was the *pre-3.14.8* prose ("The `shell_escape`
+  filter described in … is not implemented in beta3", "Beta3 does not accept a
+  default argument") — the very sentences `RM-3.14.8` names as the defect.
+  Main's unrelated edit in that file, `beta3` → `beta4` at the version
+  headings, was in disjoint regions and survived intact. That was checked
+  rather than assumed: 11 `beta4` occurrences, and one deliberately historical
+  `beta3` in the note describing the *older* release.
+
+  **Rebase-before-gate ordering matters, and it is the reverse of the
+  intuitive one.** The pre-rebase gate run was void the moment the replay
+  landed, so the gates were re-run on `338df305` *before* any finding repair
+  was committed. That ordering is deliberate: it separates "this branch is
+  green on current main" from "this branch is green with the review fixes", so
+  a failure in the second run cannot be mistaken for a rebase artefact. All
+  seven reported PASS at `338df305`.
+
+  **The PR was `CONFLICTING`, and a conflicting PR runs no CI at all.** No
+  workflow run existed for the pre-rebase head `a2311ee7`; the push that
+  cleared the conflict was immediately followed by three runs for `338df305`.
+  "Queued" and "no runs yet" are different states, and only `mergeable`
+  distinguishes them.
+
+  **Finding dispositions.** Eight findings; four genuine, four refused on
+  evidence. The four genuine ones shared a shape worth naming: each was a case
+  where code did something *reasonable-sounding* that the module's own doc
+  comment, or the RFC it cites, forbids.
+
+  1. **`resolve_dialect` silently stringified a non-string dialect — FIXED.**
+     `kwargs.get::<Option<String>>` routes through `MiniJinja`'s `String`
+     conversion, which `to_string`s a number or boolean, so
+     `shell_quote(dialect=3)` became the dialect named `"3"` and failed as
+     *unknown* rather than as the wrong *type*. RFC 0006 §6.6 forbids exactly
+     this: "A helper that expects a string rejects numbers and booleans rather
+     than stringifying them." It is now read as `Option<Value>` and
+     type-checked explicitly, mirroring `env_default_from_kwargs` in
+     `src/manifest/registration.rs` — the same D4 concern, already solved the
+     same way by commit `e453322c`. The non-string case gets a **dedicated
+     key**, `stdlib.shell.dialect_not_string`, added across all 35 catalogues;
+     folding it into `dialect_invalid` would tell the reader the name was
+     misspelled when the argument's *type* was wrong. The precedent for a
+     dedicated key is `manifest.env.default_not_string`, added for the
+     identical reason.
+  2. **`compact` dropped an empty byte array — FIXED.** `is_blank` asked
+     `Value::as_str`, which answers for well-formed UTF-8 *bytes* as well as
+     for strings (`value/mod.rs:1307-1314`: `ValueRepr::Bytes(b) =>
+     str::from_utf8(b).ok()`), so `Value::from_bytes(vec![])` reported
+     `Some("")` and was discarded on the strength of a text rule that does not
+     apply to it. The predicate now tests `ValueKind::String` first, which is
+     the rule its doc comment already claimed, and a test pins it. The
+     current unreachability is stated in the doc rather than relied on:
+     `value_from_bytes` normalises empty bytes, so nothing constructs such a
+     value today — but the predicate should state what it means, not what
+     happens to arrive.
+  3. **`property_support::posix_shell`'s doc described the wrong algorithm —
+     FIXED.** The comment claimed the well-known absolute paths are consulted
+     *after* a `PATH` lookup. The code does no `PATH` lookup at all; not
+     consulting `PATH` is the point of it. A doc describing a different
+     algorithm than the code runs is worse than no doc, because it is read as
+     authoritative.
+  4. **The Gaelic term for "keyword" was wrong — FIXED.**
+     `stdlib.shell.positional_option` said `fhacal-àirde`, "loud word", not
+     "keyword". Settled against the glossary's own cited authority rather than
+     by opinion: Am Faclair Beag attests `facal-luirg` = "keyword" in the
+     IT/computing sense, so the catalogue now uses it and the glossary gained
+     the row recording the attestation.
+
+  **Refused, with the evidence that refuses them.** Three findings asked for
+  catalogue changes on the strength of the reviewer's reading of the target
+  language. Each was checked against its own file, and each was contradicted
+  by that file's *pre-existing* text: for Scottish Gaelic, Hindi, Indonesian,
+  and Korean, the flagged wording in the new string matched the same
+  catalogue's existing `stdlib.command.quote.line_break` rendering on
+  `origin/main`, and Korean's `열` additionally matched the existing `flatten`
+  and `compact` strings. The styleguide requires the opposite of the finding —
+  quality checklist item 5, "Message families remain parallel … renders
+  identically across the family" — so changing one member to satisfy one
+  reading would have broken the parallelism the styleguide mandates. The
+  change was refused and the reason recorded rather than silently dropped.
+  Only the Gaelic item survived that test, and it survived as a genuinely
+  *new* error, not as a parallelism break.
+
+  **One finding was already fixed.** The `recognise` → `recognize` item in
+  `compact_property.rs:91` had been corrected on an earlier pass; the review
+  thread was reading a stale revision. Re-checked in the working tree, not
+  assumed from the thread's state.
+
+  **Liveness of both behaviour fixes was proved, not argued.** Reverting the
+  `is_blank` guard made the new byte-array test fail with "the surviving
+  length was 0"; reverting `resolve_dialect` made both new BDD scenarios fail.
+  Both were then restored and re-verified green. A test never seen to fail is
+  a hypothesis about the code, not evidence about it.
+
+  **A note on the localized-key cost.** Finding 1 is the only one that grew
+  the catalogue surface, by one key across 35 files. That cost is real and was
+  accepted deliberately: the alternative — reusing `dialect_invalid` — keeps
+  the catalogue smaller while making the diagnostic lie about which mistake
+  the author made. Two diagnostics a reader acts on differently should not
+  share a message.
+
+  **Two Gherkin assertions were rewritten rather than a step invented.**
+  The first draft of the type-error scenarios asserted the message did *not*
+  contain "powershell". No such step exists — `tests/bdd/steps/stdlib/` has
+  only `the stdlib error contains {expected:string}` — so the assertion became
+  `contains "must be a string"`, which is stronger anyway: it proves the
+  type-error path was taken, whereas the absence of "powershell" would also
+  hold if the filter had failed for some unrelated reason.
+
   **A scope fact worth carrying forward.** `make markdownlint` depends on
   `spelling`, which runs `typos-config-builder gate` with its default
   `scope=markdown` — the Makefile passes no `--scope`. The gate therefore scans
