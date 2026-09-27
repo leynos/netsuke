@@ -315,10 +315,14 @@ There is no Terms of Reference document in this repository. Upstream artefacts:
   stability for field-preserving permutations" — discharged as `OBL-ACTION`.
 - `FV-CONTRACT`, the requirement to decide and document what is guaranteed.
 - `ADR-004`, recording the hand-off.
-- A new architecture decision record, referred to throughout as **`ADR-NNN`**.
-  The number is deliberately not allocated: `adr-021-*` is already claimed on
-  four open branches, and `adr-020` on two. Allocate the number in a single
-  pass as the final commit of the plan, after checking remote branches again.
+- A new architecture decision record, referred to throughout by the stable
+  identifier **`ADR-NNN`** and now concretely numbered **`ADR-030`**. The first
+  draft deliberately deferred allocation because `adr-021-*` was then claimed
+  on four open branches and `adr-020` on two. That rationale is stale:
+  `origin/main` merged `adr-020` through `adr-029`, and `adr-039`–`adr-041` are
+  claimed in flight. Allocating now, having swept every ref and every open pull
+  request, avoids a second collision. `ADR-NNN` is retained as the trace
+  identifier so the links below stay stable; it denotes `ADR-030`.
 
 Trace links:
 
@@ -335,7 +339,7 @@ FV-CONTRACT  -> ADR-NNN     -> EP-M6 -> tests::ninja_determinism_process::two_ru
 RM-4.3.1.a   -> ADR-NNN     -> EP-M6 -> ninja_gen::determinism::declaration::declaration_order_does_not_change_emission
 RM-4.2.1.dup -> ADR-004     -> EP-M7 -> ir::graph_property_tests::duplicate_outputs_are_rejected_at_larger_n
 RM-4.2.1.cyc -> ADR-004     -> EP-M7 -> ir::graph_property_tests::cycles_are_rejected_at_larger_n
-FV-CONTRACT  -> ADR-NNN     -> EP-M1 -> docs/adr-NNN-ninja-emission-determinism-contract.md
+FV-CONTRACT  -> ADR-NNN     -> EP-M1 -> docs/adr-030-ninja-emission-determinism-contract.md
 ```
 
 Roadmap §4.4 is titled "Contract documentation and optional proof kernels", and
@@ -424,6 +428,16 @@ question.
   accept partial minimization, and rely on the compact `Debug` from `EP-M3`. If
   counter-examples are still unreadable, stop and redesign the strategy rather
   than raising the iteration cap into the kill window.
+- **Assertion shape.** A property whose assertion is independent of the input's
+  internal representation **must** carry a structural gradient or a compact
+  value-level diagnostic. `EP-M0` question 4 measured this: with a predicate
+  having no gradient, shrinking consumed the full 30-second wall at ~940
+  candidates/s and stopped on the wall rather than on a minimum, producing a
+  different "minimal" input on each run of the same seed. So: no whole-graph
+  hash comparison as an assertion, and pair any representation-independent
+  assertion with the `classify()`-plus-digest diagnostic prototyped in `EP-M0`.
+  If a compact diagnostic cannot be constructed for an obligation, stop and
+  redesign the obligation to assert something with a gradient.
 - **Rejection rate.** If any strategy needs `prop_filter` or `prop_assume!` on
   a structural condition, stop and redesign to construct or drop instead.
 - **Mutation discipline.** If any property still passes with its patch applied,
@@ -455,8 +469,16 @@ question.
 - **Shrinking is unsound because the predicate is not seed-determined.**
   *Severity: high. Likelihood: was certain in the first draft.* *Mitigation:*
   `OBL-ORDER` is restructured so its core is a pure function of the seed, and
-  the end-to-end variant re-materializes until the two iteration orders differ,
-  failing the case if they cannot within a bounded number of attempts.
+  the end-to-end variant draws a well-separated pair of key sets rather than
+  re-materializing and hoping. The original bounded-retry mitigation was
+  **falsified by `EP-M0` question 1** — see `OBL-ORDER` — so this risk is
+  partially realized and now closed by construction rather than by retry.
+- **A counter-example cannot be shrunk to something readable.** *Severity:
+  moderate. Likelihood: measured, certain for representation-independent
+  properties.* *Mitigation:* `Tolerance 5` requires every such property to
+  state a compact, value-level diagnostic — class counts plus a digest — so a
+  failure is diagnosable from its printed case without a re-run log. See
+  `EP-M0` question 4.
 - **Mutation patches rot.** *Severity: moderate. Likelihood: high.* The 4.2.3
   retrospective records all five of its patches going stale twice in two days.
   `every_patch_applies_cleanly` turns rot into a red `make test` for whoever
@@ -471,18 +493,19 @@ question.
   `NETSUKE_REQUIRE_NINJA`, so that lane skips silently today. *Mitigation:* use
   the existing `ninja_is_required` mechanism and record the Windows gap as a
   finding for a separate item rather than fixing it here.
-- **Regression seeds in `tests/` are inert.** *Severity: moderate. Likelihood:
-  high.* Proptest's default `SourceParallel` persistence walks up from
-  `file!()` for a `lib.rs`/`main.rs`; from an integration-test crate it finds
-  neither, so three of the five committed `tests/*.proptest-regressions` files
-  are probably never replayed — including two carrying careful retention
-  comments. *Mitigation:* `EP-M0` question 5 verifies empirically and widens to
-  the existing files; this plan places its properties library-side, where
-  persistence works.
+- **~~Regression seeds in `tests/` are inert.~~** ***Falsified 2026-09-27.***
+  Proptest's default `SourceParallel` persistence does print
+  `failed to find lib.rs or main.rs` from an integration-test crate, but that
+  is a fallback notice, not a failure: it retries against the crate root,
+  saves, and replays. Verified by `EP-M0` question 5. The three suspect files
+  are live. No mitigation is required, and the scope note that proposed a
+  separate fix for them is withdrawn.
 - **Counter-examples are unreadable.** *Severity: moderate. Likelihood: high.*
   Proptest prints the input's `Debug` regardless of the assertion message; a
   50/100 `GraphSpec` is tens of kilobytes. *Mitigation:* a handwritten compact
-  `Debug` is part of `EP-M3`, not a later refinement.
+  `Debug` is part of `EP-M3`, not a later refinement — and `EP-M0` question 4
+  showed it is not sufficient on its own, because the *shrink* does not
+  converge. `Tolerance 5` now bounds what such a property may assert.
 - **ADR number collision.** *Severity: low. Likelihood: high.* Four branches
   claim `adr-021` and two claim `adr-020`. *Mitigation:* `ADR-NNN` placeholder,
   allocated in the final commit.
@@ -608,18 +631,44 @@ than measured, shrinking is exact, and seeds replay.
 
 *End-to-end (composition).* One property builds two `BuildGraph` values from
 one spec in two insertion orders and compares whole bundles — `build_file`, and
-every sidecar's path, content, and position. Because `RandomState` is outside
-the seed, it re-materializes up to eight times until `targets.keys()` and
-`actions.keys()` actually differ between the two graphs, and fails the case if
-they cannot. That makes the predicate near-deterministic and removes the need
-for a run-level vacuity floor entirely.
+every sidecar's path, content, and position.
+
+Because `RandomState` is outside the seed, the two graphs may still iterate
+identically, and the case then says nothing. The first draft resolved this by
+re-materializing up to eight times and failing the case if the orders never
+differed. **`EP-M0` question 1 falsified that bound**, because iteration order
+is a function of the *set of keys inserted together*, not of insertion order
+alone: a map with fewer than five keys very often has an order set with no
+alternative order available at all. Measured over 200 trials per size, with the
+two orders drawn independently:
+
+| keys | trials exhausting 8 attempts | attempts needed when they do differ |
+| ---- | ---------------------------- | ----------------------------------- |
+| 1    | 200 / 200                    | never                               |
+| 2    | 23 / 200                     | up to 8                             |
+| 5    | 0 / 200                      | at most 2                           |
+| 12   | 0 / 200                      | 1                                   |
+| 50   | 0 / 200                      | 1                                   |
+
+A single-key map has exactly one insertion order, so its iteration order can
+*never* differ and the loop was guaranteed to fail every `EP-M3` minimal case.
+The bound is therefore replaced by a **well-separated pair**: draw one order,
+draw a second, and redraw the second (`prop_assume!`-free, by construction)
+until its *key set* differs from the first in at least `ORDER_MIN_DIVERGENCE`
+positions. Drawing two permutations of a ≥ 5-key domain makes the orders differ
+with probability ≥ 0.99 per draw; at 1–4 keys the property skips the end-to-end
+arm and records the class, because there the arm is unreachable in principle
+rather than by bad luck. The generated domain's lower bound is raised from 1 to
+5 actions and edges for the same reason, and the skip is *counted*, not silent.
 
 - **Method:** Proptest, metamorphic.
 - **Rationale:** `RM-4.3.1.a`.
 - **Domain:** `GraphSpec` values with 1 to 50 actions, 1 to 100 edges, and at
   most 200 explicit outputs in total. Both `DependencyOrder` variants; serial
   edges get 0 to 4 implicit dependencies so dyndep staging is genuinely
-  exercised.
+  exercised. The end-to-end arm requires at least `ORDER_MIN_DIVERGENCE` (5)
+  distinct keys in each collection and skips the case below that, recording the
+  skip.
 - **Oracle:** the second emission — metamorphic. Additionally, a *differential*
   arm asserts that whenever
   `GraphView::from_build_graph(g_u) == GraphView::from_build_graph(g_v)`, the
@@ -930,33 +979,39 @@ substitute is mutation-driven red, recorded in `Validation and acceptance`.
 
 ### EP-M0 — feasibility and measurement spike (prototyping)
 
-*Prototype; scratch commits, not merged.* Seven questions. Three are already
-answered and recorded in `Artefacts and notes`; four remain.
+*Prototype; scratch commits, not merged.* Seven questions, all now answered and
+recorded in `Artefacts and notes`.
 
-1. Do two insertion permutations of a 50/100 graph actually produce different
-   iteration orders, and how often? Also: how many re-materialization attempts
-   does the bounded loop in `OBL-ORDER` need in practice?
-2. Does `OBL-E2E` hold today? Build a manifest, permute `targets`, lower and
-   emit both, compare bytes. Repeat for `actions`. **This gates `EP-M1`'s ADR
-   content**, so it runs first.
+1. *(Answered — design change.)* Re-materialization **cannot** make two
+   iteration orders differ at small N, so the bounded loop is unsound as
+   written. See `Artefacts and notes` and the `OBL-ORDER` rewrite.
+2. *(Answered — `OBL-E2E` holds.)* Byte-identical emission across 24
+   declaration permutations, including the reachable failure class.
 3. *(Answered.)* Per-case cost.
-4. Does a 50/100 counter-example shrink to something readable within the
-   30-second `max_shrink_time`?
-5. Do regression seeds persist for a library-side property? Widen the check to
-   the three existing `tests/*.proptest-regressions` files suspected inert.
-6. *(Answered.)* Is `adr-021` claimed?
-7. *(Answered.)* Can a `src/`-side `#[cfg(test)]` module receive a
-   `netsuke`-typed value from `test_support`?
+4. *(Answered — **no**.)* A 50/100 counter-example does not shrink to something
+   readable within 30 seconds; it does not converge at all.
+5. *(Answered — **falsified**.)* Integration-test regression seeds persist and
+   replay. The plan's "probably inert" risk is wrong.
+6. *(Answered — superseded.)* `adr-021` was claimed on four branches, but
+   `origin/main` has since absorbed `add-020`…`add-029`; the next free number
+   is **`ADR-030`**.
+7. *(Answered — no.)* A `src/`-side `#[cfg(test)]` module cannot receive a
+   `netsuke`-typed value from `test_support`.
 
 *Acceptance:* every question has a recorded answer. *Conformance check:* if
-question 2 answers "no", stop and escalate before `EP-M1`. *Recovery:* discard
-the scratch commits.
+question 2 answers "no", stop and escalate before `EP-M1`. Question 2 answered
+"yes"; no escalation was needed. *Recovery:* discard the scratch commits.
+
+*Outcome:* the spike found two defects in this plan before implementation began
+— an unsound `OBL-ORDER` loop and a false regression-seed risk — plus a
+three-hour cost finding that reshaped how obligations may be assessed. The
+prototype source was scratch and has been deleted; nothing from it is merged.
 
 ### EP-M1 — state the determinism contract
 
 *Assigned:* `FV-CONTRACT`, `ADR-NNN`.
 
-Write `docs/adr-NNN-ninja-emission-determinism-contract.md` in the repository's
+Write `docs/adr-030-ninja-emission-determinism-contract.md` in the repository's
 Y-Statement style, **before any property is authored**, from the four
 statements in `Context and orientation`. It must state:
 
@@ -1101,7 +1156,7 @@ match at line 165 concerns the `graph` subcommand's renderer, so the anchor
 must be chosen deliberately and `FV-CONTRACT`'s stale citation corrected in the
 same commit; a decision, recorded in `Decision log`, on whether the six
 translated READMEs are updated in step or tracked separately;
-`docs/netsuke-design.md` §5.5 referencing `ADR-NNN` and correcting its
+`docs/netsuke-design.md` §5.5 referencing `ADR-030` and correcting its
 unqualified determinism claim; a developers'-guide subsection; an annotation on
 `ADR-004` recording its deferred obligations as discharged; the roadmap marked
 done; and allocation of the real ADR number after re-checking remote branches.
@@ -1354,7 +1409,76 @@ a separate cache. If `/tmp` or the disk fills, stop and report.
 
 ## Artefacts and notes
 
-### Answers already obtained (2026-09-09)
+### Answers obtained during `EP-M0` (2026-09-27)
+
+All four remaining questions were answered against a throwaway integration-test
+probe, since deleted. Each answer either confirmed a plan decision or forced
+one to change; the changes are in `OBL-ORDER` and in `Risks`.
+
+**Question 5 — do regression seeds persist for an integration-test crate? Yes,
+contrary to the plan.** A deliberately failing property in
+`tests/zz_scratch_probe.rs` printed
+
+```plaintext
+proptest: FileFailurePersistence::SourceParallel set, but failed to find lib.rs or main.rs
+proptest: Saving this and future failures in .../tests/zz_scratch_probe.proptest-regressions
+```
+
+and then **replayed the saved seed** on the next run. The
+`FileFailurePersistence` message is a *fallback notification*, not a failure:
+persistence retries against the crate root and succeeds. The `Risk` entry
+claiming three of the five committed files are "probably never replayed" is
+**false** and has been removed. The related `Design review findings` entry,
+which proposed a separate fix for those files, is withdrawn with it.
+
+**Question 1 — the `OBL-ORDER` re-materialization loop is unsound.** Two
+independently drawn insertion orders of the same key set frequently produce the
+*same* iteration order, and at small sizes no other order is reachable at all.
+The `OBL-ORDER` section above records the measurements and the replacement
+design: a well-separated pair of key sets, with the end-to-end arm skipped and
+counted below five distinct keys.
+
+**Question 2 — `OBL-E2E` holds today.** Twenty-four declaration permutations of
+a four-target manifest (including reversals and rotations), lowered and
+emitted, were **byte-identical**. The same held for permuting
+`manifest.actions` order. The rule-name precondition is load-bearing and
+*reachable*: two same-named rules with different bodies do diverge
+(`command = echo v2` versus `command = echo v1`), so the directed test that
+`EP-M6` adds is testing a real class, not a hypothetical one. Interning was
+also observed directly — two targets with an identical recipe collapse onto one
+action hash (`a2ff8376…` for both `out-c` and `out-d`).
+
+**Question 4 — a 50/100 counter-example does not shrink readably in 30 seconds;
+it does not converge at all.** The prototype's compact `Debug` did print the
+100-edge counter-example on one screen, so readability is solved. Convergence
+is not. With a predicate carrying no structural gradient, shrinking spent the
+whole 30-second wall and stopped on the wall, not on a minimal example, and the
+reported "minimal" input wandered across repeated runs of the same seed and
+predicate:
+
+```plaintext
+run 1 (max_shrink_iters = 128, the 4 × cases default): 39 edges
+run 2 (max_shrink_iters = 200 000):                      90 edges
+run 3 (max_shrink_iters = 200 000):                      43 edges
+run 4 (max_shrink_time = 5 000):                         73 edges
+```
+
+Generation is not the bottleneck: the shrink loop completed roughly 4,700
+candidates in a 5-second window (**≈ 940 candidates/s**), so 30 seconds buys
+about 28,000 candidates, which is not enough. The consequence for this plan is
+a verification-quality constraint, recorded as `Tolerance 5`: a property's
+*assertion* must carry a structural gradient, and a property independent of the
+internal representation must state a **compact, value-level** diagnostic
+(`classify()` counts plus a digest, as prototyped) so a case is diagnosable
+from its printed counter-example rather than from a re-run log.
+
+**Question 6 (superseded).** `adr-021` was claimed on four branches when this
+plan was written. `origin/main` has since absorbed `adr-020` through `adr-029`,
+and two unmerged branches hold `adr-039` to `adr-041`. Sweeping every local and
+remote ref, the next free number is **`ADR-030`**, not four. `adr-030` and
+`adr-031` are unclaimed on every branch and in every open pull request.
+
+### Answers obtained in the first planning pass (2026-09-09)
 
 **Question 7 — can `src/`-side tests use `test_support` strategies carrying
 netsuke types? No.** Proven by compile probe: a `test_support` function
@@ -1375,7 +1499,9 @@ carry IR types, is consumed only from `tests/`. The probe was reverted and the
 tree confirmed clean.
 
 **Question 6 — is `adr-021` claimed? Yes, four times**, on the branches for
-issues 592, 643, 644 and 646. `adr-020` is claimed twice. Hence `ADR-NNN`.
+issues 592, 643, 644 and 646. `adr-020` is claimed twice. Hence the `ADR-NNN`
+placeholder in the second draft. **Superseded:** see `EP-M0` question 6 in the
+2026-09-27 answers above, which fixes the number at `ADR-030`.
 
 **Question 3 — per-case cost.** Measured on this six-core Rocky 10 box, dev
 profile (opt-level 0 with debug assertions, matching `cargo nextest`):
@@ -1401,8 +1527,9 @@ production scale is 16.2 ms release for a 10,000-edge graph, so the repeated
 
 ### Still to record
 
-`EP-M0` questions 1, 2, 4, 5; `EP-M2` timings; per-obligation classification
-counts; per-mutation transcripts; final gate logs; CodeRabbit outcomes.
+`EP-M2` timings; per-obligation classification counts; per-mutation
+transcripts; final gate logs; CodeRabbit outcomes. All `EP-M0` questions are
+answered above.
 
 ## Progress
 
@@ -1428,9 +1555,29 @@ counts; per-mutation transcripts; final gate logs; CodeRabbit outcomes.
       `src/ninja_gen/mod.rs`; the `graph_view` prior art; `NETSUKE_REQUIRE_NINJA`;
       the nextest no-retry policy; and the nightly `cargo-mutants` job.
 - [x] (2026-09-09T00:00:00Z) Rewrote the plan against the review findings.
-- [ ] Approval gate: await explicit user approval before any implementation.
-- [ ] `EP-M0`: answer questions 1, 2, 4, 5. Question 2 gates `EP-M1`.
-- [ ] `EP-M1`: write `ADR-NNN`.
+- [x] (2026-09-27T00:00:00Z) Approval gate: the user directed implementation to
+      proceed, which is the explicit approval the gate requires.
+- [x] (2026-09-27T00:00:00Z) `EP-M0` question 7: a `src/`-side `#[cfg(test)]`
+      module cannot receive a `netsuke`-typed value from `test_support`.
+- [x] (2026-09-27T00:00:00Z) `EP-M0` question 6: `adr-021` is superseded by
+      merge; the next free number is `ADR-030`, verified by sweeping every
+      local and remote ref and every open pull request.
+- [x] (2026-09-27T00:00:00Z) `EP-M0` question 3: per-case cost, plus the
+      `ninja -t commands` and `default`-position findings.
+- [x] (2026-09-27T00:00:00Z) `EP-M0` question 5: integration-test regression
+      seeds **do** persist and replay; the plan's "inert" risk is falsified and
+      removed.
+- [x] (2026-09-27T00:00:00Z) `EP-M0` question 2: `OBL-E2E` holds across 24
+      declaration permutations; the excluded rule-name class is reachable.
+- [x] (2026-09-27T00:00:00Z) `EP-M0` question 1: the bounded
+      re-materialization loop is unsound at small N; `OBL-ORDER` rewritten to
+      draw a well-separated pair.
+- [x] (2026-09-27T00:00:00Z) `EP-M0` question 4: shrinking does not converge on
+      a gradient-free predicate; `Tolerance 5` and a new `Risk` added.
+- [x] (2026-09-27T00:00:00Z) Recorded all `EP-M0` answers and deleted the
+      scratch prototype. `EP-M0` is complete; nothing from the prototype is
+      merged.
+- [ ] `EP-M1`: write `ADR-030`.
 - [ ] `EP-M2`: file splits, mutation-evidence contract, ordering helpers,
       `make proptest`.
 - [ ] `EP-M3`: shared strategy and compact `Debug`.
@@ -1471,10 +1618,11 @@ counts; per-mutation transcripts; final gate logs; CodeRabbit outcomes.
 - (2026-09-09) `ninja -t commands` does not load dyndep sidecars: a graph
   referencing a missing sidecar exits 0. An oracle using only `-t commands`
   would be vacuous over the sidecar bundle.
-- (2026-09-09) Three of the five committed `tests/*.proptest-regressions` files
-  are probably never replayed, because Proptest's default persistence finds no
-  `lib.rs`/`main.rs` above an integration-test crate. Two carry careful
-  retention comments that may have never had effect.
+- (2026-09-09) *(Falsified 2026-09-27.)* Three of the five committed
+  `tests/*.proptest-regressions` files are probably never replayed, because
+  Proptest's default persistence finds no `lib.rs`/`main.rs` above an
+  integration-test crate. **Wrong:** persistence falls back to the crate root,
+  saves, and replays. The warning is cosmetic. See `EP-M0` question 5.
 - (2026-09-09) `register_action` hard-codes `depfile`, `deps_format`, `pool`,
   and `restat`, so no manifest can populate them. `OBL-ORDER`'s direct-graph
   strategy is the only obligation reaching those emitter branches, which makes
@@ -1486,6 +1634,31 @@ counts; per-mutation transcripts; final gate logs; CodeRabbit outcomes.
 - (2026-09-09) `make fmt`'s `mdtablefix --renumber` converted a wrapped line
   beginning "72." into an ordered-list item, truncating the sentence before it.
   No gate caught it; it was found by a reviewer reading the prose.
+- (2026-09-27) `HashMap` iteration order is a function of the *key set* as much
+  as of insertion order. A one-key map has exactly one insertion order, so two
+  "different" permutations of it are the same map and can never produce
+  different iteration orders. The first draft's retry-until-they-differ design
+  was therefore guaranteed to fail every minimal case. Measured: 200/200 trials
+  exhausted their budget at one key, 23/200 at two, 0/200 at five.
+- (2026-09-27) A deliberately failing property in an integration-test crate
+  saves and replays its regression seed. `failed to find lib.rs or main.rs` is
+  a fallback notice, not a persistence failure. This overturned a `Risk` entry
+  the design review had added.
+- (2026-09-27) `OBL-E2E` holds today, confirmed empirically rather than by
+  reading: 24 declaration permutations emitted byte-identical bundles. Also
+  confirmed reachable — two same-named rules with different bodies *do*
+  diverge, so the restriction `OBL-E2E` states is load-bearing.
+- (2026-09-27) Shrinking a gradient-free predicate does not converge. Proptest
+  reached ~940 candidates/s, ~4,700 in a 5-second window, and 30 seconds still
+  stopped on the wall rather than on a minimum, reporting a different "minimal"
+  input each run (39, 90, 43, 73 edges). A moderate iteration cap (`4 x cases`
+  = 128) actually produces a *smaller* case than a 200,000 cap, because the cap
+  bounds the time spent wandering. Readability needs a compact diagnostic;
+  minimization needs a gradient. Both, not either.
+- (2026-09-27) `origin/main` now carries `adr-020` through `adr-029`, so the
+  design review's `ADR-NNN` placeholder resolves to a concrete number instead
+  of being deferred. The plan's two-round-old claim that `adr-020` and
+  `adr-021` were both multiply claimed is stale.
 
 ## Decision log
 
@@ -1563,10 +1736,36 @@ counts; per-mutation transcripts; final gate logs; CodeRabbit outcomes.
   contract test is a repository-wide rot detector and weakening it would be
   worse than dropping a patch. Date/Author: 2026-09-09 / planning agent.
 
-- Decision: use `ADR-NNN` as a placeholder and allocate the number in the final
-  commit. Rationale: `adr-021` is claimed on four open branches and `adr-020`
-  on two; the repository already has three historical collisions. Date/Author:
-  2026-09-09 / planning agent.
+- ~~Decision: use `ADR-NNN` as a placeholder and allocate the number in the
+  final commit.~~ **Superseded 2026-09-27.** Decision: the number is
+  **ADR-030**, allocated now rather than deferred. Rationale: the earlier
+  rationale (four branches claiming `adr-021`) was true when written but has
+  been overtaken — `origin/main` merged `adr-020` through `adr-029`. Sweeping
+  every local and remote ref and every open pull request, `adr-030` and
+  `adr-031` are the lowest unclaimed numbers; `adr-039`–`adr-041` are claimed
+  in flight. Deferring allocation again risks a second collision, and `EP-M1`
+  needs the number to write the filename. Date/Author: 2026-09-27 /
+  implementation agent.
+- Decision: `OBL-ORDER`'s end-to-end arm draws a well-separated pair of key
+  sets instead of re-materializing until iteration orders differ, and raises
+  the generated lower bound to five actions and five edges. Rationale: `EP-M0`
+  question 1 measured that the original loop cannot succeed below five keys
+  (200/200 failures at one key, 23/200 at two), so it would have failed every
+  minimal counter-example. Failing a case for a property the *domain* makes
+  unreachable is a flakiness source, and this repository has an explicit
+  no-retry policy. Date/Author: 2026-09-27 / implementation agent.
+- Decision: add `Tolerance 5`, bounding what a representation-independent
+  property may assert, and a matching `Risk`. Rationale: `EP-M0` question 4
+  showed shrinking does not converge for such predicates, so the plan could
+  otherwise author obligations that are correct but not diagnosable. The
+  tolerance makes "assert something with a gradient, or pair it with a compact
+  value-level diagnostic" an enforceable rule rather than a preference.
+  Date/Author: 2026-09-27 / implementation agent.
+- Decision: withdraw the planned separate fix for the three supposedly inert
+  `tests/*.proptest-regressions` files. Rationale: `EP-M0` question 5 falsified
+  the premise. There is nothing to fix, and carrying a scope item for a
+  non-problem would be exactly the kind of unbounded scope the `Tolerances`
+  section exists to prevent. Date/Author: 2026-09-27 / implementation agent.
 
 - Decision: state `OBL-E2E` only for manifests with distinct rule names, and
   add a directed test reaching the excluded class. Rationale: `process_rules`
@@ -1592,9 +1791,11 @@ accepted but deferred, so they are not lost:
 - `ci-windows.yml` installs Ninja but does not set `NETSUKE_REQUIRE_NINJA`, so
   that lane's Ninja-dependent tests skip silently. Out of scope here; worth a
   separate item.
-- Three committed `tests/*.proptest-regressions` files are probably inert. This
-  plan's properties are library-side, where persistence works; the existing
-  files deserve a separate fix.
+- ~~Three committed `tests/*.proptest-regressions` files are probably inert.
+  This plan's properties are library-side, where persistence works; the
+  existing files deserve a separate fix.~~ **Withdrawn 2026-09-27:** the
+  premise was falsified by `EP-M0` question 5. The files are live and need no
+  fix.
 - `src/ninja_gen/mod.rs:178` clones a key that is dead immediately after
   (`seen.insert(key.clone())`), where `dyndep.rs:161` already moves it. A
   trivial follow-up, not taken here under `Constraint 1`.
@@ -1613,9 +1814,18 @@ generalized mutation-evidence contract held up.
 
 ## Revision note
 
+- 2026-09-27 (this revision, post-`EP-M0`): all seven `EP-M0` questions are
+  answered and the spike is complete. Two plan defects were found and fixed
+  before any implementation began: `OBL-ORDER`'s bounded re-materialization
+  loop was unsound below five keys, and the "regression seeds are inert" risk
+  was false. One new tolerance (`Tolerance 5`) and one new `Risk` were added,
+  both from the measured behaviour of shrinking. `ADR-NNN` resolved to
+  `ADR-030`. The prototype was deleted; nothing from it is merged. Milestone
+  completeness is unchanged — `EP-M1` through `EP-M8` proceed as written apart
+  from the `OBL-ORDER` rewrite.
 - 2026-09-09 (first draft): established the obligation set, the determinism
   statements, the shared strategy, mutation-driven red, and eight milestones.
-- 2026-09-09 (this revision): rewritten after a six-lens design review. The
+- 2026-09-09 (second revision): rewritten after a six-lens design review. The
   strategy moved from `test_support` to `src/` after a compile probe proved the
   first layout impossible; `OBL-ORDER` was restructured because its predicate
   was not seed-reproducible; `OBL-GUARD` became `OBL-NOLOSS` to assert an
