@@ -11,8 +11,8 @@ Status: DRAFT
 This plan must be approved before implementation begins. No production code may
 change until the user explicitly approves it. Approval also accepts the
 technical-design deviations listed under `Decision log` (entries marked
-"Deviation") and should answer the open question recorded there about
-file-reading filters under test.
+"Deviation"). The user has already settled the one open question, about
+file-reading filters under test (see `Decision log`).
 
 ## Purpose / big picture
 
@@ -422,7 +422,10 @@ and YAML fixtures, and were set from the inventory in Table 1.
   and verification, alternatives and viability); all three returned "revise".
 - [x] (2026-09-27) Revised the plan to address every panel finding (see the
   revision note).
-- [ ] User approval of the plan, the listed deviations, and the open question.
+- [x] (2026-09-27) User decision on the file-reading filters: extend roadmap
+  7.4.1 to root them at the sandbox. Roadmap 7.4.1 and design §5.5 updated in
+  the plan's pull request.
+- [ ] User approval of the plan and the listed deviations.
 - [ ] EP-M0 — characterization baseline.
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
@@ -448,8 +451,8 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `src/stdlib/path/filters.rs::register_filters`,
   `src/stdlib/path/path_utils.rs::current_dir_utf8`. Impact: test mode refuses
   all six (C4). Because UX design §8.6 makes filters unmockable in the first
-  version, a manifest using them could never be tested. Raised as the open
-  question in `Decision log`.
+  version, a manifest using them could never be tested. Resolved by the user:
+  roadmap 7.4.1 now roots these filters at the sandbox (see `Decision log`).
 
 - Observation: manifest-query registration does not install the legacy Boolean
   formatter that `register_with_config` installs. Evidence:
@@ -550,17 +553,18 @@ and YAML fixtures, and were set from the inventory in Table 1.
   impure call an error. The functions among these (`glob`, `which`, `fetch`,
   `command_available`, `now`) remain replaceable by overlays; filters and tests
   are not mockable in the first version (UX §8.6). Roadmap 7.4.1 later replaces
-  the `glob` and file-test stubs with sandbox-rooted adapters. Recorded in
-  ADR-041. Date/Author: 2026-09-27, planning agent.
+  the `glob`, file-test, and file-reading filter stubs with sandbox-rooted
+  adapters. Recorded in ADR-041. Date/Author: 2026-09-27, planning agent.
 
 - Decision (Deviation from design §5.5): `which` and `expanduser` refuse under
   test, although §5.5's table implies they run against an empty `PATH` and a
   missing home. Of `StdlibConfig`'s settings, test mode honours only the clock
-  in 7.1.2; the workspace root becomes relevant when 7.4.1 roots `glob` and the
-  file tests at it. Rationale: `which` with an empty `PATH` yields a misleading
-  "not found" rather than a refusal pointing at doubles, and `expanduser`
-  exposes a host-shaped answer. Refusal keeps the rule "unmocked impure call is
-  an error" uniform. Date/Author: 2026-09-27, planning agent after panel review.
+  in 7.1.2; the workspace root becomes relevant when 7.4.1 roots `glob`, the
+  file tests, and the file-reading filters at it. Rationale: `which` with an
+  empty `PATH` yields a misleading "not found" rather than a refusal pointing
+  at doubles, and `expanduser` exposes a host-shaped answer. Refusal keeps the
+  rule "unmocked impure call is an error" uniform. Date/Author: 2026-09-27,
+  planning agent after panel review.
 
 - Decision: test-mode refusals are MiniJinja `InvalidOperation` errors whose
   message is the Fluent key `stdlib.test_mode.helper_unavailable` (argument
@@ -664,16 +668,19 @@ and YAML fixtures, and were set from the inventory in Table 1.
   re-check at every rebase. Date/Author: 2026-09-27, planning agent after panel
   review.
 
-- Open question for the approver: the six file-reading filters (`contents`,
-  `size`, `linecount`, `hash`, `digest`, `realpath`) refuse under test in this
-  plan, and filters cannot be doubled in the first version, so manifests using
-  them cannot be tested. Options: extend roadmap 7.4.1 to root these filters at
-  the sandbox; add a new 7.4.x item; or accept permanent refusal. This plan's
-  implementation is the same under all three; only the roadmap text differs. A
-  related follow-on, out of scope here (C2): query mode still runs `FILE_TESTS`
-  against the real filesystem, and the query stubs for `hash`, `digest`, and
-  `contents` reject keyword arguments before refusing. Date/Author: 2026-09-27,
-  planning agent.
+- Decision: the six file-reading filters (`contents`, `size`, `linecount`,
+  `hash`, `digest`, `realpath`) refuse under test in 7.1.2, and roadmap 7.4.1
+  is extended to replace those stubs with sandbox-rooted adapters, alongside the
+  `glob()` and file-test adapters it already owned. Roadmap 7.4.1 and
+  technical design §5.5 were updated in this plan's pull request. Rationale:
+  filters cannot be doubled in the first version (UX §8.6), so without sandbox
+  adapters a manifest that reads or hashes a file could never be tested. The
+  alternatives, a new 7.4.x item or permanent refusal, were rejected. The 7.1.2
+  implementation is unchanged by the decision: these filters refuse until 7.4.1
+  lands. A related follow-on remains out of scope here (C2): query mode still
+  runs `FILE_TESTS` against the real filesystem, and the query stubs for `hash`,
+  `digest`, and `contents` reject keyword arguments before refusing.
+  Date/Author: 2026-09-27, decided by the user; recorded by the planning agent.
 
 ## Outcomes & retrospective
 
@@ -1028,7 +1035,7 @@ After each milestone, perform the conformance check listed and update
 - Conformance check: every deviation in `Decision log` appears in the design or
   an ADR.
 - Recovery: revert documentation commits.
-- Remaining gaps: the open question's roadmap outcome, as the approver decides.
+- Remaining gaps: none for 7.1.2; the sandbox adapters belong to 7.4.1.
 - Compatibility decision: none.
 
 ## Plan of work
@@ -1114,9 +1121,9 @@ computed before step 3 and reused by the existing reserved-name check), and
 Update `docs/netsuke-test-framework-technical-design.md`: §4.2 (current
 anchors), §4.3 (options shape, `TestSurface`, overlays in the test surface,
 `AmbientFull`, string entry plus crate-private path entry, deferred
-`macro_substitutions`, overlay name rules), §5.5 (full refusing inventory
-including the six file-reading filters and `which`/`expanduser`), and §7
-(shadowed-function capture is possible). Write
+`macro_substitutions`, overlay name rules), §5.5 (the full refusing inventory
+and the `which`/`expanduser` deviation; the six file-reading filters are
+already recorded there), and §7 (shadowed-function capture is possible). Write
 `docs/adr-041-deny-by-default-test-mode-stdlib.md` (surface, refusal code and
 typed source, `is_system` as injection) and index it in `docs/contents.md`. Add
 Addendum E to `docs/adr-018-bound-manifest-template-evaluation.md`. Add a
@@ -1360,3 +1367,13 @@ translation-unsafe marker, a scope ceiling breached by construction, and
 forward-compatibility of the overlay API). Effect on remaining work: the plan
 awaits approval of the recorded deviations and an answer to the open question
 on file-reading filters.
+
+2026-09-27, after the user's decision on the open question. What changed: the
+open question became a `Decision log` entry. Roadmap 7.4.1 now also roots the
+`contents`, `size`, `linecount`, `hash`, `digest`, and `realpath` filters at
+the sandbox, and technical design §5.5 names them as a third group of ambient
+bypasses. Why: the user chose to extend 7.4.1 rather than add an item or accept
+permanent refusal. Effect on remaining work: none on the 7.1.2 implementation,
+which refuses these filters until 7.4.1 lands; EP-M5 no longer needs to add the
+filters to §5.5, and has no remaining roadmap gap. The plan awaits approval of
+the recorded deviations.

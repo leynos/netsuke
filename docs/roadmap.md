@@ -1448,13 +1448,16 @@ Objective: deliver the `netsuke test` command and YAML test dialect specified in
 
 ### 7.4. Fixture engine
 
-- [ ] 7.4.1. Add sandbox-rooted `glob()` and file-test adapters for the
-  test registration. Requires: 7.1.2. See
+- [ ] 7.4.1. Add sandbox-rooted `glob()`, file-test, and file-reading filter
+  adapters for the test registration. Requires: 7.1.2. See
   [technical design §5.5](netsuke-test-framework-technical-design.md).
   - [ ] Resolve relative glob patterns against the case sandbox rather
     than the process working directory.
   - [ ] Resolve file-test paths through the sandbox handle instead of
     `open_ambient_dir`, rejecting escapes.
+  - [ ] Resolve the `contents`, `size`, `linecount`, `hash`, `digest`, and
+    `realpath` filters through the sandbox handle instead of the process
+    working directory, rejecting escapes and keeping the bounded-read limits.
   - [ ] Leave the build path's ADR-010 behaviour unchanged.
 
 - [ ] 7.4.2. Implement the fixture lifecycle. See
