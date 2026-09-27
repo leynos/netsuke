@@ -291,27 +291,25 @@ fn probe_fields() -> Result<Vec<String>> {
 /// The query surface quotes exactly as the build surface does.
 ///
 /// This is the assertion the plan calls for, and it is *not* the one the plan
-/// imagined. `src/stdlib/register.rs:190` documents the divergence as
-/// deliberate — the query surface quotes for
-/// [`RecipeShell::host_default`] rather than for the shell the build resolves —
-/// but on this codebase the two surfaces cannot actually disagree about *any*
-/// dialect, for a reason the plan's rationale does not mention:
+/// imagined. `register_query_helpers` documents the divergence as deliberate —
+/// the query surface quotes for [`RecipeShell::host_default`] rather than for
+/// the shell the build resolves — but here the two surfaces cannot actually
+/// disagree about *any* dialect, for a reason the plan's rationale omits:
 ///
 /// * `resolve_recipe_shell_with` returns [`RecipeShell::Posix`] on a non-Windows
 ///   host *before* it reads `NETSUKE_WINDOWS_SHELL`, so on Unix a malformed
-///   value cannot be reached at all and the resolved shell is always the host
-///   default.
-/// * On Windows there is no early return, but `execute_help` returns before
-///   `resolve_recipe_shell()` is called (`src/runner/mod.rs:149-153`), so the
-///   query never resolves it either — and `registry`, the crate-private
-///   reference `register_query_helpers` uses, *is* `host_default()`.
+///   value cannot be reached at all and the shell is always the host default.
+/// * On Windows there is no early return, but `execute_help` returns from the
+///   dispatcher before `resolve_recipe_shell` is ever called, so the query
+///   never resolves it either — and `registry`, the crate-private reference
+///   `register_query_helpers` uses, *is* `host_default()`.
 ///
 /// So the plan's stated hazard — that hoisting the resolution would "make
 /// `netsuke help targets` fail on a Windows host with a malformed
 /// `NETSUKE_WINDOWS_SHELL`" — is unreachable either way, and this test pins the
 /// agreement that actually holds: given an explicit dialect, a `shell_quote` or
-/// `shell_join` in a description renders identically to the same expression
-/// under the full stdlib, on every host.
+/// `shell_join` in a description renders identically under the full stdlib, on
+/// every host.
 ///
 /// `assert_full_stdlib_renders` is the negative control: if the probe failed
 /// under the full stdlib too, the comparison below would be satisfied by two
@@ -335,13 +333,13 @@ fn query_surface_agrees_with_the_build_on_explicit_dialects() -> Result<()> {
 /// The index of the trio field that carries the dialect the host resolves to.
 ///
 /// `RecipeShell::host_default` is `PowerShell` on Windows and `Posix` — which
-/// shares the `Sh` dialect with `Bash` — everywhere else
-/// (`src/recipe_shell.rs:36-42`). Mirroring that `cfg!` here is not a second
-/// guess at the host: it is the same predicate restated where a reader of this
-/// contract can check it, and it is what makes the assertion below
-/// falsifiable. A membership test over *both* twins would not be — seeding
-/// `register_query_helpers` with the PowerShell dialect satisfies it on a Unix
-/// host, because the omitted field then equals the PowerShell twin.
+/// shares the `Sh` dialect with `Bash` — everywhere else. Mirroring that `cfg!`
+/// here is not a second guess at the host: it is the same predicate restated
+/// where a reader of this contract can check it, and it is what makes the
+/// assertion below falsifiable. A membership test over *both* twins would not
+/// be — seeding `register_query_helpers` with the PowerShell dialect satisfies
+/// it on a Unix host, because the omitted field then equals the PowerShell
+/// twin.
 const fn host_default_field(trio: (usize, usize, usize)) -> usize {
     let (sh_index, power_shell_index, default_index) = trio;
     if cfg!(windows) {
