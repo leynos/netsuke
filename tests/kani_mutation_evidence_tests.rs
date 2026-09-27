@@ -199,7 +199,7 @@ fn patch_stem_for_harness(harness: &str) -> String {
     harness.replace("::", "__")
 }
 
-/// Derive the source file and property function named by a supplemental patch.
+/// Derive the directory-module source and property named by a supplemental patch.
 fn supplemental_property_location(patch_stem: &str) -> Result<(Utf8PathBuf, String)> {
     let mut segments: Vec<&str> = patch_stem.split("__").collect();
     let property_name = segments
@@ -216,11 +216,11 @@ fn supplemental_property_location(patch_stem: &str) -> Result<(Utf8PathBuf, Stri
         !module_segments.is_empty(),
         "supplemental patch {patch_stem} has no property module",
     );
-    let source_name = module_segments.join("_");
     Ok((
         Utf8Path::new("src")
             .join(root)
-            .join(format!("{source_name}.rs")),
+            .join(module_segments.join("/"))
+            .join("mod.rs"),
         property_name.to_owned(),
     ))
 }

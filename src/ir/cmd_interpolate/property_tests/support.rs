@@ -1,6 +1,6 @@
 //! Shared strategies and oracles for command-interpolation property tests.
 //!
-//! This support stays private to `cmd_interpolate_property_tests`: it owns
+//! This support stays private to `cmd_interpolate::property_tests`: it owns
 //! generated templates and independent POSIX scanner assertions, but is not a
 //! production interpolation API or a Kani harness dependency.
 

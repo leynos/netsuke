@@ -5258,9 +5258,9 @@ fixture's own loops can ask it for a deadline or a poll interval while nothing
 outside the fixture can configure one. `config_tests.rs` is its `#[path]`
 child, declared by `config.rs`. `raw_tests.rs` is declared by `mod.rs`.
 
-### `src/ir/cmd_interpolate_property_support.rs`
+### `src/ir/cmd_interpolate/property_tests/support.rs`
 
-This test-only sibling module is owned by the command-interpolation property
+This test-only support module is owned by the command-interpolation property
 tests. It may contain their generators, independent specifications, and shared
 assertions, but it must not be used by production code or the Kani harnesses.
 Keep those proof and production boundaries explicit; move a helper here only
@@ -5271,9 +5271,9 @@ private to its parent, give it a `//!` header stating the split reason and
 ownership, cap its public surface at `pub(super)`, and document it here so the
 boundary inventory stays complete.
 
-The test-only sibling `src/ir/cmd_interpolate_power_shell_tests.rs` owns the
+The test-only `src/ir/cmd_interpolate/power_shell_tests.rs` module owns the
 command-interpolation cases for protected PowerShell contexts. Keep those cases
-in the sibling so the parent test module stays below the 400-line cap;
+in this module so the parent test module stays below the 400-line cap;
 production code must not depend on this test module.
 
 ## Behavioural testing strategy

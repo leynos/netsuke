@@ -327,16 +327,13 @@ const _: () = assert!(
 #[path = "posix_lexical_tests.rs"]
 mod posix_lexical_tests;
 #[cfg(test)]
-#[path = "../cmd_interpolate_property_tests.rs"]
 mod property_tests;
 
 #[cfg(kani)]
 mod verification;
 
 #[cfg(test)]
-#[path = "../cmd_interpolate_tests.rs"]
 mod tests;
 
 #[cfg(test)]
-#[path = "../cmd_interpolate_power_shell_tests.rs"]
 mod power_shell_tests;

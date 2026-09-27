@@ -218,5 +218,4 @@ proptest! {
     }
 }
 
-#[path = "cmd_interpolate_property_support.rs"]
 mod support;
