@@ -5,6 +5,7 @@ mod common;
 use common::workflow_contents;
 use rstest::rstest;
 
+/// Verify that the release workflow uses the approved shared actions.
 #[test]
 fn behavioural_release_workflow_uses_shared_actions() {
     let contents = workflow_contents("release.yml").expect("release workflow should be readable");
@@ -27,6 +28,7 @@ fn behavioural_release_workflow_uses_shared_actions() {
     );
 }
 
+/// Verify that the release workflow exports the package binary name.
 #[test]
 fn behavioural_release_workflow_exports_bin_name() {
     let contents = workflow_contents("release.yml").expect("release workflow should be readable");
@@ -41,6 +43,7 @@ fn behavioural_release_workflow_exports_bin_name() {
     );
 }
 
+/// Verify that release modes wire their outputs into publication decisions.
 #[test]
 fn behavioural_release_workflow_wires_release_modes_outputs() {
     let contents = workflow_contents("release.yml").expect("release workflow should be readable");
@@ -64,6 +67,7 @@ fn behavioural_release_workflow_wires_release_modes_outputs() {
     );
 }
 
+/// Verify that Linux release staging receives each supported target.
 #[rstest]
 #[case("linux-x86_64")]
 #[case("linux-aarch64")]
