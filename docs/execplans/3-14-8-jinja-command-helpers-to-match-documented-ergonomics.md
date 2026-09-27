@@ -3482,12 +3482,41 @@ catalogue has the key; there is no partial state to clean up.
   be run against the wrong artefact, and still return a number.** The second
   check was re-run as a spot audit and grepped
   `/tmp/coderabbit-netsuke-3-14-8-jinja-epm2.out` — a review of *this branch*
-  from 2026-09-19 that happens to contain exactly **17** findings, the same
-  count as the review being dispositioned. It reported "17 findings" and "0
-  occurrences of the fabricated items" and read as a clean confirmation. It
-  confirmed nothing: that review's files (`locales/nl`, `da`, `cy`, `el`,
-  `src/stdlib/collections.rs`) do not overlap this block's at all, and it
-  predates the review by eight days.
+  from eight days earlier that happens to contain exactly **17** findings, the
+  same count as the review being dispositioned. It reported "17 findings" and
+  "0 occurrences of the fabricated items" and read as a clean confirmation. It
+  confirmed nothing — but not because the file was stray. It is the EP-M2
+  review pass, **already dispositioned in full** at `Artefacts and notes` entry
+  6 under its own, different 17. Its files overlap this block's — this plan,
+  `tests/stdlib_manifest_query_tests.rs`, `locales/de/messages.ftl`, and
+  `locales/cs/messages.ftl` — and four of its findings touch ground this block
+  also covers. Findings 1 and 17 raise item 7's complaint almost word for word
+  (parse the JSON rather than substring-match) at line 196 instead of 212-214.
+  Findings 6 and 14 land on the same two locale files as items 10, 11, 15, and
+  16, but on a different message key — `manifest.env.default_not_string` at
+  line 143, where the block cites `stdlib.shell.quote.not_string` at line 293.
+  Finding 14 repeats item 10's nominative-placement complaint against that
+  other key; finding 6 is a German terminology complaint the block does not
+  raise at all. EP-M2 declines the locale group on one ground this block also
+  gives — the `{ $kind }`-after-participle shape is the pre-existing house
+  idiom — and adds two it does not: a false-premise objection to finding 14's
+  "both referenced locations", and the translators-guide policy on untranslated
+  identifiers for finding 6. That overlap is exactly what made the misread
+  possible, and it is why the rule must be sharper than "check the filename":
+  **a log belongs to the review it came from, not to the files it names.** A
+  check is void against a review whose findings have their own disposition
+  block, however many of the same files it mentions.
+
+  *(This paragraph's own first draft is the third instance of the same class in
+  one session: it asserted that the review's files "do not overlap this block's
+  at all", which is false in four places — it reached that conclusion by
+  sampling the filenames of the findings it had already decided were beside the
+  point instead of diffing the two reviews' complete file lists. The correction
+  is recorded rather than silently folded in, because the wrong version was
+  committed and pushed, and because the wrong version's *rule* — distrust a log
+  whose files are unrelated — would have failed to catch this case. See
+  `Artefacts and notes` entry 6, which reached the same "record the error, the
+  distinction is the point" conclusion.)*
 
   The real artefact is `/tmp/coderabbit-702-75e0b671-2937165/`, identified by
   its `local-run-meta.txt` (`reviewed_sha=75e0b671`, `exit=0`, `duration=877s`,
