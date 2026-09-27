@@ -7,7 +7,7 @@
 //! so the assertions below pin the series a dashboard would group by.
 
 use super::path_utils::{EXPANDUSER_HOME_TOTAL, expanduser};
-use crate::stdlib::config_types::HomeDirectory;
+use crate::stdlib::config::types::HomeDirectory;
 use metrics_util::MetricKind;
 use metrics_util::debugging::{DebugValue, DebuggingRecorder};
 use rstest::rstest;

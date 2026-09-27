@@ -23,7 +23,7 @@ use super::read_telemetry::{
     FILE_READ_EVENT, FILE_READ_TOTAL, FILTER_CONTENTS, FILTER_DIGEST, FILTER_HASH,
     FILTER_LINECOUNT, OUTCOME_OK, OUTCOME_REJECTED,
 };
-use crate::stdlib::config_types::HomeDirectory;
+use crate::stdlib::config::types::HomeDirectory;
 use crate::test_tracing_capture::with_test_subscriber;
 
 /// Name of the fixture file staged inside the temporary directory.

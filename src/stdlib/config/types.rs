@@ -5,7 +5,7 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
 
-use super::network::NetworkPolicy;
+use crate::stdlib::network::NetworkPolicy;
 
 /// Default relative path for the fetch cache within the workspace.
 pub const DEFAULT_FETCH_CACHE_DIR: &str = ".netsuke/fetch";

@@ -21,7 +21,7 @@
 //! `home_metrics_tests`.
 
 use super::path_utils::{HomeSource, posix_home_from, windows_home_from};
-use crate::stdlib::config_types::HomeDirectory;
+use crate::stdlib::config::types::HomeDirectory;
 use rstest::rstest;
 
 /// Borrow a resolution as `(home, source)` so cases can be written as literals.
