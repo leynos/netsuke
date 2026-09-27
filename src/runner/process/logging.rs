@@ -5,7 +5,7 @@
 //! redacted command line for operators.
 
 use super::StderrMode;
-use super::command_env::env_names_eq;
+use super::environment::env_names_eq;
 use super::redaction::{CommandArg, redact_sensitive_args};
 use camino::Utf8PathBuf;
 use std::{

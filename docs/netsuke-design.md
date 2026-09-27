@@ -2793,7 +2793,7 @@ where it is not — and `CommandEnv` replaces same-key overrides by the same
 rule, so its view of the environment always matches the child's.
 
 The developers' guide documents the module layout and the `PATH` composition
-helper under "Module: `runner::process::command_env`".
+helper under "Module: `runner::process::environment`".
 
 Integration-test support finds the already-built `netsuke` executable before
 spawning it. Its locator derives an ordered candidate list from the test

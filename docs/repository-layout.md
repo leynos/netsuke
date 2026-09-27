@@ -413,6 +413,12 @@ give each a shorter, precise name. The
 records owners, declarations, permitted callers, and rationale, including any
 justified `#[path]` use.
 
+The former `runner/process/command_*` siblings were a naming coincidence:
+`environment.rs` composes child-process overrides, `logging.rs` records
+redacted invocations, and `list_failure_telemetry.rs` measures attributed
+command-list failures. Each remains directly under `process/` with a name for
+its own concern.
+
 When adding a justified `#[path]` support module, keep it private to its owner,
 give it a `//!` header stating the split reason and ownership, cap its visible
 surface at `pub(super)` unless a documented internal caller requires wider

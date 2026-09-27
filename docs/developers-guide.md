@@ -8480,12 +8480,12 @@ CLI parser, configuration decoder, and environment extractor reject non-UTF-8
 values before this adapter runs. The process module remains parser-independent;
 callers without CLI state construct `NinjaProcessOptions` directly.
 
-### Module: `runner::process::command_logging`
+### Module: `runner::process::logging`
 
-`src/runner/process/command_logging.rs` owns the structured logging contract
-for all internal Ninja process invocations. `CommandLogContext` is the shared
-log payload builder for a prepared `Command`; it records `program_display` for
-the `ninja_program` field and `arg_count` for stable argument cardinality.
+`src/runner/process/logging.rs` owns the structured logging contract for all
+internal Ninja process invocations. `CommandLogContext` is the shared log
+payload builder for a prepared `Command`; it records `program_display` for the
+`ninja_program` field and `arg_count` for stable argument cardinality.
 `from_command` normalizes non-UTF-8 program paths through lossy UTF-8
 conversion, replacing invalid byte sequences with Unicode replacement
 characters in `program_display`. It redacts sensitive arguments and stores the
@@ -8538,9 +8538,9 @@ reads `cli.json` itself.
 ### Module: `runner::process::redaction`
 
 `src/runner/process/redaction.rs` owns the argument-redaction boundary that
-`command_logging` consumes. `CommandArg` is a newtype over a single
-command-line argument string; it gives the redaction helpers a dedicated type
-to operate on instead of passing bare `String` values around.
+`logging` consumes. `CommandArg` is a newtype over a single command-line
+argument string; it gives the redaction helpers a dedicated type to operate on
+instead of passing bare `String` values around.
 
 `CommandArg` carries no redaction guarantee of its own. The same type holds
 both the raw arguments read from `Command::get_args` and the values returned by
@@ -8571,9 +8571,9 @@ constructed by `BuildTargets::new` and read through `as_slice`. It exposes no
 so it was removed; call `as_slice().is_empty()` where that question needs
 asking.
 
-### Module: `runner::process::command_env`
+### Module: `runner::process::environment`
 
-`src/runner/process/command_env.rs` composes the environment applied to a
+`src/runner/process/environment.rs` composes the environment applied to a
 spawned Ninja command as data, rather than by mutating the parent process.
 
 `CommandEnv` carries overrides as a list of key/value pairs:

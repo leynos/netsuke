@@ -7,8 +7,8 @@ use std::{io, process::Command};
 
 use camino::Utf8Path;
 mod child_exit;
-mod command_list_telemetry;
-mod command_logging;
+mod list_failure_telemetry;
+mod logging;
 
 mod dyndep;
 #[cfg(test)]
@@ -24,23 +24,21 @@ mod streaming;
 mod tests;
 
 use child_exit::{ExitFailureContext, check_exit_status_with_context};
-use command_logging::{
-    CommandLogContext, command_span, log_command_execution, log_command_spawn_failure,
-};
 pub use dyndep::MAX_RETAINED_DYNDEP_FILES;
 pub(crate) use dyndep::{DyndepPublicationLease, materialize_dyndep_files, prune_dyndep_cache};
 pub use file_io::*;
+use logging::{CommandLogContext, command_span, log_command_execution, log_command_spawn_failure};
 pub use ninja::resolve_ninja_program;
 use output_forwarding::{StatusObserver, spawn_and_stream_output};
 pub use streaming::NINJA_STATUS_OVERSIZED_LINES_TOTAL;
 
-mod command_env;
 mod configure;
+mod environment;
 mod job_count;
 mod request;
 mod stderr_mode;
-pub use command_env::CommandEnv;
 use configure::{configure_ninja_build_command, configure_ninja_tool_command};
+pub use environment::CommandEnv;
 pub use job_count::NinjaJobCount;
 pub use paths::*;
 pub use request::{NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest};

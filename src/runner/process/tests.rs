@@ -2,7 +2,7 @@
 
 use super::child_exit::finalize_streaming;
 #[cfg(unix)]
-use super::command_list_telemetry::COMMAND_LIST_FAILURE_DURATION;
+use super::list_failure_telemetry::COMMAND_LIST_FAILURE_DURATION;
 use super::streaming::ForwardStats;
 use super::*;
 use crate::test_tracing_capture::with_test_subscriber;
