@@ -1297,8 +1297,8 @@ providing a secure bridge to the underlying system.
   which carries only the `outcome` label and never the name or its value. A
   `default=` keyword argument supplies the value to use when the variable is
   absent, which keeps `PATH`-style optional configuration out of the manifest's
-  control flow; it is accepted only as a string, and a non-string default raises
-  the `manifest.env.default_not_string` detail under the
+  control flow; it is accepted only as a string, and a non-string default
+  raises the `manifest.env.default_not_string` detail under the
   `[netsuke::jinja::env::args]` code rather than stringifying the value. The
   default is consulted for a *missing* variable only. An undecodable value is
   still an error, because substituting there would hide a host fault the author
@@ -1372,24 +1372,24 @@ for transforming data within templates.
   prevent command injection vulnerabilities; hand-rolled escaping in a manifest
   is where injection lives, and the manifest author is the party least able to
   verify it. It is implemented once, in `src/shell_word.rs`, over the
-  `shell-quote` crate's `sh` encoder and a PowerShell single-quoted encoder, and
-  both the IR lowering path and this filter delegate there.[^22] The dialect is
-  named by a `dialect` keyword argument taking `sh` or `powershell`, defaulting
-  to the dialect implied by the active recipe shell;
+  `shell-quote` crate's `sh` encoder and a PowerShell single-quoted encoder,
+  and both the IR lowering path and this filter delegate there.[^22] The
+  dialect is named by a `dialect` keyword argument taking `sh` or `powershell`,
+  defaulting to the dialect implied by the active recipe shell;
   [ADR-041](adr-041-canonical-recipe-shell-quoting-surface.md) records why the
   argument exists, why `bash` is refused, and why the default is the surface's
-  one unstable axis. The filter is *not* a licence to stop preferring
-  structured `exec` recipes, which need no quoting at all: it serves the
-  manifests that still need shell syntax. Its output is correct only in unquoted
-  argv position, and it does not detect an author interpolating it inside a
-  shell's own double quotes, where the quoter's quotes become data.
+  one unstable axis. The filter is *not* a licence to stop preferring structured
+  `exec` recipes, which need no quoting at all: it serves the manifests that
+  still need shell syntax. Its output is correct only in unquoted argv
+  position, and it does not detect an author interpolating it inside a shell's
+  own double quotes, where the quoter's quotes become data.
 
 - `| shell_join`: A filter that accepts a list of arguments and returns one
   shell-safe command fragment, joining each encoded element with exactly one
-  space so the shell re-splits it into the original sequence. Every element must
-  be a string, and no element is ever dropped — `['']` renders as one empty
-  word, which is why `compact` is a separate filter rather than a flag here. It
-  does not flatten nested lists. This is for deliberate shell recipes;
+  space so the shell re-splits it into the original sequence. Every element
+  must be a string, and no element is ever dropped — `['']` renders as one
+  empty word, which is why `compact` is a separate filter rather than a flag
+  here. It does not flatten nested lists. This is for deliberate shell recipes;
   structured `exec` recipes remain preferred when no shell syntax is needed.
 
 - `| compact`: A collection filter that removes `none`, undefined, and empty

@@ -88,7 +88,7 @@ proptest! {
         let env = fallible::stdlib_env()
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
 
-        // A member the caller can recognise inside the output. It is appended
+        // A member the caller can recognize inside the output. It is appended
         // rather than generated into the sequence because it proves, case by
         // case, that a retained member survives rendering: without it an
         // implementation returning `[]` for every input would satisfy the

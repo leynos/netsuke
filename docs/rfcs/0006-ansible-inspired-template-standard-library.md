@@ -1403,11 +1403,11 @@ machinery rather than adding a second implementation.
   enumerating the accepted dialects. **Amended 2026-09-27**: this section
   originally read "`dialect` currently accepts only `sh`, matching the single
   `shell-quote` feature Netsuke enables." The feature half was right and the
-  conclusion did not follow: `RecipeShell::host_default()` returns
-  `PowerShell` on Windows, and `src/ir/cmd_interpolate/` already carried a
-  second, non-`shell-quote` encoder for that case. An `sh`-only filter would
-  have emitted POSIX quoting into a recipe Windows PowerShell then parses,
-  silently corrupting the argument the author believed was protected.
+  conclusion did not follow: `RecipeShell::host_default()` returns `PowerShell`
+  on Windows, and `src/ir/cmd_interpolate/` already carried a second,
+  non-`shell-quote` encoder for that case. An `sh`-only filter would have
+  emitted POSIX quoting into a recipe Windows PowerShell then parses, silently
+  corrupting the argument the author believed was protected.
   [ADR-041](../adr-041-canonical-recipe-shell-quoting-surface.md) records the
   decision and rejects `bash` for the reason given below.
 - **This is the same capability as the `shell_escape` helper documented but
@@ -1415,11 +1415,11 @@ machinery rather than adding a second implementation.
   remains the owner and ships first; this RFC contributes only the canonical
   name and the `dialect` argument. Section 13 records the sequencing.
   **Delivered by 3.14.8 on 2026-09-27**, which superseded `shell_escape` rather
-  than implementing it (the roadmap permitted either) and shipped
-  `shell_quote` and `shell_join` over one implementation in
-  `src/shell_word.rs`. `bash` is refused by that implementation; `sh` output is
-  valid Bash, and the `shell-quote` crate's `Bash` encoder emits a different
-  form Netsuke does not compile in.
+  than implementing it (the roadmap permitted either) and shipped `shell_quote`
+  and `shell_join` over one implementation in `src/shell_word.rs`. `bash` is
+  refused by that implementation; `sh` output is valid Bash, and the
+  `shell-quote` crate's `Bash` encoder emits a different form Netsuke does not
+  compile in.
 - Ansible's `quote` alias is rejected; see section 10.2.
 - Structured recipes, tracked in
   [#593](https://github.com/leynos/netsuke/issues/593), remain the preferred
@@ -1846,16 +1846,16 @@ does not have and what to write instead.
 
 ### 13.3. Relationship to in-flight work
 
-| Work item                                                        | Relationship                                                                                                                                                                                      |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Work item                                                        | Relationship                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Roadmap 3.14.8, `shell_escape`                                   | Owns the shell-quoting capability and ships first. This RFC contributes the canonical name `shell_quote` and the `dialect` argument; the roadmap task should adopt them so the two do not diverge. **Delivered 2026-09-27**: 3.14.8 adopted both and superseded `shell_escape`; the dialect set is wider than this RFC assumed, per section 8.9 and [ADR-041](../adr-041-canonical-recipe-shell-quoting-surface.md) |
-| Roadmap 3.15.5, enumerable errors                                | Section 6.6 requires every string-valued option to enumerate its valid values on failure; these helpers are a large new source of such options                                                    |
-| [#594](https://github.com/leynos/netsuke/issues/594)             | Gates all of this work; nothing here may widen the hardening release                                                                                                                              |
-| [#593](https://github.com/leynos/netsuke/issues/593)             | Structured recipes remain the preferred shell-free answer; `shell_quote` serves the manifests that still need a shell                                                                             |
-| [#590](https://github.com/leynos/netsuke/issues/590)             | Owns any future dynamic provider registry; section 10.5 defers all dispatcher questions there                                                                                                     |
-| [ADR-008](../adr-008-environment-seam-taxonomy.md)               | Governs the `expandvars` environment seam                                                                                                                                                         |
-| [ADR-010](../adr-010-scope-glob-capability-to-literal-prefix.md) | Governs `glob(files_only=true)`, whose capability scoping is unchanged                                                                                                                            |
-| [ADR-001](../adr-001-replace-serde-yml-with-serde-saphyr.md)     | Governs the YAML stack that `from_yaml` and `from_yaml_all` use                                                                                                                                   |
+| Roadmap 3.15.5, enumerable errors                                | Section 6.6 requires every string-valued option to enumerate its valid values on failure; these helpers are a large new source of such options                                                                                                                                                                                                                                                                      |
+| [#594](https://github.com/leynos/netsuke/issues/594)             | Gates all of this work; nothing here may widen the hardening release                                                                                                                                                                                                                                                                                                                                                |
+| [#593](https://github.com/leynos/netsuke/issues/593)             | Structured recipes remain the preferred shell-free answer; `shell_quote` serves the manifests that still need a shell                                                                                                                                                                                                                                                                                               |
+| [#590](https://github.com/leynos/netsuke/issues/590)             | Owns any future dynamic provider registry; section 10.5 defers all dispatcher questions there                                                                                                                                                                                                                                                                                                                       |
+| [ADR-008](../adr-008-environment-seam-taxonomy.md)               | Governs the `expandvars` environment seam                                                                                                                                                                                                                                                                                                                                                                           |
+| [ADR-010](../adr-010-scope-glob-capability-to-literal-prefix.md) | Governs `glob(files_only=true)`, whose capability scoping is unchanged                                                                                                                                                                                                                                                                                                                                              |
+| [ADR-001](../adr-001-replace-serde-yml-with-serde-saphyr.md)     | Governs the YAML stack that `from_yaml` and `from_yaml_all` use                                                                                                                                                                                                                                                                                                                                                     |
 
 _Table 14: Relationship to in-flight Netsuke work._
 

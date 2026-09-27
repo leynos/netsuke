@@ -66,7 +66,7 @@ mod tests {
     ///
     /// Returns the fallible constructor's result rather than unwrapping it, so
     /// the `expect` sits in the `#[test]` bodies where Whitaker's
-    /// `no_expect_outside_tests` recognises it. That lint does not treat a
+    /// `no_expect_outside_tests` recognizes it. That lint does not treat a
     /// `#[cfg(test)]` helper as test code, and `StdlibConfig::from_current_dir`
     /// is the same constructor `config_tests.rs` exercises for the same reason.
     fn config() -> Result<StdlibConfig> {

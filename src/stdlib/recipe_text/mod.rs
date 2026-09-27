@@ -161,7 +161,7 @@ fn accepted_dialects() -> String {
 /// solely to observe the leftover positional here: without it `MiniJinja` raises
 /// during argument binding, before the filter body can attach D9's code, and
 /// the diagnostic loses the `[netsuke::jinja::shell::args]` prefix that the
-/// localised catalogues assert on.
+/// localized catalogues assert on.
 fn reject_positional(filter: &str, rest: &Rest<Value>) -> Result<(), Error> {
     if rest.is_empty() {
         return Ok(());

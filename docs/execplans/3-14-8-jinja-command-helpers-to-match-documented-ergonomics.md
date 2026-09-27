@@ -3499,11 +3499,211 @@ recorded for whoever hits them next.
   test-size work, but the CI failure outranked them and was fixed first. The
   review's own findings are recorded in `Blocked / open questions`.
 
+- [x] (2026-09-27) EP-M5 items 9-11 closed, and the `6719ddcb` gate run
+  cleared. This entry records the four gate defects and their repairs, the
+  item-9 counter decision, and the documentation work that was still open.
+
+  **Item 9 — the env-substitution counter is dropped, and the decision is
+  final.** `netsuke_manifest_shell_quote_dialect_total` shipped (four label
+  combinations, admitted by `src/observability_recorder.rs`). The second
+  counter the item named, `netsuke_manifest_env_default_substituted_total`,
+  never shipped and must not: `substitute_fallback`
+  (`src/manifest/env_reader.rs`) already records `OUTCOME_SUCCESS` *and* emits
+  `tracing::debug!(fallback_used = true, …)`. The plan's own escape clause
+  applies — the one-sentence test cannot be met, because the `success` series
+  already counts every substitution and the debug event already marks each one,
+  so a dedicated counter would be no more distinguishable from "no
+  substitutions happened" than that existing pair. A third option (re-labelling
+  `success` with a `default=` source) was rejected because
+  `src/manifest/env_telemetry.rs`'s module doc forbids promoting the
+  substituted default to a fifth outcome.
+
+  **The four gate defects, all repaired.** Detail and evidence are in
+  `Blocked / open questions`; in brief: a private-intra-doc-link error that
+  failed both `make lint` and `make doc-coverage` (one edit, two gates); the
+  `shell_join` test cases binding a scalar where the filter requires a sequence;
+  `hand-written` against an existing `typos.toml` entry; and an `mdtablefix`
+  reflow over five Markdown files.
+
+  **Two documentation defects in this branch's own earlier work, now
+  corrected.** Both were in `docs/developers-guide.md` and both were claims the
+  source did not support:
+
+  1. The guide asserted the build and query surfaces "agree on every dialect".
+     They do not. The query surface takes `RecipeShell::host_default()`; the
+     build surface takes the shell the runner resolves, which on Windows
+     honours `NETSUKE_WINDOWS_SHELL`. A Windows host configured for Bash
+     renders `sh` quoting for the build and PowerShell quoting for
+     `help targets` from one manifest expression. The divergence is
+     *masked*, not absent: `execute_help` returns before
+     `resolve_recipe_shell()` is reached. `register_query_helpers` and
+     `ManifestLoadMode::ManifestQuery` each document it as deliberate, so the
+     guide was contradicting the code's own stated intent. The corrected
+     paragraph now separates what is true (explicit dialects agree on every
+     host) from what is not (the defaults).
+  2. The guide promised "a seeded-fault check that a wrong default dialect in
+     `register_query_helpers` is caught". No such mechanism exists:
+     `tests/stdlib_manifest_query_tests.rs` has six tests and none seeds a
+     fault. The seeded run was a **manual, one-time experiment** recorded in
+     `Surprises & discoveries`. The guide now describes what the tests
+     actually do — the dialect-*omitting* probes trip a wrong default, and
+     `host_default_field` mirrors the product `cfg!(windows)` so the file
+     still runs under `make SHELL=bash test` on Windows.
+
+  **Items 10 and 11 completed.** The guide gained the POSIX round-trip clause
+  (one word is a promise about the shell: for `dialect='sh'` a POSIX shell
+  splitting the output yields exactly one field byte-identical to the input,
+  discharged against a real `sh` by the property suite) and the `select`
+  contrast in the `compact` bullet. Verified against the vendored MiniJinja
+  2.24.0 rather than assumed: `select_or_reject` filters on `is_true()`, so it
+  drops `0`, `false`, and empty sequences — which is exactly the contrast. The
+  developers guide gained the three remaining conventions: the
+  both-registration-surfaces rule, the D8 `Value::try_iter()`-is-not-a-
+  sequence-check rule, and the argument-style rule (trailing `Option<T>` for
+  options reading naturally in a fixed order, `Kwargs` for independent named
+  options and widening enumerations). The 35-catalogue and verbatim-bracketed-
+  code rules were already present in "Adding or changing messages"
+  (`docs/developers-guide.md:353-368`) and were deliberately not duplicated.
+
+- [ ] (2026-09-27) Second repair pass: the two defects the cascade had masked,
+  plus a branch-wide spelling sweep. Detail is in `Blocked / open questions`.
+
+  **The cascade mask, now measured twice.** `make lint` aborts at the first
+  failing stage, so the `cargo doc` failure at `6719ddcb` concealed *two more*
+  lint errors behind it — a `clippy::excessive_nesting` and three Whitaker
+  `no_expect_outside_tests` errors. Both surfaced only once `cargo doc` was
+  repaired. The operative rule for this branch: a gate's problem count is a
+  **lower bound**; only a fully green `make lint` shows the stage list was
+  exhausted. Do not treat "I fixed everything the gate printed" as "the gate
+  will pass".
+
+  **The Whitaker rule is attribute-based, not module-based.** It recognizes a
+  function as test-like solely by its attribute (`#[test]`, `#[rstest]`, and a
+  fixed path list in
+  `/home/leynos/.local/share/whitaker/common/src/attributes/mod.rs:11-22`). An
+  enclosing `#[cfg(test)] mod tests` does **not** make a helper test-only. So
+  the fallible setup must live in the recognized function body, or the helper
+  must propagate `Result`. Chosen here: `recorded_render` returns
+  `anyhow::Result<Vec<SnapshotEntry>>` and propagates with `?`; each of its
+  three call sites unwraps inside its own `#[rstest]`/`#[test]`. That matches
+  the sibling modules, which contain zero `expect(` calls.
+
+  **Spelling sweep.** Five genuine `-ise` instances in this branch's own delta
+  were repaired, and two classes were deliberately kept — `localised` in
+  `tests/features/*.feature`, which four pre-existing scenarios already use,
+  and the deliberate `defualt` typo under test in
+  `tests/manifest_env_tests/default_argument.rs`. The full sweep and the
+  reasoning are in `Blocked / open questions`.
+
+  **A scope fact worth carrying forward.** `make markdownlint` depends on
+  `spelling`, which runs `typos-config-builder gate` with its default
+  `scope=markdown` — the Makefile passes no `--scope`. The gate therefore scans
+  tracked Markdown only, so a `-ise` typo in a `.rs` comment reds **no** gate
+  and is caught only by CodeRabbit or by running `typos` by hand. The sweep was
+  run manually for this reason.
+
 ## Blocked / open questions
 
-None outstanding. All seven gates are green at `149685d3`, with no failing
-prerequisite and no abort, so every sub-target is *verified* rather than merely
-unverified:
+### Gate run at `6719ddcb` (2026-09-27) — RED, four of seven
+
+The historical table below records the `149685d3` plateau. This run supersedes
+it. Four gates failed, from four distinct defects; `make typecheck` and
+`make nixie` passed. Logs are cited so they can be read rather than re-run.
+
+| Gate                | Result | Log                                              | Cause                                                                   |
+| ------------------- | ------ | ------------------------------------------------ | ----------------------------------------------------------------------- |
+| `make check-fmt`    | FAIL   | `/tmp/check-fmt-6719ddcb-20260927T062509.out`    | `mdtablefix --check` on 5 Markdown files                                |
+| `make lint`         | FAIL   | `/tmp/lint-6719ddcb-20260927T062509.out`         | `lint-clippy`'s `cargo doc` half; 3 later stages never ran              |
+| `make typecheck`    | pass   | `/tmp/typecheck-6719ddcb-20260927T062509.out`    | —                                                                       |
+| `make markdownlint` | FAIL   | `/tmp/markdownlint-6719ddcb-20260927T062509.out` | `spelling` prerequisite; `mdlint` never ran                             |
+| `make doc-coverage` | FAIL   | `/tmp/doc-coverage-6719ddcb-20260927T062509.out` | same rustdoc defect as `lint`                                           |
+| `make test`         | FAIL   | `/tmp/test-6719ddcb-20260927T062509.out`         | 2 dialect-telemetry tests; cancelled 172 others, so `doctest` never ran |
+| `make nixie`        | pass   | `/tmp/nixie-6719ddcb-20260927T062509.out`        | —                                                                       |
+
+- **One defect failed two gates.** `DIALECT_VALUES` is `pub`, but its doc
+  comment linked `crate::shell_word::ShellDialect`, which is `pub(crate)`. Under
+  `-D rustdoc::private-intra-doc-links` that is an error in both `cargo doc`
+  (`make lint`) and `make doc-coverage`. Fixed by demoting the link to a code
+  span; the encoder type is private by design, so widening it to satisfy a doc
+  link would have been the wrong repair.
+- **The two test failures were real defects in the test, not the product.**
+  `recorded_render` bound only `value => "a b"`, but `shell_join` requires a
+  sequence, so both `shell_join` cases failed on the subject-kind check before
+  reaching the assertion. Fixed by binding `items => ["a", "b"]` alongside and
+  pointing the `shell_join` templates at it. The `shell_quote` binding is
+  unchanged, since that filter's subject genuinely is one string.
+- **`hand-written` → `handwritten`** at
+  `src/observability_recorder_dialect_tests.rs:160`. `typos.toml` already pins
+  `"handwritten" = "handwritten"`, so this was the file contradicting an
+  existing entry rather than the dictionary needing a new one.
+- **`mdtablefix` reflow over 5 files** is mechanical. Note the tool is run by
+  the gate with `--wrap --renumber --breaks --ellipsis --fences`, so the
+  project's own `make fmt` target is the correct repair and a hand edit is not.
+
+Consequence recorded for the retrospective: `make test` cancelled 172 tests and
+never reached `doctest`. The suite is therefore *unverified* at this SHA, not
+merely failing, and the re-run must be the whole gate set rather than only the
+four that failed.
+
+### Defects the first repair unmasked (2026-09-27)
+
+Fixing the four `6719ddcb` defects exposed two further ones that the cascade
+had been hiding. This is the second time on this branch that a "fix everything
+the gate reported" pass turned out to be incomplete, so the lesson is recorded
+rather than just the fixes.
+
+- **`clippy::excessive_nesting`** at
+  `src/observability_recorder_dialect_tests.rs:189`, on an inline closure
+  inside the generator loops. It was masked because `cargo doc` aborts
+  `lint-clippy` *before* `cargo clippy` runs, and `cargo doc` was the failing
+  half. Repaired by extracting the `dialect_pair` free function.
+- **Whitaker `no_expect_outside_tests`**, three errors in `recorded_render`.
+  Masked by both earlier `lint-clippy` aborts. The lint recognizes a function
+  as test-like only by its *attribute* — `#[test]`, `#[rstest]`, and a fixed
+  list of path forms — **not** by an enclosing `#[cfg(test)]` module. So a
+  helper inside a `#[cfg(test)] mod tests` is still "outside test-only code" to
+  this lint. Repaired by making `recorded_render` return `anyhow::Result<_>`
+  and propagating with `?`, with each of the three call sites unwrapping inside
+  a recognized `#[rstest]`/`#[test]` body. This matches the sibling convention:
+  `observability_recorder_file_read_tests.rs` and its siblings contain zero
+  `expect(` calls.
+
+**Consequence for the re-run.** Because `make lint` aborts at the first failing
+stage, a single `cargo doc` error concealed a clippy error and a Whitaker error
+behind it. "The gate reported N problems" is therefore a lower bound, not a
+count: each repair pass can reveal new ones, and only a fully green `make lint`
+shows the stage list was exhausted.
+
+### Spelling sweep over the branch delta (2026-09-27)
+
+House style is en-GB-oxendict (`-ize`/`-ization`), confirmed by the `-ise`
+family sweep over added lines. Five genuine `-ise` instances were found in *my*
+delta and fixed: `recognise`/`recognises` in
+`tests/std_filter_tests/collection_filters/compact_property.rs`,
+`src/observability_recorder_dialect_tests.rs`,
+`src/stdlib/config/recipe_shell.rs`; `localised` in
+`src/stdlib/recipe_text/mod.rs`; and `unparseable` → `unparsable` in
+`src/shell_word.rs` (the dictionary prefers the latter; the repo carries both,
+but only mine was in scope).
+
+Two classes were deliberately **kept**:
+
+- `localised`/`localisation` in `tests/features/*.feature`. Four pre-existing
+  scenarios across `cli.feature`, `locale_resolution.feature`, and
+  `stdlib.feature` already use that spelling; my added scenario matches the
+  established Gherkin vocabulary. Changing only my line would make the file
+  internally inconsistent.
+- `defualt` in `tests/manifest_env_tests/default_argument.rs`. It is the typo
+  under test in a negative test, and the surrounding comment says so.
+
+**Scope note worth keeping:** `make markdownlint` depends on `spelling`, which
+runs `typos-config-builder gate`, whose `scope` **defaults to `markdown`** —
+the Makefile passes no `--scope`, so the gate scans tracked Markdown only. A
+`-ise` typo in a `.rs` comment therefore does **not** red any gate; it is
+caught only by a CodeRabbit review or by running `typos` directly. Hence the
+manual sweep above rather than relying on the gates to surface it.
+
+### Historical: all seven gates green at `149685d3`
 
 | Gate                | Result | Duration | Note                                                                        |
 | ------------------- | ------ | -------- | --------------------------------------------------------------------------- |
@@ -3515,15 +3715,8 @@ unverified:
 | `make test`         | pass   | 391s     | nextest 3471/3471 passed, 5 skipped; 129 doctests                           |
 | `make nixie`        | pass   | 1s       | all diagrams validated                                                      |
 
-`make test-podman` was not run: no path under `ansible/` is in the change
-surface.
-
-One provenance gap:
-`origin/3-14-8-jinja-command-helpers-to-match-documented-ergonomics` resolved to
-`719e7beb` during that run, four commits behind local head, so `b74a780c`,
-`00177f74`, `b2808b3b` and `149685d3` are unpushed and no CI run can exist for
-them. The green verdict above therefore rests on local gate evidence alone
-until the branch is pushed.
+`make test-podman` was not run at that plateau: no path under `ansible/` is in
+the change surface.
 
 ## Outcomes & retrospective
 
@@ -3531,16 +3724,62 @@ To be completed at EP-M5. Before setting this plan to `COMPLETE`, reconcile
 every discovery against the `Conformance basis`:
 
 - D2 is a deviation from `RFC-0006-8.9`. It must be recorded in ADR-041 and the
-  RFC amended, or the plan stays `BLOCKED`.
+  RFC amended, or the plan stays `BLOCKED`. **Discharged.** ADR-041 records the
+  deviation and its consequences; `RFC-0006-8.9` and the §13.3/roadmap
+  cross-references were amended to name the supersession and the wider dialect
+  set.
 - `RM-6.8.3` is materially reduced by D1 and D2. Record the reduction as a note
   on that roadmap entry; do not tick it, because its `dialect` value set is
-  wider than what ships here.
+  wider than what ships here. **Discharged.** `docs/roadmap.md:1197` remains
+  unticked and carries the note: 3.14.8 delivered the canonical name, the
+  `dialect` argument, and the single implementation, leaving the wider RFC 0006
+  dialect set — `bash` in particular, which this work deliberately refuses.
 - If EP-M4's runner plumbing proves larger than tolerance 1 allows, stop and
   record the measurement. Do **not** resolve it by shipping the
   host-default-only behaviour and deferring the plumbing: that recreates R11's
   silent-corruption path, which constraint 10 forbids. The correct escalation
   is to propose deferring the *filters* as well, leaving EP-M1 to EP-M3
-  shipped, and to raise the plumbing as its own roadmap item.
+  shipped, and to raise the plumbing as its own roadmap item. **Not
+  triggered.** The plumbing landed inside tolerance: `resolve_recipe_shell()`
+  is reached on the build path, and the bootstrapping escape (`execute_help`
+  returning before the resolution) is documented as deliberate in both
+  registration surfaces.
+
+### What the work cost, and what it taught
+
+**The dominant cost was not the feature; it was the lint and gate surface.**
+The filter implementation itself was the small part. The recurring expense was
+satisfying `make lint`'s cascade — `cargo doc`, `cargo clippy`, Whitaker,
+pylint, and the workflow lints — where each stage's failure hides every later
+stage's. That cascade was the direct cause of two full extra gate cycles: first
+four defects at `6719ddcb`, then **two more that the first four had
+concealed**. The transferable lesson is in `Blocked / open questions`: a gate's
+reported problem count is a lower bound, so "I fixed everything it printed"
+does not imply "it will pass".
+
+**A related trap is scope, not severity.** The `spelling` prerequisite of
+`make markdownlint` runs with `scope=markdown`, so an `-ise` typo in `.rs`
+comments reds nothing. Passing gates were therefore never evidence that this
+class was clean, and a manual `typos` sweep over the branch delta was required.
+The general form: when a gate's *scope* is narrower than the change surface,
+its green result is silent about the difference, and that difference is exactly
+where a reviewer will look.
+
+**What went well.** Verifying claims against the vendored dependency rather
+than reasoning about them paid off twice: `select`'s `is_true()` semantics and
+the private-intra-doc-link rule were both checked against source before acting,
+so neither needed a second attempt. The same applied to the `RecipeShell` →
+`ShellDialect` three-to-two surjection, which drove the test design.
+
+**A residual risk, stated plainly.** The build and query registration surfaces
+resolve their default dialect by different routes — the build honours
+`NETSUKE_WINDOWS_SHELL`; the query surface takes `host_default()`. On a Windows
+host configured for Bash, one manifest expression can render `sh` quoting for
+the build and PowerShell quoting for `help targets`. This is *masked*, not
+absent: `execute_help` returns before `resolve_recipe_shell()` is called, and
+both `register_query_helpers` and `ManifestLoadMode::ManifestQuery` document
+the divergence as deliberate. `docs/developers-guide.md` previously claimed the
+surfaces "agree on every dialect", which was false; that claim is corrected.
 
 ## Artefacts and notes
 

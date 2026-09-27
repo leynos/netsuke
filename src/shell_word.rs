@@ -126,7 +126,7 @@ mod tests {
     /// Every dialect names itself, and `ALL` enumerates each exactly once.
     ///
     /// `ALL` is what the `dialect_invalid` diagnostic renders, so a dialect
-    /// missing from it would be unnameable and unparseable at once.
+    /// missing from it would be unnameable and unparsable at once.
     #[rstest]
     fn dialect_names_are_unique_and_complete() {
         let names = ShellDialect::ALL

@@ -38,8 +38,9 @@ pub(crate) const DIALECT_POWERSHELL: &str = "powershell";
 
 /// The closed `dialect` vocabulary admitted on [`SHELL_QUOTE_DIALECT_TOTAL`].
 ///
-/// Kept in step with [`ShellDialect::ALL`](crate::shell_word::ShellDialect) by
-/// a test, so adding a dialect cannot silently leave it uncounted.
+/// Kept in step with `ShellDialect::ALL` by a test, so adding a dialect cannot
+/// silently leave it uncounted. The encoder type is private to the crate, so
+/// this is deliberately a code span rather than an intra-doc link.
 pub const DIALECT_VALUES: [&str; 2] = [DIALECT_SH, DIALECT_POWERSHELL];
 
 /// The bounded `source` recorded when the call site passed `dialect` itself.

@@ -139,25 +139,36 @@ shared query path, registered by `recipe_text::register_filters` alongside the
 collection filters. They take a `dialect` keyword argument, and with it given
 they read no host state at all, so a query that names its dialect is fully
 deterministic. With `dialect` omitted they resolve through
-`RecipeShell::host_default`, which is what the query surface passes, and so is
-the build surface: `StdlibConfig::new` initializes the same value. The two
-surfaces therefore agree on every dialect, and an explicitly named dialect
-agrees on any host.
+`RecipeShell::host_default`, which is the value `register_query_helpers` passes.
 
-Keep that agreement rather than reintroducing a divergence. It would be
-tempting to resolve `NETSUKE_WINDOWS_SHELL` on the query path so a query
-reports exactly what a build would emit, but the resolution does not belong
-there and buys nothing. On a non-Windows host `resolve_recipe_shell_with`
-returns `Posix` before it reads the environment at all, and on Windows
-`execute_help` returns before `resolve_recipe_shell()` is reached
-(`src/runner/mod.rs:149-153`), so no host can currently observe a difference.
-Threading it through would mean hoisting a fallible environment read above that
-early return, where a malformed `NETSUKE_WINDOWS_SHELL` would start failing a
+The two surfaces agree on an explicitly named dialect, on every host, and that
+is what `tests/stdlib_manifest_query_tests.rs` pins. Their *defaults* are a
+different matter, and the difference is wider than "the same value reached
+twice". The query surface takes `host_default()`; the build surface takes the
+shell the runner resolves, which on Windows honours `NETSUKE_WINDOWS_SHELL`. So
+a Windows host configured for Bash renders `sh` quoting for the build and
+PowerShell quoting for `help targets` from the same manifest expression — the
+divergence `register_query_helpers` and `ManifestLoadMode::ManifestQuery` each
+document as deliberate. What keeps that divergence unobservable today is only
+that `execute_help` returns before `resolve_recipe_shell()` is reached
+(`src/runner/mod.rs:149-153`); it is masked, not absent. On a non-Windows host
+`resolve_recipe_shell_with` returns `Posix` before it reads the environment at
+all, so the two defaults genuinely coincide there.
+
+Keep the masked divergence rather than closing it. Threading the resolution
+through would mean hoisting a fallible environment read above that early
+return, where a malformed `NETSUKE_WINDOWS_SHELL` would start failing a
 metadata query that never uses it — and the query renders discovery metadata
-that is never executed. `tests/stdlib_manifest_query_tests.rs` pins the
-agreement, including a seeded-fault check that a wrong default dialect in
-`register_query_helpers` is caught; note that a probe which names its dialect
-cannot catch that, because the keyword overrides the registration's default.
+that is never executed. A resolved shell is also not query-reachable for the
+metadata-only load, which does not construct `StdlibConfig` at all.
+
+The explicit-dialect agreement is pinned twice over. A probe that *names* its
+dialect is the case the keyword overrides the registration's default, so it can
+never catch a wrong default in `register_query_helpers` — the dialect-omitting
+probes do that, comparing each against the twin `host_default_field` selects
+for this host rather than against a hardcoded `sh`, because the file runs on
+Windows too. `assert_full_stdlib_renders` is the negative control on the
+explicit comparison: without it, two identical failures would satisfy it.
 
 Manifest rendering has two caller-selected modes. Full rendering evaluates all
 manifest fields, including recipe bodies, for build, generate, and manifest
@@ -172,6 +183,40 @@ preserves the historical lowercase `true` and `false` spelling when a Boolean
 helper result is interpolated into a string field, while delegating all
 non-Boolean values to MiniJinja's `escape_formatter`. Keep this as one
 registration-wide policy: do not add per-helper or per-call formatter variants.
+
+Add a new helper to **both** registration surfaces.
+`register_read_only_helpers` serves the build, and `register_query_helpers`
+serves manifest discovery; the shared sub-registrations they call —
+`collections::register_filters`, `path::register_filters`,
+`path::register_query_filters`, and `recipe_text::register_filters` — are what
+make a helper reach both, so a helper registered privately to one surface is
+reachable from a build but invisible to `netsuke help targets`, or the reverse.
+Where the two surfaces must differ, the difference is a deliberate decision to
+record here rather than an accident of which function happened to be edited:
+the recipe-text dialect default above is the one live example, and
+`register_disabled_query_helpers` is the mechanism for a helper the query
+surface must *refuse* rather than serve.
+
+Argument style follows the shape of the options, not the author's taste. A
+trailing sequence of `Option<T>` parameters, as in
+`contents(raw, encoding, kwargs)`, `hash(raw, alg, kwargs)`, and
+`digest(raw, len, alg, kwargs)` (`src/stdlib/path/filters.rs`), is for options
+that read naturally in a fixed order and that a caller would plausibly give
+positionally. `Kwargs` alone, as in `linecount`, `now`, `timedelta`, `fetch`,
+`which`, and `command_available`, is for independent named options and for any
+enumerated value set expected to widen. Always terminate with `kwargs: Kwargs`
+and call `kwargs.assert_all_used()` so an unrecognized keyword is an error
+rather than a silent no-op.
+
+`Value::try_iter()` is **not** a sequence check, and must not be used as one
+(decision D8). It succeeds on a map, yielding its keys, and on a string,
+yielding its characters, so a filter that guards with it alone would quietly
+return the wrong thing rather than fail: `{{ my_map | compact }}` would render
+the map's keys. Guard on `Value::kind()` against `ValueKind::Seq | Iterable`
+first, as `compact_filter` does (`src/stdlib/collections.rs`), and raise a
+localized error naming the received kind. The same confusion awaits any helper
+that appears to accept both `none` and a sequence: `is_blank` in that module is
+the worked example of drawing the line deliberately rather than by truthiness.
 
 Helpers excluded from the query allowlist are registered as deliberate
 query-disabled stubs by the standard-library adapter. The stubs return a
@@ -592,11 +637,11 @@ producing a translation — the code is an identifier a reader greps for, and th
 localized catalogues assert on the exact spelling. Copy the bracketed span
 unchanged and translate only the prose around it.
 
-The audit lives in `build_l10n_audit/`, split into
-`keys.rs` and `scanner.rs` (the `define_keys!` scanner, with `byte_index.rs`
-for its byte-position bookkeeping), `ftl.rs` (catalogues), `metadata.rs` (the
-Cargo metadata), and `compare.rs` (the rules). Because build scripts are not
-test targets, those modules are included by path from four test files:
+The audit lives in `build_l10n_audit/`, split into `keys.rs` and `scanner.rs`
+(the `define_keys!` scanner, with `byte_index.rs` for its byte-position
+bookkeeping), `ftl.rs` (catalogues), `metadata.rs` (the Cargo metadata), and
+`compare.rs` (the rules). Because build scripts are not test targets, those
+modules are included by path from four test files:
 `tests/build_l10n_keys_tests.rs` exercises the `define_keys!` scanner
 (`keys.rs`, `scanner.rs`, `byte_index.rs`); `tests/build_l10n_parser_tests.rs`
 exercises the catalogue and metadata parsers (`ftl.rs`, `metadata.rs`);

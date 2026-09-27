@@ -63,8 +63,8 @@ _If you are upgrading: see the
 - Add the `shell_quote` and `shell_join` recipe-text filters, and the `compact`
   collection filter. `shell_quote` encodes one string as one shell word and
   `shell_join` encodes a sequence as a command line, each for a `dialect` of
-  `sh` or `powershell` that defaults to the dialect implied by the active recipe
-  shell. The documented `shell_escape` name is superseded rather than
+  `sh` or `powershell` that defaults to the dialect implied by the active
+  recipe shell. The documented `shell_escape` name is superseded rather than
   implemented, because it would quote for the wrong interpreter on Windows
   ([#593](https://github.com/leynos/netsuke/issues/593), [ADR-041](docs/adr-041-canonical-recipe-shell-quoting-surface.md))
 - Add the `default=` keyword argument to the `env()` template function, leaving
@@ -72,8 +72,8 @@ _If you are upgrading: see the
   ([#593](https://github.com/leynos/netsuke/issues/593))
 - Count `shell_quote` and `shell_join` dialect resolutions in the bounded
   `netsuke_manifest_shell_quote_dialect_total` counter, labelled by `dialect`
-  and by whether the call site named the dialect or accepted the default, so the
-  manifests whose generated text is not pinned to an encoding are measurable
+  and by whether the call site named the dialect or accepted the default, so
+  the manifests whose generated text is not pinned to an encoding are measurable
   ([ADR-041](docs/adr-041-canonical-recipe-shell-quoting-surface.md))
 
 ### Added

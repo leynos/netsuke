@@ -9,6 +9,7 @@
 //! the recorder at all.
 
 use super::{ConfigMetricsRecorder, SnapshotEntry};
+use anyhow::Result;
 use metrics::counter;
 use metrics_util::{MetricKind, debugging::DebugValue};
 use netsuke::{
@@ -23,20 +24,32 @@ use rstest::rstest;
 /// The `Environment` is registered through the same `register_with_config`
 /// entry point a real render uses, so the default dialect under test is the one
 /// a manifest would actually receive rather than one this test chose.
-fn recorded_render(shell: RecipeShell, template: &str) -> Vec<SnapshotEntry> {
+///
+/// Two bindings are supplied because the two filters under test take different
+/// subject shapes: `shell_quote` encodes one string, while `shell_join`
+/// requires a sequence. Binding only the string would leave `shell_join`
+/// unrunnable here, and binding only the sequence would leave `shell_quote`
+/// failing its own subject check.
+///
+/// The three fallible steps are propagated rather than unwrapped here because
+/// this helper is not itself a test, and the workspace denies a panic outside
+/// test-only code. Each caller unwraps at its own call site, inside a function
+/// the lint recognizes.
+fn recorded_render(shell: RecipeShell, template: &str) -> Result<Vec<SnapshotEntry>> {
     let recorder = ConfigMetricsRecorder::new();
     let snapshotter = recorder.snapshotter();
-    let base = StdlibConfig::from_current_dir().expect("a stdlib configuration for the test host");
-    let config = base.with_recipe_shell(shell);
+    let config = StdlibConfig::from_current_dir()?.with_recipe_shell(shell);
     let mut env = minijinja::Environment::new();
-    netsuke::stdlib::register_with_config(&mut env, config).expect("stdlib registration");
+    netsuke::stdlib::register_with_config(&mut env, config)?;
 
     metrics::with_local_recorder(&recorder, || {
-        env.render_str(template, minijinja::context! { value => "a b" })
-            .expect("the filter renders");
-    });
+        env.render_str(
+            template,
+            minijinja::context! { value => "a b", items => ["a", "b"] },
+        )
+    })?;
 
-    snapshotter.snapshot().into_vec()
+    Ok(snapshotter.snapshot().into_vec())
 }
 
 /// Count the retained increments for one `dialect`/`source` pair.
@@ -76,6 +89,21 @@ fn every_series_is_bounded(snapshot: &[SnapshotEntry]) -> bool {
     })
 }
 
+/// The `(dialect, source)` pair one retained series carries, if it has both.
+///
+/// Extracted from the caller so the label walk is not nested inside the
+/// generator loops that drive it.
+fn dialect_pair(entry: &SnapshotEntry) -> Option<(String, String)> {
+    let labels: Vec<_> = entry.0.key().labels().collect();
+    let value_of = |wanted: &str| {
+        labels
+            .iter()
+            .find(|label| label.key() == wanted)
+            .map(|label| label.value().to_owned())
+    };
+    Some((value_of("dialect")?, value_of("source")?))
+}
+
 /// The filter's own resolutions reach the recorder and are retained.
 ///
 /// This is the constraint-13 test. An unadmitted name produces a noop handle,
@@ -97,7 +125,8 @@ fn a_filter_resolution_reaches_the_recorder(
         format!("{{{{ value | shell_quote(dialect='{dialect}') }}}}")
     };
 
-    let snapshot = recorded_render(shell, &template);
+    let snapshot =
+        recorded_render(shell, &template).expect("the filter renders under the test host");
 
     assert_eq!(
         retained_count(&snapshot, dialect, expected_source),
@@ -113,7 +142,8 @@ fn a_filter_resolution_reaches_the_recorder(
 /// `shell_join` resolves the dialect at the same boundary and is counted there.
 #[test]
 fn shell_join_records_at_the_same_boundary() {
-    let snapshot = recorded_render(RecipeShell::Posix, "{{ value | shell_join }}");
+    let snapshot = recorded_render(RecipeShell::Posix, "{{ items | shell_join }}")
+        .expect("the filter renders under the test host");
 
     assert_eq!(
         retained_count(&snapshot, "sh", "default"),
@@ -157,7 +187,7 @@ fn recorder_retains_only_the_bounded_dialect_series() {
 
 /// The admitted vocabulary is exactly the vocabulary the filter emits.
 ///
-/// The recording path is driven rather than hand-written, so this fails if the
+/// The recording path is driven rather than handwritten, so this fails if the
 /// filter ever emits a label the admission sets do not carry — which is the
 /// silent-noop defect — rather than merely asserting the constants agree with
 /// themselves, which they always would.
@@ -169,23 +199,14 @@ fn every_emitted_dialect_source_pair_is_admitted() {
             "{{ value | shell_quote }}",
             "{{ value | shell_quote(dialect='sh') }}",
             "{{ value | shell_quote(dialect='powershell') }}",
-            "{{ value | shell_join(dialect='sh') }}",
+            "{{ items | shell_join(dialect='sh') }}",
         ] {
-            emitted.extend(
-                recorded_render(shell, template)
-                    .into_iter()
-                    .filter(|entry| entry.0.key().name() == SHELL_QUOTE_DIALECT_TOTAL)
-                    .filter_map(|entry| {
-                        let labels: Vec<_> = entry.0.key().labels().collect();
-                        let value_of = |wanted: &str| {
-                            labels
-                                .iter()
-                                .find(|label| label.key() == wanted)
-                                .map(|label| label.value().to_owned())
-                        };
-                        Some((value_of("dialect")?, value_of("source")?))
-                    }),
-            );
+            let dialect_series = recorded_render(shell, template)
+                .expect("the filter renders under the test host")
+                .into_iter()
+                .filter(|entry| entry.0.key().name() == SHELL_QUOTE_DIALECT_TOTAL)
+                .filter_map(|entry| dialect_pair(&entry));
+            emitted.extend(dialect_series);
         }
     }
 

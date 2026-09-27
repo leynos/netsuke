@@ -202,7 +202,9 @@ Collection filters are pure and preserve input order.
   produces `2`.
 - `values | compact` removes `none`, undefined, and empty strings, preserving
   order. It drops nothing else: `0`, `false`, `[]`, `{}`, and a whitespace-only
-  string are retained. Example: `{{ ['a', none, '', 'b'] | compact | join(',') }}`
+  string are retained. That is what distinguishes it from MiniJinja's `select`,
+  which keeps only truthy values and so also discards `0`, `false`, and empty
+  sequences. Example: `{{ ['a', none, '', 'b'] | compact | join(',') }}`
   produces `a,b`.
 
 The following complete manifest exercises every path and collection filter. Its
@@ -334,7 +336,12 @@ across shells.
   sequences, mappings, `none`, and undefined are all errors rather than being
   stringified. The empty string renders as `''`, not as nothing. Tab, escape,
   and non-ASCII text are preserved; NUL, carriage return, and line feed are
-  rejected, because a Ninja binding is single-line by construction.
+  rejected, because a Ninja binding is single-line by construction. One word is
+  a promise about the shell, not only about the rendered text: for
+  `dialect='sh'` a POSIX shell splitting that text produces exactly one field,
+  byte-identical to the input. `tests/shell_filter_property_tests/` discharges
+  that against a real `sh`, and its companion control proves the check can fail
+  by feeding it a naive double-quoted witness.
 - `values | shell_join(dialect='sh')` renders a list as one command line, with
   exactly one space between elements. Every element must be a string, and no
   element is dropped — `['']` renders as one empty word, which is why `compact`
@@ -344,8 +351,8 @@ across shells.
   implied by the recipe's shell: `sh` on Unix, `powershell` on Windows. Pin it
   when the generated text must be byte-stable, because the default depends on
   the host and on configuration. `bash` is deliberately not accepted; `sh`
-  output is valid Bash, and a real `bash` dialect would mean something different
-  if it were added later.
+  output is valid Bash, and a real `bash` dialect would mean something
+  different if it were added later.
 - `compact` is the usual companion. `env('RUSTFLAGS', default='')` yields an
   empty string when the variable is unset, and `compact` removes it, so the
   shell word count does not change with the host's environment.
@@ -408,8 +415,8 @@ These helpers observe the host and should appear only in trusted manifests.
 - `env(name)` returns one environment variable, and `env(name, default='...')`
   returns `default` instead when the variable is missing. The default is
   consulted only for a missing variable: a non-Unicode value is still an error,
-  and a variable refused by the access policy is still refused. The default must
-  be a string; a number, boolean, list, or map is rejected rather than
+  and a variable refused by the access policy is still refused. The default
+  must be a string; a number, boolean, list, or map is rejected rather than
   stringified. Examples: `{{ env('NETSUKE_STDLIB_TOKEN') }}` and
   `{{ env('CC', default='cc') }}`.
 - `glob(pattern)` returns matching workspace paths. It is host-observing;
