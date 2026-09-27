@@ -2812,6 +2812,114 @@ catalogue has the key; there is no partial state to clean up.
 
 - [ ] EP-M5 documentation, ADR-041, roadmap tick.
 
+- [x] (2026-09-27) CodeRabbit review at `8d0db5b3` triaged; all five findings
+      dispositioned against the tree rather than the reviewer's framing.
+
+  **What the review actually was.** Two separate review artefacts, and the
+  distinction matters because only one of them is on the pull request. The
+  *posted* review `5328262147` (`CHANGES_REQUESTED`, pinned to `94b9b247`)
+  carries exactly two inline comments: the `compact` predicate at
+  `src/stdlib/collections.rs:106` and an en-GB-oxendict spelling in
+  `tests/std_filter_tests/collection_filters/compact_property.rs:91` (the
+  British `-ise` form of *recognize*, which `typos.toml` rewrites by rule, so
+  the offending word is described here rather than quoted back into a file the
+  gate reads). Both were already fixed at HEAD — the predicate by `fc967d91`,
+  the spelling by the same commit's en-GB-oxendict pass — so that review
+  requests changes that no longer exist. The *five* findings triaged here come
+  from the local
+  `coderabbit review --agent` run captured at
+  `/tmp/coderabbit-c72b2360-…-3-14-8-jinja-command-helpers-to-match-documented-ergonomics.out`,
+  which is a different artefact with a different file scope (its
+  `reviewedFiles` list runs to 107 entries and includes files this branch never
+  touched). Reading the posted review as if it were the local one, or vice
+  versa, would have led to "fixing" two already-fixed items and losing three
+  live ones.
+
+  **Dispositions.** Three fixed, two declined.
+
+  1. *`tests/stdlib_manifest_query_tests.rs:35-53`, unescaped YAML
+     interpolation* (trivial) — **fixed.** `write_description_manifest` spliced
+     `template` raw into `"    description: \"{template}\"\n"`, so a template
+     containing a `"` would close the scalar early and spill the remainder into
+     the document as YAML. Latent rather than live — every current caller passes
+     single quotes, and `PROBES` contains no `"` — but the failure mode is the
+     bad one for a *test*: the manifest would still parse, so a probe could be
+     satisfied by a document that never rendered the template it names. Now
+     encoded with `serde_yaml::to_string` (already a dev-dependency, used by six
+     other test files), which also keeps this test's own escaping out of the set
+     of things a failing probe could be blamed on.
+  2. *`tests/stdlib_manifest_query_tests.rs:1-400`, extract the probes*
+     (trivial) — **split applied; the `pub(crate)` half of the instruction
+     declined as unnecessary.** The file was exactly 400 lines, and the
+     `module_max_lines` cap is `lines > limit`, so it passed with zero
+     headroom. The probe block (196 lines) is now
+     `tests/stdlib_manifest_query_tests/dialect_probes.rs`, reached by an
+     explicit `#[path]` from the 220-line crate root. The reviewer's claim that
+     `run_query` must become `pub(crate)` for the child to reach it is **wrong**:
+     a descendant module resolves its ancestors' private items directly. The
+     compiler proved it during the split — before the `use` line was added, the
+     diagnostic was `cannot find function assert_full_stdlib_renders in this
+     scope`, resolved by `use super::{assert_full_stdlib_renders, run_query};`
+     with no visibility change at all. Adding `pub(crate)` would have widened
+     the surface to buy nothing. The split's own hazards were checked rather
+     than assumed: `#[path]` disarms `clippy::self_named_module_files`
+     (precedent: `tests/makefile_test_target.rs` +
+     `tests/makefile_test_target/*.rs`, every child declared the same way), and
+     `orphaned_module_trees` skips any directory without its own `mod.rs`, so a
+     plain `.rs` child is invisible to it. The moved body was verified
+     byte-identical to the original lines 205-400 by `sha256sum` before and
+     after, and both tests report under their new path (`dialect_probes::…`),
+     which is what proves the child compiles and runs rather than being silently
+     skipped.
+  3. *`locales/gd/messages.ftl:294`, `beit` for `baidht`* (minor) — **fixed.**
+     Valid, and the inconsistency was introduced by this branch's own
+     `7b55b322` (`git log --no-ext-diff -S "luach le beit neoni"`). Measured
+     across the whole catalogue: HEAD carried `baidht`×6, `beitean`×3, `beit`×1,
+     against `baidht`×6, `beitean`×3 on `origin/main` — so `beit` was a third
+     variant, not a defensible lenited or singular form. The Gaelic paradigm is
+     `baidht` (singular) / `beitean` (plural), and the surroundings call for the
+     singular. Now `baidht`×7, `beit`×0. No lenition is required: the only
+     ` le b` context is a following `b` in an unrelated message, and nothing
+     `bhaidht` appears in any catalogue.
+  4. *`locales/id/messages.ftl:294`, `retur kereta`* (minor) — **declined.**
+     The reviewer asks for `karakter CR`, and the wording is genuinely awkward
+     Indonesian. But the tree already renders "carriage return" as a *calque*
+     in 30-odd locales — `Wagenrücklauf`, `retorno de carro`, `retour chariot`,
+     `повернення каретки`, `キャリッジリターン` — and `id` is not the outlier.
+     More decisively, the same wording already ships at
+     `stdlib.command.quote.line_break` (line 277; line 275 on `origin/main`,
+     unchanged by this branch), and the styleguide requires message families to
+     stay parallel. **`CR` appears in 0 of 35 catalogues**, so the proposed term
+     would be a one-locale abbreviation introduced into a project-wide family
+     that has a settled form. Changing only my new line would leave two `id`
+     messages that describe the same control characters in two different
+     vocabularies; changing both would edit a line `origin/main` owns and this
+     branch has no other reason to touch. Neither is worth it for a wording
+     preference, so the finding is declined with the reasoning recorded here
+     rather than actioned. Should a later locale pass adopt `karakter CR`, it
+     should do so for the family at once, and move both lines together.
+  5. *`docs/localization-glossary.md:1217`, `keyword` argument* (minor) —
+     **fixed.** Valid and a real defect: the row read "the `keyword` argument of
+     `shell_quote`/`shell_join` takes this term", but neither filter has a
+     `keyword` argument — `dialect` is the only option either takes, and it is
+     keyword-only. This was prose I wrote in `57d733b4` describing the filters
+     wrongly. The row now names `stdlib.shell.positional_option` as the message
+     that carries the concept, which is checkable and true: en-GB line 299 reads
+     "`{ $filter }` takes its options by keyword", and gd line 299 renders it
+     with `facal-luirg`. The replacement was written to the table's 314-column
+     width rather than left for `mdtablefix` to re-pad, which is the lesson the
+     preceding entry records.
+
+  **The pull-request state is not approval, and was checked rather than
+  assumed.** The CodeRabbit app is **auto-paused** on this branch, so its
+  `success` status on `8d0db5b3` reads "Review paused" and is a pause indicator,
+  not a review outcome. The stale `CHANGES_REQUESTED` review `5328262147`
+  remains pinned to `94b9b247` and will keep reporting until it is dismissed or
+  the app is resumed. The pull request is `MERGEABLE` with
+  `mergeStateStatus: BLOCKED`, the block being the pending required check
+  `build-test`. None of that is a substitute for the deterministic gates, which
+  is why the fixes above are gated before any re-review is requested.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
