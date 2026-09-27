@@ -120,7 +120,7 @@ impl Delimiter {
     /// This predicate is line-level and so has no container context, which makes
     /// every bound here a heuristic and this one no exception: a fence nested in
     /// a list item sits at the item's content column, four spaces for an ordered
-    /// marker, and is legal `CommonMark` that this rule does not recognise. The
+    /// marker, and is legal `CommonMark` that this rule does not recognize. The
     /// trade is taken deliberately, because the two errors are not equally
     /// costly. Missing a fence hands its body to the heading and table scans,
     /// which misreads structure and fails loudly — the corpus carries every

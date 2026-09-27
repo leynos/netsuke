@@ -715,9 +715,9 @@ Hard invariants. Violating one requires escalation, not a workaround.
   and this one is not tied to a milestone, so an ordinal would assert a lineage
   the plan does not record.
 
-  `ADR-040`'s worked specimen still described `from_yaml_all` as rejecting
-  every `from_yaml` condition. That is the wording RFC 0013 §5.6 had already
-  been corrected away from, so the specimen and the artefact it previews had
+  `ADR-040`'s worked specimen still described `from_yaml_all` as rejecting every
+  `from_yaml` condition. That is the wording RFC 0013 §5.6 had already been
+  corrected away from, so the specimen and the artefact it previews had
   disagreed since that correction. The ADR calls the specimen non-normative and
   tells the reader that RFC 0013's copy is the normative one — but a reader
   editing RFC 0013 may well copy from the ADR, and the sentence is the same
@@ -734,8 +734,8 @@ Hard invariants. Violating one requires escalation, not a workaround.
   RFC would have silently represented two capability groups. `parse` now tracks
   reserved numbers in a `BTreeSet` and rejects a repeat. The guard was proven
   live both ways rather than only made to pass: with a row mutated `0015` →
-  `0014` it fails the run with the duplicate message, and with `map.rs` reverted
-  to `658b8157` that same mutation passes **all fifteen** checks, the
+  `0014` it fails the run with the duplicate message, and with `map.rs`
+  reverted to `658b8157` that same mutation passes **all fifteen** checks, the
   one-owner test among them. Both probes ran against the live document, and RFC
   0006 was restored to `HEAD` afterwards and confirmed by md5
   (`90c5787133429ec0a8ef66c1d936b265`).
@@ -759,6 +759,53 @@ Hard invariants. Violating one requires escalation, not a workaround.
   Three new unit tests in `mod fence_tests` pin the boundary that no document
   exercises: the 0–3 accept / 4–8 reject sweep, that a rejected opener leaves
   the structure below it readable, and that an indented *closer* still closes.
+
+  `cargo nextest run --test rfc_stdlib_coverage_tests` → 18 passed, 0 skipped.
+- [x] (2026-09-28) **Gate run at `3707fc1b`: two red, both in the prose this
+  pass had just added, both fixed in the commit carrying this entry.** Seven
+  targets were commissioned from one runner rather than the four named in
+  `AGENTS.md`, because the turn-end hook runs `check-fmt`, `lint`, `typecheck`,
+  `markdownlint` and `nixie` while `AGENTS.md` adds `doc-coverage` and `test`;
+  the union is the honest set. Five were green on the first pass — `make test`
+  at 3494 passed / 0 failed / 6 skipped in 127s, `make lint` (all five stages,
+  both Whitaker invocations), `typecheck`, `nixie`, and `doc-coverage` at
+  98.83% — and the two failures were `make check-fmt` and `make markdownlint`,
+  each on a defect this pass had introduced.
+
+  `mdtablefix` reported five hunks in the plan. Every line in every hunk was ≤
+  80 columns on both sides, so this was **not** an MD013 violation: the tool's
+  greedy fill packs the same words into a different arrangement than the hand
+  wrap, and one word's displacement cascades through the paragraph. The correct
+  fix is therefore to accept the tool's arrangement, not to shorten anything.
+  Applied with the scoped invocation this plan already records, and confirmed
+  idempotent — `--check` with the gate's own selector then reports
+  `169 files left unchanged`, exit 0. The result matches the runner's read-only
+  `--diff` capture byte for byte, which is the determinism check: the fix
+  reproduced the tool's own output rather than merely silencing it.
+
+  `markdownlint` failed *before markdownlint ran*. Its `spelling` prerequisite
+  aborts on `recognise` at `1473:57`, so `mdlint` never executed and the diff
+  has **no** markdownlint verdict from that run — an unknown, not a green. The
+  re-run closes that gap explicitly: `spelling` passes and `mdlint` proceeds to
+  169 files with 0 errors. The `-ise` to `-ize` fix was applied to both copies
+  of the sentence, the plan and the Rust doc comment it quotes, because the
+  branch's own Observation records that rule — *when a correction is applied to
+  an artefact, grep for its other copies in the same commit* — and applying it
+  to one copy only would reproduce the ADR/RFC divergence at the start of this
+  same pass. The `.rs` copy reds no gate: the spelling gate is Markdown-scoped
+  and the Rust corpus is genuinely split on this word (12 files `-ise`, 9
+  `-ize`, one file carrying both), so the local convention does not decide it.
+  What decided it was that this branch authored exactly one Rust occurrence and
+  it is the quoted same sentence.
+
+  Two things were deliberately not changed. The twelve pre-existing `.rs` files
+  spelling `recognise` are outside this delta and outside every gate's scope;
+  rewriting them would put twelve unrelated files in a prose-fix commit. And
+  `docs/execplans/…:1072` is 81 columns but is exempt: MD013's `\S*$` rule
+  means a line whose final token begins within 80 columns is not flagged, the
+  config sets no `strict`/`stern`, and `git log -S` shows the line was
+  introduced by `6ed33733` — an earlier, already-published commit, so it is not
+  a regression this pass introduced.
 
   `cargo nextest run --test rfc_stdlib_coverage_tests` → 18 passed, 0 skipped.
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
@@ -1422,36 +1469,37 @@ tracked; the derivation it performs is reimplemented in the coverage test at
   divergence was introduced by the correction itself: it was applied to the
   artefact and not to the specimen that previews it, and the two then disagreed
   for eleven days across three gate runs and three review passes. Evidence:
-  CodeRabbit's fourth pass flagged the ADR line; extracting the bullet from both
-  files showed the ADR's copy to be the pre-correction text. Impact: this is not
-  a stale comment. The specimen is the only worked example a `EP-M4` to `EP-M10`
-  author has, and it is a full section rather than a summary, so the ADR is what
-  gets copied. A second copy of a normative text needs either a check or an
-  explicit pointer to the artefact as the single source — the ADR already has
-  the pointer and it was not enough, so the rule this records is narrower:
-  **when a correction is applied to an artefact, grep for its other copies in
-  the same commit.** Neither `make check-fmt` nor `make lint` compares two
-  documents' prose, and no review pass before this one had both copies in view.
+  CodeRabbit's fourth pass flagged the ADR line; extracting the bullet from
+  both files showed the ADR's copy to be the pre-correction text. Impact: this
+  is not a stale comment. The specimen is the only worked example a `EP-M4` to
+  `EP-M10` author has, and it is a full section rather than a summary, so the
+  ADR is what gets copied. A second copy of a normative text needs either a
+  check or an explicit pointer to the artefact as the single source — the ADR
+  already has the pointer and it was not enough, so the rule this records is
+  narrower: **when a correction is applied to an artefact, grep for its other
+  copies in the same commit.** Neither `make check-fmt` nor `make lint`
+  compares two documents' prose, and no review pass before this one had both
+  copies in view.
 
 - Observation: the ownership check could not see the one collision its own
-  subject matter is named for. The coverage map must contain exactly one row per
-  capability group, `D2` allocates RFC numbers lazily *because* they collide,
-  and the plan re-enumerates remote heads before each child commit for exactly
-  that reason — yet `parse` had no duplicate-number guard, and nothing else
-  noticed one either. Evidence: `Map::ownership` inserts every claimed helper
-  into one map keyed by name and errors only when the *same helper* is claimed
-  by two *different* numbers, so two rows sharing a number are not a conflict to
-  it; downstream, `registries::parse_all` filters on `children.contains`, and
-  both the status and registry checks match rows with `find`/`any`. A
-  mutation of row `0015` to `0014` therefore passed all fifteen checks, one
-  child silently representing two capability groups. Impact: three separate
-  guards each had a partial view and each assumed another had the whole one.
-  The duplicate-number guard now sits in `parse`, the only place both rows are
-  visible before they are separated into `Map::rows`. The general lesson is the
-  converse of the ADR one: a check keyed on the *aggregate* (helpers → owner)
-  cannot enforce a property of the *members* (one number per row), and the
-  subject matter's own history of collisions is a hint about which property
-  deserves a direct guard rather than an emergent one.
+  subject matter is named for. The coverage map must contain exactly one row
+  per capability group, `D2` allocates RFC numbers lazily *because* they
+  collide, and the plan re-enumerates remote heads before each child commit for
+  exactly that reason — yet `parse` had no duplicate-number guard, and nothing
+  else noticed one either. Evidence: `Map::ownership` inserts every claimed
+  helper into one map keyed by name and errors only when the *same helper* is
+  claimed by two *different* numbers, so two rows sharing a number are not a
+  conflict to it; downstream, `registries::parse_all` filters on
+  `children.contains`, and both the status and registry checks match rows with
+  `find`/`any`. A mutation of row `0015` to `0014` therefore passed all fifteen
+  checks, one child silently representing two capability groups. Impact: three
+  separate guards each had a partial view and each assumed another had the
+  whole one. The duplicate-number guard now sits in `parse`, the only place
+  both rows are visible before they are separated into `Map::rows`. The general
+  lesson is the converse of the ADR one: a check keyed on the *aggregate*
+  (helpers → owner) cannot enforce a property of the *members* (one number per
+  row), and the subject matter's own history of collisions is a hint about
+  which property deserves a direct guard rather than an emergent one.
 
 - Observation: three of this repository's Markdown tools disagree about where a
   fence may begin, and the disagreement runs in the direction that hides a
@@ -1462,20 +1510,20 @@ tracked; the derivation it performs is reimplemented in the coverage test at
   "consistent" mode. Evidence: `Delimiter::opening` read `line.trim_start()`;
   an indentation sweep showed `mdtablefix` leaving a table untouched at every
   indent 0–6, and `markdownlint` reporting zero errors for a 4-space-indented
-  fence. Impact: a document whose only code block is indented passes every gate,
-  so the leniency was invisible by construction rather than by accident — and
-  the failure it permits is the silent one, an indented run of backticks
+  fence. Impact: a document whose only code block is indented passes every
+  gate, so the leniency was invisible by construction rather than by accident —
+  and the failure it permits is the silent one, an indented run of backticks
   swallowing every heading and table beneath it. The fix aligns the predicate
   with `CommonMark` and the module's own doc-comment claim, which is also what
   the shipped sibling reader in `tests/documentation_examples/mod.rs` does
   (column zero only, stricter than `CommonMark`). The cost is named in the doc
   comment rather than hidden: a fence nested in a list item is at the item's
-  content column and this line-level predicate will not recognise it. That
+  content column and this line-level predicate will not recognize it. That
   error is loud — the body is handed to the heading and table scans and
   misparses — and the corpus has **zero** indented fences across all 23 scanned
-  files (the 22 under `docs/rfcs/` plus `docs/roadmap.md`, 206 fence lines, none
-  indented), so no document needs the nested form today. Three unit tests in
-  `mod fence_tests` pin the boundary, because a corpus with no instance of a
+  files (the 22 under `docs/rfcs/` plus `docs/roadmap.md`, 206 fence lines,
+  none indented), so no document needs the nested form today. Three unit tests
+  in `mod fence_tests` pin the boundary, because a corpus with no instance of a
   shape cannot test the predicate for it.
 
 ## Decision log
