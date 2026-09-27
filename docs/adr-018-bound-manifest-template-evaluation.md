@@ -104,7 +104,7 @@ operator-established ceiling.
 
 - [`src/manifest/budget/`](../src/manifest/budget/)
 - [`src/manifest/expand/`](../src/manifest/expand/)
-- [`src/manifest/render.rs`](../src/manifest/render.rs)
+- [`src/manifest/render/mod.rs`](../src/manifest/render/mod.rs)
 - [`src/manifest/jinja_macros/`](../src/manifest/jinja_macros/)
 - [`src/manifest/budget/adapter.rs`](../src/manifest/budget/adapter.rs)
 - [`src/manifest/loading.rs`](../src/manifest/loading.rs)

@@ -744,10 +744,10 @@ dependency-only aggregate does not need a synthetic `command: ":"` recipe.
 
 The lowering stages have deliberately separate responsibilities:
 
-- `src/manifest/render.rs` renders a scalar or each list entry independently.
-  Every entry sees the same cloned recipe context, including target variables
-  and delayed `ins`/`outs` markers. A rendering error for a list includes its
-  one-based entry position.
+- `src/manifest/render/mod.rs` renders a scalar or each list entry
+  independently. Every entry sees the same cloned recipe context, including
+  target variables and delayed `ins`/`outs` markers. A rendering error for a
+  list includes its one-based entry position.
 - `src/ir/from_manifest_support.rs` prepares one shell-quoted input/output
   binding set for the recipe, then interpolates every scalar or list entry with
   that set. Both recipe kinds recognize the same `{{ ins }}` and `{{ outs }}`
@@ -4980,11 +4980,11 @@ general shell parser, and is not intended for reuse outside that boundary. The
 sibling `src/ir/cmd_interpolate/command_substitution.rs` owns the local quote
 and parenthesis state needed to keep protected `$()` bodies isolated.
 
-`src/manifest/render.rs` may emit the internal tokens while rendering the only
-accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell variables
-`$ins` and `$outs` are not Netsuke markers and must pass through as shell text
-for the backend to escape. Keep the constants and their recognition limited to
-this two-stage recipe pipeline and its direct IR recipe tests.
+`src/manifest/render/mod.rs` may emit the internal tokens while rendering the
+only accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell
+variables `$ins` and `$outs` are not Netsuke markers and must pass through as
+shell text for the backend to escape. Keep the constants and their recognition
+limited to this two-stage recipe pipeline and its direct IR recipe tests.
 
 ### Command interpolation contract
 
