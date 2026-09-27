@@ -1970,7 +1970,7 @@ the accepted size and performance budgets.
     `debug_assert*` sites in `src/ir/cycle/support.rs`,
     `src/ir/cycle/detector.rs`, `src/ir/cmd_interpolate/mod.rs`,
     `src/stdlib/time/format.rs`, `src/stdlib/command/quote.rs`,
-    `src/ninja_gen/mod.rs`, and `src/cli/discovery_layers.rs`, plus selected
+    `src/ninja_gen/mod.rs`, and `src/cli/discovery/layers.rs`, plus selected
     arithmetic boundaries, valid inputs, and intentionally rejected inputs.
   - Cover `NamedAction::write_into` for `Recipe::Rule`: assert the
     debug-assertion panic in its applicable profile and
