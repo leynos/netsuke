@@ -8,7 +8,7 @@ be kept up to date as work proceeds.
 
 Status: COMPLETE
 
-Revision 2.31. See `Revision note` at the foot of this document.
+Revision 2.32. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -1212,7 +1212,7 @@ therefore the sum of the two — 8m20s with these figures. An unpinned stop
 timeout hands that decision to the host default, 90 seconds on the reference
 host, and a payload that ignores `SIGTERM` can then overrun the nominal cap by
 that much: one sleeping for 200 seconds under `RuntimeMaxSec=3s` alone was
-killed at 93 seconds, and at 23 seconds once `TimeoutStopSec=20s` was pinned.
+killed at 94 seconds, and at 23 seconds once `TimeoutStopSec=20s` was pinned.
 
 `tee` sits inside the scope, and that is deliberate. The pipeline travels as
 the scope's payload, so the captured file is exactly the output the cap
@@ -1228,9 +1228,11 @@ does reach the verifier: GNU `timeout` signals the supervised command's process
 group rather than only its immediate child, and under `--scope` the payload's
 parent is the `timeout` process itself, so the two share one. Two other limits
 still make it the worse bound: the `--kill-after=` grace is added to the
-deadline rather than nested inside it, and a descendant that leaves the process
-group by `setsid` or a double fork escapes a process-group signal altogether,
-while the scope's cgroup stop does not depend on signal propagation.
+deadline rather than nested inside it, and a descendant that changes its
+process-group membership, by `setsid()` or `setpgid()`, escapes a process-group
+signal altogether, while the scope's cgroup stop does not depend on signal
+propagation. A double fork alone does not escape it: the descendant keeps the
+group it inherited, so the signal still reaches it.
 
 ```bash
 systemd-run \
@@ -1553,8 +1555,8 @@ outside this local completion boundary and must be reported separately by CI.
   two pre-rebase SHAs were replaced by their replayed twins, and the Kani
   wrapper's cap was made to bind — `-p RuntimeMaxSec=8m` on the scope replaces a
   `timeout` prefix whose `--kill-after=` grace was added to its deadline.
-  Revision 2.31 corrected the mechanism this entry originally stated and
-  completed the reconciliation. One finding misattributed the `-D warnings`
+  Revisions 2.31 and 2.32 corrected the mechanism this entry originally stated
+  and completed the reconciliation. One finding misattributed the `-D warnings`
   change to `00f48f77`; `2c030fd1` is correct and the text stands.
 
 ## Surprises & discoveries
@@ -2189,7 +2191,7 @@ third finding read the runtime as inconsistent with the documented
 scope recorded a 303-second lifetime (`21:41:15` started, `21:46:18` "Consumed
 7min 53.192s CPU time"), so the suite completed under a nominally 300-second
 cap. The mechanism this revision first gave for that overrun was wrong, and
-Revision 2.31 corrects it: the prefix did reach the payload, but its
+Revisions 2.31 and 2.32 correct it: the prefix did reach the payload, but its
 `--kill-after=` grace is added to the prefix's deadline rather than nested
 inside it, so the bound it enforced was `5m + 20s` rather than 5m. The
 pipeline's status was `tee`'s besides. The wrapper now sets
@@ -2203,7 +2205,9 @@ is no longer masked by the pipeline's `tee`. The same incomplete wrapper was
 prescribed by
 `docs/execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md`; it
 belonged to roadmap 4.2.2 and was raised rather than edited, per `OBL-PATCHES`,
-as #765.
+as #765. The residue that escalation left in this file — the unpinned stop
+timeout and the out-of-scope `tee` — is corrected by Revision 2.32 below; the
+same correction to the 4.2.2 plan landed from PR #768 as `c298a643`.
 
 The fourth finding claimed that `-D warnings` entered `kani-full` via
 `00f48f77` rather than `2c030fd1`; that is false and the text is unchanged.
@@ -2242,3 +2246,59 @@ constraint, and the 2026-09-21 progress entry — and the `OBL-PATCHES`
 escalation to #765 is retained as history even though its subject is now edited
 here, because it records why 4.2.3 waited for 4.2.2. No obligation, criterion,
 or completion state changes: header `COMPLETE`, roadmap `[x]`.
+
+**Revision 2.32 (2026-09-27, issue #769).** The wrapper in `Concrete steps` was
+corrected, and the mechanism Revision 2.30 gave for the 2026-09-20 overrun was
+replaced. That mechanism — that `timeout` signals only its direct child while
+`--scope` detaches the payload into its own cgroup, so the prefix capped the
+launcher rather than the work — does not reproduce on the reference host
+(systemd 257): the payload's parent is the `timeout` process itself and the two
+share one process group, and a `SIGTERM`-vulnerable payload under
+`timeout -s TERM 3` stops at 3 seconds. The genuine defects are narrower, and
+there are three. The `--kill-after=` grace is added to the prefix's deadline
+rather than nested inside it, so a payload that ignores the first signal is
+bounded by `5m + 20s`. A descendant that changes its process-group membership,
+by `setsid()` or `setpgid()`, escapes a process-group signal altogether, while
+the scope's cgroup stop does not depend on signal propagation; a double fork
+alone does not escape it, since the descendant keeps the group it inherited.
+And Revision 2.30 left the scope's stop timeout unpinned, so `RuntimeMaxSec`
+alone did not bound the payload at its nominal figure.
+
+The command now pairs `-p RuntimeMaxSec=8m` with `-p TimeoutStopSec=20s`, moves
+`tee` inside the scope by giving `bash -c` the whole pipeline, and sets
+`pipefail` in that same shell. The effective bound is the sum of the pair,
+8m20s, and that arithmetic is now stated rather than implied. Independently
+reproduced here: a 3-second cap carried a `SIGTERM`-ignoring payload for 94
+seconds against the host's 90-second default stop timeout, and 23 seconds once
+the grace was pinned; `timeout --kill-after=8s 3` likewise ran 11 seconds, and
+a scope set to `RuntimeMaxSec=45s` with `TimeoutStopSec=5s` ran 50. The
+group-escape claim was measured rather than assumed: against a prefix firing
+`SIGTERM` at 3 seconds, a descendant left in its inherited process group died
+with the payload, one that called `setsid()` survived, and one created by a
+double fork without changing group membership died too — so it is the group
+change, not the extra fork, that escapes the signal. Revision 2.30 named the
+double fork alongside `setsid`, and that half of the claim was wrong.
+
+This correction was raised as issue #769 from PR #768, and #768 has since
+landed on `main` as `c298a643`, bringing the same correction to both plans. The
+one claim #768 left uncorrected is the escape clause above, which it states as
+a double fork. That is wrong, and it is why this branch still carries a change:
+a double fork does not escape a process-group signal, because the descendant
+keeps the group it inherited and the signal still reaches it. Only a change of
+group escapes. Five cases were probed against a `timeout` prefix firing
+`SIGTERM` to its group at 3 seconds, with each descendant resetting its
+disposition to `SIG_DFL` first: an unsignalled control survived, a descendant
+in the inherited group died, one that called `setsid()` survived, one that
+called `setpgid()` survived, and one created by a double fork alone died. The
+first three probe generations reported the opposite, because the payload's
+`trap '' TERM` is inherited across fork and exec and a non-interactive shell
+cannot reset it, so every descendant was immune and the verdicts masked the
+mechanism under test. That is also why the claim survived review: a probe that
+reports "survived" for a reason other than the one under test looks like
+confirmation. The corrected wording is carried to the two other files that
+restate it — `docs/developers-guide.md`, which cites these plans as its probe
+evidence, and the 4.2.2 plan, which states it in four places — in the commit
+that follows this one.
+
+No obligation, criterion, or completion state changes: header `COMPLETE`,
+roadmap `[x]`.
