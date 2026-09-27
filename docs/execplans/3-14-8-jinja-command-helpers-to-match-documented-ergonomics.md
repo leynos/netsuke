@@ -3597,7 +3597,7 @@ recorded for whoever hits them next.
 
 - [x] (2026-09-27) Rebase onto `96b89ca9`, the seven gates green at `338df305`,
   and the review findings dispositioned. This entry is the record of the
-  post-review repair pass; the dispositions are itemised so a later reader can
+  post-review repair pass; the dispositions are itemized so a later reader can
   re-check them without replaying the review.
 
   **The rebase and what it cost.** Forty-three commits replayed onto
@@ -3653,7 +3653,7 @@ recorded for whoever hits them next.
      apply to it. The predicate now tests `ValueKind::String` first, which is
      the rule its doc comment already claimed, and a test pins it. The
      current unreachability is stated in the doc rather than relied on:
-     `value_from_bytes` normalises empty bytes, so nothing constructs such a
+     `value_from_bytes` normalizes empty bytes, so nothing constructs such a
      value today — but the predicate should state what it means, not what
      happens to arrive.
   3. **`property_support::posix_shell`'s doc described the wrong algorithm —
@@ -3709,6 +3709,46 @@ recorded for whoever hits them next.
   `contains "must be a string"`, which is stronger anyway: it proves the
   type-error path was taken, whereas the absence of "powershell" would also
   hold if the filter had failed for some unrelated reason.
+
+  **The first gate run after the repair pass was red, on two defects in this
+  branch's own new material.** Recorded rather than quietly repaired, because
+  both are instances of traps this plan has already named, and the second
+  instance is the more instructive one.
+
+  1. `make check-fmt` failed at `cargo fmt --all -- --check` on
+     `tests/std_filter_tests/collection_filters/compact_tests.rs:56` — the new
+     byte-array test's `render_str` call fits 80 columns as written but rustfmt
+     still breaks it into a multi-line call, so "it looks fine" is not the
+     same test as "rustfmt agrees".
+  2. `make markdownlint` failed in its `spelling` **prerequisite**, not in
+     `markdownlint-cli2`: two words in the new ExecPlan prose carried the
+     en-GB `-ise` inflection where this project's tooling requires `-ize` —
+     the past participle of *itemize*, and the third-person form of
+     *normalize*. Both were this branch's own added lines, in the paragraph
+     describing the byte-array fix, not inherited text. The fix is the `-ize`
+     spelling in each case, per the en-GB-oxendict rule.
+
+  **Both failures masked work that was never run, and that is the point worth
+  carrying.** `check-fmt` aborted inside its first command, so `ruff format
+  --check` and `mdtablefix --check` did not execute. `markdownlint` aborted in
+  `spelling`, so `markdownlint-cli2` never ran against *any* Markdown file —
+  which means the Markdown-lint verdict for this revision was **unknown**, not
+  passed, and it had been unknown for the whole branch. Neither gate's
+  failure says anything about the stages behind it. The general rule this plan
+  keeps rediscovering: a gate that aborts reports a lower bound on the work
+  remaining, and the correct reading of "one gate failed" is "the stages after
+  the failure are unmeasured".
+
+  **A note on the spelling gate's tolerance, verified rather than assumed.**
+  The gate flagged exactly two forms, while the same added prose contains
+  `recognise`, `recognises`, and `localised` — so the gate is not a blanket
+  `-ise` scanner. It is `typos-config-builder gate`, which regenerates
+  `typos.toml` from the estate configuration; `recognise` and its inflections
+  are tolerated there (`typos.toml:2169-2173`), which is why the citation of
+  the reviewer's `recognise` → `recognize` suggestion inside this very
+  paragraph does not itself red the gate. Reading the gate as "any `-ise`
+  fails" would have produced three unnecessary edits; reading it as "whatever
+  the regenerated config says fails" produced exactly two.
 
   **A scope fact worth carrying forward.** `make markdownlint` depends on
   `spelling`, which runs `typos-config-builder gate` with its default

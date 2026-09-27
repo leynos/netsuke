@@ -56,7 +56,10 @@ fn compact_retains_an_empty_byte_array() -> Result<()> {
     let env = fallible::stdlib_env()?;
     let values = vec![Value::from_bytes(Vec::new()), Value::from("")];
     let output = env
-        .render_str("{{ values | compact | length }}", context!(values => values))
+        .render_str(
+            "{{ values | compact | length }}",
+            context!(values => values),
+        )
         .context("render compact over an empty byte array")?;
     ensure!(
         output == "1",
