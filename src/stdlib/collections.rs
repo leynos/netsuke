@@ -102,8 +102,18 @@ fn uniq_filter(values: &Value) -> Result<Value, Error> {
 /// Only `none`, undefined, and the empty string are blank. `0`, `false`, `[]`,
 /// `{}`, and a whitespace-only string are values and are retained; naming the
 /// predicate keeps that asymmetry visible to the next reader.
+///
+/// The empty-string arm tests [`ValueKind::String`] rather than asking
+/// `Value::as_str`. That method answers for well-formed UTF-8 *bytes* too, so
+/// `Value::from_bytes(vec![])` would report an empty string and be dropped —
+/// silently discarding a byte array on the strength of a text rule that does
+/// not apply to it. Nothing in Netsuke constructs such a value today
+/// ([`crate::stdlib::value_from_bytes`] normalises empty bytes to a string),
+/// but the predicate now states the rule it actually means.
 fn is_blank(value: &Value) -> bool {
-    value.is_none() || value.is_undefined() || value.as_str().is_some_and(str::is_empty)
+    value.is_none()
+        || value.is_undefined()
+        || (value.kind() == ValueKind::String && value.as_str().is_some_and(str::is_empty))
 }
 
 /// Drop blank members from a sequence, preserving order.

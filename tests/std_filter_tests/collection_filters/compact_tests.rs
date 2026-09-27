@@ -44,6 +44,28 @@ fn compact_drops_witness_case_blanks_only() -> Result<()> {
     Ok(())
 }
 
+/// An empty byte array is a value, not an empty string.
+///
+/// `Value::as_str` answers for well-formed UTF-8 bytes as well as strings, so
+/// a predicate written as `value.as_str().is_some_and(str::is_empty)` discards
+/// `Value::from_bytes(vec![])` under a rule that only ever meant empty text.
+/// The two kinds are distinct here, and the length check distinguishes them
+/// without depending on how either renders.
+#[test]
+fn compact_retains_an_empty_byte_array() -> Result<()> {
+    let env = fallible::stdlib_env()?;
+    let values = vec![Value::from_bytes(Vec::new()), Value::from("")];
+    let output = env
+        .render_str("{{ values | compact | length }}", context!(values => values))
+        .context("render compact over an empty byte array")?;
+    ensure!(
+        output == "1",
+        "compact must retain the empty byte array and drop only the empty string, but the \
+         surviving length was {output}"
+    );
+    Ok(())
+}
+
 /// An explicit `none` member is droppable, not merely a coerced absence.
 #[test]
 fn compact_drops_an_injected_none_member() -> Result<()> {
