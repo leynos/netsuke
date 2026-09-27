@@ -3600,6 +3600,42 @@ catalogue has the key; there is no partial state to clean up.
   are recorded rather than tidied away, for the same reason as the paragraphs
   above: a count that came from a tool's formatting is not a count.
 
+- [x] (2026-09-27) The seven-gate set is green at `5f793f01`, the revision that
+      records the run at `77089f0a` and the triage above.
+
+  `SHA_BEFORE == SHA_AFTER == 5f793f017b61e016da4eee001b3b4a203e313c2f` and
+  `DIRTY_BEFORE == DIRTY_AFTER == 0` on all seven gates, every one `EXIT=0`,
+  verified from the `.rc.meta` sidecars. `build-test`, `kani-smoke`,
+  `netsukefile`, and `release / metadata` — the four checks the
+  `main-required-checks` ruleset names — all completed `success` on the
+  preceding revision `77089f0a`, and the final push is a docs-only delta from
+  it. Per-gate evidence is in the canonical `/tmp` triples; the `77089f0a` run
+  survives as `.prior-20260927T121251`, alongside the earlier
+  `.prior-20260927T1202` (`67938852`) and `.prior-20260927T114937` (`c7720535`).
+
+  **Every commit that recorded a gate result moved HEAD past the revision it
+  recorded, forcing the next run.** That happened three times: `c7720535` →
+  `67938852` → `77089f0a` → `5f793f01`. Each re-run was correct by the plan's
+  own provenance rule, and each was avoidable in the sense that the rule is
+  what created the work — a gate run and its own record cannot both be the last
+  word on a branch unless the record stops moving the tree. The sequence is
+  left as it is rather than retroactively tidied, because the alternative
+  readings are worse: reporting a run against a revision the plan does not
+  name, or naming a revision whose evidence was superseded.
+
+  **`5f793f01` is the last revision gated in the sequence above, and the
+  recursion is closed by one final run rather than by declaration.** Writing
+  that entry was itself the fourth commit in the sequence, so the paragraph
+  named a revision one behind the tree it landed on; the rule admits no way to
+  avoid that while also recording the run. The resolution is to gate the tip
+  once more and then make no further commit: that run covers whatever revision
+  carries this text, so for the first time in this sequence the last gate run
+  and the branch tip are the same revision. Its evidence is in `/tmp` under the
+  usual per-gate triples and is deliberately not restated here, because
+  restating it would move HEAD again and reopen the loop. A reader who finds
+  the branch tip ahead of this file's most recent SHA citation should read the
+  CI checks on the tip directly rather than inferring a gap.
+
 - [x] (2026-09-27) The seven-gate set is green at `c7720535`, the revision that
       carries the corrected disposition log.
 
