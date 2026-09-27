@@ -121,7 +121,7 @@ output and some leaf files so the long-lived structure remains visible.
 - `src/runner/`: Process execution, path handling, runner errors, command
   orchestration, capability-injected dyndep publication, and bounded generation
   and publication telemetry, including `graph/generation_telemetry.rs`,
-  `dyndep_generation_telemetry.rs`, and `process/dyndep_telemetry.rs`.
+  `dyndep/generation_telemetry.rs`, and `process/dyndep_telemetry.rs`.
 - `src/snapshots/`: Checked-in `insta` snapshots for source-level snapshot
   tests.
 - `src/shell_word.rs`: The single encoding of one string as a recipe shell

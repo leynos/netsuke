@@ -17,7 +17,7 @@ const BUNDLE_GENERATIONS_TOTAL: &str = "netsuke_ninja_dyndep_bundle_generations_
 const BUNDLE_GENERATION_DURATION: &str = "netsuke_ninja_dyndep_bundle_generation_duration_seconds";
 
 /// Record one runner-owned bundle-generation operation.
-pub(super) fn instrument_bundle_generation<T>(
+pub(in crate::runner) fn instrument_bundle_generation<T>(
     graph: &BuildGraph,
     generate: impl FnOnce() -> Result<T, NinjaGenError>,
 ) -> Result<T, NinjaGenError> {

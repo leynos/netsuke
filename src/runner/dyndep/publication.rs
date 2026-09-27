@@ -5,7 +5,7 @@
 //! the outer runner boundary and injecting the resulting `Dir` into the
 //! materializer. Only `runner` command handlers may call this module.
 
-use super::process::{self, DyndepPublicationLease};
+use super::super::process::{self, DyndepPublicationLease};
 use crate::cli::Cli;
 use crate::localization::{self, keys};
 use crate::ninja_gen::{GeneratedDyndep, GeneratedNinja};
@@ -13,7 +13,7 @@ use anyhow::{Context, Result};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
 /// Publication lease that protects one serial bundle while a command consumes it.
-pub(super) struct DyndepPublication {
+pub(in crate::runner) struct DyndepPublication {
     /// Effective Ninja working directory opened for a sidecar-bearing bundle.
     dir: Option<Dir>,
     /// Advisory lease holding sidecar publication for command consumption.
@@ -21,7 +21,7 @@ pub(super) struct DyndepPublication {
 }
 
 /// Publish a generated bundle's sidecars before a runner command uses its main file.
-pub(super) fn materialize_dyndep_bundle(
+pub(in crate::runner) fn materialize_dyndep_bundle(
     cli: &Cli,
     bundle: &GeneratedNinja,
 ) -> Result<DyndepPublication> {
@@ -40,7 +40,7 @@ pub(super) fn materialize_dyndep_bundle(
 }
 
 /// Apply retention while respecting a bundle publication lease when available.
-pub(super) fn prune_dyndep_bundle(
+pub(in crate::runner) fn prune_dyndep_bundle(
     cli: &Cli,
     current: &[GeneratedDyndep],
     publication: &DyndepPublication,

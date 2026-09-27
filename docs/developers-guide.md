@@ -4894,7 +4894,7 @@ execute-once memoization.
 
 `GeneratedNinja` is the query-command boundary: generation may construct and
 return it, but it must not publish any filesystem state.
-`src/runner/dyndep_publication.rs` owns the `materialize_dyndep_bundle`
+`src/runner/dyndep/publication.rs` owns the `materialize_dyndep_bundle`
 command, which every `build`, `clean`, and `generate` boundary must call before
 writing or invoking the main file. That command opens the effective
 working-directory capability and injects it into
@@ -4921,7 +4921,7 @@ existing content-addressed sidecar. See
 [ADR-012](adr-012-bound-dyndep-sidecar-retention.md) for the durable policy.
 
 `src/runner/graph/generation_telemetry.rs` owns runner-boundary manifest-to-IR
-graph-generation telemetry, while `src/runner/dyndep_generation_telemetry.rs`
+graph-generation telemetry, while `src/runner/dyndep/generation_telemetry.rs`
 owns dyndep bundle-generation telemetry and
 `src/runner/process/dyndep_telemetry.rs` owns publication telemetry. They may
 wrap their respective boundaries with bounded outcome-and-duration metrics and

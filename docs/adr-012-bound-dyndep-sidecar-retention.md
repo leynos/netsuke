@@ -93,7 +93,7 @@ Ninja or output consumption.
 ## Implementation references
 
 - Runner publication boundary:
-  [`src/runner/dyndep_publication.rs`](../src/runner/dyndep_publication.rs)
+  [`src/runner/dyndep/publication.rs`](../src/runner/dyndep/publication.rs)
 - Atomic sidecar materialization:
   [`src/runner/process/dyndep_files.rs`](../src/runner/process/dyndep_files.rs)
 - Retention and lease implementation:

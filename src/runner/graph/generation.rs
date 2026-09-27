@@ -6,9 +6,8 @@
 
 use super::super::manifest_structure_telemetry::record_manifest_structure;
 use super::super::{
-    Cli, Context, LocalizationKey, PipelineStage, Result, StatusReporter,
-    dyndep_generation_telemetry, generation, load_manifest_with_stage_reporting, path_helpers,
-    recipe_shell, report_pipeline_stage,
+    Cli, Context, LocalizationKey, PipelineStage, Result, StatusReporter, dyndep, generation,
+    load_manifest_with_stage_reporting, path_helpers, recipe_shell, report_pipeline_stage,
 };
 use crate::localization::{self, keys};
 use crate::ninja_gen;
@@ -65,7 +64,7 @@ pub(in crate::runner) fn generate_ninja_with_shell(
         PipelineStage::NinjaSynthesisAndExecution,
         tool_key,
     );
-    dyndep_generation_telemetry::instrument_bundle_generation(&graph, || {
+    dyndep::generation_telemetry::instrument_bundle_generation(&graph, || {
         generation::ninja_text_for_shell(&graph, graph_generation.recipe_shell)
     })
     .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))

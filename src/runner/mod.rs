@@ -4,8 +4,7 @@
 //! `ninja`, overridable with `NETSUKE_NINJA`).
 
 mod dispatch;
-mod dyndep_generation_telemetry;
-mod dyndep_publication;
+mod dyndep;
 mod error;
 mod manifest_structure_telemetry;
 mod reporter;
@@ -58,7 +57,7 @@ pub use recipe_shell_telemetry::{
     RECIPE_SHELL_RESOLUTIONS_TOTAL,
 };
 
-use dyndep_publication::{materialize_dyndep_bundle, prune_dyndep_bundle};
+use dyndep::{materialize_dyndep_bundle, prune_dyndep_bundle};
 use graph::generation::{GraphGenerationContext, generate_ninja_with_shell};
 use path_helpers::resolve_output_path;
 use recipe_shell_telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};

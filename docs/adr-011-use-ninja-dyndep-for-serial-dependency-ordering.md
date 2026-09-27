@@ -85,7 +85,7 @@ to run through that other path.
   effective Ninja working directory. `clean` may leave the immutable,
   content-addressed sidecars in place.
 - `src/ninja_gen/dyndep.rs` owns staging and naming. The command-boundary
-  module `src/runner/dyndep_publication.rs` opens the effective capability and
+  module `src/runner/dyndep/publication.rs` opens the effective capability and
   orchestrates publication and retention; `src/runner/process/dyndep_files.rs`
   owns atomic sidecar writes and verification, while
   `src/runner/process/dyndep_retention.rs` owns the lease and cleanup. Neither
