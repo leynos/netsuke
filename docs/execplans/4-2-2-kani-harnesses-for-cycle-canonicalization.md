@@ -1458,25 +1458,31 @@ corrects the mechanism its own Revision 2.30 had given for the 2026-09-20
 overrun. Nothing in this plan's scope, obligations, or completion state is
 affected: status remains `COMPLETE`.
 
-**Revision note (2026-09-27, issue #769).** The escape clause that the note
-above inherited from Revision 2.31 was wrong, and this revision corrects it in
-the three places this plan states it: the `Constraints` passage, the
-`Surprises & Discoveries` account of the additive-grace arithmetic, and the
-2026-09-22 progress entry. The clause read that a descendant "leaves the
+**Revision note (2026-09-27, issue #769).** The escape clause that PR #768
+imported into this plan was wrong, and this revision corrects it in the three
+places this plan states it: the `Constraints` passage, the `Decision Log` entry
+that carries the runtime bound with `-p RuntimeMaxSec=`, and the 2026-09-22
+entry in this revision note. The clause read that a descendant "leaves the
 process group by `setsid` or a double fork" and so escapes a process-group
 signal. Only the first half is true. A double fork does not escape it, because
 the descendant keeps the process group it inherited, so the signal still
 arrives. Five cases were probed on the reference host against a `timeout`
-prefix firing `SIGTERM` to its group at 3 seconds, with each descendant
-resetting its disposition to `SIG_DFL` first — a step the first three probe
-generations omitted, which is why they reported the opposite: the payload's
-`trap '' TERM` is inherited across `fork` and `exec` and a non-interactive
-shell cannot reset it, so every descendant was immune and the verdicts masked
-the mechanism under test. With that mask removed: an unsignalled control
+prefix firing `SIGTERM` to its group at 3 seconds: an unsignalled control
 survived, a descendant in the inherited group died, one that called `setsid()`
 survived, one that called `setpgid()` survived, and one created by a double
-fork alone died. The wording now names the group change rather than the extra
-fork. The same correction is made to the two other documents that restate the
-claim, `docs/developers-guide.md` and roadmap 4.2.3, whose Revision 2.32
-records it. Nothing in this plan's scope, obligations, or completion state is
-affected: status remains `COMPLETE`.
+fork alone died. Getting to that reading took five probe generations, and the
+reasons were independent. The payload's `trap '' TERM` is inherited across
+`fork` and `exec` and a non-interactive shell cannot reset an inherited
+disposition, so in generations 1–3 every descendant was immune and the cases
+read ALIVE whatever group they were in, masking the mechanism under test; the
+descendants that survived did so for a reason unrelated to the one being
+tested. Separately, a generation without a surviving positive control cannot
+tell a DEAD verdict from a broken probe, and the readings from those runs were
+void for that reason. The fifth generation removed the mask — each descendant
+resets its disposition to `SIG_DFL` from Python, which can — and kept a control
+that survived, so group membership became the single variable deciding
+survival. The wording now names the group change rather than the extra fork.
+The same correction is made to the two other documents that restate the claim,
+`docs/developers-guide.md` and roadmap 4.2.3, whose Revision 2.32 records it.
+Nothing in this plan's scope, obligations, or completion state is affected:
+status remains `COMPLETE`.

@@ -2206,8 +2206,9 @@ prescribed by
 `docs/execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md`; it
 belonged to roadmap 4.2.2 and was raised rather than edited, per `OBL-PATCHES`,
 as #765. The residue that escalation left in this file — the unpinned stop
-timeout and the out-of-scope `tee` — is corrected by Revision 2.32 below; the
-same correction to the 4.2.2 plan landed from PR #768 as `c298a643`.
+timeout and the out-of-scope `tee` — was corrected by Revision 2.31, which
+landed from PR #768 as `c298a643`; the same correction reached the 4.2.2 plan
+in that merge. Revision 2.32 below corrects a separate claim.
 
 The fourth finding claimed that `-D warnings` entered `kani-full` via
 `00f48f77` rather than `2c030fd1`; that is false and the text is unchanged.
@@ -2247,63 +2248,71 @@ escalation to #765 is retained as history even though its subject is now edited
 here, because it records why 4.2.3 waited for 4.2.2. No obligation, criterion,
 or completion state changes: header `COMPLETE`, roadmap `[x]`.
 
-**Revision 2.32 (2026-09-27, issue #769).** The wrapper in `Concrete steps` was
-corrected, and the mechanism Revision 2.30 gave for the 2026-09-20 overrun was
-replaced. That mechanism — that `timeout` signals only its direct child while
-`--scope` detaches the payload into its own cgroup, so the prefix capped the
-launcher rather than the work — does not reproduce on the reference host
-(systemd 257): the payload's parent is the `timeout` process itself and the two
-share one process group, and a `SIGTERM`-vulnerable payload under
-`timeout -s TERM 3` stops at 3 seconds. The genuine defects are narrower, and
-there are three. The `--kill-after=` grace is added to the prefix's deadline
-rather than nested inside it, so a payload that ignores the first signal is
-bounded by `5m + 20s`. A descendant that changes its process-group membership,
-by `setsid()` or `setpgid()`, escapes a process-group signal altogether, while
-the scope's cgroup stop does not depend on signal propagation; a double fork
-alone does not escape it, since the descendant keeps the group it inherited.
-And Revision 2.30 left the scope's stop timeout unpinned, so `RuntimeMaxSec`
-alone did not bound the payload at its nominal figure.
+**Revision 2.32 (2026-09-27, issue #769).** This revision changes no wrapper.
+The wrapper in `Concrete steps` is byte-identical to the one `main` carries, as
+are its `-p RuntimeMaxSec=8m` / `-p TimeoutStopSec=20s` pair and the
+`bash -c 'set -o pipefail; … | tee …'` capture inside the scope: that work
+landed with Revision 2.31 and is untouched here. What this revision changes is
+the escape clause, which asserts that a descendant escapes a `timeout` prefix's
+process-group signal by `setsid` **or a double fork**. The second half is false.
 
-The command now pairs `-p RuntimeMaxSec=8m` with `-p TimeoutStopSec=20s`, moves
-`tee` inside the scope by giving `bash -c` the whole pipeline, and sets
-`pipefail` in that same shell. The effective bound is the sum of the pair,
-8m20s, and that arithmetic is now stated rather than implied. Reproduced
-independently for this revision, with a `trap '' TERM` payload looping on
-`sleep 1`: a 3-second cap carried it for 94 seconds against the host's
-90-second default stop timeout, and 23 seconds once the grace was pinned;
-`timeout --kill-after=8s 3` likewise ran 11 seconds, and a scope set to
-`RuntimeMaxSec=45s` with `TimeoutStopSec=5s` ran 50. The `Concrete steps`
-figure for the unpinned case is 93 seconds rather than this run's 94, because
-the two were separate reproductions and the overshoot is a scheduler tick wide
-in either direction; both lie just past the 90-second default, which is the
-property the figure illustrates. The group-escape claim was measured rather
-than assumed: against a prefix firing `SIGTERM` at 3 seconds, a descendant left
-in its inherited process group died with the payload, one that called
-`setsid()` survived, and one created by a double fork without changing group
-membership died too — so it is the group change, not the extra fork, that
-escapes the signal. Revision 2.30 named the double fork alongside `setsid`, and
-that half of the claim was wrong.
+The clause entered this document with Revision 2.31, not Revision 2.30:
+`git log -S'double fork'` over `origin/main` returns `c298a643` for this file,
+for the 4.2.2 plan, and for `docs/developers-guide.md` alike, and Revision
+2.30's note contains no such wording. The mechanism Revision 2.30 gave for the
+2026-09-20 overrun stands corrected as Revision 2.31 records, and Revision 2.32
+leaves that account intact.
 
-This correction was raised as issue #769 from PR #768, and #768 has since
-landed on `main` as `c298a643`, bringing the same correction to both plans. The
-one claim #768 left uncorrected is the escape clause above, which it states as
-a double fork. That is wrong, and it is why this branch still carries a change:
-a double fork does not escape a process-group signal, because the descendant
-keeps the group it inherited and the signal still reaches it. Only a change of
-group escapes. Five cases were probed against a `timeout` prefix firing
-`SIGTERM` to its group at 3 seconds, with each descendant resetting its
-disposition to `SIG_DFL` first: an unsignalled control survived, a descendant
-in the inherited group died, one that called `setsid()` survived, one that
-called `setpgid()` survived, and one created by a double fork alone died. The
-first three probe generations reported the opposite, because the payload's
-`trap '' TERM` is inherited across fork and exec and a non-interactive shell
-cannot reset it, so every descendant was immune and the verdicts masked the
-mechanism under test. That is also why the claim survived review: a probe that
-reports "survived" for a reason other than the one under test looks like
-confirmation. The corrected wording is carried to the two other files that
-restate it — `docs/developers-guide.md`, which cites these plans as its probe
-evidence, and the 4.2.2 plan, which states it in three places — in the commit
-that follows this one.
+A double fork does not escape a process-group signal. The descendant is
+reparented, so its `ppid` changes to an unrelated process, but it keeps the
+process group it inherited, so a signal sent to that group still reaches it.
+Only a change of group membership — `setsid()` or `setpgid()` — escapes. Five
+cases were probed against a `timeout` prefix firing `SIGTERM` to its group at 3
+seconds, with each descendant resetting its disposition to `SIG_DFL` first: an
+unsignalled control survived, a descendant in the inherited group died, one
+that called `setsid()` survived, one that called `setpgid()` survived, and one
+created by a double fork alone died. The `ppid`/`pgid` pair corroborates it
+directly: the double-forked descendant's `ppid` changed while its `pgid` stayed
+the payload's, whereas the `setsid()` descendant had both a new `pgid` and a
+new session.
+
+Reaching that reading took five probe generations, for two separate reasons.
+The payload's `trap '' TERM` is inherited across `fork` and `exec` and a
+non-interactive shell cannot reset an inherited disposition, so in generations
+1–3 every descendant was immune and the cases read ALIVE whatever group they
+were in — the survivors survived for a reason unrelated to the one under test,
+so the verdicts decided nothing. Separately, a generation whose positive
+control dies cannot distinguish a real DEAD from a broken probe, and readings
+taken under a dead control are void on that ground alone. The fifth generation
+removed the mask, by having each descendant reset its disposition to `SIG_DFL`
+from Python, which can, and kept a control that survived; group membership was
+then the single variable deciding survival. That is also why the claim survived
+review: a probe that reports "survived" for a reason other than the one under
+test looks like confirmation, and only a case that *can* die makes the reading
+meaningful.
+
+The other limit on the prefix is the additive grace, and it was reproduced for
+this revision alongside the escape cases. With a `trap '' TERM` payload looping
+on `sleep 1`, a 3-second cap carried it for 94 seconds against the host's
+90-second default stop timeout, and 23 seconds once `-p TimeoutStopSec=20s` was
+pinned; `timeout --kill-after=8s 3` ran 11 seconds, and a scope set to
+`RuntimeMaxSec=45s` with `TimeoutStopSec=5s` ran 50. Each figure is the sum of
+its pair — `3 + 8` for the prefix, `45 + 5` for the scope — so the same
+additive arithmetic is measured in both carriers. The `Concrete steps` figure
+for the unpinned case is 93 seconds rather than this run's 94, because the two
+were separate reproductions and the overshoot is a scheduler tick wide in
+either direction; both lie just past the 90-second default, which is the
+property the figure illustrates.
+
+The claim this revision corrects is given as one of the reasons the scope's
+cgroup stop is the better bound, so it carried weight it could not support. The
+conclusion is unaffected: the additive `--kill-after=` grace and the `setsid()`/
+`setpgid()` escape both still make the prefix the worse bound, and the cgroup
+stop still catches a descendant whose group changed. The corrected wording is
+carried to the two other files that restate the claim —
+`docs/developers-guide.md`, which cites these plans as its probe evidence, and
+the 4.2.2 plan, which states it in three places — in the commit that follows
+this one.
 
 No obligation, criterion, or completion state changes: header `COMPLETE`,
 roadmap `[x]`.
