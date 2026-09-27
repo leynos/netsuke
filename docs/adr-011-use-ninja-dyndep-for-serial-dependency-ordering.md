@@ -86,11 +86,11 @@ to run through that other path.
   content-addressed sidecars in place.
 - `src/ninja_gen/dyndep.rs` owns staging and naming. The command-boundary
   module `src/runner/dyndep/publication.rs` opens the effective capability and
-  orchestrates publication and retention; `src/runner/process/dyndep_files.rs`
-  owns atomic sidecar writes and verification, while
-  `src/runner/process/dyndep_retention.rs` owns the lease and cleanup. Neither
-  side of the boundary may broaden the path-scoped guarantee with a global
-  scheduler.
+  orchestrates publication and retention;
+  `src/runner/process/dyndep/files/mod.rs` owns atomic sidecar writes and
+  verification, while `src/runner/process/dyndep/retention/mod.rs` owns the
+  lease and cleanup. Neither side of the boundary may broaden the path-scoped
+  guarantee with a global scheduler.
 - Tests must continue to use real Ninja for ordered starts, failure
   short-circuiting, shared-work reuse, and unrelated-branch concurrency.
 
@@ -126,7 +126,7 @@ manifest policy. It requires a separately approved design.
 - Ninja bundle generation:
   [`src/ninja_gen/dyndep.rs`](../src/ninja_gen/dyndep.rs)
 - Atomic sidecar materialization:
-  [`src/runner/process/dyndep_files.rs`](../src/runner/process/dyndep_files.rs)
+  [`src/runner/process/dyndep/files/mod.rs`](../src/runner/process/dyndep/files/mod.rs)
 - User contract: [user's guide](users-guide.md#run-direct-dependencies-serially)
 - Implementation history:
   [issue #552 ExecPlan](execplans/issue-552-support-serial-dependency-ordering-for-actions-and-targets.md)

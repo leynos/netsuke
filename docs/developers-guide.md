@@ -4898,14 +4898,14 @@ return it, but it must not publish any filesystem state.
 command, which every `build`, `clean`, and `generate` boundary must call before
 writing or invoking the main file. That command opens the effective
 working-directory capability and injects it into
-`src/runner/process/dyndep_files.rs`, which owns atomic sidecar writes and
+`src/runner/process/dyndep/files/mod.rs`, which owns atomic sidecar writes and
 content verification. The materializer may only use that injected `Dir`; it
 must not inspect CLI state or reopen ambient authority. It verifies existing
 content, then uses a same-directory temporary file plus atomic rename. Keep
 generated sidecars content-addressed and idempotent; corruption is an error,
 not a reason to overwrite an unknown file.
 
-`src/runner/process/dyndep_retention.rs` owns the publication lease and
+`src/runner/process/dyndep/retention/mod.rs` owns the publication lease and
 retention cleanup. The command-boundary module invokes it after materialization
 or successful clean while retaining the lease through bundle consumption.
 
@@ -4923,7 +4923,7 @@ existing content-addressed sidecar. See
 `src/runner/graph/generation_telemetry.rs` owns runner-boundary manifest-to-IR
 graph-generation telemetry, while `src/runner/dyndep/generation_telemetry.rs`
 owns dyndep bundle-generation telemetry and
-`src/runner/process/dyndep_telemetry.rs` owns publication telemetry. They may
+`src/runner/process/dyndep/telemetry.rs` owns publication telemetry. They may
 wrap their respective boundaries with bounded outcome-and-duration metrics and
 spans. Graph-generation outcomes include the fixed
 `invalid_command_interpolation` category for `IrGenError::InvalidCommand`;

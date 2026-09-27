@@ -6,7 +6,8 @@
 //! Every serial command holds the lease until it finishes consuming its bundle,
 //! so a concurrent Netsuke command cannot prune active sidecars.
 
-use super::{DYNDEP_DIR, dyndep_telemetry as telemetry};
+use super::super::DYNDEP_DIR;
+use super::telemetry;
 use crate::localization::{self, keys};
 use crate::ninja_gen::GeneratedDyndep;
 use anyhow::{Context, Result};
@@ -345,5 +346,4 @@ fn retention_error(path: &Utf8Path) -> crate::localization::LocalizedMessage {
 }
 
 #[cfg(test)]
-#[path = "dyndep_retention_tests.rs"]
-mod retention_tests;
+mod tests;

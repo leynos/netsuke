@@ -95,9 +95,9 @@ Ninja or output consumption.
 - Runner publication boundary:
   [`src/runner/dyndep/publication.rs`](../src/runner/dyndep/publication.rs)
 - Atomic sidecar materialization:
-  [`src/runner/process/dyndep_files.rs`](../src/runner/process/dyndep_files.rs)
+  [`src/runner/process/dyndep/files/mod.rs`](../src/runner/process/dyndep/files/mod.rs)
 - Retention and lease implementation:
-  [retention implementation](../src/runner/process/dyndep_retention.rs)
+  [retention implementation](../src/runner/process/dyndep/retention/mod.rs)
 - User contract: [user's guide](users-guide.md#run-direct-dependencies-serially)
 - Serial dyndep architecture:
   [ADR-011](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md)

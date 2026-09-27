@@ -13,7 +13,8 @@
 //! an atomic rename so concurrent Netsuke processes cannot observe partial
 //! content.
 
-use super::{DYNDEP_DIR, dyndep_retention::DyndepPublicationLease, dyndep_telemetry as telemetry};
+use super::super::DYNDEP_DIR;
+use super::{retention::DyndepPublicationLease, telemetry};
 use crate::localization::{self, keys};
 use crate::ninja_gen::GeneratedDyndep;
 use anyhow::{Context, Result, anyhow};
@@ -355,5 +356,4 @@ impl TempNameSource {
 }
 
 #[cfg(test)]
-#[path = "dyndep_files_tests.rs"]
 mod tests;

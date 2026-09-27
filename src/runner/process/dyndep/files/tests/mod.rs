@@ -1,9 +1,9 @@
 //! Unit tests for atomic dyndep sidecar materialization.
 
-use super::super::tests::temporary_dir;
+use super::super::super::tests::temporary_dir;
 use super::*;
 use crate::ninja_gen::GeneratedDyndep;
-use crate::runner::process::dyndep_retention::{RetentionPolicy, prune_dyndep_sidecars};
+use crate::runner::process::dyndep::retention::{RetentionPolicy, prune_dyndep_sidecars};
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
 use metrics_util::MetricKind;
@@ -373,5 +373,4 @@ fn ensure_no_temp_files(dir: &Dir) -> Result<()> {
     Ok(())
 }
 
-#[path = "dyndep_files_telemetry_tests.rs"]
 mod telemetry_tests;

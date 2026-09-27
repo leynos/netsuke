@@ -1,9 +1,9 @@
 //! Focused tests for bounded dyndep sidecar retention.
 
-use super::super::tests::temporary_dir;
+use super::super::super::tests::temporary_dir;
 use super::*;
 use crate::ninja_gen::GeneratedDyndep;
-use crate::runner::process::dyndep_telemetry::{
+use crate::runner::process::dyndep::telemetry::{
     RETAINED_BYTES_RECLAIMED, RETAINED_FILES_RECLAIMED, RETENTIONS_TOTAL,
 };
 use crate::runner::process::materialize_dyndep_files;
@@ -88,10 +88,8 @@ fn publish_repeated_sidecars(
     latest_sidecar.context("loop must publish a current sidecar")
 }
 
-#[path = "dyndep_retention_lease_tests.rs"]
 mod lease_tests;
 
-#[path = "dyndep_retention_telemetry_tests.rs"]
 mod telemetry_tests;
 
 #[rstest]

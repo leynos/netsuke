@@ -1,7 +1,7 @@
 //! Telemetry-contract tests for bounded dyndep retention.
 
 use super::*;
-use crate::runner::process::dyndep_telemetry::RETENTION_DURATION;
+use crate::runner::process::dyndep::telemetry::RETENTION_DURATION;
 use metrics::{SharedString, Unit};
 use metrics_util::{
     CompositeKey, MetricKind,

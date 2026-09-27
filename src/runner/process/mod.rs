@@ -10,9 +10,7 @@ mod child_exit;
 mod command_list_telemetry;
 mod command_logging;
 
-mod dyndep_files;
-mod dyndep_retention;
-mod dyndep_telemetry;
+mod dyndep;
 #[cfg(test)]
 mod exit_status_tests;
 mod failure_attribution;
@@ -29,9 +27,8 @@ use child_exit::{ExitFailureContext, check_exit_status_with_context};
 use command_logging::{
     CommandLogContext, command_span, log_command_execution, log_command_spawn_failure,
 };
-pub(crate) use dyndep_files::materialize_dyndep_files;
-pub use dyndep_retention::MAX_RETAINED_DYNDEP_FILES;
-pub(crate) use dyndep_retention::{DyndepPublicationLease, prune_dyndep_cache};
+pub use dyndep::MAX_RETAINED_DYNDEP_FILES;
+pub(crate) use dyndep::{DyndepPublicationLease, materialize_dyndep_files, prune_dyndep_cache};
 pub use file_io::*;
 pub use ninja::resolve_ninja_program;
 use output_forwarding::{StatusObserver, spawn_and_stream_output};

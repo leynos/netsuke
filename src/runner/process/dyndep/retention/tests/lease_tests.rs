@@ -11,7 +11,8 @@ use std::{
 };
 
 const LEASE_WORKER_DIRECTORY: &str = "NETSUKE_TEST_DYNDEP_LEASE_DIRECTORY";
-const LEASE_WORKER_NAME: &str = "runner::process::dyndep_retention::retention_tests::lease_tests::dyndep_publication_lease_worker";
+const LEASE_WORKER_NAME: &str =
+    "runner::process::dyndep::retention::tests::lease_tests::dyndep_publication_lease_worker";
 const WORKER_MARKER_PREFIX: &str = "netsuke-dyndep-lease:";
 const ACTIVE_SIDECAR_PATH: &str = ".netsuke/dyndep/active.dd";
 const ACTIVE_SIDECAR_CONTENT: &str = "active";
