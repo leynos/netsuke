@@ -680,7 +680,7 @@ the hexagonal port/adapter pattern:
   `render(&self, view: &GraphView, sink: &mut dyn io::Write) -> Result<(), GraphRenderError>`.
   Adapters consume `GraphView` only — they never touch `BuildGraph` directly.
 - [`DotRenderer`](../src/graph_view/render/dot.rs) emits Graphviz DOT.
-- [`HtmlRenderer`](../src/graph_view/render_html/mod.rs) emits a self-contained
+- [`HtmlRenderer`](../src/graph_view/render/html/mod.rs) emits a self-contained
   HTML page (server-rendered SVG, accessible textual outline, and a
   `<noscript>` fallback containing the DOT source verbatim).
 
@@ -701,8 +701,8 @@ order-only stroke (no rebuild trigger) and the dotted implicit-output stroke
 (auxiliary output side).
 
 A new renderer — for example the `--json` view planned for roadmap item
-`3.15.6` — should be added as a sibling module under `src/graph_view/` that
-implements `GraphRenderer`. The runner dispatch in
+`3.15.6` — should be added as a sibling module under `src/graph_view/render/`
+that implements `GraphRenderer`. The runner dispatch in
 [`src/runner/mod.rs`](../src/runner/mod.rs) picks the appropriate renderer
 based on `GraphArgs` and writes through the shared `write_text_file`/
 `write_text_stdout` sink helpers. The `-` sentinel for `--output` is recognized

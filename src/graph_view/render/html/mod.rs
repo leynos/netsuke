@@ -25,8 +25,8 @@ use std::io::Write;
 
 use crate::localization::{self, keys};
 
-use super::GraphView;
-use super::render::{GraphRenderError, GraphRenderer};
+use super::super::GraphView;
+use super::{GraphRenderError, GraphRenderer};
 
 use escape::{escape_attr, escape_text};
 use layout::layout_positions;

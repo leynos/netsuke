@@ -5,6 +5,7 @@
 //! [`std::io::Write`] sink.
 
 pub mod dot;
+pub mod html;
 
 use std::io;
 
