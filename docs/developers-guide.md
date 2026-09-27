@@ -8348,9 +8348,9 @@ no fixture sentinel text. The governing decision record is
 `docs/adr-009-bounded-redacted-manifest-telemetry.md`, which forbids unbounded
 or caller-controlled values in metric labels and trace fields.
 
-### Module: `runner::recipe_shell_telemetry`
+### Module: `runner::recipe_shell::telemetry`
 
-`src/runner/recipe_shell_telemetry.rs` owns bounded observability for shell
+`src/runner/recipe_shell/telemetry/mod.rs` owns bounded observability for shell
 resolution, the explicit Windows Bash preflight, and complete generated-recipe
 runner operations. `LegacyRecipeOperation` distinguishes `build` from
 `ninja_tool`; the latter describes a Ninja tool invocation and does not claim

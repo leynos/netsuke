@@ -1,5 +1,7 @@
 //! Resolves and validates the Windows legacy-recipe interpreter selection.
 
+pub(in crate::runner) mod telemetry;
+
 use anyhow::{Result, bail};
 use mockable::Env;
 use std::{
@@ -23,7 +25,7 @@ pub(super) const WINDOWS_SHELL_ENV: &str = "NETSUKE_WINDOWS_SHELL";
 
 /// Resolve the current host's legacy-recipe interpreter selection.
 pub(super) fn resolve_recipe_shell() -> Result<RecipeShell> {
-    super::recipe_shell_telemetry::instrument_recipe_shell_resolution(|| {
+    telemetry::instrument_recipe_shell_resolution(|| {
         resolve_recipe_shell_with(&mockable::DefaultEnv)
     })
 }
@@ -71,13 +73,13 @@ fn validate_recipe_shell_with(
     if !is_windows || shell != RecipeShell::Bash {
         return Ok(());
     }
-    let mut probe_outcome = super::recipe_shell_telemetry::BashProbeOutcome::LaunchFailed;
+    let mut probe_outcome = telemetry::BashProbeOutcome::LaunchFailed;
     let validation = validate_bash_runtime_with(|| {
         let probe_result = probe();
         probe_outcome = bash_probe_outcome(&probe_result);
         probe_result
     });
-    super::recipe_shell_telemetry::instrument_bash_preflight(probe_outcome, || validation)
+    telemetry::instrument_bash_preflight(probe_outcome, || validation)
 }
 
 /// Probe the production Bash compatibility runtime without leaking child output.
@@ -128,16 +130,14 @@ fn validate_bash_probe_result(probe_result: std::io::Result<BashProbeStatus>) ->
 /// Classify a Bash probe result without recording process or environment detail.
 fn bash_probe_outcome(
     probe_result: &std::io::Result<BashProbeStatus>,
-) -> super::recipe_shell_telemetry::BashProbeOutcome {
+) -> telemetry::BashProbeOutcome {
     match probe_result {
-        Ok(BashProbeStatus::Available) => super::recipe_shell_telemetry::BashProbeOutcome::Success,
-        Ok(BashProbeStatus::Failed(_)) => {
-            super::recipe_shell_telemetry::BashProbeOutcome::NonZeroExit
-        }
+        Ok(BashProbeStatus::Available) => telemetry::BashProbeOutcome::Success,
+        Ok(BashProbeStatus::Failed(_)) => telemetry::BashProbeOutcome::NonZeroExit,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            super::recipe_shell_telemetry::BashProbeOutcome::NotFound
+            telemetry::BashProbeOutcome::NotFound
         }
-        Err(_) => super::recipe_shell_telemetry::BashProbeOutcome::LaunchFailed,
+        Err(_) => telemetry::BashProbeOutcome::LaunchFailed,
     }
 }
 

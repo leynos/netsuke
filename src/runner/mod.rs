@@ -43,7 +43,6 @@ mod ninja;
 mod path_helpers;
 mod process;
 mod recipe_shell;
-mod recipe_shell_telemetry;
 pub use ninja::{NinjaContent, run_ninja, run_ninja_tool};
 #[cfg(doctest)]
 pub use process::doc;
@@ -52,7 +51,7 @@ pub use process::{
     NinjaJobCount, NinjaProcessOptions, NinjaToolRequest, StderrMode, run_ninja_tool_with,
     run_ninja_with,
 };
-pub use recipe_shell_telemetry::{
+pub use recipe_shell::telemetry::{
     BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
     RECIPE_SHELL_RESOLUTIONS_TOTAL,
 };
@@ -60,7 +59,7 @@ pub use recipe_shell_telemetry::{
 use dyndep::{materialize_dyndep_bundle, prune_dyndep_bundle};
 use graph::generation::{GraphGenerationContext, generate_ninja_with_shell};
 use path_helpers::resolve_output_path;
-use recipe_shell_telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
+use recipe_shell::telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
 
 /// Runtime dependencies shared by command dispatch handlers.
 struct ExecutionContext<'a> {

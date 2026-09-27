@@ -15,7 +15,7 @@ use metrics::{counter, describe_counter, describe_histogram, histogram};
 use std::{sync::Once, time::Instant};
 use tracing::{field, info};
 
-use super::RunnerError;
+use super::super::RunnerError;
 
 /// Count recipe-shell resolution outcomes by bounded interpreter and category.
 pub const RECIPE_SHELL_RESOLUTIONS_TOTAL: &str = "netsuke_runner_recipe_shell_resolutions_total";
@@ -29,7 +29,7 @@ pub const LEGACY_RECIPE_EXECUTION_DURATION: &str =
 
 /// Identify one complete runner operation that prepares a Ninja invocation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum LegacyRecipeOperation {
+pub(in crate::runner) enum LegacyRecipeOperation {
     /// Represent a Ninja build invocation.
     Build,
     /// Represent a Ninja tool invocation.
@@ -148,7 +148,7 @@ pub(super) fn instrument_bash_preflight<T>(
 ///
 /// The closure owns shell validation, manifest lowering, Ninja generation, and
 /// Ninja invocation so each operation emits exactly one counter and duration.
-pub(super) fn instrument_legacy_recipe_operation<T>(
+pub(in crate::runner) fn instrument_legacy_recipe_operation<T>(
     operation: LegacyRecipeOperation,
     shell: RecipeShell,
     execute: impl FnOnce() -> Result<T>,
@@ -358,6 +358,5 @@ mod tests {
         }));
     }
 
-    #[path = "recipe_shell_telemetry_operation_tests.rs"]
     mod legacy_recipe_operation_tests;
 }
