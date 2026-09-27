@@ -42,7 +42,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # than the module copied, so the test exercises the code that actually runs.
 sys.path.insert(0, str(REPO_ROOT / ".github" / "scripts"))
 
-from _nextest_oracle.listing import masked  # ruff: ignore[module-import-not-at-top-of-file] - needs the sys.path insertion above.
+from _nextest_oracle.listing import (  # ruff: ignore[module-import-not-at-top-of-file] - needs the sys.path insertion above.
+    masked,
+)
 
 #: Fragment bodies, drawn only from characters that cannot open or terminate a
 #: fragment and cannot occur in generated code. See the module docstring.
