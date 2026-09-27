@@ -409,7 +409,8 @@ Split large modules by concern while preserving narrow visibility for
 implementation helpers. A shared name prefix represents a module hierarchy: put
 its children under a directory module named for that prefix, use `mod.rs` for
 the directory module, and declare children with plain `mod child;` statements.
-Drop the parent prefix from child filenames.
+Drop the parent prefix from child filenames. The layout contract checks both
+sibling `.rs` files and directory modules with `mod.rs` for shared prefixes.
 
 Do not use `#[path]` to reach a sibling or parent file. Keep it only when a
 specific requirement still needs it, and add a comment explaining that reason.

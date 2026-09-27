@@ -1,7 +1,8 @@
-"""Keep Rust source modules grouped by their shared filename prefix.
+"""Keep Rust source modules grouped by their shared name prefix.
 
 The check owns the layout convention under ``src/``. An exception must name
-the exact sibling files and explain why their common prefix is coincidental.
+the exact sibling files or directory modules and explain why their common
+prefix is coincidental.
 Run through ``make test-workflow-contracts``.
 """
 
@@ -14,12 +15,12 @@ SOURCE_ROOT = Path(__file__).resolve().parents[2] / "src"
 IGNORED_MODULE_NAMES = frozenset({"lib", "main", "mod"})
 
 # Keyed by the directory relative to src/ and the shared first prefix.
-# Every entry must carry the exact file set and a disparate-concern rationale.
+# Every entry must carry the exact sibling set and a disparate-concern rationale.
 DISPARATE_PREFIX_EXCEPTIONS: dict[tuple[str, str], tuple[frozenset[str], str]] = {}
 
 
 def sibling_prefix_groups(source_root: Path) -> dict[tuple[str, str], frozenset[str]]:
-    """Find directories with two or more Rust files sharing a first prefix.
+    """Find sibling Rust files or directory modules sharing a first prefix.
 
     Parameters
     ----------
@@ -29,7 +30,8 @@ def sibling_prefix_groups(source_root: Path) -> dict[tuple[str, str], frozenset[
     Returns
     -------
     dict[tuple[str, str], frozenset[str]]
-        Exact sibling filenames keyed by relative directory and prefix.
+        Exact sibling names keyed by relative directory and prefix. A trailing
+        slash identifies a directory module.
     """
     groups: dict[tuple[str, str], set[str]] = defaultdict(set)
     for source in source_root.rglob("*.rs"):
@@ -38,6 +40,13 @@ def sibling_prefix_groups(source_root: Path) -> dict[tuple[str, str], frozenset[
         directory = source.parent.relative_to(source_root).as_posix()
         prefix = source.stem.partition("_")[0]
         groups[directory, prefix].add(source.name)
+    for module_root in source_root.rglob("mod.rs"):
+        module_directory = module_root.parent
+        if module_directory == source_root:
+            continue
+        parent = module_directory.parent.relative_to(source_root).as_posix()
+        prefix = module_directory.name.partition("_")[0]
+        groups[parent, prefix].add(f"{module_directory.name}/")
     return {
         key: frozenset(filenames)
         for key, filenames in groups.items()
@@ -80,7 +89,7 @@ def assert_module_layout(
     source_root : Path
         Root of the Rust source tree to inspect.
     exceptions : dict[tuple[str, str], tuple[frozenset[str], str]]
-        Exact sibling filenames and rationale for each coincidental prefix.
+        Exact sibling names and rationale for each coincidental prefix.
 
     Notes
     -----
@@ -117,6 +126,17 @@ def test_added_prefix_pair_fails_contract(tmp_path: Path) -> None:
     source_root.mkdir()
     (source_root / "widget.rs").touch()
     (source_root / "widget_tests.rs").touch()
+    with pytest.raises(AssertionError, match="unrecorded prefix group"):
+        assert_module_layout(source_root, DISPARATE_PREFIX_EXCEPTIONS)
+
+
+def test_added_prefix_directory_pair_fails_contract(tmp_path: Path) -> None:
+    """Prove sibling directory modules with a shared prefix trip the guard."""
+    source_root = tmp_path / "src"
+    for name in ("widget", "widget_detail"):
+        directory = source_root / name
+        directory.mkdir(parents=True)
+        (directory / "mod.rs").touch()
     with pytest.raises(AssertionError, match="unrecorded prefix group"):
         assert_module_layout(source_root, DISPARATE_PREFIX_EXCEPTIONS)
 
