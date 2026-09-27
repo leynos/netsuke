@@ -427,7 +427,7 @@ fn stdlib_optional_rustflags_example_pins_one_shell_word(
     let output = test_fs::read_to_string(workspace.path().join("rustflags.txt"))?;
     ensure!(
         output == expected,
-        "RUSTFLAGS {rustflags:?} should render one shell word per flag: {output:?}"
+        "RUSTFLAGS {rustflags:?} rendered {output:?}, expected {expected:?}"
     );
     Ok(())
 }

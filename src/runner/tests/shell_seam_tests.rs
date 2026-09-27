@@ -46,19 +46,25 @@ fn render_description_with_shell(shell: RecipeShell, template: &str) -> Result<S
         .unwrap_or_default())
 }
 
-/// A template whose two filters quote differently per dialect.
+/// A template naming its dialect explicitly: one `shell_quote` call, `sh`.
 ///
-/// `a b` needs quoting under both dialects but with different characters, and
-/// a single quote inside the word is what separates them sharply: `sh` closes,
-/// escapes and reopens the quote, while PowerShell doubles it.
+/// The word `a b` contains a space, so it needs quoting. The constant pins
+/// `dialect='sh'` so its rendering does not depend on the host, which is what
+/// lets the cases below assert an exact result rather than a "successful"
+/// build. The default dialect is deliberately *not* exercised here — an
+/// omitted `dialect` follows the loader instead, and
+/// `omitted_dialect_follows_the_loader_shell` is the case that covers it.
 const DIALECT_SENSITIVE_TEMPLATE: &str = "{{ 'a b' | shell_quote(dialect='sh') }}";
 
-/// The interpreter the runner resolved reaches the filters.
+/// Both POSIX-family interpreters reach the filters and quote as `sh`.
 ///
-/// `sh` is requested explicitly, so this also shows `dialect='sh'` is accepted
-/// on the build surface. Passing `PowerShell` must produce a *different*
-/// rendering for the same template, which is the part a deleted plumbing
-/// cannot satisfy.
+/// `dialect='sh'` is requested explicitly, so this shows the build surface
+/// accepts that argument and renders the `sh` form. The assertion is exact
+/// rather than a substring check, so it cannot be satisfied by rendering
+/// merely something non-empty. It does *not* show the *resolved* interpreter
+/// reaches the filters — the pin makes the rendered text independent of the
+/// loader — which is why `omitted_dialect_follows_the_loader_shell` carries
+/// that half, and why the file's opening comment names that case load-bearing.
 #[rstest]
 #[case(RecipeShell::Posix)]
 #[case(RecipeShell::Bash)]

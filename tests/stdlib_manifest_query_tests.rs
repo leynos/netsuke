@@ -208,10 +208,20 @@ fn query_surface_renders_its_permitted_helpers() -> Result<()> {
             "the query surface should render {template:?}: {}",
             run.stderr
         );
+        // Compared as a whole value rather than by substring. A substring check
+        // is satisfied by any output that merely *embeds* the expected text —
+        // a duplicated or truncated description would pass, and so would one
+        // that rendered the right helper alongside a second, wrong one. The
+        // dialect probes parse the same document the same way.
+        let document: Value = serde_json::from_str(&run.stdout)
+            .with_context(|| format!("stdout should be one JSON document: {}", run.stdout))?;
+        let rendered = document
+            .pointer("/result/targets/0/description")
+            .and_then(Value::as_str)
+            .context("the catalogue should carry the target description")?;
         ensure!(
-            run.stdout.contains(expected),
-            "the query catalogue should contain {expected:?}: {}",
-            run.stdout
+            rendered == expected,
+            "the query catalogue rendered {template:?} as {rendered:?}, expected {expected:?}"
         );
         assert_full_stdlib_renders(template)?;
     }

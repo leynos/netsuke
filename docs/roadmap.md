@@ -384,8 +384,8 @@ and agents.
     `powershell`, defaulting to the dialect implied by the active recipe shell,
     and are correct only in unquoted argv position. The design and user guides
     no longer name `shell_escape`; the tested `RUSTFLAGS` example lives in
-    `docs/stdlib-yaml-and-jinja-guide.md` and asserts one shell word per flag
-    with the variable both set and unset.
+    `docs/stdlib-yaml-and-jinja-guide.md` and asserts one shell-quoted
+    `RUSTFLAGS` assignment with the variable both set and unset.
 - [ ] 3.14.9. Add structured recipe environment mappings.
   Requires 3.14.7, 3.14.8, and the follow-on design decision in 15.1.1. See
   [netsuke-design.md §2.6](netsuke-design.md#26-planned-recipe-ergonomics-and-execution-feedback).

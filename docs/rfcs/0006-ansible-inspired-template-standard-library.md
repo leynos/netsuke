@@ -1410,16 +1410,17 @@ machinery rather than adding a second implementation.
   corrupting the argument the author believed was protected.
   [ADR-041](../adr-041-canonical-recipe-shell-quoting-surface.md) records the
   decision and rejects `bash` for the reason given below.
-- **This is the same capability as the `shell_escape` helper documented but
-  unimplemented today**, which roadmap task 3.14.8 exists to resolve. That task
-  remains the owner and ships first; this RFC contributes only the canonical
-  name and the `dialect` argument. Section 13 records the sequencing.
+- **This was the same capability as the `shell_escape` helper documented but
+  unimplemented at the time**, which roadmap task 3.14.8 existed to resolve.
+  That task was the owner and shipped first; this RFC contributed only the
+  canonical name and the `dialect` argument. Section 13 records the sequencing.
   **Delivered by 3.14.8 on 2026-09-27**, which superseded `shell_escape` rather
   than implementing it (the roadmap permitted either) and shipped `shell_quote`
   and `shell_join` over one implementation in `src/shell_word.rs`. `bash` is
   refused by that implementation; `sh` output is valid Bash, and the
   `shell-quote` crate's `Bash` encoder emits a different form Netsuke does not
-  compile in.
+  compile in. The name and the `dialect` argument were adopted as proposed
+  here; nothing in this section is still pending.
 - Ansible's `quote` alias is rejected; see section 10.2.
 - Structured recipes, tracked in
   [#593](https://github.com/leynos/netsuke/issues/593), remain the preferred

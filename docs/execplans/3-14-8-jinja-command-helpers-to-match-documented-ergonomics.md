@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -3232,6 +3232,90 @@ catalogue has the key; there is no partial state to clean up.
   not fresh evidence that the Rust tree compiles from cold, and it should not
   be cited as such.
 
+- [x] (2026-09-27) The CodeRabbit review at `75e0b671` triaged; the four valid
+      findings fixed, the remainder declined or found stale. EP-M5 closed and the
+      plan set to `COMPLETE`.
+
+  **Dispositions.** 17 raw findings, 13 unique after deduplication. Four were
+  valid and are fixed here; the other nine are recorded below with the reason
+  each was not applied.
+
+  1. *ExecPlan `Status:` still `IN PROGRESS`, and `Outcomes & retrospective`
+     still forward-looking* — **fixed.** Valid, and the one finding that
+     concerned the plan document itself rather than the product. The status is
+     now `COMPLETE`; the retrospective's "To be completed at EP-M5" preamble is
+     rewritten in the past tense. The three reconciliation bullets are kept in
+     place rather than deleted, each still stating the condition that *would*
+     have blocked the plan and then its outcome, because a future reader needs
+     the condition to judge the discharge — a bare tick would not carry it.
+  2. *`docs/rfcs/0006-…md` §8.9 claims 3.14.8 "remains the owner and ships
+     first" six lines above "Delivered by 3.14.8 on 2026-09-27"* — **fixed.**
+     Valid, and self-contradictory within one bullet. The present-tense claims
+     ("This **is** the same capability", "remains the owner and ships first")
+     are now historical, and a closing clause states that the name and the
+     `dialect` argument were adopted as proposed and that nothing in the section
+     is still pending. RFCs do not leave `Proposed` here, so the amendment is
+     the only place this can be said.
+  3. *`docs/roadmap.md:387` describes the `RUSTFLAGS` example as asserting "one
+     shell word per flag"* — **fixed.** Valid. Verified against the example at
+     `docs/stdlib-yaml-and-jinja-guide.md:384-385`, which pipes the joined flags
+     through `compact`, `join(' ')`, and `shell_quote(dialect='sh')` into a
+     single `printf` argument: the output is **one shell-quoted `RUSTFLAGS`
+     assignment**, not one word per flag. The description was wrong about the
+     artefact the test reads, so it is replaced with that phrase.
+  4. *`docs/stdlib-yaml-and-jinja-guide.md:365`, second person* —
+     **fixed.** Valid. "a value **you interpolate** somewhere other than as a
+     complete argv word" became "a value interpolated anywhere other than as a
+     complete argv word", which matches the impersonal voice of the sentence
+     before it.
+  5. *`src/runner/tests/shell_seam_tests.rs`, `DIALECT_SENSITIVE_TEMPLATE`'s
+     doc claims "two filters" and embedded single quotes* — **fixed.** Valid. The
+     constant is one `shell_quote(dialect='sh')` call on `'a b'`; the doc
+     described a template that no longer existed — a doc/code drift introduced
+     when the constant was narrowed during the QA pass, so the comment described
+     its predecessor. Rewritten to state what the template is, why `a b` needs
+     quoting, and why pinning `dialect='sh'` is what licenses the exact
+     assertions; the omitted-dialect case is named as the one that covers the
+     default.
+  6. *`tests/shell_filter_property_tests/round_trip_through_an_oracle.rs`,
+     `RefCell` where `Cell` suffices* — **fixed.** Valid, and a real
+     simplification rather than a style note: the closure passed to
+     `TestRunner::run` is an `Fn`, so nothing can hold a mutable borrow across
+     calls and `Cell` is the correct type. `Corpus` is already `Copy`, which is
+     what makes it available; the doc comment was updated to say so.
+  7. *`tests/stdlib_manifest_query_tests.rs:206`, substring assertion* —
+     **fixed, and this was the most valuable of the four.** Valid. The case
+     compared the rendered description with `contains`, which a duplicated or
+     truncated description would satisfy. It now parses the catalogue and
+     compares the whole field. The fix was **proved live** rather than reasoned
+     about: with the expectation perturbed to a string the old assertion would
+     have accepted (`"B"` for a template rendering `"A B"`), the new assertion
+     failed with `the query catalogue rendered "{{ 'a b' | upper }}" as "A B",
+     expected "B"`. The evidence is that the injected defect produced a *wrong
+     message*, not a missing one — a `contains` check would have gone green.
+  8. *Three findings against `docs/execplans/…` prose (dash spacing, a
+     `shell_escape` mention in a historical quotation, and the retrospective's
+     length)* — **declined.** The dashes are em dashes in a document whose every
+     other list uses them; the `shell_escape` occurrence is inside a quoted
+     quotation of what a *prior* document said, so renaming it would falsify the
+     quote; and the retrospective's length is the format the `execplans` skill
+     asks for, which the other plans in this directory also use.
+  9. *The remaining six: two duplicates of findings 6 and 7 filed against the
+     same lines, one against a file this branch does not touch, two already
+     fixed in `c3078c1f` and `b9e23191`, and one against a line whose content the
+     review had cached from `b9e23191`* — **declined as stale or duplicate.**
+     Because `coderabbit review --agent` re-reads the working tree, its output
+     at a given head contains findings already resolved at earlier heads; each
+     of these was re-checked against the current text before being set aside,
+     and none of them matched it.
+
+  Finding 7 is the one worth generalising. A substring assertion is not a weak
+  assertion, it is an assertion of a *different proposition* — "the output
+  contains X" rather than "the output is X" — and the two agree on every input
+  the test author has in mind. It is caught by asking what output the assertion
+  would accept that the code should not produce, which is what the injected
+  defect above does mechanically.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
@@ -4374,8 +4458,11 @@ the change surface.
 
 ## Outcomes & retrospective
 
-To be completed at EP-M5. Before setting this plan to `COMPLETE`, reconcile
-every discovery against the `Conformance basis`:
+Written at EP-M5, which is complete. All three reconciliation items below are
+discharged, so the plan is `COMPLETE`; each is kept in place, with its outcome,
+because the *condition* it states is what a future reader needs — a tick alone
+would not say what would have blocked the plan. Every discovery was reconciled
+against the `Conformance basis` before the status was changed:
 
 - D2 is a deviation from `RFC-0006-8.9`. It must be recorded in ADR-041 and the
   RFC amended, or the plan stays `BLOCKED`. **Discharged.** ADR-041 records the

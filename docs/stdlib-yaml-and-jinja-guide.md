@@ -362,7 +362,7 @@ filters only. **Their output is correct only in unquoted argv position.** A
 value interpolated inside the shell's own double quotes is *data* to the shell,
 so the quotes these filters emit would arrive literally and corrupt the
 argument. Neither filter can detect that mistake, and neither protects a value
-you interpolate somewhere other than as a complete argv word.
+interpolated anywhere other than as a complete argv word.
 
 The following manifest constructs a `RUSTFLAGS` value from an optional
 environment override without any shell parameter expansion, and pins

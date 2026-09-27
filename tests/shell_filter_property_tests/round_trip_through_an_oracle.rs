@@ -101,7 +101,7 @@ fn the_posix_harness_rejects_a_naive_quoter() -> Result<()> {
 ///
 /// The property above can only fail on inputs that need quoting. Without this,
 /// a generator that happened to produce nothing but inert characters would let
-/// the property pass while testing nothing. The tallies live in a `RefCell`
+/// the property pass while testing nothing. The tallies live in a `Cell`
 /// because `TestRunner::run` takes an `Fn`.
 #[test]
 fn the_generated_corpus_spans_the_quoting_boundary() {
