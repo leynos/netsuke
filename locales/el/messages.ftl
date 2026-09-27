@@ -141,7 +141,7 @@ manifest.env.missing = Μια απαιτούμενη μεταβλητή περι
 manifest.env.invalid_utf8 = Μια μεταβλητή περιβάλλοντος περιέχει μη έγκυρο UTF-8.
 manifest.env.blocked = Η πρόσβαση σε μεταβλητή περιβάλλοντος έχει αποκλειστεί.
 manifest.env.args_error = [netsuke::jinja::env::args] { $details }
-manifest.env.default_not_string = Το default του env πρέπει να είναι συμβολοσειρά, ελήφθη { $kind }.
+manifest.env.default_not_string = Το default του env πρέπει να είναι συμβολοσειρά· τύπος τιμής που ελήφθη: { $kind }.
 manifest.vars.not_object = Το `vars` του δηλωτικού πρέπει να είναι αντιστοίχιση ή αντικείμενο.
 manifest.vars.reserved_name = Το κλειδί `vars` '{ $name }' του μανιφέστου είναι δεσμευμένο για ενσωματωμένη βοηθητική συνάρτηση προτύπων· μετονομάστε τη μεταβλητή.
 manifest.read_failed = Δεν ήταν δυνατή η ανάγνωση του δηλωτικού από { $path }.
@@ -343,7 +343,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Μη υποστηριζόμεν�
 
 # Διαγνωστικά των βοηθημάτων συλλογών.
 stdlib.collections.flatten.expected_sequence = Το flatten περίμενε στοιχεία ακολουθίας αλλά βρήκε { $kind }.
-stdlib.collections.compact.not_sequence = Το compact περιμένει ακολουθία αλλά βρήκε { $kind }.
+stdlib.collections.compact.not_sequence = Το compact περιμένει ακολουθία· τύπος τιμής που βρέθηκε: { $kind }.
 stdlib.collections.group_by.empty_attribute = Το group_by απαιτεί μη κενό γνώρισμα.
 stdlib.collections.group_by.unresolved = Το group_by δεν μπόρεσε να εντοπίσει το «{ $attr }» σε στοιχείο τύπου { $kind }.
 

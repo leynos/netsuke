@@ -25,12 +25,15 @@ Windows, where recipes run under Windows PowerShell.
 After this change a manifest author can write, in a `Netsukefile`:
 
 ```yaml
+# POSIX recipe shell (`sh`). The `VAR=value cmd` prefix and `&&` below are
+# POSIX forms: a Windows PowerShell manifest sets `$env:RUSTFLAGS` before the
+# command and chains with `if ($?) { ... }`, and quotes for `dialect='powershell'`.
 targets:
   - name: build-stamp
     command: >-
       RUSTFLAGS={{ [base_flags, env('RUSTFLAGS', default='')]
         | compact | join(' ') | shell_quote(dialect='sh') }}
-      cargo build ; touch {{ outs }}
+      cargo build && touch {{ outs }}
 ```
 
 Two details of that example are load-bearing and were wrong in the first draft
@@ -40,11 +43,21 @@ of this plan.
   complete shell word; putting it inside `"..."` would insert its quote
   characters literally and corrupt the value. This is a precondition of the
   filter, not a stylistic choice, and it is documented as such.
-- The recipe uses `;`, not `&&`. `docs/users-guide.md:333-339` states that
-  Netsuke's Windows contract is Windows PowerShell, "not a PowerShell Core
-  (`pwsh`) contract", and Windows PowerShell 5.1 has no `&&` operator. A
-  flagship example that cannot run on the platform whose dialect machinery this
-  feature exists to serve would be worse than no example.
+- The recipe is **POSIX-only, and the example says so**. `VAR=value cmd` is a
+  POSIX prefix assignment that Windows PowerShell does not accept, so this
+  example was never portable to PowerShell however its commands were chained —
+  `touch` is likewise not a Windows command. `docs/users-guide.md:365-366`
+  states the Windows contract is Windows PowerShell, "not a PowerShell Core
+  (`pwsh`) contract"; the comment above the snippet gives that dialect's
+  equivalents, and the example pins `dialect='sh'` explicitly because D10
+  requires a pinned dialect for byte-stable output. Within a POSIX shell `&&`
+  is available and is used, so a failed `cargo build` does not create the
+  stamp. The first draft used `;` and justified it as keeping the example
+  runnable on Windows; that rationale was false — `;` made the recipe's exit
+  status that of `touch`, so the build failure was swallowed and the stamp was
+  written anyway. The cross-dialect requirement is real for *other* recipes,
+  and it is why `dialect` defaults to the active `RecipeShell` (D2) rather than
+  always to `sh`.
 
 Given that manifest, observe that:
 
@@ -2270,6 +2283,8 @@ vars:
   base_flags: "-D warnings"
 targets:
   - name: stamp.txt
+    # POSIX recipe shell: `env`, the `VAR=value` prefix, `sh -c` and the single
+    # quotes all assume `sh`. The dialect is pinned per D10.
     command: >-
       env RUSTFLAGS={{ [base_flags, env('RUSTFLAGS', default='')]
         | compact | join(' ') | shell_quote(dialect='sh') }}
@@ -2969,6 +2984,42 @@ recorded for whoever hits them next.
   over sprinkling `#[expect]`, which `clippy.toml` deliberately steers toward
   so that migrated sites re-warn once. Confidence: verified.
 
+- Observation: **An example can be justified by a false premise and still read
+  as considered.** The Purpose example chained its commands with `;` and the
+  plan defended that at length, citing `docs/users-guide.md` on the Windows
+  PowerShell contract and Windows PowerShell 5.1's lack of `&&`. The rationale
+  was wrong twice. First, the example was never Windows-runnable: it opens with
+  `RUSTFLAGS=... cargo build`, a POSIX prefix assignment PowerShell rejects,
+  and it ends with `touch`. Second, `;` is *worse* than `&&` here regardless of
+  platform, because it makes the recipe's exit status that of `touch`, so a
+  failed `cargo build` still writes the stamp — the exact silent success the
+  example exists to demonstrate avoiding. The review caught the symptom (no
+  success guard) and proposed `&&`, which the plan had explicitly rejected, so
+  the two could not agree until the premise itself was tested. The example now
+  uses `&&`, is labelled POSIX-only, and names the PowerShell equivalents.
+  General shape: a stated rationale is evidence about the author's reasoning,
+  not about the world; when a finding conflicts with a documented decision, the
+  decision's *premise* is the thing to check, not the decision's authority. The
+  citation had also drifted — the quoted sentence is at
+  `users-guide.md:365-366`, not `:333-339` — which is the same relative-anchor
+  hazard recorded above.
+- Observation: **A pervasive house convention can make a correct grammar
+  finding look like a false positive, and the honest fix is narrower than
+  either side proposed.** CodeRabbit flagged three locale lines where
+  `{ $kind }` was the inflected object of a verb. The construction is real, and
+  the placeholders render *English* kind names (`sequence`, `map`,
+  `plain object`) spliced into every catalogue, so they can never agree with a
+  target-language verb — the defect is structural, not stylistic. But the same
+  construction appears throughout the pre-existing catalogues
+  (`pl:77,157,185,232,371`, `cs:77,157,185`, `el:77,158,186`), so "fix the
+  family" as the review's per-line reporting implies would rewrite a large body
+  of upstream translation outside this milestone's remit. What was actually in
+  scope: the six lines this branch *added* (the three flagged and their
+  `default_not_string` siblings), switched to the label-and-colon form the same
+  files already use for `clap-error-*`, which keeps `{ $kind }` in nominative
+  position and preserves the placeholder the l10n audit enforces. Scope was
+  settled by asking which lines the branch added, not which lines the review
+  named.
 - Observation: **A task-list item's continuation body is indented two spaces,
   not six, and at six it becomes an indented code block.** MD046 anchors on the
   *first* block style markdownlint sees, and this file's first code block is
