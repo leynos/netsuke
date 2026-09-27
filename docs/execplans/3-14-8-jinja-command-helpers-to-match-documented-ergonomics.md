@@ -3151,6 +3151,58 @@ catalogue has the key; there is no partial state to clean up.
   placeholder as if it were prose will keep proposing agreement rules for
   values that have no grammatical features to agree with.
 
+- [x] (2026-09-27) The seven-gate set is green at `c3078c1f`, the Korean repair
+      and the dispositions committed and pushed. Fourth full run on this branch.
+
+  `SHA_BEFORE == SHA_AFTER == c3078c1f4e8c5cac9bab04f778aaa75991378532` on all
+  seven gates, every one `EXIT=0` and `PROVENANCE=valid`, with
+  `git status --porcelain` empty before and after each. `test` ran 3578 nextest
+  tests (3578 passed, 5 skipped) across 108 binaries plus **both** doctest
+  targets (129 passed, 32 ignored, 0 failed — the two-target count confirmed
+  rather than assumed); `doc-coverage` 4815/4872 = 98.83% against the 80.00%
+  threshold; `markdownlint` 0 errors over 167 files; `nixie` 168 files.
+
+  **The run caught a self-inflicted provenance defect, and that is the entry's
+  real content.** Two seconds after `check-fmt` finished, I edited this very
+  document to tick a stale checkbox — with the gate run still in flight. The
+  runner's own trailer recorded `DIRTY_BEFORE=1` on `make lint` without being
+  told, which is the check working as designed; `SHA_BEFORE == SHA_AFTER` still
+  held, because HEAD had not moved, so the defect was working-tree-only and the
+  gate's verdict survived. I reverted the edit with `git checkout --`, saved it
+  to a patch outside the repository, and re-applied it afterwards, so the run's
+  provenance now covers exactly the commit it cites.
+
+  Three things this is worth recording for. **First**, the failure mode is
+  milder than the one the earlier entries describe — a dirty working tree does
+  not invalidate a gate whose stages never read the dirty file, and `lint`'s
+  stages (`cargo doc`, clippy, whitaker, ruff, pylint, yamllint, actionlint)
+  read no Markdown at all. That was verified from the log rather than assumed.
+  **Second**, the distinction between *HEAD moving* and *the working tree
+  changing* is what decides whether a run is invalidated, and only the first is
+  caught by a `SHA_BEFORE`/`SHA_AFTER` comparison; the `DIRTY_*` trailer is
+  what closes the second, which is why it earns its place. **Third**, the
+  correct order is to freeze the tree *before* summoning the gate runner, not
+  to reason afterwards about whether a mid-run edit mattered. Had the edit
+  landed before `check-fmt`'s start, or had it touched a file that
+  `markdownlint` or `mdtablefix` reads, the whole set would have had to be
+  re-run; the cheap insurance is to commit or revert first and ask questions
+  later.
+
+  **The checkbox was stale, and re-verifying it was the point.** The unticked
+  box described a completed repair pass whose end state I confirmed against the
+  tree rather than the entry's own prose: `recorded_render` is
+  `src/observability_recorder_dialect_tests.rs:38`, returns
+  `Result<Vec<SnapshotEntry>>`, and propagates its fallible steps with `?`. Its
+  callers unwrap at their own sites inside recognized test functions, which is
+  what the whitaker rule requires — and which is a *positional* requirement,
+  not a module-scoped one: `src/observability.rs:173` gates the parent module
+  with `#[cfg(test)]` and reaches the child through `#[path]`, so the helper
+  compiles only under `cfg(test)` yet is not itself "a test" for lint purposes.
+  A `tests/`-scoped search finds no trace of it, because it lives under `src/`;
+  that is the likely reason the box went unticked, and it is the same
+  `#[path]`-under-`src/` shape recorded earlier for the Whitaker test-module
+  split.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
@@ -3904,8 +3956,16 @@ recorded for whoever hits them next.
   code rules were already present in "Adding or changing messages"
   (`docs/developers-guide.md:353-368`) and were deliberately not duplicated.
 
-- [ ] (2026-09-27) Second repair pass: the two defects the cascade had masked,
+- [x] (2026-09-27) Second repair pass: the two defects the cascade had masked,
   plus a branch-wide spelling sweep. Detail is in `Blocked / open questions`.
+  Ticked after re-verifying the described end state still holds at `c3078c1f`
+  rather than on the strength of the entry's own prose: `recorded_render` is
+  `src/observability_recorder_dialect_tests.rs:38` and genuinely returns
+  `Result<Vec<SnapshotEntry>>`, propagating its three fallible steps with `?`,
+  with each caller unwrapping at its own call site inside a recognized test
+  function. Note the helper lives under `src/`, not `tests/`, because it is a
+  `#[path]`-included test module — a `tests/`-scoped grep finds no trace of it,
+  which is the likely reason the box was left unticked.
 
   **The cascade mask, now measured twice.** `make lint` aborts at the first
   failing stage, so the `cargo doc` failure at `6719ddcb` concealed *two more*
