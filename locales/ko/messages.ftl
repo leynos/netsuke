@@ -353,7 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = 지원하지 않는 해시 알�
 
 # 컬렉션 도우미 진단.
 stdlib.collections.flatten.expected_sequence = flatten은 열의 항목을 기대했지만 { $kind }을(를) 발견했습니다.
-stdlib.collections.compact.not_sequence = compact은 열을 기대했지만 { $kind }을(를) 발견했습니다.
+stdlib.collections.compact.not_sequence = compact는 열을 기대했지만 { $kind }을(를) 발견했습니다.
 stdlib.collections.group_by.empty_attribute = group_by에는 비어 있지 않은 속성이 필요합니다.
 stdlib.collections.group_by.unresolved = group_by가 { $kind } 형식의 항목에서 '{ $attr }'을(를) 찾지 못했습니다.
 

@@ -3033,6 +3033,124 @@ catalogue has the key; there is no partial state to clean up.
   `cs delta` is PR-scoped, and a survey of the other open pull requests found
   10 of 11 passing it, so dismissing it as background would have been wrong.
 
+- [x] (2026-09-27) The seven-gate set is green again at `b9e23191`, and that
+      commit is pushed. This is the third full run on this branch; the two
+      before it were invalidated, the first by a `cargo fmt` defect and the
+      second by a mid-run commit.
+
+  `SHA_BEFORE == SHA_AFTER == b9e2319197865d0a92aafbd169e794493602d3aa` on all
+  seven gates, every one `EXIT=0`. `test` ran 3578 nextest tests (3578 passed,
+  5 skipped) plus both doctest targets; `doc-coverage` measured 4815/4872 =
+  98.83% against an 80.00% threshold; `markdownlint` reported 0 errors over 167
+  files. The five skipped tests correlate exactly with the five `#[ignore]`
+  attributes in the sources, so none is a silently disabled gate.
+
+  **A log-naming hazard worth recording.** The gate runner writes to
+  `/tmp/<action>-<project>-<branch>.out`, which is keyed by *branch* and not by
+  revision. Three families of stale log now sit in `/tmp` for this one branch —
+  the uppercase `CHECK-FMT`-style set from an earlier run, a `peer-0828-*` set,
+  and a `peer-stale8d0db5b3-*` set whose `.out.meta` sidecars record a
+  `head_before` that is not this branch's HEAD at all. A reader who greps for
+  the branch name gets every one of them and can easily cite a green result
+  from a tree that no longer exists. The current run's own logs are
+  distinguishable only by their run prefix and mtime, which is exactly the
+  provenance gap the `SHA_BEFORE`/`SHA_AFTER` trailer closes from the inside.
+  Cite the trailer, not the filename.
+
+- [x] (2026-09-27) Six further CodeRabbit findings triaged at `b9e23191`; one
+      fixed, five declined. The fix is a single Korean particle; every decline
+      is backed by a count against `origin/main` rather than a preference.
+
+  **Dispositions.** One fixed, five declined.
+
+  1. *`locales/ko/messages.ftl:356`, `compact은` for `compact는`* (minor) —
+     **fixed.** Valid. `compact` is transliterated 컴팩트, whose final syllable
+     트 carries no 받침, so the topic marker is 는. The finding is confirmed by
+     the catalogue's own arithmetic rather than by consulting a grammar: a
+     sweep of every Latin identifier bearing a bare (unhedged) particle in this
+     file returns **17 sites**, and line 356 was the **only one** that
+     disagreed with the 받침 rule. Fourteen others are correct by inspection —
+     `Netsuke는` (트-final), `Ninja를` (자-final, no 받침), `JSON을` (엔-final),
+     `YAML은` (엘-final, has 받침), `glob이` (브-final), `group_by가`,
+     `timedelta가`, `cwd_mode는`. The decisive comparison is the sibling at line
+     143, `default는`: `default` is 디폴트 and `compact` is 컴팩트, both
+     트-final, both therefore take 는 — so 143 and 356 are the same
+     phonological class and could not both be right. 143 is branch-added too
+     (`e453322c`, EP-M1) and is the correct member of the pair, which is why
+     the repair moved 356 toward 143 and not the reverse.
+
+     The catalogue also has a **second, older convention** for exactly this
+     situation, and the choice between them was made on counts. An identifier
+     bearing a particle is written with a hedge in **58 places on
+     `origin/main`** (은(는)×15, 이(가)×20, 을(를)×23), including both of this
+     branch's own `stdlib.shell` lines — 293 `shell_quote은(는)` and 297
+     `shell_join은(는)`, which are line 356's sentence with a different
+     identifier substituted. The hedge is the safer form because it cannot be
+     wrong, and it was the candidate the triage recommended. It was **not**
+     taken: of the 17 bare-particle sites the sweep returns, **8** use 은/는,
+     and the two that frame line 356 — the main-owned 355 (`flatten은`, line 341
+     on `origin/main`) and this branch's own 143 (`default는`) — are both
+     unhedged and both correct. Line 355 is 356's immediate sibling in the same
+     `stdlib.collections` block and shares its sentence shape. Only **2** of the
+     8 은/는 sites are branch-added at all (143 and 356); the other **6** are
+     main-owned. Hedging 356 alone would make two adjacent lines describing the
+     same filter family disagree in form, and hedging all eight would edit six
+     main-owned lines for no defect. So the minimal correct repair is
+     the particle itself, and the hedge is recorded here as the alternative a
+     later locale pass may prefer. Note that no document states a rule either
+     way — `docs/localization-glossary.md` covers spacing (띄어쓰기), loanword
+     orthography, and false friends for Korean, but says nothing about particle
+     selection — so the 17-site sweep, not a citation, is what settles it.
+  2. *`locales/hi/messages.ftl:294`, `गाड़ी वापसी` for `कैरिज रिटर्न`
+     (carriage return)* (minor) — **declined.** The requested form
+     `कैरिज रिटर्न` appears in **0** of 35 catalogues. `गाड़ी वापसी` is the
+     branch's calque and reads as a literal "cart return", but the finding
+     cannot be applied locally: the identical wording already ships at
+     `stdlib.command.quote.line_break`, which is **main-owned** — line 274 on
+     `origin/main`, untouched by this branch, and line 277 here only because
+     the branch's own insertions shifted it down. This is the same
+     "move both or not at all" disposition as the Indonesian finding recorded
+     above, and for the same reason: changing only the new line would leave two
+     Hindi messages describing the same control characters in two vocabularies,
+     while changing both would edit a line this branch has no other reason to
+     touch. (Because `grep -c` is unreliable on these Unicode catalogues — it
+     returned 0 for text that was visibly present — the counts here come from
+     Python's `str.count()`: HEAD 2, `origin/main` 1.)
+  3. *`locales/ru/messages.ftl:143`, `получено` agreement* (minor) —
+     **declined.** The reviewer reads `получено { $kind }` as a predicate
+     agreeing with a missing subject. It is an **impersonal passive** — "it was
+     received" — which takes no accusative object and therefore no agreement at
+     all, so there is no number or gender for it to get wrong. The placeholder
+     also does not supply one: `{ $kind }` renders MiniJinja's own `ValueKind`
+     labels, which are Latin and indeclinable (`string`, `number`, `sequence`).
+     And the construction is not this branch's invention: `origin/main` uses
+     `получено` immediately followed by a placeable in **4** places (lines 154,
+     182, 229, 367), and `получено` never once appears followed by a Cyrillic
+     word — so the new line reproduces a main-owned pattern exactly.
+  4. *`locales/uk/messages.ftl:143`, `отримано` agreement* (minor) —
+     **declined**, for the reasons in finding 3, which the reviewer raised
+     separately for the Ukrainian catalogue. `отримано { $placeable }` occurs
+     **4** times on `origin/main` (the same four lines), and `отримано` is
+     likewise never followed by a Cyrillic word there.
+  5. *`locales/ru/messages.ftl:143`, duplicate of finding 3* (minor) —
+     **declined as a duplicate.** Same line, same requested change, filed
+     against the same message key; the second occurrence adds no new evidence.
+  6. *`locales/uk/messages.ftl:143`, duplicate of finding 4* (minor) —
+     **declined as a duplicate**, as above.
+
+  **One of the declines rests on a distinction the reviewer could not see from
+  the line alone.** Findings 3-6 all target the *same* placeholder substitution
+  that findings 1 and 2 do not: `{ $kind }` is not a translated noun but a
+  runtime type label. That is why "the participle must agree with it" is not a
+  near-miss but a category error — there is no Slavic noun in the rendered
+  string at all. The same reasoning applies to the `을(를)` hedge on the Korean
+  line 356 that finding 1's sentence contains, and to the 28 `을(를)` hedges in
+  this catalogue: every one of them marks an object whose identity is only
+  known at render time, which is precisely why the hedge exists rather than a
+  chosen particle. Recorded because the shape recurs — a finding that reads a
+  placeholder as if it were prose will keep proposing agreement rules for
+  values that have no grammatical features to agree with.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
