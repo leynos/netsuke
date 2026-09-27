@@ -217,4 +217,3 @@ fn query_surface_renders_its_permitted_helpers() -> Result<()> {
     }
     Ok(())
 }
-
