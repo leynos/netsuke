@@ -7,6 +7,9 @@
 //! [`super::process`] sinks, honouring the `-` stdout sentinel and
 //! `-C/--directory` resolution for relative `--output` paths.
 
+pub(super) mod generation;
+mod generation_telemetry;
+
 use anyhow::{Context, Result};
 use std::path::Path;
 use tracing::info;
@@ -23,7 +26,7 @@ use crate::status::{LocalizationKey, PipelineStage, report_pipeline_stage};
 use super::path_helpers::{
     ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path,
 };
-use super::{ExecutionContext, generation, load_manifest_with_stage_reporting, process};
+use super::{ExecutionContext, generation as build_generation, load_manifest_with_stage_reporting, process};
 
 /// Render the build graph in-process and write the selected artefact.
 ///
@@ -49,10 +52,10 @@ pub(super) fn handle_graph(
     let manifest_path = resolve_manifest_path(cli)?;
     ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
     let inputs =
-        generation::ManifestLoadInputs::from_cli(cli, context.graph_generation.recipe_shell)?;
+        build_generation::ManifestLoadInputs::from_cli(cli, context.graph_generation.recipe_shell)?;
     let manifest = load_manifest_with_stage_reporting(&manifest_path, &inputs, reporter)?;
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
-    let graph = generation::build_graph(&manifest)?;
+    let graph = build_generation::build_graph(&manifest)?;
     let view = GraphView::from_build_graph(&graph);
 
     let status_key: LocalizationKey = if args.html {

@@ -7,8 +7,6 @@ mod dispatch;
 mod dyndep_generation_telemetry;
 mod dyndep_publication;
 mod error;
-mod graph_generation;
-mod graph_generation_telemetry;
 mod manifest_structure_telemetry;
 mod reporter;
 use crate::cli::{BuildArgs, Cli, Commands};
@@ -61,7 +59,7 @@ pub use recipe_shell_telemetry::{
 };
 
 use dyndep_publication::{materialize_dyndep_bundle, prune_dyndep_bundle};
-use graph_generation::{GraphGenerationContext, generate_ninja_with_shell};
+use graph::generation::{GraphGenerationContext, generate_ninja_with_shell};
 use path_helpers::resolve_output_path;
 use recipe_shell_telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
 

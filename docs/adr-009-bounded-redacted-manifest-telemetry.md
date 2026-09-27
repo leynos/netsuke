@@ -159,7 +159,7 @@ variable names never reach a span field or a metric label.
 
 The runner now records a bounded structural summary after
 `load_manifest_with_stage_reporting` loads the manifest in
-`src/runner/graph_generation.rs::generate_ninja_with_shell`, before graph
+`src/runner/graph/generation.rs::generate_ninja_with_shell`, before graph
 construction. The call is owned by the runner composition boundary and is kept
 separate from the pure graph-generation query.
 

@@ -2,13 +2,13 @@
 //!
 //! This runner-internal boundary combines the selected recipe shell, monotonic
 //! clock, pipeline reporting, and observability. It keeps the pure generation
-//! queries in [`super::generation`] free of runner infrastructure.
+//! queries in [`super::super::generation`] free of runner infrastructure.
 
-use super::manifest_structure_telemetry::record_manifest_structure;
-use super::{
+use super::super::manifest_structure_telemetry::record_manifest_structure;
+use super::super::{
     Cli, Context, LocalizationKey, PipelineStage, Result, StatusReporter,
-    dyndep_generation_telemetry, generation, graph_generation_telemetry,
-    load_manifest_with_stage_reporting, path_helpers, recipe_shell, report_pipeline_stage,
+    dyndep_generation_telemetry, generation, load_manifest_with_stage_reporting, path_helpers,
+    recipe_shell, report_pipeline_stage,
 };
 use crate::localization::{self, keys};
 use crate::ninja_gen;
@@ -18,11 +18,11 @@ use monotony::MonotonicClock;
 ///
 /// Keep this runner-internal composition boundary limited to graph generation
 /// so unrelated command dispatch does not acquire a clock dependency.
-pub(super) struct GraphGenerationContext<'a> {
+pub(in crate::runner) struct GraphGenerationContext<'a> {
     /// Select the legacy-recipe interpreter used during graph generation.
-    pub(super) recipe_shell: crate::recipe_shell::RecipeShell,
+    pub(in crate::runner) recipe_shell: crate::recipe_shell::RecipeShell,
     /// Measure graph generation with a runner-provided monotonic clock.
-    pub(super) clock: &'a dyn MonotonicClock,
+    pub(in crate::runner) clock: &'a dyn MonotonicClock,
 }
 
 /// Generate a Ninja bundle from the manifest referenced by `cli`.
@@ -38,7 +38,7 @@ pub(super) struct GraphGenerationContext<'a> {
 /// # let _: Option<GeneratedNinja> = None;
 /// ```
 /// Generate Ninja output using one selected legacy-recipe interpreter.
-pub(super) fn generate_ninja_with_shell(
+pub(in crate::runner) fn generate_ninja_with_shell(
     cli: &Cli,
     reporter: &dyn StatusReporter,
     tool_key: Option<LocalizationKey>,
@@ -53,7 +53,7 @@ pub(super) fn generate_ninja_with_shell(
     record_manifest_structure(&manifest);
 
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
-    let graph = graph_generation_telemetry::instrument_graph_generation(
+    let graph = super::generation_telemetry::instrument_graph_generation(
         graph_generation.clock,
         graph_generation.recipe_shell,
         || generation::build_graph_for_shell(&manifest, graph_generation.recipe_shell),
