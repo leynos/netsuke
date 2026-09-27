@@ -2823,10 +2823,14 @@ catalogue has the key; there is no partial state to clean up.
   `tests/std_filter_tests/collection_filters/compact_property.rs:91` (the
   British `-ise` form of *recognize*, which `typos.toml` rewrites by rule, so
   the offending word is described here rather than quoted back into a file the
-  gate reads). Both were already fixed at HEAD — the predicate by `fc967d91`,
-  the spelling by the same commit's en-GB-oxendict pass — so that review
-  requests changes that no longer exist. The *five* findings triaged here come
-  from the local
+  gate reads). Both were already fixed at HEAD, and by two different commits:
+  the predicate by `fc967d91` ("Keep an empty byte array out of `compact`'s
+  blank set") and the spelling by `338df305` ("Clear the lint cascade and the
+  spelling sweep"). Neither was written in response to this review — the
+  predicate was correctness work and the spelling fell out of the
+  en-GB-oxendict sweep — which is the point: the review is pinned to `94b9b247`
+  and reports a tree HEAD has since moved past twice. The *five* findings
+  triaged here come from the local
   `coderabbit review --agent` run captured at
   `/tmp/coderabbit-c72b2360-…-3-14-8-jinja-command-helpers-to-match-documented-ergonomics.out`,
   which is a different artefact with a different file scope (its
