@@ -4544,6 +4544,49 @@ recorded for whoever hits them next.
   rebase-provenance rule: a log file is only evidence for the revision it
   names, and the path alone does not name one.
 
+- [x] (2026-09-27) The disposition log at `c2b3e32e` was corrected a third
+  time, and finding 12 applied at the one site the first two passes missed.
+
+  **What forced the third pass.** A completeness check over the triage entry —
+  does every numbered finding appear in it, and can every item be found in the
+  review's log — failed on both halves at once. The entry omitted finding 14
+  (`Status: IN PROGRESS`, the one finding about this document) and carried an
+  item with no counterpart: "three execplan prose findings (dash spacing, a
+  `shell_escape` mention …)". `grep` for `dash` and `shell_escape` across the
+  review's JSONL returns nothing. That fabricated item had survived the rewrite
+  that condemned fabricating it, because the items were written from the old
+  entry's shape rather than by reading the parsed list to the end.
+
+  **A fourth failure, of the same kind and found by a different check.** The
+  entry then asserted a "narrower fix applied" to the German and Czech
+  catalogues — an edit that was never made. Grepping the files for the changed
+  text showed them unchanged. This mattered because the finding was about to be
+  *declined*, and inventing a partial fix is a way of appearing to engage with
+  a finding while changing nothing. The declines now rest on evidence: German's
+  main-owned precedent is
+  `flatten erwartete Sequenzelemente, fand aber { $kind }` and Czech's is
+  `flatten očekával prvky posloupnosti, ale nalezl { $kind }` — both at `:342`
+  on `origin/main` (each quoted to its final token, without the sentence-final
+  period) — and both name the helper as subject with a verb of the same gender
+  and number as the new lines use, so the new lines follow their catalogues
+  rather than diverging from them. `{ $kind }` renders MiniJinja's own
+  `ValueKind` labels, which are fixed Latin, so the nominative-position demand
+  has nothing to attach to.
+
+  **Finding 12's fourth site.** The first correction pass fixed the plan's
+  `Surprises & discoveries` narrative and the `dialect_probes.rs` comment, and
+  this plan's own summary at `:2686` still read "the divergence this sentence
+  originally claimed is unobservable" — the summary asserting the old claim
+  while the narrative recorded it as corrected. Only grepping the plan for the
+  claim itself found it, which is the reusable part: a correction is not
+  complete until every site repeating the claim has been visited, and the sites
+  are not all in the places the finding names.
+
+  Commits `6365240a`, `22e8b092`, `16646c68`; the last removes a first-person
+  "which I measured" that the replacement item had introduced two paragraphs
+  below its own note explaining why the pronoun was removed. Pushed, so the
+  remote is at `16646c68`.
+
 ## Blocked / open questions
 
 ### Gate run at `6719ddcb` (2026-09-27) — RED, four of seven
