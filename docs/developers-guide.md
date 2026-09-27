@@ -1804,8 +1804,9 @@ cover them, and neither runs the other:
   suites. It passes `--doctest-modules`, so the examples in those modules are
   executed rather than read.
 - `make test-coverage-artifact` — when the change touches the coverage artefact
-  validators under `scripts/`. It is the pytest module under `scripts/tests/`,
-  so a validator change is untested unless it runs.
+  validators under `scripts/`. It runs the pytest modules
+  `test_validate_coverage_artifact.py` and `test_validate_coverage_archive.py`
+  under `scripts/tests/`, so a validator change is untested unless it runs.
 
 `make validate-coverage-artifact` is separate from both, and is not a test: it
 is the operator-run entry point for validating a downloaded artefact, and it

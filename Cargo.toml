@@ -185,7 +185,7 @@ regex = "1.12.2"
 # are rather than as text, so `telemetry` is matched as an identifier and a
 # comment or a literal quoting the same name is not one. Full syntax, because
 # the items being read are ordinary source files.
-syn = { version = "2", features = ["full"] }
+syn = { version = "2", features = ["full", "visit"] }
 # Plural-selection tests must pass numeric arguments to Fluent. `ortho_config`
 # exposes `LocalizationArgs` as a map of `FluentValue`, but does not re-export
 # the value type, so the tests need `fluent-bundle` directly. Constrained to

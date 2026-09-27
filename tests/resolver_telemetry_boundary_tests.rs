@@ -38,7 +38,10 @@ use cap_std::{
     fs_utf8::{Dir, DirEntry},
 };
 use rstest::rstest;
-use syn::{File, Item, UseTree};
+use syn::{
+    File, ItemUse, UseTree,
+    visit::{self, Visit},
+};
 
 /// The resolver domain, relative to the workspace root.
 const RESOLVER_DOMAIN: &str = "src/stdlib/which";
@@ -195,7 +198,31 @@ fn names_segment(tree: &UseTree, wanted: &str) -> bool {
     }
 }
 
-/// Return whether `items` holds a `use` reaching the telemetry module.
+/// The record of whether a walk has met a `use` reaching the telemetry module.
+///
+/// One field on a type that implements [`Visit`], rather than a function that
+/// recurses by hand: `use` is legal in a block, so the positions that matter
+/// are every position the grammar allows an item, and only a walk that covers
+/// the whole tree reaches them all. The implementation below states the visit
+/// for `ItemUse` and nothing else — every other node is passed to the default
+/// visit, which descends — so the set of places a `use` can hide is the
+/// grammar's, not a list this module maintains.
+#[derive(Default)]
+struct TelemetryImport {
+    /// Whether a `use` met so far names the telemetry module.
+    found: bool,
+}
+
+impl<'ast> Visit<'ast> for TelemetryImport {
+    /// Record whether a `use` reached here names the telemetry module, then
+    /// descend into it.
+    fn visit_item_use(&mut self, node: &'ast ItemUse) {
+        self.found |= names_segment(&node.tree, TELEMETRY_MODULE);
+        visit::visit_item_use(self, node);
+    }
+}
+
+/// Return whether `file` imports the telemetry module, at any nesting depth.
 ///
 /// Only `use` items are read, not qualified paths written at a call site. Those
 /// are the same dependency, and the rule is stated over imports, so a module
@@ -205,25 +232,17 @@ fn names_segment(tree: &UseTree, wanted: &str) -> bool {
 /// path's first segment is a crate or a local module is not a fact a single
 /// file carries.
 ///
-/// Inline modules are descended into. `use` is legal inside `mod tests { ... }`,
-/// and this domain writes several of its test modules that way, so a scan that
-/// read only a file's own items would report a clean file for one whose `use`
-/// sits one block down. The walk is over the syntax tree, so a module written
-/// inline and the same module split into its own file are read alike.
-fn imports_telemetry_in(items: &[Item]) -> bool {
-    items.iter().any(|item| match item {
-        Item::Use(item_use) => names_segment(&item_use.tree, TELEMETRY_MODULE),
-        Item::Mod(item_mod) => item_mod
-            .content
-            .as_ref()
-            .is_some_and(|(_, nested)| imports_telemetry_in(nested)),
-        _ => false,
-    })
-}
-
-/// Return whether `file` imports the telemetry module, at any nesting depth.
+/// "At any nesting depth" is what the [`Visit`] walk above earns: `use` is
+/// legal in a block, so the scan reaches one written inside a function body,
+/// an `impl` or `trait` body, or a `const` or `static` initialiser, as well as
+/// one inside an inline module. Each of those is a position the grammar admits
+/// an item in, and each is one a handwritten descent can silently omit — the
+/// prelude of a function is exactly where the resolver writes the imports it
+/// wants kept local.
 fn imports_telemetry(file: &File) -> bool {
-    imports_telemetry_in(&file.items)
+    let mut search = TelemetryImport::default();
+    search.visit_file(file);
+    search.found
 }
 
 /// Every module under the resolver domain that names telemetry must be allowed to.
@@ -343,6 +362,32 @@ fn use_tree_naming(#[case] source: &str, #[case] expected: bool) -> Result<()> {
 )]
 #[case::top_level_import("use crate::stdlib::which::telemetry;\n", true)]
 fn inline_module_naming(#[case] source: &str, #[case] expected: bool) -> Result<()> {
+    let parsed: File = syn::parse_str(source).with_context(|| format!("parse {source:?}"))?;
+    ensure!(imports_telemetry(&parsed) == expected, "{source:?}");
+    Ok(())
+}
+
+/// The `use` sits in a block that belongs to an item rather than to a module.
+///
+/// `use` is legal wherever an item is, so a function body, a method in an
+/// `impl`, and a `const` initialiser are all places one can be written, and
+/// none is a module the file's own item list mentions. The resolver writes
+/// function-local imports already, so a scan that descended into inline modules
+/// but stopped at every other item reported a clean file for one whose import
+/// sits in a function prelude — the exact shape of the false negative these
+/// cases pin.
+#[rstest]
+#[case::function_body("fn resolve() { use crate::stdlib::which::telemetry; }", true)]
+#[case::impl_method(
+    "impl Cache {\n    fn record() { use crate::stdlib::which::telemetry; }\n}",
+    true
+)]
+#[case::const_initialiser(
+    "const LABELS: &[&str] = {\n    use crate::stdlib::which::telemetry;\n    &[]\n};",
+    true
+)]
+#[case::block_without_import("fn resolve() { use crate::stdlib::which::resolve_error; }", false)]
+fn block_import_naming(#[case] source: &str, #[case] expected: bool) -> Result<()> {
     let parsed: File = syn::parse_str(source).with_context(|| format!("parse {source:?}"))?;
     ensure!(imports_telemetry(&parsed) == expected, "{source:?}");
     Ok(())

@@ -807,8 +807,8 @@ not accept a default argument; an absent or non-Unicode value is an error.
 the drained `metrics snapshot` described in
 [Diagnose configuration selection](#diagnose-configuration-selection):
 
-- `netsuke_stdlib_which_cache_total` — a counter with the `cwd_mode` and
-  `outcome` labels that counts cache outcomes. `outcome` is `hit`, `miss`, or
+- `netsuke_stdlib_which_cache_total` — a counter that records cache outcomes
+  with the `cwd_mode` and `outcome` labels. `outcome` is `hit`, `miss`, or
   `bypass`, where `bypass` is a `fresh=true` lookup.
 - `netsuke_stdlib_which_resolution_total` — a counter with two label shapes
   that counts resolution outcomes. A success series carries `cwd_mode` and
