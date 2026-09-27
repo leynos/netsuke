@@ -3307,7 +3307,7 @@ Startup diagnostics are buffered rather than written. The locale is resolved
 before the command line is parsed, so a fallback can be reported before the
 effective diagnostic mode is known, and the JSON diagnostic document is written
 to stderr — an eagerly emitted warning could corrupt it. `StartupWriter` in
-`src/startup_tracing.rs` therefore holds startup tracing until the mode is
+`src/startup_tracing/mod.rs` therefore holds startup tracing until the mode is
 settled. `settle_startup_diagnostics` in `src/main.rs` then releases the buffer
 to stderr in human mode, or discards it in JSON mode so that stderr carries a
 single diagnostic document. Settlement happens after the JSON mode is resolved

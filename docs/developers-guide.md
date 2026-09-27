@@ -603,7 +603,7 @@ Locale resolution happens before the command line is parsed, so a fallback
 warning can be emitted before the effective diagnostic mode — human or JSON —
 is known, yet the JSON diagnostic document is also written to stderr: an
 eagerly emitted warning could corrupt it. `StartupWriter` in
-`src/startup_tracing.rs` closes that window. It implements
+`src/startup_tracing/mod.rs` closes that window. It implements
 `tracing_subscriber`'s `MakeWriter` and is installed by `init_tracing` in
 `src/main.rs` before locale resolution runs, so every startup event is held
 rather than written. The buffer is bounded at `MAX_BUFFERED_BYTES` (64 KiB): it

@@ -42,7 +42,6 @@ impl DiagMode {
     }
 }
 mod observability;
-#[path = "startup_tracing.rs"]
 mod startup_tracing;
 
 #[cfg(test)]

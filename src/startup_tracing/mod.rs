@@ -250,5 +250,4 @@ impl<'writer> MakeWriter<'writer> for StartupWriter {
 }
 
 #[cfg(test)]
-#[path = "startup_tracing_tests.rs"]
 mod tests;
