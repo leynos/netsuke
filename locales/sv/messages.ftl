@@ -293,6 +293,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote väntade en sträng men fick { $kind }.
 stdlib.shell.quote.control_character = Ett värde som innehåller en nollbyte, vagnretur eller radmatning kan inte citeras.
 stdlib.shell.dialect_invalid = Okänd shelldialekt { $dialect }; väntade en av { $accepted }.
+stdlib.shell.dialect_not_string = dialect-alternativet i shell måste vara en sträng, tog emot { $kind }.
 stdlib.shell.join.not_sequence = shell_join väntade en sekvens men fick { $kind }.
 stdlib.shell.join.item_not_string = Element { $index } i shell_join är { $kind }, inte en sträng.
 stdlib.shell.positional_option = { $filter } tar sina alternativ som nyckelord; skriv { $example }.

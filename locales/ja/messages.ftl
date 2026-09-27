@@ -293,6 +293,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote は文字列を期待しましたが、{ $kind } を受け取りました。
 stdlib.shell.quote.control_character = ヌルバイト、復帰、または改行を含む値は引用符で囲めません。
 stdlib.shell.dialect_invalid = 不明なシェル方言 { $dialect } です。{ $accepted } のいずれかを指定してください。
+stdlib.shell.dialect_not_string = shell の dialect オプションは文字列でなければなりません。{ $kind } を受け取りました。
 stdlib.shell.join.not_sequence = shell_join は列を期待しましたが、{ $kind } を受け取りました。
 stdlib.shell.join.item_not_string = shell_join の { $index } 番目の項目は { $kind } であり、文字列ではありません。
 stdlib.shell.positional_option = { $filter } はオプションをキーワードで受け取ります。{ $example } と記述してください。

@@ -258,6 +258,18 @@ Feature: Template stdlib filters
     Then the stdlib error contains "netsuke::jinja::shell::args"
     And the stdlib error contains "powershell"
 
+  Scenario: shell_quote rejects a non-string dialect as a type error
+    When I render the stdlib template "{{ 'x' | shell_quote(dialect=3) }}" without context
+    Then the stdlib error contains "netsuke::jinja::shell::args"
+    And the stdlib error contains "must be a string"
+    And the stdlib error contains "number"
+
+  Scenario: shell_join rejects a non-string dialect as a type error
+    When I render the stdlib template "{{ ['x'] | shell_join(dialect=true) }}" without context
+    Then the stdlib error contains "netsuke::jinja::shell::args"
+    And the stdlib error contains "must be a string"
+    And the stdlib error contains "bool"
+
   Scenario: shell_quote rejects a value containing a line feed
     When I render the stdlib template "{{ 'a\nb' | shell_quote(dialect='sh') }}" without context
     Then the stdlib error contains "netsuke::jinja::shell::unquotable"

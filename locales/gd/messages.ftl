@@ -293,9 +293,10 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = Bha dùil aig shell_quote ri sreang ach fhuair e { $kind }.
 stdlib.shell.quote.control_character = Chan urrainnear luach le beit neoni, tilleadh-carbaid no briseadh-loidhne a chur ann an comharran-labhairt.
 stdlib.shell.dialect_invalid = Dual-chainnt sligean neo-aithnichte { $dialect }; bha dùil ri aon de { $accepted }.
+stdlib.shell.dialect_not_string = Feumaidh roghainn dialect shell a bhith na shreang; fhuaras { $kind }.
 stdlib.shell.join.not_sequence = Bha dùil aig shell_join ri sreath ach fhuair e { $kind }.
 stdlib.shell.join.item_not_string = Tha nì { $index } aig shell_join na { $kind }, chan e sreang.
-stdlib.shell.positional_option = Bidh { $filter } a' gabhail a roghainnean mar fhacal-àirde; sgrìobh { $example }.
+stdlib.shell.positional_option = Bidh { $filter } a' gabhail a roghainnean mar fhacal-luirg; sgrìobh { $example }.
 
 # Breithneachadh cuidiche nan slighean.
 stdlib.path.io.failed = Dh'fhàillig an gnìomh “{ $action }” airson { $path } ({ $label }).

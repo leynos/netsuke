@@ -293,6 +293,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote ожидал строку, но получил { $kind }.
 stdlib.shell.quote.control_character = Значение, содержащее нулевой байт, возврат каретки или перевод строки, нельзя заключить в кавычки.
 stdlib.shell.dialect_invalid = Неизвестный диалект оболочки { $dialect }; ожидается один из { $accepted }.
+stdlib.shell.dialect_not_string = Опция dialect в shell должна быть строкой, получено { $kind }.
 stdlib.shell.join.not_sequence = shell_join ожидал последовательность, но получил { $kind }.
 stdlib.shell.join.item_not_string = Элемент { $index } в shell_join имеет тип { $kind }, а не строку.
 stdlib.shell.positional_option = { $filter } принимает параметры по ключевым словам; напишите { $example }.

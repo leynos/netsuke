@@ -293,6 +293,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = Roedd shell_quote yn disgwyl llinyn ond cafodd { $kind }.
 stdlib.shell.quote.control_character = Ni ellir rhoi gwerth sy'n cynnwys beit nwl, dychweliad cerbyd neu doriad llinell mewn dyfynodau.
 stdlib.shell.dialect_invalid = Tafodiaith plisgyn anhysbys { $dialect }; disgwylir un o { $accepted }.
+stdlib.shell.dialect_not_string = Rhaid i'r opsiwn dialect yn shell fod yn llinyn, derbyniwyd { $kind }.
 stdlib.shell.join.not_sequence = Roedd shell_join yn disgwyl dilyniant ond cafodd { $kind }.
 stdlib.shell.join.item_not_string = Mae eitem { $index } shell_join yn { $kind }, nid yn llinyn.
 stdlib.shell.positional_option = Mae { $filter } yn cymryd ei opsiynau fel allweddair; ysgrifennwch { $example }.

@@ -293,6 +293,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote verwachtte een tekenreeks, maar kreeg { $kind }.
 stdlib.shell.quote.control_character = Een waarde met een nulbyte, regelterugloop of regeleinde kan niet tussen aanhalingstekens worden gezet.
 stdlib.shell.dialect_invalid = Onbekend shell-dialect { $dialect }; verwacht een van { $accepted }.
+stdlib.shell.dialect_not_string = De optie dialect van shell moet een tekenreeks zijn, ontvangen { $kind }.
 stdlib.shell.join.not_sequence = shell_join verwachtte een reeks, maar kreeg { $kind }.
 stdlib.shell.join.item_not_string = Element { $index } van shell_join is { $kind }, geen tekenreeks.
 stdlib.shell.positional_option = { $filter } neemt zijn opties als trefwoord; schrijf { $example }.

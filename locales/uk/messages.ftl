@@ -293,6 +293,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote очікував рядок, але отримав { $kind }.
 stdlib.shell.quote.control_character = Значення, що містить нульовий байт, повернення каретки або переведення рядка, не можна взяти в лапки.
 stdlib.shell.dialect_invalid = Невідомий діалект оболонки { $dialect }; очікується один із { $accepted }.
+stdlib.shell.dialect_not_string = Опція dialect у shell має бути рядком, отримано { $kind }.
 stdlib.shell.join.not_sequence = shell_join очікував послідовність, але отримав { $kind }.
 stdlib.shell.join.item_not_string = Елемент { $index } у shell_join має тип { $kind }, а не рядок.
 stdlib.shell.positional_option = { $filter } приймає параметри за ключовими словами; напишіть { $example }.

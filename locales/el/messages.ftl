@@ -294,6 +294,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = Το shell_quote περίμενε συμβολοσειρά, αλλά έλαβε { $kind }.
 stdlib.shell.quote.control_character = Μια τιμή που περιέχει μηδενικό byte, επιστροφή ή αλλαγή γραμμής δεν μπορεί να τεθεί σε εισαγωγικά.
 stdlib.shell.dialect_invalid = Άγνωστη διάλεκτος κελύφους { $dialect }· αναμενόταν μία από { $accepted }.
+stdlib.shell.dialect_not_string = Η επιλογή dialect του shell πρέπει να είναι συμβολοσειρά· τύπος τιμής που ελήφθη: { $kind }.
 stdlib.shell.join.not_sequence = Το shell_join περίμενε ακολουθία, αλλά έλαβε { $kind }.
 stdlib.shell.join.item_not_string = Το στοιχείο { $index } του shell_join είναι { $kind }, όχι συμβολοσειρά.
 stdlib.shell.positional_option = Το { $filter } δέχεται τις επιλογές του ως λέξεις-κλειδιά· γράψτε { $example }.

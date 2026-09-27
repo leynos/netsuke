@@ -113,6 +113,12 @@ fn encode_one(dialect: ShellDialect, text: &str) -> Result<String, Error> {
 /// `MiniJinja`'s `String` argument type converts a number or a boolean with
 /// `to_string`, so `dialect=3` would silently become the dialect named `"3"`
 /// and fail as merely unknown rather than as the wrong type (D4).
+///
+/// The non-string case gets its own diagnostic rather than being folded into
+/// [`dialect_invalid_error`]. Reporting `dialect=3` as an *unknown dialect*
+/// would be true but misleading: nothing called `3` was ever a dialect name,
+/// and the reader needs to know the argument's type is wrong, not that the
+/// name is absent from the accepted set.
 fn resolve_dialect(default: ShellDialect, kwargs: &Kwargs) -> Result<ShellDialect, Error> {
     let Some(value) = kwargs.get::<Option<Value>>("dialect")? else {
         // The omitted-dialect population is the one this counter exists to
@@ -123,7 +129,9 @@ fn resolve_dialect(default: ShellDialect, kwargs: &Kwargs) -> Result<ShellDialec
             default,
         ));
     };
-    let raw = value.as_str().unwrap_or("");
+    let Some(raw) = value.as_str() else {
+        return Err(dialect_not_string_error(value.kind()));
+    };
     ShellDialect::parse(raw)
         .map(|dialect| {
             dialect_telemetry::record_dialect(
@@ -133,6 +141,18 @@ fn resolve_dialect(default: ShellDialect, kwargs: &Kwargs) -> Result<ShellDialec
             )
         })
         .ok_or_else(|| dialect_invalid_error(&value))
+}
+
+/// Report a `dialect` argument that is not a string at all.
+///
+/// Separate from [`dialect_invalid_error`] so the diagnostic names the
+/// received kind: a non-string never reaches the accepted-name list, and
+/// telling the reader it is "unknown" would send them to check spelling.
+fn dialect_not_string_error(kind: ValueKind) -> Error {
+    args_error(
+        localization::message(keys::STDLIB_SHELL_DIALECT_NOT_STRING)
+            .with_arg("kind", kind.to_string()),
+    )
 }
 
 /// Report the rejected `dialect` value and enumerate every accepted name.

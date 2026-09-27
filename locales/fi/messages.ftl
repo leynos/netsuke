@@ -293,6 +293,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote odotti merkkijonoa, mutta sai { $kind }.
 stdlib.shell.quote.control_character = Arvoa, joka sisältää nollatavun, vaunupalautuksen tai rivinvaihdon, ei voi lainausmerkitä.
 stdlib.shell.dialect_invalid = Tuntematon komentotulkin murre { $dialect }; odotettiin jotakin joukosta { $accepted }.
+stdlib.shell.dialect_not_string = dialect-valinnan shell-funktiossa on oltava merkkijono, vastaanotettiin { $kind }.
 stdlib.shell.join.not_sequence = shell_join odotti jonoa, mutta sai { $kind }.
 stdlib.shell.join.item_not_string = Kohteen { $index } tyyppi shell_join-kutsussa on { $kind }, ei merkkijono.
 stdlib.shell.positional_option = { $filter } ottaa valitsimensa avainsanoina; kirjoita { $example }.

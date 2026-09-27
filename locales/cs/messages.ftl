@@ -293,6 +293,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote očekával řetězec, ale obdržel { $kind }.
 stdlib.shell.quote.control_character = Hodnotu obsahující nulový bajt, návrat vozíku nebo konec řádku nelze uzavřít do uvozovek.
 stdlib.shell.dialect_invalid = Neznámý dialekt shellu { $dialect }; očekáván jeden z { $accepted }.
+stdlib.shell.dialect_not_string = Volba dialect v shell musí být řetězec; typ obdržené hodnoty: { $kind }.
 stdlib.shell.join.not_sequence = shell_join očekával posloupnost, ale obdržel { $kind }.
 stdlib.shell.join.item_not_string = Prvek { $index } v shell_join má typ { $kind }, nikoli řetězec.
 stdlib.shell.positional_option = { $filter } přijímá své volby jako klíčová slova; zapište { $example }.

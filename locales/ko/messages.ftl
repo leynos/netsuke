@@ -293,6 +293,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote은(는) 문자열을 기대했지만 { $kind }을(를) 받았습니다.
 stdlib.shell.quote.control_character = 널 바이트, 캐리지 리턴 또는 줄바꿈이 포함된 값은 따옴표로 감싸 수 없습니다.
 stdlib.shell.dialect_invalid = 알 수 없는 셸 방언 { $dialect }입니다. { $accepted } 중 하나여야 합니다.
+stdlib.shell.dialect_not_string = shell의 dialect 옵션은 문자열이어야 합니다. { $kind }을(를) 받았습니다.
 stdlib.shell.join.not_sequence = shell_join은(는) 열을 기대했지만 { $kind }을(를) 받았습니다.
 stdlib.shell.join.item_not_string = shell_join의 { $index }번째 항목은 { $kind }이며 문자열이 아닙니다.
 stdlib.shell.positional_option = { $filter }은(는) 옵션을 키워드로 받습니다. { $example } 형식으로 작성하세요.

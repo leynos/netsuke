@@ -293,6 +293,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote forventede en streng, men fik { $kind }.
 stdlib.shell.quote.control_character = En værdi med nulbyte, vognretur eller linjeskift kan ikke sættes i anførselstegn.
 stdlib.shell.dialect_invalid = Ukendt shell-dialekt { $dialect }; forventede en af { $accepted }.
+stdlib.shell.dialect_not_string = dialect-indstillingen i shell skal være en streng, modtog { $kind }.
 stdlib.shell.join.not_sequence = shell_join forventede en følge, men fik { $kind }.
 stdlib.shell.join.item_not_string = Element { $index } i shell_join er { $kind }, ikke en streng.
 stdlib.shell.positional_option = { $filter } tager sine valgmuligheder som nøgleord; skriv { $example }.

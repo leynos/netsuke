@@ -293,6 +293,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote bir dize bekliyordu, ancak { $kind } aldı.
 stdlib.shell.quote.control_character = Null bayt, satır başı veya satır sonu içeren bir değer tırnak içine alınamaz.
 stdlib.shell.dialect_invalid = Bilinmeyen kabuk lehçesi { $dialect }; şunlardan biri bekleniyordu: { $accepted }.
+stdlib.shell.dialect_not_string = shell dialect seçeneği bir dizge olmalıdır, { $kind } alındı.
 stdlib.shell.join.not_sequence = shell_join bir dizi bekliyordu, ancak { $kind } aldı.
 stdlib.shell.join.item_not_string = shell_join öğesi { $index }, { $kind } türünde; dize değil.
 stdlib.shell.positional_option = { $filter } seçeneklerini anahtar sözcükle alır; şöyle yazın: { $example }.

@@ -293,6 +293,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote mong đợi một chuỗi nhưng lại nhận { $kind }.
 stdlib.shell.quote.control_character = Giá trị chứa byte null, ký tự về đầu dòng hoặc xuống dòng không thể đặt trong dấu nháy.
 stdlib.shell.dialect_invalid = Phương ngữ shell không xác định { $dialect }; mong đợi một trong { $accepted }.
+stdlib.shell.dialect_not_string = Tùy chọn dialect của shell phải là chuỗi, nhưng nhận được { $kind }.
 stdlib.shell.join.not_sequence = shell_join mong đợi một dãy nhưng lại nhận { $kind }.
 stdlib.shell.join.item_not_string = Phần tử { $index } của shell_join có kiểu { $kind }, không phải chuỗi.
 stdlib.shell.positional_option = { $filter } nhận tùy chọn theo từ khóa; hãy viết { $example }.

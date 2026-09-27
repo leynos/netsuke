@@ -292,6 +292,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote 預期字串，卻收到 { $kind }。
 stdlib.shell.quote.control_character = 含有空位元組、歸位或換行的值無法加上引號。
 stdlib.shell.dialect_invalid = 未知的 shell 方言 { $dialect }；應為 { $accepted } 之一。
+stdlib.shell.dialect_not_string = shell 的 dialect 選項必須是字串，但收到 { $kind }。
 stdlib.shell.join.not_sequence = shell_join 預期序列，卻收到 { $kind }。
 stdlib.shell.join.item_not_string = shell_join 的第 { $index } 項為 { $kind }，不是字串。
 stdlib.shell.positional_option = { $filter } 以關鍵字接收選項；請寫成 { $example }。

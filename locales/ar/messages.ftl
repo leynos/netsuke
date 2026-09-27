@@ -293,6 +293,7 @@ stdlib.shell.unquotable = ‏[netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = يتوقّع shell_quote سلسلة نصية لكنه تلقّى { $kind }.
 stdlib.shell.quote.control_character = لا يمكن وضع قيمة تتضمّن بايتاً صفرياً أو إرجاع أوّل السطر أو تغذية السطر بين علامتي اقتباس.
 stdlib.shell.dialect_invalid = لهجة صدفة غير معروفة { $dialect }؛ المتوقّع أحد هذه: { $accepted }.
+stdlib.shell.dialect_not_string = يجب أن يكون خيار dialect في shell سلسلة نصية، وتم تلقّي { $kind }.
 stdlib.shell.join.not_sequence = يتوقّع shell_join تسلسلاً لكنه تلقّى { $kind }.
 stdlib.shell.join.item_not_string = العنصر { $index } في shell_join نوعه { $kind } وليس سلسلة نصية.
 stdlib.shell.positional_option = ‏{ $filter } يتلقّى خياراته ككلمات مفتاحية؛ اكتب { $example }.

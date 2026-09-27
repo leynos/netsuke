@@ -293,6 +293,7 @@ stdlib.shell.unquotable = ‏[netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = ‏shell_quote ציפה למחרוזת אך קיבל { $kind }.
 stdlib.shell.quote.control_character = לא ניתן להקיף במרכאות ערך המכיל בייט אפס, החזרת גרר או מעבר שורה.
 stdlib.shell.dialect_invalid = דיאלקט מעטפת לא מוכר { $dialect }; צפוי אחד מבין { $accepted }.
+stdlib.shell.dialect_not_string = האפשרות dialect של shell חייבת להיות מחרוזת, התקבל { $kind }.
 stdlib.shell.join.not_sequence = ‏shell_join ציפה לרצף אך קיבל { $kind }.
 stdlib.shell.join.item_not_string = הפריט { $index } ב-shell_join הוא { $kind }, לא מחרוזת.
 stdlib.shell.positional_option = ‏{ $filter } מקבל את אפשרויותיו כמילת מפתח; כתבו { $example }.

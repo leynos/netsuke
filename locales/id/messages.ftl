@@ -293,6 +293,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote mengharapkan string, tetapi menerima { $kind }.
 stdlib.shell.quote.control_character = Nilai yang memuat byte nol, retur kereta, atau ganti baris tidak dapat diberi tanda kutip.
 stdlib.shell.dialect_invalid = Dialek shell tidak dikenal { $dialect }; diharapkan salah satu dari { $accepted }.
+stdlib.shell.dialect_not_string = Opsi dialect pada shell harus berupa untai, menerima { $kind }.
 stdlib.shell.join.not_sequence = shell_join mengharapkan urutan, tetapi menerima { $kind }.
 stdlib.shell.join.item_not_string = Item { $index } pada shell_join bertipe { $kind }, bukan string.
 stdlib.shell.positional_option = { $filter } mengambil opsinya sebagai kata kunci; tulis { $example }.

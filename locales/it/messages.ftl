@@ -294,6 +294,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote si aspettava una stringa ma ha ricevuto { $kind }.
 stdlib.shell.quote.control_character = Un valore che contiene un byte nullo, un ritorno a capo o un avanzamento di riga non può essere racchiuso tra virgolette.
 stdlib.shell.dialect_invalid = Dialetto della shell sconosciuto { $dialect }; atteso uno tra { $accepted }.
+stdlib.shell.dialect_not_string = L'opzione dialect di shell deve essere una stringa, ricevuto { $kind }.
 stdlib.shell.join.not_sequence = shell_join si aspettava una sequenza ma ha ricevuto { $kind }.
 stdlib.shell.join.item_not_string = L'elemento { $index } di shell_join è { $kind }, non una stringa.
 stdlib.shell.positional_option = { $filter } accetta le sue opzioni per parola chiave; scrivere { $example }.

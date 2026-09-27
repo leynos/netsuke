@@ -293,6 +293,7 @@ stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
 stdlib.shell.quote.not_string = shell_quote aștepta un șir, dar a primit { $kind }.
 stdlib.shell.quote.control_character = O valoare care conține octet nul, retur de car sau salt de linie nu poate fi pusă între ghilimele.
 stdlib.shell.dialect_invalid = Dialect de shell necunoscut { $dialect }; se aștepta unul dintre { $accepted }.
+stdlib.shell.dialect_not_string = Opțiunea dialect din shell trebuie să fie un șir de caractere, s-a primit { $kind }.
 stdlib.shell.join.not_sequence = shell_join aștepta o secvență, dar a primit { $kind }.
 stdlib.shell.join.item_not_string = Elementul { $index } din shell_join este { $kind }, nu un șir.
 stdlib.shell.positional_option = { $filter } își preia opțiunile ca cuvinte-cheie; scrieți { $example }.
