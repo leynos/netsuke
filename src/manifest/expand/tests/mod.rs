@@ -12,9 +12,7 @@ mod condition_cases;
 
 mod description_cases;
 
-mod foreach_property_cases;
-
-mod foreach_laziness_cases;
+mod foreach;
 
 mod structure_cases;
 

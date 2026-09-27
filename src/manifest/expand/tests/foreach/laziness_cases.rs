@@ -1,6 +1,6 @@
 //! Proves `foreach` consumes its iterator lazily rather than collecting it.
 
-use super::*;
+use super::super::*;
 use crate::manifest::ManifestBudgetLimits;
 use anyhow::{Result, ensure};
 use minijinja::{
