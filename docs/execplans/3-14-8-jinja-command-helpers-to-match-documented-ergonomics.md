@@ -2810,7 +2810,11 @@ catalogue has the key; there is no partial state to clean up.
   not an oracle that was never consulted. The Linux side re-runs 44/44 with the
   gates restored.
 
-- [ ] EP-M5 documentation, ADR-041, roadmap tick.
+- [x] EP-M5 documentation, ADR-041, roadmap tick. Verified present rather than
+      assumed: `docs/adr-041-canonical-recipe-shell-quoting-surface.md` is
+      `Accepted` dated 2026-09-27, `docs/roadmap.md:367` carries
+      `- [x] 3.14.8`, and `docs/users-guide.md:518-521` documents
+      `shell_quote`/`shell_join` including the `dialect` argument.
 
 - [x] (2026-09-27) CodeRabbit review at `8d0db5b3` triaged; all five findings
       dispositioned against the tree rather than the reviewer's framing.
@@ -2830,8 +2834,7 @@ catalogue has the key; there is no partial state to clean up.
   predicate was correctness work and the spelling fell out of the
   en-GB-oxendict sweep — which is the point: the review is pinned to `94b9b247`
   and reports a tree HEAD has since moved past twice. The *five* findings
-  triaged here come from the local
-  `coderabbit review --agent` run captured at
+  triaged here come from the local `coderabbit review --agent` run captured at
   `/tmp/coderabbit-c72b2360-…-3-14-8-jinja-command-helpers-to-match-documented-ergonomics.out`,
   which is a different artefact with a different file scope (its
   `reviewedFiles` list runs to 107 entries and includes files this branch never
@@ -2882,9 +2885,9 @@ catalogue has the key; there is no partial state to clean up.
      against `baidht`×6, `beitean`×3 on `origin/main` — so `beit` was a third
      variant, not a defensible lenited or singular form. The Gaelic paradigm is
      `baidht` (singular) / `beitean` (plural), and the surroundings call for the
-     singular. Now `baidht`×7, `beit`×0. No lenition is required: the only
-     ` le b` context is a following `b` in an unrelated message, and nothing
-     `bhaidht` appears in any catalogue.
+     singular. Now `baidht`×7, `beit`×0. Lenition is not applied to this noun
+     anywhere: `bhaidht` appears in 0 of 35 catalogues, so line 294 now agrees
+     with the six other uses instead of introducing a form nothing else uses.
   4. *`locales/id/messages.ftl:294`, `retur kereta`* (minor) — **declined.**
      The reviewer asks for `karakter CR` on the grounds that the current term
      is not unambiguously readable as "carriage return". The wording is
@@ -2927,10 +2930,10 @@ catalogue has the key; there is no partial state to clean up.
 
   **The pull-request state is not approval, and was checked rather than
   assumed.** The CodeRabbit app is **auto-paused** on this branch, so its
-  `success` status on `8d0db5b3` reads "Review paused" and is a pause indicator,
-  not a review outcome. The stale `CHANGES_REQUESTED` review `5328262147`
-  remains pinned to `94b9b247` and will keep reporting until it is dismissed or
-  the app is resumed. The pull request is `MERGEABLE` with
+  `success` status on `8d0db5b3` reads "Review paused" and is a pause
+  indicator, not a review outcome. The stale `CHANGES_REQUESTED` review
+  `5328262147` remains pinned to `94b9b247` and will keep reporting until it is
+  dismissed or the app is resumed. The pull request is `MERGEABLE` with
   `mergeStateStatus: BLOCKED`, the block being the pending required check
   `build-test`. None of that is a substitute for the deterministic gates, which
   is why the fixes above are gated before any re-review is requested.
@@ -2939,14 +2942,14 @@ catalogue has the key; there is no partial state to clean up.
       this entry describes: a trailing blank line after the root file's final
       `}`, rejected by `cargo fmt --all -- --check`. Fixed in `10b76e45`.
 
-  **Why it is worth recording.** `cargo check --test
-  stdlib_manifest_query_tests` passed, the six tests passed, and `make lint`
-  passed — the file was correct by every measure except the one gate that reads
-  trailing whitespace. Removing one line from the end of a file is exactly the
-  edit a line-oriented split invites, and `sed -n '1,220p'` produced it by
-  keeping the separator blank line that had followed the last block. **A file
-  split is a formatting change, not just a move**, so the formatting gate has to
-  see it; a compile-and-test check cannot.
+  **Why it is worth recording.**
+  `cargo check --test stdlib_manifest_query_tests` passed, the six tests
+  passed, and `make lint` passed — the file was correct by every measure except
+  the one gate that reads trailing whitespace. Removing one line from the end
+  of a file is exactly the edit a line-oriented split invites, and
+  `sed -n '1,220p'` produced it by keeping the separator blank line that had
+  followed the last block. **A file split is a formatting change, not just a
+  move**, so the formatting gate has to see it; a compile-and-test check cannot.
 
   **A second shape worth naming.** The gate logs for this run record
   `SHA_BEFORE=fbbeeeb7` on every line but `SHA_AFTER=0ac808fa` on `lint`,
@@ -2955,6 +2958,37 @@ catalogue has the key; there is no partial state to clean up.
   `SHA_BEFORE` would attribute a `lint` result to the wrong tree. Any commit
   made during a gate run invalidates that run's provenance, even when the delta
   is harmless; the whole set must be re-run against the final HEAD.
+
+- [x] (2026-09-27) The re-run at `890a657f` found two more defects, both in
+      **this document** and both introduced by the disposition entry itself:
+      `mdtablefix --check` rejected three paragraphs for re-wrapping, and
+      `markdownlint` reported MD038 at line 2886 on a code span reading
+      `` ` le b` ``. Fixed in the same commit as this entry.
+
+  **Why the code span was broken, and why the repair is not cosmetic.** The
+  span was written to name the Gaelic lenition context and lost a leading
+  grapheme, leaving a space inside the backticks. But the claim it carried was
+  also unverifiable as written: *every* `le b` context is followed by a `b` by
+  construction, so "the only `le b` context is a following `b`" is a tautology
+  and not a measurement. The repaired text states something checkable instead —
+  `bhaidht` appears in 0 of 35 catalogues, so line 294 agrees with the six
+  other uses of `baidht` rather than introducing a form nothing else uses.
+
+  **A `--wrap` refill is a formatting change that a reader cannot see.**
+  `mdtablefix --check` failing with `+13 -14` does not mean 13 wrong lines: it
+  means the paragraph's fill point drifted. All three hunks moved text
+  *between* lines without changing a word, which is why the prose read
+  correctly while the gate was red. The diff is the only artefact that shows
+  it, so the check has to be run before the commit rather than reasoned about.
+
+  **Both defects were in a document, and both were caught by Markdown gates.**
+  Nothing in `cargo check`, `make lint`, `make typecheck`, or `make test` reads
+  prose wrapping or code-span interiors, and all four passed on the same tree
+  (3578/3578 tests green). This is the second time on this branch that a
+  prose-only edit was invisible to every non-Markdown gate — the first being the
+  `sed -n '1,220p'` trailing blank line. `make check-fmt` and
+  `make markdownlint` are the only two gates with jurisdiction here, and they
+  are not optional on a documentation commit.
 
 ## Surprises & discoveries
 
