@@ -181,5 +181,4 @@ fn insert_nested(target: &mut Dict, components: &[String], value: Value) -> Resu
 }
 
 #[cfg(test)]
-#[path = "environment_tests.rs"]
 mod tests;
