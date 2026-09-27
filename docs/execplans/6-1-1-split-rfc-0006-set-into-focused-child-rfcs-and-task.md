@@ -1464,10 +1464,11 @@ tracked; the derivation it performs is reimplemented in the coverage test at
   comment rather than hidden: a fence nested in a list item is at the item's
   content column and this line-level predicate will not recognise it. That
   error is loud — the body is handed to the heading and table scans and
-  misparses — and the corpus has **zero** indented fences across all 24 scanned
-  files, so no document needs the nested form today. Three unit tests in `mod
-  fence_tests` pin the boundary, because a corpus with no instance of a shape
-  cannot test the predicate for it.
+  misparses — and the corpus has **zero** indented fences across all 23 scanned
+  files (the 22 under `docs/rfcs/` plus `docs/roadmap.md`, 206 fence lines, none
+  indented), so no document needs the nested form today. Three unit tests in
+  `mod fence_tests` pin the boundary, because a corpus with no instance of a
+  shape cannot test the predicate for it.
 
 ## Decision log
 

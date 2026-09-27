@@ -230,9 +230,10 @@ mod fence_tests {
     //! Unit tests for [`Fences`](super::Fences) and its opening rule.
     //!
     //! The indent bound is pinned here rather than only exercised through a
-    //! document, because the corpus carries every fence at column zero today:
-    //! nothing in `docs/rfcs` or `docs/roadmap.md` has an indented fence, so a
-    //! document-level test cannot tell the correct bound from an unbounded one.
+    //! document, because the scanned corpus carries every one of its 206 fence
+    //! lines at column zero: neither the 22 RFCs nor `docs/roadmap.md` has an
+    //! indented fence, so a document-level test cannot tell the correct bound
+    //! from an unbounded one.
 
     use super::Fences;
 
