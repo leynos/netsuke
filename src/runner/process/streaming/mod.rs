@@ -272,8 +272,6 @@ where
 }
 
 #[cfg(test)]
-#[path = "streaming_telemetry_tests.rs"]
 mod telemetry_tests;
 #[cfg(test)]
-#[path = "streaming_tests.rs"]
 mod tests;
