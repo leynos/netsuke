@@ -5,7 +5,7 @@
 //! a `Cli` use these wrappers; process requests remain parser-independent and
 //! callers without CLI state construct `NinjaProcessOptions` directly.
 
-use super::{BuildTargets, CommandEnv, StderrMode, process};
+use super::super::{BuildTargets, CommandEnv, StderrMode, process};
 use crate::cli::Cli;
 use camino::Utf8Path;
 use std::io;
@@ -16,7 +16,9 @@ use std::io;
 ///
 /// Returns [`io::ErrorKind::InvalidInput`] when the job count lies outside the
 /// supported `1..=64` range.
-pub(super) fn ninja_process_options(cli: &Cli) -> io::Result<process::NinjaProcessOptions> {
+pub(in crate::runner) fn ninja_process_options(
+    cli: &Cli,
+) -> io::Result<process::NinjaProcessOptions> {
     let working_dir = cli.directory.clone();
     let jobs = cli.jobs.map(process::NinjaJobCount::try_new).transpose()?;
     Ok(process::NinjaProcessOptions { working_dir, jobs })

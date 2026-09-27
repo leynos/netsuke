@@ -88,4 +88,4 @@ already-removed `prepend_dir_to_path` helper, so it requires no migration.
 - CLI boundary: [`src/cli/`](../src/cli/)
 - Ninja process adapter: [`src/runner/process/`](../src/runner/process/)
 - Runner adapter:
-  [`src/runner/ninja_process_adapter.rs`](../src/runner/ninja_process_adapter.rs)
+  [`src/runner/ninja/process_adapter.rs`](../src/runner/ninja/process_adapter.rs)

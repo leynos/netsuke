@@ -2714,9 +2714,9 @@ parameter list: `NinjaBuildRequest` for a build and `NinjaToolRequest` for
 file, the targets or tool, a `&CommandEnv` describing the child's environment,
 and the `stderr_mode: StderrMode` policy field. `run_ninja_with` and
 `run_ninja_tool_with` consume these; the convenience wrappers `run_ninja` and
-`run_ninja_tool` live in `runner::ninja_process_adapter`, translate `Cli` state
-at the runner boundary, call them with `CommandEnv::inherit()`, and derive the
-`stderr_mode` policy from the CLI via
+`run_ninja_tool` live in `runner::ninja::process_adapter`, translate `Cli`
+state at the runner boundary, call them with `CommandEnv::inherit()`, and
+derive the `stderr_mode` policy from the CLI via
 `StderrMode::from_json_enabled(cli.json)`, which is production behaviour.
 Process requests never import `Cli`; callers without parser state construct
 `NinjaProcessOptions` directly. The CLI parser rejects a non-UTF-8 `--file` or

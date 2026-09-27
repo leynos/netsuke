@@ -8473,7 +8473,7 @@ selected source at debug level. Process construction uses the resolved path
 exported by this module and must not interpret the environment override
 independently.
 
-`src/runner/ninja_process_adapter.rs` owns the one-way translation from `Cli` to
+`src/runner/ninja/process_adapter.rs` owns the one-way translation from `Cli` to
 `NinjaProcessOptions` and the public CLI-facing wrappers. It clones the
 already-validated `Cli::directory` into the options' UTF-8 `working_dir`; the
 CLI parser, configuration decoder, and environment extractor reject non-UTF-8
@@ -8639,7 +8639,7 @@ The explicit request APIs compose on top of `CommandEnv`: `NinjaBuildRequest`/
 `NinjaToolRequest` carry `env: &CommandEnv` and `stderr_mode: StderrMode`
 fields alongside the program, `NinjaProcessOptions`, and build file, and are
 consumed by `run_ninja_with`/`run_ninja_tool_with`. The convenience wrappers
-`run_ninja`/`run_ninja_tool` live in `src/runner/ninja_process_adapter.rs`,
+`run_ninja`/`run_ninja_tool` live in `src/runner/ninja/process_adapter.rs`,
 call these with `CommandEnv::inherit()`, and derive the `stderr_mode` policy
 from the CLI via `StderrMode::from_json_enabled(cli.json)`, reproducing
 production behaviour; tests reach for `run_ninja_with`/`run_ninja_tool_with`
