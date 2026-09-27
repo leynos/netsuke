@@ -7,7 +7,8 @@ operator, user, and contributor references are easier to find.
 
 - [contents.md](contents.md): This index for the Netsuke documentation set.
 - [repository-layout.md](repository-layout.md): Path ownership and repository
-  structure guide for contributors.
+  structure guide for contributors, including the
+  [module ownership](repository-layout.md#internal-support-module-ownership).
 
 ## Core design and planning
 

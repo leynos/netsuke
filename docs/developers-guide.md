@@ -5022,260 +5022,27 @@ use the root crate's development dependency.
 
 ## Internal support module boundaries
 
-The repository caps every source file at 400 lines (Whitaker's
-`module_max_lines`, see `docs/whitaker-users-guide.md`). When a production
-module approaches that cap, the established pattern is to split its private
-helpers into a sibling `#[path]` module rather than restructure the public
-surface. Each such module is a pure implementation seam: it keeps the parent
-below the cap while preserving `pub(super)` visibility for the helpers the
-parent needs, and nothing outside the parent module may reach it. A helper may
-use `pub(in crate::ir)` only when a sibling IR support module needs it; that is
-still an internal boundary, not a public API. These split modules record their
-ownership and caller contract in their `//!` header; the following list is the
-authoritative indexing of the current ones.
+Keep every source file below the 400-line cap enforced by Whitaker's
+`module_max_lines` lint (see [Whitaker's guide](whitaker-users-guide.md)).
+Split large modules by concern while preserving narrow visibility for
+implementation helpers. A shared name prefix represents a module hierarchy: put
+its children under a directory module named for that prefix, use `mod.rs` for
+the directory module, and declare children with plain `mod child;` statements.
+Drop the parent prefix from child filenames.
 
-### `src/ir/cycle_support.rs`
+Do not use `#[path]` to reach a sibling or parent file. Keep it only when a
+specific requirement still needs it, and add a comment explaining that reason.
+When a shared prefix joins genuinely unrelated concerns, keep them separate and
+give each a shorter, precise name. The [repository layout guide]
+(repository-layout.md#internal-support-module-ownership) records the ownership,
+declarations, permitted callers, and rationale for internal support modules,
+including any justified `#[path]` use.
 
-`src/ir/cycle.rs` owns this support module and declares it `pub(super)`, so it
-is nameable only within `ir`. Its `pub(in crate::ir)` comparisons are likewise
-limited to the IR implementation; they must not be re-exported from the crate
-or used by non-IR modules.
-
-`first_byte_cmp` owns the bounded string-comparison semantics for Kani builds.
-Under `cfg(kani)`, it orders non-empty strings by their first UTF-8 byte,
-orders an empty string before a non-empty string, and treats two empty strings
-as equal. Its only direct consumers are `path_cmp`, which adapts cycle paths
-with `Utf8Path::as_str`, and `sort_utils::string_cmp`, which adapts manifest
-rule names. Future IR code may reuse it only when its symbolic inputs have that
-same single-byte contract; ordinary builds must keep their full lexical
-comparison, and a caller with different semantics must own a separate local
-comparator.
-
-This composition keeps the Kani approximation in one owner while leaving the
-cycle and manifest modules responsible for adapting their domain values. It is
-not a general-purpose string-sorting utility.
-
-### `src/ir/sort_utils.rs`
-
-Kani-friendly deterministic sorting and comparison helpers, owned by
-`src/ir/from_manifest_support.rs` (which declares
-`#[path = "sort_utils.rs"] mod sort_utils;`). It provides `insertion_sort_by`,
-`sort_strings`, `sort_paths`, and `has_seen_output`, which the manifest-to-IR
-rule-resolution and duplicate-output detection paths consume. Its Kani
-`string_cmp` adapts rule names to the `cycle::support::first_byte_cmp`
-contract; it must not duplicate or redefine that byte-ordering semantics. Keep
-the local sorting algorithms dependency-free and deterministic so the Kani
-harnesses in `src/ir/from_manifest_verification.rs` can verify bounded symbolic
-input, and do not move them out to a shared utility crate.
-
-### `src/ir/cycle_detector.rs`
-
-The depth-first traversal state machine, owned by `src/ir/cycle.rs` through its
-private `#[path = "cycle_detector.rs"] mod detector;` declaration. It provides
-`CycleDetector`, `VisitState`, and traversal result types used by the production
-`analyse` entry point and its Kani presence-only variant. The module is
-private to `ir::cycle`; its test and verification children reach the types
-through the parent module's private re-exports. Keep graph traversal state
-here, while path comparison and cycle canonicalization remain owned by
-`cycle_support.rs`.
-
-### `src/diagnostic_json_support.rs`
-
-Private helpers for the machine-readable diagnostic document in
-`src/diagnostic_json.rs`. It owns the span extraction, cause collection, help
-and URL rendering, and fallback-payload machinery, exposing them as
-`pub(super)` items re-imported by the parent. Only `src/diagnostic_json.rs` may
-call into it. The schema remains defined by the parent module; this file is a
-size split, not a second schema owner.
-
-### `src/diagnostic_json_excerpt_tests.rs`
-
-The source-excerpt guard over rendered diagnostic documents, declared by
-`src/diagnostic_json_shape_tests.rs` through a `#[path]` attribute. The guard
-walks a document's causes *and* those of its nested `related` entries, because
-the serializer renders a related diagnostic as a full entry of the same shape;
-a top-level-only walk would leave those cause chains unguarded. It covers the
-diagnostic paths, where a normalized cause renders the failing location through
-`source` and `labels` and an excerpt in `causes` would duplicate it. The plain
-path is deliberately not normalized: `render_error_json` leaves `source`,
-`primary_span`, and `labels` empty, so the cause chain is the only location
-channel a plain error has, and `causes` is documented as the error-cause chain
-itself. One case drives a real excerpt through `render_error_json` so the guard
-cannot pass by inspecting nothing; the snapshot-producing cases stay in
-`src/diagnostic_json_tests.rs`, because insta derives a snapshot's filename
-from the module path that asserted it.
-
-### `src/stdlib/command/error_support.rs`
-
-Detail types and message-append helpers for command-failure rendering in
-`src/stdlib/command/error.rs`, which declares
-`#[path = "error_support.rs"] mod support;`. It owns `ExitDetails`,
-`LimitExceeded`, `append_exit_status`, and `append_stderr`, and is reachable
-only from that error module. Keep the localized-message keys it uses alongside
-the other stdlib command keys rather than introducing a separate key namespace.
-
-### `src/stdlib/time/format.rs`
-
-ISO-8601 rendering for the standard-library time values, owned by
-`src/stdlib/time/mod.rs` (which declares `mod format;`). It renders offset
-datetimes and UTC offsets to ISO-8601 while stripping the zero fractional part,
-and exposes the `TimeDeltaValue` and `TimestampValue` MiniJinja object types
-the parent predicates downcast. Only the time module may import it.
-
-### `src/status_indicatif.rs`
-
-The `indicatif`-backed progress reporter and rendering helpers, owned by
-`src/status.rs` through its private
-`#[path = "status_indicatif.rs"] mod indicatif;` declaration. It provides the
-crate's `IndicatifReporter` export and the shared stage/completion rendering
-helpers used by the accessible reporter. Only `status.rs` and its test module
-may reach this private support module; callers use the reporter re-export from
-`status`.
-
-### `src/stdlib/which/env/path_support.rs`
-
-Path parsing and Windows executable-candidate construction, owned by
-`src/stdlib/which/env/mod.rs`, which declares it as a child module. It owns
-`PathEntry`, `PATH` and `PATHEXT` normalization, UTF-8 current-directory
-conversion, and Windows candidate generation. Only `which::env` imports it;
-lookup modules retain their existing access through `which::env`'s narrow
-`pub(super)` re-exports. The split is purely to keep the environment snapshot
-adapter below the 400-line cap, not a new resolution boundary.
-
-### `src/stdlib/network/redirect/support.rs`
-
-Localized diagnostics for failed and refused fetch hops, owned by
-`src/stdlib/network/redirect/mod.rs` through its `mod support;` declaration. It
-owns `fetch_failed_error`, `location_failure_error`, `rejection_error`, and the
-`redacted_url` helper every diagnostic renders through. Only `redirect` imports
-it. The split keeps the redirect adapter — the HTTP client, the chain budget,
-the bounded telemetry, and the `Location` header parse — below the 400-line
-cap, not a new boundary: nothing in it decides anything, and it must never grow
-a helper that inspects a header, a status, or a chain, because those are the
-adapter's concerns.
-
-### `src/stdlib/network/redirect/tests/location.rs`
-
-Unit tests for the adapter's `Location` header parse and its diagnostics,
-declared under `src/stdlib/network/redirect/tests/mod.rs` with the
-directory-module path `tests::location`. It pins the resolver, the closed
-`redirect_failure` reason each header failure is counted under, the localized
-message it renders, and the four bounded trace fields the refusal logs. The
-snapshot-producing cases stay in the parent module: insta derives a snapshot's
-filename from the module path that asserted it, and the files under
-`src/snapshots/network_redirect/` keep stable names.
-
-### `src/stdlib/network/tests_support.rs`
-
-Shared support for the network tests, declared by `src/stdlib/network/mod.rs`
-through `#[path = "tests_support.rs"]`. It owns the shared `REDIRECT_USER` and
-`REDIRECT_SECRET` constants and the URL helpers that apply them.
-`credentialed_url` preserves the caller's path; the current and target helpers,
-`credentialed_current_url` and `credentialed_target_url`, use `/start` and
-`/next`, respectively. `credentialed_loopback_url` preserves the fixture's host
-and port but normalizes its path to `/start` so fixture-backed diagnostics
-remain stable. Use `credentialed_url` when a loopback case needs a different
-path. These helpers return errors for malformed URLs or URLs that do not accept
-userinfo; redirect tests should use them instead of duplicating credential
-literals.
-
-### `test_support/src/check_ninja_tests.rs`
-
-Unix-only unit coverage for the fake-Ninja factories, owned by
-`test_support/src/check_ninja.rs` through a test-gated `#[path]` declaration.
-It exercises the `-C` directory argument contract through the public factory
-only. Keep fixture assertions here and production test-helper behaviour in
-`check_ninja.rs`; this split keeps the public helper below the 400-line cap.
-
-### `test_support/src/http/raw.rs`
-
-The raw-response payload for the local HTTP fixture. `HttpResponse` composes a
-response: a status line, a header block ending in a blank line, and a
-`Content-Length` that matches the body it carries. It does not validate the
-status or header values a caller supplies, so it is not a guard against a
-status that is not three digits or a value containing a line break.
-`RawHttpResponse` is the stronger separation: it emits bytes verbatim, so a
-case can present a status line, header block, or framing no client accepts. The
-two are separate types rather than one type with an escape hatch, so a case
-that means to send malformed bytes cannot reach the composed path by accident.
-Both implement the crate-private `FinishResponse` trait, which carries the
-bytes, and `finish_response` performs the write and the write-side shutdown for
-either. That trait exists so the two payloads share one completion contract; it
-is not an extension point, and `raw`'s surface is crate-private except for
-`RawHttpResponse` itself.
-
-Completion is the reason this module exists. `finish_response` writes the whole
-payload and then calls `shutdown(Shutdown::Write)`. Dropping the stream instead
-closes both directions at once, and a server that closes while the client's
-request bytes are still unread makes the platform answer with a reset, which
-discards the response the client had not yet consumed. The client then reports
-a transport failure, on Windows Winsock `WSAECONNABORTED` (10053), in place of
-the wire-level fault the payload was written to provoke. Shutting down write
-alone sends the end of the response as a FIN while the read side stays open to
-drain the request, so the client sees exactly the configured bytes. This is
-also why a test must not stand a bare `TcpListener` in place of the fixture:
-such a listener closes without that shutdown and races the client, which is how
-`stdlib::network::redirect::error_tests::protocol_failures_are_classified_from_a_live_response`
-came to fail on Windows after the `ureq` 3 bump. The fixture still reads the
-request's header block before it answers, so the request bytes are consumed
-rather than left to force a reset. A request *body* is deliberately not
-consumed: the fixture answers on the header block alone, so it is for bodyless
-requests, which is what every fixture case sends.
-
-The `#[cfg(test)] rendered_exchange` helper drives one request through the same
-completion path a real client sees and returns both the client's bytes and the
-request bytes the fixture consumed. It reads exactly and against no deadline,
-so the fixture's lifecycle tests infer nothing from elapsed time.
-
-`RawHttpResponse` is composed with `spawn_raw_http_server`, which follows the
-same accept, read, and shutdown contract as the checked wrappers and returns
-the same `(String, Arc<AtomicUsize>, HttpServer)` tuple so a case can assert
-the malformed response was actually solicited. Keep a raw payload for a
-deliberately malformed response; use `HttpResponse` for a valid one that merely
-needs an unusual status.
-
-`test_support/src/http/raw_tests.rs` is the fixture's own test-gated `#[path]`
-child, declared by `mod.rs`. It pins the bytes each path emits, the end of the
-connection after them, and the fixture's consumption of the request, and it
-belongs to this fixture rather than to any production module.
-
-### `test_support/src/http/accept.rs`
-
-Connection acceptance for the local HTTP fixture, split out of
-`test_support/src/http/mod.rs` to keep the fixture configuration below the
-400-line cap. It owns `AcceptWait`, the retry rules that make polling a
-non-blocking listener safe, and the accept loop itself. The parent module
-declares it `mod accept;`, and its surface is `pub(super)`, so nothing outside
-the fixture can reach it. The wait policy stays in `HttpServerConfig`; this
-module only carries the wait out.
-
-### `test_support/src/http/config.rs`
-
-Timeout configuration for the local HTTP fixture, split out of
-`test_support/src/http/mod.rs` for the same 400-line reason as `accept.rs`. It
-owns `HttpServerConfig`, the three `NETSUKE_TEST_HTTP_*` override names, and
-the duration parse that reads them. Its accessors are `pub(super)`, so the
-fixture's own loops can ask it for a deadline or a poll interval while nothing
-outside the fixture can configure one. `config_tests.rs` is its `#[path]`
-child, declared by `config.rs`. `raw_tests.rs` is declared by `mod.rs`.
-
-### `src/ir/cmd_interpolate/property_tests/support.rs`
-
-This test-only support module is owned by the command-interpolation property
-tests. It may contain their generators, independent specifications, and shared
-assertions, but it must not be used by production code or the Kani harnesses.
-Keep those proof and production boundaries explicit; move a helper here only
-when it serves more than one command-interpolation property test.
-
-When adding a new `#[path]` support module, follow the same shape: keep it
-private to its parent, give it a `//!` header stating the split reason and
-ownership, cap its public surface at `pub(super)`, and document it here so the
-boundary inventory stays complete.
-
-The test-only `src/ir/cmd_interpolate/power_shell_tests.rs` module owns the
-command-interpolation cases for protected PowerShell contexts. Keep those cases
-in this module so the parent test module stays below the 400-line cap;
-production code must not depend on this test module.
+When adding a justified `#[path]` support module, keep it private to its owner,
+give it a `//!` header stating the split reason and ownership, cap its visible
+surface at `pub(super)` unless a documented internal caller requires wider
+visibility, and add its entry to the [support module ownership inventory]
+(repository-layout.md#internal-support-module-ownership).
 
 ## Behavioural testing strategy
 
