@@ -3757,6 +3757,37 @@ recorded for whoever hits them next.
   and is caught only by CodeRabbit or by running `typos` by hand. The sweep was
   run manually for this reason.
 
+  **`mdtablefix` and `markdownlint` measure different properties, and passing
+  one says nothing about the other.** `make check-fmt` runs
+  `mdtablefix --check --wrap --renumber --breaks --ellipsis --fences` as its
+  *third* command, after `cargo fmt` and `ruff format --check`. On the first
+  run of this repair pass it aborted at the first command, so the stage behind
+  it had never executed; on the second run it executed and failed. Two files
+  were non-canonical, and the fixes differ in kind, which is the point:
+
+  1. A new glossary row was 504 columns against a table whose 26 other rows
+     are 314. `--wrap` refills a table to a single width, so appending one
+     over-long note would have re-padded every row — a 26-line whitespace diff
+     concealing a one-line addition. The note was shortened to fit the
+     existing width, keeping the attestation and the cited authority. The
+     table's shape survives and the diff is the row that actually changed.
+     `origin/main` was measured first and is canonical at 314, so this was the
+     branch's own breakage rather than inherited drift.
+  2. The new ExecPlan paragraphs were reflowed, because they had been written
+     to a visual 80 columns rather than to `mdtablefix`'s fill point.
+
+  Why (2) is invisible to every line-length check bears stating: `--wrap`
+  *refills* to a fill point; it does not enforce a maximum. Every rewritten
+  line was still under 80 columns, so MD013 saw nothing and `markdownlint`
+  passed the whole time. A green `markdownlint` is therefore not evidence that
+  `check-fmt` will pass, and the two gates should never be treated as redundant.
+
+  The reflow was verified content-preserving rather than assumed to be:
+  whitespace-normalizing the before and after revisions makes them
+  byte-identical, and no table separator row appears in the diff. That check is
+  cheap and worth repeating whenever this tool rewrites prose, because
+  `--renumber` and `--wrap` both rewrite text the author wrote.
+
 ## Blocked / open questions
 
 ### Gate run at `6719ddcb` (2026-09-27) — RED, four of seven
