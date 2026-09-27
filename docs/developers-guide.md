@@ -5132,11 +5132,11 @@ helpers used by the accessible reporter. Only `status.rs` and its test module
 may reach this private support module; callers use the reporter re-export from
 `status`.
 
-### `src/stdlib/which/env_path_support.rs`
+### `src/stdlib/which/env/path_support.rs`
 
 Path parsing and Windows executable-candidate construction, owned by
-`src/stdlib/which/env.rs`, which declares it through a `#[path]` attribute. It
-owns `PathEntry`, `PATH` and `PATHEXT` normalization, UTF-8 current-directory
+`src/stdlib/which/env/mod.rs`, which declares it as a child module. It owns
+`PathEntry`, `PATH` and `PATHEXT` normalization, UTF-8 current-directory
 conversion, and Windows candidate generation. Only `which::env` imports it;
 lookup modules retain their existing access through `which::env`'s narrow
 `pub(super)` re-exports. The split is purely to keep the environment snapshot

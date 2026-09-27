@@ -59,7 +59,7 @@ well — the owned style was habit, so they carry no toolchain caveat:
   `&'targets Utf8Path` keys for its deterministic sort instead of cloning every
   target path per analysis. The snapshot exists for sorting, not to end a
   borrow, so it stays.
-- `src/stdlib/which/env.rs` — `EnvSnapshot::resolved_dirs` returns
+- `src/stdlib/which/env/mod.rs` — `EnvSnapshot::resolved_dirs` returns
   `Vec<&Utf8Path>` borrowed from the snapshot; the search loop reads borrowed
   directories and the paths are copied into the owned `ResolveError::NotFound`
   only at the error boundary.
@@ -152,13 +152,13 @@ has to use the pinned toolchain; nothing needs to propagate a build setting:
 Measured with `rg --count '\.clone\(\)'` over `src/` (tests included where they
 live in `src/`):
 
-| Scope                        | Before | After |
-| ---------------------------- | ------ | ----- |
-| `src/` total                 | 158    | 151   |
-| `src/graph_view/mod.rs`      | 17     | 14    |
-| `src/ir/cycle.rs` (non-test) | 1      | 0     |
-| `src/stdlib/which/env.rs`    | 4      | 1     |
-| `src/stdlib/collections.rs`  | 4      | 3     |
+| Scope                         | Before | After |
+| ----------------------------- | ------ | ----- |
+| `src/` total                  | 158    | 151   |
+| `src/graph_view/mod.rs`       | 17     | 14    |
+| `src/ir/cycle.rs` (non-test)  | 1      | 0     |
+| `src/stdlib/which/env/mod.rs` | 4      | 1     |
+| `src/stdlib/collections.rs`   | 4      | 3     |
 
 The scanner's clone-modify-writeback section was empty before and after the
 migration. The remaining graph_view clones construct owned keys for the two

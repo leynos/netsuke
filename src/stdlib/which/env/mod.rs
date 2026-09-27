@@ -14,7 +14,6 @@ use super::{
 };
 
 /// Keep path parsing and Windows candidate construction below the module cap.
-#[path = "env_path_support.rs"]
 mod path_support;
 
 #[cfg(test)]
@@ -345,9 +344,7 @@ fn capture_common(
 }
 
 #[cfg(all(test, not(windows)))]
-#[path = "env_tests.rs"]
 mod tests;
 
 #[cfg(all(test, windows))]
-#[path = "env_windows_tests.rs"]
 mod windows_tests;

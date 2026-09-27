@@ -178,7 +178,7 @@ resolution entirely rather than setting the variable for a child to read.
 
 - Workspace switch state:
   [`src/stdlib/which/workspace_switch.rs`](../src/stdlib/which/workspace_switch.rs)
-- `EnvSnapshot`: [`src/stdlib/which/env.rs`](../src/stdlib/which/env.rs)
+- `EnvSnapshot`: [`src/stdlib/which/env/mod.rs`](../src/stdlib/which/env/mod.rs)
 - Cache fingerprint: [`src/stdlib/which/cache.rs`](../src/stdlib/which/cache.rs)
 - `mockable::Env` seam:
   [`src/runner/process/ninja_program.rs`](../src/runner/process/ninja_program.rs);
