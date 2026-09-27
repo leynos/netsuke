@@ -5022,27 +5022,10 @@ use the root crate's development dependency.
 
 ## Internal support module boundaries
 
-Keep every source file below the 400-line cap enforced by Whitaker's
-`module_max_lines` lint (see [Whitaker's guide](whitaker-users-guide.md)).
-Split large modules by concern while preserving narrow visibility for
-implementation helpers. A shared name prefix represents a module hierarchy: put
-its children under a directory module named for that prefix, use `mod.rs` for
-the directory module, and declare children with plain `mod child;` statements.
-Drop the parent prefix from child filenames.
-
-Do not use `#[path]` to reach a sibling or parent file. Keep it only when a
-specific requirement still needs it, and add a comment explaining that reason.
-When a shared prefix joins genuinely unrelated concerns, keep them separate and
-give each a shorter, precise name. The [repository layout guide]
-(repository-layout.md#internal-support-module-ownership) records the ownership,
-declarations, permitted callers, and rationale for internal support modules,
-including any justified `#[path]` use.
-
-When adding a justified `#[path]` support module, keep it private to its owner,
-give it a `//!` header stating the split reason and ownership, cap its visible
-surface at `pub(super)` unless a documented internal caller requires wider
-visibility, and add its entry to the [support module ownership inventory]
-(repository-layout.md#internal-support-module-ownership).
+Group shared-prefix modules under `<prefix>/mod.rs` with prefix-free children
+declared by plain `mod` statements. Rename genuinely unrelated prefix matches
+instead. The [layout guide](repository-layout.md#placement-conventions) defines
+the placement and visibility rules and indexes support-module owners.
 
 ## Behavioural testing strategy
 
@@ -7289,8 +7272,8 @@ emitters is covered.
 ### Fetch redirect architecture
 
 Redirect handling splits along an ownership boundary.
-[`src/stdlib/network/redirect/chain/mod.rs`](../src/stdlib/network/redirect/chain/mod.rs)
-is a transport-independent state machine holding every pure decision: hop
+[redirect chain](../src/stdlib/network/redirect/chain/mod.rs) is a
+transport-independent state machine holding every pure decision: hop
 accounting, loop detection, cross-origin credential stripping, and per-hop
 network-policy evaluation. It performs no I/O and builds no user-facing text.
 [`src/stdlib/network/redirect/mod.rs`](../src/stdlib/network/redirect/mod.rs)

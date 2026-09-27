@@ -398,6 +398,27 @@ below the 400-line cap; production code must not depend on this test module.
 
 ## Placement conventions
 
+Keep every source file below the 400-line cap enforced by Whitaker's
+`module_max_lines` lint (see [Whitaker's guide](whitaker-users-guide.md)).
+Split large modules by concern while preserving narrow visibility for
+implementation helpers. A shared name prefix represents a module hierarchy: put
+its children under a directory module named for that prefix, use `mod.rs` for
+the directory module, and declare children with plain `mod child;` statements.
+Drop the parent prefix from child filenames.
+
+Do not use `#[path]` to reach a sibling or parent file. Keep it only when a
+specific requirement still needs it, and add a comment explaining that reason.
+When a shared prefix joins genuinely unrelated concerns, keep them separate and
+give each a shorter, precise name. The
+[support module ownership inventory](#internal-support-module-ownership)
+records owners, declarations, permitted callers, and rationale, including any
+justified `#[path]` use.
+
+When adding a justified `#[path]` support module, keep it private to its owner,
+give it a `//!` header stating the split reason and ownership, cap its visible
+surface at `pub(super)` unless a documented internal caller requires wider
+visibility, and add its entry to the ownership inventory above.
+
 Place user-facing documentation under `docs/`, then link it from
 [contents.md](contents.md). Use [users-guide.md](users-guide.md) for behaviour
 that users or operators need to understand,
