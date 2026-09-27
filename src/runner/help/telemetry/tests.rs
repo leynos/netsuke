@@ -11,6 +11,7 @@ use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use metrics_util::MetricKind;
 use metrics_util::debugging::{DebugValue, DebuggingRecorder};
+use rstest::rstest;
 use std::sync::Arc;
 use tempfile::TempDir;
 use test_support::localizer_test_lock;
@@ -48,11 +49,6 @@ fn recorded<T>(operation: impl FnOnce() -> T) -> (T, Snapshot) {
     let snapshotter = recorder.snapshotter();
     let result = metrics::with_local_recorder(&recorder, operation);
     (result, snapshotter.snapshot().into_vec())
-}
-
-/// Build a CLI pointing at a capability-written manifest fixture.
-fn help_targets_fixture() -> Result<(TempDir, Cli)> {
-    help_targets_fixture_with_manifest(MANIFEST)
 }
 
 /// Build a CLI pointing at a capability-written manifest fixture with `manifest`.
@@ -194,18 +190,32 @@ fn assert_help_targets_telemetry(
     Ok(())
 }
 
-#[test]
-fn help_targets_records_bounded_success_telemetry() -> Result<()> {
-    let (_temp, cli) = help_targets_fixture()?;
-    assert_help_targets_telemetry(
-        &cli,
-        &ExpectedHelpTargetsTelemetry {
-            outcome: "success",
-            error_category: "none",
-            succeeds: true,
-        },
-        "successful help targets",
-    )
+#[rstest]
+#[case::success(
+    MANIFEST,
+    ExpectedHelpTargetsTelemetry {
+        outcome: "success",
+        error_category: "none",
+        succeeds: true,
+    },
+    "successful help targets"
+)]
+#[case::invalid_manifest(
+    INVALID_MANIFEST,
+    ExpectedHelpTargetsTelemetry {
+        outcome: "error",
+        error_category: "other",
+        succeeds: false,
+    },
+    "invalid manifest help targets"
+)]
+fn help_targets_records_manifest_telemetry(
+    #[case] manifest: &str,
+    #[case] expected: ExpectedHelpTargetsTelemetry,
+    #[case] scenario: &str,
+) -> Result<()> {
+    let (_temp, cli) = help_targets_fixture_with_manifest(manifest)?;
+    assert_help_targets_telemetry(&cli, &expected, scenario)
 }
 
 #[test]
@@ -222,19 +232,5 @@ fn help_targets_records_manifest_failure_telemetry() -> Result<()> {
             succeeds: false,
         },
         "missing manifest help targets",
-    )
-}
-
-#[test]
-fn help_targets_records_other_failure_telemetry() -> Result<()> {
-    let (_temp, cli) = help_targets_fixture_with_manifest(INVALID_MANIFEST)?;
-    assert_help_targets_telemetry(
-        &cli,
-        &ExpectedHelpTargetsTelemetry {
-            outcome: "error",
-            error_category: "other",
-            succeeds: false,
-        },
-        "invalid manifest help targets",
     )
 }
