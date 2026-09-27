@@ -12,8 +12,8 @@ use std::sync::Arc;
 use super::command::Cli;
 use crate::host_pattern::HostPattern;
 
-mod budget_request;
-pub(crate) use budget_request::ProjectManifestBudgetRequest;
+mod budget;
+pub(crate) use budget::ProjectManifestBudgetRequest;
 
 mod environment;
 pub use environment::{EnvProvider, StdEnvProvider};
@@ -354,6 +354,3 @@ mod replay_proptests;
 mod path_precedence_tests;
 #[cfg(test)]
 mod unit_tests;
-
-#[cfg(test)]
-mod budget_tests;

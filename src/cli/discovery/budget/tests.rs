@@ -1,6 +1,6 @@
 //! Exercise project-chain budget authority and explicit-selector independence.
 
-use super::*;
+use super::super::*;
 use crate::cli::test_support::TestEnv;
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;

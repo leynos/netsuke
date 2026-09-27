@@ -41,3 +41,6 @@ fn narrow_limit<T: Ord + Copy>(current: &mut Option<T>, candidate: Option<T>) {
         *current = Some(current.map_or(requested, |existing| existing.min(requested)));
     }
 }
+
+#[cfg(test)]
+mod tests;
