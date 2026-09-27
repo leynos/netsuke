@@ -358,5 +358,4 @@ impl Default for CommandOptions {
 }
 
 #[cfg(test)]
-#[path = "config_tests.rs"]
 mod tests;
