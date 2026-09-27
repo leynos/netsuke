@@ -45,7 +45,7 @@ whether it is expected to grow:
    `_with` closure parameter.
 - **The `mockable::Env` trait**, for a boundary mocked across many tests or
    expected to grow further inputs. `resolve_ninja_program_utf8_with` in
-   `src/runner/process/ninja_program.rs` takes `&impl Env`; production supplies
+   `src/runner/process/ninja/program.rs` takes `&impl Env`; production supplies
    `mockable::DefaultEnv`, and tests supply `mockable::MockEnv` for every
    resolution branch without mutating the process (#488).
    `stdlib::which::env::EnvSnapshot::capture_with_env` takes the same
@@ -181,7 +181,7 @@ resolution entirely rather than setting the variable for a child to read.
 - `EnvSnapshot`: [`src/stdlib/which/env/mod.rs`](../src/stdlib/which/env/mod.rs)
 - Cache fingerprint: [`src/stdlib/which/cache.rs`](../src/stdlib/which/cache.rs)
 - `mockable::Env` seam:
-  [`src/runner/process/ninja_program.rs`](../src/runner/process/ninja_program.rs);
+  [`src/runner/process/ninja/program.rs`](../src/runner/process/ninja/program.rs);
   `runner::run_with_ninja_program` in
   [`src/runner/mod.rs`](../src/runner/mod.rs) is the companion injected seam
   that lets callers select the resolved Ninja executable directly, without

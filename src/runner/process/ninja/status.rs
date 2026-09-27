@@ -2,7 +2,7 @@
 
 /// Parsed task progress from a Ninja status line.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct NinjaTaskProgress {
+pub(in crate::runner::process) struct NinjaTaskProgress {
     /// Completed task count from the status line.
     current: u32,
     /// Total task count from the status line.
@@ -13,7 +13,11 @@ pub(super) struct NinjaTaskProgress {
 
 impl NinjaTaskProgress {
     /// Build a parsed status update.
-    pub(super) const fn new(current: u32, total: u32, description: String) -> Self {
+    pub(in crate::runner::process) const fn new(
+        current: u32,
+        total: u32,
+        description: String,
+    ) -> Self {
         Self {
             current,
             total,
@@ -22,24 +26,24 @@ impl NinjaTaskProgress {
     }
 
     /// Return the completed task count.
-    pub(super) const fn current(&self) -> u32 {
+    pub(in crate::runner::process) const fn current(&self) -> u32 {
         self.current
     }
 
     /// Return the total task count.
-    pub(super) const fn total(&self) -> u32 {
+    pub(in crate::runner::process) const fn total(&self) -> u32 {
         self.total
     }
 
     /// Return the trailing human-readable status text.
-    pub(super) fn description(&self) -> &str {
+    pub(in crate::runner::process) fn description(&self) -> &str {
         &self.description
     }
 }
 
 /// Tracks task updates and filters regressive or inconsistent lines.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub(super) struct NinjaTaskProgressTracker {
+pub(in crate::runner::process) struct NinjaTaskProgressTracker {
     /// Total count accepted so far, fixed once the first update is accepted.
     total: Option<u32>,
     /// Highest accepted current count, for monotonicity checks.
@@ -53,7 +57,7 @@ impl NinjaTaskProgressTracker {
     }
 
     /// Accept a new update when it is consistent and monotonic.
-    pub(super) const fn accept(&mut self, update: &NinjaTaskProgress) -> bool {
+    pub(in crate::runner::process) const fn accept(&mut self, update: &NinjaTaskProgress) -> bool {
         if Self::is_invalid_update(update) {
             return false;
         }
@@ -78,7 +82,7 @@ fn is_valid_numeric_string(value: &str) -> bool {
 /// This recognizes Ninja status output in its `[current/total] description` shape. A
 /// customized `NINJA_STATUS` template that preserves that shape still updates progress;
 /// unsupported shapes yield no updates while child output forwarding continues.
-pub(super) fn parse_ninja_status_line(line: &str) -> Option<NinjaTaskProgress> {
+pub(in crate::runner::process) fn parse_ninja_status_line(line: &str) -> Option<NinjaTaskProgress> {
     let trimmed = line.trim_start();
     let rest = trimmed.strip_prefix('[')?;
     let (current_raw, remaining) = rest.split_once('/')?;

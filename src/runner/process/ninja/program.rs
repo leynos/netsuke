@@ -9,7 +9,7 @@
 //! process-environment adapter for this boundary, and tests supply
 //! `mockable::MockEnv` so every branch runs without process mutation.
 
-use super::super::{NINJA_ENV, NINJA_PROGRAM};
+use super::super::super::{NINJA_ENV, NINJA_PROGRAM};
 use camino::Utf8PathBuf;
 use mockable::Env;
 use std::path::PathBuf;

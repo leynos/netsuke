@@ -1,6 +1,6 @@
 //! Streaming helpers for subprocess output forwarding.
 
-use super::ninja_status::{NinjaTaskProgressTracker, parse_ninja_status_line};
+use super::ninja::{NinjaTaskProgressTracker, parse_ninja_status_line};
 use metrics::{counter, describe_counter};
 use std::{
     io::{self, Read, Write},
