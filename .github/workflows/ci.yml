@@ -570,21 +570,6 @@ jobs:
         run: make test-kani-scope-wrapper
       - name: Run Kani harnesses
         run: make kani-ir
-      - name: Install the build standard
-        # The gate below compiles the tree the harnesses are verified in, so it
-        # needs the same prerequisites every other build target declares: the
-        # pinned `mold` linker and the repository's nightly toolchain. This is
-        # the step that puts the pinned nightly on the machine; `cargo kani`
-        # itself drives its own bundled toolchain and is unaffected.
-        run: make install-build-tools
-      - name: Install cargo-nextest
-        # The gate runs through nextest like every other test target. Installed
-        # by the workflow-scoped pin rather than `cargo binstall`, so it matches
-        # the version the other lanes use without needing a binary-install
-        # helper in this job.
-        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375  # v2.87.12
-        with:
-          tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Mutation patch compile gate
         # Applies each patch under docs/verification/mutations/ and compiles the
         # patched tree under `-D warnings`. `#[ignore]`-gated and run from its
@@ -596,6 +581,17 @@ jobs:
         # parses `#[cfg(kani)]` code, so only Kani can reject a patch that seeds
         # its fault inside a Kani-gated item; `build-test` has no Kani at all.
         # The gate compiles through the Kani frontend for that reason.
+        #
+        # It declares no `Install the build standard` / `Install cargo-nextest`
+        # pair of its own, though it needs both: the pinned `mold` linker and
+        # nightly toolchain the target's `check-build-tools` prerequisite
+        # verifies, and the runner it invokes. The pair above installs them, and
+        # a job shares one filesystem, so a second pair would install the same
+        # tools twice and make both `named_step()` and the single-install
+        # assertion in `ci_lint_test.py` ambiguous about which one is meant.
+        # The gate step is ordered after that pair, which is the property that
+        # matters; `PRECEDING_STEPS` in `kani_mutation_gate_wiring_test.py`
+        # holds it.
         #
         # `make test-kani-mutations` is deliberately named so the
         # forbidden-suite scan in
