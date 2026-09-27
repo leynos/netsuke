@@ -524,6 +524,40 @@ failure mode cannot recur silently.
       every branch addition is byte-identical under its rebased patch, all 115
       main-only paths are byte-identical at the new head, and no file gained a
       repeated block.
+- [x] (2026-09-27) Rebased onto `origin/main` a second time, on confirmed branch
+      motion rather than on a fetch: `origin/main` had advanced one commit past
+      the first replay's target, `c298a643` (`#768`), which moves the scope
+      wrapper's end-to-end step and its user-manager prerequisite into the
+      `kani-smoke` job. The boundary was re-established rather than inherited —
+      `OLD_BASE` `96b89ca9`, `OLD_HEAD` `c27837d8`, `TARGET` `c298a643`,
+      recovery refs `refs/recovery/issue756-r2-*-20260927T171128Z` — and the
+      one incoming commit was read before replaying, because a target commit
+      that adds steps to a job is a target commit that can move the step
+      indexes a contract asserts on. The series replayed linear, 49 of 49
+      commits, zero merges, stopping once at commit 4 of 49 on two
+      adjacent-line conflicts. Both were the same shape and both were resolved
+      as unions: `.PHONY` in the `Makefile` and `NEXTEST_TARGETS` in
+      `tests/makefile_test_target.rs`, where this branch adds
+      `test-kani-mutations` and `main` adds `test-kani-scope-wrapper`. Neither
+      side was discarded, and in the second file the list had to *grow* rather
+      than swap: `behavioural_nextest_targets_forward_both_worker_bounds`
+      asserts set-equality between the declared list and the targets that
+      actually invoke `nextest run`, so a union in one file and a substitution
+      in the other would have failed the build while each side looked intact in
+      isolation. The semantic audit the driver policy requires was run
+      regardless of the text-merge backend: `git range-diff` reports all 49
+      commits `=` — the replay is patch-identical to the pre-rebase series — all
+      eight target-only paths are byte-identical at the new head `1b538c2b`, no
+      file is deleted outright, no conflict marker survives anywhere in the
+      tree, and the two windows a repeated-block scan flagged are both intended
+      branch content: the gate's own override block, whose `test-group` and
+      `success-output` lines every sibling override shares by construction, and
+      a sixth `WorkflowExpectation` whose struct-literal tail names the same
+      fields as its siblings. The only `git diff --check` hits are a blank
+      context line inside three mutation patches' payload, reported identically
+      against the pre-rebase branch, so they are patch content rather than merge
+      damage — which is worth stating, because `--check` cannot tell the two
+      apart.
 
 ## Surprises & discoveries
 
@@ -2073,3 +2107,23 @@ approaches the ceiling, as `makefile_recipes.py` itself records having done.
   mismatch between the parts and the whole is what exposed two different
   moments wearing one date. A hedge that names its instant is not just more
   honest, it is more testable.
+- 2026-09-27 — Rebased onto `origin/main` a second time, after the first
+  replay's target moved by one commit. The lesson of the first replay was
+  applied rather than restated: check the target immediately before pushing,
+  because a branch that sat still for days can be overtaken in minutes, and
+  review the incoming commit before replaying onto it rather than after. The
+  one incoming commit, `c298a643` (`#768`), adds steps to the `kani-smoke` job,
+  which is the job two contracts on this branch assert step orderings and
+  worker bounds over; reading it first is what made the resolution a decision
+  instead of a discovery. Both conflicts were the same shape — two branches
+  each adding a distinct `nextest`-invoking target to a shared list — and both
+  were resolved as unions, because the two additions are independent changes to
+  a collection rather than competing claims about one value. The second file
+  needed its list to grow to three entries rather than swap one for the other:
+  the contract there asserts set-equality against discovery, so a union in the
+  Makefile with a substitution in the test file would have failed the build
+  while each side read as intact on its own. The whole replay then verified as
+  patch-identical to the pre-rebase series under `git range-diff`, all 49
+  commits `=`, which is stronger than the usual audit and is available here
+  precisely because the replay is linear and none of the intervening commits
+  had to be reworked.
