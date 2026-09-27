@@ -48,7 +48,6 @@
 //! assert_eq!(bundle.dyndep_files().len(), 2);
 //! ```
 
-#[path = "dyndep_bundle.rs"]
 mod bundle;
 pub use bundle::{GeneratedDyndep, GeneratedNinja};
 
@@ -367,5 +366,4 @@ pub(crate) fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenEr
 }
 
 #[cfg(test)]
-#[path = "dyndep_tests.rs"]
 mod tests;
