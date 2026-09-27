@@ -105,32 +105,46 @@ fn probe_fields() -> Result<Vec<String>> {
     Ok(fields)
 }
 
-/// The query surface quotes exactly as the build surface does.
+/// An explicitly named dialect renders identically under both surfaces.
 ///
-/// This is the assertion the plan calls for, and it is *not* the one the plan
-/// imagined. `register_query_helpers` documents the divergence as deliberate —
-/// the query surface quotes for [`RecipeShell::host_default`] rather than for
-/// the shell the build resolves — but here the two surfaces cannot actually
-/// disagree about *any* dialect, for a reason the plan's rationale omits:
+/// This is the assertion that *can* be made from a test on this host.
+/// `register_query_helpers` documents the two surfaces' **defaults** as
+/// deliberately divergent — the query surface quotes for
+/// [`RecipeShell::host_default`], while the build surface quotes for the shell
+/// the runner resolves, which on Windows honours `NETSUKE_WINDOWS_SHELL`. That
+/// divergence is real. On this host it is *masked* rather than absent, and the
+/// masking is what makes it unreachable from here: `resolve_recipe_shell_with`
+/// returns [`RecipeShell::Posix`] before it reads the environment, so the
+/// build's default and the query's default coincide for reasons that have
+/// nothing to do with the code under test. See `docs/developers-guide.md`,
+/// "the difference is wider than 'the same value reached twice' … it is masked,
+/// not absent".
 ///
-/// * `resolve_recipe_shell_with` returns [`RecipeShell::Posix`] on a non-Windows
-///   host *before* it reads `NETSUKE_WINDOWS_SHELL`, so on Unix a malformed
-///   value cannot be reached at all and the shell is always the host default.
-/// * On Windows there is no early return, but `execute_help` returns from the
-///   dispatcher before `resolve_recipe_shell` is ever called, so the query
-///   never resolves it either — and `registry`, the crate-private reference
-///   `register_query_helpers` uses, *is* `host_default()`.
+/// The hazard the divergence is weighed against is conditional. On Windows
+/// there is no `cfg` early return, but `execute_help` returns before
+/// `resolve_recipe_shell` is called, so the query never resolves a shell on
+/// either platform; resolving it *above* that return would make a metadata-only
+/// query reject a malformed `NETSUKE_WINDOWS_SHELL`. That is a statement about
+/// what hoisting the resolution would do, not about today's reachability, and
+/// it is not something a test here can settle — which is precisely why this
+/// file does not try to.
 ///
-/// So the plan's stated hazard — that hoisting the resolution would "make
-/// `netsuke help targets` fail on a Windows host with a malformed
-/// `NETSUKE_WINDOWS_SHELL`" — is unreachable either way, and this test pins the
-/// agreement that actually holds: given an explicit dialect, a `shell_quote` or
-/// `shell_join` in a description renders identically under the full stdlib, on
-/// every host.
+/// What is host-independent is the explicit case, and that is what this test
+/// pins: give both surfaces the same `dialect=` and they agree, because the
+/// keyword overrides the registration's default outright. So the agreement
+/// below is a statement about the *keyword*, not about the defaults — a test
+/// that appeared to cover the divergence while being unable to reach it would
+/// be worse than no test, because its green result would read as evidence.
 ///
-/// `assert_full_stdlib_renders` is the negative control: if the probe failed
-/// under the full stdlib too, the comparison below would be satisfied by two
-/// identical failures.
+/// `assert_full_stdlib_renders` is the negative control, and it is a weak one:
+/// it asserts that the build renders the probe, not that it renders the *same
+/// text*, so a build whose default dialect differed would leave it green. The
+/// comparison below carries the agreement; the control only rules out two
+/// identical failures. Strengthening it means moving the probe onto a rule —
+/// rule descriptions do reach `build.ninja`, unlike a `command:` target's,
+/// which `src/ir/from_manifest.rs:140-141` drops on purpose — and comparing the
+/// six fields. That is recorded as a follow-on rather than done here, because
+/// the default it would pin is the masked Windows-only one above.
 #[test]
 fn query_surface_agrees_with_the_build_on_explicit_dialects() -> Result<()> {
     let fields = probe_fields()?;

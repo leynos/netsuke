@@ -9,7 +9,10 @@
 
 use super::fallible;
 use anyhow::{Context, Result};
-use minijinja::{Environment, context, value::Value};
+use minijinja::{
+    Environment, context,
+    value::{Value, ValueKind},
+};
 use proptest::prelude::*;
 use proptest::test_runner::{FileFailurePersistence, TestRunner};
 use std::cell::Cell;
@@ -20,7 +23,10 @@ use std::cell::Cell;
 /// two groups are weighted evenly so a run meets both. Whitespace is here
 /// because a naive `trim().is_empty()` reading of "blank" would drop it, while
 /// the contract keeps it; `0` and `false` are here because a naive truthiness
-/// reading would drop them, and the contract keeps them.
+/// reading would drop them, and the contract keeps them; the empty byte array
+/// is here because `Value::as_str` answers for well-formed UTF-8 *bytes* too,
+/// so a predicate that asked it without checking `ValueKind::String` would drop
+/// a byte array on the strength of a text rule.
 fn member() -> impl Strategy<Value = Value> {
     prop_oneof![
         // Droppable: none, undefined, the empty string.
@@ -32,14 +38,28 @@ fn member() -> impl Strategy<Value = Value> {
         2 => Just(Value::from(false)),
         // Retained, and the one a `trim().is_empty()` reading would drop.
         1 => Just(Value::from(" ")),
+        // Retained, and the one an unguarded `as_str()` would wrongly drop:
+        // `Value::from_bytes(vec![])` is `ValueKind::Bytes`, not `String`, and
+        // its kind is what decides.
+        1 => Just(Value::from_bytes(Vec::new())),
         // Retained.
         4 => "[a-z]{1,3}".prop_map(|seed| Value::from(seed.as_str())),
     ]
 }
 
 /// Whether the contract drops `value`.
+///
+/// The empty-string arm tests [`ValueKind::String`] rather than asking
+/// [`Value::as_str`], matching `stdlib::collections::is_blank`. That method
+/// answers for well-formed UTF-8 *bytes* too, so the unguarded form would call
+/// `Value::from_bytes(vec![])` an empty string and drop it — a byte array
+/// discarded on the strength of a text rule that does not apply to it. The
+/// corpus below reaches that value, so this oracle is checked against the
+/// production predicate rather than merely restating it.
 fn is_droppable(value: &Value) -> bool {
-    value.is_none() || value.is_undefined() || value.as_str().is_some_and(str::is_empty)
+    value.is_none()
+        || value.is_undefined()
+        || (value.kind() == ValueKind::String && value.as_str().is_some_and(str::is_empty))
 }
 
 /// Extract the members of `value`, which the probe has already made a list.
