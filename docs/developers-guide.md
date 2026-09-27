@@ -7397,7 +7397,7 @@ cached layers to `cli::merge_with_cached_file_layers_with_observer`, then
 replays the returned merge events through `cli::TracingMergeObserver`. The
 boundary replays deferred discovery diagnostics before that merge; the ordinary
 query helpers do not emit tracing themselves. Phase-level metrics are composed
-in `src/observability.rs` around those two operations.
+in `src/observability/mod.rs` around those two operations.
 
 Both aggregate and phase-level configuration-load timing use the same injected
 elapsed-time seam: each boundary receives `&impl monotony::MonotonicClock`.
@@ -7715,7 +7715,7 @@ and a category label would either lose the distinction or grow the label set
 with the locale space.
 
 The counter description is registered once per process behind a `Once`. The
-application recorder in `src/observability_recorder.rs` admits the series:
+application recorder in `src/observability/recorder/mod.rs` admits the series:
 `FILE_READ_TOTAL` is listed in `accepts_name` and matched in
 `accepts_stdlib_counter_registration`, the private helper grouping the
 standard-library counter rules, against exactly those two label sets, so the
@@ -7728,9 +7728,9 @@ Tests sit within the module: `src/stdlib/path/read_telemetry/tests.rs` drives
 the registered filters against a local debugging recorder and asserts the
 emitted series and the bounded debug event, while
 `recorder_retains_bounded_file_read_series` in
-`src/observability_recorder_tests.rs` proves the production recorder retains
-the two bounded series and rejects out-of-vocabulary `filter` and `outcome`
-values and a series missing a label.
+`src/observability/recorder/tests/mod.rs` proves the production recorder
+retains the two bounded series and rejects out-of-vocabulary `filter` and
+`outcome` values and a series missing a label.
 
 ### Manifest environment-lookup telemetry
 
@@ -7761,7 +7761,7 @@ is new behaviour that previously could not occur, and the accompanying
 `tracing` event is neither aggregated nor retained by the application recorder.
 
 The counter description is registered once per process behind a `Once`. The
-application recorder in `src/observability_recorder.rs` admits the series:
+application recorder in `src/observability/recorder/mod.rs` admits the series:
 `ENV_LOOKUP_TOTAL` is listed in `accepts_name` and matched in
 `accepts_counter_registration` against exactly that one label set, so the
 counter survives into the process snapshot rather than being discarded as a
@@ -7772,9 +7772,9 @@ Tests sit beside the boundary: `src/manifest/tests/env/telemetry.rs` drives
 `env_var_with_default` against a local debugging recorder and asserts each
 outcome reaches exactly one bounded series, while
 `recorder_retains_bounded_env_lookup_series` in
-`src/observability_recorder_tests.rs` proves the production recorder retains
-the four bounded series and rejects an out-of-vocabulary outcome, an extra
-label, and a series missing its label.
+`src/observability/recorder/tests/mod.rs` proves the production recorder
+retains the four bounded series and rejects an out-of-vocabulary outcome, an
+extra label, and a series missing its label.
 
 ### Recipe-text dialect telemetry
 
@@ -8341,7 +8341,7 @@ same six fixed integer fields (`variable_count`, `macro_count`, `rule_count`,
 `describe_counter!` registration with a `std::sync::Once`.
 
 The drained-snapshot boundary is `ConfigMetricsRecorder` in
-`src/observability_recorder.rs`: `accepts_name` recognizes the counter and
+`src/observability/recorder/mod.rs`: `accepts_name` recognizes the counter and
 `exact_labels(key, &[])` keeps only the unlabelled series, rejecting any
 labelled variant. An inline `#[cfg(test)] mod tests` asserts the emission site
 records one unlabelled series and the event carries the six known counts with
@@ -8780,7 +8780,7 @@ The boundary receives `&impl monotony::MonotonicClock`. Production passes
 do not call `Instant::now` or introduce a configuration-specific clock
 abstraction.
 
-`src/observability.rs` owns the phase-level instrumentation for the two
+`src/observability/mod.rs` owns the phase-level instrumentation for the two
 configuration-loading boundaries in `src/main.rs`. Keep configuration loading
 itself as a plain query: compose this instrumentation only at the CLI
 composition root. Other subsystem boundaries retain their local telemetry

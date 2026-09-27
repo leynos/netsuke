@@ -31,8 +31,8 @@ Compose configuration observability at the CLI composition root.
 `cli::merge_with_cached_file_layers_with_observer`. That query returns bounded
 merge events alongside the merge result; the application replays them through
 `TracingMergeObserver`. These query functions neither install a recorder nor
-invoke observers or own configuration-load metrics. `src/observability.rs` owns
-the phase-level vocabulary and classification helpers.
+invoke observers or own configuration-load metrics. `src/observability/mod.rs`
+owns the phase-level vocabulary and classification helpers.
 
 Both aggregate and phase-level configuration-load timing receive the same
 `&impl monotony::MonotonicClock` seam. Production supplies
@@ -107,7 +107,7 @@ may include both phase-level and startup-attempt entries.
 - Composition root and startup metrics:
   [`src/main.rs`](../src/main.rs)
 - Phase-level observability:
-  [`src/observability.rs`](../src/observability.rs)
+  [`src/observability/mod.rs`](../src/observability/mod.rs)
 - Configuration-load orchestration:
   [`src/config_load/mod.rs`](../src/config_load/mod.rs), which composes
   `cli::resolve_json_and_layers_outcome_with_env` and

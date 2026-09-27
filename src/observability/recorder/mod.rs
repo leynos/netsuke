@@ -396,3 +396,6 @@ impl metrics::Recorder for ConfigMetricsRecorder {
         )
     }
 }
+
+#[cfg(test)]
+mod tests;

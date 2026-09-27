@@ -6,7 +6,7 @@
 //! observations.
 
 use super::*;
-use metrics::{SharedString, Unit};
+use metrics::{SharedString, Unit, counter, histogram};
 use metrics_util::{CompositeKey, MetricKind, debugging::DebugValue};
 use netsuke::{
     cli::PATH_VALIDATION_TOTAL,
@@ -18,23 +18,18 @@ type SnapshotEntry = (CompositeKey, Option<Unit>, Option<SharedString>, DebugVal
 type MetricLabels = [(&'static str, &'static str); 3];
 
 /// Cover bounded legacy-recipe operation metric registrations separately.
-#[path = "observability_recorder_legacy_recipe_tests.rs"]
 mod legacy_recipe_tests;
 
 /// Cover the bounded stdlib file-read counter series separately.
-#[path = "observability_recorder_file_read_tests.rs"]
 mod file_read_tests;
 
 /// Cover the unlabelled manifest-structure counter series separately.
-#[path = "observability_recorder_manifest_structure_tests.rs"]
 mod manifest_structure_tests;
 
 /// Cover the unlabelled oversized Ninja status counter separately.
-#[path = "observability_recorder_ninja_status_tests.rs"]
 mod ninja_status_tests;
 
 /// Cover the bounded manifest environment-lookup counter series separately.
-#[path = "observability_recorder_env_lookup_tests.rs"]
 mod env_lookup_tests;
 
 /// Cover the bounded `which` resolver counter series separately.

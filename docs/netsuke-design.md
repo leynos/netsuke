@@ -3261,11 +3261,11 @@ versioned diagnostic document on failure.
 #### Configuration observability
 
 Configuration loading remains a plain query. The application-owned recorder
-boundary in `src/observability.rs` composes instrumentation at the CLI root,
-around the diagnostic-mode resolution and full-merge queries; configuration
-loading itself does not install a recorder or emit metrics. The process-wide
-recorder is installed by the application after tracing is ready, while tests
-use local recorders.
+boundary in `src/observability/mod.rs` composes instrumentation at the CLI
+root, around the diagnostic-mode resolution and full-merge queries;
+configuration loading itself does not install a recorder or emit metrics. The
+process-wide recorder is installed by the application after tracing is ready,
+while tests use local recorders.
 
 The metric vocabulary keeps labels bounded: `config_load_total` uses only
 `phase` (`diag_mode` or `merge`) and `outcome` (`success` or `failure`), while
@@ -3328,11 +3328,11 @@ then replays the outcome's deferred diagnostics and passes the cached layers to
 `cli::merge_with_cached_file_layers_with_observer`. That query returns bounded
 merge events alongside the result, which `config_load::resolve_configuration`
 replays through `cli::TracingMergeObserver`. The ordinary query functions do
-not install a recorder or emit tracing. `src/observability.rs` owns the phase
-recorder and bounded phase/outcome vocabulary, while `src/config_load/mod.rs`
-owns the startup-attempt series. The application installs an in-process
-`DebuggingRecorder`; it does not open a metrics listener as a side effect of a
-command invocation.
+not install a recorder or emit tracing. `src/observability/mod.rs` owns the
+phase recorder and bounded phase/outcome vocabulary, while
+`src/config_load/mod.rs` owns the startup-attempt series. The application
+installs an in-process `DebuggingRecorder`; it does not open a metrics listener
+as a side effect of a command invocation.
 
 Metric labels are closed sets: phase-level series use `diag_mode` or `merge`,
 and both phase-level and startup-attempt counters use `success` or `failure`.
