@@ -43,15 +43,17 @@ use super::{
 };
 
 /// Name of the resolver span every tracing assertion targets.
-const RESOLVER_SPAN: &str = "stdlib.which.resolve";
+pub(super) const RESOLVER_SPAN: &str = "stdlib.which.resolve";
 
+#[path = "telemetry_tests/failure_categories.rs"]
+mod failure_categories;
 #[path = "telemetry_tests/outcome_series.rs"]
 mod outcome_series;
 #[path = "telemetry_tests/tracing_capture.rs"]
 mod tracing_capture;
 
 /// A temporary workspace holding the executable fixtures.
-struct Workspace {
+pub(super) struct Workspace {
     /// Guard owning the temporary directory; dropping it removes the fixture.
     _temp: TempDir,
     /// Root of the temporary workspace.
@@ -62,7 +64,7 @@ struct Workspace {
 
 impl Workspace {
     /// Create an empty workspace.
-    fn new() -> Result<Self> {
+    pub(super) fn new() -> Result<Self> {
         let temp = TempDir::new().context("create temp workspace")?;
         let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
             .map_err(|path| anyhow::anyhow!("temp path should be UTF-8: {}", path.display()))?;
@@ -96,7 +98,7 @@ impl Workspace {
     /// cache capacity is non-zero by construction of the literal, and a caller
     /// propagates the error instead of unwrapping a value the type system has
     /// not established.
-    fn resolver(&self, path: Option<OsString>) -> Result<WhichResolver> {
+    pub(super) fn resolver(&self, path: Option<OsString>) -> Result<WhichResolver> {
         let cache_capacity =
             NonZeroUsize::new(8).context("the fixture cache capacity literal must be non-zero")?;
         Ok(WhichResolver::new(
@@ -135,7 +137,7 @@ fn path_override(entries: &[&Utf8Path]) -> Result<OsString> {
 }
 
 /// The default options, with the search domain set to `cwd_mode`.
-fn options(cwd_mode: CwdMode) -> WhichOptions {
+pub(super) fn options(cwd_mode: CwdMode) -> WhichOptions {
     WhichOptions {
         cwd_mode,
         ..WhichOptions::default()

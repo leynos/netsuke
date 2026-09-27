@@ -35,7 +35,11 @@ use crate::test_tracing_capture::with_test_subscriber;
 const SEARCHED_DIR: &str = "/netsuke/which/telemetry/never-searched";
 
 /// The message the failure event carries.
-const FAILURE_MESSAGE: &str = "which resolver finished with non-success result";
+///
+/// Read by the sibling `failure_categories` as well as here, so it is
+/// `pub(super)`: one copy of the text a reader sees, rather than two that
+/// drift.
+pub(super) const FAILURE_MESSAGE: &str = "which resolver finished with non-success result";
 
 /// The span fields the miss case must record, and no others.
 ///

@@ -7,6 +7,13 @@
 //! sample set stays inside the declared vocabularies — in its values *and* in
 //! its shape, so a label the resolver was never meant to emit fails a case
 //! rather than being projected away by the read.
+//!
+//! The flattening below is shared: a series read back as labels is what every
+//! counter assertion in this module family works from, so the sample type and
+//! its readers are `pub(super)` rather than private to this file. The failure
+//! rows this module pins are the `PATH` search miss's; the cases that drive a
+//! failure outside that one point live in
+//! [`super::failure_categories`].
 
 use std::ffi::OsString;
 
@@ -36,7 +43,7 @@ use super::{Workspace, options, path_override};
 /// and fails the case. Reading only the expected labels would project such a
 /// sample onto a bounded shape and compare it equal.
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Sample {
+pub(super) struct Sample {
     /// The sample's labels as `(key, value)` pairs, sorted by key.
     labels: Vec<(String, String)>,
     /// The recorded count.
@@ -45,7 +52,7 @@ struct Sample {
 
 impl Sample {
     /// Describe one series with a count of one.
-    fn once(cwd_mode: &str, outcome: &str, category: Option<&str>) -> Self {
+    pub(super) fn once(cwd_mode: &str, outcome: &str, category: Option<&str>) -> Self {
         Self::tally(cwd_mode, outcome, category, 1)
     }
 
@@ -96,7 +103,7 @@ type Entry = (CompositeKey, Option<Unit>, Option<SharedString>, DebugValue);
 /// Holding the read in a value makes that explicit: a test takes `Samples`
 /// once and queries it, rather than reading the recorder again and silently
 /// comparing against a zeroed series.
-struct Samples {
+pub(super) struct Samples {
     /// The counter samples, sorted by metric name and then by their labels.
     counters: Vec<(&'static str, Sample)>,
 }
@@ -113,7 +120,7 @@ impl Samples {
     /// how to name: a series is reported as the recorder holds it, so the
     /// comparisons in the cases above see an extra label instead of ignoring
     /// it.
-    fn take(snapshotter: &Snapshotter) -> Self {
+    pub(super) fn take(snapshotter: &Snapshotter) -> Self {
         let mut counters: Vec<(&'static str, Sample)> = snapshotter
             .snapshot()
             .into_vec()
@@ -149,7 +156,7 @@ impl Samples {
     }
 
     /// The samples of one counter, ordered by their labels.
-    fn of(&self, metric: &'static str) -> Vec<Sample> {
+    pub(super) fn of(&self, metric: &'static str) -> Vec<Sample> {
         self.counters
             .iter()
             .filter(|(name, _sample)| *name == metric)
