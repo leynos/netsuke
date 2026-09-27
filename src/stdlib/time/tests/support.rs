@@ -4,14 +4,14 @@
 //! tests in the `tests` module and the clock-seam tests in the `clock::tests`
 //! module can both stay focused on what they assert.
 
-use super::*;
+use super::super::*;
 use anyhow::{Context, Result, anyhow};
 use minijinja::{Environment, context, value::Value};
 use rstest::fixture;
 use time::{Duration, OffsetDateTime};
 
 /// Evaluate `expr` against `env`, contextualizing compile and run errors.
-pub(super) fn eval_expression(env: &Environment<'_>, expr: &str) -> Result<Value> {
+pub(in crate::stdlib::time) fn eval_expression(env: &Environment<'_>, expr: &str) -> Result<Value> {
     let compiled = env
         .compile_expression(expr)
         .with_context(|| format!("compiling expression: {expr}"))?;
@@ -22,14 +22,14 @@ pub(super) fn eval_expression(env: &Environment<'_>, expr: &str) -> Result<Value
 
 /// Build an environment whose `now()` reads the ambient host clock.
 #[fixture]
-pub(super) fn env() -> Environment<'static> {
+pub(in crate::stdlib::time) fn env() -> Environment<'static> {
     let mut env = Environment::new();
     register_functions(&mut env, WallClock::default());
     env
 }
 
 /// Downcast `value` to the timestamp object `now()` produces.
-pub(super) fn value_as_timestamp(value: &Value) -> Result<OffsetDateTime> {
+pub(in crate::stdlib::time) fn value_as_timestamp(value: &Value) -> Result<OffsetDateTime> {
     value
         .as_object()
         .and_then(|obj| obj.downcast_ref::<TimestampValue>())
@@ -38,7 +38,7 @@ pub(super) fn value_as_timestamp(value: &Value) -> Result<OffsetDateTime> {
 }
 
 /// Downcast `value` to the duration object `timedelta()` produces.
-pub(super) fn value_as_duration(value: &Value) -> Result<Duration> {
+pub(in crate::stdlib::time) fn value_as_duration(value: &Value) -> Result<Duration> {
     value
         .as_object()
         .and_then(|obj| obj.downcast_ref::<TimeDeltaValue>())
@@ -47,7 +47,7 @@ pub(super) fn value_as_duration(value: &Value) -> Result<Duration> {
 }
 
 /// Read the `iso8601` attribute of `value` as a string.
-pub(super) fn get_iso8601_property(value: &Value) -> Result<String> {
+pub(in crate::stdlib::time) fn get_iso8601_property(value: &Value) -> Result<String> {
     let obj = value.as_object().context("value is not an object")?;
     let iso = obj
         .get_value(&Value::from("iso8601"))

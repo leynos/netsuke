@@ -4,6 +4,8 @@
 //! functions expose consistent object wrappers for downstream template
 //! evaluation. Tests that pin *where* `now()` reads its instant from live in
 //! `super::clock::tests`.
+pub(super) mod support;
+
 use super::*;
 use anyhow::{Result, anyhow, ensure};
 use minijinja::{ErrorKind, context};
