@@ -2630,7 +2630,7 @@ catalogue has the key; there is no partial state to clean up.
 - [x] (2026-09-27) EP-M4 catalogue work. The eight `stdlib.shell.*` keys now
     exist in all 35 catalogues, and `cargo check --all-targets --all-features`
     passes: the build-script localization audit that had been reporting "missing
-    in <every locale>" for all eight is green.
+    in *every* locale" for all eight is green.
 
     The two wrapper keys (`stdlib.shell.args_error`, `stdlib.shell.unquotable`)
     are byte-identical to en-GB, because `tests/locale_catalogue_tests.rs` pins
@@ -2767,12 +2767,12 @@ catalogue has the key; there is no partial state to clean up.
   `src/shell_word.rs:15` and `src/stdlib/command/quote.rs:6`, the latter since
   renamed to `child_argument.rs` by this milestone. The count is still two and
   the reasoning still holds — the two call sites are the shared implementation
-  and the one delegation to it — but the stated reason ("exactly two sites")
-  is now true for a different set of paths than the text claims. Impact: the
-  plan was written from a survey of the pre-EP-M3 tree and one of its file
-  paths was already wrong when it was written, so nothing in the branch would
-  have caught it; only a fresh grep does. The mitigation for EP-M5 is to cite
-  by symbol (`shell_word::quote_word`, `quote_child_argument`) rather than by
+  and the one delegation to it — but the stated reason ("exactly two sites") is
+  now true for a different set of paths than the text claims. Impact: the plan
+  was written from a survey of the pre-EP-M3 tree and one of its file paths was
+  already wrong when it was written, so nothing in the branch would have caught
+  it; only a fresh grep does. The mitigation for EP-M5 is to cite by symbol
+  (`shell_word::quote_word`, `quote_child_argument`) rather than by
   `path:line`, which is the same lesson as the line-number-citation rule
   already recorded elsewhere in this repository: anchors that survive edits are
   names, not positions.

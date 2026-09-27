@@ -134,6 +134,31 @@ named-command help paths render clap help directly and do not load a manifest.
 Keep future help topics within this boundary rather than coupling read-only
 inspection to `runner::process`.
 
+The recipe-text quoting filters `shell_quote` and `shell_join` are on that
+shared query path, registered by `recipe_text::register_filters` alongside the
+collection filters. They take a `dialect` keyword argument, and with it given
+they read no host state at all, so a query that names its dialect is fully
+deterministic. With `dialect` omitted they resolve through
+`RecipeShell::host_default`, which is what the query surface passes, and so is
+the build surface: `StdlibConfig::new` initializes the same value. The two
+surfaces therefore agree on every dialect, and an explicitly named dialect
+agrees on any host.
+
+Keep that agreement rather than reintroducing a divergence. It would be
+tempting to resolve `NETSUKE_WINDOWS_SHELL` on the query path so a query
+reports exactly what a build would emit, but the resolution does not belong
+there and buys nothing. On a non-Windows host `resolve_recipe_shell_with`
+returns `Posix` before it reads the environment at all, and on Windows
+`execute_help` returns before `resolve_recipe_shell()` is reached
+(`src/runner/mod.rs:149-153`), so no host can currently observe a difference.
+Threading it through would mean hoisting a fallible environment read above that
+early return, where a malformed `NETSUKE_WINDOWS_SHELL` would start failing a
+metadata query that never uses it — and the query renders discovery metadata
+that is never executed. `tests/stdlib_manifest_query_tests.rs` pins the
+agreement, including a seeded-fault check that a wrong default dialect in
+`register_query_helpers` is caught; note that a probe which names its dialect
+cannot catch that, because the keyword overrides the registration's default.
+
 Manifest rendering has two caller-selected modes. Full rendering evaluates all
 manifest fields, including recipe bodies, for build, generate, and manifest
 output. Manifest-query rendering evaluates discovery metadata and the
