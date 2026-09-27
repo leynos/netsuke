@@ -17,8 +17,8 @@ use minijinja::{Environment, UndefinedBehavior};
 use serde::de::Error as _;
 
 mod budget;
-pub(crate) mod budget_adapter;
-use budget_adapter::{BudgetErrorExt, from_str_named};
+pub(crate) use budget::adapter::budget_exhaustion_message;
+use budget::adapter::{BudgetErrorExt, from_str_named};
 mod diagnostics;
 mod env_policy;
 mod expand;

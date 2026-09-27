@@ -8,8 +8,8 @@
 use super::ManifestValue;
 use crate::ast::MacroDefinition;
 use crate::localization::{self, keys};
+use crate::manifest::budget::adapter::BudgetErrorExt;
 use crate::manifest::budget::{ManifestBudget, ManifestBudgetStage};
-use crate::manifest::budget_adapter::BudgetErrorExt;
 use anyhow::{Context, Result};
 use minijinja::{Environment, Error, ErrorKind, value::Value};
 use serde::Serialize;

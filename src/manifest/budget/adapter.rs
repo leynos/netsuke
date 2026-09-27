@@ -1,20 +1,21 @@
 //! Translate domain budget failures at the manifest evaluation boundary.
 
-use super::{budget::ManifestBudgetExhaustion, jinja_macros::telemetry};
+use super::super::jinja_macros::telemetry;
+use super::ManifestBudgetExhaustion;
 use crate::localization::{self, LocalizedMessage, keys};
 use minijinja::{Error, ErrorKind};
 
 /// Evaluate a manifest and record budget failures only for full loading.
-pub(super) fn from_str_named(
+pub(in crate::manifest) fn from_str_named(
     yaml: &str,
-    parse: super::ManifestParse<'_>,
-    on_stage: &mut Option<&mut dyn FnMut(super::ManifestLoadStage)>,
+    parse: super::super::ManifestParse<'_>,
+    on_stage: &mut Option<&mut dyn FnMut(super::super::ManifestLoadStage)>,
 ) -> anyhow::Result<crate::ast::NetsukeManifest> {
     let is_query = matches!(
         parse.stdlib_registration,
-        Some(super::StdlibRegistration::ManifestQuery)
+        Some(super::super::StdlibRegistration::ManifestQuery)
     );
-    let result = super::evaluate_manifest(yaml, parse, on_stage);
+    let result = super::super::evaluate_manifest(yaml, parse, on_stage);
     if !is_query && let Err(error) = &result {
         record_exhaustion(error);
     }

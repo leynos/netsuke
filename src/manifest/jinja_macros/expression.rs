@@ -1,8 +1,8 @@
 //! Preserve expression values and engine state for shared fuel accounting.
 
 use crate::manifest::{
+    budget::adapter::BudgetErrorExt,
     budget::{ManifestBudget, ManifestBudgetStage},
-    budget_adapter::BudgetErrorExt,
 };
 use minijinja::{Environment, Error, ErrorKind, Value};
 
