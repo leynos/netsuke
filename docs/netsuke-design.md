@@ -1529,8 +1529,8 @@ Implementation notes:
   this policy is enforced once rather than re-implemented per filter.
   `FileReadLimits` and `open_file_checked` in `src/stdlib/path/fs_utils.rs`
   decide what may be opened; `BoundedRead` and `read_bounded_chunk` in
-  `src/stdlib/path/bounded_read.rs` stream the bytes and charge the budget as
-  they arrive, so no buffer grows with the length of a line. See the
+  `src/stdlib/path/bounded_read/mod.rs` stream the bytes and charge the budget
+  as they arrive, so no buffer grows with the length of a line. See the
   [developer's guide](developers-guide.md#file-reading-filter-boundary).
 - The configured ceiling is `DEFAULT_FILE_MAX_READ_BYTES` (8 MiB) in
   `src/stdlib/config_types.rs`, stored as `FileConfig::max_read_bytes` and set

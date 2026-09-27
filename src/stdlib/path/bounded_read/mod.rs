@@ -245,5 +245,4 @@ pub(crate) fn linecount_from(
 }
 
 #[cfg(test)]
-#[path = "bounded_read_tests.rs"]
 mod tests;

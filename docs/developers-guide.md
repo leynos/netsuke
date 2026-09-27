@@ -7870,7 +7870,7 @@ share one open-and-read policy under `src/stdlib/path/`:
   `max_bytes` and `follow_symlinks` values, and `open_file_checked` resolves
   the parent directory, applies the platform open flags, and rejects anything
   that is not a regular file.
-- `bounded_read.rs` owns the read boundary built on that open: `BoundedRead`
+- `bounded_read/mod.rs` owns the read boundary built on that open: `BoundedRead`
   tracks the running byte total, `read_bounded_chunk` reads through the budget,
   `read_utf8` reads `contents` as text, and `linecount` counts newlines in
   fixed chunks while validating UTF-8 incrementally.
@@ -7921,7 +7921,7 @@ Because the judgement and the read share one handle, there is no
 check-then-open window between them; see
 [ADR-032](adr-032-windows-reparse-point-same-handle-open.md).
 
-Two diagnostics come out of the boundary. `bounded_read.rs` raises
+Two diagnostics come out of the boundary. `bounded_read/mod.rs` raises
 `file_too_large_error`, which quotes the path and the limit that was exceeded;
 `fs_utils.rs` raises `not_regular_file_error`, which quotes only the path and
 is what rejects an opened FIFO or device (and, on Windows, a reparse point that
