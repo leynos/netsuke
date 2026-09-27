@@ -2669,7 +2669,15 @@ catalogue has the key; there is no partial state to clean up.
     a valid value for the new parameter. The convenience wrappers in
     `path_loaders.rs` pass `host_default()` and so keep their old behaviour.
     The query path is unchanged: `ManifestLoadMode::ManifestQuery` still
-    carries no shell, so the deliberate divergence is exactly as planned.
+    carries no shell, and it never needed to. The divergence this sentence
+    originally claimed is unobservable — both surfaces resolve through
+    `RecipeShell::host_default`, and neither `resolve_recipe_shell_with` on
+    Unix nor `execute_help` on Windows can reach a malformed
+    `NETSUKE_WINDOWS_SHELL` from the query path. See the corresponding
+    `Surprises & discoveries` entry: the plan's stated hazard is unreachable in
+    both directions, so what is preserved here is an *agreement*, not a
+    divergence, and EP-M4's query-surface obligation was rewritten to pin that
+    agreement rather than to document a difference that cannot occur.
 
     `src/runner/tests/shell_seam_tests.rs` (six cases) is the acceptance
     evidence, and its negative control was run rather than argued. Reverting
@@ -2709,7 +2717,44 @@ catalogue has the key; there is no partial state to clean up.
     signal that the field is genuinely threaded rather than merely present.
     Restoring the line returned the suite to 6 passed.
 
-- [ ] EP-M4 `shell_quote` and `shell_join`.
+- [x] (2026-09-27) EP-M4 `shell_quote` and `shell_join` — the red tests, the
+    filters, the BDD scenarios, the query surface, and the documentation
+    note. Four commits, each gated before the next: `43d9f24c`
+    (`shell_filter_property_tests`), `e097c3f3`
+    (`shell_filter_composition_tests`), `ac36f7ab` (the eight `shell_*`
+    scenarios in `tests/features/stdlib.feature`), `fbcfd046` (the two
+    query-surface contracts plus `cargo fmt` repairs to three sources left
+    unformatted by earlier commits), and `668080db`
+    (`docs/developers-guide.md`).
+
+    Two plan defects were found and corrected rather than implemented, both
+    recorded in `Surprises & discoveries`. The query surface's "deliberate
+    divergence" does not exist: `resolve_recipe_shell_with` returns `Posix`
+    before reading the environment on Unix, and `execute_help` returns before
+    `resolve_recipe_shell()` on Windows, so `register_query_helpers`' use of
+    `RecipeShell::host_default` is identical to the build surface's and no
+    host can observe a difference. The obligation was rewritten to pin the
+    agreement, and the guide documents why threading the resolution through
+    would be a regression (it hoists a fallible environment read above an
+    early return, so a malformed `NETSUKE_WINDOWS_SHELL` would start failing
+    a metadata query that executes nothing). The plan's `shell_quote`
+    scenario also could not be written as drafted: `:string` step captures
+    strip their delimiters without unescaping, so the drafted `\"` reached
+    MiniJinja raw. It was respelt with a single-quoted Jinja string, which
+    renders the drafted expected value verbatim.
+
+    Every obligation has a negative control that was run, not argued. The
+    query-surface test went 6/6 green against a `RecipeShell::PowerShell`
+    seed before it was believed, which is how the fixture's two dead
+    assertions (an inverted guard and a membership test satisfied by the seed
+    itself) were found; with the trio design the same seed fails. The
+    `.feature`-only rebuild gap was found the same way — the harness re-runs
+    the previously compiled scenarios, so the touch is part of the loop.
+
+    Suite state at the last full run: 344 passed across
+    `stdlib_manifest_query_tests` (6), `shell_filter_property_tests` (44),
+    `shell_filter_composition_tests` (13) and `bdd_tests` (281), in 5.8 s.
+
 - [ ] EP-M5 documentation, ADR-027, roadmap tick.
 
 ## Surprises & discoveries
@@ -3167,6 +3212,133 @@ recorded for whoever hits them next.
   compare against and the indented block is accepted. The probe has to contain
   the fence to be a probe. Verified by threshold: at 4 and 5 spaces the
   paragraph is a list continuation, at 6 and 7 it is a code block.
+
+- Observation: **The plan's central query-surface premise is false, and both
+  halves of it are false for a reason the plan did not consider.** The
+  `ManifestLoadMode::ManifestQuery` section says the query surface "renders
+  different quoting from the build for the same expression", which is true on
+  no host: both surfaces resolve through `RecipeShell::host_default`
+  (`src/stdlib/register.rs` registers the build dialect from
+  `StdlibConfig::new` and the query dialect from the same value), so they agree
+  on every dialect. The stated hazard is unreachable in both directions. On a
+  non-Windows host `resolve_recipe_shell_with` returns `Posix` *before* it reads
+  `NETSUKE_WINDOWS_SHELL`, so a malformed value can never be parsed there; on
+  Windows there is no early return, but `execute_help` returns before
+  `resolve_recipe_shell()` is reached (`src/runner/mod.rs:149-153`), so the
+  query never resolves a shell at all. Measured directly:
+  `netsuke --json help targets` under
+  `NETSUKE_WINDOWS_SHELL=definitely-not-a-shell` exits 0 and renders
+  byte-identically to the same query with the variable unset. Impact: the plan
+  instructed EP-M4 to *preserve* a divergence and to *justify* it with a
+  hazard, and following that instruction would have meant writing an
+  unverifiable comment, a test asserting a disagreement that cannot occur, and a
+  `docs/developers-guide.md` paragraph explaining a mechanism that does not
+  exist — documentation asserting a falsehood about the code, which is the one
+  thing this branch's own review standard treats as blocking. What shipped
+  instead pins the *agreement* and argues explicitly against threading the
+  resolution through, on the ground that it would hoist a fallible environment
+  read above `execute_help`'s early return so that a malformed
+  `NETSUKE_WINDOWS_SHELL` would start failing a metadata query that never
+  executes anything. General shape: a rationale in a design document is
+  evidence about the author's reasoning, not about the world, and a rationale
+  that names a *mechanism* is testable in one command — here, running the
+  binary with the offending variable set. The plan's own `Conformance basis`
+  discipline applies to its `Risks` section too, not only to its citations.
+- Observation: **A probe that names its own input cannot detect a defect in the
+  default.** `dialect=` overrides the registration's dialect outright, so a
+  query probe written as `shell_quote(dialect='sh')` renders identically whether
+  `register_query_helpers` is seeded with `Sh` or with PowerShell — all six
+  fields of the first version of the probe passed 6/6 against a deliberately
+  wrong seed. The fix is a *trio*: each expression is rendered three times,
+  once with an explicit `sh`, once with an explicit `powershell`, and once with
+  the dialect omitted, and the omitted field must equal the twin that the
+  host's default selects. Two further bugs surfaced only once the seed was
+  failing: a guard asserting the omitted field matches *neither* twin
+  (inverted, and it fired on the correct tree), and a membership test
+  (`default == sh || default == power_shell`) that is satisfied by the very
+  seed it was meant to catch, because a wrong default *is* one of the twins.
+  The working formulation mirrors `RecipeShell::host_default`'s own `cfg!` in a
+  `const fn`, so the expected twin is chosen by the same predicate the product
+  code uses rather than hardcoded to `sh` — which matters because
+  `make SHELL=bash test` is a merge gate on `windows-latest`
+  (`.github/workflows/ci-windows.yml`) and the file runs there. General shape:
+  a negative control is only a control if the fault it seeds is on the path the
+  assertion reads; where a keyword short-circuits configuration, the assertion
+  must exercise the path where the configuration is *read*, and the expected
+  value must come from the same predicate as the implementation's. Recorded
+  because the first green run here was the false one.
+- Observation: **An `.feature`-only edit does not rebuild the BDD harness, and
+  the stale binary reports the *old* scenario text rather than failing
+  outright.** `rstest-bdd-macros` 0.5.0 discovers feature files with `WalkDir`
+  at macro-expansion time (`src/macros/scenarios/feature_discovery.rs:72`) and
+  emits no `include_str!`/`include_bytes!` for them, so Cargo's dependency
+  fingerprint contains no path under `tests/features` and
+  `cargo nextest run --test bdd_tests` happily re-runs the previously compiled
+  scenarios. This produced a long false diagnosis: the assertion was patched to
+  `ZZPROBE`, then to a phrase that exists nowhere, and the run still reported
+  the original generated step text — which reads exactly like a macro capture
+  bug and is nothing of the kind. `touch tests/bdd_tests.rs` forces the rebuild
+  and the new scenarios appear. Impact: any behavioural scenario added or
+  edited in isolation must be preceded by a touch, or the red/green evidence is
+  about the previous revision. It also means a *committed* feature file can be
+  verified by a gate that never compiled it, so the touch belongs in the loop
+  rather than in a remembered one-off.
+- Observation: **The `{name:string}` step capture strips the surrounding
+  quotes without unescaping anything, so a planned scenario written with `\"`
+  is a MiniJinja syntax error rather than a quoted value.** The pattern is
+  `r#""(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'"#`
+  (`rstest-bdd-patterns-0.5.0/src/hint.rs:20`) and the generated code is
+  `&raw[1..raw.len() - 1]`
+  (`rstest-bdd-macros-0.5.0/src/codegen/wrapper/arguments/step_parse.rs:67`) —
+  only the outer characters are removed, so a backslash-escaped quote inside a
+  double-quoted capture reaches MiniJinja verbatim and raises
+  `unexpected character`. The plan's scenario used exactly that form.
+  Respelling the step with a single-quoted Jinja string and an escaped inner
+  quote (`{{ 'a b \'$HOME\'' | shell_quote(dialect='sh') }}`) renders the
+  plan's expected value verbatim: `a' b '\''$HOME'\'`. General shape: a hint's
+  regex governs what the *capture* accepts, and stripping the delimiters is not
+  unescaping; the two halves are separate mechanisms and only one of them
+  exists. The same distinction is why the composition suite binds its values as
+  template *variables* rather than splicing them into template source.
+- Observation: **`shell_join`'s sequence error carries the `netsuke::jinja::`
+  code that `compact`'s does not, and the difference is one call.** `compact`
+  raises `STDLIB_COLLECTIONS_COMPACT_NOT_SEQUENCE` directly
+  (`src/stdlib/collections.rs:122`), so its message is
+  `compact expects a sequence, received …` with no bracketed code; `shell_join`
+  raises the same-shaped message through `args_error`
+  (`src/stdlib/recipe_text/mod.rs:76`), which wraps it as
+  `[netsuke::jinja::shell::args] { $details }`. Both keys exist in all 35
+  catalogues; only six entries in `locales/en-GB/messages.ftl` carry a
+  `netsuke::` prefix at all, and `compact`'s is not one of them. Impact: the
+  behavioural scenario for `compact` asserts on its English text while the
+  `shell_*` scenarios assert on codes, which is not an inconsistency in the
+  suite but a faithful reflection of two registration paths — and it is a
+  latent trap for any future catalogue translation, since the `compact`
+  assertion would have to change if that message ever gained a code. It is
+  recorded rather than "fixed" because adding a code to an existing,
+  long-shipped collections message is a diagnostic-contract change outside this
+  milestone's remit: `flatten` sits beside it in the same file and would have
+  to move too, or the two would disagree.
+- Observation: **Three of the composition suite's premises were false, and the
+  suite is more useful for having lost them.** (1) PowerShell command lists do
+  not use `eval`: the `eval` wrapper is produced by `command_evaluator`/
+  `shell_single_quote` in `src/ninja_gen_command_list.rs` and PowerShell does
+  not reach that renderer, so the assertion that `Invoke-Expression` is
+  *absent* is the one that holds — a first draft asserted eval on all three
+  transports and would have encoded a renderer behaviour that does not exist.
+  (2) The filter refuses an inadmissible value *before* any Ninja guard sees
+  it, so the control asserts on the `netsuke::jinja::shell::unquotable` code at
+  the template rather than expecting the downstream checker to catch a line
+  feed later. (3) The three `RecipeShell` variants are three *transports*, not
+  three interpreters — `Posix` runs the text directly, `Bash` wraps it in
+  `bash.exe -e -c "…"`, and `PowerShell` base64-encodes it for
+  `-EncodedCommand` — so only the `Posix` arm is executable on this host and
+  the other two are asserted on transport shape, with the `Bash` payload
+  additionally *decoded* back to its inner script and run under the host's own
+  POSIX shell. General shape: "compose it and run it" is only an end-to-end
+  test for the arm whose end is reachable; for the others the honest obligation
+  is that the payload survives the encoding, and stating which arm executes is
+  what keeps the suite from claiming coverage it does not have.
 
 ## Blocked / open questions
 
