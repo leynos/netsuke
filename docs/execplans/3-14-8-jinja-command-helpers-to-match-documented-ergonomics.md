@@ -3478,6 +3478,47 @@ catalogue has the key; there is no partial state to clean up.
   independent — an omitted finding leaves no trace in the list, an invented one
   has no counterpart in the log, and a claimed-but-absent edit has neither.
 
+- [x] (2026-09-27) The seven-gate set is green at `c7720535`, the revision that
+      carries the corrected disposition log.
+
+  `SHA_BEFORE == SHA_AFTER == c77205358497b68c26235cddcaa06e543d247457` and
+  `DIRTY_BEFORE == DIRTY_AFTER == 0` on all seven gates, every one `EXIT=0`,
+  read from the per-gate `.rc.meta` sidecars rather than from the runner's
+  prose. Durations 2 s to 152 s; nextest
+  `3578 tests run: 3578 passed, 5 skipped`; both doctest targets reached (88
+  passed plus a 2-case compile-fail block for `netsuke`, 39 passed for
+  `test_support`); `markdownlint` 167 files, 0 errors, with the `spelling`
+  prerequisite run; `doc-coverage` 98.83% against the 80.00% threshold; `nixie`
+  "All diagrams validated successfully!". The delta is Markdown-only, so `lint`
+  and `test` exercised cached artefacts, as the entry above records for the
+  previous run.
+
+  **A near-miss that would have turned this run red, recorded because the
+  reflex it names is a general one.** Disposition item 2 opens with a bare `-`
+  after its list number and carries its path on the following line, so it reads
+  as a mangled item: that `-` looks like it should be the `*` opening the
+  emphasis that closes at `Cell*`. The item was numbered 6 at `c2b3e32e` and
+  renumbered to 2 by `6365240a`, whose edit also lengthened the path with
+  `:100-106` — so the shape arrived with that renumbering, and a one-line
+  repair looked obvious.
+
+  It was probed against the gate's own tool before it was committed, and the
+  probe is the whole point. `mdtablefix --check` **accepts** the committed form:
+  `1 file left unchanged`. It **rewrites** the proposed form: `--in-place`
+  breaks the line open after the `*`, leaving that `*` alone on the first line,
+  and `--check` then rejects the result. The repair would have failed
+  `check-fmt` on a commit whose entire purpose was cosmetic, and the run above
+  would have been invalidated to land it.
+
+  The lesson is narrower than "check your work": a formatting-shaped artefact
+  is evidence about the formatter's *output*, not about its *intent*, and the
+  only way to tell a defect from a canon is to run the formatter that owns the
+  file. Reading the shape and reasoning about it produced a confident, wrong
+  answer; one `mdtablefix --check` produced the right one. This is the third
+  entry on this branch to turn on the same distinction — the two above concern
+  `markdownlint` and `mdtablefix` measuring different properties — and the
+  first where the risk was creating a failure rather than missing one.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
