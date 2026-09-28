@@ -1,11 +1,15 @@
 //! Dispatch parsed commands and emit their successful JSON result documents.
 
+#[cfg(feature = "lint")]
+use super::check;
 use super::{
-    ExecutionContext, NinjaContent, NinjaToolSpec, check, generate_ninja_with_shell, graph,
-    handle_build, handle_ninja_tool, help, materialize_dyndep_bundle, process, prune_dyndep_bundle,
+    ExecutionContext, NinjaContent, NinjaToolSpec, generate_ninja_with_shell, graph, handle_build,
+    handle_ninja_tool, help, materialize_dyndep_bundle, process, prune_dyndep_bundle,
     resolve_output_path,
 };
-use crate::cli::{BuildArgs, CheckArgs, Cli, Commands, HelpArgs, HelpTopic};
+#[cfg(feature = "lint")]
+use crate::cli::CheckArgs;
+use crate::cli::{BuildArgs, Cli, Commands, HelpArgs, HelpTopic};
 use crate::localization::keys;
 use crate::result_json;
 use anyhow::{Context, Result};
@@ -18,6 +22,7 @@ use anyhow::{Context, Result};
 pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'_>) -> Result<()> {
     match command {
         Commands::Build(args) => execute_build(cli, &args, context),
+        #[cfg(feature = "lint")]
         Commands::Check(args) => execute_check(cli, &args, context.reporter),
         Commands::Generate { output } => execute_generate(cli, output.as_ref(), context),
         Commands::Clean => execute_clean(cli, context),
@@ -40,6 +45,7 @@ pub(super) fn execute_help(
         None => help::render_root_help(),
         Some(HelpTopic::Targets) => help::handle_help_targets(cli, reporter),
         Some(HelpTopic::Build) => help::render_subcommand_help("build"),
+        #[cfg(feature = "lint")]
         Some(HelpTopic::Check) => help::render_subcommand_help("check"),
         Some(HelpTopic::Clean) => help::render_subcommand_help("clean"),
         Some(HelpTopic::Graph) => help::render_subcommand_help("graph"),
@@ -58,6 +64,7 @@ pub(super) fn execute_help(
 ///
 /// Returns an error when the manifest cannot be linted or when findings reach
 /// the failure threshold.
+#[cfg(feature = "lint")]
 pub(super) fn execute_check(
     cli: &Cli,
     args: &CheckArgs,

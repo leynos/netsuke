@@ -122,6 +122,7 @@ pub(super) fn load_manifest_with_limits(
 ///
 /// Returns an error when the manifest cannot be read, parsed, or rendered, or
 /// when it exceeds `budget_limits`.
+#[cfg(feature = "lint")]
 pub(super) fn load_manifest_with_source(
     path: &Utf8Path,
     budget_limits: manifest::ManifestBudgetLimits,

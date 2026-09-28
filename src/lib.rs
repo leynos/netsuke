@@ -16,6 +16,7 @@ pub(crate) use host::matching as host_matching;
 pub use host::pattern as host_pattern;
 pub mod ir;
 mod json_envelope;
+#[cfg(feature = "lint")]
 pub mod lint;
 mod locale;
 pub use locale::{catalogues as locale_catalogues, resolution as locale_resolution};

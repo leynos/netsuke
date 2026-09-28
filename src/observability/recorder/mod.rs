@@ -20,6 +20,8 @@ use metrics::{Counter, Gauge, Histogram, Key, KeyName, Metadata, SharedString, U
 use metrics_util::MetricKind;
 use metrics_util::debugging::{DebuggingRecorder, Snapshotter};
 
+#[cfg(feature = "lint")]
+use netsuke::runner::{CHECK_DURATION, CHECK_TOTAL};
 use netsuke::{
     cli::{
         DISCOVERY_DURATION, DISCOVERY_OUTCOME_VALUES, DISCOVERY_TOTAL,
@@ -27,9 +29,8 @@ use netsuke::{
     },
     manifest::{ENV_LOOKUP_OUTCOME_VALUES, ENV_LOOKUP_TOTAL},
     runner::{
-        BASH_PREFLIGHT_TOTAL, CHECK_DURATION, CHECK_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION,
-        LEGACY_RECIPE_EXECUTIONS_TOTAL, NINJA_STATUS_OVERSIZED_LINES_TOTAL,
-        RECIPE_SHELL_RESOLUTIONS_TOTAL,
+        BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
+        NINJA_STATUS_OVERSIZED_LINES_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL,
     },
     stdlib::{
         DIALECT_SOURCE_VALUES, DIALECT_VALUES, FILE_READ_FILTER_VALUES, FILE_READ_OUTCOME_VALUES,
@@ -68,7 +69,20 @@ const BASH_PREFLIGHT_OUTCOMES: [&str; 2] = ["success", "error"];
 /// Bounded probe results emitted by Bash compatibility preflight.
 const BASH_PREFLIGHT_PROBE_OUTCOMES: [&str; 4] =
     ["success", "not_found", "launch_failed", "non_zero_exit"];
+/// Report whether `name` is one of `netsuke check`'s metrics.
+#[cfg(feature = "lint")]
+fn is_check_metric(name: &str) -> bool {
+    matches!(name, CHECK_TOTAL | CHECK_DURATION)
+}
+
+/// Report no `netsuke check` metrics: the command is not compiled in.
+#[cfg(not(feature = "lint"))]
+const fn is_check_metric(_name: &str) -> bool {
+    false
+}
+
 /// Bounded command outcomes emitted by `netsuke check`.
+#[cfg(feature = "lint")]
 const CHECK_OUTCOMES: [&str; 5] = [
     "success",
     "threshold_failure",
@@ -144,8 +158,6 @@ impl ConfigMetricsRecorder {
                 | TIMING_SUMMARY_SINK_WRITES_TOTAL
                 | TIMING_SUMMARY_SINK_WRITE_DURATION
                 | RECIPE_SHELL_RESOLUTIONS_TOTAL
-                | CHECK_TOTAL
-                | CHECK_DURATION
                 | BASH_PREFLIGHT_TOTAL
                 | LEGACY_RECIPE_EXECUTIONS_TOTAL
                 | LEGACY_RECIPE_EXECUTION_DURATION
@@ -159,7 +171,7 @@ impl ConfigMetricsRecorder {
                 | MANIFEST_STRUCTURES_TOTAL
                 | NINJA_STATUS_OVERSIZED_LINES_TOTAL
                 | SHELL_QUOTE_DIALECT_TOTAL
-        )
+        ) || is_check_metric(name)
     }
 
     /// Admit exact bounded counter series by their registered name.
@@ -219,6 +231,7 @@ impl ConfigMetricsRecorder {
             | WHICH_CACHE_TOTAL
             | WHICH_RESOLUTION_TOTAL
             | SHELL_QUOTE_DIALECT_TOTAL => accepts_stdlib_counter_registration(key),
+            #[cfg(feature = "lint")]
             CHECK_TOTAL => exact_labels(key, &[(OUTCOME_LABEL, &CHECK_OUTCOMES)]),
             _ => false,
         }
@@ -240,6 +253,7 @@ impl ConfigMetricsRecorder {
                     ("failure_category", &LEGACY_RECIPE_FAILURE_CATEGORIES),
                 ],
             ),
+            #[cfg(feature = "lint")]
             CHECK_DURATION => exact_labels(key, &[(OUTCOME_LABEL, &CHECK_OUTCOMES)]),
             _ => false,
         }

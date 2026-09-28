@@ -10,7 +10,7 @@ use metrics::{SharedString, Unit, counter, histogram};
 use metrics_util::{CompositeKey, MetricKind, debugging::DebugValue};
 use netsuke::{
     cli::PATH_VALIDATION_TOTAL,
-    runner::{BASH_PREFLIGHT_TOTAL, CHECK_DURATION, CHECK_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL},
+    runner::{BASH_PREFLIGHT_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL},
 };
 
 type SnapshotEntry = (CompositeKey, Option<Unit>, Option<SharedString>, DebugValue);
@@ -31,6 +31,11 @@ mod ninja_status_tests;
 
 /// Cover the bounded manifest environment-lookup counter series separately.
 mod env_lookup_tests;
+
+/// Cover the bounded `netsuke check` series, which exist only with `lint`.
+#[cfg(feature = "lint")]
+#[path = "observability_recorder_check_tests.rs"]
+mod check_tests;
 
 /// Cover bounded CLI path-validation metric registrations separately.
 #[path = "observability_recorder_path_validation_tests.rs"]
@@ -91,10 +96,6 @@ fn record_mixed_metric_series(recorder: &ConfigMetricsRecorder) {
         histogram!(STARTUP_CONFIG_LOAD_DURATION, "phase" => DIAG_MODE_PHASE).record(0.03);
         counter!("help_targets_total", "topic" => "help").increment(1);
         histogram!("template_render_duration_seconds", "template" => "unbounded").record(0.5);
-        counter!(CHECK_TOTAL, "outcome" => "success").increment(1);
-        histogram!(CHECK_DURATION, "outcome" => "success").record(0.04);
-        counter!(CHECK_TOTAL, "outcome" => "unbounded").increment(1);
-        histogram!(CHECK_DURATION, "outcome" => "unbounded").record(0.05);
     });
 }
 
@@ -119,38 +120,6 @@ fn assert_retained_startup_counter(snapshot: &[SnapshotEntry]) {
         )),
         "snapshot should retain the bounded startup counter: {snapshot:?}"
     );
-}
-
-/// Assert that the recorder retained the successful check counter.
-fn assert_retained_check_counter(snapshot: &[SnapshotEntry]) {
-    assert!(
-        snapshot
-            .iter()
-            .any(|entry| is_retained_outcome_counter(entry, CHECK_TOTAL, "success")),
-        "snapshot should retain the bounded check counter: {snapshot:?}"
-    );
-}
-
-/// Assert that the recorder retained the successful check duration.
-fn assert_retained_check_duration(snapshot: &[SnapshotEntry]) {
-    assert!(
-        snapshot.iter().any(|entry| {
-            entry.0.kind() == MetricKind::Histogram
-                && entry.0.key().name() == CHECK_DURATION
-                && matches!(
-                    entry.0.key().labels().collect::<Vec<_>>().as_slice(),
-                    [label] if label.key() == "outcome" && label.value() == "success"
-                )
-                && matches!(entry.3, DebugValue::Histogram(ref values) if values.as_slice() == [0.04])
-        }),
-        "snapshot should retain the bounded check duration: {snapshot:?}"
-    );
-}
-
-/// Assert the process recorder retains the bounded check command telemetry.
-fn assert_check_telemetry(snapshot: &[SnapshotEntry]) {
-    assert_retained_check_counter(snapshot);
-    assert_retained_check_duration(snapshot);
 }
 
 /// Assert an unlabelled duration has the exact expected histogram sample.
@@ -180,8 +149,6 @@ fn assert_only_configuration_metric_names(snapshot: &[SnapshotEntry]) {
                     | CONFIG_LOAD_DURATION
                     | STARTUP_CONFIG_LOAD_COUNTER
                     | STARTUP_CONFIG_LOAD_DURATION
-                    | CHECK_TOTAL
-                    | CHECK_DURATION
             )
         }),
         "snapshot must reject unrelated metric series: {snapshot:?}"
@@ -198,12 +165,11 @@ fn configuration_metrics_recorder_retains_bounded_startup_and_phase_series() {
     let snapshot = snapshotter.snapshot().into_vec();
     assert_eq!(
         snapshot.len(),
-        6,
-        "only bounded configuration and check metric series should be retained"
+        4,
+        "only bounded configuration metric series should be retained"
     );
     assert_retained_startup_counter(&snapshot);
     assert_unlabelled_duration(&snapshot, STARTUP_CONFIG_LOAD_DURATION, 0.02);
-    assert_check_telemetry(&snapshot);
     assert_only_configuration_metric_names(&snapshot);
 }
 

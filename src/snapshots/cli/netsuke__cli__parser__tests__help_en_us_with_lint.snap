@@ -1,0 +1,155 @@
+---
+source: src/cli/parser_tests.rs
+expression: rendered_help
+---
+Netsuke transforms YAML + Jinja manifests into reproducible Ninja graphs and runs Ninja with safe defaults.
+
+Usage: netsuke [OPTIONS] [COMMAND]
+
+Commands:
+  build     Build targets defined in the manifest (default).
+  check     Lint the manifest without generating or running a build.
+  clean     Remove build artefacts via Ninja.
+  graph     Emit the build dependency graph. Default format is DOT.
+  generate  Generate the Ninja manifest without running Ninja.
+  help      Print the top-level help, or the help for a named topic.
+
+Options:
+  -f, --file <FILE>
+          Path to the Netsuke manifest file to use.
+
+          [default: Netsukefile]
+
+  -C, --directory <DIR>
+          Run as if started in this directory.
+
+          This affects manifest lookup, output paths, and config discovery.
+
+      --config <FILE>
+          Path to a configuration file, bypassing automatic discovery.
+
+  -j, --jobs <N>
+          Set the number of parallel build jobs.
+
+          Values must be between 1 and 64.
+
+  -v, --verbose
+          Enable verbose diagnostic logging and completion timing summaries.
+
+      --locale <LOCALE>
+          Locale tag for CLI copy (for example: en-US, es-ES).
+
+      --fetch-allow-scheme <SCHEME>
+          Additional URL schemes allowed for the fetch helper.
+
+      --env-allow-var <VAR>
+          Environment variable permitted for the manifest env() helper.
+
+      --env-block-var <VAR>
+          Environment variable blocked for the manifest env() helper.
+
+      --fetch-allow-host <HOST>
+          Hostnames that are permitted when default deny is enabled.
+
+          Supports wildcards such as `*.example.com`.
+
+      --fetch-block-host <HOST>
+          Hostnames that are always blocked, even when allowed elsewhere.
+
+          Supports wildcards such as `*.example.com`.
+
+      --fetch-default-deny
+          Deny all hosts by default; only allow the declared allowlist.
+
+      --trust-project-fetch-policy
+          Allow project configuration to widen fetch-policy grants.
+
+      --manifest-evaluation-fuel <FUEL>
+          Limit MiniJinja instructions for each manifest evaluation.
+
+          [default: 1000000]
+
+      --manifest-fuel <FUEL>
+          Limit MiniJinja instructions across one manifest.
+
+          [default: 100000000]
+
+      --manifest-rendered-value-bytes <BYTES>
+          Limit bytes rendered into one manifest value.
+
+          [default: 1048576]
+
+      --manifest-rendered-manifest-bytes <BYTES>
+          Limit total bytes rendered across one manifest.
+
+          [default: 16777216]
+
+      --manifest-source-bytes <BYTES>
+          Limit template and macro source bytes consumed per manifest.
+
+          [default: 4194304]
+
+      --manifest-foreach-cardinality <COUNT>
+          Limit values processed by one foreach expansion.
+
+          [default: 10000]
+
+      --manifest-expanded-entries <COUNT>
+          Limit targets and actions expanded from one manifest.
+
+          [default: 50000]
+
+      --json
+          Emit machine-readable JSON output.
+
+      --no-input
+          Never read interactive input.
+
+      --color <POLICY>
+          Colour output policy (auto, always, never).
+
+          Possible values:
+          - auto:   Follow the host environment
+          - always: Force colour output on when available
+          - never:  Force colour output off
+
+          [default: auto]
+
+      --emoji <POLICY>
+          Emoji policy (auto, always, never).
+
+          Possible values:
+          - auto:   Follow the host environment and accessibility mode
+          - always: Force emoji glyphs on
+          - never:  Disable emoji glyphs
+
+          [default: auto]
+
+      --progress <POLICY>
+          Progress rendering policy (auto, always, never).
+
+          Possible values:
+          - auto:   Follow Netsuke's default progress behaviour
+          - always: Force progress rendering on
+          - never:  Disable progress rendering
+
+          [default: auto]
+
+      --accessibility <POLICY>
+          Accessible output policy (auto, on, off).
+
+          Possible values:
+          - auto: Follow terminal and environment detection
+          - on:   Force accessible output on
+          - off:  Force accessible output off
+
+          [default: auto]
+
+      --default-target <TARGET>
+          Default build targets when none are specified.
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version

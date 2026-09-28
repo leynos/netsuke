@@ -3,12 +3,20 @@
 //! Keeps post-merge command/default resolution separate from layer collection
 //! so merge orchestration remains compact and independently understandable.
 
-use super::super::command::{BuildArgs, CheckArgs, Cli, Commands, InteractionArgs};
-use super::super::config::{BuildConfig, CheckConfig, CliConfig};
+#[cfg(feature = "lint")]
+use super::super::command::CheckArgs;
+use super::super::command::{BuildArgs, Cli, Commands, InteractionArgs};
+#[cfg(feature = "lint")]
+use super::super::config::CheckConfig;
+use super::super::config::{BuildConfig, CliConfig};
 
 /// Apply merged configuration over parsed CLI input to build the runtime CLI.
 pub(super) fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
     let build_defaults = resolved_build_config(&config);
+    let command = apply_check_defaults(
+        resolve_command(parsed.command.as_ref(), &build_defaults),
+        &config,
+    );
     Cli {
         file: config.file,
         directory: parsed.directory.clone(),
@@ -39,11 +47,7 @@ pub(super) fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
         progress: config.progress,
         accessibility: config.accessibility,
         default_targets: build_defaults.targets.clone(),
-        command: Some(resolve_command(
-            parsed.command.as_ref(),
-            &build_defaults,
-            &config.cmds.check,
-        )),
+        command: Some(command),
     }
 }
 
@@ -57,11 +61,7 @@ fn resolved_build_config(config: &CliConfig) -> BuildConfig {
 }
 
 /// Resolve the final command, substituting default targets when none were given.
-fn resolve_command(
-    parsed: Option<&Commands>,
-    build_defaults: &BuildConfig,
-    check_defaults: &CheckConfig,
-) -> Commands {
+fn resolve_command(parsed: Option<&Commands>, build_defaults: &BuildConfig) -> Commands {
     match parsed {
         Some(Commands::Build(args)) => Commands::Build(BuildArgs {
             targets: if args.targets.is_empty() {
@@ -70,7 +70,6 @@ fn resolve_command(
                 args.targets.clone()
             },
         }),
-        Some(Commands::Check(args)) => Commands::Check(resolve_check_args(args, check_defaults)),
         Some(other) => other.clone(),
         None => Commands::Build(BuildArgs {
             targets: build_defaults.targets.clone(),
@@ -78,10 +77,27 @@ fn resolve_command(
     }
 }
 
+/// Fill the `check` arguments the command line left at their defaults.
+#[cfg(feature = "lint")]
+fn apply_check_defaults(command: Commands, config: &CliConfig) -> Commands {
+    match command {
+        Commands::Check(args) => Commands::Check(resolve_check_args(&args, &config.cmds.check)),
+        other => other,
+    }
+}
+
+/// Return `command` unchanged: without the linter there are no `check`
+/// defaults to apply.
+#[cfg(not(feature = "lint"))]
+const fn apply_check_defaults(command: Commands, _config: &CliConfig) -> Commands {
+    command
+}
+
 /// Resolve the effective `check` arguments from the CLI and configuration.
 ///
 /// Command-line values already won the merge, so the configuration only fills
 /// in the fields the caller left at their defaults.
+#[cfg(feature = "lint")]
 fn resolve_check_args(args: &CheckArgs, config: &CheckConfig) -> CheckArgs {
     CheckArgs {
         rule: if args.rule.is_empty() {
