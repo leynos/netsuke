@@ -949,7 +949,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
     `Optioned`), so the legitimate overlap is inside a row, not across rows. The
     only scope separating the defect from the design is **per cell**, which is
     what `ensure_distinct` implements.
-- [ ] (2026-09-28) **BLOCKER: the shared Cargo package cache is deadlocked
+- [x] (2026-09-28) **BLOCKER: the shared Cargo package cache is deadlocked
   machine-wide, so no Rust gate can run.** The commit carrying the three codex
   dispositions is `630b8116`, verified by inspection and by everything that
   does not need Cargo, but **its local gate run is outstanding**. The commit
@@ -974,7 +974,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   showed utime+stime unchanged at 48 ticks, so the loop is not progressing.
   Forty-seven processes were queued on that inode with `locks_lock_inode_wait`,
   the oldest for 1h46m, and `pgrep -c rustc` was **0** system-wide — every Rust
-  job on the machine, mine included, was stalled behind it.
+  job on the machine, this branch's included, was stalled behind it.
 
   This was diagnosed and left alone deliberately. The house rule says not to
   kill other agents' processes, and the holder belongs to another session; the
@@ -983,6 +983,12 @@ Hard invariants. Violating one requires escalation, not a workaround.
   self-inflicted in the sense that matters here — it is a nested-Cargo deadlock
   of the kind this repository has hit before (see the nested-Cargo timeout
   records), not a cache that merely needs to drain.
+
+  The diagnosis carried no action of its own, so this entry closes as
+  *diagnosed and recorded* rather than as a task left undone. Its one live debt
+  — the local gate run it blocks — was paid later the same day: the cache
+  drained, and all seven targets ran green. The scope correction above is what
+  makes the checkbox safe to tick; the historical record is unchanged.
 
   What *was* verified without Cargo: `mdtablefix --check` over the full
   selector reports `169 files left unchanged` (exit 0), so every Markdown edit
@@ -1310,18 +1316,18 @@ Hard invariants. Violating one requires escalation, not a workaround.
   push whenever its line survives, so `commit_id` tracks the head while the
   comment body still describes an older revision — `line` and `position` are
   both non-null for all seven here, which is exactly the shape that reads as
-  "live". Treating the anchor as the verdict would have sent me to re-fix three
-  defects that were already fixed. Read the body, and check the revision it
-  describes.
+  "live". Treating the anchor as the verdict would have sent a reader to re-fix
+  three defects that were already fixed. Read the body, and check the revision
+  it describes.
 
-- **A credential report I filed was wrong, and is corrected here.** A push
-  failed with `could not read Username for 'https://github.com/…'`. I diagnosed
-  it to the Lody credential helper's `missing_path` early-return with
-  `credential.useHttpPath` unset, and reported that to Lody as an environment
-  misconfiguration. The retry then succeeded, which prompted a second look, and
-  the second look contradicts the first. The harness **injects
-  `credential.useHttpPath=true`** into every command through the
-  `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` channel:
+- **A credential report filed earlier was wrong, and is corrected here.** A
+  push failed with `could not read Username for 'https://github.com/…'`, and
+  the first diagnosis blamed the Lody credential helper's `missing_path`
+  early-return with `credential.useHttpPath` unset. That diagnosis was reported
+  to Lody as an environment misconfiguration. The retry then succeeded, which
+  prompted a second look, and the second look contradicts the first. The
+  harness **injects `credential.useHttpPath=true`** into every command through
+  the `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/ `GIT_CONFIG_VALUE_n` channel:
   `git config --show-origin --get-all credential.useHttpPath` reports
   `command line: true`. The helper succeeds end-to-end when a `path=` is
   supplied — run directly with its own debug log enabled at
@@ -1329,7 +1335,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `env_var`) to `fetch` to a `200` `fetch_response` to `success`, and emits
   `username=x-access-token` on stdout with a 40-character password.
 
-  The `missing_path` observation therefore came from my own hand-built `printf`
+  The `missing_path` observation therefore came from a hand-built `printf`
   probe, which omitted `path=` and so never reproduced what a real push sends.
   It was a true statement about a command that is not the one that failed. An
   earlier `git ls-remote` "proof" was void for the same reason in reverse:
@@ -1340,6 +1346,38 @@ Hard invariants. Violating one requires escalation, not a workaround.
   stands as a report of a symptom, and this entry is the correction to its
   diagnosis. **A probe that does not reproduce the failing command's inputs
   cannot establish the failing command's cause.**
+
+- [x] (2026-09-28) **The local `coderabbit review --agent` pass was read and
+  dispositioned; its seven in-scope findings are fixed in the commit carrying
+  this entry.** The run is `REV=ac314a94`, `CR_STATUS=0`, 617 s, 23 findings.
+  The count is 23, not 7, and the difference is the whole reason this entry
+  exists: the local review scans the **working tree**, while the GitHub review
+  scans the **PR diff**, and the two sets are not the same artefact. Sixteen of
+  the 23 land in files this branch never touches — `.github/scripts/`
+  nextest-oracle modules, `tests/kani_scope_wrapper_e2e_tests.rs`, other
+  branches' execplans — so they belong to the revisions that wrote them and are
+  recorded as out of scope rather than silently dropped. They are not "skipped
+  as unimportant"; they are not this PR's to fix.
+
+  All seven in-scope findings were verified against the document text before
+  any edit, and all seven were correct. Four were stale facts the plan's own
+  later entries already contradicted: the ToR claim, the still-open blocker
+  checkbox, the superseded standalone-PR instruction, and the missing
+  `.gitignore` line. Three were substantive: the `fourteen` test count (the
+  breakdown was wrong too — 7 + 6 + 5, not 7 + 3 + 4), the `D10`/`:2148`
+  contradiction, and the first-person passages. The last of these is a real
+  style-guide rule (`docs/documentation-style-guide.md:39`), though a corpus
+  probe shows it is widely violated elsewhere in `docs/execplans/`; that makes
+  the rule no less binding on this file, and the remaining quote at line 835 is
+  verbatim bot text and correctly left alone.
+
+  One correction went further than the finding asked, because the finding's own
+  premise was checked rather than trusted. The ToR entry's existing `924cb215`
+  pin is a commit that **predates the document's existence**; the ToR arrived on
+  `main` in `96b89ca9` (PR #786). Citing the document at a revision where it
+  does not exist would have been a fresh instance of exactly the staleness
+  class this entry is clearing, so the new artefact carries its own pin and
+  says why it differs from its neighbour.
 
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
@@ -2144,8 +2182,10 @@ tracked; the derivation it performs is reimplemented in the coverage test at
      and `Reject as a new name` (1). All 50 reject-dispositioned rows count as
      rejected whatever their class, so the deny set is the complement of the
      accepted set: 67 reject names plus 6 deferred names, less the 2 that are
-     themselves accepted Netsuke names. `D10` records why the class
-     distinction, while derivable, is deliberately not load-bearing.
+     themselves accepted Netsuke names. The class distinction is **not
+     derivable** from the document and is **not asserted**; `D10` records how
+     that was established and why it does not matter. No check reads a row's
+     class.
   Date/Author: 2026-09-08, planning agent.
 
 - Decision `D6`: section 5 has five mandatory substantive clauses; the other
@@ -2239,14 +2279,14 @@ tracked; the derivation it performs is reimplemented in the coverage test at
 - Decision `D10`: the forbidden set is the **complement of the accepted set**
   — every section 7 reject name and every section 9 deferred name, less the
   registered Netsuke names of accepted helpers — which is **71 names**, not the
-  34 this plan first asserted. The reject-class split of table 11 is still
-  derived and asserted, but it is not load-bearing for the deny set. Rationale:
-  `EP-M0` found that the plan's 34 reconciles only as a **row** count — 28
-  class-based forbidden rows plus 6 deferred rows — and not as a name count
-  under any derivation; that its assertion that the deny set contains `is_file`
-  cannot hold under that same class reading, because the `file` / `is_file` row
-  is classed "already provides", so the plan's number and its membership list
-  were mutually inconsistent; and that the resolution-note prose does not
+  34 this plan first asserted. The reject-class split of table 11 is neither
+  derived nor asserted; the deny set does not need it. Rationale: `EP-M0` found
+  that the plan's 34 reconciles only as a **row** count — 28 class-based
+  forbidden rows plus 6 deferred rows — and not as a name count under any
+  derivation; that its assertion that the deny set contains `is_file` cannot
+  hold under that same class reading, because the `file` / `is_file` row is
+  classed "already provides", so the plan's number and its membership list were
+  mutually inconsistent; and that the resolution-note prose does not
   discriminate the three reject classes under any rule the document states. Two
   independent attempts at a note-parsing rule produced 24/10/16 and 25/6/18
   against table 11's 22/10/18; a third rule reproduced 22/10/18 exactly, but it
@@ -2465,7 +2505,21 @@ section 15.5's analysis of the rejected Windows-specific filter family.
 
 ## Conformance basis
 
-There is no Terms of Reference document. Upstream artefacts:
+`docs/terms-of-reference.md` exists, and two of its parts bear on this split
+directly. Goal **G4** ("Deterministic plans") and goal **G6** ("Visible
+impurity") are the parent documents' statement of what RFC 0006 section 6 turns
+into a per-helper contract, and hard constraint 8.1's "project configuration
+cannot grant itself authority the operator has not granted" (ADR-021, ADR-026)
+is the rule clause 6.4 discharges as a capability boundary. No goal or
+constraint contradicts the split; the split's purpose is to make those
+obligations dischargeable per helper rather than in one survey document.
+
+Upstream artefacts:
+
+- `docs/terms-of-reference.md` at `origin/main` commit `96b89ca9`, goals G4 and
+  G6, and hard constraint 8.1. The pin differs from the one below because the
+  document postdates `924cb215`: it arrived on `main` in `96b89ca9` (PR #786),
+  and is unchanged on this branch.
 
 - `docs/rfcs/0006-ansible-inspired-template-standard-library.md` at
   `origin/main` commit `924cb215`, status `Proposed`. Sections 6, 7, 7.8, 8, 9,
@@ -3047,8 +3101,14 @@ first draft made, and it is true.
 
 ### `EP-M1` — coverage test, ADR, corrections, roadmap rewrite
 
-Ship as a self-contained pull request. It is independently valuable and is the
-fallback if nothing else proceeds.
+Land as commits in PR #697, not as a self-contained pull request. The earlier
+draft asked for a separate pull request on the grounds that the milestone is
+independently valuable and is the fallback if nothing else proceeds; the
+reviewer's instruction names one pull request, and PR #697 already carries the
+task title, so the milestones stack there and each lands as its own commit. The
+same correction was applied to this milestone's own Progress entry when it
+shipped (see the `EP-M1` entry in `Progress`), and this paragraph had been left
+stating the superseded model.
 
 - Outcome: `tests/rfc_stdlib_coverage_tests.rs` green with all eight groups
   unwritten and `COV-4` reporting 8. `ADR-040` records the convention, its
@@ -3192,7 +3252,7 @@ covering struct fields and enum variants, not merely types.
 
 ### Stage C — implementation
 
-`EP-M1` as its own pull request. Then `EP-M2`, then one commit per child. For
+`EP-M1` as commits in PR #697, then `EP-M2`, then one commit per child. For
 each child:
 
 1. Create `docs/rfcs/00NN-<slug>.md` from the literal template in `ADR-040`.
@@ -3302,11 +3362,12 @@ Acceptance is behavioural.
    group-specific consequence: a named bound from RFC 0006 table 3, a
    diagnostic code, a named error condition. Nowhere does a justification
    reduce to matching Ansible.
-3. Run `make test` and observe `rfc_stdlib_coverage_tests` pass with fourteen
-   tests — seven obligation checks, three heading tests, four deference tests —
-   and a line reporting how many capability groups remain unwritten. Delete one
-   row from RFC 0013's section 5.1 registry, re-run, and observe a failure
-   naming that helper and reporting zero owners. Restore the row.
+3. Run `make test` and observe `rfc_stdlib_coverage_tests` pass with eighteen
+   tests — seven obligation checks, six `markdown.rs` heading and fence tests,
+   five `deference.rs` appeal tests — and a line reporting how many capability
+   groups remain unwritten. Delete one row from RFC 0013's section 5.1
+   registry, re-run, and observe a failure naming that helper and reporting
+   zero owners. Restore the row.
 4. Move a registry row from one child to another, re-run, and observe a
    wrong-owner failure naming both the designated and the actual RFC.
 5. Search the registries in `docs/rfcs/` for `shuffle`, `is_dir`, `is_file`,
@@ -3395,10 +3456,20 @@ Files modified:
   child-RFC citation per child
 - `docs/contents.md`
 - this ExecPlan
+- `.gitignore` — adds `uv.lock`, paired with `git rm --cached uv.lock`. The
+  lockfile is never tracked on `origin/main`; it entered this branch by
+  accident at `a94a3006`, whose `git add -A` swept its own verification entry
+  and the working-tree file in together, and it left again at `f42202a4`. The
+  net diff against `origin/main` for that path is therefore **empty**, and the
+  `.gitignore` line is the only surviving trace. It is named here because a
+  reader who runs `git diff origin/main...HEAD -- uv.lock` sees nothing and
+  would otherwise not know the change exists.
 
 No other file changes. No `src/` change. No `Cargo.toml` change: `googletest`
 0.14.3, `pretty_assertions` 1.4.1, and `regex` 1.12.2 are dev-dependencies, and
-`anyhow` is a normal dependency, which integration tests link against.
+`anyhow` is a normal dependency, which integration tests link against. The
+`.gitignore` and `uv.lock` change above is the one exception to "no other file
+changes", and it is confined to repository hygiene — no build input.
 
 The test's private shape, in `tests/rfc_stdlib_coverage/mod.rs`. Every field
 and variant needs a documentation comment, since
