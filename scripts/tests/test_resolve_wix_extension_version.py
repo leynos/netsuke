@@ -50,12 +50,17 @@ def test_workflow_call_exports_the_requested_extension_version(
     )
 
 
-def test_workflow_call_with_null_inputs_uses_the_default(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+@pytest.mark.parametrize(
+    "payload",
+    [{}, {"inputs": None}, {"inputs": {}}],
+    ids=["missing-inputs", "null-inputs", "missing-version"],
+)
+def test_workflow_call_without_a_version_uses_the_default(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, payload: dict[str, object]
 ) -> None:
-    """Explicitly null workflow inputs fall back to the default version."""
+    """Missing inputs or version values fall back to the default version."""
     event_path = tmp_path / "event.json"
-    event_path.write_text(json.dumps({"inputs": None}), encoding="utf-8")
+    event_path.write_text(json.dumps(payload), encoding="utf-8")
     output_path = tmp_path / "github-output"
     monkeypatch.setenv("INPUT_EVENT_NAME", "workflow_call")
     monkeypatch.setenv("INPUT_EVENT_PATH", str(event_path))
@@ -64,8 +69,23 @@ def test_workflow_call_with_null_inputs_uses_the_default(
     resolver.app([], result_action="return_value")
 
     assert output_path.read_text(encoding="utf-8") == "value=7\n", (
-        "null workflow inputs must fall back to the default extension version"
+        "missing inputs or versions must use the default extension version"
     )
+
+
+@pytest.mark.parametrize("inputs", [[], "not-a-mapping", 42])
+def test_workflow_call_rejects_non_object_inputs(
+    tmp_path: Path, inputs: object
+) -> None:
+    """Non-object workflow inputs fail with a clear diagnostic."""
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps({"inputs": inputs}), encoding="utf-8")
+
+    with pytest.raises(
+        resolver.WorkflowInputsShapeError,
+        match="workflow inputs must be a JSON object",
+    ):
+        resolver.resolve_extension_version("workflow_call", str(event_path))
 
 
 def test_workflow_call_rejects_an_invalid_event_file(

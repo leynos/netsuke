@@ -12,6 +12,15 @@ import typing as typ
 import cyclopts
 from cyclopts import App, Parameter
 
+
+class WorkflowInputsShapeError(ValueError):
+    """Report workflow-call inputs that are not JSON objects."""
+
+    def __init__(self) -> None:
+        """Initialise the error for non-object workflow inputs."""
+        super().__init__("workflow inputs must be a JSON object")
+
+
 DEFAULT_EXTENSION_VERSION = "7"
 app = App(config=cyclopts.config.Env("INPUT_", command=False))
 
@@ -24,6 +33,11 @@ def resolve_extension_version(event_name: str, event_path: str) -> str:
     str
         The configured extension version or the default.
 
+    Raises
+    ------
+    WorkflowInputsShapeError
+        If workflow-call inputs are not a JSON object.
+
     Examples
     --------
     >>> resolve_extension_version("push", "unused")
@@ -33,7 +47,11 @@ def resolve_extension_version(event_name: str, event_path: str) -> str:
         return DEFAULT_EXTENSION_VERSION
 
     payload = json.loads(pathlib.Path(event_path).read_text(encoding="utf-8"))
-    inputs = payload.get("inputs") or {}
+    inputs = payload.get("inputs")
+    if inputs is None:
+        inputs = {}
+    elif not isinstance(inputs, dict):
+        raise WorkflowInputsShapeError
     configured_version = inputs.get("wix-extension-version")
     if configured_version is None:
         version = ""
