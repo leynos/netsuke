@@ -1551,6 +1551,39 @@ Hard invariants. Violating one requires escalation, not a workaround.
   this entry, because a rebase creates a new candidate and every gate result
   bound to `c765659d` is historical.
 
+- [x] (2026-09-28) **All seven gates pass on `802be5ea`, and `markdownlint` is
+  a real pass rather than the UNKNOWN the earlier episode produced.** The seven
+  targets ran sequentially on the post-rebase head: `check-fmt` (4s,
+  `164 files already formatted`, mdtablefix `169 files left unchanged`), `lint`
+  (14s, clippy `-D warnings` clean, both pylint runs `10.00/10`, interrogate
+  `100.0%`, yamllint and actionlint clean), `typecheck` (1s, ty
+  `All checks passed!`), `test` (180s, nextest
+  `3494 tests run: 3494 passed (1 slow), 6 skipped`, doctests 87+2+39 passed
+  with 0 failed), `markdownlint` (14s), `nixie` (1s,
+  `All diagrams validated successfully!`), and `doc-coverage` (7s,
+  `aggregate 4801/4858 98.83%`, meets the 80% threshold).
+
+  The `markdownlint` verdict was checked for the *state*, not merely the exit
+  code, because the earlier episode established that a red prerequisite makes
+  the target report nothing at all and an outside reader takes silence for
+  green. Both tells are present and in order — `Linting: 169 file(s)` at line 5
+  and `Summary: 0 error(s)` at line 6 — so `markdownlint-cli2` genuinely ran.
+  This is the first seven-target run on this branch where every gate is green
+  *and* every verdict is a verdict.
+
+  Two log artefacts were inspected rather than waved through. `lint`'s log
+  carries `Blocking waiting for file lock on package cache` three times, which
+  is the shared Cargo cache serializing access as intended, not a defect. And
+  the candidate for a false reading is the `test` log, which is 669 KB and
+  contains the strings `error` and `FAIL`: every `error` occurrence is a test
+  *name* under an `error::tests` module, and `FAIL` does not occur at all. Both
+  were established by reading the lines, not by the absence of a grep hit.
+
+  Logs are `/tmp/g3-<gate>-6-1-1.out`. These results cover `802be5ea` only. CI
+  is a separate channel and had not concluded at the time of writing:
+  `netsukefile` and `release / metadata` had passed, and `build-test` and
+  `kani-smoke` were still in progress.
+
 ## Surprises & discoveries
 
 - Observation: **two independent safety nets can both report success while
