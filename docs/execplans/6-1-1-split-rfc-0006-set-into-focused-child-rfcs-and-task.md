@@ -1272,6 +1272,75 @@ Hard invariants. Violating one requires escalation, not a workaround.
   that reason: the branch carries it, so the plan and the pull request
   description must both name it rather than let a reviewer discover it.
 
+- **The seven bot findings open at this head are already answered; the review
+  is stale, not unresolved.** Four from `chatgpt-codex-connector` and three
+  from CodeRabbit's `CHANGES_REQUESTED` pass `5332303125` all anchor at
+  `658b8157`, and every one names a defect this branch fixed afterwards.
+  CodeRabbit says so itself: each of its three carries
+  `✅ Addressed in commits 797178c to 68c266e`. The four codex comments do not
+  self-annotate, so each was checked against the revision rather than the
+  anchor:
+
+  | Finding           | Subject                               | State at `6ff02d87`                               |
+  | ----------------- | ------------------------------------- | ------------------------------------------------- |
+  | codex `…609`      | an `Owns` cell repeats a section      | `ensure_distinct`, `map.rs:162`, `:164`           |
+  | codex `…616`      | duplicate child RFC numbers           | `ensure!`, `map.rs:132`                           |
+  | codex `…627`      | non-string JSON mapping keys          | section 5.7 rejects non-distinct rendered keys    |
+  | codex `…620`      | serializers unbounded                 | section 5.3's length pass, both serializers       |
+  | CodeRabbit `…304` | ADR-040 specimen contradicts RFC 0013 | specimen states `document_count` is not inherited |
+  | CodeRabbit `…313` | duplicate child RFC reservations      | the `map.rs:132` guard                            |
+  | CodeRabbit `…325` | a fence opened by four spaces         | `opening` rejects more than three                 |
+
+  The second codex row is rehearsed by a seeded fault; the rest are guards read
+  at the revision named in the first column.
+
+  Two codex findings are worth recording as *not applied as written*, because
+  their mechanisms were wrong even though the defects were real, and `630b8116`
+  says so. `…627` claimed the round trip was impossible, but section 6.7's
+  canonical form of an integer key *is* its string form, so `{1: "a"}` and
+  `{"1": "a"}` canonicalize identically and the round trip holds; the real
+  defect was adjacent and unnamed — `from_yaml` accepts a mapping holding both
+  keys, which would render a duplicate key its own inverse rejects. And
+  `…609`'s suggested remedy ("reject any existing owner") cannot be applied at
+  all: row `0018`'s `Owns` clause resolves to `glob` and its `Optioned` cell
+  names `glob` again, so a blanket reject would red the live document.
+
+  **The lesson is about review state, not about the bots.** A comment anchored
+  at the current head is not necessarily live. GitHub re-anchors a comment on
+  push whenever its line survives, so `commit_id` tracks the head while the
+  comment body still describes an older revision — `line` and `position` are
+  both non-null for all seven here, which is exactly the shape that reads as
+  "live". Treating the anchor as the verdict would have sent me to re-fix three
+  defects that were already fixed. Read the body, and check the revision it
+  describes.
+
+- **A credential report I filed was wrong, and is corrected here.** A push
+  failed with `could not read Username for 'https://github.com/…'`. I diagnosed
+  it to the Lody credential helper's `missing_path` early-return with
+  `credential.useHttpPath` unset, and reported that to Lody as an environment
+  misconfiguration. The retry then succeeded, which prompted a second look, and
+  the second look contradicts the first. The harness **injects
+  `credential.useHttpPath=true`** into every command through the
+  `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` channel:
+  `git config --show-origin --get-all credential.useHttpPath` reports
+  `command line: true`. The helper succeeds end-to-end when a `path=` is
+  supplied — run directly with its own debug log enabled at
+  `http://127.0.0.1:41269`, it records `request` to `broker_config` (from an
+  `env_var`) to `fetch` to a `200` `fetch_response` to `success`, and emits
+  `username=x-access-token` on stdout with a 40-character password.
+
+  The `missing_path` observation therefore came from my own hand-built `printf`
+  probe, which omitted `path=` and so never reproduced what a real push sends.
+  It was a true statement about a command that is not the one that failed. An
+  earlier `git ls-remote` "proof" was void for the same reason in reverse:
+  `leynos/netsuke` is **public**, so that read needs no credentials at all and
+  could not have exercised the helper. `git push --dry-run` exits 0, and that
+  is the ordering which actually exercises write auth. The single intermittent
+  failure is left **unexplained rather than misattributed**; the filed report
+  stands as a report of a symptom, and this entry is the correction to its
+  diagnosis. **A probe that does not reproduce the failing command's inputs
+  cannot establish the failing command's cause.**
+
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
 - [ ] `EP-M6` RFC 0016, pattern and version predicates (step 6.5).
