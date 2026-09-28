@@ -33,7 +33,7 @@ def resolve_extension_version(event_name: str, event_path: str) -> str:
         return DEFAULT_EXTENSION_VERSION
 
     payload = json.loads(pathlib.Path(event_path).read_text(encoding="utf-8"))
-    inputs = payload.get("inputs", {})
+    inputs = payload.get("inputs") or {}
     configured_version = inputs.get("wix-extension-version")
     if configured_version is None:
         version = ""

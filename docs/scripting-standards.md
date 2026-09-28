@@ -614,7 +614,7 @@ def test_reads_env_and_defaults(monkeypatch, capsys):
     captured = capsys.readouterr()
 
     # Assert
-    assert '"version": "1.2.3"' in captured.out
+    assert "'version': '1.2.3'" in captured.out
 
 
 def test_patch_python_dependency(mocker):

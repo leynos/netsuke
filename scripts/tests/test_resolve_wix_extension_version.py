@@ -50,6 +50,24 @@ def test_workflow_call_exports_the_requested_extension_version(
     )
 
 
+def test_workflow_call_with_null_inputs_uses_the_default(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Explicitly null workflow inputs fall back to the default version."""
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps({"inputs": None}), encoding="utf-8")
+    output_path = tmp_path / "github-output"
+    monkeypatch.setenv("INPUT_EVENT_NAME", "workflow_call")
+    monkeypatch.setenv("INPUT_EVENT_PATH", str(event_path))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+
+    resolver.app([], result_action="return_value")
+
+    assert output_path.read_text(encoding="utf-8") == "value=7\n", (
+        "null workflow inputs must fall back to the default extension version"
+    )
+
+
 def test_workflow_call_rejects_an_invalid_event_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
