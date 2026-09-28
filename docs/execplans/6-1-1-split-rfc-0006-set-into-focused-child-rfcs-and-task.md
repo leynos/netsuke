@@ -951,9 +951,11 @@ Hard invariants. Violating one requires escalation, not a workaround.
     what `ensure_distinct` implements.
 - [ ] (2026-09-28) **BLOCKER: the shared Cargo package cache is deadlocked
   machine-wide, so no Rust gate can run.** The commit carrying the three codex
-  dispositions is verified by inspection and by everything that does not need
-  Cargo, but **its gate run is outstanding**. A reader must not treat the
-  absence of a gate result as a pass.
+  dispositions is `630b8116`, verified by inspection and by everything that
+  does not need Cargo, but **its gate run is outstanding**. The commit
+  recording this entry is plan-only; the code delta under test is exactly
+  `630b8116`, and a later reader must not fold the two together. A reader must
+  not treat the absence of a gate result as a pass.
 
   The cycle, read from `/proc` rather than inferred: PID `1832225`
   (`cargo test --all-targets --all-features` in the `podbot` worktree, another
