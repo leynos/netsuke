@@ -1023,6 +1023,18 @@ Hard invariants. Violating one requires escalation, not a workaround.
   later RFC 0014/0015 ownership faults. They agree, so neither was changed — an
   apparent inconsistency that is only apparent.
 
+  The `ensure_distinct` doc comment's load-bearing claim was **re-verified at
+  the source level**, because it is the kind of prose a reviewer cannot cheaply
+  check and a wrong mechanism there would justify the wrong fix. The claim is
+  that `basename`, `dirname` and `glob` enter the per-section member lists even
+  though section 7 never accepts them, which is what forces the guard's scope
+  to be per cell rather than per row. Confirmed: `section7::apply_optioned`
+  inserts each optioned helper into `read.sections_of` (`section7.rs:260`), and
+  `survey.rs:130` builds `Survey::sections` by inverting exactly that map. So a
+  clause reading `` `8.6` except `expandvars` `` resolves to include `basename`
+  and `dirname`, and what a per-row or per-union guard would need to tolerate
+  is therefore present in the live document. The comment stands as written.
+
   **Next action for whoever resumes:** re-run the seven-target gate set once
   the cache clears (`pgrep -c rustc` returning non-zero, or the inode free in
   `/proc/locks`), then commission the `scrutineer` run. The liveness proof for
