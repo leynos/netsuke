@@ -1,10 +1,10 @@
 //! Reading and checking RFC 0006's coverage map.
 //!
-//! The map is a table in RFC 0006 section 14.13 with one row per capability
-//! group. It is simultaneously the artefact RFC 0006 section 6.1 asks for and
-//! the anchor for the ownership bijection: each row names the section 8
-//! subsections a child RFC owns, and the rows together must partition the
-//! accepted set exactly.
+//! The map is a table in RFC 0006 section 14.13 with one row per child RFC. It
+//! is simultaneously the artefact RFC 0006 section 6.1 asks for and the anchor
+//! for the ownership bijection: each row names the section 8 subsections a
+//! child RFC owns, and the rows together must partition the accepted set
+//! exactly.
 //!
 //! The `Owns` grammar is deliberately tiny, because a richer one would be a
 //! language nobody reviews. Clause forms, separated by semicolons:
@@ -113,7 +113,7 @@ pub(super) fn parse(repo: &Repo, sections: &BTreeMap<String, Vec<String>>) -> Re
 
     ensure!(
         rows.len() == 8,
-        "the coverage map has {} rows; expected 8, one per capability group",
+        "the coverage map has {} rows; expected 8, one per child RFC",
         rows.len()
     );
 
@@ -121,18 +121,19 @@ pub(super) fn parse(repo: &Repo, sections: &BTreeMap<String, Vec<String>>) -> Re
     let mut numbers: BTreeSet<String> = BTreeSet::new();
     for row in &rows {
         let parsed_row = parse_row(row, sections)?;
-        // One child RFC per capability group is the split's central rule, and
-        // this is the only place a second row could claim a number already
+        // One row per child RFC is the split's central rule — a child may own
+        // several capability groups, but no two rows may reserve one number —
+        // and this is the only place a second row could claim a number already
         // taken. `ownership` does not catch it: it permits a repeated helper
         // when both rows carry the same number, which is exactly the shape a
         // duplicate reservation produces. `parse_all` would then find at most
         // one registry for that number, and both the status and registry checks
         // match rows with `find`/`any`, so one child would silently represent
-        // two groups.
+        // two slices of the accepted set.
         ensure!(
             numbers.insert(parsed_row.number.clone()),
             "the coverage map reserves RFC {} more than once; \
-             each child RFC owns exactly one capability group",
+             each child RFC owns exactly one row",
             parsed_row.number
         );
         parsed.push(parsed_row);

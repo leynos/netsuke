@@ -52,8 +52,13 @@ schedules.
 
 ### Functional requirements
 
-- The survey RFC's accepted set is partitioned into capability groups, each
-  owned by exactly one focused child RFC and one roadmap step.
+- The survey RFC's accepted set is partitioned into capability groups, and each
+  helper in that set is owned by exactly one focused child RFC and delivered by
+  exactly one roadmap step. Groups and children are not in one-to-one
+  correspondence: a child may own more than one group where a single roadmap
+  step delivers them, and a group may be divided between two children where the
+  roadmap's boundary falls inside it. What is excluded is a helper claimed
+  twice, or claimed by nobody.
 - Each child RFC carries the survey's cross-cutting contract, discharged
   per clause, and a registry of the helpers it introduces.
 - The survey RFC records the allocation in a coverage map, one row per child,
@@ -84,9 +89,9 @@ schedules.
 ### Option A: focused child RFCs with a coverage map
 
 One child RFC per capability group, each owning a contiguous slice of the
-survey's section 8, with the allocation recorded in the survey and enforced by
-a derived test. The survey keeps its candidate matrix, its dispositions, and
-its clause list; it gains only the map.
+survey's section 8 where the group boundaries allow it, with the allocation
+recorded in the survey and enforced by a derived test. The survey keeps its
+candidate matrix, its dispositions, and its clause list; it gains only the map.
 
 ### Option B: registries in place, no child RFCs
 
@@ -116,18 +121,22 @@ _Table 1: Comparison of the split options._
 ## Decision outcome / proposed direction
 
 A survey RFC whose accepted set is too large to specify in place is split into
-focused child RFCs, one per capability group, and records the allocation in a
-coverage map in its own delivery section. Option A is adopted for RFC 0006.
+focused child RFCs, each owning one or more capability groups, and records the
+allocation in a coverage map in its own delivery section. Option A is adopted
+for RFC 0006.
 
 The convention has four parts:
 
 1. **The survey keeps its dispositions.** Sections 7 to 10, the clause list in
    section 6, and the numbering are unchanged. The split adds a coverage map;
    it does not move a specification.
-2. **One child per capability group.** Each child RFC owns a contiguous slice
-   of the survey's accepted-helper sections, and carries that group's registry,
-   its per-clause discharge, and its per-helper obligations. A group is sized
-   so a reviewer can read the whole child in one sitting.
+2. **One child per capability group.** Each child RFC owns a slice of the
+   survey's accepted-helper sections, and carries that slice's registry, its
+   per-clause discharge, and its per-helper obligations. Usually that slice is
+   one whole group; sometimes several groups travel together because one
+   roadmap step delivers them, and sometimes one group is divided between two
+   children because the roadmap's boundary falls inside it. A slice is sized so
+   a reviewer can read the whole child in one sitting.
 3. **The map is the allocation.** One row per child, naming the section 8
    subsections owned, the existing helpers gaining an option, the roadmap step
    that delivers the group, and whether the child has been written. The rows
@@ -381,9 +390,10 @@ helpers and the two serializers do not share a rejection set.
   rather than to each document.
 - `to_yaml` accepts any value except undefined. It rejects `undefined_input`
   and `indent_out_of_range` outright, plus `unsupported_key` when
-  `sort_keys=true` meets a mapping key with no canonical JSON form, and
-  `unsupported_kind` for a value that has none.
-- `to_nice_json` accepts any value except undefined, and rejects the same four
+  `sort_keys=true` meets a mapping key with no canonical JSON form,
+  `unsupported_kind` for a value that has none, and `output_too_large` when
+  the rendered output would exceed the ceiling section 5.8 enforces.
+- `to_nice_json` accepts any value except undefined, and rejects the same five
   conditions as `to_yaml`, with the difference that section 8.1 states its key
   rule directly: integer and boolean keys are rendered in canonical string
   form and every other key kind is rejected rather than coerced.
@@ -435,9 +445,10 @@ exclusions this group can meet, and to fix how the round trips are stated.
   since `1: a` and `"1": b` are distinct keys in YAML — would emit a document
   with a duplicate key that `from_json`, the stated inverse, rejects with
   `duplicate_key`. `to_nice_json` therefore rejects a mapping whose rendered
-  keys are not distinct, naming both source keys, and the round trip is asserted
-  over every mapping it accepts. The check is on the rendered key, not the
-  source key, because that is the level at which the collision exists.
+  keys are not distinct, with the same `duplicate_key` code and naming both
+  source keys, and the round trip is asserted over every mapping it accepts.
+  The check is on the rendered key, not the source key, because that is the
+  level at which the collision exists.
 
 ### 5.8. Resource bounds
 

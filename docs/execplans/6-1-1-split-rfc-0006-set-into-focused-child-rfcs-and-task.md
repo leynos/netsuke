@@ -31,9 +31,10 @@ can check the derivation.
 
 Second, there is no mechanical way to answer the question the roadmap asks: is
 every accepted capability covered exactly once, and is every deferred or
-rejected candidate covered not at all? That is a bijection over fifty-seven
-names, and bijections over fifty-seven names are not reliably checked by
-reading.
+rejected candidate covered not at all? That is a bijection over the accepted
+set, which is sixty names — the fifty-seven new helpers plus the three existing
+helpers that gain a behaviour-preserving option — and a bijection over sixty
+names is not reliably checked by reading.
 
 After this change each of roadmap phase 6's eight capability steps has a
 focused child RFC that discharges the cross-cutting contract for its own
@@ -832,8 +833,8 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - [x] (2026-09-28) **Two `chatgpt-codex-connector` passes on `658b8157`
   triaged; four inline comments, plus a non-review from `sourcery-ai[bot]`.**
   The plan had recorded neither bot. Sourcery's is a size-limit refusal, not a
-  review — "your pull request is larger than the review limit of 150,000 diff
-  characters" — so it carries no findings and no verdict to clear.
+  review — the diff exceeded the 150,000-character review limit — so it carries
+  no findings and no verdict to clear.
 
   Of codex's four, one (`map.rs:123`) is a duplicate of CodeRabbit's F2 already
   fixed at `797178c9` and is recorded as such rather than re-dispositioned. The
@@ -1120,10 +1121,11 @@ Hard invariants. Violating one requires escalation, not a workaround.
   The probe was a false clear because `cargo metadata` is one of the few
   commands that does not need the write lock. **Do not read a single exit-0
   probe as the deadlock lifting** — the durable signal is either a non-zero
-  `pgrep -c rustc` or the granted-lock line disappearing from `/proc/locks`. My
-  own build attempt was blocked on the lock for its whole life, not failing,
-  and was stopped rather than left queued: a queued waiter is itself one more
-  entry in the 45, which makes everyone else's diagnosis noisier.
+  `pgrep -c rustc` or the granted-lock line disappearing from `/proc/locks`.
+  The build attempt made while diagnosing was blocked on the lock for its whole
+  life, not failing, and was stopped rather than left queued: a queued waiter
+  is itself one more entry in the 45, which makes everyone else's diagnosis
+  noisier.
 
   Also corrected: the memory note's holder recipe (`awk '{print $5}'` over
   every matching `/proc/locks` line) conflates the holder with its waiters,
@@ -1442,8 +1444,8 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - [ ] `EP-M11` Reconcile, retarget roadmap citations, run all gates, mark
   roadmap 6.1.1 done.
 
-- [x] (2026-09-28) **A gate run reded the current head, and the defect was
-  mine.** `make markdownlint` on `feed5192` exited 2, but not because
+- [x] (2026-09-28) **A gate run reded the current head, and the defect was the
+  branch's own.** `make markdownlint` on `feed5192` exited 2, but not because
   `markdownlint` found anything: its `spelling` prerequisite aborts on
   `canonicalised` at this file's line 1391, so `markdownlint-cli2` never ran
   and emitted no verdict at all. The word was added by `feed5192` itself, in
@@ -3819,6 +3821,17 @@ Files modified:
   reader who runs `git diff origin/main...HEAD -- uv.lock` sees nothing and
   would otherwise not know the change exists.
 
+  **Authorized separately from this split, and not part of its scope.** The
+  `.gitignore` line and the `git rm --cached` were requested explicitly for
+  this branch rather than arrived at by the execplan, so a reviewer finding
+  them outside `EP-M4`–`EP-M11` is looking at a deliberate, separately-approved
+  change and not at scope creep. The reasoning that makes the change correct —
+  a lockfile that locks nothing, an ignore rule that would be inert while the
+  path stays tracked, and the measurements showing no test reads the file — is
+  recorded in the Progress entry dated 2026-09-28 that begins "A second change
+  rides on this head". Its placement in this list is descriptive: the file
+  changes on this branch, so the interface list names it.
+
 No other file changes. No `src/` change. No `Cargo.toml` change: `googletest`
 0.14.3, `pretty_assertions` 1.4.1, and `regex` 1.12.2 are dev-dependencies, and
 `anyhow` is a normal dependency, which integration tests link against. The
@@ -3970,3 +3983,143 @@ does not assert it: it asserts the directly parseable totals, plus that table
 discriminating column remains the remedy if the split is ever wanted as a
 contract; `D10` keeps it off the deny set's critical path either way, so no
 normative edit to RFC 0006 is made now.
+
+- [x] (2026-09-28) **The `2db228aa` review triaged: seven local CodeRabbit
+  findings, five in scope, plus the verification that the scrutineer's two
+  "posted-but-unaddressed" comments were already fixed.** The seven local
+  targets were reviewed against this branch's actual diff, which is 60 commits
+  over 27 files. Note the local `--agent` pass diffed `6499fc48` — a commit
+  that is not an ancestor of HEAD, is not on `origin/main`, and is reached by
+  no ref. Nine of its fourteen findings land outside the PR diff entirely (kani
+  tests, `.github/workflows/ci.yml`, `Makefile`, `pylint_tier_test.py`, two
+  foreign ExecPlans, `resolver_telemetry_boundary_tests.rs`) and are not this
+  branch's to fix. The five in scope are applied in the commit carrying this
+  entry.
+
+  Two of the five are corrections of *this plan's* text and one of those
+  contradicts a number the plan states eight other times:
+
+  - `bijection over fifty-seven names` is wrong twice over. The bijection is
+    over the accepted set, which is **sixty** — 57 new helpers plus the 3
+    existing ones gaining an option — and the plan's own totals table already
+    reads `| Accepted set | 60 | 60 | agree |`. Both occurrences were corrected,
+    with the arithmetic shown so the 57 is not simply erased: it is the
+    *new-helper* figure, not the accepted-set figure.
+  - Three first-person pronouns were removed from the plan, per
+    `documentation-style-guide.md` line 39. The sweep found **three**, not the
+    two the finding named: the phrase `My own build attempt`, in the entry
+    about the package-cache deadlock, was outside the finding's citation and
+    would have been missed by applying it literally.
+    A corpus probe bounds the rule honestly — `docs/` carries 149 first-person
+    occurrences, so the rule is stated rather than universally observed, and
+    this plan is now among the compliant files rather than the rest.
+  - The `.gitignore` / `uv.lock` paragraph now records that the change was
+    authorized separately from the split and is not part of its scope, which is
+    what the finding asks for. The change itself is untouched: it was requested
+    for this branch in its own right, and is correct for reasons recorded in the
+    earlier entry beginning "A second change rides on this head". What was
+    missing was the *record of authorization*, not the change.
+
+  The remaining two are normative edits that reach beyond this plan, and each
+  was mirrored into its other copy in the same commit, per the rule this plan
+  already records — *when a correction is applied to an artefact, grep for its
+  other copies in the same commit*:
+
+  - **RFC 0013 section 5.6 omitted `output_too_large` from both serializer
+    bullets.** The code is real, is in section 5.9's table, and is *enforced*
+    by section 5.8's length pass — but section 5.6 is the per-helper
+    enumeration a reviewer reads to learn what each helper rejects, and it
+    listed four conditions for `to_yaml` and repeated "the same four" for
+    `to_nice_json`. Both bullets now name five. The count was checked against
+    the table afterwards rather than asserted: `to_yaml` now names
+    `undefined_input`, `indent_out_of_range`, `unsupported_key`,
+    `unsupported_kind`, and `output_too_large`, and section 5.9 carries a row
+    for each. **This changes no code and no count elsewhere** — fourteen codes
+    was already correct.
+  - **Section 5.7's rendered-key collision named no code.** It said
+    `to_nice_json` "rejects a mapping whose rendered keys are not distinct"
+    while the adjacent sentence named `duplicate_key` for `from_json`'s
+    rejection of the same collision. The serializer reuses that code — the same
+    key problem detected at the other end of the round trip — so naming it keeps
+    the code set at fourteen and leaves both discharge rows and section 5.9's
+    table untouched. Introducing a fifteenth code was the alternative and was
+    rejected as the larger change for no gain in precision.
+
+  **The scrutineer's "Next Action" was wrong and was not acted on.** It
+  reported two "posted-but-unaddressed findings" —
+  `tests/rfc_stdlib_coverage/map.rs:173` (duplicate child RFC reservations) and
+  `tests/rfc_stdlib_coverage/markdown.rs:154` (fence indentation) — and told
+  the next agent to review them first. Both guards are present and correct:
+  `map.rs` rejects a repeated reservation at lines 120-139, and `markdown.rs`
+  bounds fence indentation at 136-154. The posted comments carry
+  `commit_id = 2db228aa` only because GitHub re-anchors a review comment's line
+  and position on push; the bodies describe defects fixed in commits merged
+  before it. **A comment's `commit_id` is not evidence that the code it points
+  at is still broken.** This is a second instance of the same re-anchoring
+  illusion already recorded for this PR, and the verification cost three file
+  reads — cheaper than the alternative, which was to re-fix two live guards.
+
+  One further false premise was rejected before it reached the tree. The
+  scrutineer's report also read the `coverage map: 1 of 8 …` line as not being
+  a progress report at all. It is correct that COV-4 captures the *test's own
+  stdout* rather than a live count, but the plan has consistently read it as
+  the reported state of the map and that reading is the one the test asserts
+  on; the observation changes no disposition.
+
+  **A `make fmt` run was required and is recorded rather than assumed.** Gate
+  one (`make check-fmt`) reded on the first attempt of this change:
+  hand-wrapped prose is not `mdtablefix`'s canonical wrap, and four of the six
+  edited files were flagged. That is the canonicalization trap this plan has
+  already met once, and it is a formatting failure rather than a content one —
+  the formatter's own `--fix` was the remedy, and the resulting reflow was
+  verified not to have dropped content by comparing word counts against HEAD
+  (all six files grew, none shrank) and by re-reading every edited passage in
+  the reflowed text. Two `grep` probes returned empty during that verification
+  for phrases that were in fact present, because `mdtablefix` had moved them
+  across a line break: **a phrase-level `grep` is not evidence of absence in a
+  wrapped document** — read the paragraph.
+
+  **The gate run then reded a second time, and again the defect was this
+  branch's own prose.** `make markdownlint` aborted in its `spelling`
+  prerequisite on `canonicalisation` — a bare `-ise` form written into the very
+  paragraph describing the canonicalization trap, which is the *same* defect
+  class this plan already records at the entry about `feed5192`, three hundred
+  lines above the new text. The lesson repeats rather than extending: the
+  recurrence is not evidence that the earlier entry was wrong, it is evidence
+  that the trap is live in new prose and that writing *about* a spelling rule
+  in an unbackticked word is itself the hazard. `markdownlint-cli2` never ran,
+  so mdlint had no verdict — that state was reported as UNKNOWN rather than as
+  a pass, per the distinction already recorded above.
+
+  Two side effects of the failed gate are worth recording, because each would
+  otherwise have entered the commit unexamined:
+
+  - **`typos.toml` is rewritten by the gate, and the rewrite was reverted.**
+    `make spelling` regenerates the file from the pinned shared dictionary
+    (`typos-config-builder` `v0.1.1`) on every run, and the run moved one
+    `extend-ignore-re` entry — narrowing `\bvar\.iamge_id\b` to a longer
+    backticked phrase and re-sorting it. The file is tool output, not hand
+    prose, so the question is not whether the new text is nicer but whether a
+    stale file fails anything. **It does not.** The probe is decisive: with
+    HEAD's version restored, `make spelling` exits **0**, prints `current:
+    typos.toml`, and silently rewrites the file to the same 44-entry text on
+    each run, byte-identical across two consecutive runs. So the modification is
+    a gate side effect that CI reproduces on its own, and committing it would
+    widen this branch's diff by a file the ExecPlan does not list for the sake
+    of text that is regenerated rather than authored. It was reverted, and the
+    tree is back to the six files this change touches. The one thing that does
+    bite is a *stale committed* file being invisible in review: nothing fails,
+    so nobody learns the dictionary moved.
+  - **A `grep` for `-ise` forms on added lines found no others.** Reporting the
+    negative matters here because the spelling gate stops at the first error, so
+    a single fix is not evidence that the rest of the new prose is clean. The
+    check was run against the added lines specifically — `canonicalis`,
+    `normalis`, `serialis`, `initialis`, `organis`, `recognis`, `analys`, and
+    their kin — and the only surviving matches were correct English words
+    (`collision`, `diagnosis`, `premise`, `consistently`), none of them a `-ise`
+    variant a reviewer would need to weigh.
+
+  Concern counts after triage: **high 0, medium 0, low 2** — the two CodeRabbit
+  findings in `tests/rfc_stdlib_coverage/markdown.rs` and `map.rs` that this
+  session verified as already-fixed, and which are therefore closed rather than
+  carried.

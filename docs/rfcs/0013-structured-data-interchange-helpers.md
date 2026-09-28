@@ -181,9 +181,10 @@ and the two serializers do not share a rejection set.
   rather than to each document.
 - `to_yaml` accepts any value except undefined. It rejects `undefined_input`
   and `indent_out_of_range` outright, plus `unsupported_key` when
-  `sort_keys=true` meets a mapping key with no canonical JSON form, and
-  `unsupported_kind` for a value that has none.
-- `to_nice_json` accepts any value except undefined, and rejects the same four
+  `sort_keys=true` meets a mapping key with no canonical JSON form,
+  `unsupported_kind` for a value that has none, and `output_too_large` when the
+  rendered output would exceed the ceiling section 5.8 enforces.
+- `to_nice_json` accepts any value except undefined, and rejects the same five
   conditions as `to_yaml`, with the difference that section 8.1 states its key
   rule directly: integer and boolean keys are rendered in canonical string form
   and every other key kind is rejected rather than coerced.
@@ -235,9 +236,10 @@ exclusions this group can meet, and to fix how the round trips are stated.
   since `1: a` and `"1": b` are distinct keys in YAML — would emit a document
   with a duplicate key that `from_json`, the stated inverse, rejects with
   `duplicate_key`. `to_nice_json` therefore rejects a mapping whose rendered
-  keys are not distinct, naming both source keys, and the round trip is
-  asserted over every mapping it accepts. The check is on the rendered key, not
-  the source key, because that is the level at which the collision exists.
+  keys are not distinct, with the same `duplicate_key` code and naming both
+  source keys, and the round trip is asserted over every mapping it accepts.
+  The check is on the rendered key, not the source key, because that is the
+  level at which the collision exists.
 
 ### 5.8. Resource bounds
 

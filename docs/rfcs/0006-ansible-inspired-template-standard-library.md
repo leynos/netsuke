@@ -2054,13 +2054,18 @@ Every slice must satisfy all of the following before it merges:
 
 ### 14.13. Coverage map
 
-Each row below allocates one capability group to one focused child RFC, which
-carries the full cross-cutting contract from section 6 for the helpers it owns.
-The rows partition the accepted set: every helper section 8 specifies —
-including `basename`, `dirname`, and `glob`, which gain an option rather than
-being introduced — appears in exactly one row, and no row claims a helper
-section 8 does not specify. Delivery is tracked by the roadmap step each row
-names, per roadmap task 6.1.1.
+Each row below allocates one or more capability groups to one focused child
+RFC, which carries the full cross-cutting contract from section 6 for the
+helpers it owns. The map's boundaries are the roadmap's rather than section
+8's, and the two do not coincide in either direction: rows `0015` and `0016`
+each own a pair of whole groups, because one roadmap step delivers both, while
+rows `0017` and `0018` divide two groups between them, because section 8.6 and
+section 8.7 sit on opposite sides of the pure/observing boundary. The rows
+partition the accepted set: every helper section 8 specifies — including
+`basename`, `dirname`, and `glob`, which gain an option rather than being
+introduced — appears in exactly one row, and no row claims a helper section 8
+does not specify. Delivery is tracked by the roadmap step each row names, per
+roadmap task 6.1.1.
 
 The `Owns` column is a grammar rather than a list, so the allocation cannot
 drift from section 8 as it is edited:
