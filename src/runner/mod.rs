@@ -3,9 +3,13 @@
 //! Provides execution orchestration; build work streams through Ninja (default
 //! `ninja`, overridable with `NETSUKE_NINJA`).
 
+#[cfg(feature = "lint")]
 mod check;
+#[cfg(feature = "lint")]
 pub mod check_diagnostics;
+#[cfg(feature = "lint")]
 mod check_documentation;
+#[cfg(feature = "lint")]
 mod check_telemetry;
 mod dispatch;
 mod dyndep;
@@ -20,6 +24,7 @@ use crate::output_prefs::OutputPrefs;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 use anyhow::{Context, Result};
 pub use camino::{Utf8Path, Utf8PathBuf};
+#[cfg(feature = "lint")]
 pub use check_diagnostics::FindingDiagnostic;
 pub use error::RunnerError;
 use monotony::StdMonotonicClock;
@@ -48,6 +53,7 @@ mod ninja;
 mod path_helpers;
 mod process;
 mod recipe_shell;
+#[cfg(feature = "lint")]
 pub use check_telemetry::{CHECK_DURATION, CHECK_TOTAL};
 pub use ninja::{NinjaContent, run_ninja, run_ninja_tool};
 #[cfg(doctest)]
@@ -149,6 +155,9 @@ fn run_with_ninja_program_resolver(
     if let Commands::Help(args) = &command {
         return dispatch::execute_help(cli, args, reporter.as_ref());
     }
+    // `check` analyses the manifest without building it, so it is routed
+    // before the Ninja program and recipe shell are resolved.
+    #[cfg(feature = "lint")]
     if let Commands::Check(args) = &command {
         return dispatch::execute_check(cli, args, reporter.as_ref());
     }

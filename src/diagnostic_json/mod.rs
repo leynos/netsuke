@@ -93,6 +93,7 @@ impl DiagnosticDocument {
 /// `netsuke check` uses this so a lint finding carried in a successful result
 /// document is byte-identical to the same finding carried in a failure
 /// document, and a consumer parses one shape either way.
+#[cfg(feature = "lint")]
 pub(crate) fn diagnostic_entry(diagnostic: &dyn Diagnostic) -> DiagnosticEntry {
     DiagnosticEntry::from_diagnostic(diagnostic)
 }

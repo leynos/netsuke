@@ -1,7 +1,9 @@
 //! Resolve command-specific CLI configuration values during layer composition.
 
 use super::maybe_insert_explicit;
-use crate::cli::command::{BuildArgs, Cli, Commands};
+use crate::cli::command::BuildArgs;
+#[cfg(feature = "lint")]
+use crate::cli::command::{Cli, Commands};
 use clap::ArgMatches;
 use ortho_config::OrthoResult;
 use serde_json::{Map, Value};
@@ -20,12 +22,34 @@ pub(super) fn build_cli_overrides(
     Ok(build)
 }
 
+/// Insert the `check` subcommand's explicit arguments under `cmds.check`.
+///
+/// Nothing is inserted when no `check` argument was supplied, so an absent
+/// `check` table still means "no command-line override".
+///
+/// # Errors
+///
+/// Returns a validation error when a supplied value cannot be serialized.
+#[cfg(feature = "lint")]
+pub(super) fn insert_check_overrides(
+    cli: &Cli,
+    matches: &ArgMatches,
+    cmds: &mut Map<String, Value>,
+) -> OrthoResult<()> {
+    let check = check_overrides(cli, matches)?;
+    if !check.is_empty() {
+        cmds.insert("check".to_owned(), Value::Object(check));
+    }
+    Ok(())
+}
+
 /// Collect the `check` subcommand's explicitly supplied arguments.
 ///
 /// # Errors
 ///
 /// Returns a validation error when a supplied value cannot be serialized.
-pub(super) fn check_overrides(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Map<String, Value>> {
+#[cfg(feature = "lint")]
+fn check_overrides(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Map<String, Value>> {
     let mut check = Map::new();
     let Some(Commands::Check(args)) = cli.command.as_ref() else {
         return Ok(check);

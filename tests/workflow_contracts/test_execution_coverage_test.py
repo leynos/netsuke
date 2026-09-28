@@ -221,13 +221,28 @@ def test_ambient_target_harnesses_check_only_the_library_they_consume() -> None:
     before compiling a small direct-rustc fixture.
     """
     module = GATE_FEATURES_MODULE.read_text(encoding="utf-8")
-    declaration = module.split("pub const LIBRARY_BUILD_ARGUMENTS:", maxsplit=1)
-    assert len(declaration) == 2, "the shared module must define library arguments"
-    selected_arguments = declaration[1].split(";", maxsplit=1)[0]
-    assert '"--lib"' in selected_arguments, "ambient checks must select library targets"
-    assert '"--all-features"' in selected_arguments, (
-        "ambient checks must enable all features"
+    declarations = dict(
+        re.findall(
+            r'#\[cfg\((feature = "lint"|not\(feature = "lint"\))\)\]\s*'
+            r"pub const LIBRARY_BUILD_ARGUMENTS:\s*&\[&str\]\s*=\s*&\[(.*?)\];",
+            module,
+            re.DOTALL,
+        )
     )
+    # The all-features lane (`make test-nextest`) is the one with `lint` on; the
+    # default-features lane passes no feature selection, so a nested check must
+    # not add `--all-features` there or Cargo recompiles the graph.
+    expected_lanes = {
+        'feature = "lint"': ["--lib", "--all-features"],
+        'not(feature = "lint")': ["--lib"],
+    }
+    for lane, expected in expected_lanes.items():
+        assert lane in declarations, (
+            f"the shared module must define library arguments under cfg({lane})"
+        )
+        assert re.findall(r'"([^"]+)"', declarations[lane]) == expected, (
+            f"ambient checks under cfg({lane}) must select {expected!r}"
+        )
     for package, source in AMBIENT_TARGET_NESTED_BUILD_PACKAGES:
         text = source.read_text(encoding="utf-8")
         required_composition = (
@@ -250,6 +265,8 @@ def test_ambient_target_harnesses_check_only_the_library_they_consume() -> None:
     assert features.get("legacy-digests") == ["netsuke/legacy-digests"], (
         "test_support must forward legacy-digests exactly to netsuke-build"
     )
+
+
 
 
 @pytest.mark.parametrize(
