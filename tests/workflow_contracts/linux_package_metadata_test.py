@@ -172,13 +172,32 @@ def test_linux_package_metadata_gate_runs_after_packaging_before_upload() -> Non
         for name in (
             "Package Linux artefacts with dependencies",
             "Prune packaging metadata",
+            "Install Python 3.14 for Linux package metadata validation",
             "Validate Linux package metadata",
             "Upload Linux artefacts",
         )
     ]
     assert step_indices == sorted(set(step_indices)), (
         "metadata validation must follow package creation and pruning and "
-        "precede Linux artefact upload"
+        "install its Python runtime before running, then precede Linux "
+        "artefact upload"
+    )
+
+    python_setup = named_step(
+        steps, "Install Python 3.14 for Linux package metadata validation"
+    )
+    assert python_setup.get("if") == "inputs.platform == 'linux'", (
+        "the Python setup must be limited to Linux package jobs"
+    )
+    assert str(python_setup.get("uses", "")).startswith("astral-sh/setup-uv@"), (
+        "the Python baseline must be provisioned by the pinned uv action"
+    )
+    python_inputs = require_mapping(python_setup.get("with"), "Python setup inputs")
+    assert python_inputs.get("python-version") == "3.14", (
+        "the package validator must use the repository Python baseline"
+    )
+    assert python_inputs.get("enable-cache") is False, (
+        "the release validator must not share the setup-uv cache"
     )
 
     validation = named_step(steps, "Validate Linux package metadata")
@@ -212,6 +231,7 @@ def test_linux_package_metadata_gate_runs_after_packaging_before_upload() -> Non
         'if [[ -z "${!field}" ]]; then',
         "Missing Linux package metadata",
         "sudo apt-get install --no-install-recommends --yes rpm",
+        "uv run --no-project --python 3.14",
         "scripts/validate_linux_package_metadata.py",
         "--dist dist",
         "--manifest Cargo.toml",
@@ -225,6 +245,7 @@ def test_linux_package_metadata_gate_runs_after_packaging_before_upload() -> Non
         command.index('if [[ -z "${!field}" ]]')
         < command.index("sudo apt-get update")
         < command.index("sudo apt-get install")
+        < command.index("uv run --no-project --python 3.14")
         < command.index("scripts/validate_linux_package_metadata.py")
     ), "metadata must be checked before installing tools or validating packages"
 

@@ -353,6 +353,13 @@ jobs:
         shell: bash
         run: rm -rf dist/.man dist/nfpm.yaml
 
+      - name: Install Python 3.14 for Linux package metadata validation
+        if: inputs.platform == 'linux'
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          python-version: '3.14'
+          enable-cache: false
+
       - name: Validate Linux package metadata
         if: inputs.platform == 'linux'
         shell: bash
@@ -372,7 +379,8 @@ jobs:
           done
           sudo apt-get update
           sudo apt-get install --no-install-recommends --yes rpm
-          python3 scripts/validate_linux_package_metadata.py \
+          uv run --no-project --python 3.14 \
+            scripts/validate_linux_package_metadata.py \
             --dist dist \
             --manifest Cargo.toml \
             --package-name "$PACKAGE_NAME" \
