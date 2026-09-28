@@ -353,6 +353,31 @@ jobs:
         shell: bash
         run: rm -rf dist/.man dist/nfpm.yaml
 
+      - name: Validate Linux package metadata
+        if: inputs.platform == 'linux'
+        shell: bash
+        env:
+          PACKAGE_NAME: ${{ inputs['bin-name'] }}
+          PACKAGE_MAINTAINER: ${{ inputs['package-maintainer'] }}
+          PACKAGE_HOMEPAGE: ${{ inputs['package-homepage'] }}
+          PACKAGE_LICENSE: ${{ inputs['package-license'] }}
+          PACKAGE_DESCRIPTION: ${{ inputs['package-description'] }}
+        run: |
+          set -euo pipefail
+          for field in PACKAGE_MAINTAINER PACKAGE_HOMEPAGE PACKAGE_LICENSE PACKAGE_DESCRIPTION; do
+            if [[ -z "${!field}" ]]; then
+              printf '::error title=Missing Linux package metadata::%s is empty\n' "$field"
+              exit 1
+            fi
+          done
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes rpm
+          python3 scripts/validate_linux_package_metadata.py \
+            --dist dist \
+            --manifest Cargo.toml \
+            --package-name "$PACKAGE_NAME" \
+            --license-file LICENSE
+
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
         id: package_windows

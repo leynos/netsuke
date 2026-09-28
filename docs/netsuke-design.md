@@ -3772,13 +3772,22 @@ Linux builds cross-compile for `x86_64` and `aarch64`, stage the binary and
 generated manual page through `.github/release-staging.toml`, and pass the
 staged `man_path` output into the shared `linux-packages` composite. The
 resulting `.deb` and `.rpm` archives both declare a runtime dependency on
-`ninja-build`. Windows and macOS builds use the same staging composite from
-`leynos/shared-actions`; Windows staging also carries the PowerShell help files
-as release artefacts alongside the MSI package. Every standalone release
-archive also carries the generated shell completion sidecars under
-`completions/<shell>/`. The composite shells out to a Cyclopts-driven script
-that reads the `.github/release-staging.toml` configuration (Tom's Obvious,
-Minimal Language (TOML)), merges the `[common]` configuration with the
+`ninja-build`. The maintainer value comes from the first `[package].authors`
+entry in `Cargo.toml`; the package homepage, licence identifier, and
+description come from `[package].homepage`, `license`, and `description`.
+Before upload, the Linux job inspects the built Debian and RPM headers against
+those fields and compares Debian's `./usr/share/doc/<package-name>/copyright`
+contents with `LICENSE`. Its request type and injectable package-command runner
+stay private to the validator; Debian and RPM queries use that same runner
+boundary. The shared-action follow-up
+[#542](https://github.com/leynos/shared-actions/issues/542) tracks exposing a
+Debian `License` control field. Windows and macOS builds use the same staging
+composite from `leynos/shared-actions`; Windows staging also carries the
+PowerShell help files as release artefacts alongside the MSI package. Every
+standalone release archive also carries the generated shell completion sidecars
+under `completions/<shell>/`. The composite shells out to a Cyclopts-driven
+script that reads the `.github/release-staging.toml` configuration (Tom's
+Obvious, Minimal Language (TOML)), merges the `[common]` configuration with the
 target-specific overrides, and copies the configured artefacts into a fresh
 `dist/{bin}_{platform}_{arch}` directory. It installs Astral's Python package
 manager (uv) with `astral-sh/setup-uv`, double-checks the tool is present, and

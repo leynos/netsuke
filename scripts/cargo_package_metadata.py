@@ -3,6 +3,16 @@
 
 The release workflow and Linux package validator share this reader so package
 metadata has one normalization and validation boundary.
+
+Examples
+--------
+Run from the repository root to append all four ``key=value`` fields to the
+file named by ``GITHUB_OUTPUT``:
+
+.. code-block:: console
+
+    $ GITHUB_OUTPUT=/tmp/package-metadata \
+      python3 scripts/cargo_package_metadata.py --manifest Cargo.toml
 """
 
 import argparse
@@ -23,7 +33,7 @@ class PackageMetadataIssue(enum.Enum):
     FIELD_NOT_STRING
         A required value is not a string.
     FIELD_CONTROL_CHARACTER
-        A required value contains a control character.
+        A required value contains a control character or line separator.
     FIELD_EMPTY
         A required value is empty after trimming whitespace.
     MANIFEST_READ
@@ -48,7 +58,7 @@ class PackageMetadataIssue(enum.Enum):
 PACKAGE_METADATA_ERROR_MESSAGES = {
     PackageMetadataIssue.FIELD_NOT_STRING: "{detail} must be a string",
     PackageMetadataIssue.FIELD_CONTROL_CHARACTER: (
-        "{detail} must not contain control characters"
+        "{detail} must not contain control characters or line separators"
     ),
     PackageMetadataIssue.FIELD_EMPTY: "{detail} must not be empty",
     PackageMetadataIssue.MISSING_PACKAGE: (
@@ -57,6 +67,7 @@ PACKAGE_METADATA_ERROR_MESSAGES = {
     PackageMetadataIssue.MISSING_AUTHORS: "package.authors must be a non-empty array",
     PackageMetadataIssue.OUTPUT_UNSET: "GITHUB_OUTPUT must name an output file",
 }
+INVALID_CHARACTER_CATEGORIES = frozenset({"Cc", "Zl", "Zp"})
 
 
 class PackageMetadataError(ValueError):
@@ -76,11 +87,19 @@ class PackageMetadataError(ValueError):
         """Record the rejected metadata condition and optional field detail."""
         self.issue = issue
         self.detail = detail
+        super().__init__(str(self))
 
     @typ.override
     def __str__(self) -> str:
         """Format a package metadata diagnostic for command-line output."""
         return _format_package_metadata_error(self.issue, self.detail)
+
+    @typ.override
+    def __reduce__(
+        self,
+    ) -> tuple[typ.Any, tuple[PackageMetadataIssue, object | None]]:
+        """Preserve the structured issue when copying or pickling the error."""
+        return type(self), (self.issue, self.detail)
 
 
 class PackageMetadata(typ.TypedDict):
@@ -115,7 +134,8 @@ def _required_string(value: object, field: str) -> str:
     Raises
     ------
     PackageMetadataError
-        If the value is not a non-empty string without control characters.
+        If the value is not a non-empty string without control characters or
+        line separators.
 
     Examples
     --------
@@ -127,9 +147,12 @@ def _required_string(value: object, field: str) -> str:
             pass
         case _:
             raise PackageMetadataError(PackageMetadataIssue.FIELD_NOT_STRING, field)
-    if any(unicodedata.category(character) == "Cc" for character in string_value):
-        raise PackageMetadataError(PackageMetadataIssue.FIELD_CONTROL_CHARACTER, field)
     normalized = string_value.strip()
+    if any(
+        unicodedata.category(character) in INVALID_CHARACTER_CATEGORIES
+        for character in normalized
+    ):
+        raise PackageMetadataError(PackageMetadataIssue.FIELD_CONTROL_CHARACTER, field)
     if not normalized:
         raise PackageMetadataError(PackageMetadataIssue.FIELD_EMPTY, field)
     return normalized

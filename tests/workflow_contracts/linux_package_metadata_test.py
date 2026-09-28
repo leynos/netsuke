@@ -162,3 +162,72 @@ def test_ci_runs_the_linux_package_metadata_pytest_target() -> None:
     assert package_metadata_index > workflow_contract_index, (
         "Linux package metadata tests must run after workflow contracts"
     )
+
+
+def test_linux_package_metadata_gate_runs_after_packaging_before_upload() -> None:
+    """Validate Linux package fields after pruning and before artefact upload."""
+    steps = job_steps(load_workflow(PACKAGE_WORKFLOW_PATH), "build")
+    step_indices = [
+        step_index_by_key(steps, "name", name)
+        for name in (
+            "Package Linux artefacts with dependencies",
+            "Prune packaging metadata",
+            "Validate Linux package metadata",
+            "Upload Linux artefacts",
+        )
+    ]
+    assert step_indices == sorted(set(step_indices)), (
+        "metadata validation must follow package creation and pruning and "
+        "precede Linux artefact upload"
+    )
+
+    validation = named_step(steps, "Validate Linux package metadata")
+    assert validation.get("if") == "inputs.platform == 'linux'", (
+        "package metadata validation must be Linux-gated"
+    )
+    assert "continue-on-error" not in validation, (
+        "package metadata validation must fail the build when fields differ"
+    )
+    environment = require_mapping(validation.get("env"), "metadata validator env")
+    expected_environment = {
+        "PACKAGE_NAME": "${{ inputs['bin-name'] }}",
+        "PACKAGE_MAINTAINER": "${{ inputs['package-maintainer'] }}",
+        "PACKAGE_HOMEPAGE": "${{ inputs['package-homepage'] }}",
+        "PACKAGE_LICENSE": "${{ inputs['package-license'] }}",
+        "PACKAGE_DESCRIPTION": "${{ inputs['package-description'] }}",
+    }
+    for name, expression in expected_environment.items():
+        assert environment.get(name) == expression, (
+            f"the validator must receive the {name} workflow value"
+        )
+    match validation.get("run"):
+        case str() as command:
+            pass
+        case _:
+            pytest.fail("Linux package metadata gate must define a command")
+    for fragment in (
+        "set -euo pipefail",
+        "for field in PACKAGE_MAINTAINER",
+        "PACKAGE_DESCRIPTION; do",
+        'if [[ -z "${!field}" ]]; then',
+        "Missing Linux package metadata",
+        "sudo apt-get install --no-install-recommends --yes rpm",
+        "scripts/validate_linux_package_metadata.py",
+        "--dist dist",
+        "--manifest Cargo.toml",
+        '--package-name "$PACKAGE_NAME"',
+        "--license-file LICENSE",
+    ):
+        assert fragment in command, (
+            f"Linux metadata validation command must include {fragment!r}"
+        )
+    assert (
+        command.index('if [[ -z "${!field}" ]]')
+        < command.index("sudo apt-get update")
+        < command.index("sudo apt-get install")
+        < command.index("scripts/validate_linux_package_metadata.py")
+    ), "metadata must be checked before installing tools or validating packages"
+
+    assert "always()" not in str(
+        named_step(steps, "Upload Linux artefacts").get("if", "")
+    ), "Linux artefact upload must not bypass a failed validation step"

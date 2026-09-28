@@ -250,10 +250,11 @@ test-coverage-artifact: ## Test hostile LCOV artefact validation
 		scripts/tests/test_validate_coverage_archive.py -c /dev/null --rootdir=. \
 		-p no:cacheprovider
 
-test-linux-package-metadata: ## Test Cargo metadata reading for Linux packages
+test-linux-package-metadata: ## Test Linux package metadata reading and validation
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with pytest==9.0.2 python -m pytest \
-		scripts/tests/test_cargo_package_metadata.py -c /dev/null --rootdir=. \
+		scripts/tests/test_cargo_package_metadata.py \
+		scripts/tests/test_validate_linux_package_metadata.py -c /dev/null --rootdir=. \
 		-p no:cacheprovider
 
 # Split rather than a single `target/%/$(APP)` pattern: the two profiles no

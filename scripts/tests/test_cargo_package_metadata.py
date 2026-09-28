@@ -1,5 +1,6 @@
 """Specify Cargo package metadata normalization and workflow output."""
 
+import copy
 import json
 import typing as typ
 
@@ -21,6 +22,9 @@ EXPECTED_GITHUB_OUTPUT = (
     "homepage=https://example.test/project\n"
     "license=ISC\n"
     "description=A useful package description.\n"
+)
+EXPECTED_CONTROL_CHARACTER_ERROR = (
+    "package.description must not contain control characters or line separators"
 )
 
 
@@ -55,6 +59,22 @@ def _reader() -> types.ModuleType:
     return load_script_module(READER_MODULE_NAME, "cargo_package_metadata.py")
 
 
+def test_metadata_error_preserves_message_when_copied_or_pickled() -> None:
+    """Retain the formatted message and issue details across copies."""
+    reader = _reader()
+    issue = reader.PackageMetadataIssue.FIELD_EMPTY
+    error = reader.PackageMetadataError(issue, "package.homepage")
+    expected_message = "package.homepage must not be empty"
+
+    assert error.args == (expected_message,), (
+        "the exception args should expose its message"
+    )
+    for copied in (copy.copy(error), copy.deepcopy(error)):
+        assert copied.issue is issue, "copies should retain the classified issue"
+        assert copied.detail == "package.homepage", "copies should retain field context"
+        assert str(copied) == expected_message, "copies should retain the diagnostic"
+
+
 def test_main_writes_normalized_package_values_in_stable_order(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -80,7 +100,7 @@ def test_reader_selects_the_first_author(
         tmp_path,
         {
             "authors": json.dumps([
-                "  Release Maintainer <release@example.test>  ",
+                "\t  Release Maintainer <release@example.test>  \r\n",
                 "Other Author",
             ])
         },
@@ -112,9 +132,25 @@ def test_reader_selects_the_first_author(
             (
                 "description",
                 '"first line\\nsecond line"',
-                "package.description must not contain control characters",
+                EXPECTED_CONTROL_CHARACTER_ERROR,
             ),
             id="control-character",
+        ),
+        pytest.param(
+            (
+                "description",
+                '"first line\\u2028second line"',
+                EXPECTED_CONTROL_CHARACTER_ERROR,
+            ),
+            id="line-separator",
+        ),
+        pytest.param(
+            (
+                "description",
+                '"first line\\u2029second line"',
+                EXPECTED_CONTROL_CHARACTER_ERROR,
+            ),
+            id="paragraph-separator",
         ),
         pytest.param(
             (
