@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use saphyr_parser::{Event, Parser, ScalarStyle as YamlStyle, Span as YamlSpan};
+use granit_parser::{Event, Parser, ScalarStyle as YamlStyle, Span as YamlSpan};
 
 use super::document::{Entry, Node, NodeKind, ScalarStyle, Span};
 use super::scalar_span;
@@ -155,11 +155,14 @@ impl<'offsets> Builder<'offsets> {
                 );
                 self.push_node(node, 0);
             }
-            Event::SequenceStart(anchor, _) => self.open(span, *anchor, false),
-            Event::MappingStart(anchor, _) => self.open(span, *anchor, true),
+            Event::SequenceStart(_, anchor, _) => self.open(span, *anchor, false),
+            Event::MappingStart(_, anchor, _) => self.open(span, *anchor, true),
             Event::SequenceEnd | Event::MappingEnd => self.close(span),
             Event::StreamEnd => return true,
-            Event::Nothing | Event::StreamStart | Event::DocumentStart(_) | Event::DocumentEnd => {}
+            // Comments are read from the source by the directive scanner, and
+            // `Event` is non-exhaustive: an event kind this index does not
+            // model contributes no node rather than failing the analysis.
+            _ => {}
         }
         false
     }

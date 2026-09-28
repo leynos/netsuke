@@ -224,10 +224,11 @@ deserialization discards everything but the values. Positions survive only
 inside `serde_saphyr`'s parse error, and only for the first stage.
 
 The linter therefore reads the source a second time, but not to reinterpret it.
-`document_build.rs` streams the source through `saphyr_parser::Parser`, which
-yields `(Event, Span)` pairs, and assembles a spanned tree: every scalar,
-sequence, and mapping node carries the byte range it occupies. This is a
-position index over the same bytes `serde_saphyr` consumed, not a second
+`document_build.rs` streams the source through `granit_parser::Parser`, the
+parser `serde_saphyr` itself uses and resolved to the same version, which yields
+`(Event, Span)` pairs, and assembles a spanned tree: every scalar, sequence, and
+mapping node carries the byte range it occupies. This is a position index over
+the same bytes `serde_saphyr` consumed, read by the same grammar, not a second
 opinion about their meaning. If the two disagree the manifest did not parse, and
 `netsuke check` reports the parse error instead of running any rule.
 
