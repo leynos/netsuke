@@ -88,6 +88,21 @@ def test_workflow_call_rejects_non_object_inputs(
         resolver.resolve_extension_version("workflow_call", str(event_path))
 
 
+@pytest.mark.parametrize("payload", [[], "not-an-object", 42])
+def test_workflow_call_rejects_non_object_event_payload(
+    tmp_path: Path, payload: object
+) -> None:
+    """Non-object event payloads fail with a clear diagnostic."""
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(
+        resolver.WorkflowEventShapeError,
+        match="GitHub event payload must be a JSON object",
+    ):
+        resolver.resolve_extension_version("workflow_call", str(event_path))
+
+
 def test_workflow_call_rejects_an_invalid_event_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -13,6 +13,14 @@ import cyclopts
 from cyclopts import App, Parameter
 
 
+class WorkflowEventShapeError(ValueError):
+    """Report a GitHub event payload that is not a JSON object."""
+
+    def __init__(self) -> None:
+        """Initialise the error for a non-object event payload."""
+        super().__init__("GitHub event payload must be a JSON object")
+
+
 class WorkflowInputsShapeError(ValueError):
     """Report workflow-call inputs that are not JSON objects."""
 
@@ -35,6 +43,8 @@ def resolve_extension_version(event_name: str, event_path: str) -> str:
 
     Raises
     ------
+    WorkflowEventShapeError
+        If the event payload is not a JSON object.
     WorkflowInputsShapeError
         If workflow-call inputs are not a JSON object.
 
@@ -47,6 +57,9 @@ def resolve_extension_version(event_name: str, event_path: str) -> str:
         return DEFAULT_EXTENSION_VERSION
 
     payload = json.loads(pathlib.Path(event_path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise WorkflowEventShapeError
+
     inputs = payload.get("inputs")
     if inputs is None:
         inputs = {}
