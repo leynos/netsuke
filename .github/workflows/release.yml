@@ -99,17 +99,21 @@ jobs:
       - id: wix_extension_version
         name: Resolve WiX extension version
         shell: bash
+        env:
+          WIX_EXTENSION_VERSION: ${{ inputs.wix-extension-version || '7' }}
         run: |
           set -euo pipefail
-          version=''
-          if [ "${{ github.event_name }}" = 'workflow_call' ]; then
-            version="$(jq -r '.inputs["wix-extension-version"] // empty' \
-              "$GITHUB_EVENT_PATH")"
+          if [ -z "${WIX_EXTENSION_VERSION:-}" ]; then
+            echo "WIX_EXTENSION_VERSION must be set" >&2
+            exit 1
           fi
-          if [ -z "$version" ] || [ "$version" = 'null' ]; then
-            version='7'
+          # Keep caller input from creating extra GITHUB_OUTPUT records.
+          if [[ "$WIX_EXTENSION_VERSION" == *$'\n'* || "$WIX_EXTENSION_VERSION" == *$'\r'* ]]; then
+            echo "WIX_EXTENSION_VERSION must not contain line breaks" >&2
+            exit 1
           fi
-          echo "value=$version" >>"$GITHUB_OUTPUT"
+          printf 'value=%s\n' "$WIX_EXTENSION_VERSION" >>"$GITHUB_OUTPUT"
+          echo "Resolved WiX extension version: $WIX_EXTENSION_VERSION"
       - id: manifest_path
         name: Resolve Cargo manifest path
         shell: bash
