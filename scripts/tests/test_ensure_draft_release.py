@@ -84,7 +84,7 @@ def test_failed_release_creation_propagates_gh_status(
     def respond(invocation: Invocation) -> tuple[str, str, int]:
         """Return gh's lookup failure and requested creation failure."""
         if invocation.args == lookup_args:
-            return "", "", 1
+            return "", "release not found\n", 1
         if invocation.args == creation_args:
             return "", "", 42
         return "", "unexpected gh arguments", 127
@@ -100,3 +100,29 @@ def test_failed_release_creation_propagates_gh_status(
         lookup_args,
         creation_args,
     ], "gh must view the release before attempting creation"
+
+
+def test_release_lookup_failure_other_than_not_found_stops_creation(
+    cmd_mox: CmdMox,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An operational lookup failure must not be treated as a missing release."""
+    tag = "v1.2.3"
+    lookup_error = "failed to connect to GitHub\n"
+    lookup = (
+        cmd_mox
+        .mock("gh")
+        .with_args("release", "view", tag)
+        .returns(exit_code=1, stderr=lookup_error)
+    )
+    monkeypatch.setenv("INPUT_TAG", tag)
+
+    with pytest.raises(SystemExit) as error:
+        release_script.app([])
+
+    assert error.value.code == 1, "the lookup failure status must reach the workflow"
+    assert len(lookup.invocations) == 1, "a failed lookup must not create a release"
+    assert capsys.readouterr().err == lookup_error, (
+        "the lookup failure must remain visible in the workflow log"
+    )

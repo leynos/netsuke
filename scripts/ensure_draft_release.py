@@ -50,7 +50,8 @@ def ensure_draft_release(*, tag: typ.Annotated[str, Parameter(required=True)]) -
     Raises
     ------
     SystemExit
-        If creating the draft release fails, with ``gh``'s exit status.
+        If lookup fails for a reason other than a missing release, or creating
+        the draft release fails, with ``gh``'s exit status.
 
     Examples
     --------
@@ -62,6 +63,13 @@ def ensure_draft_release(*, tag: typ.Annotated[str, Parameter(required=True)]) -
         return
     if existing_release.stderr:
         sys.stderr.write(existing_release.stderr)
+    # The CLI uses status 1 for ordinary errors, so create only on its
+    # explicit not-found diagnostic; network and API failures must stop here.
+    if not (
+        existing_release.exit_code == 1
+        and "release not found" in (existing_release.stderr or "").lower()
+    ):
+        raise SystemExit(existing_release.exit_code)
 
     created_release = run_gh(
         "release",
