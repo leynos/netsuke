@@ -228,6 +228,16 @@ exclusions this group can meet, and to fix how the round trips are stated.
   asserted equal under clause 6.7's relation. A looser relation for tests would
   make the property tests agree with an implementation the clause does not
   describe.
+- **The JSON round trip is stated over the mappings `to_nice_json` accepts, and
+  the rendering can collapse two keys into one.** An integer or boolean key
+  renders as its canonical string form, so the integer `1` and the string `"1"`
+  produce one JSON key. A mapping holding both — which `from_yaml` can build,
+  since `1: a` and `"1": b` are distinct keys in YAML — would emit a document
+  with a duplicate key that `from_json`, the stated inverse, rejects with
+  `duplicate_key`. `to_nice_json` therefore rejects a mapping whose rendered
+  keys are not distinct, naming both source keys, and the round trip is
+  asserted over every mapping it accepts. The check is on the rendered key, not
+  the source key, because that is the level at which the collision exists.
 
 ### 5.8. Resource bounds
 
@@ -241,8 +251,8 @@ JSON and YAML parsers do not share a code path.
 | `from_yaml`     | input 8 MiB; depth 128; alias expansion 100000 nodes |
 | `from_yaml_all` | input 8 MiB; depth 128; alias expansion 100000 nodes |
 |                 | — the same three, applied to the stream as a whole   |
-| `to_yaml`       | none; output is a function of a bounded input        |
-| `to_nice_json`  | none; output is a function of a bounded input        |
+| `to_yaml`       | output 8 MiB; checked before the result is returned  |
+| `to_nice_json`  | output 8 MiB; checked before the result is returned  |
 
 Three consequences this group decides:
 
@@ -257,11 +267,23 @@ Three consequences this group decides:
   this RFC rejects aliases outright and records that in the guide, per RFC 0006
   section 8.1 and roadmap task 6.2.2. That choice is carried as section 8's
   open question 4 and is not resolved here.
-- **The serializers enforce nothing, and that is a decision rather than an
-  omission.** Neither allocates proportionally to anything but its input, so a
-  bound would reject documents a parser had already accepted. The row reads
-  "none" instead of being left blank so that a reviewer sees the absence was
-  chosen.
+- **The serializers bound their output because a shared value is not a bounded
+  input.** An earlier draft of this group read "none" into both rows, on the
+  reasoning that a serializer allocates proportionally to nothing but the value
+  it is handed. That reasoning is wrong, and the runtime shows how: MiniJinja
+  values are reference-counted, so a value built by repeated doubling is a
+  graph whose *logical* size is exponential in its construction depth, while
+  its in-memory footprint stays linear. One recursive macro with twenty
+  doublings emits `{{ v | to_nice_json }}` as **4,194,301** bytes — 2× per
+  level, from a four-line template with no large input anywhere. Clause 6.8
+  names "materialized output" precisely for this and requires the rejection
+  *before* allocating, so counting bytes as they are written is not enough.
+  Each serializer counts first: a pass walks the value computing the output
+  length with checked arithmetic, abandoning the walk the moment the running
+  total passes the ceiling, so a doubled value stops after 8 MiB of *logical*
+  nodes instead of expanding. Only a value that fits is then written. The
+  failure is `output_too_large`, at the same 8 MiB ceiling the parsers apply to
+  input.
 
 ### 5.9. Diagnostics and localization
 
@@ -286,6 +308,7 @@ rather than described.
 | undefined      | `netsuke::jinja::interchange::undefined_input`     |
 | indent         | `netsuke::jinja::interchange::indent_out_of_range` |
 | value kind     | `netsuke::jinja::interchange::unsupported_kind`    |
+| output length  | `netsuke::jinja::interchange::output_too_large`    |
 
 Each code's Fluent key is the code's reason in upper snake case under
 `STDLIB_INTERCHANGE_`, so `wrong_kind` pairs with
@@ -300,7 +323,7 @@ group, not the syntax. All five helpers — `from_json`, `from_yaml`,
 this enum: every `Error::new` call in the group's leaf functions is replaced by
 a variant of it, so a caller can tell an interchange failure from a manifest
 diagnostic by the code alone. Clause 6.9 rejects ad hoc construction at this
-scale, and a group with thirteen conditions is the case it names.
+scale, and a group with fourteen conditions is the case it names.
 
 ### 5.10. Naming and alias policy
 
@@ -345,19 +368,19 @@ serialization-determinism property it names is the same proposition as section
 
 ### Clause discharge
 
-| Clause | Discharge                                                                                               |
-| ------ | ------------------------------------------------------------------------------------------------------- |
-| `6.1`  | Five pure `New` helpers; the five section 5.1 rows are 5 of 52.                                         |
-| `6.2`  | All five pure, so all register in `register_query_helpers`, none stubbed.                               |
-| `6.3`  | Mapping order in and out; one trailing newline for `to_yaml`, none for `to_nice_json`.                  |
-| `6.4`  | No filesystem, environment, or subprocess access; no handle taken.                                      |
-| `6.5`  | No `dialect` argument; all five emit LF everywhere.                                                     |
-| `6.6`  | Undefined rejected, `none` accepted; duplicates rejected positionally; both `indent` ranges enumerated. |
-| `6.7`  | `sort_keys` sorts by canonical key; both round trips under canonical equality.                          |
-| `6.8`  | Table 3's input and depth bounds, stream-wide for `from_yaml_all`, plus the alias budget.               |
-| `6.9`  | One enum, one `From` impl, thirteen `netsuke::jinja::interchange::*` codes.                             |
-| `6.10` | Five new names, no alias family, none reused across namespaces.                                         |
-| `6.11` | The clause's seven obligations, plus the two round trips and the determinism property.                  |
+| Clause | Discharge                                                                                                                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `6.1`  | Five pure `New` helpers; the five section 5.1 rows are 5 of 52.                                                                           |
+| `6.2`  | All five pure, so all register in `register_query_helpers`, none stubbed.                                                                 |
+| `6.3`  | Mapping order in and out; one trailing newline for `to_yaml`, none for `to_nice_json`.                                                    |
+| `6.4`  | No filesystem, environment, or subprocess access; no handle taken.                                                                        |
+| `6.5`  | No `dialect` argument; all five emit LF everywhere.                                                                                       |
+| `6.6`  | Undefined rejected, `none` accepted; duplicates rejected positionally; both `indent` ranges enumerated.                                   |
+| `6.7`  | `sort_keys` sorts by canonical key; both round trips under canonical equality.                                                            |
+| `6.8`  | Table 3's input and depth bounds, stream-wide for `from_yaml_all`, plus the alias budget; both serializers pre-check their output length. |
+| `6.9`  | One enum, one `From` impl, fourteen `netsuke::jinja::interchange::*` codes.                                                               |
+| `6.10` | Five new names, no alias family, none reused across namespaces.                                                                           |
+| `6.11` | The clause's seven obligations, plus the two round trips and the determinism property.                                                    |
 
 ## 6. Dependencies
 

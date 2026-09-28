@@ -808,6 +808,190 @@ Hard invariants. Violating one requires escalation, not a workaround.
   a regression this pass introduced.
 
   `cargo nextest run --test rfc_stdlib_coverage_tests` → 18 passed, 0 skipped.
+- [x] (2026-09-28) **Gate run at `68c266e8`: all seven targets green.** The
+  same seven-target union ran again on the fix commit and passed: `check-fmt`
+  (169 files, 0 reformatted, 2s), `lint` (all five stages, both Whitaker
+  invocations, actionlint resolved from `$HOME/go/bin`, 14s), `typecheck` (1s),
+  `test` (3494 run / 3494 passed / 6 skipped in 147.569s,
+  `rfc_stdlib_coverage_tests` 18/18, `execplan_status_contract_tests` 9/9,
+  doctest targets two not three), `markdownlint` (spelling now passes and
+  `mdlint` proceeds to 169 files with 0 errors, 19s), `nixie` (10s),
+  `doc-coverage` (98.83%, 32s). The runner also independently reproduced the
+  two facts this pass had argued from: the `spelling` target's scope is
+  Markdown-only (controlled A/B on a scratch repo: an `-ise` typo in a `.rs`
+  file reds no gate) and `make test` *is* sensitive to plan edits, via
+  `tests/execplan_status_contract_tests.rs:62,133`.
+
+  **This entry is the reason the revision it cites is not the revision that
+  stands green now.** Writing a Progress entry moves `HEAD`, so the run is
+  evidence for exactly `68c266e8` and for nothing later; the commit carrying
+  this paragraph is a *new* revision that the run did not cover. The next gate
+  run therefore has to cover the commit that contains it, not be assumed green
+  by inheritance — the same rule the plan's own Observation records about a
+  suffix in a gate log not being a revision.
+- [x] (2026-09-28) **Two `chatgpt-codex-connector` passes on `658b8157`
+  triaged; four inline comments, plus a non-review from `sourcery-ai[bot]`.**
+  The plan had recorded neither bot. Sourcery's is a size-limit refusal, not a
+  review — "your pull request is larger than the review limit of 150,000 diff
+  characters" — so it carries no findings and no verdict to clear.
+
+  Of codex's four, one (`map.rs:123`) is a duplicate of CodeRabbit's F2 already
+  fixed at `797178c9` and is recorded as such rather than re-dispositioned. The
+  other three are substantive and are actioned in the commit carrying this
+  entry; each needed a premise check rather than a straight application,
+  because in all three the *finding* is sound and the *stated mechanism or
+  proposed remedy* is not:
+
+  - `map.rs:85` — `claim()` accepts a repeated helper when the repeat carries
+    the same row number, so a cell reading `` `8.1`; `8.1` `` claims every
+    helper twice and the `BTreeMap` collapses it. Codex's remedy is "reject any
+    existing owner". That remedy cannot be applied as written: row `0018`'s
+    `` `8.7` except `abs` `` resolves through `Survey::sections`, which is built
+    from `sections_of` *including* the optioned helpers (`section7.rs:260`), so
+    it already yields `glob`, and the same row's `Optioned` cell names `glob`
+    again. A blanket reject would red the live document.
+
+    This entry first recorded the remedy as a guard "within one row's own claim
+    list". That is **also wrong, and wrong in the same way**: `basename` and
+    `dirname` reach row `0017`'s `claims()` twice — once through `owns`, since
+    `sections_of` files them in `8.6`, and once through that row's `Optioned`
+    cell — so the legitimate overlap is *within* a row, not across rows. The
+    only scope that separates the defect from the design is **per cell**: an
+    `Owns` cell must name a helper once, an `Optioned` cell must name a helper
+    once, and the same name may appear in both because the two cells record
+    different facts (which subsection specifies it; that it gains an option
+    rather than being introduced). The guard is `ensure_distinct`, applied to
+    each cell in `parse_row`. Verified against the live document rather than
+    assumed, and proven live by mutation.
+  - `RFC 0013:264` — the serializers are specified as enforcing no bound. The
+    premise that a serializer's input need not be a bounded parser's output is
+    **correct, and stronger than codex put it**. RFC 0006 §6.8 says
+    "materialized output rejects unreasonable expansion before allocating", and
+    RFC 0013 had read "materialized" only in the `from_yaml_all` sense (fully
+    materialized before return), missing the output sense. The amplification is
+    not hypothetical and needs no hostile input: MiniJinja values are
+    `Arc`-shared, so a value built by repeated doubling is a DAG whose *logical*
+    size is exponential in its construction depth. The mechanism is visible in
+    the pinned crate: `impl Serialize for Value` recurses through
+    `ObjectRepr::Seq` with `seq.serialize_element(&item)` for each child, and for
+    a doubling both children are the same `Arc`, so every level visits the whole
+    subtree twice. Confirmed by measurement — one recursive macro with `n`
+    doublings emits `{{ v | tojson }}` as exactly `2^(n+2) - 3` bytes: `n=10` →
+    4,093, `n=16` → 262,141, `n=20` → **4,194,301**. A four-line template
+    therefore drives a materialized output past §6.8's 8 MiB ceiling with no
+    large input anywhere. **Provenance:** that measurement ran through the
+    MiniJinja Python binding, which wraps this engine; the figure for the pinned
+    Rust crate is the one the implementation slice must re-measure, and the
+    source-level mechanism above is what makes the result binding-independent.
+    The bound is a ceiling on the *serialized byte count*, reachable only
+    through `to_yaml` and `to_nice_json`, and clause 6.8 requires the rejection
+    *before* allocating. That rules out counting bytes as they are written, so
+    both documents specify a length pass first: walk the value with checked
+    arithmetic, abandoning the walk when the running total passes the ceiling,
+    and write only a value that fits.
+  - `RFC 0013:189` — this is the one finding whose **stated mechanism is
+    false**, and it is recorded that way rather than applied. Codex argues
+    `{1: "a"} | to_nice_json | from_json` yields `{"1": "a"}`, "which is not
+    equal to the input under §6.7's canonical equality". But §6.7 defines
+    equality as *byte-identical canonical key*, and the canonical form of an
+    integer key **is** the string form: `serde_json`'s `MapKeySerializer`
+    renders every integer and boolean arm through
+    `begin_string`/`write_iNN`/`end_string`, and `serde_json_canonicalizer`'s
+    `JsonProperty::new` then re-parses those bytes and requires `.as_str()`. So
+    both mappings canonicalize to `{"1":"a"}` and compare **equal** — the round
+    trip holds, and codex's "impossible for part of the documented input
+    domain" does not follow. Its proposed remedy (constrain `to_nice_json` to
+    string-keyed mappings) is also the wrong split: RFC 0006 §8.1 requires the
+    stringification outright.
+
+    The real defect is **adjacent, sharper, and unnamed by codex**: one mapping
+    can hold both the integer `1` and the string `"1"` as keys, and `from_yaml`
+    accepts exactly that (probe: `yaml.safe_load('1: a\n"1": b\n')` yields
+    **two** entries, keys `int 1` and `str '1'`). Both render to the same JSON
+    key, so `{1: "a", "1": "b"} | to_nice_json` emits a document with a
+    **duplicate key** — which `from_json`, the stated inverse, **rejects** with
+    `duplicate_key` per §8.1. That is the round-trip guarantee failing on an
+    accepted input, in the direction codex missed. The collision is rejected at
+    the serializer, so `to_nice_json` is total on the inputs it accepts, and the
+    §5.7 guarantee is qualified to say so.
+
+  Both §5 findings land in the section the seven later child RFCs are copied
+  from, so both were also checked against `ADR-040`'s specimen copy of §5
+  (lines 372-463) in the same commit, per the rule this plan already records —
+  *when a correction is applied to an artefact, grep for its other copies in
+  the same commit*. The specimen differs from RFC 0013's §5 in several places
+  already (it is a preview, and shorter), and the two sentences the corrections
+  touch were found in both copies and corrected in both.
+
+  Two consequences of the §5.8 correction were found only by following it
+  through, and both are corrections of this entry's own earlier text:
+
+  - The new `output_too_large` condition is a condition of the group, so §5.9's
+    enumeration needed its row and the "thirteen conditions" claim needed to
+    become fourteen. The count is asserted in **four** places (both documents'
+    §5.9 prose and both clause-discharge tables); all four were changed and the
+    tables were counted mechanically afterwards — 14 rows, 14 codes, in each.
+  - `RFC 0013`'s first wording for the mechanism was "counts the bytes it writes
+    and fails past 8 MiB". Reading clause 6.8 rather than paraphrasing it showed
+    that is not sufficient: the clause opens "Every parser, combinatorial
+    helper, regular-expression operation, and materialized output rejects
+    unreasonable expansion **before** allocating." Counting while writing is a
+    post-hoc check, so it discharges the clause's letter only by accident. Both
+    documents now specify a length pass first, walking the value with checked
+    arithmetic and abandoning the walk when the running total passes the
+    ceiling, so a doubled value stops after 8 MiB of *logical* nodes rather than
+    expanding.
+  - The `map.rs` guard's scope was corrected **twice**. This entry first
+    recorded codex's remedy ("reject any existing owner") as unworkable, then
+    proposed the narrower "within one row's own claim list". That second
+    proposal is also wrong, and for the same reason: `basename` and `dirname`
+    appear twice *within* row `0017`'s claims (once through `owns`, once through
+    `Optioned`), so the legitimate overlap is inside a row, not across rows. The
+    only scope separating the defect from the design is **per cell**, which is
+    what `ensure_distinct` implements.
+- [ ] (2026-09-28) **BLOCKER: the shared Cargo package cache is deadlocked
+  machine-wide, so no Rust gate can run.** The commit carrying the three codex
+  dispositions is verified by inspection and by everything that does not need
+  Cargo, but **its gate run is outstanding**. A reader must not treat the
+  absence of a gate result as a pass.
+
+  The cycle, read from `/proc` rather than inferred: PID `1832225`
+  (`cargo test --all-targets --all-features` in the `podbot` worktree, another
+  agent's job) holds the **write** lock on `~/.cargo/.package-cache-mutate` and
+  is blocked in `do_wait` on its child test binary `1855438`, which is blocked
+  in `futex_wait_queue`; that binary spawned a **nested** `cargo` (`1855450`)
+  which is blocked in `locks_lock_inode_wait` **on the lock its own grandparent
+  holds**. Two samples of `1855438`'s `/proc/<pid>/stat` twenty seconds apart
+  showed utime+stime unchanged at 48 ticks, so the loop is not progressing.
+  Forty-seven processes were queued on that inode with `locks_lock_inode_wait`,
+  the oldest for 1h46m, and `pgrep -c rustc` was **0** system-wide — every Rust
+  job on the machine, mine included, was stalled behind it.
+
+  This was diagnosed and left alone deliberately. The house rule says not to
+  kill other agents' processes, and the holder belongs to another session; the
+  system prompt's remedy for a full or wedged cache is to stop and tell the
+  user, not to break someone else's lock. The `podbot` job is also
+  self-inflicted in the sense that matters here — it is a nested-Cargo deadlock
+  of the kind this repository has hit before (see the nested-Cargo timeout
+  records), not a cache that merely needs to drain.
+
+  What *was* verified without Cargo: `mdtablefix --check` over the full
+  selector reports `169 files left unchanged` (exit 0), so every Markdown edit
+  is canonical and idempotent; `rustfmt --edition 2024 --check` on `map.rs`
+  exits 0, so the new guard parses and is format-clean; and the two §5.9 tables
+  were counted mechanically (14 rows, 14 codes each) rather than trusted. A
+  standalone `rustc` parse of `map.rs` was tried and is **inconclusive** — it
+  fails only on the unresolvable `anyhow` and `super::` imports, so it cannot
+  distinguish a syntax error from a missing dependency, and must not be cited
+  as evidence.
+
+  **Next action for whoever resumes:** re-run the seven-target gate set once
+  the cache clears (`pgrep -c rustc` returning non-zero, or the inode free in
+  `/proc/locks`), then commission the `scrutineer` run. The liveness proof for
+  `ensure_distinct` is also still owed: the guard must be shown to *fire*, by
+  mutating a coverage-map row to `` `8.1`; `8.1` `` and observing the run fail
+  with the duplicate message.
+
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
 - [ ] `EP-M6` RFC 0016, pattern and version predicates (step 6.5).

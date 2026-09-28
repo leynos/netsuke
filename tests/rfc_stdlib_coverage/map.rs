@@ -158,14 +158,46 @@ fn parse_row(row: &RawRow, sections: &BTreeMap<String, Vec<String>>) -> Result<M
     // under RFC 0013's name. The link is the only place the mismatch is
     // visible before the child is parsed.
     check_link_names_the_row(row, &number, written.as_deref())?;
+    let optioned = backticked(row.cell(3, "optioned")?);
+    ensure_distinct(&optioned, "`Optioned`", row.line)?;
+    let owns = resolve_owns(row.cell(2, "owns")?, sections, row.line)?;
+    ensure_distinct(&owns, "`Owns`", row.line)?;
     Ok(MapRow {
         number,
         written,
-        owns: resolve_owns(row.cell(2, "owns")?, sections, row.line)?,
-        optioned: backticked(row.cell(3, "optioned")?),
+        owns,
+        optioned,
         step: row.cell(4, "roadmap step")?.trim().to_owned(),
         is_written,
     })
+}
+
+/// Fail when one cell names the same helper twice.
+///
+/// Each cell is checked on its own rather than through [`MapRow::claims`]. A
+/// name may legitimately appear in *both* cells: row `0018`'s `Owns` clause
+/// resolves to `glob`, because `Survey::sections` is built from `sections_of`
+/// and `section7::apply_optioned` files each optioned helper in the
+/// subsection that specifies it, and that same row's `Optioned` cell names
+/// `glob` again. The two records say different things — the first is which
+/// section 8 subsection specifies it, the second that it gains an option rather
+/// than being introduced — so a check on the union would red the live document.
+///
+/// A duplicate *within* one cell says nothing at all, and is the shape a
+/// copy-paste produces: an `Owns` cell reading `` `8.1`; `8.1` `` claims every
+/// helper in the subsection twice. Nothing downstream can see it, because every
+/// consumer collects the claims into a set before using them — [`Map::ownership`]
+/// inserts into a `BTreeMap`, and the partition check collects into a
+/// `BTreeSet` — so the repeat is collapsed rather than counted.
+fn ensure_distinct(names: &[String], cell: &str, line: usize) -> Result<()> {
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
+    for name in names {
+        ensure!(
+            seen.insert(name.as_str()),
+            "the {cell} cell at {RFC_0006}:{line} names {name} twice"
+        );
+    }
+    Ok(())
 }
 
 /// Read a row's status cell, checking it agrees with whether it links.
