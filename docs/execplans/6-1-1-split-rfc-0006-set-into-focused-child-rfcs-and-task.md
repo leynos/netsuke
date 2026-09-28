@@ -1160,13 +1160,26 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `coverage map: 1 of 8 capability groups written; 7 remaining` inside a
   *passing* run, which is the whole point of the counter: a half-finished split
   passes every other coverage check, so a stall is visible only if this line
-  still reaches the terminal. Third, every one of the seven logs independently
-  carries a verdict appended by the runner —
-  `GATE=<name> EXIT=<rc> DURATION=<n>s STARTED=<iso> FINISHED=<iso> HEAD=<sha>` —
-  and all seven name `a5455a1aae235fb7fd52e5db0ca9fda135329151`. That is what
-  binds the evidence to a revision rather than to whatever HEAD happened to be
-  when the report was written, and it is why the exit status was captured
-  through `PIPESTATUS[0]` rather than read off `tee`.
+  still reaches the terminal. Third, every one of the seven logs carries a
+  verdict line the runner appended itself, of the form
+  `GATE=… EXIT=<rc> … HEAD=<sha>`; all seven name the same revision,
+  `a5455a1aae235fb7fd52e5db0ca9fda135329151`. That is what binds the evidence
+  to a revision rather than to whatever HEAD happened to be when the report was
+  written, and it is why the exit status was captured through `PIPESTATUS[0]`
+  rather than read off `tee`.
+
+  **The first green was not the last word, and CI caught what the local run
+  could not.** CI on `86160a53` reded `build-test` — a *required* check — on
+  `MD013/line-length`, at this very entry's line 1165, 81 columns against a
+  budget of 80. The cause is worth recording because nothing local would have
+  found it: the "verdict line" format was written as one unbreakable code span
+  of 80 columns, and `mdtablefix` cannot break *inside* a code span, so its
+  greedy fill emitted the line and MD013 rejected it. The local seven-target
+  run was green on `a5455a1a` because the offending prose did not exist yet —
+  it arrived in `86160a53`, the commit that recorded that run. **A gate result
+  covers the revision it ran on and no other**, which is the recurrence this
+  plan keeps meeting; the fix is to shorten the frozen token so the wrapper has
+  somewhere to break.
 
   The one slow test was
   `packaging_smoke_tests::packaged_manifest_retains_build_script_sources`,
@@ -1178,10 +1191,50 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
   So the two readings this plan wanted now both exist and are kept separate:
   CI's `3494 run / 3494 passed` on `c7ff9e4a` and on `1524a7e6`, and this local
-  run on `a5455a1a`. **The owed liveness proof for `ensure_distinct` is still
-  owed** — a green suite has not yet exercised the new branch, and the guard
-  must still be shown to *fire* by mutating a coverage-map row to
-  `` `8.1`; `8.1` `` and observing the duplicate message.
+  run on `a5455a1a`.
+
+  **And the liveness proof is discharged for the `Owns` call site.** The guard
+  was mutated, not merely re-run: RFC 0006's row `0013` was edited so its
+  `Owns` cell read `` `8.1`; `8.1` ``, and only the `rfc_stdlib_coverage_tests`
+  binary was run. It failed —
+
+  ```text
+  Error: the `Owns` cell at docs/rfcs/0006-ansible-inspired-template-standard-library.md:2068 names from_json twice
+  Summary [0.035s] 18 tests run: 12 passed, 6 failed, 0 skipped
+  ```
+
+  — and on restoring the pristine file the same binary read
+  `18 tests run: 18 passed`. The message names the mutation's own line, which
+  is what shows the edit reached the parser rather than being silently dropped
+  by table parsing. **Six** tests red rather than one, because the map parse is
+  a shared load step, so a single malformed row fails every test that reads the
+  map; the guard was the sole error source for all six (the captured log's
+  distinct `Error:` lines number exactly one). The string is also unique to
+  this call site: of the tree's `names … twice` producers, only `map.rs:197`
+  uses the `the {cell} cell at …` shape, so nothing else could have worn its
+  message.
+
+  That proof covers `map.rs:164` only, so **the sibling call at `map.rs:162`,
+  which guards the `Optioned` cell, was proved separately** — the same argument
+  applies to it verbatim, and a per-call-site liveness claim needs a
+  per-call-site witness. Row `0017`'s `Optioned` cell was mutated to
+  `` basename ``; `` basename `` and the same binary run:
+
+  ```text
+  Error: the `Optioned` cell at docs/rfcs/0006-ansible-inspired-template-standard-library.md:2072 names basename twice
+  Summary [0.038s] 18 tests run: 12 passed, 6 failed, 0 skipped
+  ```
+
+  Both call sites now have a witness, and the cell label is what separates
+  them: each run produced exactly one distinct `Error:` line, and in the
+  `Optioned` run a count of the `` `Owns` `` label over the log returned **0**,
+  so the failure is attributable to the call site under test rather than
+  borrowed from its sibling. The guard at `map.rs:162` also runs *before* the
+  `Owns` guard at `:164`, so an `Optioned` failure can never mask an `Owns`
+  one. Note what the pair does and does not establish: neither call site is
+  unexercised now, but a surviving falsification attempt is *not* proof — each
+  is falsified-or-not by one mutation, which is exactly the standard this plan
+  asked for.
 
   **A second change rides on this head: `uv.lock` is untracked.** The file was
   never deliberately tracked. `a94a3006` staged its own verification entry with
