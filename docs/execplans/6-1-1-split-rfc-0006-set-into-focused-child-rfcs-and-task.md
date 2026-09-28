@@ -1379,6 +1379,28 @@ Hard invariants. Violating one requires escalation, not a workaround.
   class this entry is clearing, so the new artefact carries its own pin and
   says why it differs from its neighbour.
 
+  **The commit that fixes all seven then reded `check-fmt` in CI, and the
+  reason is a green from the wrong command.** After editing, the plan's
+  Markdown was verified with a bare `mdtablefix --check <path>`, which reported
+  "1 file left unchanged". The gate does not use that invocation. It runs
+  `mdtablefix --check --git --include-untracked --wrap --renumber
+  --breaks --ellipsis --fences`,
+  and `--wrap` is the flag that rewraps prose to the line width; the bare form
+  is a strictly weaker check that does not rewrap at all. The gate's own
+  command reported `+45 -45` on the same file, which `build-test` — a
+  *required* check — caught and reded. The edit was then canonicalised with
+  `--in-place` under the gate's flags, after which the gate's own command
+  reports `169 files left unchanged`, exit 0. The rewrap is provably
+  content-free: the word sequence before and after is identical (34481 words,
+  compared programmatically rather than by eye).
+
+  This is the plan's recurring theme in a new costume. The earlier instance was
+  "a gate result covers the revision it ran on and no other"; this one is **a
+  verifier that is not the gate's verifier is not the gate**, and a pass from
+  it is not a pass. Both share the same root: an artefact was treated as
+  evidence for a claim it does not cover. The remedy is the same too — run the
+  command the gate runs, not a command that resembles it.
+
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
 - [ ] `EP-M6` RFC 0016, pattern and version predicates (step 6.5).
