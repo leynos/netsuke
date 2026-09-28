@@ -17,7 +17,7 @@ class WorkflowEventShapeError(ValueError):
     """Report a GitHub event payload that is not a JSON object."""
 
     def __init__(self) -> None:
-        """Initialise the error for a non-object event payload."""
+        """Initialize the error for a non-object event payload."""
         super().__init__("GitHub event payload must be a JSON object")
 
 
@@ -25,7 +25,7 @@ class WorkflowInputsShapeError(ValueError):
     """Report workflow-call inputs that are not JSON objects."""
 
     def __init__(self) -> None:
-        """Initialise the error for non-object workflow inputs."""
+        """Initialize the error for non-object workflow inputs."""
         super().__init__("workflow inputs must be a JSON object")
 
 
@@ -33,7 +33,7 @@ class ExtensionVersionShapeError(ValueError):
     """Report a WiX extension version that is not a JSON string."""
 
     def __init__(self) -> None:
-        """Initialise the error for a non-string extension version."""
+        """Initialize the error for a non-string extension version."""
         super().__init__("wix-extension-version must be a JSON string")
 
 

@@ -35,7 +35,7 @@ fn assert_orthohelp_comes_from_a_prebuilt_release(contents: &str) -> Result<()> 
     );
     ensure!(
         install_body.lines().any(|line| line.trim()
-            == "run: uv run --no-project --python 3.14 scripts/install_orthohelp.py"),
+            == "run: uv run --no-project --python \"$UV_PYTHON\" scripts/install_orthohelp.py"),
         "workflow should keep the installer invocation thin"
     );
     ensure!(

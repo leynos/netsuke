@@ -78,51 +78,82 @@ def test_workflow_call_without_a_version_uses_the_default(
     )
 
 
-@pytest.mark.parametrize("version", [[], {}, 42, False])
-def test_workflow_call_rejects_non_string_versions(
-    tmp_path: Path, version: object
+@pytest.mark.parametrize(
+    ("payload", "expected_error", "message"),
+    [
+        pytest.param(
+            {"inputs": {"wix-extension-version": []}},
+            resolver.ExtensionVersionShapeError,
+            "wix-extension-version must be a JSON string",
+            id="version-list",
+        ),
+        pytest.param(
+            {"inputs": {"wix-extension-version": {}}},
+            resolver.ExtensionVersionShapeError,
+            "wix-extension-version must be a JSON string",
+            id="version-object",
+        ),
+        pytest.param(
+            {"inputs": {"wix-extension-version": 42}},
+            resolver.ExtensionVersionShapeError,
+            "wix-extension-version must be a JSON string",
+            id="version-number",
+        ),
+        pytest.param(
+            {"inputs": {"wix-extension-version": False}},
+            resolver.ExtensionVersionShapeError,
+            "wix-extension-version must be a JSON string",
+            id="version-boolean",
+        ),
+        pytest.param(
+            {"inputs": []},
+            resolver.WorkflowInputsShapeError,
+            "workflow inputs must be a JSON object",
+            id="inputs-list",
+        ),
+        pytest.param(
+            {"inputs": "not-a-mapping"},
+            resolver.WorkflowInputsShapeError,
+            "workflow inputs must be a JSON object",
+            id="inputs-string",
+        ),
+        pytest.param(
+            {"inputs": 42},
+            resolver.WorkflowInputsShapeError,
+            "workflow inputs must be a JSON object",
+            id="inputs-number",
+        ),
+        pytest.param(
+            [],
+            resolver.WorkflowEventShapeError,
+            "GitHub event payload must be a JSON object",
+            id="event-list",
+        ),
+        pytest.param(
+            "not-an-object",
+            resolver.WorkflowEventShapeError,
+            "GitHub event payload must be a JSON object",
+            id="event-string",
+        ),
+        pytest.param(
+            42,
+            resolver.WorkflowEventShapeError,
+            "GitHub event payload must be a JSON object",
+            id="event-number",
+        ),
+    ],
+)
+def test_workflow_call_rejects_invalid_payload_shapes(
+    tmp_path: Path,
+    payload: object,
+    expected_error: type[ValueError],
+    message: str,
 ) -> None:
-    """Reject malformed version values instead of serializing them to output."""
-    event_path = tmp_path / "event.json"
-    event_path.write_text(
-        json.dumps({"inputs": {"wix-extension-version": version}}),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(
-        resolver.ExtensionVersionShapeError,
-        match="wix-extension-version must be a JSON string",
-    ):
-        resolver.resolve_extension_version("workflow_call", str(event_path))
-
-
-@pytest.mark.parametrize("inputs", [[], "not-a-mapping", 42])
-def test_workflow_call_rejects_non_object_inputs(
-    tmp_path: Path, inputs: object
-) -> None:
-    """Non-object workflow inputs fail with a clear diagnostic."""
-    event_path = tmp_path / "event.json"
-    event_path.write_text(json.dumps({"inputs": inputs}), encoding="utf-8")
-
-    with pytest.raises(
-        resolver.WorkflowInputsShapeError,
-        match="workflow inputs must be a JSON object",
-    ):
-        resolver.resolve_extension_version("workflow_call", str(event_path))
-
-
-@pytest.mark.parametrize("payload", [[], "not-an-object", 42])
-def test_workflow_call_rejects_non_object_event_payload(
-    tmp_path: Path, payload: object
-) -> None:
-    """Non-object event payloads fail with a clear diagnostic."""
+    """Reject malformed event and input values with a clear diagnostic."""
     event_path = tmp_path / "event.json"
     event_path.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(
-        resolver.WorkflowEventShapeError,
-        match="GitHub event payload must be a JSON object",
-    ):
+    with pytest.raises(expected_error, match=message):
         resolver.resolve_extension_version("workflow_call", str(event_path))
 
 
