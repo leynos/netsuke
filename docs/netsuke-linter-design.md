@@ -2,13 +2,16 @@
 
 ## Front matter
 
-- **Status:** living. The v0.4.0 linter is a prototype: it is implemented and
+- **Status:** living. The v0.2.0 linter is a prototype: it is implemented and
   shipped behind `netsuke check`, but its rule set, default severities, and
   most of the contracts below are expected to change once the rules have been
   used against manifests their authors did not write. Roadmap phase 12 owns
   that feedback loop and the freeze that ends it. Rule identifiers are the
-  exception: they are permanent from v0.4.0. Update this document as the phase
-  progresses rather than treating it as a record of what was once decided.
+  exception: they are permanent from v0.2.0. Update this document as the phase
+  progresses rather than treating it as a record of what was once decided. The
+  linter compiles only under the off-by-default `lint` Cargo feature until
+  v0.2.0, when the gate is planned to be removed; see the "Release gating"
+  section of [ADR-042](adr-042-manifest-linting-under-netsuke-check.md).
 - **Scope:** the manifest linter — its rule model, compiler-stage hooks, rule
   identifiers, suppression contract, policy configuration, and output schemas.
 - **Primary audience:** Netsuke contributors adding or changing lint rules, and
@@ -117,7 +120,7 @@ These are assumed by every later section rather than re-justified.
    exception is the span index in section 4, which reads the source once to
    recover positions the typed manifest does not retain.
 4. **Findings never mutate anything.** `netsuke check` has no `--fix`. Automated
-   rewriting of an executable manifest is out of scope for v0.4.0.
+   rewriting of an executable manifest is out of scope for v0.2.0.
 5. **The linter must not duplicate a hard error.** Anything `IrGenError`,
    `NinjaGenError`, or the manifest parser already rejects is out of scope; a
    lint rule that fires only on a manifest that cannot compile is dead code.
@@ -558,7 +561,7 @@ normative list. A contract test checks it against the registry in both
 directions, so it can neither omit a shipped rule nor document one that does
 not exist. The summary below groups the first set by the concern it addresses.
 
-Table: the v0.4.0 rule set
+Table: the v0.2.0 rule set
 
 | Rule                           | Stage     | Category    | Default | Concern                                                                                  |
 | ------------------------------ | --------- | ----------- | ------- | ---------------------------------------------------------------------------------------- |
@@ -668,7 +671,7 @@ that keeps the growth cheap.
   new caching rule can flag recipes that read files outside the declared graph.
 - **Dependency and provider configuration (v0.3.0).** The issue's
   "ambiguous or weakly reproducible provider configuration" family has no rules
-  in v0.4.0 because the manifest cannot yet express providers. The stage-2 hook
+  in v0.2.0 because the manifest cannot yet express providers. The stage-2 hook
   is where those rules will bind.
 - **Editor integration.** The JSON catalogue from `--explain --json` and the
   per-finding span data are together sufficient for a language server; nothing

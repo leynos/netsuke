@@ -167,7 +167,7 @@ file or a suppression comment and a machine matches exactly, which is the class
 the translators' guide already covers.
 
 A rule's summary, rationale, and remediation are prose and will be localized.
-They are not localized in v0.4.0: the rule set is a prototype whose membership
+They are not localized in v0.2.0: the rule set is a prototype whose membership
 and wording are expected to change once the rules have been used, and
 translating prose before it has settled spends the effort twice. The registry
 owns that text for now, and the command's framing text — subcommand and flag
@@ -212,6 +212,46 @@ none of those is prose.
   exit-code taxonomy yet. Roadmap task 3.15.5 owns that separation; this ADR
   does not pre-empt it, and the `code` field already distinguishes the cases
   for machine consumers.
+
+## Release gating
+
+`netsuke check` and the whole `crate::lint` module compile only under an
+off-by-default Cargo feature named `lint` (`lint = ["dep:granit-parser"]`).
+Release binaries build the default feature set, so v0.1.0 ships without the
+linter; removing the gate is planned for v0.2.0, at which point `check` becomes
+standard. The gate exists so the linting work already described by this ADR and
+the [manifest linter design](netsuke-linter-design.md) can be merged and kept
+current against a fast-moving `main` without shipping it in the v0.1.0 release
+build.
+
+Gated behind `#[cfg(feature = "lint")]`: `crate::lint`; the CLI's
+`Commands::Check`, `CheckArgs`, `DEFAULT_FAIL_ON`, `DEFAULT_FINDING_LIMIT`,
+`HelpTopic::Check`, `CheckConfig`, and the `cmds.check` configuration field;
+the runner's `check` modules and dispatch, the lint `RunnerError` variants, and
+check telemetry; and the `source` and `name` fields of the internal
+`LoadedManifest`. Deliberately not gated: the Fluent message keys in
+`src/localization/keys.rs` and their catalogue entries, because the build-time
+localization audit is bidirectional across all 35 catalogues and gating the
+constants would make every locale look orphaned; and the subcommand-to-key
+routing in `src/cli_l10n.rs`, which only maps command names and carries no
+linting logic.
+
+Both configurations are verified in continuous integration (CI): the existing
+gates build and test with `--all-features`, and a second, uninstrumented CI
+lane builds, lints, and tests the default feature set. An absence test asserts
+that without the `lint` feature, `check` is an unknown subcommand and does not
+appear in `--help`, which is what makes "not in the release build" a tested
+property rather than an assertion. See the "Feature-gated code" section of the
+[developers' guide](developers-guide.md) for the mechanics contributors need
+when touching gated code.
+
+Two alternatives were rejected. Holding the branch unmerged until v0.2.0 would
+have let it drift against `main` and forced repeated conflict resolution for
+work with no behavioural effect on the shipped binary. Using
+`cargo hack --each-feature` to verify every feature combination was rejected
+because, combined with the existing `legacy-digests` feature, it multiplies CI
+lanes for a question that has only two answers: the release shape, and
+everything.
 
 ## Architectural rationale
 

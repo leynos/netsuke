@@ -1,10 +1,14 @@
 # Migrating to v0.2.0
 
-## v0.4.0 linter signpost
+## `netsuke check` becomes standard
 
-The v0.4.0 release adds the `netsuke check` manifest linter. Existing manifests
-need no changes: checking is read-only, and the command analyses the same
-compiler artefacts as a build without running recipes or creating build output.
+In v0.1.x, `netsuke check` exists only in builds compiled with the `lint` Cargo
+feature; release binaries built with the default feature set do not include it.
+Version 0.2.0 is planned to remove that feature gate, making the manifest
+linter standard, so no feature flag is needed after upgrading. Existing
+manifests need no changes: checking is read-only, and the command analyses the
+same compiler artefacts as a build without running recipes or creating build
+output.
 
 ## Run the linter
 

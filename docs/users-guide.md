@@ -1163,6 +1163,14 @@ Published beta2 `help targets` does not provide those semantics.
 
 ### Lint a manifest with `netsuke check`
 
+This command is available only in builds compiled with the `lint` Cargo
+feature; the v0.1.0 release binaries, including the GitHub release archives,
+`cargo binstall`, and the Windows MSI, do not include it. Build it from source
+with `cargo install netsuke --features lint`, or, in a checkout, with
+`cargo build --features lint`. It is planned to become part of every build in
+v0.2.0. Running `netsuke check` in an unsupported build reports it as an
+unknown subcommand.
+
 `netsuke check` analyses the selected manifest for constructs that parse and
 lower cleanly but are likely erroneous, unsafe, non-portable, or hostile to
 caching. It loads, expands, renders, and lowers the manifest through the same

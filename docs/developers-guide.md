@@ -971,6 +971,61 @@ names, manifest paths, finding text, or other caller-controlled values to
 metric labels or span fields. The telemetry adapter owns this instrumentation;
 the lint domain remains free of metrics and tracing concerns.
 
+### Feature-gated code
+
+`netsuke check` and the whole `crate::lint` module compile only under the
+`lint` Cargo feature (`lint = ["dep:granit-parser"]`), which is off by default.
+The "Release gating" section of
+[ADR-042](adr-042-manifest-linting-under-netsuke-check.md) records why: release
+binaries build the default feature set, so v0.1.0 ships without the linter, and
+removing the gate is planned for v0.2.0. Treat it as temporary scaffolding, not
+a permanent configuration knob.
+
+Run the usual gates against `--all-features` as before. When a change touches
+gated code, also run `make lint-default-features` and
+`make test-default-features` locally before pushing; both build and test the
+default feature set, matching the `default-features` CI lane that verifies the
+release shape.
+
+**Cfg placement.** Place `#[cfg(feature = "lint")]` after an item's doc comment
+and above its other attributes.
+
+**No-op twins.** Where both configurations need a definition — for example
+`apply_check_defaults` in `src/cli/merge_apply.rs` and `is_check_metric` in the
+observability recorder — provide two definitions: one under
+`#[cfg(feature = "lint")]` and a `#[cfg(not(feature = "lint"))]` no-op twin.
+
+**Fluent keys stay ungated.** The Fluent message keys in
+`src/localization/keys.rs`, their catalogue entries, and the subcommand-to-key
+routing in `src/cli_l10n.rs` are deliberately not gated. The build-time
+localization audit is bidirectional across all 35 catalogues, and gating the
+constants would make every locale look orphaned; the routing only maps command
+names and carries no linting logic.
+
+**Test gating.** Check-only integration tests gate the whole test binary with
+an inner `#![cfg(feature = "lint")]` (`tests/check_command_tests.rs`,
+`tests/lint_rule_reference_tests.rs`); individual tests use
+`#[cfg(feature = "lint")]` where only part of a file needs the feature.
+`tests/check_command_absent_tests.rs` compiles only without the feature
+(`#![cfg(not(feature = "lint"))]`) and asserts that `check` and `help check`
+are unknown subcommands and that `--help` does not list `check`; this is the
+test that makes "absent from the release build" a checked property rather than
+an assumption.
+
+**Split help snapshots.** `--help` snapshots are split by feature:
+`src/snapshots/cli/netsuke__cli__parser__tests__help_en_us.snap` (and `_es_es`)
+cover the default feature set, and the `..._with_lint.snap` files carry the
+extra `check` line. The test selects the snapshot name with
+`HELP_SNAPSHOT_SUFFIX`. Regenerate both sets by running the help snapshot test
+under each feature configuration in turn and reviewing the resulting
+`.snap.new` file before accepting it.
+
+**`GATE_FEATURE_ARGUMENTS`.** `tests/support/cargo_features.rs` defines
+`GATE_FEATURE_ARGUMENTS` twice — `["--all-features"]` when `lint` is enabled,
+`[]` otherwise — so that nested Cargo builds spawned by the user-interface test
+harness match whichever lane compiled them instead of recompiling the whole
+dependency graph.
+
 ## Package and target naming
 
 The crates.io package is `netsuke-build`; the library target, the binary

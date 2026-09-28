@@ -62,7 +62,7 @@ Each phase validates a product hypothesis:
 - Phase 29 evaluates a bounded, compatibility-gated Paralegal experiment.
 - Phase 30 validates that opt-in, immutable host facts can replace platform
   shell probes without weakening discovery privacy or Ninja invalidation.
-- Phase 31 validates that the manifest linter shipped as a v0.4.0 prototype
+- Phase 31 validates that the manifest linter shipped as a v0.2.0 prototype
   earns the rule set, severities, and contracts it will have to keep.
 
 Each phase carries one hypothesis, and Phase 6 is the capability track for
@@ -3277,7 +3277,7 @@ implementation promises.
 
 ## 31. Manifest linting
 
-Hypothesis: the v0.4.0 linter is a prototype whose rule set was chosen from the
+Hypothesis: the v0.2.0 linter is a prototype whose rule set was chosen from the
 evidence available before anyone had used it; if that prototype is exercised
 against real manifests and the findings are fed back into the rules, their
 severities, and their prose, `netsuke check` earns a rule set worth freezing,
@@ -3291,7 +3291,7 @@ Scope: everything behind `netsuke check`. The
 [manifest linter design](netsuke-linter-design.md) is a living document and
 [ADR-042](adr-042-manifest-linting-under-netsuke-check.md) records the
 decisions it currently rests on; both are expected to change under this phase,
-and a task that supersedes either must say so. The v0.4.0 rule identifiers are
+and a task that supersedes either must say so. The v0.2.0 rule identifiers are
 already treated as permanent, so a rule withdrawn here keeps its name reserved.
 
 Two decisions are explicitly provisional and are settled by steps in this
@@ -3428,6 +3428,18 @@ completion is what turns the prototype into a supported feature.
   - Record it in the [users' guide](users-guide.md) beside the suppression
     grammar, so an author writing a directive can see the promise it rests on.
   - Success: the policy is published and the rule reference links to it.
+- [ ] 31.4.4. Make `netsuke check` standard by removing the `lint` feature
+  gate.
+  - Delete every `#[cfg(feature = "lint")]` and
+    `#[cfg(not(feature = "lint"))]` twin.
+  - Make `granit-parser` a normal dependency and drop the feature.
+  - Delete `tests/check_command_absent_tests.rs`.
+  - Collapse the help snapshots back to one set.
+  - Retire the default-features CI lane or repoint it at the next gated
+    feature, updating its workflow contracts.
+  - Update the users' guide, README, changelog, and ADR-042.
+  - Success: a default `cargo build` ships `netsuke check`, and release
+    binaries list it in `--help`.
 
 ### 31.5. Pay down the prototype's structural debt
 
