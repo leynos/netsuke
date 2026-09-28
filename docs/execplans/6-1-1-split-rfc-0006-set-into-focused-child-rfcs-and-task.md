@@ -1292,7 +1292,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   | codex `…609`      | an `Owns` cell repeats a section      | `ensure_distinct`, `map.rs:162`, `:164`           |
   | codex `…616`      | duplicate child RFC numbers           | `ensure!`, `map.rs:132`                           |
   | codex `…627`      | non-string JSON mapping keys          | section 5.7 rejects non-distinct rendered keys    |
-  | codex `…620`      | serializers unbounded                 | section 5.3's length pass, both serializers       |
+  | codex `…620`      | serializers unbounded                 | section 5.8's output bound, both serializers      |
   | CodeRabbit `…304` | ADR-040 specimen contradicts RFC 0013 | specimen states `document_count` is not inherited |
   | CodeRabbit `…313` | duplicate child RFC reservations      | the `map.rs:132` guard                            |
   | CodeRabbit `…325` | a fence opened by four spaces         | `opening` rejects more than three                 |
@@ -1425,6 +1425,131 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - [ ] `EP-M10` RFC 0020, date and time conversion (step 6.9).
 - [ ] `EP-M11` Reconcile, retarget roadmap citations, run all gates, mark
   roadmap 6.1.1 done.
+
+- [x] (2026-09-28) **A gate run reded the current head, and the defect was
+  mine.** `make markdownlint` on `feed5192` exited 2, but not because
+  `markdownlint` found anything: its `spelling` prerequisite aborts on
+  `canonicalised` at this file's line 1391, so `markdownlint-cli2` never ran
+  and emitted no verdict at all. The word was added by `feed5192` itself, in
+  the very sentence describing canonicalization — a `-ise` form where the
+  project's en-GB-oxendict rule mandates `-ize`. CI then failed the required
+  `build-test` check on the same word at the same line and column, so the local
+  diagnosis and CI agree independently rather than one being inferred from the
+  other.
+
+  The repair is a one-word substitution of equal length, so no wrap boundary
+  moves; that was verified with the gate's own command rather than assumed,
+  since `mdtablefix` reflows prose greedily and a longer or shorter token would
+  have reded `check-fmt` in exchange. Two neighbouring spellings were
+  deliberately left alone: this file contains `recognise` twice, and both are
+  backticked quotations of a *different* revision's gate output, so the
+  code-span exemption applies and rewriting them would falsify a historical
+  record. The general lesson is recorded under `Surprises & discoveries` — for
+  this class the deciding question is prose versus quoted evidence, not one
+  spelling against another, so a repo-wide sweep is not a safe repair.
+
+  The episode is the third instance of one theme, and the plan now says so in
+  one place: the earlier two were "a gate result covers the revision it ran on
+  and no other", and "a verifier that is not the gate's verifier is not the
+  gate". This one is "a failed prerequisite hides a stage that never ran", and
+  its tell is the same in all three — an artefact was read as evidence for a
+  claim it does not cover. A green `check-fmt` and a green `spelling` are now
+  recorded on `c765659d`, with `mdlint` reaching `169 files, 0 error(s)` for
+  the first time on this branch, which also demonstrates the prerequisite is
+  live rather than vacuous.
+
+  Re-verifying the seven stale bot findings at this head turned up one stale
+  citation of the plan's own. The `chatgpt-codex-connector` finding that the
+  serializers were unbounded is discharged by RFC 0013 **section 5.8**
+  ("Resource bounds"), where `to_yaml` and `to_nice_json` each carry "output 8
+  MiB; checked before the result is returned" — but the disposition table above
+  credited "section 5.3's length pass", and 5.3 is "Determinism", which
+  contains no such pass. The two sections are distinct entries in this plan's
+  own list of substantive clauses, so the number was simply wrong. Corrected in
+  place. All seven findings were then confirmed discharged at HEAD, not merely
+  self-annotated: the `map.rs` duplicate-number guard, `ensure_distinct`'s two
+  call sites, and the two RFC 0013 obligations were each read at the revision.
+
+- [x] (2026-09-28) **The branch was rebased onto `main`, 53 commits replayed
+  one-to-one with no conflict.** `OLD_HEAD` was `c765659d`, `OLD_BASE`
+  `aa764819` (the branch's exclusive replay boundary), target `7677c388`, and
+  the result is `93a5d8b6`. `git range-diff` reports `=` for all 53 pairs and
+  emits no non-summary output, so every replayed patch is byte-identical and
+  nothing was resolved by hand. The old range and the new range each contain 53
+  commits and no merges, `OLD_BASE` is an ancestor of `OLD_HEAD`, and
+  `OLD_HEAD` is no longer an ancestor of the result — the expected shape after
+  a replay.
+
+  The reason the replay was mechanical is worth recording, because it is a
+  property of the *pair* of revisions rather than luck: main's three new commits
+  (`7677c388`, `027a848e`, `dc4c116a`) touch ten paths and this branch touches
+  twenty-seven, and **the two sets are disjoint**. There was therefore no file
+  for a merge driver to arbitrate, which is also why the replay needed no
+  driver-consent decision — no path was ever selected for a three-way merge.
+  That was checked rather than assumed: `comm -12` on the two path manifests is
+  empty, and all ten main-only paths are byte-identical at `93a5d8b6` to their
+  `7677c388` blobs, which is the audit the merge policy requires of a
+  target-only path.
+
+  **Main's incoming changes are not pertinent to this branch, and that is
+  evidenced rather than asserted.** The three commits change workflows, the
+  `Makefile`'s Pylint invocation, `docs/developers-guide.md`, and add
+  `tests/workflow_contracts/pylint_tier_test.py`. The branch is documentation
+  plus Rust source plus one `.gitignore` line, so the overlap in *subject
+  matter* is nil; more concretely, every `file:line` citation this plan makes
+  was re-resolved at the new head and no citation names a main-touched path
+  except the one corrected below. The `Makefile`'s Pylint refactor is the
+  nearest miss: it changes how the *Python* baseline lint runs, and this branch
+  touches no Python. So the decision is to adopt none of it and to record why,
+  rather than to manufacture a merge.
+
+  Two things did need attention. First, `uv.lock`. The incoming commit
+  `d03a3e31` (a replay of `a94a3006`) had swept `uv.lock` into the repository
+  with `git add -A`, while the later commit `224dc762` (a replay of `f42202a4`)
+  untracked it and added `.gitignore:21`. The rebase therefore stopped with
+  "The following untracked working tree files would be overwritten by merge:
+  uv.lock". The on-disk copy is a 52-byte file that no configuration in this
+  repository reads, and it is byte-identical (`md5 8bbc054c…`) to the incoming
+  blob, so removing the blocker discards nothing. It was preserved to
+  `/tmp/rebase-6-1-1-untracked/uv.lock`, restored after the rebase, and
+  verified at the new head to be both present and ignored
+  (`git check-ignore -v` names `.gitignore:21`) and untracked (`git ls-tree`
+  finds no entry). The commit that untracks it survives as a non-empty commit,
+  so its `.gitignore` hunk still applies.
+
+  Second, the rebase exposed a stale citation of this plan's own, in the same
+  class as the `5.3`→`5.8` correction above. The `doc-coverage` observation
+  cited `Makefile:206-210` as its evidence. That span is the `RUSTDOC_FLAGS`/
+  `VERUS_FLAGS`/`WHITAKER` block, not the `doc-coverage` target, at every
+  revision examined — including `b23d0535`, the commit that introduced the
+  citation, where the target sits at line 325. The `206` was correct at an
+  earlier main state (`5fda1e6e`), so the citation drifted as main moved and
+  nobody re-resolved it. Main's Pylint hunk made it drift once more, by
+  deleting one line at 161–168 and shifting everything after 168 up by one. It
+  now reads `Makefile:325-329`, which is the `doc-coverage` target and its
+  recipe, and the claim it supports (`scripts/doc-coverage.py` measures library
+  and binary targets; integration tests are not measured) is carried by the
+  script's own module docstring at `scripts/doc-coverage.py:4`.
+
+  This is the fourth instance of the plan's recurring theme, and the sharpest:
+  all three earlier ones were about *running* the wrong check. This one is
+  about a citation that was never re-resolved after the file under it moved — a
+  `file:line` is a pointer, and a pointer into a moving file is a claim with an
+  expiry date. The rebase is precisely the event that invalidates it, which is
+  why the sweep belongs in the rebase audit rather than in a later review. The
+  remedy applied here is a bounds-and-identity pass over every citation the
+  plan makes at the new head, not a spot fix.
+
+  Recovery refs are retained until publication is confirmed:
+  `refs/recovery/6-1-1-old-head-20260928-162555` (→ `c765659d`),
+  `-old-base-20260928-162555` (→ `aa764819`), and `-target-20260928-162555` (→
+  `7677c388`). The four gates the rebase hook names (`check-fmt`, `typecheck`,
+  `lint`, `test`) were run in sequence on `93a5d8b6` immediately after the
+  replay, and all four exited 0. Those results are bound to `93a5d8b6`; this
+  entry is a later revision and they do not cover it. The seven-target run that
+  acceptance requires is therefore commissioned against the commit that adds
+  this entry, because a rebase creates a new candidate and every gate result
+  bound to `c765659d` is historical.
 
 ## Surprises & discoveries
 
@@ -1618,7 +1743,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 - Observation: `make doc-coverage` runs `cargo rustdoc --show-coverage` over
   library and binary targets only; integration tests are not measured. Evidence:
-  `scripts/doc-coverage.py`; `Makefile:206-210`. Impact: the governing gate on
+  `scripts/doc-coverage.py`; `Makefile:325-329`. Impact: the governing gate on
   the new test file is `missing_docs_in_private_items = "deny"`
   (`Cargo.toml:252`) under `make lint`, which does apply and covers enum
   variants and struct fields. `unwrap_used` and `expect_used` are also denied
