@@ -19,9 +19,6 @@ mod lookup;
 mod options;
 mod resolve_error;
 mod telemetry;
-#[cfg(test)]
-#[path = "telemetry_tests.rs"]
-mod telemetry_tests;
 mod workspace_switch;
 pub(crate) use lookup::{WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
 pub use telemetry::{

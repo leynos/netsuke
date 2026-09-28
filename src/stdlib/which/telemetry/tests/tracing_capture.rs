@@ -14,7 +14,7 @@ use camino::Utf8Path;
 use rstest::rstest;
 use tracing::level_filters::LevelFilter;
 
-use super::super::{
+use super::super::super::{
     options::CwdMode,
     telemetry::{
         CACHE_OUTCOME_MISS, CATEGORY_NOT_FOUND, RESOLUTION_OUTCOME_FOUND,

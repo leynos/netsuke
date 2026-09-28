@@ -93,7 +93,7 @@ error category leave the process. Resolver behaviour and its search semantics
 are unchanged by this addendum, and the four `CwdMode` contracts recorded above
 still hold.
 
-The contract lives in `src/stdlib/which/telemetry.rs`, which owns both counter
-names and every label vocabulary; the implementation is in
+The contract lives in `src/stdlib/which/telemetry/mod.rs`, which owns both
+counter names and every label vocabulary; the implementation is in
 `src/stdlib/which/cache.rs`, and the recorder admission rule is in
-`src/observability_recorder.rs`.
+`src/observability/recorder/mod.rs`.

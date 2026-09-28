@@ -6955,19 +6955,19 @@ is recorded in
 [ADR-024](adr-024-require-explicit-recursive-workspace-which-search.md) and the
 [executable-discovery design](netsuke-design.md#executable-discovery-filter-which).
 
-`src/stdlib/which/telemetry.rs` is the single owner of both counter names and
-every label vocabulary the resolver emits. `netsuke_stdlib_which_cache_total`
-counts cache outcomes, and `netsuke_stdlib_which_resolution_total` counts
-resolution outcomes; both carry the same `cwd_mode` label, drawn from the
-closed set `auto`, `always`, `never`, and `workspace_recursive`. The set is
-exposed as `WHICH_CWD_MODE_VALUES` and re-exported through `netsuke::stdlib`.
-It is a telemetry vocabulary rather than the template spelling: a manifest
-writes `workspace-recursive`, and the label is `workspace_recursive`. The
-mapping is total over `CwdMode`, so no series can be created outside the set,
-and that is what lets an operator tell which search policy a resolution was
-requested under. The label records the request, not the outcome: it is derived
-from the options before the lookup, so it does not show whether recursive
-lookup ran or produced the result.
+`src/stdlib/which/telemetry/mod.rs` is the single owner of both counter names
+and every label vocabulary the resolver emits.
+`netsuke_stdlib_which_cache_total` counts cache outcomes, and
+`netsuke_stdlib_which_resolution_total` counts resolution outcomes; both carry
+the same `cwd_mode` label, drawn from the closed set `auto`, `always`, `never`,
+and `workspace_recursive`. The set is exposed as `WHICH_CWD_MODE_VALUES` and
+re-exported through `netsuke::stdlib`. It is a telemetry vocabulary rather than
+the template spelling: a manifest writes `workspace-recursive`, and the label is
+`workspace_recursive`. The mapping is total over `CwdMode`, so no series can
+be created outside the set, and that is what lets an operator tell which search
+policy a resolution was requested under. The label records the request, not the
+outcome: it is derived from the options before the lookup, so it does not show
+whether recursive lookup ran or produced the result.
 
 The cache counter's `outcome` is drawn from `hit`, `miss`, and `bypass`
 (`WHICH_CACHE_OUTCOME_VALUES`). The resolution counter's `outcome` is drawn from
@@ -7021,15 +7021,15 @@ rule, grouped or not, still validates bounded labels exactly. This is the same
 allowlist that gates the configuration, runner, manifest-filtering, file-read,
 and environment-lookup series.
 
-Tests sit beside the module: `src/stdlib/which/telemetry_tests.rs` drives the
-real `WhichResolver` against a local debugging recorder and asserts that each
-search domain is attributed to its own series, that every `ResolveError`
+Tests sit beneath the module: `src/stdlib/which/telemetry/tests/mod.rs` drives
+the real `WhichResolver` against a local debugging recorder and asserts that
+each search domain is attributed to its own series, that every `ResolveError`
 variant reports a declared category, and that nothing outside the closed
-vocabularies is emitted. `src/observability_recorder_which_tests.rs`, which
-`src/observability_recorder_tests.rs` registers, proves the production recorder
-retains each bounded shape and rejects an out-of-vocabulary `cwd_mode`, an
-undeclared extra label, a missing label, and the failure `category` on a
-success series.
+vocabularies is emitted. `src/observability/recorder/tests/which_tests.rs`,
+which `src/observability/recorder/tests/mod.rs` registers, proves the
+production recorder retains each bounded shape and rejects an out-of-vocabulary
+`cwd_mode`, an undeclared extra label, a missing label, and the failure
+`category` on a success series.
 
 Tests that inject `EnvSnapshot::capture_with_env` must use
 `env::mock_env_for_capture`. The strict builder declares every documented read:

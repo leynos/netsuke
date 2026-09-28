@@ -33,7 +33,6 @@ mod ninja_status_tests;
 mod env_lookup_tests;
 
 /// Cover the bounded `which` resolver counter series separately.
-#[path = "observability_recorder_which_tests.rs"]
 mod which_tests;
 
 /// Cover the bounded recipe-text dialect counter series separately.

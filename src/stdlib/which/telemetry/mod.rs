@@ -31,6 +31,9 @@ use super::{
     resolve_error::{ResolveError, ResolveErrorCategory},
 };
 
+#[cfg(test)]
+mod tests;
+
 /// Counts resolver cache outcomes by bounded `cwd_mode` and `outcome`.
 ///
 /// Both labels are drawn from the closed sets below, so the number of series
@@ -167,7 +170,7 @@ pub(super) const fn category_label(category: ResolveErrorCategory) -> &'static s
 ///
 /// Spelled as the label constants above. The domain declares its own spellings
 /// separately, in `ResolveErrorCategory::label`, and the two are tied together
-/// by test rather than by a shared constant: `telemetry_tests` maps every
+/// by test rather than by a shared constant: `tests` maps every
 /// variant through the boundary and asserts that the mapped words are exactly
 /// this set, with no duplicates and the whole set reached; the same module also
 /// pins the words themselves. A second assertion naming the domain's spellings

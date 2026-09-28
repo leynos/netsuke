@@ -411,6 +411,9 @@ its children under a directory module named for that prefix, use `mod.rs` for
 the directory module, and declare children with plain `mod child;` statements.
 Drop the parent prefix from child filenames. The layout contract checks both
 sibling `.rs` files and directory modules with `mod.rs` for shared prefixes.
+Keep new concern-specific tests under their owner's test directory, as with
+`src/observability/recorder/tests/which_tests.rs` for the `which` resolver
+counter series and `src/stdlib/which/telemetry/tests/` for its emitter.
 
 Do not use `#[path]` to reach a sibling or parent file. Keep it only when a
 specific requirement still needs it, and add a comment explaining that reason.

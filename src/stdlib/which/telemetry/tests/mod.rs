@@ -28,7 +28,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
 use tempfile::TempDir;
 
-use super::{
+use super::super::{
     WhichConfig, WhichResolver,
     lookup::WorkspaceSkipList,
     options::{CwdMode, WhichOptions},
@@ -45,11 +45,8 @@ use super::{
 /// Name of the resolver span every tracing assertion targets.
 pub(super) const RESOLVER_SPAN: &str = "stdlib.which.resolve";
 
-#[path = "telemetry_tests/failure_categories.rs"]
 mod failure_categories;
-#[path = "telemetry_tests/outcome_series.rs"]
 mod outcome_series;
-#[path = "telemetry_tests/tracing_capture.rs"]
 mod tracing_capture;
 
 /// A temporary workspace holding the executable fixtures.

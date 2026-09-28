@@ -36,7 +36,7 @@ use camino::Utf8PathBuf;
 use metrics_util::debugging::DebuggingRecorder;
 use tracing::level_filters::LevelFilter;
 
-use super::super::{
+use super::super::super::{
     WhichResolver,
     options::CwdMode,
     resolve_error::ResolveError,
