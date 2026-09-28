@@ -263,6 +263,8 @@ jobs:
         run: make test-workflow-contracts
       - name: Release-admission runtime tests
         run: make test-release-admission
+      - name: Linux package metadata tests
+        run: make test-linux-package-metadata
       - name: Test and Measure Coverage
         # The only test execution on this lane: measuring and testing in one
         # instrumented run costs one compile instead of two, so the flags must

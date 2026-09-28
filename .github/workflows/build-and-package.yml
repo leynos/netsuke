@@ -43,6 +43,26 @@ name: Build and Package
         description: Key used to look up staged artefacts
         required: false
         type: string
+      package-maintainer:
+        description: Maintainer value read from Cargo.toml
+        required: false
+        default: ''
+        type: string
+      package-homepage:
+        description: Homepage value read from Cargo.toml
+        required: false
+        default: ''
+        type: string
+      package-license:
+        description: Licence value read from Cargo.toml
+        required: false
+        default: ''
+        type: string
+      package-description:
+        description: Description value read from Cargo.toml
+        required: false
+        default: ''
+        type: string
       msi-arch:
         description: Architecture identifier for Windows MSI packaging
         required: false
@@ -323,6 +343,10 @@ jobs:
           outdir: dist
           deb-depends: ninja-build
           rpm-depends: ninja-build
+          maintainer: ${{ inputs['package-maintainer'] }}
+          homepage: ${{ inputs['package-homepage'] }}
+          license: ${{ inputs['package-license'] }}
+          description: ${{ inputs['package-description'] }}
 
       - name: Prune packaging metadata
         if: inputs.platform == 'linux'

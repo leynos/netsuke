@@ -64,6 +64,10 @@ licence. Ninja must be installed separately when using the macOS or Windows
 installer. The Windows MSI installs to `C:\Program Files\netsuke` and does not
 update `PATH`.
 
+Linux package metadata comes from `[package]` in `Cargo.toml`: the first
+`authors` entry supplies the maintainer, while `homepage`, `license`, and
+`description` supply the corresponding package fields.
+
 The MSI installer supports pre-release SemVer versions such as `0.1.0-beta4`:
 the pre-release suffix cannot be represented in an MSI product version, so the
 installer carries the numeric release triple (`0.1.0`) while the full version
