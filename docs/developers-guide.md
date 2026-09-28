@@ -1302,15 +1302,15 @@ is covered without being listed again. The upstream default is reported as
 
 Every merge-gate job that compiles Rust reaches the compiler cache: the Linux
 lanes through `setup-rust`, the Windows lanes through `RUSTC_WRAPPER=sccache`.
-The release packaging lanes are the exception and run uncached, for two
-independent reasons: on Windows sccache re-spawns rustc with the aarch64
-target's `--extern` and `-L` list and exceeds the operating system's
-command-line limit, and elsewhere the lane's server would be started inside the
-nested setup action, whose older pinned `setup-rust` still carries the clobber
-described above. Reproducing the gate's export, install and run-step start
-sequence for a lane that runs only on tag pushes and the dry run would not pay
-back. That lane must therefore stay free of `RUSTC_WRAPPER`,
-`SCCACHE_GHA_ENABLED` and `SCCACHE_DIR` entirely, and
+The release packaging lanes are the exception and run uncached. On Windows
+sccache re-spawns rustc with the aarch64 target's `--extern` and `-L` list and
+exceeds the operating system's command-line limit, which nothing here can
+shorten. On the other platforms the nested `setup-rust` inside
+`rust-build-release`, now at the same pin as the gate, would select the backend
+correctly, so the reason there is cost rather than correctness: the lane runs
+only on tag pushes and the release dry run, and a compiler cache it reads so
+rarely would not pay back its setup. That lane must therefore stay free of
+`RUSTC_WRAPPER`, `SCCACHE_GHA_ENABLED` and `SCCACHE_DIR` entirely, and
 `tests/workflow_contracts/sccache_contract_test.py` requires all three to be
 absent rather than merely empty. Every compiling job that does use the compiler
 cache starts from zeroed counters, which `setup-rust` provides on the Linux

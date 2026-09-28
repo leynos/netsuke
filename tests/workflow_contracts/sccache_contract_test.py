@@ -141,14 +141,12 @@ def test_every_compiling_job_reaches_the_compiler_cache(
 def test_the_packaging_lane_compiles_without_a_wrapper() -> None:
     """Require the release packaging lane to run with no compiler cache at all.
 
-    Two independent reasons, each sufficient on its own. On Windows sccache
-    re-spawns rustc with the aarch64 target's whole `--extern` and `-L` list
-    and exceeds the operating system's command-line limit, which nothing here
-    can shorten. Elsewhere the lane's server would be started inside the nested
-    setup action, whose `mozilla-actions/sccache-action` re-exports
-    `ACTIONS_CACHE_SERVICE_V2` and GitHub's own results address as its last
-    act; on Ubicloud that sends every write past the cache proxy to GitHub,
-    where it is rate-limited and lands in no store this repository reads.
+    On Windows sccache re-spawns rustc with the aarch64 target's whole
+    `--extern` and `-L` list and exceeds the operating system's command-line
+    limit, which nothing here can shorten. Elsewhere the nested `setup-rust`,
+    at the gate's pin, would select the backend correctly, so the reason is
+    cost: the lane runs on tag pushes and the dry run only, and a cache read
+    that rarely would not pay back its setup.
 
     An earlier shape exempted Windows alone through a negated expression, and
     got the negation backwards once, which cost a release build. Requiring the

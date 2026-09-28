@@ -164,14 +164,12 @@ TARGET_ARCHIVE_OWNERS = (
     ("build-and-package.yml", "build", "Build release binary"),
 )
 
-#: The one lane that compiles Rust without a compiler cache, for two
-#: independent reasons. On Windows sccache re-spawns rustc with the aarch64
-#: target's `--extern` and `-L` list and exceeds the operating system's
-#: command-line limit, which nothing here can shorten. Elsewhere the lane's
-#: server would start inside the nested setup action, whose sccache action
-#: re-exports GitHub's results address and so sends writes past Ubicloud's
-#: proxy. Release builds are infrequent, so the lane runs uncached rather than
-#: unreliably.
+#: The one lane that compiles Rust without a compiler cache. On Windows sccache
+#: re-spawns rustc with the aarch64 target's `--extern` and `-L` list and
+#: exceeds the operating system's command-line limit, which nothing here can
+#: shorten. Elsewhere the nested `setup-rust`, at the gate's pin, would select
+#: the backend correctly, so the reason is cost: release builds are infrequent,
+#: and a cache read that rarely would not pay back its setup.
 SCCACHE_EXEMPT_LANE = ("build-and-package.yml", "build")
 
 #: Jobs that compile Rust through a compiler cache they wire themselves: the

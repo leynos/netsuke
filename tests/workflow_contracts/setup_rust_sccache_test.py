@@ -294,6 +294,14 @@ def test_statistics_follow_the_last_compile_and_name_the_backend(
     assert backend in str(show.get("env", {})), (
         f"{workflow_name} {job_name} must report {backend}"
     )
+    script = str(show.get("run", ""))
+    for command in ("sccache --show-stats", "sccache --show-stats --stats-format=json"):
+        assert command in script, (
+            f"{workflow_name} {job_name} must run `{command}` in its report"
+        )
+    assert "${SCCACHE_BACKEND" in script, (
+        f"{workflow_name} {job_name} must print the backend it was handed"
+    )
 
 
 @pytest.mark.parametrize(

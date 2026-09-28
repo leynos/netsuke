@@ -83,21 +83,16 @@ jobs:
     env:
       BIN_NAME: ${{ inputs['bin-name'] }}
       VERSION: ${{ inputs.version }}
-      # No compiler cache on any release lane. Two independent reasons, and
-      # each alone is sufficient.
+      # No compiler cache on any release lane.
       #
       # On Windows, sccache re-spawns rustc with the aarch64 target's
       # `--extern` and `-L` list and exceeds the operating system's
       # command-line limit, which nothing in this repository can shorten.
       #
-      # Elsewhere, this lane's sccache server would be started inside the
-      # nested `setup-rust`, whose `mozilla-actions/sccache-action` re-exports
-      # `ACTIONS_CACHE_SERVICE_V2` and GitHub's own results URL as its last
-      # act. On a Ubicloud runner that points the server past Ubicloud's cache
-      # proxy at GitHub, where writes are rate-limited and nothing lands in
-      # the store the merge gate reads. Wiring the proxy export in here would
-      # mean reproducing the gate's whole export, install and run-step start
-      # sequence for a lane that runs on tag pushes and the dry run only.
+      # Elsewhere the nested `setup-rust`, at the gate's pin, would select
+      # the backend correctly, so the reason is cost: this lane runs on tag
+      # pushes and the dry run only, and a cache read that rarely would not
+      # pay back its setup.
       #
       # Release builds are infrequent, so these lanes run uncached rather than
       # unreliably. The merge gates keep their own caches; see
