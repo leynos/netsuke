@@ -987,12 +987,72 @@ Hard invariants. Violating one requires escalation, not a workaround.
   distinguish a syntax error from a missing dependency, and must not be cited
   as evidence.
 
+- [x] (2026-09-28) **Two pieces of work completed while Cargo was blocked, and
+  the PR description brought back in line with the branch.** Neither needs the
+  package cache.
+
+  The two commits `630b8116` and `e209ee99` were **pushed**. The remote head
+  had stood at `68c266e8` while the local head was `e209ee99`, so the earlier
+  "remote-head discrepancy" is resolved. It was a fast-forward: the remote head
+  was verified to be an ancestor of local `HEAD` before pushing, so no force
+  was needed and none was used.
+
+  The PR description had drifted in three separate ways, all corrected in one
+  edit rather than left for a reviewer to notice. Its `Verification` section
+  described **four** gates on the long-superseded head `ada8b994` and never
+  mentioned the seven-target union, the later runs, or the blocker at all. Two
+  figures were stale: the coverage suite was "15 tests executed", which is
+  **18** (7 top-level in `tests/rfc_stdlib_coverage_tests.rs` plus 11 module
+  tests, 6 of them in `markdown.rs`), and RFC 0013 was "429 lines", which is
+  **452**. Both were re-derived from the working tree rather than adjusted by
+  arithmetic — `grep -c '#\[test\]'` over the module tree, and `wc -l` on the
+  committed blob via `git show HEAD:`.
+
+  The rewritten section leads with a per-revision table that states plainly that
+  `68c266e8` is the last revision to complete the set, and that `630b8116` and
+  `e209ee99` are **outstanding — blocked, not passed**. It records the deadlock
+  with the `/proc` evidence, what was verified without Cargo, and — since CI
+  does not use this machine's package cache — that **CI is the one channel the
+  deadlock does not block**, which is what can actually settle the current head.
+
+  One figure was **kept** after checking it: "Five seeded-fault controls run
+  before any second child exists" is not the same list as the
+  `Verification plan`'s "four seeded faults". The five are the early controls
+  (a deleted coverage-map table, a corrupted section 7 row, a dangling link, a
+  deleted roadmap bullet, a bullet moved to the wrong step); the four are the
+  later RFC 0014/0015 ownership faults. They agree, so neither was changed — an
+  apparent inconsistency that is only apparent.
+
   **Next action for whoever resumes:** re-run the seven-target gate set once
   the cache clears (`pgrep -c rustc` returning non-zero, or the inode free in
   `/proc/locks`), then commission the `scrutineer` run. The liveness proof for
   `ensure_distinct` is also still owed: the guard must be shown to *fire*, by
   mutating a coverage-map row to `` `8.1`; `8.1` `` and observing the run fail
   with the duplicate message.
+
+  **Re-measured, and still held, at 05:30Z — the blocker is unchanged, not
+  stale.** A `cargo metadata` probe returned exit 0, which looked like a clear,
+  but the subsequent build never produced a `target/debug/deps` and no `rustc`
+  ran. Reading `/proc/locks` properly settled it: the inode carries **exactly
+  one granted entry** (the un-arrowed line, `1832225`, `FLOCK ADVISORY WRITE`)
+  and **45 blocked requests** (every `->` line). The holder is still the same
+  `cargo test --all-targets --all-features` in the `podbot` worktree, at 2h14m,
+  still in `do_wait` on `1855438`; nested `1855450` is still in
+  `locks_lock_inode_wait`. `pgrep -c rustc` is still **0** and ~20 `cargo`
+  processes are queued machine-wide.
+
+  The probe was a false clear because `cargo metadata` is one of the few
+  commands that does not need the write lock. **Do not read a single exit-0
+  probe as the deadlock lifting** — the durable signal is either a non-zero
+  `pgrep -c rustc` or the granted-lock line disappearing from `/proc/locks`. My
+  own build attempt was blocked on the lock for its whole life, not failing,
+  and was stopped rather than left queued: a queued waiter is itself one more
+  entry in the 45, which makes everyone else's diagnosis noisier.
+
+  Also corrected: the memory note's holder recipe (`awk '{print $5}'` over
+  every matching `/proc/locks` line) conflates the holder with its waiters,
+  because the field layout differs between granted and blocked lines. The
+  granted line is the one **without** a leading `->`.
 
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
