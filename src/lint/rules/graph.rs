@@ -7,7 +7,7 @@
 
 use std::collections::BTreeSet;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::ast::Recipe;
 use crate::ir::{BuildEdge, BuildGraph};
@@ -119,9 +119,17 @@ fn undeclared_inputs<'graph>(
 
 /// Borrow the edge that produces a target's first output.
 fn primary_edge<'a>(graph: &'a BuildGraph, name: Option<&String>) -> Option<&'a BuildEdge> {
+    producing_edge(graph, name?)
+}
+
+/// Borrow the edge that produces `output`, when the graph declares it.
+///
+/// A multi-output edge is stored once, so every one of its outputs resolves to
+/// the same edge.
+fn producing_edge<'a>(graph: &'a BuildGraph, output: &str) -> Option<&'a BuildEdge> {
     graph
-        .target_for_output(Utf8PathBuf::from(name?).as_path())
-        .map(|(_, edge)| edge)
+        .target_for_output(Utf8Path::new(output))
+        .map(|(_, producer)| producer)
 }
 
 /// Collect every path an edge is ordered after, transitively.
@@ -145,10 +153,7 @@ fn dependency_closure<'graph>(
         if !reached.insert(path) {
             continue;
         }
-        let Some(next) = graph
-            .target_for_output(Utf8PathBuf::from(path).as_path())
-            .map(|(_, edge)| edge)
-        else {
+        let Some(next) = producing_edge(graph, path) else {
             continue;
         };
         queue.extend(direct_dependencies(next));
@@ -237,10 +242,7 @@ fn reachable_outputs(graph: &BuildGraph) -> BTreeSet<&str> {
         if !reachable.insert(path) {
             continue;
         }
-        let Some(edge) = graph
-            .target_for_output(Utf8PathBuf::from(path).as_path())
-            .map(|(_, edge)| edge)
-        else {
+        let Some(edge) = producing_edge(graph, path) else {
             continue;
         };
         queue.extend(
