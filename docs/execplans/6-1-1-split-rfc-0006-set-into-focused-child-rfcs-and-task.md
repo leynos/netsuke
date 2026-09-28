@@ -1082,6 +1082,15 @@ Hard invariants. Violating one requires escalation, not a workaround.
   lessons are the general ones — a summary row is not the log, and an
   assumption about what a blocker blocks is itself a claim that needs a check.
 
+  **And the run was repeated on the revision that carries this entry.** Head
+  `1524a7e6`, run `36375195362`, `CI`, all jobs `success`; `Format` reports
+  `169 files left unchanged`, and `Test and Measure Coverage` reports **
+  `3494 tests run: 3494 passed (1 slow), 6 skipped`** in 240.328s with
+  `coverage map: 1 of 8 capability groups written; 7 remaining`. So the plan
+  edits that record the correction are themselves covered by the same evidence,
+  which is the property the `68c266e8` entry above argues for and this entry
+  would otherwise have violated.
+
   **Next action for whoever resumes:** run the seven-target gate set locally
   once the cache clears (`pgrep -c rustc` returning non-zero, or the inode free
   in `/proc/locks`), then commission the `scrutineer` run — not because the
