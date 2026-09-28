@@ -229,7 +229,20 @@ test-kani-mutations: check-build-tools ## Compile each mutation patch's patched 
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test kani_mutation_evidence_tests --all-features --run-ignored ignored-only $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 test-workflow-contracts: ## Validate GitHub Actions workflow contracts
-	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' --with 'cuprum==0.1.0' --with 'cyclopts==4.25.3' pytest tests/workflow_contracts -q --doctest-modules
+	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		--with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' \
+		--with 'cmd-mox==0.2.0' --with 'cuprum==0.1.0' \
+		--with 'cyclopts==4.25.3' pytest tests/workflow_contracts -q --doctest-modules
+	PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		--with 'pytest>=8' --with 'cmd-mox==0.2.0' \
+		--with 'cyclopts==4.25.3' --with 'cuprum==0.1.0' \
+		pytest scripts/tests/test_ensure_draft_release.py \
+			scripts/tests/test_install_orthohelp.py \
+			scripts/tests/test_report_glibc_floor.py \
+			scripts/tests/test_resolve_wix_extension_version.py \
+			scripts/ensure_draft_release.py scripts/install_orthohelp.py \
+			scripts/report_glibc_floor.py scripts/resolve_wix_extension_version.py \
+			scripts/hoist_binstall_archives.py -q --doctest-modules
 
 test-windows-msi-release-rank: ## Validate Windows MSI release-rank parsing
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \

@@ -15,6 +15,7 @@ from workflow_loading import (
     RELEASE_WORKFLOW_PATH,
     job_steps,
     load_workflow,
+    named_step,
     require_mapping,
     step_index_by_key,
 )
@@ -39,13 +40,15 @@ def _python_baseline() -> str:
 
 
 def test_release_workflow_invokes_the_hoist_script() -> None:
-    """The release job must run the script with the resolved version."""
-    workflow = RELEASE_WORKFLOW_PATH.read_text(encoding="utf-8")
-    assert "scripts/hoist_binstall_archives.py" in workflow, (
+    """The release job must pass its resolved version through the environment."""
+    steps = job_steps(load_workflow(RELEASE_WORKFLOW_PATH), "release")
+    step = named_step(steps, "Hoist cargo-binstall archives to the release root")
+    assert "scripts/hoist_binstall_archives.py" in str(step.get("run", "")), (
         "release.yml must invoke the hoist script"
     )
-    assert "--version '${{ needs.metadata.outputs.version }}'" in workflow, (
-        "release.yml must pass the resolved release version to the script"
+    env = require_mapping(step.get("env"), "the hoist step's environment")
+    assert env.get("INPUT_VERSION") == "${{ needs.metadata.outputs.version }}", (
+        "release.yml must pass the resolved release version through INPUT_VERSION"
     )
 
 

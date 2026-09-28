@@ -45,10 +45,18 @@ TRACE_ARTIFACT = {
 UPLOAD_CONDITION = (
     "always() && needs.metadata.outputs.should_upload_workflow_artifacts == 'true'"
 )
+SUMMARY_ENVIRONMENT = {
+    "RELEASE_ADMISSION_GATE_OUTCOME": (
+        "${{ steps.release_admission.outputs.gate-outcome }}"
+    ),
+    "RELEASE_ADMISSION_ERROR_CATEGORY": (
+        "${{ steps.release_admission.outputs.gate-error-category }}"
+    ),
+}
 SUMMARY_REQUIRED_FRAGMENTS = frozenset({
     '>>"$GITHUB_STEP_SUMMARY"',
-    "steps.release_admission.outputs.gate-outcome",
-    "steps.release_admission.outputs.gate-error-category",
+    "\\`$RELEASE_ADMISSION_GATE_OUTCOME\\`",
+    "\\`$RELEASE_ADMISSION_ERROR_CATEGORY\\`",
 })
 
 
@@ -207,6 +215,9 @@ def _assert_metrics_delivery_contract(
     summary_run = str(summary_step.get("run"))
     assert all(fragment in summary_run for fragment in SUMMARY_REQUIRED_FRAGMENTS), (
         "the summary must write its operator-facing output and both gate fields"
+    )
+    assert summary_step.get("env") == SUMMARY_ENVIRONMENT, (
+        "the summary must pass both action outputs through the step environment"
     )
     require_external_action_sha(
         upload_step.get("uses"),

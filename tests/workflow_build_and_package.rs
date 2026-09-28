@@ -210,34 +210,34 @@ fn behavioural_build_and_package_wiring_matches_shared_actions() {
         "workflow should normalize Windows paths when staging on Windows"
     );
     assert!(
-        contents.contains("application-path: ${{ steps.stage_paths.outputs.binary_path }}"),
-        "windows-package should consume staged binary_path output"
+        contents.contains("application-path: ${{ steps.stage.outputs['binary-path'] }}"),
+        "windows-package should consume the staged binary-path output directly"
     );
     assert!(
-        contents.contains("license-rtf-path: ${{ steps.stage_paths.outputs.license_path }}"),
-        "windows-package should consume staged license_path output"
+        contents.contains("license-rtf-path: ${{ steps.stage.outputs['license-path'] }}"),
+        "windows-package should consume the staged license-path output directly"
     );
     assert!(
         contents.contains("upload-artefact: ${{ inputs['should-upload-workflow-artifacts'] }}"),
         "windows-package should use the upload-artefact input spelling"
     );
     assert!(
-        contents.contains("binary: ${{ steps.stage_paths.outputs.binary_path }}"),
-        "macos-package should consume staged binary_path output"
+        contents.contains("binary: ${{ steps.stage.outputs['binary-path'] }}"),
+        "macos-package should consume the staged binary-path output directly"
     );
     assert!(
-        contents.contains("manpage: ${{ steps.stage_paths.outputs.man_path }}"),
-        "macos-package should consume staged man_path output"
+        contents.contains("manpage: ${{ steps.stage.outputs['man-path'] }}"),
+        "macos-package should consume the staged man-path output directly"
     );
     assert!(
-        contents.contains("${{ steps.stage_paths.outputs.artefact_dir }}"),
-        "workflow should use the staged artefact_dir output for uploads"
+        contents.contains("${{ steps.stage.outputs['artifact-dir'] }}"),
+        "workflow should use the staged artifact-dir output for uploads"
     );
 }
 
 #[rstest]
 #[case("config-file: .github/release-staging.toml")]
-#[case("man-paths: ${{ steps.stage_paths.outputs.man_path }}")]
+#[case("man-paths: ${{ steps.stage.outputs['man-path'] }}")]
 fn build_and_package_wires_staged_release_outputs(#[case] expected: &str) {
     let contents = workflow_contents("build-and-package.yml")
         .expect("build-and-package workflow should be readable");
@@ -351,14 +351,13 @@ fn windows_upload_includes_staged_artefact_dir() {
     let step_body = workflow_step_body(&contents, "Upload Windows artefacts").join("\n");
 
     assert!(
-        step_body.contains("${{ steps.stage_paths.outputs.artefact_dir }}"),
+        step_body.contains("${{ steps.stage.outputs['artifact-dir'] }}"),
         "Windows upload should include staged sidecar artefacts"
     );
 }
 
 #[rstest]
 #[case("Stage artefacts")]
-#[case("Capture staged paths")]
 fn behavioural_staging_runs_for_every_platform(#[case] step_name: &str) {
     let contents = workflow_contents("build-and-package.yml")
         .expect("build-and-package workflow should be readable");

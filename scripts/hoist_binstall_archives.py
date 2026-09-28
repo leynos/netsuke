@@ -1,3 +1,8 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.14"
+# dependencies = ["cyclopts>=4.25.3,<5"]
+# ///
 """Hoist staged cargo-binstall archives to the release root.
 
 The release workflow downloads one workflow artefact per target into
@@ -32,9 +37,9 @@ Run via ``.github/workflows/release.yml``; behavioural coverage lives in
 ``tests/workflow_contracts/hoist_binstall_archives_test.py``.
 """
 
-import argparse
 import shutil
 import sys
+import typing as typ
 from pathlib import Path
 
 # Discovery and validation live in a sibling module so each file stays within
@@ -45,6 +50,13 @@ from hoist_binstall_discovery import (
     expected_archive_names,
     locate_archives,
 )
+
+import cyclopts
+from cyclopts import App, Parameter
+
+# This script's public ``--version`` parameter is the release version used in
+# archive names, so it takes precedence over Cyclopts' built-in version flag.
+app = App(config=cyclopts.config.Env("INPUT_", command=False), version_flags=[])
 
 
 def hoist(dist_dir: Path, staging_config: Path, manifest: Path, version: str) -> int:
@@ -154,35 +166,51 @@ def _move_all(dist_dir: Path, located: list[StagedArchive]) -> None:
         raise
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Parse command-line arguments and run the hoist.
-
-    Parameters
-    ----------
-    argv
-        Argument vector to parse; ``None`` lets ``argparse`` read
-        ``sys.argv``.
+@app.default
+def run_hoist(
+    *,
+    version: typ.Annotated[str, Parameter(required=True)],
+    dist_dir: Path = Path("dist"),
+    staging_config: Path = Path(".github/release-staging.toml"),
+    manifest: Path = Path("Cargo.toml"),
+) -> int:
+    """Run the archive hoist from Cyclopts arguments or ``INPUT_*`` values.
 
     Returns
     -------
     int
-        Process exit status from :func:`hoist`.
+        The hoist status from :func:`hoist`.
 
-    Notes
-    -----
-    ``argparse`` raises ``SystemExit`` when argument parsing fails.
+    Examples
+    --------
+    ``INPUT_VERSION=1.2.3`` supplies the version, and ``--version 1.2.3``
+    remains available to callers that use the command-line interface.
     """
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--version", required=True, help="Release version")
-    parser.add_argument("--dist-dir", type=Path, default=Path("dist"))
-    parser.add_argument(
-        "--staging-config",
-        type=Path,
-        default=Path(".github/release-staging.toml"),
-    )
-    parser.add_argument("--manifest", type=Path, default=Path("Cargo.toml"))
-    args = parser.parse_args(argv)
-    return hoist(args.dist_dir, args.staging_config, args.manifest, args.version)
+    return hoist(dist_dir, staging_config, manifest, version)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Parse arguments or ``INPUT_*`` variables and return the hoist status.
+
+    Returns
+    -------
+    int
+        The hoist command's status.
+
+    Raises
+    ------
+    TypeError
+        If Cyclopts returns something other than the hoist status.
+
+    Examples
+    --------
+    ``main(["--version", "1.2.3"])`` runs the release hoist for version 1.2.3.
+    """
+    arguments = sys.argv[1:] if argv is None else argv
+    result = app(arguments, result_action="return_value")
+    if not isinstance(result, int):
+        raise TypeError
+    return result
 
 
 if __name__ == "__main__":

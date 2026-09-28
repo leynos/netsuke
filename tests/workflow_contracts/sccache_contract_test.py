@@ -198,24 +198,16 @@ def test_windows_lanes_use_a_workspace_compiler_cache(
 
 
 def test_orthohelp_probes_before_installing() -> None:
-    """Require the version probe to precede the installer.
+    """Require the release lane to use its tested install script.
 
-    The cache restores `~/.cargo/bin`, and an install refuses to overwrite a
-    binary already there, so a warm run that reached the installer failed on a
-    cache hit.
-
-    There is one installer to precede now rather than two. The source-build
-    fallback this test also guarded was retired once `cargo-orthohelp` 0.9.1
-    began publishing prebuilt archives (leynos/ortho-config#480).
+    The script owns the cache probe and prebuilt release installation. Keeping
+    command sequencing in that tested script prevents shell drift here.
     """
     steps = job_steps(load_workflow(WORKFLOW_DIR / "build-and-package.yml"), "build")
     script = str(named_step(steps, "Install cargo-orthohelp").get("run", ""))
-    probe = script.index("cargo-orthohelp --version")
-    installer = script.index("cargo binstall")
-    assert probe < installer, "the probe must precede the installer"
-    assert "exit 0" in script[probe:installer], (
-        "a matching probe must skip the installer rather than fall through"
+    assert "scripts/install_orthohelp.py" in script, (
+        "the installer must delegate cache probing to the Python script"
     )
-    assert "cargo install" not in script, (
-        "the retired source-build fallback must not return"
+    assert "cargo binstall" not in script, (
+        "the installer command must be owned by the tested Python script"
     )
