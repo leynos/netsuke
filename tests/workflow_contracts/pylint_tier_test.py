@@ -38,6 +38,13 @@ def _makefile_variable(name: str) -> str:
     -------
     str
         The assigned value with surrounding whitespace removed.
+
+    Examples
+    --------
+    >>> _makefile_variable("PYLINT_VERSION")
+    '4.0.9'
+    >>> _makefile_variable("PYLINT_PYTHON")
+    '$(PYTHON_BASELINE)'
     """
     # Join backslash continuations so a multi-line assignment reads whole.
     text = MAKEFILE_PATH.read_text(encoding="utf-8").replace("\\\n", " ")
@@ -89,6 +96,13 @@ def _make_quoted(path: Path) -> str:
     str
         The shell-quoted path with each ``$`` doubled, so Make passes it to
         the shell as one literal word.
+
+    Examples
+    --------
+    >>> _make_quoted(Path("/tmp/probe module.py"))
+    "'/tmp/probe module.py'"
+    >>> _make_quoted(Path("/tmp/$HOME.py"))
+    "'/tmp/$$HOME.py'"
     """
     return shlex.quote(str(path)).replace("$", "$$")
 
@@ -105,6 +119,15 @@ def _run_configured_pylint(target: Path) -> subprocess.CompletedProcess[str]:
     -------
     subprocess.CompletedProcess[str]
         The finished Make process, with output captured.
+
+    Examples
+    --------
+    Lint one module with the tier exactly as ``make lint-python`` would; a
+    parse failure yields a non-zero ``returncode``:
+
+    >>> result = _run_configured_pylint(Path("broken.py"))  # doctest: +SKIP
+    >>> result.returncode != 0  # doctest: +SKIP
+    True
     """
     make = shutil.which("make")
     assert make is not None, "make must be on PATH"
