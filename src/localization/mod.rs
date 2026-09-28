@@ -6,6 +6,18 @@
 //! English catalogue, while callers can override it (for example in `main`) to
 //! respect `--locale` or `NETSUKE_LOCALE`.
 
+/// Declare Fluent message keys and their stable string identifiers.
+///
+/// Defined here rather than in `keys` so that file stays a plain table of
+/// keys; `macro_rules!` scoping is textual, so the child module sees it.
+macro_rules! define_keys {
+    ($($name:ident => $value:literal,)+) => {
+        $(#[doc = "Fluent message key."] pub const $name: &str = $value;)+
+        /// All Fluent message keys referenced by Netsuke.
+        pub const ALL_KEYS: &[&str] = &[$($name),+];
+    };
+}
+
 pub mod keys;
 
 /// The locale registry, which lives at the crate root so that it depends on
