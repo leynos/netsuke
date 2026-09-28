@@ -57,9 +57,13 @@ checkout (with `fetch-depth: 2`), `astral-sh/setup-uv`, and **Decide Kani proof
 scope**, which runs `uv run --script scripts/kani_proof_scope.py` with
 `INPUT_EVENT_NAME` set from `github.event_name`. The script writes
 `run-proofs=true` or `run-proofs=false` to the step outputs, and every later
-step carries `if: steps.scope.outputs.run-proofs == 'true'`. When the proofs
-are skipped the job ends green, and the script says why in the job summary and
-as a `::notice::` annotation.
+step carries `if: steps.scope.outputs.run-proofs == 'true'`. That includes the
+job's two other checks, the scope wrapper's end-to-end suite and the mutation
+patch compile gate, together with the build standard and runner they install.
+The gate compiles through the Kani front-end that only a proof run installs,
+and both checks read inputs the scope names, so they run and skip with the
+proofs. When the proofs are skipped the job ends green, and the script says why
+in the job summary and as a `::notice::` annotation.
 
 **What runs in full, and when.**
 
@@ -114,8 +118,13 @@ as a `::notice::` annotation.
 - `infrastructure` names what builds and runs the proofs, which no source
   closure can find: `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`,
   `build.rs`, `.cargo/`, `tools/kani/`, `.github/actions/kani-cache/`, the
-  `Makefile`, `.github/workflows/ci.yml`, and the decision script itself. The
-  contract requires each of them.
+  `Makefile`, `.github/workflows/ci.yml`, and the decision script itself. It
+  also names the inputs of the job's two other checks, which the same decision
+  gates: the scope wrapper's suite (`tests/kani_scope_wrapper_e2e_tests.rs`)
+  and the mutation compile gate (`tests/kani_mutation_evidence_tests.rs`, its
+  module directory, and the patches under `docs/verification/mutations/`).
+  Every file a patch edits must lie in `sources`, since the gate applies the
+  patch before compiling. The contract requires each of them.
 
 The contract fails when the closure reaches a path the scope does not cover,
 when any `#[kani::proof]` file anywhere in the repository is outside the scope,

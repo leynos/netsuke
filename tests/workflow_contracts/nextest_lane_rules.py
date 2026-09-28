@@ -5,7 +5,8 @@ to run without the pinned ``mold`` on ``PATH``. That holds even where the
 measured build never links with ``mold``: the coverage lanes assign
 ``RUSTFLAGS`` and so displace the linker flag, yet their tests still reach the
 preflight. So every Linux job that runs the suite must run
-``make install-build-tools`` in a step of its own, unguarded, before the suite.
+``make install-build-tools`` in a step of its own, before the suite, and
+unguarded unless every suite step carries the same guard.
 
 Which jobs those are is derived, not listed. A job runs the suite when a step
 calls the shared coverage action, runs ``cargo nextest run`` itself, or invokes
@@ -233,6 +234,24 @@ def suite_lanes(documents: dict[str, dict[str, object]], makefile: str) -> list[
     return [where for where, _ in _suite_jobs(documents, nextest_goals(makefile))]
 
 
+def _guard_is_shared(steps: Steps, install: int, goals: frozenset[str]) -> bool:
+    """Return whether the install runs whenever any suite step does.
+
+    An unguarded install always does. A guarded one does only when every
+    suite step carries the identical guard, as in `kani-smoke`, where one
+    decision step gates every later step alike (ADR-039).
+
+    Returns
+    -------
+    bool
+        Whether the install is unguarded, or every suite step shares its guard.
+    """
+    if "if" not in steps[install]:
+        return True
+    guard = steps[install]["if"]
+    return all(step.get("if") == guard for step in steps if runs_suite(step, goals))
+
+
 def _lane_violations(where: str, steps: Steps, goals: frozenset[str]) -> list[str]:
     """Check one suite lane's install step against the rule."""
     first_suite = next(i for i, step in enumerate(steps) if runs_suite(step, goals))
@@ -248,8 +267,11 @@ def _lane_violations(where: str, steps: Steps, goals: frozenset[str]) -> list[st
             f"{where}: installs the build standard only after "
             f"{step_name(steps[first_suite])!r} runs the suite"
         )
-    if "if" in steps[install]:
-        problems.append(f"{where}: `make install-build-tools` must not carry an `if:`")
+    if not _guard_is_shared(steps, install, goals):
+        problems.append(
+            f"{where}: `make install-build-tools` must not carry an `if:` "
+            "that every suite step does not carry too"
+        )
     if steps[install].get("continue-on-error") not in {None, False}:
         problems.append(
             f"{where}: `make install-build-tools` must not continue on error"

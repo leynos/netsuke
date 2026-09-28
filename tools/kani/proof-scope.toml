@@ -33,8 +33,10 @@ sources = [
   "src/recipe_shell.rs",
 ]
 
-# What builds and runs the proofs rather than what they prove. The contract
-# requires each of these, since none can be derived from the Rust source.
+# What builds and runs the proofs rather than what they prove, and the inputs of
+# the job's other steps (the scope wrapper's suite and the mutation compile
+# gate), which the same decision gates. The contract requires each of these,
+# since none can be derived from the Rust source.
 infrastructure = [
   ".cargo/",
   ".github/actions/kani-cache/",
@@ -43,7 +45,11 @@ infrastructure = [
   "Cargo.toml",
   "Makefile",
   "build.rs",
+  "docs/verification/mutations/",
   "rust-toolchain.toml",
   "scripts/kani_proof_scope.py",
+  "tests/kani_mutation_evidence_tests.rs",
+  "tests/kani_mutation_evidence_tests/",
+  "tests/kani_scope_wrapper_e2e_tests.rs",
   "tools/kani/",
 ]

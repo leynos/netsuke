@@ -3303,8 +3303,11 @@ links with it, but the suite does not only build: its tests drive `make`
 recipes gated on `check-build-tools`, which refuses to run without the pinned
 `mold` on `PATH`. The rule is general. Every Linux job that runs the nextest
 suite, whether through the coverage action, `cargo nextest run`, or a Make goal
-whose recipe reaches it, runs `make install-build-tools` in an unguarded step
-of its own before the suite. `tests/workflow_contracts/nextest_lane_rules.py`
+whose recipe reaches it, runs `make install-build-tools` in a step of its own
+before the suite. That step carries no `if:` unless every suite step in the job
+carries the identical one, so the install runs whenever the suite does.
+`kani-smoke` is the case this admits: its proof-scope decision gates every
+later step alike (ADR-039). `tests/workflow_contracts/nextest_lane_rules.py`
 derives those jobs from the workflows and the Makefile rather than listing
 them, and `tests/workflow_contracts/nextest_lane_mold_test.py` proves each
 clause by mutation.
@@ -4152,13 +4155,13 @@ for the design rationale and re-entry criteria.
 Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
 `build-test` job. When the proofs run, the job installs the pinned, checksummed
 `cargo-kani` front-end and Kani release bundle, checks the reported version,
-and then runs the bounded harness suite through `make kani-ir` and the
-mutation compile gate through `make test-kani-mutations`, both under a
-30-minute job timeout; it does not run `make verus`, coverage, CodeScene
-upload, or the normal build matrix. Its cache entry owns the job-local Kani
-Cargo, support-file, and Rust toolchain homes separately from ordinary Cargo
-build artefacts. The job runs on every pull request, on a push to `main`, on
-the nightly schedule and on a manual dispatch, which is what lets a dispatch
+and then runs the bounded harness suite through `make kani-ir` and the mutation
+compile gate through `make test-kani-mutations`, both under a 30-minute job
+timeout; it does not run `make verus`, coverage, CodeScene upload, or the
+normal build matrix. Its cache entry owns the job-local Kani Cargo,
+support-file, and Rust toolchain homes separately from ordinary Cargo build
+artefacts. The job runs on every pull request, on a push to `main`, on the
+nightly schedule and on a manual dispatch, which is what lets a dispatch
 measure a warm restore of those homes.
 
 ### Change-scoped Kani proofs

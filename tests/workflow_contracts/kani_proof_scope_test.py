@@ -37,10 +37,15 @@ REQUIRED_INFRASTRUCTURE = (
     "Cargo.toml",  # features, dependencies and `[package.metadata.kani]`
     "Makefile",  # the `kani-ir` and `kani-full` targets and their flags
     "build.rs",  # the build script `cargo kani` runs before compiling
+    "docs/verification/mutations/",  # the patches the mutation gate compiles
     "rust-toolchain.toml",  # the toolchain pin
     "scripts/kani_proof_scope.py",  # the decision itself
+    "tests/kani_mutation_evidence_tests.rs",  # the mutation compile gate
+    "tests/kani_mutation_evidence_tests/",  # its modules
+    "tests/kani_scope_wrapper_e2e_tests.rs",  # the scope wrapper's own suite
     "tools/kani/",  # the verifier version and this scope
 )
+MUTATIONS_DIR = REPO_ROOT / "docs" / "verification" / "mutations"
 PROOF_ATTRIBUTE = re.compile(r"#\[\s*kani\s*::\s*proof\s*\]")
 SKIPPED_DIRECTORIES = frozenset({"target", "node_modules"})
 
@@ -182,6 +187,25 @@ def test_every_scope_entry_covers_the_closure(closure: set[str]) -> None:
         e for e in _scope()["sources"] if not any(_covers(e, path) for path in closure)
     ]
     assert not dead, f"these entries cover nothing a harness reaches: {dead}"
+
+
+def test_every_mutation_patch_target_is_in_scope() -> None:
+    """Require every file a mutation patch edits to be a proof input.
+
+    The mutation compile gate applies each patch before compiling, so a pull
+    request that changes a patched file can break the gate even where no
+    harness reaches that file.
+    """
+    targets = sorted({
+        line.removeprefix("+++ b/").strip()
+        for patch in sorted(MUTATIONS_DIR.glob("*.patch"))
+        for line in patch.read_text(encoding="utf-8").splitlines()
+        if line.startswith("+++ b/")
+    })
+    assert targets, "no mutation patch target found; the discovery is broken"
+    sources = _scope()["sources"]
+    outside = [path for path in targets if not any(_covers(e, path) for e in sources)]
+    assert not outside, f"these patched files are outside the scope: {outside}"
 
 
 def test_scope_names_every_toolchain_input() -> None:

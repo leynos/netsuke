@@ -547,6 +547,7 @@ jobs:
         if: steps.scope.outputs.run-proofs == 'true'
         run: cargo kani --version | grep --fixed-strings "0.67.0"
       - name: Start the user manager
+        if: steps.scope.outputs.run-proofs == 'true'
         # A hosted runner's job does not run inside a login session, so the
         # per-user systemd manager that `systemd-run --user --scope` needs is
         # absent until lingering is on; without it every scenario in the next
@@ -562,6 +563,7 @@ jobs:
             sleep 1
           done
       - name: Install the build standard
+        if: steps.scope.outputs.run-proofs == 'true'
         # Not because the wrapper's suite needs the pinned linker: its recipe is
         # a single `cargo nextest run` whose `RUSTFLAGS` displace the
         # configuration's `-Zthreads`/`mold` tables, and the target declares no
@@ -571,6 +573,7 @@ jobs:
         # tests/workflow_contracts/nextest_lane_mold_test.py is that contract.
         run: make install-build-tools
       - name: Install cargo-nextest
+        if: steps.scope.outputs.run-proofs == 'true'
         # The wrapper's own suite is an ordinary test binary run through the
         # standard runner, and this job installs none of the test tooling the
         # `build-test` lane does. Pinned to the same action revision and the
@@ -579,6 +582,7 @@ jobs:
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Verify the scope wrapper end to end
+        if: steps.scope.outputs.run-proofs == 'true'
         # Runs before the harness suite so a broken wrapper is reported as
         # itself rather than as a Kani failure. Not a `make test` invocation:
         # the wrapper's own suite is one test binary, and `kani-smoke` is
@@ -591,6 +595,7 @@ jobs:
         if: steps.scope.outputs.run-proofs == 'true'
         run: make kani-ir
       - name: Mutation patch compile gate
+        if: steps.scope.outputs.run-proofs == 'true'
         # Applies each patch under docs/verification/mutations/ and compiles the
         # patched tree under `-D warnings`. `#[ignore]`-gated and run from its
         # own target: one Kani codegen per patch is too costly for the default
