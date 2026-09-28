@@ -1124,6 +1124,55 @@ Hard invariants. Violating one requires escalation, not a workaround.
   because the field layout differs between granted and blocked lines. The
   granted line is the one **without** a leading `->`.
 
+  **Unblocked at 06:10Z — the durable signal this entry named has fired.** The
+  condition it specified is met in the form it specified:
+  `grep "$INODE" /proc/locks | grep -v -- '->'` returns nothing (no granted
+  line), the blocked count is **0**, and `pgrep -c rustc` is 0 because nothing
+  is running rather than because everything is stalled. The holder `1832225`
+  and its descendants have left the process table. So the local seven-target
+  run is no longer blocked by the cache, and the second reading this entry
+  called outstanding is owed as work rather than waiting on an event. Note
+  which signal carried the verdict: the *inode* going free, exactly as the
+  entry above insists — a `pgrep`-based reading alone would not have
+  distinguished a cleared deadlock from a machine whose holders had merely not
+  yet restarted.
+
+  **A second change rides on this head: `uv.lock` is untracked.** The file was
+  never deliberately tracked. `a94a3006` staged its own verification entry with
+  `git add -A`, and the sweep carried `uv.lock` along with it, so the branch
+  *added* the file against `origin/main` —
+  `git diff --name-status origin/main…HEAD -- uv.lock` read `A`. Commit
+  `f42202a4` adds the name to `.gitignore` **and** removes it from the index,
+  because the ignore rule alone would have been inert: git answers from the
+  index for a tracked path and never consults the ignore rules, so the file
+  would have stayed tracked while looking ignored. The working-tree file is
+  deliberately left in place, so `uv` still finds the lockfile it wrote.
+
+  Ignoring it is right for this repository even though `uv`'s own guidance says
+  a lockfile "should be checked into version control". That guidance presumes
+  dependencies to lock, and this repository has none by design and in as many
+  words: `pyproject.toml` declares no `[project]` table and no
+  `[build-system]`, "so no Python distribution can be built from it and `uv`
+  never treats the repository as a Python project". The Makefile agrees in
+  every invocation — `uv tool run …` throughout, and `uv run --no-project …`
+  for the contract tests and the Python lint gates; the `--locked`/`--frozen`
+  flags elsewhere in the tree belong to `cargo build`. What would be locked is
+  a three-line stub naming no package.
+
+  The change is inert by measurement rather than by assumption. The only test
+  that reads `.gitignore` copies it into a scratch repository and asserts that
+  each name in `MACHINE_LOCAL_DIRECTORIES` *is* ignored — one-directional, over
+  fifteen *directory* names that `uv.lock` is not among, so a new file pattern
+  cannot reach it. The two tests that shell out to `git ls-files` are both
+  path-scoped (`MUTATIONS_DIR`; `Cargo.toml`/`**/Cargo.toml`). `typos.toml`
+  already lists `uv.lock` in `extend-exclude`, so the spelling gate expects the
+  file to exist and is indifferent to who owns it. No test requires it tracked,
+  and none reads it.
+
+  This is a change outside `EP-M4`–`EP-M11`'s scope and is recorded here for
+  that reason: the branch carries it, so the plan and the pull request
+  description must both name it rather than let a reviewer discover it.
+
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
 - [ ] `EP-M6` RFC 0016, pattern and version predicates (step 6.5).
