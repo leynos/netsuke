@@ -1579,10 +1579,76 @@ Hard invariants. Violating one requires escalation, not a workaround.
   *name* under an `error::tests` module, and `FAIL` does not occur at all. Both
   were established by reading the lines, not by the absence of a grep hit.
 
-  Logs are `/tmp/g3-<gate>-6-1-1.out`. These results cover `802be5ea` only. CI
-  is a separate channel and had not concluded at the time of writing:
-  `netsukefile` and `release / metadata` had passed, and `build-test` and
-  `kani-smoke` were still in progress.
+  Logs are `/tmp/g3-<gate>-6-1-1.out`. These results cover `802be5ea` only, and
+  the later revision is covered separately below.
+
+- [x] (2026-09-28) **CI's full gate set and all four required checks pass on
+  `09e609ab`, the current head; the four Markdown-sensitive targets were also
+  re-run locally on it.** This entry closes the gap the entry above left open
+  on purpose — a gate result covers the revision it ran on, so `802be5ea`'s
+  green did not speak for the commit that recorded it.
+
+  CI is the stronger of the two readings because it is revision-bound and it
+  ran the whole union rather than a subset. `build-test` on `09e609ab` completed
+  `success` after running `Format`, `Lint Markdown`, `Lint`, `Typecheck`,
+  `Doc coverage`, `Spelling`, `Validate Mermaid diagrams`,
+  `Workflow contract tests`, and `Test and Measure Coverage` — every step
+  `success`. Its log carries the two verdicts that matter here:
+  `3494 tests run: 3494 passed (1 slow), 6 skipped`, and `Linting: 169 files`
+  followed by `Summary: 0 issues in 0 files`.
+
+  The four required checks are `success` on the same revision, and each
+  *completed after* the commit was created at 14:51:11Z — which is what makes
+  them evidence about this revision rather than about an ancestor:
+
+  | Check                | Conclusion | Completed | Job                  |
+  | -------------------- | ---------- | --------- | -------------------- |
+  | `build-test`         | success    | 15:08:03Z | `…/job/108985193830` |
+  | `kani-smoke`         | success    | 15:06:36Z | `…/job/108985193426` |
+  | `netsukefile`        | success    | 14:54:57Z | `…/job/108985192215` |
+  | `release / metadata` | success    | 14:53:38Z | `…/job/108985197560` |
+
+  All four job links point at runs whose `head_sha` is `09e609ab…`, checked
+  through the runs API rather than read off the check-run row, since a summary
+  row also lists checks that never ran.
+
+  The local re-run is the weaker reading and is recorded as such. The delta
+  `802be5ea` → `09e609ab` changes exactly one path — this ExecPlan
+  (`git diff --name-only --no-ext-diff 802be5ea 09e609ab` prints one line) — so
+  only the Markdown-sensitive targets can move, and those four were run again:
+  `check-fmt` (`164 files already formatted`; mdtablefix
+  `169 files left unchanged`), `markdownlint` (`Linting: 169 file(s)` then
+  `Summary: 0 error(s)` — both tells present, so `markdownlint-cli2` genuinely
+  ran), `nixie` (`All diagrams validated successfully!`), and `doc-coverage`
+  (`aggregate 4801/4858 98.83%`). Logs are `/tmp/g4-<gate>-6-1-1.out`, written
+  at 14:51:38Z–14:52:16Z.
+
+  Two honest limits on the local half. First, those log files carry **no**
+  runner verdict line of the `GATE=… EXIT=<rc> … HEAD=<sha>` form that the
+  `a5455a1a` run appended; the verdicts above are read from each tool's own
+  terminal success line, which is one step weaker than an exit status captured
+  through `PIPESTATUS[0]`. Second, the other three targets were not re-run
+  locally, because they are not reachable by this delta — but that is an
+  argument from the diff, not a measurement, and CI supplies the measurement on
+  the same revision.
+
+  That the evidence still describes the current head is itself checked, not
+  assumed: `git reflog` shows no commit since `09e609ab` and
+  `git ls-remote origin` agrees with the local ref.
+
+  The run has since closed out, and the whole of it is green rather than the
+  required four alone: `36439268002` is `completed/success` with every job
+  `success` — `build-test`, `kani-smoke`, `netsukefile`, `release / metadata`,
+  and also `Windows / lint-windows`, `Windows / build-test-windows`, and
+  `Windows / windows-msi-upgrade`. `lint-windows` is the one worth naming
+  because it was the last to finish and it is *not* quick: its
+  `Lint (Whitaker)` step ran 15:01:43Z–15:16:12Z against `Lint (Clippy)`'s
+  15:00:58Z, so a reader watching the run mid-flight would have seen a 14-minute
+  `in_progress` on a step whose local counterpart takes seconds. That is
+  dylint building its lint library from source on a cold runner, not a stall —
+  the diagnostic the earlier deadlock entry taught, applied forward: an
+  unexplained wait gets measured against its own baseline before it is called a
+  wedge.
 
 ## Surprises & discoveries
 
