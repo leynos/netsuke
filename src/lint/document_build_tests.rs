@@ -105,11 +105,16 @@ fn aliases_resolve_to_the_anchored_contents_at_their_own_span() {
     assert_eq!(doc.slice(copy.span), "*base");
 }
 
+/// A malformed source reports the line the scanner attributes the failure to.
+///
+/// For an unclosed flow collection that is the line the bracket opened on,
+/// not the end of input, which is also where the manifest parser's own error
+/// points: both read the source through `granit-parser`.
 #[rstest]
-#[case("targets:\n  - name: [\n", 3)]
-#[case("targets: [1, 2\n", 2)]
+#[case("targets:\n  - name: [\n", 2)]
+#[case("targets: [1, 2\n", 1)]
 #[case("a: 1\n  b: 2\n", 2)]
-fn malformed_sources_report_where_scanning_stopped(#[case] text: &str, #[case] line: usize) {
+fn malformed_sources_report_the_failing_line(#[case] text: &str, #[case] line: usize) {
     let failure = Document::parse(text.to_owned()).expect_err("source should not index");
     assert_eq!(failure.line, line, "{}", failure.message);
     assert_ne!(
