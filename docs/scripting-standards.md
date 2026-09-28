@@ -19,9 +19,18 @@ as a default.
   override code defaults. Behaviour is predictable in both CI and local runs.
 - Small API surface. The API is explicit and integrates cleanly with type
   hints, aiding readability and testing.
-- Backwards‑compatible migration. Option aliases and per‑parameter
+- Backwards-compatible migration. Option aliases and per-parameter
   environment variable names permit preservation of existing interfaces while
   removing shell glue.
+
+### Script-local input parsers
+
+Keep a parser beside the standalone script that owns its input contract. For
+example, `load_workflow_call_inputs` in the WiX release resolver is called only
+by `resolve_extension_version`; it owns that workflow's event-file shape checks
+and missing-input fallback. Keep it private to that script. Move it to a shared
+module only when another script consumes the same payload shape and shares its
+error and fallback semantics, then test both call sites.
 
 ## Language and runtime
 

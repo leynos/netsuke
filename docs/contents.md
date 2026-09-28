@@ -292,7 +292,8 @@ operator, user, and contributor references are easier to find.
   conventions, roadmap-writing rules, and Markdown requirements.
 - [scripting-standards.md](scripting-standards.md): Python scripting standards
   for repository automation scripts, covering the Cyclopts CLI pattern,
-  `cuprum` command execution, `pathlib` usage, and pytest coverage rules.
+  `cuprum` command execution, `pathlib` usage, pytest coverage rules, and
+  script-local input-parser ownership.
 - [execplans/](execplans/): Execution plans and implementation handoff notes.
 
 ## Testing and quality references

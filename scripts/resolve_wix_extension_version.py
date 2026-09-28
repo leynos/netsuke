@@ -33,13 +33,15 @@ DEFAULT_EXTENSION_VERSION = "7"
 app = App(config=cyclopts.config.Env("INPUT_", command=False))
 
 
-def resolve_extension_version(event_name: str, event_path: str) -> str:
-    """Resolve the requested extension version, falling back to version 7.
+def load_workflow_call_inputs(event_path: str) -> dict[str, object]:
+    """Return workflow-call inputs from the event file.
+
+    Keep this parser in the release script because it owns this event shape.
 
     Returns
     -------
-    str
-        The configured extension version or the default.
+    dict[str, object]
+        The workflow inputs, or an empty mapping when they are absent.
 
     Raises
     ------
@@ -47,6 +49,26 @@ def resolve_extension_version(event_name: str, event_path: str) -> str:
         If the event payload is not a JSON object.
     WorkflowInputsShapeError
         If workflow-call inputs are not a JSON object.
+    """
+    payload = json.loads(pathlib.Path(event_path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise WorkflowEventShapeError
+
+    inputs = payload.get("inputs")
+    if inputs is None:
+        return {}
+    if not isinstance(inputs, dict):
+        raise WorkflowInputsShapeError
+    return inputs
+
+
+def resolve_extension_version(event_name: str, event_path: str) -> str:
+    """Resolve the requested extension version, falling back to version 7.
+
+    Returns
+    -------
+    str
+        The configured extension version or the default.
 
     Examples
     --------
@@ -56,15 +78,7 @@ def resolve_extension_version(event_name: str, event_path: str) -> str:
     if event_name != "workflow_call":
         return DEFAULT_EXTENSION_VERSION
 
-    payload = json.loads(pathlib.Path(event_path).read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise WorkflowEventShapeError
-
-    inputs = payload.get("inputs")
-    if inputs is None:
-        inputs = {}
-    elif not isinstance(inputs, dict):
-        raise WorkflowInputsShapeError
+    inputs = load_workflow_call_inputs(event_path)
     configured_version = inputs.get("wix-extension-version")
     if configured_version is None:
         version = ""
@@ -73,7 +87,7 @@ def resolve_extension_version(event_name: str, event_path: str) -> str:
     else:
         version = json.dumps(configured_version)
 
-    return version if version and version != "null" else DEFAULT_EXTENSION_VERSION
+    return DEFAULT_EXTENSION_VERSION if version in {"", "null"} else version
 
 
 @app.default

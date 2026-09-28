@@ -52,13 +52,18 @@ def test_workflow_call_exports_the_requested_extension_version(
 
 @pytest.mark.parametrize(
     "payload",
-    [{}, {"inputs": None}, {"inputs": {}}],
-    ids=["missing-inputs", "null-inputs", "missing-version"],
+    [
+        {},
+        {"inputs": None},
+        {"inputs": {}},
+        {"inputs": {"wix-extension-version": "null"}},
+    ],
+    ids=["missing-inputs", "null-inputs", "missing-version", "null-sentinel"],
 )
 def test_workflow_call_without_a_version_uses_the_default(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, payload: dict[str, object]
 ) -> None:
-    """Missing inputs or version values fall back to the default version."""
+    """Missing inputs, keys, or the null sentinel use the default version."""
     event_path = tmp_path / "event.json"
     event_path.write_text(json.dumps(payload), encoding="utf-8")
     output_path = tmp_path / "github-output"
@@ -69,7 +74,7 @@ def test_workflow_call_without_a_version_uses_the_default(
     resolver.app([], result_action="return_value")
 
     assert output_path.read_text(encoding="utf-8") == "value=7\n", (
-        "missing inputs or versions must use the default extension version"
+        "missing inputs or the null sentinel must use the default version"
     )
 
 
