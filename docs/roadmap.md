@@ -2144,7 +2144,6 @@ runs prove the failure boundary before any job receives release permissions.
   - Success: a real release is publishable only from the admitted exact tag
     commit, and its retained evidence reproduces the admission decision.
 
-
 ## 10. Property-based testing of generated build scripts
 
 Hypothesis: Netsukefile authors trust the generated build script when the test

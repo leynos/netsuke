@@ -226,11 +226,11 @@ inside `serde_saphyr`'s parse error, and only for the first stage.
 The linter therefore reads the source a second time, but not to reinterpret it.
 `document_build.rs` streams the source through `granit_parser::Parser`, the
 parser `serde_saphyr` itself uses and resolved to the same version, which yields
-`(Event, Span)` pairs, and assembles a spanned tree: every scalar, sequence, and
-mapping node carries the byte range it occupies. This is a position index over
-the same bytes `serde_saphyr` consumed, read by the same grammar, not a second
-opinion about their meaning. If the two disagree the manifest did not parse, and
-`netsuke check` reports the parse error instead of running any rule.
+`(Event, Span)` pairs, and assembles a spanned tree: every scalar, sequence,
+and mapping node carries the byte range it occupies. This is a position index
+over the same bytes `serde_saphyr` consumed, read by the same grammar, not a
+second opinion about their meaning. If the two disagree the manifest did not
+parse, and `netsuke check` reports the parse error instead of running any rule.
 
 Span availability by stage:
 
@@ -242,9 +242,8 @@ Span availability by stage:
   its authored length; equal lengths alone are not enough, because a `foreach`
   over one element keeps the count while changing which item is which.
   Otherwise the resolver matches on the authored `name` scalar when that scalar
-  is literal. When
-  neither succeeds, the finding is emitted without a span and names the target,
-  rule, or action instead.
+  is literal. When neither succeeds, the finding is emitted without a span and
+  names the target, rule, or action instead.
 
 This is deliberately conservative. A wrong span is worse than no span: it sends
 a reader to the wrong line and, because suppression is span-scoped, it would
