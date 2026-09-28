@@ -1686,6 +1686,35 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `Doc-tests` headers this plan records as the real number rather than the
   three a hasty grep suggests.
 
+  **The MD038 fix was then carried forward, and the two affected gates re-run at
+  `6720c2b9` rather than argued about.** Writing the paragraph above reded
+  `markdownlint` on a code span with a trailing space — `` `Doc-tests ` `` —
+  which is MD038, and the repair was to shorten the span to `Doc-tests` rather
+  than to touch the rule. `check-fmt` and `markdownlint` were re-run on the
+  fixed tree (both green, the latter again in state 3 with
+  `Linting: 169 file(s)` before `Summary: 0 error(s)`), and the commit
+  `6720c2b9` lands exactly that tree.
+
+  `nixie` and `doc-coverage` were re-run too, and the reason is worth stating
+  because the first instinct was to exempt them as Markdown-irrelevant. They
+  are not, for `nixie`: a probe of its own log shows it names **this** plan (2
+  hits) among 47 `docs/execplans/*.md` files in a 170-file sweep, so a
+  one-character edit inside a plan is inside `nixie`'s scope even though the
+  plan carries no mermaid fence of its own. Both re-ran green
+  (`All diagrams validated successfully!`; `aggregate 4801/4858 98.83%`).
+  `doc-coverage` reads no Markdown at all (0 hits for `execplans`), so its
+  re-run was the cheap confirmation of that rather than a necessity.
+
+  The loop this plan has hit before is recording a gate run in a tracked file,
+  which moves HEAD past the revision the run verified. It is not re-opened here:
+  `6720c2b9` is the last revision verified, and the delta since `84e4fa82` is
+  the MD038 repair plus this paragraph — prose, in this one file, whose Rust
+  content is byte-identical to what the seven-target run passed. Earlier
+  entries in this plan handled the same situation by *stating the last verified
+  revision and the delta*, and that is what is done here. CI covers the same
+  four required contexts on every push and is the authority for any tip beyond
+  `6720c2b9`.
+
 ## Surprises & discoveries
 
 - Observation: **two independent safety nets can both report success while
