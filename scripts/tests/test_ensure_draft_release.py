@@ -26,7 +26,9 @@ def test_existing_release_is_left_untouched(
 
 
 def test_missing_release_is_created_with_tag_as_one_argument(
-    cmd_mox: CmdMox, monkeypatch: pytest.MonkeyPatch
+    cmd_mox: CmdMox,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A shell-significant tag remains one argument to both gh commands."""
     tag = "v1.2.3'; touch injected"
@@ -44,7 +46,7 @@ def test_missing_release_is_created_with_tag_as_one_argument(
     def respond(invocation: Invocation) -> tuple[str, str, int]:
         """Return gh's lookup and creation statuses for this tag."""
         if invocation.args == lookup_args:
-            return "", "", 1
+            return "", "release not found\n", 1
         if invocation.args == creation_args:
             return "", "", 0
         return "", "unexpected gh arguments", 127
@@ -58,6 +60,9 @@ def test_missing_release_is_created_with_tag_as_one_argument(
         lookup_args,
         creation_args,
     ], "the shell-significant tag must be one argument to each gh call"
+    assert capsys.readouterr().err == "release not found\n", (
+        "the failed release lookup diagnostic must reach the workflow log"
+    )
 
 
 def test_failed_release_creation_propagates_gh_status(

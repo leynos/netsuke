@@ -5,6 +5,7 @@
 # ///
 """Ensure the requested GitHub release exists as a draft."""
 
+import sys
 import typing as typ
 
 from cuprum import CommandResult, Program, ProgramCatalogue, sh
@@ -59,6 +60,8 @@ def ensure_draft_release(*, tag: typ.Annotated[str, Parameter(required=True)]) -
     existing_release = run_gh("release", "view", tag)
     if existing_release.exit_code == 0:
         return
+    if existing_release.stderr:
+        sys.stderr.write(existing_release.stderr)
 
     created_release = run_gh(
         "release",

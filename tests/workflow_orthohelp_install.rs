@@ -110,8 +110,14 @@ fn behavioural_build_and_package_validates_release_help_tooling() {
     let contents = workflow_contents("build-and-package.yml")
         .expect("build-and-package workflow should be readable");
 
-    assert!(contents.contains("scripts/install_orthohelp.py"));
-    assert!(contents.contains("cargo-orthohelp --version"));
+    assert!(
+        contents.contains("scripts/install_orthohelp.py"),
+        "workflow should use the tested cargo-orthohelp installer"
+    );
+    assert!(
+        contents.contains("cargo-orthohelp --version"),
+        "workflow should verify the installed cargo-orthohelp version"
+    );
     for step_name in ["Validate cargo-orthohelp version", "Generate release help"] {
         let step_body = workflow_step_body(&contents, step_name).join("\n");
         assert!(

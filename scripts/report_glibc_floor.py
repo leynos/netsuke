@@ -116,7 +116,7 @@ def report_glibc_floor(
     With ``INPUT_TARGET=x86_64-unknown-linux-gnu`` and ``INPUT_BIN_NAME=netsuke``,
     inspect the target's release binary and report its highest needed GLIBC.
     """
-    binary = pathlib.Path(f"target/{target}/release/{bin_name}")
+    binary = pathlib.Path("target") / target / "release" / bin_name
     result = _readelf(binary)
     if result.stderr:
         sys.stderr.write(result.stderr)

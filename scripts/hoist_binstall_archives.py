@@ -209,7 +209,8 @@ def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
     result = app(arguments, result_action="return_value")
     if not isinstance(result, int):
-        raise TypeError
+        message = f"Cyclopts returned {type(result).__name__}; expected int"
+        raise TypeError(message)
     return result
 
 

@@ -414,7 +414,7 @@ jobs:
       - name: Install uv
         # The privileged job runs inline-metadata Python scripts without a
         # shared dependency cache.
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
         with:
           python-version: '3.14'
           enable-cache: false
