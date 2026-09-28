@@ -216,12 +216,20 @@ fn assert_fixture_matches_build_source(build_script: &str) -> io::Result<()> {
             io::Error::other("could not locate the end of build.rs's cli module slice")
         })?;
 
-    for declaration in BUILD_SLICE_MODULES {
-        if !declared_slice.contains(declaration) {
-            return Err(io::Error::other(format!(
-                "build.rs's cli slice no longer matches the UI fixture: missing {declaration:?}",
-            )));
-        }
+    let mut declared_modules = declared_slice
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            (line.starts_with("mod ") || line.starts_with("pub mod ")) && line.ends_with(';')
+        })
+        .collect::<Vec<_>>();
+    declared_modules.sort_unstable();
+    let mut expected_modules = BUILD_SLICE_MODULES.to_vec();
+    expected_modules.sort_unstable();
+    if declared_modules != expected_modules {
+        return Err(io::Error::other(format!(
+            "build.rs's cli slice no longer matches the UI fixture: {declared_modules:?}",
+        )));
     }
     if declared_slice.matches("#[path = ").count() != 1 {
         return Err(io::Error::other(
@@ -242,6 +250,29 @@ fn fixture_contract_accepts_crlf_build_script_source() -> io::Result<()> {
     build_script.push_str("}\r\n#[path = \"src/cli/localization/mod.rs\"]\r\n");
 
     assert_fixture_matches_build_source(&build_script)
+}
+
+/// Reject a runtime child added to the build-script module slice.
+#[test]
+fn fixture_contract_rejects_extra_plain_child_module() -> io::Result<()> {
+    let build_script = test_support::fs::read_to_string(manifest_dir().join("build.rs"))?;
+    let widened_slice = build_script.replacen(
+        "    mod command;",
+        "    mod command;\n    mod discovery;",
+        1,
+    );
+
+    let error = assert_fixture_matches_build_source(&widened_slice)
+        .expect_err("an extra runtime module must widen the declared slice");
+    if !error
+        .to_string()
+        .contains("no longer matches the UI fixture")
+    {
+        return Err(io::Error::other(format!(
+            "unexpected fixture mismatch: {error}",
+        )));
+    }
+    Ok(())
 }
 
 /// Verify rerun directives track only the build-script's compiled module slice.

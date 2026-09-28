@@ -104,7 +104,7 @@ loaded through `extends` remain ordinary file layers by design.
 ## Implementation references
 
 - Discovery, provenance, and project-request capture:
-  [`src/cli/discovery/layers.rs`](../src/cli/discovery/layers.rs)
+  [`src/cli/discovery/layers/mod.rs`](../src/cli/discovery/layers/mod.rs)
 - Domain reconciliation:
   [`src/stdlib/network/policy/reconciliation/mod.rs`][reconciliation-module]
 - Configuration composition and observer event:
