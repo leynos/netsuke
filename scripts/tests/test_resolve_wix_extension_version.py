@@ -78,6 +78,24 @@ def test_workflow_call_without_a_version_uses_the_default(
     )
 
 
+@pytest.mark.parametrize("version", [[], {}, 42, False])
+def test_workflow_call_rejects_non_string_versions(
+    tmp_path: Path, version: object
+) -> None:
+    """Reject malformed version values instead of serializing them to output."""
+    event_path = tmp_path / "event.json"
+    event_path.write_text(
+        json.dumps({"inputs": {"wix-extension-version": version}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        resolver.ExtensionVersionShapeError,
+        match="wix-extension-version must be a JSON string",
+    ):
+        resolver.resolve_extension_version("workflow_call", str(event_path))
+
+
 @pytest.mark.parametrize("inputs", [[], "not-a-mapping", 42])
 def test_workflow_call_rejects_non_object_inputs(
     tmp_path: Path, inputs: object

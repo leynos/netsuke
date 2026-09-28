@@ -80,8 +80,8 @@ def ensure_draft_release(*, tag: typ.Annotated[str, Parameter(required=True)]) -
 
     Examples
     --------
-    With ``INPUT_TAG=v1.2.3``, view that release and create it as a draft if
-    the view command fails.
+    With ``INPUT_TAG=v1.2.3``, view that release and create it as a draft only
+    when ``gh`` reports that the release is missing.
     """
     existing_release = run_gh("release", "view", tag)
     if existing_release.exit_code == 0:

@@ -29,6 +29,14 @@ class WorkflowInputsShapeError(ValueError):
         super().__init__("workflow inputs must be a JSON object")
 
 
+class ExtensionVersionShapeError(ValueError):
+    """Report a WiX extension version that is not a JSON string."""
+
+    def __init__(self) -> None:
+        """Initialise the error for a non-string extension version."""
+        super().__init__("wix-extension-version must be a JSON string")
+
+
 DEFAULT_EXTENSION_VERSION = "7"
 app = App(config=cyclopts.config.Env("INPUT_", command=False))
 
@@ -70,6 +78,11 @@ def resolve_extension_version(event_name: str, event_path: str) -> str:
     str
         The configured extension version or the default.
 
+    Raises
+    ------
+    ExtensionVersionShapeError
+        If the configured extension version is not a JSON string.
+
     Examples
     --------
     >>> resolve_extension_version("push", "unused")
@@ -85,7 +98,7 @@ def resolve_extension_version(event_name: str, event_path: str) -> str:
     elif isinstance(configured_version, str):
         version = configured_version
     else:
-        version = json.dumps(configured_version)
+        raise ExtensionVersionShapeError
 
     return DEFAULT_EXTENSION_VERSION if version in {"", "null"} else version
 

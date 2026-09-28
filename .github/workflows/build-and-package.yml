@@ -182,7 +182,7 @@ jobs:
         env:
           INPUT_TARGET: ${{ inputs.target }}
           INPUT_BIN_NAME: ${{ env.BIN_NAME }}
-        run: uv run --no-project --python 3.14 scripts/report_glibc_floor.py
+        run: uv run --no-project --python "$UV_PYTHON" scripts/report_glibc_floor.py
 
       - name: Restore cargo-orthohelp
         id: orthohelp_cache

@@ -125,6 +125,7 @@ def report_glibc_floor(
 
     floor = _highest_glibc_version(result.stdout or "")
     if not floor:
+        print(f"no GLIBC version requirements found for {binary}", file=sys.stderr)
         raise SystemExit(1)
 
     print(f"glibc floor for {target}: {floor}")

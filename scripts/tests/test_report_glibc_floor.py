@@ -130,4 +130,8 @@ def test_missing_glibc_version_preserves_pipeline_failure(
     assert error.value.code == 1, (
         "the old pipefail pipeline fails when grep finds no version"
     )
+    assert report_context.capsys.readouterr().err == (
+        "no GLIBC version requirements found for "
+        "target/x86_64-unknown-linux-gnu/release/netsuke\n"
+    ), "a missing floor must identify the binary in the workflow log"
     assert not summary_path.exists(), "a missing GLIBC floor must not enter the summary"

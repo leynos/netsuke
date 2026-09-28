@@ -55,7 +55,7 @@ def test_the_floor_script_receives_inputs_through_the_environment() -> None:
     steps = _steps()
     step = named_step(steps, FLOOR_STEP)
     assert step.get("run") == (
-        "uv run --no-project --python 3.14 scripts/report_glibc_floor.py"
+        'uv run --no-project --python "$UV_PYTHON" scripts/report_glibc_floor.py'
     ), "the glibc logic must run through its tested Python script"
     env = require_mapping(step.get("env"), f"{FLOOR_STEP} environment")
     assert env.get("INPUT_TARGET") == "${{ inputs.target }}", (
@@ -65,8 +65,13 @@ def test_the_floor_script_receives_inputs_through_the_environment() -> None:
         "the binary name must reach the script through INPUT_BIN_NAME"
     )
     floor_index = step_index_by_key(steps, "name", FLOOR_STEP)
-    assert step_index_by_key(steps, "uses", "setup-uv") < floor_index, (
+    setup_index = step_index_by_key(steps, "uses", "setup-uv")
+    assert setup_index < floor_index, (
         "uv must be installed before the floor script runs"
+    )
+    setup = require_mapping(steps[setup_index].get("with"), "setup-uv inputs")
+    assert setup.get("python-version") == "${{ inputs['python-version'] }}", (
+        "the script must use the Python version configured by the reusable workflow"
     )
 
 
