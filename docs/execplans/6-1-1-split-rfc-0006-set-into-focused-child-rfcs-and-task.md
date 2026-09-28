@@ -1388,7 +1388,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   and `--wrap` is the flag that rewraps prose to the line width; the bare form
   is a strictly weaker check that does not rewrap at all. The gate's own
   command reported `+45 -45` on the same file, which `build-test` — a
-  *required* check — caught and reded. The edit was then canonicalised with
+  *required* check — caught and reded. The edit was then canonicalized with
   `--in-place` under the gate's flags, after which the gate's own command
   reports `169 files left unchanged`, exit 0. The rewrap is provably
   content-free: the word sequence before and after is identical (34481 words,
@@ -1400,6 +1400,21 @@ Hard invariants. Violating one requires escalation, not a workaround.
   it is not a pass. Both share the same root: an artefact was treated as
   evidence for a claim it does not cover. The remedy is the same too — run the
   command the gate runs, not a command that resembles it.
+
+  The fix above then produced a third instance, caught by a local gate run on
+  `feed5192` rather than by CI. The sentence *about* canonicalization was
+  itself written `canonicalised`, which `make spelling` rejects under the
+  en-GB-oxendict `-ize` rule, so `spelling` aborted and `markdownlint` reported
+  **no verdict at all** — an unknown that the outside observer would have read
+  as green had the abort not been noticed. Two properties of that failure are
+  worth keeping. First, the word was outside backticks: the plan already
+  records that a code span is exempt from the rule, and the only reason this
+  one was not exempt is that it is plain prose. Second, the same file contains
+  `recognise` twice, and both are correct as they stand — each is a backticked
+  quotation of a *different* revision's gate output, so the exemption still
+  applies and "fixing" them would have falsified a historical record. A
+  repo-wide `-ise` sweep is therefore not a safe repair; the distinction is
+  prose versus quoted evidence, not one spelling against another.
 
 - [ ] `EP-M4` RFC 0014, mapping and sequence transforms (step 6.3).
 - [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
