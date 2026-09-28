@@ -1,13 +1,8 @@
 //! Fluent message identifiers used by Netsuke.
-
-/// Declare Fluent message keys and their stable string identifiers.
-macro_rules! define_keys {
-    ($($name:ident => $value:literal,)+) => {
-        $(#[doc = "Fluent message key."] pub const $name: &str = $value;)+
-        /// All Fluent message keys referenced by Netsuke.
-        pub const ALL_KEYS: &[&str] = &[$($name),+];
-    };
-}
+//!
+//! This file holds only the key table: the build-time localization audit
+//! parses its single `define_keys!` invocation, and the macro itself is
+//! defined in the parent module.
 
 define_keys! {
     CLI_ABOUT => "cli.about",
