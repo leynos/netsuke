@@ -35,6 +35,39 @@ fn run_git(root: &Utf8Path, arguments: &[&str]) -> Result<()> {
     Ok(())
 }
 
+/// Generate a directory name that works on Windows and Unix.
+///
+/// Windows reserves several names that are otherwise valid in this generator.
+fn portable_directory_name() -> impl Strategy<Value = String> {
+    "[a-z]{1,8}".prop_filter("Windows reserves these device names", |name| {
+        !matches!(
+            name.as_str(),
+            "con"
+                | "prn"
+                | "aux"
+                | "nul"
+                | "com1"
+                | "com2"
+                | "com3"
+                | "com4"
+                | "com5"
+                | "com6"
+                | "com7"
+                | "com8"
+                | "com9"
+                | "lpt1"
+                | "lpt2"
+                | "lpt3"
+                | "lpt4"
+                | "lpt5"
+                | "lpt6"
+                | "lpt7"
+                | "lpt8"
+                | "lpt9"
+        )
+    })
+}
+
 /// Write a manifest-shaped fixture file below an isolated source-tree root.
 fn write_fixture(root: &Dir, relative_path: &Utf8Path) -> Result<()> {
     if let Some(parent) = relative_path
@@ -97,8 +130,8 @@ proptest! {
     /// without repeatedly creating isolated Git repositories 256 times.
     #[test]
     fn generated_layouts_include_only_tracked_manifests(
-        tracked_names in proptest::collection::btree_set("[a-z]{1,8}", 0..5),
-        untracked_names in proptest::collection::btree_set("[a-z]{1,8}", 1..5),
+        tracked_names in proptest::collection::btree_set(portable_directory_name(), 0..5),
+        untracked_names in proptest::collection::btree_set(portable_directory_name(), 1..5),
     ) {
         let (_directory, root, root_dir) = temp_root()
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
