@@ -95,6 +95,7 @@ _If you are upgrading: see the
   the manifests whose generated text is not pinned to an encoding are measurable
   ([ADR-0041](docs/adrs/adr-0041-canonical-recipe-shell-quoting-surface.md))
 
+<!-- markdownlint-disable-next-line MD024 -->
 ### Added
 
 - Bound manifest evaluation with configurable instruction, rendered-output,
