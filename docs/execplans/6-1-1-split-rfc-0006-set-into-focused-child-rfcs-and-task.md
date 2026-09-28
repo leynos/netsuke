@@ -1137,6 +1137,52 @@ Hard invariants. Violating one requires escalation, not a workaround.
   distinguished a cleared deadlock from a machine whose holders had merely not
   yet restarted.
 
+  **Discharged the same day — the local seven-target run is green on
+  `a5455a1a`, the revision that carries this entry.** `scrutineer` ran the
+  whole set sequentially, to completion, and every gate exited 0:
+
+  | Gate           | Exit | Duration | Diagnostic line, read from the log                             |
+  | -------------- | ---- | -------- | -------------------------------------------------------------- |
+  | `check-fmt`    | 0    | 2s       | `169 files left unchanged.`                                    |
+  | `lint`         | 0    | 85s      | all five stages ran; `All checks passed!`, `rated at 10.00/10` |
+  | `typecheck`    | 0    | 12s      | `All checks passed!` (ty), then `Finished 'dev' profile`       |
+  | `test`         | 0    | 286s     | `3494 tests run: 3494 passed (1 slow), 6 skipped`              |
+  | `markdownlint` | 0    | 30s      | spelling ran and passed, then `Summary: 0 error(s)`            |
+  | `nixie`        | 0    | 1s       | `All diagrams validated successfully!`                         |
+  | `doc-coverage` | 0    | 39s      | `aggregate 4801/4858 98.83%`, meets the 80.00% threshold       |
+
+  Three details are worth more than the verdict, because each is a way a green
+  could have been hollow. First, `markdownlint` shows *both* a `spelling` pass
+  (`current: typos.toml`) **and** an mdlint verdict (`Linting: 169 file(s)`,
+  `Summary: 0 error(s)`) — this gate's spelling prerequisite can abort before
+  mdlint ever runs, and a spelling-only log would have been an unknown wearing
+  a pass's clothes. Second, `test` printed `COV-4`'s
+  `coverage map: 1 of 8 capability groups written; 7 remaining` inside a
+  *passing* run, which is the whole point of the counter: a half-finished split
+  passes every other coverage check, so a stall is visible only if this line
+  still reaches the terminal. Third, every one of the seven logs independently
+  carries a verdict appended by the runner —
+  `GATE=<name> EXIT=<rc> DURATION=<n>s STARTED=<iso> FINISHED=<iso> HEAD=<sha>` —
+  and all seven name `a5455a1aae235fb7fd52e5db0ca9fda135329151`. That is what
+  binds the evidence to a revision rather than to whatever HEAD happened to be
+  when the report was written, and it is why the exit status was captured
+  through `PIPESTATUS[0]` rather than read off `tee`.
+
+  The one slow test was
+  `packaging_smoke_tests::packaged_manifest_retains_build_script_sources`,
+  which logged `SLOW [>120.000s]` and then **passed** inside its budget, under
+  a machine load average of 58 from other agents' runs. That is the known
+  cold-build-cost member and a load observation rather than a correctness
+  signal; it is recorded because a 120s flag in a log invites the wrong
+  question otherwise.
+
+  So the two readings this plan wanted now both exist and are kept separate:
+  CI's `3494 run / 3494 passed` on `c7ff9e4a` and on `1524a7e6`, and this local
+  run on `a5455a1a`. **The owed liveness proof for `ensure_distinct` is still
+  owed** — a green suite has not yet exercised the new branch, and the guard
+  must still be shown to *fire* by mutating a coverage-map row to
+  `` `8.1`; `8.1` `` and observing the duplicate message.
+
   **A second change rides on this head: `uv.lock` is untracked.** The file was
   never deliberately tracked. `a94a3006` staged its own verification entry with
   `git add -A`, and the sweep carried `uv.lock` along with it, so the branch
