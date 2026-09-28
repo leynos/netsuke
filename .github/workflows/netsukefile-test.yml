@@ -7,6 +7,14 @@ on:
   push:
     branches: [main]
 
+# A newer push to a pull request cancels the run it supersedes. Other events
+# never cancel: each `main` push, dispatch or schedule falls back to its own
+# run identifier, so no run replaces another that is still pending. See
+# tests/workflow_contracts/pr_concurrency_test.py.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   netsukefile:
     # The deliberate Ubuntu 22.04 compatibility lane. Ubicloud's default image
