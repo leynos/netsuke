@@ -883,7 +883,7 @@ rather than reusing command escaping.
 
 `netsuke check` is driven by a static registry in `src/lint/registry.rs`. The
 [manifest linter design](netsuke-linter-design.md) specifies the model and
-[ADR-021](adr-021-manifest-linting-under-netsuke-check.md) records the
+[ADR-042](adr-042-manifest-linting-under-netsuke-check.md) records the
 decisions behind it; this section is the mechanics.
 
 A new rule touches four implementation places, the repository localization

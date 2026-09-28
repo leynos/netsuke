@@ -435,7 +435,7 @@ identifier remains reserved, not checked off as implemented.
     `feedback`.
     - [x] `check` lints the selected manifest. See
       [manifest linter design](netsuke-linter-design.md) and
-      [ADR-021](adr-021-manifest-linting-under-netsuke-check.md).
+      [ADR-042](adr-042-manifest-linting-under-netsuke-check.md).
   - [ ] Rename `--file` to `--manifest`, keeping `-f` as an intentional
     shorthand.
   - [ ] Depend on OrthoConfig `7.1.1` to `7.1.3` for shared vocabulary policy
@@ -3290,7 +3290,7 @@ findings that changed a manifest, not by the number of rules registered.
 
 Scope: everything behind `netsuke check`. The
 [manifest linter design](netsuke-linter-design.md) is a living document and
-[ADR-021](adr-021-manifest-linting-under-netsuke-check.md) records the
+[ADR-042](adr-042-manifest-linting-under-netsuke-check.md) records the
 decisions it currently rests on; both are expected to change under this phase,
 and a task that supersedes either must say so. The v0.4.0 rule identifiers are
 already treated as permanent, so a rule withdrawn here keeps its name reserved.
@@ -3334,7 +3334,7 @@ is a proposal rather than a contract.
 
 This step answers how far the linter's text can move into the localization
 catalogues without letting the emitted text and the rule reference drift apart,
-which is the risk [ADR-021](adr-021-manifest-linting-under-netsuke-check.md)
+which is the risk [ADR-042](adr-042-manifest-linting-under-netsuke-check.md)
 cited when it deferred the work. It is sequenced after step 31.1 so the prose
 being translated is prose the rules have earned.
 
