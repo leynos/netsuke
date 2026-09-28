@@ -1733,6 +1733,18 @@ Hard invariants. Violating one requires escalation, not a workaround.
   reading its conclusion, and treat an absent run as a failure, not as silence.
   The mitigation is structural, not vigilance: keep the pull request mergeable,
   because a conflict disables the entire CI channel.
+
+  *Amendment, added the same day: the mitigation worked, and this Observation
+  is kept in its original tense because it records a state that no longer
+  holds.* PR #697 became `MERGEABLE` when the conflict was resolved, and the CI
+  channel reopened with it: the branch has since been validated on `09e609ab`
+  (run `36439268002`, `completed/success`, every job green) and again on
+  `eb21dec1` (run `36445217340`, triggered 2026-09-28T15:39:14Z). The sentence
+  "the branch's 23 commits have never been CI-validated, and the last CI run on
+  it is `3f02ee37`" was true when written and is now false; it is left standing
+  because the lesson depends on it. What the amendment adds is the confirmation
+  that the *structural* fix — keep the pull request mergeable — is what
+  restored the channel, rather than attention or luck.
 - Observation: **"every gate green" is the wrong acceptance criterion for a
   shared, contended host, and the plan wrote it anyway.** Evidence: the same
   commit `288526a2` is red locally (`make test`, one nested-Cargo compile test
