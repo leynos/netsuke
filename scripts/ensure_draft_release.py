@@ -43,6 +43,31 @@ def run_gh(*arguments: str, echo: bool = False) -> CommandResult:
     return command.run_sync(echo=echo)
 
 
+def _lookup_reported_missing(result: CommandResult) -> bool:
+    """Classify a lookup as a confirmed missing release.
+
+    Only the GitHub CLI's explicit not-found diagnostic proves absence; other
+    status-1 errors can indicate authentication, connectivity, or API failures.
+
+    Returns
+    -------
+    bool
+        Whether the lookup result explicitly reports a missing release.
+
+    Examples
+    --------
+    >>> missing = CommandResult(
+    ...     Program("gh"), ("gh", "release", "view", "v1.2.3"), 1, 42, None,
+    ...     "release not found",
+    ... )
+    >>> _lookup_reported_missing(missing)
+    True
+    """
+    return (
+        result.exit_code == 1 and "release not found" in (result.stderr or "").lower()
+    )
+
+
 @app.default
 def ensure_draft_release(*, tag: typ.Annotated[str, Parameter(required=True)]) -> None:
     """Create a verified draft release when the tag has no release yet.
@@ -65,10 +90,8 @@ def ensure_draft_release(*, tag: typ.Annotated[str, Parameter(required=True)]) -
         sys.stderr.write(existing_release.stderr)
     # The CLI uses status 1 for ordinary errors, so create only on its
     # explicit not-found diagnostic; network and API failures must stop here.
-    if not (
-        existing_release.exit_code == 1
-        and "release not found" in (existing_release.stderr or "").lower()
-    ):
+    is_missing_release = _lookup_reported_missing(existing_release)
+    if not is_missing_release:
         raise SystemExit(existing_release.exit_code)
 
     created_release = run_gh(

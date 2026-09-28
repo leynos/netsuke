@@ -266,6 +266,8 @@ def test_python_quality_targets_run_the_pinned_local_commands() -> None:
         ),
         "typecheck-python": (
             "ty check --python-version $(PYTHON_BASELINE)",
+            "--with 'cyclopts>=4.25.3,<5'",
+            "--with 'cuprum>=0.1.0,<0.2.0'",
             "--extra-search-path scripts",
             "--extra-search-path .github/scripts",
             "$(PYTHON_SOURCES)",

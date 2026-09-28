@@ -766,9 +766,10 @@ existing error handling logic.
    parameter on the command.
 8. Pipelines: the `|` operator works identically; ensure both commands are
    constructed via `sh.make()`.
-9. Error handling: replace `CommandNotFound` with cuprum's
-    `UnknownProgramError`; replace `ProcessExecutionError` with exit code
-    checks on `CommandResult`.
+9. Error handling: a program omitted from the catalogue raises
+   `UnknownProgramError`; an executable missing from `PATH` raises
+   `FileNotFoundError`. Replace `ProcessExecutionError` with exit-code checks on
+   `CommandResult` for commands that start successfully.
 
 ## CI wiring: GitHub Actions (Cyclopts‑first)
 
@@ -790,8 +791,14 @@ existing error handling logic.
 
 - Newline‑separated lists are preferred for CI inputs to avoid shell quoting
   issues across platforms.
-- Cuprum's `run_sync()` always returns a `CommandResult`; check `exit_code`
-  explicitly rather than relying on exceptions for non‑zero exits.
+- Cuprum's `run_sync()` returns a `CommandResult` for commands that start,
+  including commands that exit non-zero. A missing executable still raises
+  `FileNotFoundError`; catch it only around optional command probes, where
+  absence has a defined meaning such as a cache miss.
+- Keep command-result predicates private to the script that owns the external
+  command contract. They classify a result and leave command execution and
+  fallback work to the caller. Share a predicate only when multiple scripts
+  consume the same stable command contract.
 - Production code should present friendly error messages; tests may assert raw
   behaviours (non‑zero exits, stderr contents) via `cmd-mox`.
 - On Windows, newline‑separated lists are recommended for `list[Path]` to

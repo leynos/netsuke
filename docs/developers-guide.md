@@ -2629,6 +2629,9 @@ The Python gates run inside the ordinary quality-gate targets:
   outlived the baseline change.
 - `make typecheck` runs `make typecheck-python`: the
   [ty](https://github.com/astral-sh/ty) typechecker over the Python sources.
+  Its temporary environment includes the runtime dependencies declared by
+  standalone scripts in PEP 723 metadata, because `ty` does not read those
+  blocks when resolving imports.
 
 Because PEP 649 defers annotation evaluation, the contract modules under
 `tests/workflow_contracts/` import cleanly while their annotations still name

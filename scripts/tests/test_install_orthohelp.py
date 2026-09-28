@@ -65,6 +65,43 @@ def test_cache_miss_uses_only_the_non_compiling_binstall_strategy(
     )
 
 
+def test_missing_cached_binary_runs_prebuilt_install(
+    cmd_mox: CmdMox, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A missing optional probe executable selects the install fallback."""
+    original_run = installer._run
+
+    def run_with_missing_probe(
+        program: str, *arguments: str, echo: bool = False
+    ) -> installer.CommandResult:
+        """Raise for the absent cache probe and run mocked cargo normally."""
+        if program == "cargo-orthohelp":
+            raise FileNotFoundError
+        return original_run(program, *arguments, echo=echo)
+
+    monkeypatch.setattr(installer, "_run", run_with_missing_probe)
+    installation = (
+        cmd_mox
+        .mock("cargo")
+        .with_args(
+            "binstall",
+            "--no-confirm",
+            "--locked",
+            "--disable-strategies",
+            "compile",
+            f"cargo-orthohelp@{VERSION}",
+        )
+        .returns(exit_code=0)
+    )
+    monkeypatch.setenv("INPUT_VERSION", VERSION)
+
+    installer.app([], result_action="return_value")
+
+    assert len(installation.invocations) == 1, (
+        "a missing cached binary installs the pinned release"
+    )
+
+
 def test_failed_binstall_propagates_its_exit_status(
     cmd_mox: CmdMox, monkeypatch: pytest.MonkeyPatch
 ) -> None:

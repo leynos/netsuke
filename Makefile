@@ -376,13 +376,15 @@ typecheck-python: ## Typecheck the Python sources with ty
 	# `uv tool run` materialises one venv holding ty plus the test-suite
 	# dependencies, so ty can resolve third-party imports. `uv run --with`
 	# would layer the extras through `.pth` chaining, which ty cannot follow.
+	# Standalone scripts declare these runtime dependencies in PEP 723 blocks,
+	# which ty does not read, so include them in its environment explicitly.
 	# Both `scripts` and `.github/scripts` are named as search roots because
 	# the contract tests import from them through a `sys.path` insert, which
 	# ty does not follow; without the roots those imports read as unresolved.
 	$(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 		--from ty==$(TY_VERSION) --with pytest==9.0.2 --with pytest-cov==7.0.0 \
 		--with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' \
-		--with 'cuprum==0.1.0' --with 'cyclopts==4.25.3' \
+		--with 'cyclopts>=4.25.3,<5' --with 'cuprum>=0.1.0,<0.2.0' \
 		ty check --python-version $(PYTHON_BASELINE) \
 		--extra-search-path scripts --extra-search-path .github/scripts \
 		$(PYTHON_SOURCES)
