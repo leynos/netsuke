@@ -1300,6 +1300,22 @@ Hard invariants. Violating one requires escalation, not a workaround.
   The second codex row is rehearsed by a seeded fault; the rest are guards read
   at the revision named in the first column.
 
+  **A caution for anyone following that annotation after the rebase.** The span
+  `797178c to 68c266e` was correct when CodeRabbit wrote it and is now
+  misleading in a way that does not announce itself:
+  `git merge-base --is-ancestor 68c266e8 HEAD` fails, because the 2026-09-28
+  rebase rewrote the branch and neither object is an ancestor of any current
+  branch or of `origin`. They survive only because the rebase preserved the
+  pre-rebase head, so `68c266e8` is reachable from
+  `refs/recovery/6-1-1-old-head-20260928-162555` and nowhere else. The content
+  they introduced did *not* go missing — the guards and prose each row of the
+  table names were re-read at `b89652b9` and all four are present there — but
+  the *citation* now points into a history that only the recovery ref holds.
+  This is the same class as the plan's other rebase-provenance lessons: a
+  rebase invalidates every SHA cited across it, including one cited by a
+  reviewer rather than by this plan, and a reader who checks the annotation
+  finds a missing object rather than a missing fix.
+
   Two codex findings are worth recording as *not applied as written*, because
   their mechanisms were wrong even though the defects were real, and `630b8116`
   says so. `…627` claimed the round trip was impossible, but section 6.7's
