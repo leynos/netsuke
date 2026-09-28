@@ -952,10 +952,17 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - [ ] (2026-09-28) **BLOCKER: the shared Cargo package cache is deadlocked
   machine-wide, so no Rust gate can run.** The commit carrying the three codex
   dispositions is `630b8116`, verified by inspection and by everything that
-  does not need Cargo, but **its gate run is outstanding**. The commit
+  does not need Cargo, but **its local gate run is outstanding**. The commit
   recording this entry is plan-only; the code delta under test is exactly
   `630b8116`, and a later reader must not fold the two together. A reader must
   not treat the absence of a gate result as a pass.
+
+  **Scope correction, added later the same day: this entry overclaims.** It
+  says no Rust gate can run, and that is true only of the *local* invocation.
+  CI runs the same gates on GitHub's runners, which do not touch this machine's
+  package cache, and it has since run them green on a later revision — see the
+  entry below. The blocker is real but narrow: it costs the local second
+  reading, not the gates themselves.
 
   The cycle, read from `/proc` rather than inferred: PID `1832225`
   (`cargo test --all-targets --all-features` in the `podbot` worktree, another
@@ -1035,12 +1042,54 @@ Hard invariants. Violating one requires escalation, not a workaround.
   and `dirname`, and what a per-row or per-union guard would need to tolerate
   is therefore present in the live document. The comment stands as written.
 
-  **Next action for whoever resumes:** re-run the seven-target gate set once
-  the cache clears (`pgrep -c rustc` returning non-zero, or the inode free in
-  `/proc/locks`), then commission the `scrutineer` run. The liveness proof for
-  `ensure_distinct` is also still owed: the guard must be shown to *fire*, by
-  mutating a coverage-map row to `` `8.1`; `8.1` `` and observing the run fail
-  with the duplicate message.
+- [x] (2026-09-28) **The blocker does not block the gates after all — CI runs
+  them, and they are green on `c7ff9e4a`.** This entry corrects the scope, and
+  the correction matters more than the original entry did: it was written on
+  the assumption that a deadlocked local package cache left the Rust gates with
+  no runner. That assumption was **never checked, and it is false**.
+
+  The `CI` workflow's `build-test` job ran, on `c7ff9e4a`, to completion and to
+  success — and its steps are the seven-target union almost exactly:
+  `make check-fmt` (169 files left unchanged by `mdtablefix --check`),
+  `make lint` (all five stages, with `actionlint` from the job's own download),
+  `make typecheck`, `make doc-coverage`, `make spelling`, `make nixie`,
+  `markdownlint-cli2` over `**/*.md`, and `make test-workflow-contracts`. The
+  `Windows / lint-windows` job independently carries `Format`, `Lint (Clippy)`
+  and `Lint (Whitaker)`.
+
+  The test evidence is the strongest of these, and it is not a subset.
+  `Test and Measure Coverage` invokes the shared `generate-coverage` action with
+  `all-features: true`, `all-targets: true`, `doctests: true`,
+  `use-cargo-nextest: true`, and `RUSTFLAGS: -D warnings` — the same flags the
+  local gate uses — and its log reads **
+  `3494 tests run: 3494 passed (1 slow), 6 skipped`**, with every
+  `rfc_stdlib_coverage_tests` instance `PASS`, including
+  `totals_and_purity_aggregate_agree`. Doctests ran too, in **two** targets
+  (`Doc-tests netsuke`, `Doc-tests test_support`), which re-confirms the
+  two-not-three figure from the other side. `COV-4` printed
+  `coverage map: 1 of 8 capability groups written; 7 remaining` in that passing
+  run, exactly as this plan requires.
+
+  So the outstanding work is **narrower than the blocker entry above claimed**.
+  What remains genuinely unrun is the *local* invocation of the set — which is
+  not the same claim as "the gates have not run". Two things must be stated
+  separately and must not be merged: CI's `3494 run / 3494 passed` on
+  `c7ff9e4a` **is** gate evidence for that revision, and the local `scrutineer`
+  run is still owed as the second, independent reading.
+
+  Read the run rather than the summary row: `36373283587`, head `c7ff9e4a`,
+  `workflowName: CI`, `event: pull_request`, all five jobs `success`. The
+  lessons are the general ones — a summary row is not the log, and an
+  assumption about what a blocker blocks is itself a claim that needs a check.
+
+  **Next action for whoever resumes:** run the seven-target gate set locally
+  once the cache clears (`pgrep -c rustc` returning non-zero, or the inode free
+  in `/proc/locks`), then commission the `scrutineer` run — not because the
+  gates are unrun, but because a local second reading on the runner's own
+  revision is what this plan owes. The liveness proof for `ensure_distinct` is
+  also still owed: the guard must be shown to *fire*, by mutating a
+  coverage-map row to `` `8.1`; `8.1` `` and observing the run fail with the
+  duplicate message.
 
   **Re-measured, and still held, at 05:30Z — the blocker is unchanged, not
   stale.** A `cargo metadata` probe returned exit 0, which looked like a clear,
