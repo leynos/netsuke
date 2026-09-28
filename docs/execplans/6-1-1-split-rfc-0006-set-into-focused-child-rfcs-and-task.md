@@ -1633,7 +1633,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   the same revision.
 
   That the evidence still describes the current head is itself checked, not
-  assumed: `git reflog` shows no commit since `09e609ab` and
+  assumptions: `git reflog` shows no commit since `09e609ab` and
   `git ls-remote origin` agrees with the local ref.
 
   The run has since closed out, and the whole of it is green rather than the
@@ -1649,6 +1649,42 @@ Hard invariants. Violating one requires escalation, not a workaround.
   the diagnostic the earlier deadlock entry taught, applied forward: an
   unexplained wait gets measured against its own baseline before it is called a
   wedge.
+
+- [x] (2026-09-28) **All seven targets pass on `84e4fa82`, the commit that
+  lands the entry above, so the full local second reading this plan owes is
+  discharged on the acceptance revision.** `check-fmt`
+  (`164 files already formatted`; mdtablefix `169 files left unchanged`),
+  `lint` (clippy `-D warnings` clean, both pylint runs `10.00/10`, `ambrleaks`
+  silent, interrogate `100.0%`, yamllint and actionlint clean), `typecheck` (ty
+  `All checks passed!`, then `cargo check --all-targets --all-features`
+  finished), `test` (nextest `3494 tests run: 3494 passed (1 slow), 6 skipped`,
+  then doctests `87 + 2 + 39` passed with 0 failed), `markdownlint`
+  (`Linting: 169 file(s)`, `Summary: 0 error(s)`), `nixie`
+  (`All diagrams validated successfully!`), and `doc-coverage`
+  (`aggregate 4801/4858 98.83%`). Logs are `/tmp/g5-<gate>-6-1-1.out`.
+
+  Four of the seven were logged *before* the commit and three after (the commit
+  is 15:23:44Z; `markdownlint`, `check-fmt` and `nixie` closed at
+  15:21:36Z–15:21:52Z, `doc-coverage` at 15:22:43Z, and `lint`, `test` and
+  `typecheck` at 15:24:27Z–15:29:01Z). That is not a gap in the evidence,
+  because the commit only had to capture a working tree the gates had already
+  read, and `git status --porcelain` was empty both before the commit and after
+  — the tree did not move between the pre-commit gates and the commit, and
+  `git rev-parse HEAD` has read `84e4fa82` at every probe since. Recording the
+  *order* rather than the aggregate is the point: an earlier entry in this plan
+  had to say that its gate log described the commit that recorded it and
+  therefore did not cover it, and the remedy that produced `84e4fa82` was to
+  gate the tree and then commit exactly what was gated.
+
+  The `test` log was read rather than grepped, for the same reason as before:
+  it carries `coverage map: 1 of 8 capability groups written; 7 remaining`
+  inside a *passing* run. That line is the whole point of the counter — a
+  half-finished split passes every other coverage check, so a stall is visible
+  only if this line still reaches the terminal — and `7 remaining` is the
+  correct reading at `EP-M3`, with `EP-M4` not yet begun. `FAIL` does not occur
+  at all (count 0), and the doctest target count is 2, matching the two
+  `Doc-tests` headers this plan records as the real number rather than the
+  three a hasty grep suggests.
 
 ## Surprises & discoveries
 
