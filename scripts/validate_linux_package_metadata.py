@@ -19,7 +19,7 @@ import sys
 import tarfile
 import typing as typ
 
-from cargo_package_metadata import PackageMetadataError, read_package_metadata
+import cargo_package_metadata as cargo_meta
 
 type SubprocessRunner = cabc.Callable[..., subprocess.CompletedProcess[bytes]]
 
@@ -263,7 +263,7 @@ def _summary_line(description: str) -> str:
 def _validate_debian(
     inspector: _PackageInspector,
     package_name: str,
-    metadata: cabc.Mapping[str, str],
+    metadata: cargo_meta.PackageMetadata,
     licence_contents: bytes,
 ) -> list[str]:
     """Compare Debian ``Maintainer``, ``Homepage``, ``Description`` and copyright."""
@@ -296,7 +296,7 @@ def _validate_debian(
 
 
 def _validate_rpm(
-    inspector: _PackageInspector, metadata: cabc.Mapping[str, str]
+    inspector: _PackageInspector, metadata: cargo_meta.PackageMetadata
 ) -> list[str]:
     """Compare RPM tags, e.g. ``_read_rpm_tag(inspector, "LICENSE")`` reads ISC."""
     expected_fields = {
@@ -335,7 +335,7 @@ def validate_linux_package_metadata(
     --------
     Matching package headers and Debian copyright return an empty list.
     """
-    metadata = read_package_metadata(request.manifest)
+    metadata = cargo_meta.read_package_metadata(request.manifest)
     debian_package, rpm_package = _package_files(request.dist)
     expected_licence = request.licence_file.read_bytes()
     selected_runner = runner if runner is not None else subprocess.run
@@ -385,7 +385,7 @@ def main(
     )
     try:
         errors = validate_linux_package_metadata(request, runner=runner)
-    except (OSError, PackageMetadataError, PackageValidationError) as error:
+    except (OSError, cargo_meta.PackageMetadataError, PackageValidationError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     if errors:
