@@ -158,14 +158,13 @@ TY_VERSION ?= 0.0.74
 # the walk.
 PYTHON_SOURCES = .github/scripts scripts tests/workflow_contracts
 # Pylint must run on the Python baseline so it parses every repository-owned
-# source. `--load-plugins=` clears the shim's default plugin list so this pass
-# runs exactly the messages pyproject.toml enables.
+# source. `--load-plugins=` clears any configured plugins so this pass runs
+# exactly the messages pyproject.toml enables.
 PYLINT_PYTHON ?= $(PYTHON_BASELINE)
+PYLINT_VERSION ?= 4.0.9
 PYLINT_TARGETS ?= $(PYTHON_SOURCES)
-PYLINT_PYPY_SHIM_REF ?= 726d09f968b4d729ee4b29c71fc732e744854f3b
-PYLINT_PYPY_SHIM = git+https://github.com/leynos/pylint-pypy-shim.git@$(PYLINT_PYPY_SHIM_REF)
-PYLINT = $(UV_ENV) $(UV) tool run --python $(PYLINT_PYTHON) \
-	--from '$(PYLINT_PYPY_SHIM)' pylint-pypy --load-plugins=
+PYLINT = $(UV_ENV) $(UV) tool run --managed-python --python $(PYLINT_PYTHON) \
+	--from 'pylint==$(PYLINT_VERSION)' pylint --load-plugins=
 # The df12 house lints need CPython 3.14: they parse syntax PyPy's 3.11
 # runtime cannot, and the baseline-gated messages (R9112, C9112) key off the
 # `py-version` in pyproject.toml. They run through `uv tool run` rather than
