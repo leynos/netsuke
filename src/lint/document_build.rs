@@ -18,7 +18,7 @@ use super::scalar_span;
 pub struct ParseFailure {
     /// The scanner's message.
     pub message: String,
-    /// One-based line the scanner stopped at.
+    /// One-based line the scanner attributes the failure to.
     pub line: usize,
 }
 
