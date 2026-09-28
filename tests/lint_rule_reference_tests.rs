@@ -5,6 +5,8 @@
 //! nothing, and a section left behind by a retired rule sends readers to advice
 //! that no longer applies. These tests make both states a build failure.
 
+#![cfg(feature = "lint")]
+
 use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, ensure};

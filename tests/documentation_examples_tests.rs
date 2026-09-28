@@ -398,6 +398,7 @@ fn help_targets_example_lists_described_targets() -> Result<()> {
 }
 
 /// The documented `netsuke check` invocation must run and report cleanly.
+#[cfg(feature = "lint")]
 #[test]
 fn check_example_reports_a_clean_manifest() -> Result<()> {
     let example = documented_example("guide-check-command")?;
@@ -419,6 +420,7 @@ fn check_example_reports_a_clean_manifest() -> Result<()> {
 /// policy example for the effect its selectors claim: a `clarity=off` category
 /// selector followed by a rule selector that promotes one of that category's
 /// rules to `error` must still report that rule.
+#[cfg(feature = "lint")]
 #[test]
 fn check_explain_and_policy_examples_run() -> Result<()> {
     let workspace = manifest_workspace("guide-first-build-manifest")?;
@@ -468,6 +470,7 @@ fn check_explain_and_policy_examples_run() -> Result<()> {
 }
 
 /// The documented configuration example must be accepted and take effect.
+#[cfg(feature = "lint")]
 #[test]
 fn check_configuration_example_is_accepted() -> Result<()> {
     documented_configuration_example_is_accepted(
@@ -483,6 +486,7 @@ fn check_configuration_example_is_accepted() -> Result<()> {
 /// Without the directive the manifest reports `background-job`; with it, the
 /// run is clean. Asserting both directions is what proves the example teaches
 /// a working suppression rather than a manifest that never had a finding.
+#[cfg(feature = "lint")]
 #[test]
 fn check_suppression_example_silences_its_finding() -> Result<()> {
     let workspace = manifest_workspace("guide-check-suppression")?;

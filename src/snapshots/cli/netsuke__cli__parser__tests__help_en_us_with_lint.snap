@@ -1,21 +1,22 @@
 ---
-source: src/cli/parser/tests.rs
+source: src/cli/parser_tests.rs
 expression: rendered_help
 ---
-Netsuke transforma manifiestos YAML + Jinja en grafos Ninja reproducibles y ejecuta Ninja con valores seguros.
+Netsuke transforms YAML + Jinja manifests into reproducible Ninja graphs and runs Ninja with safe defaults.
 
 Usage: netsuke [OPTIONS] [COMMAND]
 
 Commands:
-  build     Compila objetivos definidos en el manifiesto (predeterminado).
-  clean     Elimina artefactos de compilación mediante Ninja.
-  graph     Emite el grafo de dependencias de compilación. El formato predeterminado es DOT.
-  generate  Genera el manifiesto Ninja sin ejecutar Ninja.
-  help      Imprima la ayuda de nivel superior o la ayuda de un tema determinado.
+  build     Build targets defined in the manifest (default).
+  check     Lint the manifest without generating or running a build.
+  clean     Remove build artefacts via Ninja.
+  graph     Emit the build dependency graph. Default format is DOT.
+  generate  Generate the Ninja manifest without running Ninja.
+  help      Print the top-level help, or the help for a named topic.
 
 Options:
   -f, --file <FILE>
-          Ruta al archivo de manifiesto Netsuke.
+          Path to the Netsuke manifest file to use.
 
           [default: Netsukefile]
 
@@ -25,7 +26,7 @@ Options:
           This affects manifest lookup, output paths, and config discovery.
 
       --config <FILE>
-          Ruta a un archivo de configuración, omitiendo la detección automática.
+          Path to a configuration file, bypassing automatic discovery.
 
   -j, --jobs <N>
           Set the number of parallel build jobs.
@@ -33,19 +34,19 @@ Options:
           Values must be between 1 and 64.
 
   -v, --verbose
-          Habilitar registro de diagnóstico detallado y resúmenes de tiempo al completar.
+          Enable verbose diagnostic logging and completion timing summaries.
 
       --locale <LOCALE>
-          Etiqueta de idioma para la CLI (por ejemplo: en-US, es-ES).
+          Locale tag for CLI copy (for example: en-US, es-ES).
 
       --fetch-allow-scheme <SCHEME>
-          Esquemas de URL adicionales permitidos para el ayudante fetch.
+          Additional URL schemes allowed for the fetch helper.
 
       --env-allow-var <VAR>
-          Variable de entorno permitida para el asistente env() del manifiesto.
+          Environment variable permitted for the manifest env() helper.
 
       --env-block-var <VAR>
-          Variable de entorno bloqueada para el asistente env() del manifiesto.
+          Environment variable blocked for the manifest env() helper.
 
       --fetch-allow-host <HOST>
           Hostnames that are permitted when default deny is enabled.
@@ -58,54 +59,54 @@ Options:
           Supports wildcards such as `*.example.com`.
 
       --fetch-default-deny
-          Denegar todos los hosts por defecto; solo permitir la lista de permitidos.
+          Deny all hosts by default; only allow the declared allowlist.
 
       --trust-project-fetch-policy
-          Permitir que la configuración del proyecto amplíe los permisos de la política de fetch.
+          Allow project configuration to widen fetch-policy grants.
 
       --manifest-evaluation-fuel <FUEL>
-          Limitar las instrucciones de MiniJinja para cada evaluación del manifiesto.
+          Limit MiniJinja instructions for each manifest evaluation.
 
           [default: 1000000]
 
       --manifest-fuel <FUEL>
-          Limitar las instrucciones de MiniJinja en un manifiesto.
+          Limit MiniJinja instructions across one manifest.
 
           [default: 100000000]
 
       --manifest-rendered-value-bytes <BYTES>
-          Limitar los bytes escritos en un valor del manifiesto.
+          Limit bytes rendered into one manifest value.
 
           [default: 1048576]
 
       --manifest-rendered-manifest-bytes <BYTES>
-          Limitar el total de bytes escritos en un manifiesto.
+          Limit total bytes rendered across one manifest.
 
           [default: 16777216]
 
       --manifest-source-bytes <BYTES>
-          Limitar los bytes de origen de plantillas y macros consumidos por manifiesto.
+          Limit template and macro source bytes consumed per manifest.
 
           [default: 4194304]
 
       --manifest-foreach-cardinality <COUNT>
-          Limitar los valores procesados por una expansión foreach.
+          Limit values processed by one foreach expansion.
 
           [default: 10000]
 
       --manifest-expanded-entries <COUNT>
-          Limitar los objetivos y las acciones expandidos desde un manifiesto.
+          Limit targets and actions expanded from one manifest.
 
           [default: 50000]
 
       --json
-          Emitir salida JSON legible por máquinas.
+          Emit machine-readable JSON output.
 
       --no-input
-          No leer nunca entrada interactiva.
+          Never read interactive input.
 
       --color <POLICY>
-          Política de color de salida (auto, always, never).
+          Colour output policy (auto, always, never).
 
           Possible values:
           - auto:   Follow the host environment
@@ -115,7 +116,7 @@ Options:
           [default: auto]
 
       --emoji <POLICY>
-          Política de emoji (auto, always, never).
+          Emoji policy (auto, always, never).
 
           Possible values:
           - auto:   Follow the host environment and accessibility mode
@@ -125,7 +126,7 @@ Options:
           [default: auto]
 
       --progress <POLICY>
-          Política de progreso (auto, always, never).
+          Progress rendering policy (auto, always, never).
 
           Possible values:
           - auto:   Follow Netsuke's default progress behaviour
@@ -135,7 +136,7 @@ Options:
           [default: auto]
 
       --accessibility <POLICY>
-          Política de accesibilidad (auto, on, off).
+          Accessible output policy (auto, on, off).
 
           Possible values:
           - auto: Follow terminal and environment detection
@@ -145,7 +146,7 @@ Options:
           [default: auto]
 
       --default-target <TARGET>
-          Objetivos de compilación predeterminados cuando no se especifica ninguno.
+          Default build targets when none are specified.
 
   -h, --help
           Print help (see a summary with '-h')

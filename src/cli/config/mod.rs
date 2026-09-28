@@ -160,6 +160,7 @@ pub struct BuildConfig {
 /// Lint policy belongs in configuration rather than only on the command line:
 /// a project's rule selection is a property of the project, and repeating it in
 /// every continuous-integration invocation is how the two drift apart.
+#[cfg(feature = "lint")]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct CheckConfig {
     /// Rule and category severity selectors, as `NAME=SEVERITY`.
@@ -183,6 +184,7 @@ pub struct CommandConfigs {
     pub build: BuildConfig,
 
     /// Configuration that applies only to the `check` subcommand.
+    #[cfg(feature = "lint")]
     #[serde(default)]
     pub check: CheckConfig,
 }

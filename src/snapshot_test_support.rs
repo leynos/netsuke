@@ -82,6 +82,7 @@ pub(crate) fn help_targets_json_snapshot_settings() -> Settings {
 /// Extend the check settings with the generator-version redaction so lint
 /// snapshots survive version bumps, on the same terms as every other JSON
 /// document snapshot.
+#[cfg(feature = "lint")]
 pub(crate) fn check_json_snapshot_settings() -> Settings {
     let mut settings = snapshot_settings("check");
     add_generator_version_filter(&mut settings);

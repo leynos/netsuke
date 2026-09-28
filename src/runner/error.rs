@@ -21,6 +21,7 @@ use miette::Diagnostic;
 use std::path::PathBuf;
 use thiserror::Error;
 
+#[cfg(feature = "lint")]
 use super::FindingDiagnostic;
 
 /// Errors raised during command execution.
@@ -56,6 +57,7 @@ pub enum RunnerError {
     /// message so that both the human renderer and the JSON serializer see the
     /// same per-finding objects, each with its own code, severity, help text,
     /// documentation URL, and source span.
+    #[cfg(feature = "lint")]
     #[error("{message}")]
     #[diagnostic(code(netsuke::lint::threshold_exceeded))]
     LintThresholdExceeded {
@@ -70,6 +72,7 @@ pub enum RunnerError {
     },
 
     /// A `netsuke check` policy selector could not be applied.
+    #[cfg(feature = "lint")]
     #[error("{message}")]
     #[diagnostic(code(netsuke::lint::invalid_policy))]
     CheckPolicy {
@@ -78,6 +81,7 @@ pub enum RunnerError {
     },
 
     /// The manifest source could not be indexed for lint diagnostics.
+    #[cfg(feature = "lint")]
     #[error("{message}")]
     #[diagnostic(code(netsuke::lint::source_index_failed))]
     CheckSourceIndex {

@@ -275,6 +275,7 @@ pub struct GraphArgs {
 /// live in `crate::lint`, and the runner parses these values once it has the
 /// registry to validate them against. `explain` is a per-invocation mode and
 /// is excluded from `OrthoConfig` layering.
+#[cfg(feature = "lint")]
 #[derive(Debug, Args, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct CheckArgs {
     /// Set a rule's or category's severity, as `NAME=SEVERITY`.
@@ -299,11 +300,14 @@ pub struct CheckArgs {
 }
 
 /// Default failure threshold for `netsuke check`.
+#[cfg(feature = "lint")]
 pub const DEFAULT_FAIL_ON: &str = "error";
 
 /// Default cap on the number of findings `netsuke check` reports.
+#[cfg(feature = "lint")]
 pub const DEFAULT_FINDING_LIMIT: usize = 200;
 
+#[cfg(feature = "lint")]
 impl CheckArgs {
     /// Supply the default failure threshold to `serde`.
     fn default_fail_on() -> String {
@@ -316,6 +320,7 @@ impl CheckArgs {
     }
 }
 
+#[cfg(feature = "lint")]
 impl Default for CheckArgs {
     /// Construct the same defaults Clap and `serde` apply.
     ///
@@ -342,6 +347,7 @@ pub enum Commands {
     Build(BuildArgs),
 
     /// Lint the selected manifest without generating or running a build.
+    #[cfg(feature = "lint")]
     Check(CheckArgs),
 
     /// Remove build artefacts and intermediate files.

@@ -19,6 +19,7 @@ use std::time::Duration;
 use test_support::{localizer_test_lock, set_en_localizer};
 use tracing_subscriber::filter::LevelFilter;
 
+#[cfg(feature = "lint")]
 mod check_dispatch_tests;
 mod manifest_structure_telemetry_tests;
 

@@ -98,12 +98,17 @@ pub(super) fn from_path_with_policy_and_environment_and_limits(
 }
 
 /// A rendered manifest together with the source text it was parsed from.
+///
+/// The source and its display name are kept only for the linter's span index;
+/// a build without the `lint` feature has no reader for them.
 pub(crate) struct LoadedManifest {
     /// The expanded and rendered manifest.
     pub(crate) manifest: NetsukeManifest,
     /// The manifest source, exactly as read.
+    #[cfg(feature = "lint")]
     pub(crate) source: String,
     /// The display name the diagnostics label the source with.
+    #[cfg(feature = "lint")]
     pub(crate) name: String,
 }
 
@@ -192,7 +197,9 @@ fn from_path_with_registration(
     )?;
     Ok(LoadedManifest {
         manifest,
+        #[cfg(feature = "lint")]
         source: data,
+        #[cfg(feature = "lint")]
         name: name.as_ref().to_owned(),
     })
 }

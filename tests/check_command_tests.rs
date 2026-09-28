@@ -5,6 +5,8 @@
 //! document reaches, and that stdout stays empty when a run fails in JSON
 //! mode. The child modules group output, policy, and explanation contracts.
 
+#![cfg(feature = "lint")]
+
 #[path = "check_command_tests/support.rs"]
 mod support;
 
