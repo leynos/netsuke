@@ -238,9 +238,11 @@ Span availability by stage:
   node in the spanned tree.
 - **Stages 2 and 3** resolve spans through `resolve.rs`, which maps a manifest
   item back to its authored node in two steps. Positional correspondence is
-  used when a section's expanded length equals its authored length, which holds
-  for every manifest that does not use `foreach`. Otherwise the resolver
-  matches on the authored `name` scalar when that scalar is literal. When
+  used only when a section declares no `foreach` and its expanded length equals
+  its authored length; equal lengths alone are not enough, because a `foreach`
+  over one element keeps the count while changing which item is which.
+  Otherwise the resolver matches on the authored `name` scalar when that scalar
+  is literal. When
   neither succeeds, the finding is emitted without a span and names the target,
   rule, or action instead.
 
