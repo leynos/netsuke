@@ -141,7 +141,7 @@ jobs:
           command -v awk
           awk --version
       - name: Install sccache
-        uses: taiki-e/install-action@4076c08d76dba979c11a7285295b0716c1d67908  # v2.87.15
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73  # v2.87.17
         with:
           tool: sccache@0.16.0
           fallback: none
@@ -156,7 +156,7 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@4076c08d76dba979c11a7285295b0716c1d67908  # v2.87.15
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73  # v2.87.17
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Reset sccache statistics
@@ -181,7 +181,7 @@ jobs:
           version: ${{ env.MDTABLEFIX_VERSION }}
       - name: Setup uv
         # Before Format: the uv-driven Ruff, Pylint, and df12 gates need it.
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
           # The gate cache already owns the uv download and tool stores, and
@@ -556,7 +556,7 @@ jobs:
         # standard runner, and this job installs none of the test tooling the
         # `build-test` lane does. Pinned to the same action revision and the
         # same workflow-scoped version as that lane, so the two cannot drift.
-        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375  # v2.87.12
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73  # v2.87.17
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Verify the scope wrapper end to end
