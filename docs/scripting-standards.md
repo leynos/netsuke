@@ -530,7 +530,7 @@ except FileNotFoundError:
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.14"
-# dependencies = ["cyclopts>=2.9", "cuprum>=0.1.0,<0.2.0", "cmd-mox"]
+# dependencies = ["cyclopts>=4.25.3,<5", "cuprum>=0.1.0,<0.2.0", "cmd-mox"]
 # ///
 
 from __future__ import annotations
