@@ -4,12 +4,13 @@ description: >-
   Own every cache path the Linux merge gate depends on. Ubicloud destroys the
   runner VM after each job, so warm state arrives only through archives. This
   action is the single owner of the Cargo download store, the installed-tool
-  directories, the Whitaker suite, and the optional local sccache directory;
-  no other step in the gate may cache those paths.
+  directories, and the Whitaker suite; no other step in the gate may cache
+  those paths.
 
   Cargo's `target` tree is deliberately absent, here and everywhere else in
   this repository: sccache is the single owner of compiler output for every
-  build shape the gate produces.
+  build shape the gate produces, and `setup-rust` owns sccache, which reaches
+  Ubicloud's cache proxy directly and needs no archive.
 
 inputs:
   mode:
@@ -29,17 +30,6 @@ inputs:
     description: Restore result for the Whitaker suite, gating its save.
     required: false
     default: ''
-  sccache-hit:
-    description: Restore result for the local sccache directory.
-    required: false
-    default: ''
-  sccache-local:
-    description: >-
-      `true` selects the local-directory sccache backend and its cache step.
-      Anything else leaves the GitHub Actions backend in charge and skips the
-      step, so exactly one compiler-cache backend is ever active.
-    required: false
-    default: 'false'
 
 outputs:
   registry-hit:
@@ -51,9 +41,6 @@ outputs:
   whitaker-hit:
     description: Whether the Whitaker suite restored exactly.
     value: ${{ steps.whitaker.outputs.cache-hit }}
-  sccache-hit:
-    description: Whether the local sccache directory restored exactly.
-    value: ${{ steps.sccache.outputs.cache-hit }}
 
 runs:
   using: composite
@@ -93,10 +80,6 @@ runs:
           printf 'tools=netsuke-tools-v1-%s-%s\n' "${lane}" "${pins_hash}"
           printf 'whitaker=netsuke-whitaker-v1-%s-%s-%s\n' \
             "${lane}" "${pins_hash}" "${dylint_hash}"
-          printf 'sccache=netsuke-sccache-v1-%s-%s-%s-%s\n' \
-            "${lane}" "${NETSUKE_RUST_TOOLCHAIN}" "${BUILD_PROFILE}" "${GITHUB_SHA}"
-          printf 'sccache-prefix=netsuke-sccache-v1-%s-%s-%s-\n' \
-            "${lane}" "${NETSUKE_RUST_TOOLCHAIN}" "${BUILD_PROFILE}"
         } >> "$GITHUB_OUTPUT"
 
     - name: Restore Cargo download store
@@ -146,18 +129,6 @@ runs:
         path: ~/.local/share
         key: ${{ steps.keys.outputs.whitaker }}
 
-    - name: Restore compiler cache
-      id: sccache
-      if: inputs.mode == 'restore' && inputs['sccache-local'] == 'true'
-      # Step B, and only in local-directory mode. The GitHub Actions backend
-      # needs no archive, so enabling both would give the compiler cache two
-      # owners.
-      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-      with:
-        path: ${{ env.SCCACHE_DIR }}
-        key: ${{ steps.keys.outputs.sccache }}
-        restore-keys: ${{ steps.keys.outputs['sccache-prefix'] }}
-
     - name: Record cache observations
       if: always() && inputs.mode == 'restore'
       shell: bash
@@ -170,20 +141,12 @@ runs:
         TOOLS_HIT: ${{ steps.tools.outputs.cache-hit }}
         WHITAKER_KEY: ${{ steps.keys.outputs.whitaker }}
         WHITAKER_HIT: ${{ steps.whitaker.outputs.cache-hit }}
-        SCCACHE_KEY: ${{ steps.keys.outputs.sccache }}
-        SCCACHE_HIT: ${{ steps.sccache.outputs.cache-hit }}
-        SCCACHE_LOCAL: ${{ inputs['sccache-local'] }}
       run: |
         {
           printf '### Cache observations\n\n'
           printf -- '- registry key: `%s` hit: `%s`\n' "${REGISTRY_KEY}" "${REGISTRY_HIT:-false}"
           printf -- '- tools key: `%s` hit: `%s`\n' "${TOOLS_KEY}" "${TOOLS_HIT:-false}"
           printf -- '- whitaker key: `%s` hit: `%s`\n' "${WHITAKER_KEY}" "${WHITAKER_HIT:-false}"
-          printf -- '- sccache backend: `%s`\n' \
-            "$([ "${SCCACHE_LOCAL}" = 'true' ] && printf 'local-dir' || printf 'gha')"
-          if [ "${SCCACHE_LOCAL}" = 'true' ]; then
-            printf -- '- sccache key: `%s` hit: `%s`\n' "${SCCACHE_KEY}" "${SCCACHE_HIT:-false}"
-          fi
         } | tee -a "$GITHUB_STEP_SUMMARY"
 
     - name: Save Cargo download store
@@ -222,12 +185,3 @@ runs:
       with:
         path: ~/.local/share
         key: ${{ steps.keys.outputs.whitaker }}
-
-    - name: Save compiler cache
-      if: >-
-        inputs.mode == 'save' && steps.keys.outputs.writer == 'true' &&
-        inputs['sccache-local'] == 'true' && inputs['sccache-hit'] != 'true'
-      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-      with:
-        path: ${{ env.SCCACHE_DIR }}
-        key: ${{ steps.keys.outputs.sccache }}

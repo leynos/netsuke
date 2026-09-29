@@ -81,16 +81,9 @@ jobs:
       # input, so this variable is the only lever; the default profile is
       # deliberately uncapped for local runs on contended hosts.
       NEXTEST_PROFILE: ci
-      RUSTC_WRAPPER: sccache
-      # sccache uses the GitHub Actions backend, whose objects land in
-      # Ubicloud's own store, so it needs no archive. Setting the repository
-      # variable NETSUKE_SCCACHE_LOCAL_DIR to `true` switches the gate to the
-      # local-directory backend and enables cache step B; one is ever active.
-      SCCACHE_GHA_ENABLED: ${{ vars.NETSUKE_SCCACHE_LOCAL_DIR == 'true' && 'false' || 'true' }}
-      SCCACHE_DIR: ${{ github.workspace }}/.sccache
-      # Sized for two build shapes: ordinary debug objects and the `llvm-cov`
-      # instrumented ones, sharing this store keyed by flags.
-      SCCACHE_CACHE_SIZE: 4G
+      # sccache is setup-rust's: it names the wrapper, starts and zeroes the
+      # server, and picks the backend from the runner (shared-actions ADR
+      # 0005). See "Compiler cache" in docs/developers-guide.md.
       # Polonius is nightly-only (docs/adr-006-adopt-polonius-nightly-toolchain.md),
       # so CI builds with the dated nightly pinned in rust-toolchain.toml.
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
@@ -113,17 +106,6 @@ jobs:
           # request's merge base once the gate is wired in.
           fetch-depth: 0
           persist-credentials: false
-      - name: Export sccache credentials
-        # A server started without these stays on local disk all job.
-        # Only on the owned arm. This action clears the v2 switch and
-        # exports Ubicloud's proxy address; a fork's pull request runs on a
-        # GitHub-hosted runner where that address is GitHub's own or empty,
-        # and the verification step below then fails the job outright
-        # because `SCCACHE_GHA_ENABLED` is true. The hosted arm keeps
-        # GitHub's native cache configuration, which sccache reads for
-        # itself.
-        if: github.event.pull_request.head.repo.fork != true
-        uses: ./.github/actions/sccache-gha-credentials
       - name: Start resource sampler
         uses: ./.github/actions/memory-sampler
         with:
@@ -133,7 +115,6 @@ jobs:
         uses: ./.github/actions/linux-gate-cache
         with:
           mode: restore
-          sccache-local: ${{ vars.NETSUKE_SCCACHE_LOCAL_DIR }}
       - name: Install test shell dependencies
         run: |
           sudo apt-get update
@@ -148,27 +129,23 @@ jobs:
 
           command -v awk
           awk --version
-      - name: Install sccache
-        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73  # v2.87.17
-        with:
-          tool: sccache@0.16.0
-          fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
+        id: setup-rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
           rustflags: -D warnings
           cache-provider: external
-          use-sccache: 'false'
+          # `any`: a fork's pull request falls back to a GitHub-hosted
+          # runner, where setup-rust picks local disk instead of failing.
+          expect-cache: any
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
         uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73  # v2.87.17
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
-      - name: Reset sccache statistics
-        run: sccache --zero-stats
       - name: Install the build standard
         # The pinned `mold` is the repository's default linker and
         # `check-build-tools` gates every build target on it, so this runs
@@ -334,11 +311,13 @@ jobs:
         run: uv run --no-project --python 3.14 .github/scripts/verify_nextest_anchored_filters.py
       - name: Show sccache statistics
         if: always()
+        env:
+          SCCACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: |
           sccache --show-stats | tee sccache-stats.txt
           sccache --show-stats --stats-format=json > sccache-stats.json
           {
-            printf '### sccache\n\n```text\n'
+            printf '### sccache\n\n- backend: %s\n\n```text\n' "${SCCACHE_BACKEND:-none}"
             cat sccache-stats.txt
             printf '```\n'
           } >> "$GITHUB_STEP_SUMMARY"
@@ -363,8 +342,6 @@ jobs:
           registry-hit: ${{ steps.caches.outputs['registry-hit'] }}
           tools-hit: ${{ steps.caches.outputs['tools-hit'] }}
           whitaker-hit: ${{ steps.caches.outputs['whitaker-hit'] }}
-          sccache-hit: ${{ steps.caches.outputs['sccache-hit'] }}
-          sccache-local: ${{ vars.NETSUKE_SCCACHE_LOCAL_DIR }}
 
   windows:
     # The Windows merge gates live in a reusable workflow so this file stays
@@ -476,7 +453,7 @@ jobs:
           mode: restore
           runner-image: ${{ env.NETSUKE_RUNNER_IMAGE }}
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
         with:
           # Resolved from the job's own `env`, which declares the pinned
           # nightly. This input does double duty: a non-empty value selects
