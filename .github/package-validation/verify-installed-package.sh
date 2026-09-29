@@ -27,7 +27,7 @@ if command -v dpkg-query >/dev/null 2>&1; then
         printf 'FAIL: could not read Debian dependencies for %s\n' "$package_name" >&2
         exit 1
     fi
-    if ! printf '%s\n' "$dependencies" | grep -Eq '(^|,)[[:space:]]*ninja-build([[:space:](),]|$)'; then
+    if ! printf '%s\n' "$dependencies" | grep -Eq '(^|,)[[:space:]]*ninja-build[[:space:]]*(,|$)'; then
         printf 'FAIL: Debian package %s does not declare ninja-build\n' "$package_name" >&2
         exit 1
     fi
