@@ -2527,6 +2527,26 @@ configuration and cache state:
 - `scripts/tests/test_release_admission_metric_failures.py`
 - `scripts/tests/test_release_admission_metric_boundedness.py`
 
+The test-only `release_admission_test_support.py` module is the support and
+export facade for these runtime modules. `release_admission_test_records.py`
+owns their fixed-record assertions. Its
+`assert_identifiers_excluded_from_values` helper ignores non-string values and
+checks for each identifier as a substring of every string, reporting matching
+identifier/value pairs on failure. The shared
+`assert_identifiers_excluded_from_records` helper traverses metric labels and
+trace fields, checks that each metric's `labels` field is a dictionary, then
+delegates substring checks to the values helper. Only the failure and
+boundedness metric modules use it. Keep these helpers within the
+release-admission runtime suite rather than treating them as general test
+utilities.
+
+The isolated subprocess uses `GITHUB_REPOSITORY` as the fixed repository value
+at its fake GitHub boundary. The boundedness property generates canonical
+lowercase hexadecimal Git object IDs of 40 or 64 characters so execution
+reaches the commit and workflow-run requests. Arbitrary Unicode values remain
+probes for telemetry-only identifiers, which do not construct requests;
+malformed newline revisions are covered by deterministic failure tests.
+
 Pull-request CI invokes this target separately from the workflow-contract
 tests. Keep both gates: the runtime suite exercises the Bash boundary, while
 the workflow suite validates YAML and delivery structure.

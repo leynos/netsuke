@@ -1,4 +1,4 @@
-"""Provide reusable subprocess fakes for release-admission runtime tests."""
+"""Provide shared assertions and subprocess fakes for release-admission tests."""
 
 import dataclasses
 import importlib.util
@@ -11,6 +11,8 @@ from pathlib import Path
 from release_admission_test_fakes import write_fake_commands
 from release_admission_test_records import (
     assert_failure_trace_sequence,
+    assert_identifiers_excluded_from_records,
+    assert_identifiers_excluded_from_values,
     operation_duration,
     operation_records,
 )
@@ -18,11 +20,14 @@ from release_admission_test_records import (
 __all__ = (
     "BASH_PATH",
     "CANARY_BY_OPERATION",
+    "GITHUB_REPOSITORY",
     "METRICS_VALIDATOR",
     "REVISION",
     "FailureCase",
     "_run_gate",
     "assert_failure_trace_sequence",
+    "assert_identifiers_excluded_from_records",
+    "assert_identifiers_excluded_from_values",
     "expected_gate_labels",
     "expected_operation_labels",
     "operation_duration",
@@ -38,6 +43,7 @@ METRICS_VALIDATOR_PATH = (
 )
 BASH_PATH = Path("/usr/bin/bash")
 REVISION = "a" * 40
+GITHUB_REPOSITORY = "leynos/netsuke"
 CANARY_BY_OPERATION = {
     "resolve_tag_commit": "none",
     "fetch_candidate_revision": "release_candidate",
@@ -82,8 +88,7 @@ class MetricsValidator(typ.Protocol):
 
     Notes
     -----
-    Contract invariants: implementations enforce exact schemas, ordered
-    fields, bounded vocabularies, and finite JSON values.
+    Enforce ordered schemas, bounded vocabularies, and finite JSON values.
     """
 
     def parse_metrics(self, lines: list[str]) -> list[dict[str, object]]:
@@ -158,8 +163,7 @@ def load_metrics_validator() -> MetricsValidator:
 
     Notes
     -----
-    Contract invariants: file loading preserves the repository's single
-    validator contract without package installation.
+    File loading preserves one validator contract without package installation.
     """
     specification = importlib.util.spec_from_file_location(
         "release_admission_metrics_contract", METRICS_VALIDATOR_PATH
@@ -347,7 +351,7 @@ def _gate_environment(
     environment = {
         **os.environ,
         "GITHUB_OUTPUT": str(paths["output"]),
-        "GITHUB_REPOSITORY": "leynos/netsuke",
+        "GITHUB_REPOSITORY": GITHUB_REPOSITORY,
         "GITHUB_SHA": REVISION,
         "BASH_ENV": str(paths["bash_environment"]),
         "NETSUKE_ADMISSION_CALL_LOG": str(paths["call_log"]),
