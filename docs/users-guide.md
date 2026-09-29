@@ -72,6 +72,19 @@ releases share that numeric version, installing a later beta or final MSI
 replaces the existing installation for that version series rather than
 installing alongside it.
 
+Repositories that call Netsuke's reusable release workflow can select the
+`WixToolset.UI.wixext` version with the `wix-extension-version` input in the
+caller job's `with:` block:
+
+```yaml
+with:
+  wix-extension-version: '7'
+```
+
+An omitted or empty value resolves to `7`. The resolved version is used for
+Windows WiX packaging. Any non-empty supplied version must be a single-line
+string; the workflow rejects values containing carriage returns or line feeds.
+
 SHA-256 checksum files accompany standalone binaries and staged help,
 completion, and licence files. Installer packages do not have checksum sidecars
 in v0.1.0-beta4. Windows PowerShell help files are published beside each MSI as

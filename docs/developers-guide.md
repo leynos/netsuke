@@ -1065,6 +1065,15 @@ The Windows packaging workflow passes the repository-owned authoring file as
 when changing the packaging action: the caller owns the WiX v4 authoring and
 the shared action passes it to the pinned WiX compiler unchanged.
 
+Callers of `.github/workflows/release.yml` may set the `wix-extension-version`
+`workflow_call` input to select the `WixToolset.UI.wixext` version. The input
+defaults to `7`, and omitted or empty values resolve to `7` before the value
+reaches the shell step. The metadata job exposes the resolved value as
+`wix_extension_version`; `build-windows` passes that output to
+`build-and-package.yml` as `wix-extension-version`. The shell step fails only
+if the resolved environment value is unexpectedly empty, and rejects values
+containing carriage returns or line feeds before writing the output.
+
 The merge gate's dedicated `windows-msi-upgrade` job runs on `windows-latest`.
 It uses the local `.github/actions/windows-msi-upgrade-validation` adapter for
 fixture creation, package builds, and the install-transition checks. Keep the
