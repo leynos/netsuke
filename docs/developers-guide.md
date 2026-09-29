@@ -2051,9 +2051,15 @@ action or the credential. Any mention of `codescene.io`, matched
 case-insensitively because DNS names are case-insensitive, is refused, since a
 step can curl the project API directly. And `secrets: inherit` on a call to
 another repository's workflow is refused, because that callee's content is not
-in this tree. The same forwarding to a local workflow is allowed, because the
-closure reads the callee and holds it to every clause; `release-dry-run.yml`
-calls `release.yml` that way.
+in this tree. The coverage-surface clauses read a local callee and hold it to
+every clause, so they do not refuse forwarding to one themselves. A separate
+contract,
+`test_no_pull_request_workflow_in_this_repository_forwards_every_secret` in
+`pull_request_closure_test.py`, refuses `secrets: inherit` on any call a pull
+request makes, local or not: a pull request should be handed no secret it does
+not need. `release-dry-run.yml` calls `release.yml` and forwards none, because
+`release.yml` reads only `secrets.GITHUB_TOKEN`, which a called workflow has
+without being forwarded it.
 
 Every contract reads workflows through `_WorkflowLoader` in
 `tests/workflow_contracts/workflow_loading.py`. It refuses a mapping that
