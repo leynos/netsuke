@@ -84,5 +84,8 @@ def test_the_upload_runs_only_where_it_may_publish(
 def test_the_evaluator_refuses_what_it_does_not_model(condition: str) -> None:
     """Refuse a disjunction or an unmodelled clause rather than answer False."""
     contexts = {"env": {}, "github": {"ref": MAIN}}
-    with pytest.raises(UnsupportedExpressionError):
+    with pytest.raises(UnsupportedExpressionError) as error:
         evaluate_conjunction(condition, contexts)
+    assert condition.split(" && ")[-1] in str(error.value), (
+        "unsupported expressions should include the rejected clause in the error"
+    )
