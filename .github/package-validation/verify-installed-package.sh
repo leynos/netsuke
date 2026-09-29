@@ -9,7 +9,10 @@ fi
 
 package_name=$1
 
-"$package_name" --version
+if ! "$package_name" --version; then
+    printf 'FAIL: %s --version failed\n' "$package_name" >&2
+    exit 1
+fi
 printf 'PASS: %s --version\n' "$package_name"
 
 if ! man_page=$(man -w "$package_name"); then
@@ -27,7 +30,7 @@ if command -v dpkg-query >/dev/null 2>&1; then
         printf 'FAIL: could not read Debian dependencies for %s\n' "$package_name" >&2
         exit 1
     fi
-    if ! printf '%s\n' "$dependencies" | grep -Eq '(^|,)[[:space:]]*ninja-build[[:space:]]*(,|$)'; then
+    if ! printf '%s\n' "$dependencies" | grep -Eq '(^|,)[[:space:]]*ninja-build(:[[:alnum:]][[:alnum:].+-]*)?([[:space:]]+\([^)]*\))?[[:space:]]*(,|$)'; then
         printf 'FAIL: Debian package %s does not declare ninja-build\n' "$package_name" >&2
         exit 1
     fi
