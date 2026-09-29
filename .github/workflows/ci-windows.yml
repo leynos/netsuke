@@ -140,7 +140,7 @@ jobs:
         # other. It compiled the tool from source until then, which was this
         # repository's last source-build exception.
         uses: >-
-          leynos/shared-actions/.github/actions/install-mdtablefix@a5765019912a8ab6882b12db049c7cde635f3a85
+          leynos/shared-actions/.github/actions/install-mdtablefix@774cc5a01e457714aede66e14a97b3e257812fc2
         with:
           version: ${{ env.MDTABLEFIX_VERSION }}
       - name: Setup uv
