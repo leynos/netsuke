@@ -17,8 +17,9 @@ name: Release Binary
         default: false
       dry-run:
         description: >-
-          When `true`, build artefacts without uploading them to GitHub
-          releases or workflow artefacts.
+          When `true`, upload package workflow artefacts for staging rehearsal,
+          do not upload diagnostics artefacts, and never create or upload to a
+          GitHub release.
         required: false
         type: boolean
         default: false
@@ -82,6 +83,9 @@ jobs:
       should_publish: ${{ steps.release_modes.outputs['should-publish'] }}
       dry_run: ${{ steps.release_modes.outputs['dry-run'] }}
       should_upload_workflow_artifacts: ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] }}
+      should_upload_package_artifacts: >-
+        ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] == 'true' ||
+            steps.release_modes.outputs['dry-run'] == 'true' }}
       wix_extension_version: ${{ steps.wix_extension_version.outputs.value }}
       repo_name: ${{ steps.repo_name.outputs.value }}
     steps:
@@ -177,7 +181,7 @@ jobs:
       package-license: ${{ needs.metadata.outputs.package_license }}
       package-description: ${{ needs.metadata.outputs.package_description }}
       artifact-name: ${{ needs.metadata.outputs.repo_name }}-${{ matrix.artefact }}
-      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
+      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_package_artifacts) }}
       package-arch: ${{ matrix.package_arch }}
       stage-target: ${{ matrix.target_key }}
 
@@ -208,7 +212,7 @@ jobs:
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
       artifact-name: ${{ needs.metadata.outputs.repo_name }}-windows-${{ matrix.package_arch }}
-      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
+      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_package_artifacts) }}
       stage-target: ${{ matrix.target_key }}
       msi-arch: ${{ matrix.msi_arch }}
       wix-extension-version: ${{ needs.metadata.outputs.wix_extension_version }}
@@ -239,7 +243,7 @@ jobs:
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
       artifact-name: ${{ needs.metadata.outputs.repo_name }}-${{ matrix.artefact_suffix }}
-      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
+      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_package_artifacts) }}
       stage-target: ${{ matrix.target_key }}
       artifact-suffix: ${{ matrix.artefact_suffix }}
 
@@ -394,7 +398,17 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: needs.metadata.outputs.should_publish == 'true'
+    if: >-
+      !cancelled() &&
+      needs.metadata.result == 'success' &&
+      needs.build-linux.result == 'success' &&
+      needs.build-windows.result == 'success' &&
+      needs.build-macos.result == 'success' &&
+      (needs.windows-native-recipe-smoke.result == 'success' ||
+       (needs.metadata.outputs.dry_run == 'true' &&
+        needs.windows-native-recipe-smoke.result == 'skipped')) &&
+      (needs.metadata.outputs.should_publish == 'true' ||
+       needs.metadata.outputs.dry_run == 'true')
     permissions:
       contents: write
     needs:
@@ -419,6 +433,7 @@ jobs:
           python-version: '3.14'
           enable-cache: false
       - name: Ensure release exists (draft)
+        if: needs.metadata.outputs.should_publish == 'true'
         shell: bash
         env:
           INPUT_TAG: ${{ github.ref_name }}
@@ -450,6 +465,7 @@ jobs:
           release-tag: ${{ github.ref_name }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
           dist-dir: dist
+          dry-run: ${{ needs.metadata.outputs.should_publish != 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

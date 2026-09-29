@@ -24,6 +24,13 @@ import typing as typ
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
+from actions_expression_evaluator import (
+    UnsupportedExpressionError as UnsupportedExpressionError,
+)
+from actions_expression_evaluator import (
+    evaluate_expression as evaluate_expression,
+)
+
 #: The characters that open a string literal, matched by the same character.
 _QUOTES: typ.Final[str] = "'\""
 
@@ -116,14 +123,6 @@ def top_level_conjuncts(expression: str) -> list[str]:
     ]
     bounds = zip([0, *(cut + 2 for cut in cuts)], [*cuts, len(expression)], strict=True)
     return [expression[start:end].strip() for start, end in bounds]
-
-
-class UnsupportedExpressionError(ValueError):
-    """Raised when an expression leaves the grammar the evaluator models.
-
-    An evaluator that answered False outside its grammar would let a guard it
-    cannot read pass as one that never runs, so it refuses instead.
-    """
 
 
 #: One comparison of a context field against a quoted literal.

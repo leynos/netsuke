@@ -62,6 +62,21 @@ fn behavioural_release_workflow_wires_release_modes_outputs() {
         contents.contains("should_upload_workflow_artifacts: ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] }}"),
         "release workflow should capture workflow artefact upload output"
     );
+    assert!(
+        contents.contains("should_upload_package_artifacts: >-"),
+        "release metadata should expose a separate package artefact upload output"
+    );
+    assert_eq!(
+        contents
+            .matches("fromJSON(needs.metadata.outputs.should_upload_package_artifacts)")
+            .count(),
+        3,
+        "every platform build should receive the package artefact upload output"
+    );
+    assert!(
+        contents.contains("dry-run: ${{ needs.metadata.outputs.should_publish != 'true' }}"),
+        "release asset upload should validate its plan on non-publishing runs"
+    );
 }
 
 #[rstest]

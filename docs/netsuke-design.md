@@ -3846,9 +3846,13 @@ The staged artefacts feed a Windows Installer XML (WiX) v4 authoring template
 stored in `installer/Package.wxs`; the workflow invokes the shared
 `windows-package` composite to convert the repository licence into Rich Text
 Format (RTF), embed the binary, and output a signed Microsoft Installer (MSI)
-installer alongside the staged directory. The packaging step gates the action's
-internal artefact uploader behind the `should_publish` flag exported by the
-metadata job so that dry runs do not leak MSI artefacts. The composite pins the
+installer alongside the staged directory. The release workflow's separate
+`should_upload_package_artifacts` metadata output feeds the build workflow's
+upload input in publishing and dry-run modes. It enables the Windows package
+action's MSI upload and the platform artefact upload, which carries the MSI
+under the repository-prefixed name the release staging job downloads. Dry runs
+keep diagnostic uploads disabled through the separate
+`should_upload_workflow_artifacts` output. The composite pins the
 `WixToolset.UI.wixext` extension to v6 to match the WiX v6 CLI and avoid the
 `WIX6101` incompatibility seen with the legacy v4 bundle. The installer uses
 WiX v4 syntax, installs per-machine, and presents the minimal UI appropriate
