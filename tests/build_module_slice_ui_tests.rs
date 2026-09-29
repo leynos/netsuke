@@ -52,11 +52,27 @@ const BUILD_SLICE_RERUN_PATHS: &[&str] = &[
 const RUNTIME_ONLY_RERUN_PATHS: &[&str] = &[
     "src/cli/diag/mod.rs",
     "src/cli/discovery/mod.rs",
-    "src/cli/merge.rs",
+    "src/cli/merge/mod.rs",
     "src/cli/parser/mod.rs",
     "src/cli/parsing.rs",
     "src/host/matching.rs",
 ];
+
+#[test]
+fn runtime_only_rerun_paths_exist() -> io::Result<()> {
+    let repository_root = manifest_dir();
+    let missing_paths = RUNTIME_ONLY_RERUN_PATHS
+        .iter()
+        .filter(|path| !repository_root.join(**path).is_file())
+        .copied()
+        .collect::<Vec<_>>();
+    if !missing_paths.is_empty() {
+        return Err(io::Error::other(format!(
+            "the runtime-only rerun path list is stale; missing files: {missing_paths:?}",
+        )));
+    }
+    Ok(())
+}
 
 /// Verify the production build-script module root and its runtime boundary.
 #[test]
