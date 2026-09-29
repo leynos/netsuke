@@ -117,89 +117,67 @@ def test_reader_selects_the_first_author(
 
 
 @pytest.mark.parametrize(
-    "invalid_value",
+    "invalid_case",
     [
         pytest.param(
-            ("homepage", None, "package.homepage must be a string"), id="missing"
-        ),
-        pytest.param(
-            ("homepage", '"  "', "package.homepage must not be empty"), id="empty"
-        ),
-        pytest.param(
-            ("license", "42", "package.license must be a string"), id="non-string"
+            (_manifest_text({"homepage": None}), "package.homepage must be a string"),
+            id="missing",
         ),
         pytest.param(
             (
-                "description",
-                '"first line\\nsecond line"',
+                _manifest_text({"homepage": '"  "'}),
+                "package.homepage must not be empty",
+            ),
+            id="empty",
+        ),
+        pytest.param(
+            (_manifest_text({"license": "42"}), "package.license must be a string"),
+            id="non-string",
+        ),
+        pytest.param(
+            (
+                _manifest_text({"description": '"first line\\nsecond line"'}),
                 EXPECTED_CONTROL_CHARACTER_ERROR,
             ),
             id="control-character",
         ),
         pytest.param(
             (
-                "description",
-                '"first line\\u2028second line"',
+                _manifest_text({"description": '"first line\\u2028second line"'}),
                 EXPECTED_CONTROL_CHARACTER_ERROR,
             ),
             id="line-separator",
         ),
         pytest.param(
             (
-                "description",
-                '"first line\\u2029second line"',
+                _manifest_text({"description": '"first line\\u2029second line"'}),
                 EXPECTED_CONTROL_CHARACTER_ERROR,
             ),
             id="paragraph-separator",
         ),
         pytest.param(
             (
-                "authors",
-                '["", "Later Author <later@example.test>"]',
+                _manifest_text({
+                    "authors": '["", "Later Author <later@example.test>"]'
+                }),
                 "package.authors[0] must not be empty",
             ),
             id="empty-first-author",
         ),
         pytest.param(
-            ("authors", "[]", "package.authors must be a non-empty array"),
+            (
+                _manifest_text({"authors": "[]"}),
+                "package.authors must be a non-empty array",
+            ),
             id="no-authors",
         ),
         pytest.param(
             (
-                "authors",
-                '"not-an-array"',
+                _manifest_text({"authors": '"not-an-array"'}),
                 "package.authors must be a non-empty array",
             ),
             id="authors-not-array",
         ),
-    ],
-)
-def test_main_rejects_invalid_package_values_without_output(
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    invalid_value: tuple[str, str | None, str],
-) -> None:
-    """Reject missing, empty, non-string, control, and author-list values."""
-    field, raw_value, message = invalid_value
-    manifest = _write_manifest(tmp_path, {field: raw_value})
-    output = tmp_path / "github-output"
-    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
-
-    status = _reader().main(["--manifest", str(manifest)])
-
-    captured = capsys.readouterr()
-    assert status == 1, "invalid package metadata should fail"
-    assert captured.err == f"error: {message}\n", (
-        "the error should name the invalid field"
-    )
-    assert not captured.out, "metadata errors should not write standard output"
-    assert not output.exists(), "metadata errors should not write workflow outputs"
-
-
-@pytest.mark.parametrize(
-    "invalid_manifest",
-    [
         pytest.param(
             (
                 "[workspace]\nmembers = []\n",
@@ -216,25 +194,25 @@ def test_main_rejects_invalid_package_values_without_output(
         ),
     ],
 )
-def test_main_rejects_manifests_without_a_valid_package_table(
+def test_main_rejects_invalid_manifests_without_output(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    invalid_manifest: tuple[str, str],
+    invalid_case: tuple[str, str],
 ) -> None:
-    """Reject manifests that omit package authors before writing outputs."""
-    manifest_text, message = invalid_manifest
+    """Reject invalid package values and package tables before writing outputs."""
+    manifest_contents, message = invalid_case
     manifest = tmp_path / "Cargo.toml"
-    manifest.write_text(manifest_text, encoding="utf-8")
+    manifest.write_text(manifest_contents, encoding="utf-8")
     output = tmp_path / "github-output"
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
 
     status = _reader().main(["--manifest", str(manifest)])
 
     captured = capsys.readouterr()
-    assert status == 1, "incomplete package metadata should fail"
+    assert status == 1, "invalid package metadata should fail"
     assert captured.err == f"error: {message}\n", (
-        "the error should describe the missing package field"
+        "the error should describe the invalid package metadata"
     )
     assert not captured.out, "metadata errors should not write standard output"
     assert not output.exists(), "metadata errors should not write workflow outputs"

@@ -78,6 +78,7 @@ jobs:
       package_homepage: ${{ steps.package_metadata.outputs.homepage }}
       package_license: ${{ steps.package_metadata.outputs.license }}
       package_description: ${{ steps.package_metadata.outputs.description }}
+      package_manifest: ${{ steps.manifest_path.outputs.value }}
       should_publish: ${{ steps.release_modes.outputs['should-publish'] }}
       dry_run: ${{ steps.release_modes.outputs['dry-run'] }}
       should_upload_workflow_artifacts: ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] }}
@@ -177,6 +178,7 @@ jobs:
       target: ${{ matrix.target }}
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
+      package-manifest: ${{ needs.metadata.outputs.package_manifest }}
       package-maintainer: ${{ needs.metadata.outputs.package_maintainer }}
       package-homepage: ${{ needs.metadata.outputs.package_homepage }}
       package-license: ${{ needs.metadata.outputs.package_license }}

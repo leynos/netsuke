@@ -66,6 +66,9 @@ def test_release_reader_follows_manifest_resolution_and_exposes_outputs() -> Non
     ), "metadata reader command must validate and read the resolved manifest"
 
     outputs = require_mapping(metadata_job.get("outputs"), "metadata job outputs")
+    assert outputs.get("package_manifest") == (
+        "${{ steps.manifest_path.outputs.value }}"
+    ), "the resolved manifest path must be available to build-linux"
     for field, (output_name, _) in PACKAGE_METADATA.items():
         expected = "${{ steps.package_metadata.outputs." + field + " }}"
         assert outputs.get(output_name) == expected, (
@@ -104,6 +107,9 @@ def test_linux_release_forwards_metadata_without_workflow_call_outputs() -> None
         assert forwarded.get(input_name) == expected, (
             f"build-linux must forward {output_name} into {input_name}"
         )
+    assert forwarded.get("package-manifest") == (
+        "${{ needs.metadata.outputs.package_manifest }}"
+    ), "build-linux must forward the resolved manifest path"
 
     package_workflow = load_workflow(PACKAGE_WORKFLOW_PATH)
     triggers = require_mapping(package_workflow.get("on"), "package workflow triggers")
@@ -132,6 +138,18 @@ def test_package_workflow_inputs_are_optional_and_map_to_linux_action() -> None:
                 assert not default_value, f"{input_name} must default to empty"
             case _:
                 pytest.fail(f"{input_name} default must be a string")
+    manifest_input = require_mapping(
+        inputs.get("package-manifest"), "input package-manifest"
+    )
+    assert manifest_input.get("required") is False, (
+        "the resolved package manifest must remain optional"
+    )
+    assert manifest_input.get("type") == "string", (
+        "the resolved package manifest must be a string"
+    )
+    assert manifest_input.get("default") == "Cargo.toml", (
+        "direct workflow callers must retain the root-manifest default"
+    )
 
     package_step = named_step(
         job_steps(load_workflow(PACKAGE_WORKFLOW_PATH), "build"),
@@ -214,6 +232,7 @@ def test_linux_package_metadata_gate_runs_after_packaging_before_upload() -> Non
         "PACKAGE_HOMEPAGE": "${{ inputs['package-homepage'] }}",
         "PACKAGE_LICENSE": "${{ inputs['package-license'] }}",
         "PACKAGE_DESCRIPTION": "${{ inputs['package-description'] }}",
+        "PACKAGE_MANIFEST": "${{ inputs['package-manifest'] }}",
     }
     for name, expression in expected_environment.items():
         assert environment.get(name) == expression, (
@@ -234,7 +253,7 @@ def test_linux_package_metadata_gate_runs_after_packaging_before_upload() -> Non
         "uv run --no-project --python 3.14",
         "scripts/validate_linux_package_metadata.py",
         "--dist dist",
-        "--manifest Cargo.toml",
+        '--manifest "$PACKAGE_MANIFEST"',
         '--package-name "$PACKAGE_NAME"',
         "--license-file LICENSE",
     ):

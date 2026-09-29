@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Validate package metadata against Cargo.
+"""Compare built Debian and RPM metadata with Cargo and Debian copyright.
 
-Run from the repository root after a package build:
-$ python3 scripts/validate_linux_package_metadata.py --dist dist \
-  --manifest Cargo.toml --package-name netsuke --license-file LICENSE
+Example::
+
+    python3 scripts/validate_linux_package_metadata.py --dist dist \
+      --manifest Cargo.toml --package-name netsuke --license-file LICENSE
 """
 
 import argparse
@@ -36,10 +37,7 @@ class PackageValidationIssue(enum.Enum):
     INVALID_UTF8 = "{}: field {}: inspection output is not UTF-8"
     PACKAGE_NAME = "invalid package name for Debian copyright lookup: {!r}"
     COPYRIGHT_COUNT = "{}: field Debian copyright: expected {}; actual {}"
-    COPYRIGHT_FILE = (
-        "{}: field Debian copyright: expected a regular file matching {}; "
-        "actual non-regular archive member"
-    )
+    COPYRIGHT_FILE = "{}: field Debian copyright: expected {}; actual non-regular"
     COPYRIGHT_READ = "{}: field Debian copyright: expected {}; actual unreadable file"
     INVALID_ARCHIVE = "{}: field Debian copyright: invalid package file list: {}"
 
@@ -73,11 +71,7 @@ class _PackageValidationRequest:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class _PackageInspector:
-    """Bind package queries to this script's command and injectable runner.
-
-    Keep this boundary local to the validator; Debian and RPM readers share it,
-    and tests supply its runner through ``main``.
-    """
+    """Run Debian and RPM queries through an injectable command runner."""
 
     command: str
     package: pathlib.Path
@@ -113,10 +107,9 @@ class _PackageInspector:
 
 def _required_tool(name: str) -> str:
     """Return a tool path such as ``/usr/bin/rpm`` or name the missing tool."""
-    command = shutil.which(name)
-    if command is None:
-        raise PackageValidationError(PackageValidationIssue.MISSING_TOOL, (name,))
-    return command
+    if command := shutil.which(name):
+        return command
+    raise PackageValidationError(PackageValidationIssue.MISSING_TOOL, (name,))
 
 
 def _find_package(dist: pathlib.Path, suffix: str) -> pathlib.Path:
@@ -177,6 +170,59 @@ def _copyright_member_path(package_name: str) -> str:
     return f"usr/share/doc/{package_name}/copyright"
 
 
+def _unique_copyright_member(
+    archive: tarfile.TarFile, member_path: str, package_name: str, expected: bytes
+) -> tarfile.TarInfo | None:
+    """Select the sole Debian copyright member, or return ``None`` if absent."""
+    matching = [
+        member
+        for member in archive.getmembers()
+        if member.name.removeprefix("./") == member_path
+    ]
+    if len(matching) > 1:
+        raise PackageValidationError(
+            PackageValidationIssue.COPYRIGHT_COUNT,
+            (
+                package_name,
+                _copyright_fingerprint(expected),
+                f"{len(matching)} members",
+            ),
+        )
+    return matching[0] if matching else None
+
+
+def _read_copyright_member(
+    archive: tarfile.TarFile, member_path: str, package_name: str, expected: bytes
+) -> bytes | None:
+    """Read a Debian copyright member; keep it local to this check.
+
+    Returns
+    -------
+    bytes | None: Member contents, or ``None`` when absent.
+
+    Raises
+    ------
+    PackageValidationError
+        For duplicate, non-regular, or unreadable members.
+    """
+    member = _unique_copyright_member(archive, member_path, package_name, expected)
+    if member is None:
+        return None
+    if not member.isfile():
+        raise PackageValidationError(
+            PackageValidationIssue.COPYRIGHT_FILE,
+            (package_name, _copyright_fingerprint(expected)),
+        )
+    contents = archive.extractfile(member)
+    if contents is None:
+        raise PackageValidationError(
+            PackageValidationIssue.COPYRIGHT_READ,
+            (package_name, _copyright_fingerprint(expected)),
+        )
+    with contents:
+        return contents.read()
+
+
 def _read_debian_copyright(
     inspector: _PackageInspector, package_name: str, expected: bytes
 ) -> bytes | None:
@@ -187,36 +233,9 @@ def _read_debian_copyright(
     )
     try:
         with tarfile.open(fileobj=io.BytesIO(archive_contents), mode="r:*") as archive:
-            matching = [
-                member
-                for member in archive.getmembers()
-                if member.name.removeprefix("./") == member_path
-            ]
-            if not matching:
-                return None
-            if len(matching) != 1:
-                raise PackageValidationError(
-                    PackageValidationIssue.COPYRIGHT_COUNT,
-                    (
-                        inspector.package.name,
-                        _copyright_fingerprint(expected),
-                        f"{len(matching)} members",
-                    ),
-                )
-            member = matching[0]
-            if not member.isfile():
-                raise PackageValidationError(
-                    PackageValidationIssue.COPYRIGHT_FILE,
-                    (inspector.package.name, _copyright_fingerprint(expected)),
-                )
-            contents = archive.extractfile(member)
-            if contents is None:
-                raise PackageValidationError(
-                    PackageValidationIssue.COPYRIGHT_READ,
-                    (inspector.package.name, _copyright_fingerprint(expected)),
-                )
-            with contents:
-                return contents.read()
+            return _read_copyright_member(
+                archive, member_path, inspector.package.name, expected
+            )
     except tarfile.TarError as error:
         raise PackageValidationError(
             PackageValidationIssue.INVALID_ARCHIVE, (inspector.package.name, error)
@@ -227,12 +246,9 @@ def _record_comparison(
     errors: list[str], field_label: str, expected: str, actual: str
 ) -> None:
     """Report an empty or unequal field with both expected and actual values."""
-    if not actual:
-        outcome = "is empty"
-    elif actual != expected:
-        outcome = "does not match"
-    else:
+    if actual and actual == expected:
         return
+    outcome = "is empty" if not actual else "does not match"
     errors.append(f"{field_label} {outcome}: expected {expected!r}; actual {actual!r}")
 
 
@@ -240,24 +256,14 @@ def _record_copyright_comparison(
     errors: list[str], package_name: str, expected: bytes, actual: bytes | None
 ) -> None:
     """Report missing, empty or differing Debian licence bytes by fingerprint."""
-    expected_value = _copyright_fingerprint(expected)
-    if actual is None:
-        outcome, actual_value = "is missing", "missing"
-    elif not actual:
-        outcome, actual_value = "is empty", _copyright_fingerprint(actual)
-    elif actual != expected:
-        outcome, actual_value = "does not match", _copyright_fingerprint(actual)
-    else:
+    if actual and actual == expected:
         return
+    outcome = {None: "is missing", b"": "is empty"}.get(actual, "does not match")
+    actual_value = "missing" if actual is None else _copyright_fingerprint(actual)
     errors.append(
         f"{package_name}: field Debian copyright {outcome}: "
-        f"expected {expected_value}; actual {actual_value}"
+        f"expected {_copyright_fingerprint(expected)}; actual {actual_value}"
     )
-
-
-def _summary_line(description: str) -> str:
-    r"""Use the first line of a multiline package description as its summary."""
-    return description.splitlines()[0] if description else ""
 
 
 def _validate_debian(
@@ -270,7 +276,7 @@ def _validate_debian(
     expected_fields = {
         "Maintainer": metadata["maintainer"],
         "Homepage": metadata["homepage"],
-        "Description": _summary_line(metadata["description"]),
+        "Description": metadata["description"],
     }
     errors: list[str] = []
     for field, expected in expected_fields.items():
@@ -303,7 +309,7 @@ def _validate_rpm(
         "PACKAGER": metadata["maintainer"],
         "URL": metadata["homepage"],
         "LICENSE": metadata["license"],
-        "SUMMARY": _summary_line(metadata["description"]),
+        "SUMMARY": metadata["description"],
         "DESCRIPTION": metadata["description"],
     }
     errors: list[str] = []
@@ -324,16 +330,14 @@ def validate_linux_package_metadata(
     *,
     runner: SubprocessRunner | None = None,
 ) -> list[str]:
-    """Validate one built Debian and RPM package against Cargo metadata.
+    """Validate built packages against Cargo metadata.
+
+    Example: Matching headers and Debian copyright make
+    ``validate_linux_package_metadata(request)`` return ``[]``.
 
     Returns
     -------
-    list[str]
-        Empty when package fields match; otherwise one diagnostic per mismatch.
-
-    Examples
-    --------
-    Matching package headers and Debian copyright return an empty list.
+    list[str]: One diagnostic per mismatch, or an empty list when packages match.
     """
     metadata = cargo_meta.read_package_metadata(request.manifest)
     debian_package, rpm_package = _package_files(request.dist)
@@ -360,16 +364,13 @@ def main(
     *,
     runner: SubprocessRunner | None = None,
 ) -> int:
-    """Run package metadata validation and return its command status.
+    """Run validation and return its command status.
+
+    Example: Matching package headers make ``main([...])`` return ``0``.
 
     Returns
     -------
-    int
-        ``0`` when both packages match or ``1`` on validation failure.
-
-    Examples
-    --------
-    ``main(["--dist", "dist", ...])`` returns ``0`` for matching packages.
+    int: ``0`` when package metadata matches, otherwise ``1``.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dist", type=pathlib.Path, required=True)
@@ -389,8 +390,7 @@ def main(
         print(f"error: {error}", file=sys.stderr)
         return 1
     if errors:
-        for error in errors:
-            print(f"error: {error}", file=sys.stderr)
+        print("\n".join(f"error: {error}" for error in errors), file=sys.stderr)
         return 1
     print("ok: Debian and RPM package metadata match Cargo.toml")
     return 0

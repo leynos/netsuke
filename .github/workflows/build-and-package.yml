@@ -63,6 +63,11 @@ name: Build and Package
         required: false
         default: ''
         type: string
+      package-manifest:
+        description: Cargo manifest resolved by the release metadata job
+        required: false
+        default: Cargo.toml
+        type: string
       msi-arch:
         description: Architecture identifier for Windows MSI packaging
         required: false
@@ -369,6 +374,7 @@ jobs:
           PACKAGE_HOMEPAGE: ${{ inputs['package-homepage'] }}
           PACKAGE_LICENSE: ${{ inputs['package-license'] }}
           PACKAGE_DESCRIPTION: ${{ inputs['package-description'] }}
+          PACKAGE_MANIFEST: ${{ inputs['package-manifest'] }}
         run: |
           set -euo pipefail
           for field in PACKAGE_MAINTAINER PACKAGE_HOMEPAGE PACKAGE_LICENSE PACKAGE_DESCRIPTION; do
@@ -382,7 +388,7 @@ jobs:
           uv run --no-project --python 3.14 \
             scripts/validate_linux_package_metadata.py \
             --dist dist \
-            --manifest Cargo.toml \
+            --manifest "$PACKAGE_MANIFEST" \
             --package-name "$PACKAGE_NAME" \
             --license-file LICENSE
 

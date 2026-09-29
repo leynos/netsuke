@@ -3774,12 +3774,16 @@ staged `man_path` output into the shared `linux-packages` composite. The
 resulting `.deb` and `.rpm` archives both declare a runtime dependency on
 `ninja-build`. The maintainer value comes from the first `[package].authors`
 entry in `Cargo.toml`; the package homepage, licence identifier, and
-description come from `[package].homepage`, `license`, and `description`.
-Before upload, the Linux job inspects the built Debian and RPM headers against
-those fields and compares Debian's `./usr/share/doc/<package-name>/copyright`
-contents with `LICENSE`. Its request type and injectable package-command runner
-stay private to the validator; Debian and RPM queries use that same runner
-boundary. The shared-action follow-up
+description come from `[package].homepage`, `license`, and `description`. The
+metadata job forwards its resolved manifest path into the Linux build job, so
+the validator checks the same source that supplied those fields. Before upload,
+the Linux job inspects the built Debian and RPM headers against those fields
+and compares Debian's `./usr/share/doc/<package-name>/copyright` contents with
+`LICENSE`. Its request type and injectable package-command runner stay private
+to the validator; Debian and RPM queries use that same runner boundary. The
+Debian tar-member reader is also private to this copyright check. The coverage
+ZIP validator enforces a different archive contract, so the two readers do not
+form a shared archive API. The shared-action follow-up
 [#542](https://github.com/leynos/shared-actions/issues/542) tracks exposing a
 Debian `License` control field. Windows and macOS builds use the same staging
 composite from `leynos/shared-actions`; Windows staging also carries the
