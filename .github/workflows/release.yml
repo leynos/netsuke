@@ -124,7 +124,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          manifest_path="${CARGO_TOML_PATH:-Cargo.toml}"
+          manifest_path='Cargo.toml'
           echo "value=$manifest_path" >>"$GITHUB_OUTPUT"
       - name: Install Python for package metadata
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
@@ -146,7 +146,7 @@ jobs:
         uses: >-
           leynos/shared-actions/.github/actions/export-cargo-metadata@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
-          manifest-path: ${{ steps.manifest_path.outputs.value }}
+          manifest-path: Cargo.toml
           fields: bin-name
           export-to-env: 'false'
 
