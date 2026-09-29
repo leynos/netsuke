@@ -3884,7 +3884,7 @@ Each job uploads its products as workflow artefacts, and the final release job
 downloads every file, filters out unrelated downloads, and prefixes asset names
 with their staging directories to avoid collisions before attaching them to the
 GitHub release draft. This automated pipeline guarantees parity across Windows,
-Linux, and macOS without custom GoReleaser logic.
+Linux, and macOS through the shared actions.
 
 ### 8.7 Release Notes
 
