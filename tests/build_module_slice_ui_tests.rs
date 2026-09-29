@@ -9,6 +9,8 @@
 mod cargo_artifacts;
 #[path = "support/cargo_features.rs"]
 mod cargo_features;
+#[path = "support/build_module_slice_runtime_only_tests.rs"]
+mod runtime_only_rerun_tests;
 #[path = "support/rustc_response_file.rs"]
 mod rustc_response_file;
 
@@ -318,6 +320,12 @@ fn build_script_rerun_directives_match_the_compiled_module_slice() -> io::Result
             "build.rs must track src/host/pattern.rs exactly once",
         ));
     }
+    reject_runtime_only_rerun_paths(&rerun_paths)?;
+    Ok(())
+}
+
+/// Reject build-script rerun directives that track runtime-only modules.
+fn reject_runtime_only_rerun_paths(rerun_paths: &[&str]) -> io::Result<()> {
     for &path in RUNTIME_ONLY_RERUN_PATHS {
         if rerun_paths.contains(&path) {
             return Err(io::Error::other(format!(
