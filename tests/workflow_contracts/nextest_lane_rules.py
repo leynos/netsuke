@@ -241,6 +241,13 @@ def _guard_is_shared(steps: Steps, install: int, goals: frozenset[str]) -> bool:
     suite step carries the identical guard, as in `kani-smoke`, where one
     decision step gates every later step alike (ADR-039).
 
+    Guards are compared as written, so the same condition spelled with and
+    without `${{ }}` counts as different and is refused: the rule fails loud
+    rather than open. The quantifier is never vacuous here, since
+    ``_lane_violations`` runs only for jobs with at least one suite step, and
+    ``test_a_guard_every_suite_step_shares_is_allowed`` pins `kani-smoke` as
+    such a job.
+
     Returns
     -------
     bool
