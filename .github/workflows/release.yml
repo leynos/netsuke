@@ -89,7 +89,7 @@ jobs:
       - id: release_modes
         name: Determine release modes
         uses: >-
-          leynos/shared-actions/.github/actions/determine-release-modes@a5765019912a8ab6882b12db049c7cde635f3a85
+          leynos/shared-actions/.github/actions/determine-release-modes@774cc5a01e457714aede66e14a97b3e257812fc2
       - id: ensure_version
         name: Read package version from Cargo.toml
         uses: >-
