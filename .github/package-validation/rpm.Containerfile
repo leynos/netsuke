@@ -7,6 +7,8 @@ RUN set -eu; \
         sed -i '/^[[:space:]]*%_excludedocs\b/d' "$rpm_macro"; \
     done; \
     dnf -y install man-db; \
+    mandb; \
+    man -w man >/dev/null; \
     dnf clean all; \
     rm -rf /var/cache/dnf
 
