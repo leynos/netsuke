@@ -3893,8 +3893,7 @@ staging directories to avoid collisions. Dry-run staging writes its operation
 summary but does not upload diagnostic artefacts; publication telemetry and the
 full observability policy are documented in
 [ADR-020](adr-020-release-admission-observability.md). This automated pipeline
-guarantees parity across Windows, Linux, and macOS without custom GoReleaser
-logic.
+guarantees parity across Windows, Linux, and macOS through the shared actions.
 
 ### 8.7 Release Notes
 
