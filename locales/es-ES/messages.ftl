@@ -471,7 +471,10 @@ check.threshold_exceeded = Los hallazgos alcanzaron el umbral { $severity }: { $
 check.threshold_exceeded.help = Corrija los hallazgos informados, ajuste --rule o relaje --fail-on.
 check.summary.counts = Resultados del análisis — errores: { $errors }, advertencias: { $warnings }, consejos: { $advice }, suprimidos: { $suppressed }.
 check.summary.clean = Sin hallazgos.
-check.summary.truncated = Se muestran { $shown } hallazgos; --limit omitió { $omitted } más.
+check.summary.truncated = { $shown ->
+    [one] Se muestra { $shown } hallazgo; --limit omitió { $omitted } más.
+   *[other] Se muestran { $shown } hallazgos; --limit omitió { $omitted } más.
+}
 check.rule.malformed = El selector { $selector } no está escrito como NAME=SEVERITY.
 check.rule.unknown = El selector nombra { $name }, que no es ni una regla ni una categoría.
 check.rule.severity = El selector { $name } nombra la severidad { $severity }; se esperaba una de { $values }.

@@ -468,7 +468,10 @@ check.threshold_exceeded = Bevindingen bereikten de drempel { $severity }: { $fa
 check.threshold_exceeded.help = Los de gemelde bevindingen op, pas --rule aan of versoepel --fail-on.
 check.summary.counts = Analyseresultaten — fouten: { $errors }, waarschuwingen: { $warnings }, adviezen: { $advice }, onderdrukt: { $suppressed }.
 check.summary.clean = Geen bevindingen.
-check.summary.truncated = { $shown } bevindingen getoond; --limit liet er nog { $omitted } weg.
+check.summary.truncated = { $shown ->
+    [one] { $shown } bevinding getoond; --limit liet er nog { $omitted } weg.
+   *[other] { $shown } bevindingen getoond; --limit liet er nog { $omitted } weg.
+}
 check.rule.malformed = Selector { $selector } is niet geschreven als NAME=SEVERITY.
 check.rule.unknown = Selector noemt { $name }, wat noch een regel noch een categorie is.
 check.rule.severity = Selector { $name } noemt ernst { $severity }; verwacht werd een van { $values }.

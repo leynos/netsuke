@@ -471,7 +471,11 @@ check.threshold_exceeded = Constatările au atins pragul { $severity }: { $faili
 check.threshold_exceeded.help = Remediați constatările raportate, ajustați --rule sau relaxați --fail-on.
 check.summary.counts = Rezultatele analizei — erori: { $errors }, avertismente: { $warnings }, sfaturi: { $advice }, suprimate: { $suppressed }.
 check.summary.clean = Nicio constatare.
-check.summary.truncated = Se afișează { $shown } constatări; --limit a omis încă { $omitted }.
+check.summary.truncated = { $shown ->
+    [one] Se afișează { $shown } constatare; --limit a omis încă { $omitted }.
+    [few] Se afișează { $shown } constatări; --limit a omis încă { $omitted }.
+   *[other] Se afișează { $shown } de constatări; --limit a omis încă { $omitted }.
+}
 check.rule.malformed = Selectorul { $selector } nu este scris ca NAME=SEVERITY.
 check.rule.unknown = Selectorul indică { $name }, care nu este nici regulă, nici categorie.
 check.rule.severity = Selectorul { $name } indică severitatea { $severity }; se aștepta una dintre { $values }.

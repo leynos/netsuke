@@ -472,7 +472,10 @@ check.threshold_exceeded = הממצאים הגיעו לסף { $severity }: { $fa
 check.threshold_exceeded.help = תקן את הממצאים שדווחו, התאם את ‎--rule או הרפה את ‎--fail-on.
 check.summary.counts = תוצאות הבדיקה — שגיאות: { $errors }, אזהרות: { $warnings }, המלצות: { $advice }, הושתקו: { $suppressed }.
 check.summary.clean = אין ממצאים.
-check.summary.truncated = מוצגים { $shown } ממצאים; ‎--limit השמיט { $omitted } נוספים.
+check.summary.truncated = { $shown ->
+    [one] מוצג { $shown } ממצא; ‎--limit השמיט { $omitted } נוספים.
+   *[other] מוצגים { $shown } ממצאים; ‎--limit השמיט { $omitted } נוספים.
+}
 check.rule.malformed = הבורר { $selector } אינו כתוב בכתיב NAME=SEVERITY.
 check.rule.unknown = הבורר מציין את { $name }, שאינו כלל ואינו קטגוריה.
 check.rule.severity = הבורר { $name } מציין את החומרה { $severity }; נדרש אחד מתוך { $values }.

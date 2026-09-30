@@ -469,7 +469,10 @@ check.threshold_exceeded = Les constats ont atteint le seuil { $severity } : { $
 check.threshold_exceeded.help = Corrigez les constats signalés, ajustez --rule ou assouplissez --fail-on.
 check.summary.counts = Résultats de l'analyse — erreurs : { $errors }, avertissements : { $warnings }, conseils : { $advice }, supprimés : { $suppressed }.
 check.summary.clean = Aucun constat.
-check.summary.truncated = { $shown } constats affichés ; --limit en a omis { $omitted } autres.
+check.summary.truncated = { $shown ->
+    [one] { $shown } constat affiché ; --limit en a omis { $omitted } autres.
+   *[other] { $shown } constats affichés ; --limit en a omis { $omitted } autres.
+}
 check.rule.malformed = Le sélecteur { $selector } n'est pas écrit sous la forme NAME=SEVERITY.
 check.rule.unknown = Le sélecteur nomme { $name }, qui n'est ni une règle ni une catégorie.
 check.rule.severity = Le sélecteur { $name } nomme la sévérité { $severity } ; attendu l'une de { $values }.

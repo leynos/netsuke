@@ -469,7 +469,10 @@ check.threshold_exceeded = Os achados atingiram o limite { $severity }: { $faili
 check.threshold_exceeded.help = Corrija os achados relatados, ajuste --rule ou relaxe --fail-on.
 check.summary.counts = Resultados da análise — erros: { $errors }, avisos: { $warnings }, sugestões: { $advice }, suprimidos: { $suppressed }.
 check.summary.clean = Nenhum achado.
-check.summary.truncated = Exibindo { $shown } achados; --limit omitiu mais { $omitted }.
+check.summary.truncated = { $shown ->
+    [one] Exibindo { $shown } achado; --limit omitiu mais { $omitted }.
+   *[other] Exibindo { $shown } achados; --limit omitiu mais { $omitted }.
+}
 check.rule.malformed = O seletor { $selector } não está escrito como NAME=SEVERITY.
 check.rule.unknown = O seletor indica { $name }, que não é uma regra nem uma categoria.
 check.rule.severity = O seletor { $name } indica a severidade { $severity }; esperava-se uma de { $values }.

@@ -55,7 +55,7 @@ pub(super) fn summary_line(report: &Report) -> String {
 #[must_use]
 pub(super) fn truncation_line(report: &Report) -> String {
     localization::message(keys::CHECK_SUMMARY_TRUNCATED)
-        .with_arg("shown", report.findings().len().to_string())
-        .with_arg("omitted", report.truncated().to_string())
+        .with_count("shown", report.findings().len())
+        .with_count("omitted", report.truncated())
         .to_string()
 }

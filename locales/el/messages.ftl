@@ -469,7 +469,10 @@ check.threshold_exceeded = Τα ευρήματα έφτασαν το κατώφ�
 check.threshold_exceeded.help = Διορθώστε τα αναφερόμενα ευρήματα, προσαρμόστε το --rule ή χαλαρώστε το --fail-on.
 check.summary.counts = Αποτελέσματα ανάλυσης — σφάλματα: { $errors }, προειδοποιήσεις: { $warnings }, συμβουλές: { $advice }, κατεσταλμένα: { $suppressed }.
 check.summary.clean = Κανένα εύρημα.
-check.summary.truncated = Εμφανίζονται { $shown } ευρήματα· το --limit παρέλειψε άλλα { $omitted }.
+check.summary.truncated = { $shown ->
+    [one] Εμφανίζεται { $shown } εύρημα· το --limit παρέλειψε άλλα { $omitted }.
+   *[other] Εμφανίζονται { $shown } ευρήματα· το --limit παρέλειψε άλλα { $omitted }.
+}
 check.rule.malformed = Ο επιλογέας { $selector } δεν είναι γραμμένος ως NAME=SEVERITY.
 check.rule.unknown = Ο επιλογέας ονομάζει { $name }, που δεν είναι ούτε κανόνας ούτε κατηγορία.
 check.rule.severity = Ο επιλογέας { $name } ονομάζει τη σοβαρότητα { $severity }· αναμενόταν μία από { $values }.

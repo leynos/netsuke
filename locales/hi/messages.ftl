@@ -470,7 +470,10 @@ check.threshold_exceeded = निष्कर्ष { $severity } सीमा �
 check.threshold_exceeded.help = रिपोर्ट किए गए निष्कर्ष ठीक करें, --rule समायोजित करें, या --fail-on ढीला करें।
 check.summary.counts = जाँच परिणाम — त्रुटियाँ: { $errors }, चेतावनियाँ: { $warnings }, सुझाव: { $advice }, दबाए गए: { $suppressed }।
 check.summary.clean = कोई निष्कर्ष नहीं।
-check.summary.truncated = { $shown } निष्कर्ष दिखाए जा रहे हैं; --limit ने { $omitted } और छोड़ दिए।
+check.summary.truncated = { $shown ->
+    [one] { $shown } निष्कर्ष दिखाया जा रहा है; --limit ने { $omitted } और छोड़ दिए।
+   *[other] { $shown } निष्कर्ष दिखाए जा रहे हैं; --limit ने { $omitted } और छोड़ दिए।
+}
 check.rule.malformed = चयनकर्ता { $selector } NAME=SEVERITY के रूप में नहीं लिखा गया है।
 check.rule.unknown = चयनकर्ता { $name } बताता है, जो न नियम है न श्रेणी।
 check.rule.severity = चयनकर्ता { $name } गंभीरता { $severity } बताता है; { $values } में से एक अपेक्षित था।

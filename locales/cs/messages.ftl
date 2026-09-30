@@ -472,7 +472,11 @@ check.threshold_exceeded = Nálezy dosáhly prahu { $severity }: { $failing } z 
 check.threshold_exceeded.help = Opravte hlášené nálezy, upravte --rule nebo uvolněte --fail-on.
 check.summary.counts = Výsledky analýzy — chyby: { $errors }, varování: { $warnings }, doporučení: { $advice }, potlačeno: { $suppressed }.
 check.summary.clean = Žádné nálezy.
-check.summary.truncated = Zobrazeno { $shown } nálezů; --limit vynechal dalších { $omitted }.
+check.summary.truncated = { $shown ->
+    [one] Zobrazen { $shown } nález; --limit vynechal dalších { $omitted }.
+    [few] Zobrazeny { $shown } nálezy; --limit vynechal dalších { $omitted }.
+   *[other] Zobrazeno { $shown } nálezů; --limit vynechal dalších { $omitted }.
+}
 check.rule.malformed = Selektor { $selector } není zapsán jako NAME=SEVERITY.
 check.rule.unknown = Selektor uvádí { $name }, což není ani pravidlo, ani kategorie.
 check.rule.severity = Selektor { $name } uvádí závažnost { $severity }; očekávána jedna z { $values }.

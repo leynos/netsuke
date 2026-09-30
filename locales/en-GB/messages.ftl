@@ -468,7 +468,10 @@ check.threshold_exceeded = Lint findings reached the { $severity } threshold: { 
 check.threshold_exceeded.help = Fix the reported findings, adjust --rule, or relax --fail-on.
 check.summary.counts = Lint results — errors: { $errors }, warnings: { $warnings }, advice: { $advice }, suppressed: { $suppressed }.
 check.summary.clean = No lint findings.
-check.summary.truncated = Showing { $shown } findings; --limit omitted { $omitted } more.
+check.summary.truncated = { $shown ->
+    [one] Showing { $shown } finding; --limit omitted { $omitted } more.
+   *[other] Showing { $shown } findings; --limit omitted { $omitted } more.
+}
 check.rule.malformed = Lint selector { $selector } is not written as NAME=SEVERITY.
 check.rule.unknown = Lint selector names { $name }, which is neither a rule nor a category.
 check.rule.severity = Lint selector { $name } names severity { $severity }; expected one of { $values }.
