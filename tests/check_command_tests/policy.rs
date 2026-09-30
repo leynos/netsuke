@@ -162,32 +162,27 @@ fn run_with_configured_warning_threshold(
     workspace.run(&args)
 }
 
-/// A `[cmds.check]` table supplies the policy when the caller gives none.
-#[rstest]
-fn configuration_supplies_the_check_policy(warning_workspace: Result<Workspace>) -> Result<()> {
-    let workspace = warning_workspace?;
-    let run = run_with_configured_warning_threshold(&workspace, &[])?;
-    ensure!(
-        !run.success,
-        "the configured threshold should fail the run: {}",
-        run.stdout
-    );
-    Ok(())
-}
-
-/// An explicit flag outranks the configuration file.
+/// A `[cmds.check]` table supplies the policy, and an explicit flag outranks it.
 ///
-/// The check is written against a value that equals the built-in default,
-/// because that is where a merge keyed on "differs from the default" rather
-/// than on "supplied on the command line" would silently keep the
-/// configuration's value.
+/// The override case uses a value that equals the built-in default, because
+/// that is where a merge keyed on "differs from the default" rather than on
+/// "supplied on the command line" would silently keep the configuration's
+/// value.
 #[rstest]
-fn an_explicit_flag_outranks_the_configuration(warning_workspace: Result<Workspace>) -> Result<()> {
+#[case::configuration_supplies_the_policy(&[], false)]
+#[case::explicit_flag_outranks_the_configuration(&["--fail-on", "error"], true)]
+fn configured_check_policy_yields_to_an_explicit_flag(
+    warning_workspace: Result<Workspace>,
+    #[case] extra_args: &[&str],
+    #[case] should_succeed: bool,
+) -> Result<()> {
     let workspace = warning_workspace?;
-    let run = run_with_configured_warning_threshold(&workspace, &["--fail-on", "error"])?;
+    let run = run_with_configured_warning_threshold(&workspace, extra_args)?;
     ensure!(
-        run.success,
-        "the explicit threshold should win over the configured one: {}",
+        run.success == should_succeed,
+        "{extra_args:?} should {} the run:\nstdout: {}\nstderr: {}",
+        if should_succeed { "pass" } else { "fail" },
+        run.stdout,
         run.stderr
     );
     Ok(())
