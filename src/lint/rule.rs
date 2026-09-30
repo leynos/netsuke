@@ -11,68 +11,63 @@ use super::suppress::Directive;
 use crate::ast::NetsukeManifest;
 use crate::ir::BuildGraph;
 
-/// The concern a rule addresses.
+/// Declare [`Category`], its [`Category::ALL`] list, and its selector
+/// spellings from one list.
 ///
-/// Category is metadata rather than part of a rule's identifier, so that
-/// recategorizing a rule cannot invalidate a configuration file or a
-/// suppression comment that named it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Category {
-    /// The manifest is likely to behave differently from what it says.
-    Correctness,
-    /// The declaration defeats change detection or forces needless rebuilds.
-    Caching,
-    /// The construct depends on a shell or platform Netsuke does not promise.
-    Portability,
-    /// The recipe's result depends on something other than its declared inputs.
-    Determinism,
-    /// The declaration is unnecessary, inert, or duplicated.
-    Redundancy,
-    /// The declaration is never used.
-    Hygiene,
-    /// A canonical alternative reads better or is easier to discover.
-    Clarity,
-    /// A workaround for behaviour that a released version has since changed.
-    Migration,
-    /// The lint directives themselves are wrong or stale.
-    Suppression,
+/// Each variant, its position in `ALL`, and its spelling come from the same
+/// entry, so the three cannot drift apart when a category is added.
+macro_rules! define_categories {
+    ($($(#[doc = $doc:literal])+ $variant:ident => $spelling:literal,)+) => {
+        /// The concern a rule addresses.
+        ///
+        /// Category is metadata rather than part of a rule's identifier, so that
+        /// recategorizing a rule cannot invalidate a configuration file or a
+        /// suppression comment that named it.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub enum Category {
+            $($(#[doc = $doc])+ $variant,)+
+        }
+
+        impl Category {
+            /// Every category, in declaration order, which is the order the rule
+            /// reference lists them.
+            pub const ALL: [Self; [$(stringify!($variant)),+].len()] = [$(Self::$variant),+];
+
+            /// Name this category using its selector spelling.
+            #[must_use]
+            pub const fn as_str(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $spelling,)+
+                }
+            }
+            /// Resolve a category from its selector spelling.
+            #[must_use]
+            pub fn parse(text: &str) -> Option<Self> {
+                Self::ALL.into_iter().find(|entry| entry.as_str() == text)
+            }
+        }
+    };
 }
 
-impl Category {
-    /// Every category, in the order the rule reference lists them.
-    pub const ALL: [Self; 9] = [
-        Self::Correctness,
-        Self::Caching,
-        Self::Portability,
-        Self::Determinism,
-        Self::Redundancy,
-        Self::Hygiene,
-        Self::Clarity,
-        Self::Migration,
-        Self::Suppression,
-    ];
-
-    /// Name this category using its selector spelling.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Correctness => "correctness",
-            Self::Caching => "caching",
-            Self::Portability => "portability",
-            Self::Determinism => "determinism",
-            Self::Redundancy => "redundancy",
-            Self::Hygiene => "hygiene",
-            Self::Clarity => "clarity",
-            Self::Migration => "migration",
-            Self::Suppression => "suppression",
-        }
-    }
-
-    /// Resolve a category from its selector spelling.
-    #[must_use]
-    pub fn parse(text: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|entry| entry.as_str() == text)
-    }
+define_categories! {
+    /// The manifest is likely to behave differently from what it says.
+    Correctness => "correctness",
+    /// The declaration defeats change detection or forces needless rebuilds.
+    Caching => "caching",
+    /// The construct depends on a shell or platform Netsuke does not promise.
+    Portability => "portability",
+    /// The recipe's result depends on something other than its declared inputs.
+    Determinism => "determinism",
+    /// The declaration is unnecessary, inert, or duplicated.
+    Redundancy => "redundancy",
+    /// The declaration is never used.
+    Hygiene => "hygiene",
+    /// A canonical alternative reads better or is easier to discover.
+    Clarity => "clarity",
+    /// A workaround for behaviour that a released version has since changed.
+    Migration => "migration",
+    /// The lint directives themselves are wrong or stale.
+    Suppression => "suppression",
 }
 
 /// The compiler artefact a rule inspects.
@@ -334,5 +329,22 @@ mod tests {
             assert_eq!(category.as_str(), named);
         }
         assert_eq!(Category::ALL.len(), 9, "ALL should list every variant");
+    }
+
+    /// `Category::ALL` lists the variants in declaration order.
+    ///
+    /// The derived `Ord` follows declaration order and the registry sorts the
+    /// catalogue by it, so `ALL` must agree or the rule reference and
+    /// `--explain` would list categories in two different orders.
+    #[test]
+    fn all_follows_declaration_order() {
+        for (ordinal, category) in Category::ALL.into_iter().enumerate() {
+            assert_eq!(
+                category as usize,
+                ordinal,
+                "`{}` is out of order",
+                category.as_str()
+            );
+        }
     }
 }
