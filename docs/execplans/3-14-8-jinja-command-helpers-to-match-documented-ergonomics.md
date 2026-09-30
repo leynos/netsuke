@@ -3985,6 +3985,76 @@ catalogue has the key; there is no partial state to clean up.
   corollary is that a gate runner should re-read `HEAD` and `git status`
   between gates, not only at the ends; this runner says as much itself.
 
+- **The fix confirmed at the gate** (`31b92635`, `45db8b6a`). CodeScene's PR
+  check for `45db8b6a` reports **pass** in 58 s, where the same check on
+  `76c31096` reported **fail**. The local instrument had predicted this —
+  `cs check` returns 10.00 on both branch-touched code files — and the gate
+  agreed with it, which is the round trip that makes the local reading a
+  measurement rather than a guess.
+
+- **The five local gates at `45db8b6a`: three pass, two blocked.** A gate run
+  on the clean, committed tree returned `check-fmt` **pass** (2 s, 167 files
+  formatted, mdtablefix 168 unchanged), `doc-coverage` **pass** (65 pytest
+  passed; aggregate 4870/4927 = 98.84% against the 80% bar), and `test`
+  **pass** (119 s; 3636 nextest tests passed, 6 skipped, both doctest targets
+  green). `lint` and `markdownlint` were **blocked, not failed**: both abort in
+  the same `uv tool run ... git+https://github.com/leynos/...` step with
+  `Failed to resolve --with requirement / Git operation failed`, the Lody
+  credential-broker starvation. `lint` reached and passed `cargo doc`, Clippy,
+  both Whitaker runs, Ruff, and Pylint 10.00/10 before `lint-python` aborted, so
+  `yamllint`, `actionlint`, and `ambrleaks` never ran. `markdownlint` died in
+  its `spelling` prerequisite, so markdownlint-cli2 never ran either — its logs
+  contain no `Linting: N file(s)` line, which is what distinguishes "did not
+  execute" from "ran and passed".
+
+  Those two gates are **incomplete validation**, and the honest record is that
+  the local suite did not fully pass. The substitute is an independent one on
+  the same SHA, and getting its scope right took a correction: GitHub Actions
+  run `36782338450` for `45db8b6a` succeeded in all five jobs, and its
+  `build-test` job does cover the same ground with `make check-fmt`,
+  `make lint`, and `make typecheck`. It does **not** run `make markdownlint` —
+  Markdown is checked there by the upstream
+  `DavidAnson/markdownlint-cli2-action`, and spelling by `make spelling`. That
+  distinction is not pedantry: the action ships the linter's whole dependency
+  graph in its release, so it resolves nothing from the registry at run time
+  and the broker failure that blocked the local `markdownlint` prerequisite
+  cannot reach it. `lint-windows` (22 m 34 s) and `kani-smoke` (20 m 22 s) are
+  green too, and the run is named by id rather than asserted in the abstract.
+
+  A note on the dirty window, and a correction to how the evidence read it. The
+  runner reported the window as 21:56:29Z (when it observed the dirt) to
+  21:58:06Z (when it confirmed the restore), and stated that all five gates ran
+  wholly outside it. Its clock was two hours behind the filesystem, and two
+  gate mtimes prove the shift exactly: check-fmt at `23:55:27` and the first
+  `lint` at `23:55:57` match the runner's `21:55:25–21:55:27` and
+  `21:55:45–21:55:57` with the same seconds in both. Corrected, the window is
+  23:56:29Z–23:58:06Z, and it falls *between* the first `lint` attempt
+  (23:55:57, before it opened) and the second (23:59:02, after it closed). That
+  is the runner's substance — no gate overlapped the window — but the absolute
+  times quoted in the first draft were two hours early and are corrected here.
+  The contamination was real and did not land in any gate, which is luck rather
+  than design.
+
+- **Portability datum, with one figure corrected.** The broker was starved for
+  three `typos-config-builder` invocations on this branch — 23:34:38, 23:48:28,
+  and 00:02:39 — and for both `lint-python` invocations. A first draft of this
+  bullet claimed `df12-python-lints` had been reachable at 23:36 on this
+  branch; no log records that, so the claim is withdrawn rather than restated.
+  The honest shape is: the *same* gate passed on other branches seconds later
+  (`spelling-build-tools-scripts...-8` at 00:37:04, on another worktree), so
+  the outage is branch-adjacent rather than global, and a later spelling run on
+  a different branch reached `current: typos.toml` at 00:02:24 — evidence the
+  broker recovers, not evidence it was up here. `typos-cli 1.50.1` is installed
+  at `~/.cargo/bin/typos`, and `typos.toml` at HEAD is a complete generated
+  correction map, so `typos --config typos.toml --force-exclude <markdown>`
+  reproduces the spelling gate's rule application locally and returned 0
+  misspellings. `markdownlint-cli2` v0.22.1 is local too and reported 168
+  files, 0 errors — re-confirmed after these edits by `make fmt`, whose own
+  linter step runs it and summarized `168 file(s)` with `0 error(s)`. Neither
+  substitute is what the gate actually ran, and neither is claimed as a pass —
+  but they are why the two blocked gates are *probably* clean rather than
+  unknown.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
