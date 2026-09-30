@@ -4100,6 +4100,51 @@ catalogue has the key; there is no partial state to clean up.
   `gh api repos/leynos/netsuke/rules/branches/main`, which lists those four
   contexts and nothing else.
 
+- **CI is green on the final head `664b9422`.** The prediction above held:
+  within the hour, `mergeStateStatus` moved `BLOCKED` → `UNSTABLE` → `CLEAN`
+  with `mergeable: MERGEABLE` as `build-test` (15m01s) and `kani-smoke`
+  (15m55s) finished, and every check on the PR now passes. The four the ruleset
+  names — `build-test`, `kani-smoke`, `netsukefile`, `release / metadata` — all
+  pass, as do the Windows jobs (`build-test-windows`, `lint-windows`,
+  `windows-msi-upgrade`), all six release artefact builds,
+  `release-admission-canaries`, `CodeScene`, `Gecko`, and `CodeRabbit`. The
+  only non-pass states are `skipping`, which is the normal outcome for
+  `automerge`, the external reviewers whose bots declined, and the two release
+  jobs gated on a real tag. So the local `lint` and `markdownlint` gates, left
+  **blocked, not failed** by the broker outage, are covered for this revision
+  by the same commands on the same SHA in run `36789327168`. The `build-test`
+  job's own step list is the evidence, not the job's green badge: `Lint` (which
+  is `make lint`), `Lint Markdown`, `Format`, `Typecheck`, `Doc coverage`,
+  `Spelling`, `Validate Mermaid diagrams`, `Workflow contract tests`, and
+  `Test and Measure Coverage` each report `success` on `664b9422`. That is the
+  CI substitute the earlier entry promised, and it is now evidence rather than
+  intent.
+
+  `reviewDecision` is still `CHANGES_REQUESTED`, and deliberately so: it is the
+  stale CodeRabbit review, and GitHub keeps the decision until a human
+  dismisses it or a new review lands. `mergeStateStatus` reads `CLEAN` despite
+  that, which is the contradiction the previous entry predicted and is the
+  reason the two fields must be read together rather than as one status.
+
+- **The broker recovered, and the two blocked gates now pass locally.** While
+  polling CI, `make markdownlint` and `make lint` — the pair left **blocked,
+  not failed** by the starved credential broker — were re-run and both exited
+  `0`. `markdownlint` reached its linter for the first time this session
+  (`Linting: 168 file(s)`, `0 error(s)`), and `make spelling`, which shares the
+  same fetched tool, passed as well; `lint` ran to completion through Clippy,
+  Whitaker, Ruff, Pylint, the df12 house lints, `ambrleaks`, and `interrogate`
+  (`RESULT: PASSED`, `100.0%`). So the earlier substitute evidence is no longer
+  merely a substitute — it is corroborated by a local run of the same commands.
+  The distinction the previous entry drew still matters, though: those local
+  results are for the plan revision, and they do not retroactively apply to
+  `45db8b6a`, where the outage genuinely prevented them.
+
+  This is worth stating plainly because a blocked gate and a passing gate look
+  identical in a summary that only lists exit codes. The honest record is that
+  the outage was real, that CI covered the same commands on the same SHA in the
+  meantime, and that the local re-run afterwards removed the doubt rather than
+  the outage having been imagined.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
