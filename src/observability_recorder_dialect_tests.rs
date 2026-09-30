@@ -186,15 +186,19 @@ fn recorder_retains_only_the_bounded_dialect_series() {
 
     // A count alone would still pass if one combination were admitted twice
     // and another refused, so assert each combination is present exactly once.
-    for dialect in DIALECT_VALUES {
-        for source in DIALECT_SOURCE_VALUES {
-            assert_eq!(
-                retained_count(&snapshot, dialect, source),
-                1,
-                "{dialect}/{source} should be retained exactly once: {snapshot:?}"
-            );
-        }
-    }
+    let admitted: Vec<_> = DIALECT_VALUES
+        .iter()
+        .flat_map(|dialect| {
+            DIALECT_SOURCE_VALUES
+                .iter()
+                .map(move |source| (*dialect, *source))
+        })
+        .filter(|(dialect, source)| retained_count(&snapshot, dialect, source) != 1)
+        .collect();
+    assert!(
+        admitted.is_empty(),
+        "each combination should be retained exactly once, but these missed: {admitted:?}"
+    );
 }
 
 /// Record one malformed counter series under the dialect name.
