@@ -47,21 +47,6 @@ pytest_plugins: tuple[str, ...] = ("cmd_mox.pytest_plugin",)
 #: Pins that must agree between the Makefile and the CI workflow env block.
 SYNCED_PINS = ("RUFF_VERSION", "TY_VERSION", "PYTHON_BASELINE")
 
-#: Python sources whose dedicated coverage policy excludes them from Interrogate.
-INTERROGATE_EXCLUDED_FILES: tuple[str, ...] = (
-    "scripts/generate_typos_config.py",
-    "scripts/typos_rollout_check.py",
-    "scripts/typos_rollout.py",
-    "scripts/typos_rollout_cache.py",
-    "scripts/typos_rollout_http.py",
-    "scripts/tests/conftest.py",
-    "scripts/tests/test_typos_rollout.py",
-    "scripts/tests/test_typos_rollout_check.py",
-    "scripts/tests/test_typos_rollout_hardening.py",
-    "scripts/tests/test_typos_rollout_refresh.py",
-    "scripts/tests/typos_rollout_test_support.py",
-)
-
 #: Repository-owned Python roots that the quality targets must scan.
 PYTHON_SOURCES: tuple[str, ...] = (
     ".github/scripts",
@@ -252,11 +237,6 @@ def _interrogate_invocation(baseline: str, version: str) -> list[str]:
         "interrogate",
         "--fail-under",
         "100",
-        *(
-            argument
-            for path in INTERROGATE_EXCLUDED_FILES
-            for argument in ("--exclude", path)
-        ),
         *PYTHON_SOURCES,
     ]
 
@@ -282,7 +262,7 @@ def test_python_quality_targets_run_the_pinned_local_commands() -> None:
             "$(PYLINT) $(PYLINT_TARGETS)",
             "$(DF12_PYLINT) $(PYLINT_TARGETS)",
             "$(AMBRLEAKS) $(PYTHON_SOURCES)",
-            "$(INTERROGATE) $(INTERROGATE_EXCLUDES) $(PYTHON_SOURCES)",
+            "$(INTERROGATE) $(PYTHON_SOURCES)",
         ),
         "typecheck-python": (
             "ty check --python-version $(PYTHON_BASELINE)",

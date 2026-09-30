@@ -2506,19 +2506,12 @@ workflow-only pin. `tests/workflow_contracts/python_toolchain_sync_test.py`
 asserts the pairs agree — without asserting any specific version — so a bump
 must land in both files in the same commit.
 
-The shared spelling-policy rollout helpers (`scripts/generate_typos_config.py`
-and the `typos_rollout*` modules and tests) are estate-synchronized and keep
-their own pinned, isolated Ruff policy enforced by `make spelling-helper-test`;
-they are excluded from the repository-wide Ruff and Pylint configuration so the
-two policies cannot disagree about the same file. Interrogate uses the same
-explicit file list as an exclusion, so it measures every remaining definition
-under `PYTHON_SOURCES` (`.github/scripts`, `scripts`, and
-`tests/workflow_contracts`) at 100%. The skipped spelling helpers remain
-covered by their dedicated policy; no broader path or nested-function exemption
-applies. There are no `typ.overload` stubs in this scope. If one is introduced,
-add a targeted `--ignore-regex` for that stub only because Interrogate 1.7.0
-cannot recognize the configured `typ.overload` spelling; leave Ruff's
-real-implementation docstring rule enabled.
+Interrogate measures every definition under `PYTHON_SOURCES` (`.github/scripts`,
+`scripts`, and `tests/workflow_contracts`) at 100%; no path or nested-function
+exemption applies. There are no `typ.overload` stubs in this scope. If one is
+introduced, add a targeted `--ignore-regex` for that stub only because
+Interrogate 1.7.0 cannot recognize the configured `typ.overload` spelling;
+leave Ruff's real-implementation docstring rule enabled.
 
 ### Release-admission runtime tests
 
