@@ -4076,6 +4076,30 @@ catalogue has the key; there is no partial state to clean up.
   because a per-file sweep that reported only its 10.00s would be a measurement
   with its awkward datum removed.
 
+- **The PR shows `CHANGES_REQUESTED`, and it is not a blocker.** `gh pr view`
+  reports `reviewDecision: CHANGES_REQUESTED` and `mergeStateStatus: BLOCKED`,
+  which reads as an outstanding objection. It is neither: the review is
+  CodeRabbit's from 2026-09-27 on `94b9b247`, and **both** of its findings are
+  already discharged in the current tree. It asked that `compact`'s predicate
+  test `ValueKind::String` before consulting `as_str` so empty byte arrays
+  survive, plus an empty-byte-array regression case — `is_blank` now does
+  exactly that, with the reason recorded at the predicate, and the case exists
+  in two places (`compact_tests.rs:51-57`, a named test, and
+  `compact_property.rs:42-44`, a property strategy). Its second finding was a
+  British-spelling correction that would have been wrong to apply: the gate
+  mandates en-GB-oxendict `-ize`, and the comment at `compact_property.rs:111`
+  reads `recognize` because the house rule overrides the reviewer's suggested
+  `recognise`. So the review is stale, not open.
+
+  `mergeStateStatus: BLOCKED` is a separate misreading worth pinning down,
+  because the obvious explanation is wrong. The ruleset `main-required-checks`
+  (id `18427981`) requires exactly four checks — `build-test`, `kani-smoke`,
+  `netsukefile`, `release / metadata` — and **contains no `pull_request` rule
+  at all**, so no review state gates a merge here. The block is simply the two
+  checks still running. Verified with
+  `gh api repos/leynos/netsuke/rules/branches/main`, which lists those four
+  contexts and nothing else.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
