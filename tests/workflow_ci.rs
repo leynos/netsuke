@@ -17,7 +17,7 @@ enum StepField {
 
 const INSTALL_NIXIE_ACTION: &str = "leynos/shared-actions/.github/actions/install-nixie";
 const INSTALL_WHITAKER_ACTION: &str = "leynos/shared-actions/.github/actions/install-whitaker";
-const WHITAKER_INSTALLER_VERSION: &str = "0.2.7";
+const WHITAKER_INSTALLER_VERSION: &str = "0.2.9";
 
 impl StepField {
     const fn yaml_key(self) -> &'static str {
