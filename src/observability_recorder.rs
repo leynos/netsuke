@@ -208,13 +208,7 @@ impl ConfigMetricsRecorder {
             ),
             ENV_LOOKUP_TOTAL => exact_labels(key, &[(OUTCOME_LABEL, &ENV_LOOKUP_OUTCOME_VALUES)]),
             WHICH_CACHE_TOTAL | WHICH_RESOLUTION_TOTAL => accepts_which_registration(key),
-            SHELL_QUOTE_DIALECT_TOTAL => exact_labels(
-                key,
-                &[
-                    ("dialect", &DIALECT_VALUES),
-                    ("source", &DIALECT_SOURCE_VALUES),
-                ],
-            ),
+            SHELL_QUOTE_DIALECT_TOTAL => accepts_shell_quote_dialect_registration(key),
             _ => false,
         }
     }
@@ -304,6 +298,23 @@ fn accepts_which_registration(key: &Key) -> bool {
         ),
         _ => false,
     }
+}
+
+/// Admit shell-quoting dialect series only when both selectors are known.
+///
+/// The `dialect` and `source` labels together say which encoder produced a
+/// recipe and where the choice came from. A series carrying one label but not
+/// the other, or a value outside the declared set, is refused rather than
+/// exported: no call site can produce it, so admitting it would let a typo in
+/// a future call site reach the metric backend as a silent new time series.
+fn accepts_shell_quote_dialect_registration(key: &Key) -> bool {
+    exact_labels(
+        key,
+        &[
+            ("dialect", &DIALECT_VALUES),
+            ("source", &DIALECT_SOURCE_VALUES),
+        ],
+    )
 }
 
 /// Whether `key`'s label set matches any of the `expected` shapes exactly.
