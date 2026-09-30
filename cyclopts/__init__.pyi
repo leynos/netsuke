@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections.abc as cabc
 import typing as typ
 
 P = typ.ParamSpec("P")
@@ -10,7 +11,7 @@ class Parameter:
 
 class App:
     def __init__(self, *args: object, **kwargs: object) -> None: ...
-    def default(self, func: typ.Callable[P, T]) -> typ.Callable[P, T]: ...
+    def default(self, func: cabc.Callable[P, T]) -> cabc.Callable[P, T]: ...
     def __call__(self, *args: object, **kwargs: object) -> object: ...
 
 class _Env:
