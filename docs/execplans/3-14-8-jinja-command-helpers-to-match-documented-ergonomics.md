@@ -3816,7 +3816,7 @@ catalogue has the key; there is no partial state to clean up.
   whatever the transport did. Two consequences worth keeping: the error is a
   *transport* failure, not a policy denial or a bad rewrite, and a `git push`
   needs both the credential helper cleared **and** the `GIT_CONFIG_*` pairs
-  stripped, because `insteadof` is applied when git canonicalises the URL,
+  stripped, because `insteadof` is applied when git canonicalizes the URL,
   before any helper is consulted. `gh` does not use this path and stays
   reliable. There is no way to fix this from inside a worktree, and none was
   attempted: the daemon is the parent of the agent sessions themselves, so
