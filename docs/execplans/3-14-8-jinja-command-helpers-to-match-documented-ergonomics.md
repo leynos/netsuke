@@ -3737,6 +3737,8 @@ catalogue has the key; there is no partial state to clean up.
     dispatch arm; this branch added `DIALECT_*`, `SHELL_QUOTE_DIALECT_TOTAL`,
     and its own `exact_labels` arm. Both arms now sit in the match, and the
     import block interleaves the two sets into one rustfmt-shaped block.
+    (Superseded: the dialect arm is now a named predicate — see the CodeScene
+    entry below.)
   - `src/observability_recorder_tests.rs` — `main` registered `which_tests`,
     the branch registered `dialect_tests`; both modules now register, and both
     module files exist.
@@ -3801,6 +3803,52 @@ catalogue has the key; there is no partial state to clean up.
   `.github/workflows/release-dry-run.yml`, a file this branch never touched and
   which is byte-identical to `main`; it arrived with `6357fda5` (#833) and is
   the target's to fix.
+
+- [x] (2026-09-30) CodeScene's review of `a7618c30` failed on a biomarker this
+      branch introduced; fixed in `a3e546ec` by extracting one predicate.
+
+  The check-run for `a7618c30` reported 15 successes, 5 skips and **1 failure**:
+  `CodeScene Code Health Review (main)`, *Enforce advisory code health rules*,
+  flagging `ConfigMetricsRecorder.accepts_counter_registration` in
+  `src/observability_recorder.rs` as `Large Method`, code health
+  `10.00 → 9.61`. The four *required* checks (`build-test`, `kani-smoke`,
+  `netsukefile`, `release / metadata`) all passed, so this was never
+  merge-blocking — but it was a real defect, and it was **ours**, not inherited:
+  `git log -L` put the function's last authorship on `main` at `b93e01de`,
+  while `git diff origin/main HEAD` showed this branch adding 13 lines to the
+  file, among them the seven-line `SHELL_QUOTE_DIALECT_TOTAL` dispatch arm. The
+  method sat at 70 lines, and the file at a flat 10.00 before the arm was
+  added; the biomarker fires on the whole method, not the arm, which is why a
+  small addition crossed a threshold that had held for months.
+
+  The fix moves that arm into a free function named
+  `accepts_shell_quote_dialect_registration`, mirroring
+  `accepts_which_registration` — which `main`'s own doc comment says was "split
+  from the name match above to keep each predicate within the repository's
+  function-length bound". The body is unchanged; only its location is. The
+  method drops to 64 lines and the file returns to 10.00.
+
+  **Measured, not assumed.** `cs check` reproduces the gate locally and accepts
+  a revision selector, so both states were read from the same tool that failed
+  in CI:
+
+  ```text
+  cs check a7618c30:./src/observability_recorder.rs
+    info: Code health score: 9.60
+    warn: line 151: Large Method (LoC = 70 lines)
+
+  cs check ./src/observability_recorder.rs
+    info: Code health score: 10.00
+  ```
+
+  `cargo check --workspace --all-targets --all-features` under `-D warnings`
+  exits 0 with no new diagnostics. The repository's own gates were **not** run
+  for this commit: four peer sessions were mid-gate
+  (`make check-fmt lint typecheck` ×3 and a `make test`) and the standing rule
+  is sequential gate execution, so the commit was made on the compiler and
+  CodeScene evidence alone. That gap is stated rather than glossed; the change
+  is a pure move of an unchanged body, which is what makes the narrower
+  evidence proportionate.
 
 ## Surprises & discoveries
 
