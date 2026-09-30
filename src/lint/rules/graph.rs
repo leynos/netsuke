@@ -175,10 +175,37 @@ fn recipe_texts(ctx: &GraphContext<'_>, action_id: &str) -> Vec<String> {
     let Some(action) = ctx.graph.actions.get(action_id) else {
         return Vec::new();
     };
-    match &action.recipe {
-        Recipe::Command { command } => command.to_string_vec(),
-        Recipe::Script { script } => vec![script.clone()],
-        Recipe::Rule { rule } => rule.to_string_vec(),
+    let mut texts = Vec::new();
+    collect_recipe_texts(ctx, &action.recipe, &mut BTreeSet::new(), &mut texts);
+    texts
+}
+
+/// Append a recipe's shell text to `texts`, following delegated rules.
+///
+/// Lowering resolves one hop of rule delegation, so an action can still hold
+/// `rule: <name>` when the referenced rule itself delegates. The names are
+/// rule names, not shell text, so they are resolved through the manifest's
+/// rules. The parser accepts a delegation cycle, and `visited` stops the walk
+/// from re-entering a rule it has already read.
+fn collect_recipe_texts<'manifest>(
+    ctx: &GraphContext<'manifest>,
+    recipe: &'manifest Recipe,
+    visited: &mut BTreeSet<&'manifest str>,
+    texts: &mut Vec<String>,
+) {
+    match recipe {
+        Recipe::Command { command } => texts.extend(command.to_string_vec()),
+        Recipe::Script { script } => texts.push(script.clone()),
+        Recipe::Rule { rule } => {
+            for name in rule.to_string_vec() {
+                let Some(referenced) = ctx.manifest.rules.iter().find(|r| r.name == name) else {
+                    continue;
+                };
+                if visited.insert(referenced.name.as_str()) {
+                    collect_recipe_texts(ctx, &referenced.recipe, visited, texts);
+                }
+            }
+        }
     }
 }
 

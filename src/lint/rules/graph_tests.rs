@@ -153,3 +153,42 @@ fn unreachable_target_is_suppressed_by_a_directive() {
     );
     crate::assert_lint_silent!(yaml, "unreachable-target");
 }
+
+/// A rule that delegates to another rule reaches the graph as a rule name, so
+/// the recipe text the rule scans is the delegated rule's command.
+#[test]
+fn undeclared_target_input_follows_delegated_rules() {
+    let yaml = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "rules:\n",
+        "  - name: link-objects\n",
+        "    command: \"cc build/main.o -o $out\"\n",
+        "  - name: link\n",
+        "    rule: link-objects\n",
+        "targets:\n",
+        "  - name: build/main.o\n",
+        "    command: \"cc -c src/main.c -o {{ outs }}\"\n",
+        "  - name: app\n",
+        "    rule: link\n",
+    );
+    crate::assert_lint_fires!(yaml, "undeclared-target-input", 1);
+}
+
+/// A delegation cycle yields no command text; the walk must still terminate.
+#[test]
+fn undeclared_target_input_survives_a_delegation_cycle() {
+    let yaml = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "rules:\n",
+        "  - name: first\n",
+        "    rule: second\n",
+        "  - name: second\n",
+        "    rule: first\n",
+        "targets:\n",
+        "  - name: build/main.o\n",
+        "    command: \"cc -c src/main.c -o {{ outs }}\"\n",
+        "  - name: app\n",
+        "    rule: first\n",
+    );
+    crate::assert_lint_silent!(yaml, "undeclared-target-input");
+}
