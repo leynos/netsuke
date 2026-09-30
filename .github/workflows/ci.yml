@@ -160,7 +160,7 @@ jobs:
         run: ninja --version
       - name: Install mdtablefix
         uses: >-
-          leynos/shared-actions/.github/actions/install-mdtablefix@a5765019912a8ab6882b12db049c7cde635f3a85
+          leynos/shared-actions/.github/actions/install-mdtablefix@2f58fab140cc8dfe69756aaa6a3bbb987c426023
         # The gate cache owns `~/.local/bin`, so a warm run finds it present.
         with:
           version: ${{ env.MDTABLEFIX_VERSION }}
