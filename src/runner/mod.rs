@@ -155,15 +155,15 @@ fn run_with_ninja_program_resolver(
     if let Commands::Help(args) = &command {
         return dispatch::execute_help(cli, args, reporter.as_ref());
     }
+    let clock = StdMonotonicClock;
     // `check` analyses the manifest without building it, so it is routed
     // before the Ninja program and recipe shell are resolved.
     #[cfg(feature = "lint")]
     if let Commands::Check(args) = &command {
-        return dispatch::execute_check(cli, args, reporter.as_ref());
+        return dispatch::execute_check(cli, args, reporter.as_ref(), &clock);
     }
     let ninja_program = configured_program.map_or_else(resolve_program, Utf8Path::to_owned);
     let recipe_shell = recipe_shell::resolve_recipe_shell()?;
-    let clock = StdMonotonicClock;
     let context = ExecutionContext {
         reporter: reporter.as_ref(),
         progress_enabled,

@@ -11,6 +11,7 @@
 //! `docs/adr-042-manifest-linting-under-netsuke-check.md`.
 
 use anyhow::{Context, Result};
+use monotony::MonotonicClock;
 
 use crate::cli::{CheckArgs, Cli};
 use crate::ir::BuildGraph;
@@ -43,8 +44,9 @@ pub(super) fn handle_check(
     cli: &Cli,
     args: &CheckArgs,
     reporter: &dyn StatusReporter,
+    clock: &dyn MonotonicClock,
 ) -> Result<()> {
-    check_telemetry::instrument_check(|| handle_check_inner(cli, args, reporter))
+    check_telemetry::instrument_check(clock, || handle_check_inner(cli, args, reporter))
 }
 
 /// Execute the check flow while classifying failures for boundary telemetry.

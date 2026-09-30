@@ -1,16 +1,23 @@
 //! Tests for bounded `netsuke check` telemetry.
 
+use std::time::Duration;
+
 use anyhow::{Result, anyhow, ensure};
 use metrics_util::MetricKind;
 use metrics_util::debugging::{DebugValue, DebuggingRecorder};
+use monotony::test_util::FixedMonotonicClock;
 
 use super::{CHECK_DURATION, CHECK_TOTAL, CheckFailure, instrument_check};
+
+/// The duration the injected clock reports for every recorded check.
+const CHECK_ELAPSED: Duration = Duration::from_millis(1_250);
 
 /// Record one check outcome and return its complete metrics snapshot.
 fn recorded(check: impl FnOnce() -> Result<(), CheckFailure>) -> (Result<()>, Snapshot) {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
-    let result = metrics::with_local_recorder(&recorder, || instrument_check(check));
+    let clock = FixedMonotonicClock::with_elapsed(CHECK_ELAPSED);
+    let result = metrics::with_local_recorder(&recorder, || instrument_check(&clock, check));
     (result, snapshotter.snapshot().into_vec())
 }
 
@@ -23,6 +30,9 @@ type Snapshot = Vec<(
 )>;
 
 /// Assert one counter and duration sample carry exactly the fixed outcome.
+///
+/// The duration sample must equal the injected clock's elapsed time, which
+/// proves the histogram reads the clock rather than the wall clock.
 fn assert_outcome(snapshot: &Snapshot, outcome: &str) -> Result<()> {
     let has_outcome = |key: &metrics_util::CompositeKey, kind, name| {
         key.kind() == kind
@@ -43,9 +53,13 @@ fn assert_outcome(snapshot: &Snapshot, outcome: &str) -> Result<()> {
     ensure!(
         snapshot.iter().any(|(key, _, _, value)| {
             has_outcome(key, MetricKind::Histogram, CHECK_DURATION)
-                && matches!(value, DebugValue::Histogram(samples) if samples.len() == 1)
+                && matches!(
+                    value,
+                    DebugValue::Histogram(samples)
+                        if samples.iter().map(|sample| sample.0).eq([CHECK_ELAPSED.as_secs_f64()])
+                )
         }),
-        "the duration should record {outcome:?}: {snapshot:?}"
+        "the duration should record {CHECK_ELAPSED:?} for {outcome:?}: {snapshot:?}"
     );
     Ok(())
 }

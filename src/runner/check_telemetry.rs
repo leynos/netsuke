@@ -6,7 +6,8 @@
 
 use anyhow::Result;
 use metrics::{counter, describe_counter, describe_histogram, histogram};
-use std::{sync::Once, time::Instant};
+use monotony::MonotonicClock;
+use std::sync::Once;
 use tracing::{field, info};
 
 /// Metric name counting complete check invocations by fixed outcome.
@@ -49,11 +50,20 @@ impl CheckFailure {
 }
 
 /// Instrument one complete check command with fixed outcome telemetry.
-pub(super) fn instrument_check(check: impl FnOnce() -> Result<(), CheckFailure>) -> Result<()> {
+///
+/// The duration is read from the injected `clock`, so tests can pin the
+/// recorded sample rather than depend on wall-clock timing.
+pub(super) fn instrument_check<Clock>(
+    clock: &Clock,
+    check: impl FnOnce() -> Result<(), CheckFailure>,
+) -> Result<()>
+where
+    Clock: MonotonicClock + ?Sized,
+{
     describe_metrics();
     let span = tracing::info_span!("runner.check", outcome = field::Empty);
     let _guard = span.enter();
-    let started = Instant::now();
+    let started = clock.now();
     let result = check();
     let outcome = result
         .as_ref()
@@ -61,7 +71,7 @@ pub(super) fn instrument_check(check: impl FnOnce() -> Result<(), CheckFailure>)
     span.record("outcome", outcome);
     info!(outcome, "Completed manifest check");
     counter!(CHECK_TOTAL, "outcome" => outcome).increment(1);
-    histogram!(CHECK_DURATION, "outcome" => outcome).record(started.elapsed());
+    histogram!(CHECK_DURATION, "outcome" => outcome).record(clock.now().duration_since(started));
     result.map_err(CheckFailure::into_inner)
 }
 
