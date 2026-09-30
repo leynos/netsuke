@@ -3718,6 +3718,90 @@ catalogue has the key; there is no partial state to clean up.
   `markdownlint` and `mdtablefix` measuring different properties — and the
   first where the risk was creating a failure rather than missing one.
 
+- [x] (2026-09-30) Rebasing the 73-commit series onto `origin/main` at
+      `6357fda5` moved it to `a14fbf4f`; the four gates then passed.
+
+  `main` advanced from `96b89ca9` to `6357fda5` (13 commits, #812 #814 #818
+  #819 #827 #833 #838 #839 and the #756/#760/#765/#766/#768 series). The
+  exclusive replay boundary is `96b89ca9`: it is the branch's merge-base with
+  the new target, it appears exactly once on `main`'s first-parent line, and
+  all 73 commits above it carry this branch's own subjects. No branch work
+  squash-landed in `main` in the meantime — `git log 96b89ca9..6357fda5`
+  mentions neither 3.14.8 nor any shipped helper name.
+
+  Three conflicts, all the same additive shape, and all resolved by keeping
+  **both** sides:
+
+  - `src/observability_recorder.rs` — `main` added the `WHICH_*` imports and
+    the `WHICH_CACHE_TOTAL | WHICH_RESOLUTION_TOTAL => accepts_which_registration`
+    dispatch arm; this branch added `DIALECT_*`, `SHELL_QUOTE_DIALECT_TOTAL`,
+    and its own `exact_labels` arm. Both arms now sit in the match, and the
+    import block interleaves the two sets into one rustfmt-shaped block.
+  - `src/observability_recorder_tests.rs` — `main` registered `which_tests`,
+    the branch registered `dialect_tests`; both modules now register, and both
+    module files exist.
+  - `.codescene/code-health-rules.json` — `main` added the
+    `src/stdlib/which/telemetry_tests/**` and `tests/kani_scope_wrapper_e2e_tests.rs`
+    rule sets, the branch added `tests/shell_filter_property_tests/property_support.rs`.
+    Parsed as JSON: 2 rule sets at the base, 4 on `main`, 3 on the branch, and
+    **5 after the merge, with zero shared additions and zero removals**.
+
+  The conflicts were resolved by reading the preimage, not by branch label —
+  which was necessary, because stage 2 held this branch's `dialect_tests` and
+  stage 3 held `main`'s `which_tests`, the reverse of what "ours/theirs"
+  suggests. Verification beyond the compiler: the resolved import block counts
+  7 lines where the two sides naive-summed to 9, and the whole file's line
+  arithmetic is exactly `309 + 64 + 11 − 2 = 382`; `WHICH_CACHE_TOTAL` occurs
+  the same 4 times and `SHELL_QUOTE_DIALECT_TOTAL` the same 3 times as in their
+  own sides, so nothing was lost or duplicated.
+
+  The rebase audit's strongest available check passed: **101 branch-only files
+  are byte-identical to their pre-rebase state, 0 perturbed**, and all 101
+  target-only files are byte-identical to `main`. Every deletion against the
+  target in the 8 shared files maps to an intended branch change — the doc
+  deletions in `developers-guide.md`, `netsuke-design.md` and `users-guide.md`
+  are the branch's own rewrite of "planned" prose into shipped behaviour, and
+  the `observability_recorder.rs` deletions are the import reflow, with every
+  deleted name still present. A repeated-block scan flagged ten files; nine are
+  branch-only and byte-identical to `OLD_HEAD`, and the tenth is the shared
+  guide already accounted for.
+
+  The four gates the requester named for this replay all exit 0 on `a14fbf4f`,
+  each run after the rebase commit at 20:18:30 and logged to
+  `/tmp/<gate>-netsuke-<branch>.out`: `make check-fmt`
+  (`168 files left unchanged`), `make typecheck`, `make lint`, and `make test`
+  (nextest `3634 tests run: 3634 passed (3 slow), 6 skipped` across 110
+  binaries; both doctest targets reached — `88 passed; 0 failed; 26 ignored`
+  plus a `2 passed; 0 failed` compile-fail block for `netsuke`, and
+  `39 passed; 0 failed; 6 ignored` for `test_support`). That set is
+  deliberately *not* the repository's full seven gates: `doc-coverage` and
+  `nixie` were not re-run after the replay, so the honest claim is
+  four-of-seven, not a complete gate set. Neither is Markdown-sensitive in a
+  way this delta could reach, but the distinction is recorded rather than
+  glossed, because a four-gate claim described as "the gates" is the kind of
+  overstatement this plan has had to correct before. Separately,
+  `make markdownlint` (the spelling gate plus `markdownlint-cli2`) was run
+  post-rebase and exits 0 with `0 error(s)` across 168 files. See the gate
+  section below for the one environmental caveat.
+
+  **`make lint` initially failed for a reason unrelated to this branch**, and
+  the distinction is worth recording. The `lint-python` stage resolves the
+  house plugin from
+  `git+https://github.com/leynos/df12-python-lints.git@v0.3.0` and reported
+  `Failed to resolve --with requirement` / `Git operation failed`. The cause is
+  this session's harness: it injects `GIT_CONFIG_*` variables carrying
+  `url.lody-github::https.insteadof https://github.com/`, redirecting every
+  GitHub HTTPS URL to a `lody-github` remote helper that is not on `PATH`.
+  `curl` reaches GitHub fine (HTTP 200) and the pre-rebase lint log shows the
+  identical stage passing at 12:13, so the regression is the environment, not
+  the merge. Re-running `make lint` with those `GIT_CONFIG_*` entries unset let
+  the plugin resolve and the target exit 0, which is the run recorded above —
+  the same stage, the same content, with the broken redirect removed. The lone
+  remaining output is a `yamllint` *warning* in
+  `.github/workflows/release-dry-run.yml`, a file this branch never touched and
+  which is byte-identical to `main`; it arrived with `6357fda5` (#833) and is
+  the target's to fix.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
