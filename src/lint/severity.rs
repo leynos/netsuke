@@ -8,15 +8,12 @@
 use std::fmt;
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
-
 /// How loudly a lint finding is reported.
 ///
 /// The names match the severity vocabulary already used by Netsuke's JSON
 /// diagnostic schema, so a lint finding and a compiler diagnostic are directly
 /// comparable by machine consumers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Severity {
     /// A suggestion that never fails a default run.
     Advice,
@@ -81,8 +78,7 @@ impl DefaultSeverity {
 }
 
 /// The threshold at or above which findings fail `netsuke check`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum FailOn {
     /// Fail on any advisory or worse.
     Advice,
