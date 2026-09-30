@@ -3891,8 +3891,20 @@ catalogue has the key; there is no partial state to clean up.
   earlier extraction is the consequence, and it is recorded here so the two
   commits are not read as contradictory.
 
-  Method lengths, measured: `accepts_counter_registration` 64 → 50,
-  `accepts_stdlib_counter_registration` 20. `cs check` returns 10.00.
+  Method lengths, measured: `accepts_counter_registration` 70 → 64 → 59 across
+  `a3e546ec` and this commit, `accepts_stdlib_counter_registration` 20,
+  `accepts_which_registration` 26. `cs check` returns 10.00.
+
+  An earlier draft of this bullet read "64 → 50". That figure was wrong, and
+  the way it was wrong is worth keeping: it came from a script that closed the
+  function at the first subsequent line consisting of four spaces and a closing
+  brace, which in this file is a `match` arm's brace rather than the
+  function's, so it truncated the span. The corrected count closes on brace
+  *depth* and is calibrated against a state CodeScene has already scored — it
+  reproduces `LoC = 70` at `a7618c30` exactly, which is the only reason to
+  trust the 59. A line-counting script is an oracle like any other and needs
+  its own falsification test; mine did not have one until the discrepancy was
+  chased.
 
   Every named invariant was checked mechanically rather than asserted:
   `exact_labels`, `any_exact_labels`, `accepts_name`, the
@@ -3928,6 +3940,50 @@ catalogue has the key; there is no partial state to clean up.
   `uv tool run --from git+https://github.com/leynos/typos-config-builder`
   reached its own gate logic and emitted a *content* finding, which it could
   not do while the Lody credential broker was refusing the fetch.
+
+- **A CodeScene failure in a file I had measured as clean.** After the push,
+  the PR's CodeScene check went **fail** while
+  `cs check ./src/observability_recorder.rs` still returned 10.00 — because
+  CodeScene scores the whole pull-request delta, not the one file the request
+  named. The offending file was `src/observability_recorder_dialect_tests.rs`,
+  the sibling I had extended:
+  `cs check 76c31096:./src/observability_recorder_dialect_tests.rs` reports
+  9.84 with `Bumpy Road Ahead (bumps = 2)` at line 160, and the same file is
+  10.00 at `a7618c30`, `d665ab41`, and `a3e546ec`, so the regression is mine.
+
+  The bump was a second nested assertion loop added to
+  `recorder_retains_only_the_bounded_dialect_series`. Flattening it into an
+  iterator chain that gathers the offending pairs and asserts once restores
+  10.00. The flat form is not merely shorter: it reports *every* missing
+  combination in one failure message instead of stopping at the first, which is
+  the better assertion independently of the metric. Liveness-checked by
+  injecting three duplicate valid pairs — the test failed and named
+  `[("sh", "default")]`.
+
+  The generalizable part is the measurement boundary. "Run CodeScene on the
+  file I edited" is the habit the request's step 5 invites, and it is
+  insufficient by construction: the gate is scoped to the *delta*, so any file
+  the branch touched can carry the finding. Enumerate the changed files and
+  score each one. Note also that the per-file ceiling is empirical rather than
+  documented — measured across these commits it is roughly 54 lines — so a
+  helper that "looks small enough" is not evidence.
+
+  **The repair then contaminated a gate run.** A gate runner was validating
+  `76c31096` when the fix landed at 23:39:20 — 116 s after `check-fmt`, `lint`,
+  and `doc-coverage` had finished, and squarely inside `make test`, which was
+  executing that very file's tests. The runner reported the contamination
+  rather than burying it, discredited its own binary-grep probe when the probe
+  proved unreliable, and returned "all five gates exited 0, but gate 4 cannot
+  be attributed" instead of claiming a clean pass. That is the right shape for
+  the report; the fault is upstream of it.
+
+  This is the second time this session I have edited under a running gate. The
+  first was caught and the run restarted. Two instances make it a pattern
+  rather than an accident, and the rule they jointly teach is not "be careful"
+  but **commit before delegating a gate** — a gate validates an artefact, so
+  letting the tree move under it produces a verdict with no referent. The
+  corollary is that a gate runner should re-read `HEAD` and `git status`
+  between gates, not only at the ends; this runner says as much itself.
 
 ## Surprises & discoveries
 
