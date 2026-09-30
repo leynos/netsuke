@@ -5,7 +5,7 @@
 - **Status:** living. The v0.2.0 linter is a prototype: it is implemented and
   shipped behind `netsuke check`, but its rule set, default severities, and
   most of the contracts below are expected to change once the rules have been
-  used against manifests their authors did not write. Roadmap phase 12 owns
+  used against manifests their authors did not write. Roadmap phase 31 owns
   that feedback loop and the freeze that ends it. Rule identifiers are the
   exception: they are permanent from v0.2.0. Update this document as the phase
   progresses rather than treating it as a record of what was once decided. The
@@ -630,7 +630,7 @@ benefit of a diagnostic, and is deferred until evidence says the missing spans
 actually hurt.
 
 **Rule text is not localized yet.** Rule prose will move to the Fluent
-catalogues under roadmap step 12.2, keyed by the rule's stable name; rule
+catalogues under roadmap step 31.2, keyed by the rule's stable name; rule
 identifiers never move, because they are values a user types and a machine
 matches. The command's framing text — help, summary, threshold message, and
 errors — is already localized.
