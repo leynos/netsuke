@@ -4055,6 +4055,27 @@ catalogue has the key; there is no partial state to clean up.
   but they are why the two blocked gates are *probably* clean rather than
   unknown.
 
+- **The corrections were re-gated on the corrected tree.** Correcting a plan is
+  still an edit, so the corrected text carries its own evidence rather than
+  inheriting `45db8b6a`'s. `make check-fmt` was run twice: the first attempt
+  exited 2 with `1 file would be reformatted` — mdtablefix re-wrapped the new
+  prose, a pure line-joining change with no content altered, proved by diffing
+  the file against a pre-fix snapshot whose SHA-256 matched the working copy
+  before `make fmt` ran. The second attempt exits 0 (167 files formatted;
+  mdtablefix 168 unchanged). `make fmt`'s own linter step reported
+  `Linting: 168 file(s)` with `Summary: 0 error(s)`. The spelling substitute
+  re-ran at this head and returned 0 misspellings across 169 tracked Markdown
+  files.
+
+  CodeScene's PR check for `b5ffae38` reports **success**, and the per-file
+  sweep is 10.00 across every branch-touched Rust file except
+  `tests/shell_filter_property_tests/property_support.rs` at **9.68**
+  (`String Heavy Function Arguments`). That one is **not** a branch regression:
+  the same file scores 9.68 with the same biomarker at the validated baseline
+  `a7618c30`, and the PR-scoped check passes regardless. Recording it here
+  because a per-file sweep that reported only its 10.00s would be a measurement
+  with its awkward datum removed.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
