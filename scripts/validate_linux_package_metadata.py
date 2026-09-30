@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
-"""Compare built Debian and RPM metadata with Cargo and Debian copyright.
+"""Compare built Debian and RPM metadata with Cargo.
 
-Example::
-
-    python3 scripts/validate_linux_package_metadata.py --dist dist \
-      --manifest Cargo.toml --package-name netsuke --license-file LICENSE
+Example: ``python3 scripts/validate_linux_package_metadata.py --help``.
 """
 
 import argparse
@@ -160,24 +157,27 @@ def _copyright_fingerprint(contents: bytes) -> str:
     return f"sha256:{hashlib.sha256(contents).hexdigest()} ({len(contents)} bytes)"
 
 
-def _copyright_member_path(package_name: str) -> str:
+def _copyright_member_path(package_name: str) -> pathlib.PurePosixPath:
     """Map ``netsuke`` to its Debian copyright member path."""
     invalid_name_issue = PackageValidationIssue.PACKAGE_NAME
     if not package_name or package_name in {".", ".."}:
         raise PackageValidationError(invalid_name_issue, (package_name,))
     if any(character in package_name for character in ("/", "\\")):
         raise PackageValidationError(invalid_name_issue, (package_name,))
-    return f"usr/share/doc/{package_name}/copyright"
+    return pathlib.PurePosixPath("usr/share/doc", package_name, "copyright")
 
 
 def _unique_copyright_member(
-    archive: tarfile.TarFile, member_path: str, package_name: str, expected: bytes
+    archive: tarfile.TarFile,
+    member_path: pathlib.PurePosixPath,
+    package_name: str,
+    expected: bytes,
 ) -> tarfile.TarInfo | None:
     """Select the sole Debian copyright member, or return ``None`` if absent."""
     matching = [
         member
         for member in archive.getmembers()
-        if member.name.removeprefix("./") == member_path
+        if pathlib.PurePosixPath(member.name) == member_path
     ]
     if len(matching) > 1:
         raise PackageValidationError(
@@ -192,13 +192,16 @@ def _unique_copyright_member(
 
 
 def _read_copyright_member(
-    archive: tarfile.TarFile, member_path: str, package_name: str, expected: bytes
+    archive: tarfile.TarFile,
+    member_path: pathlib.PurePosixPath,
+    package_name: str,
+    expected: bytes,
 ) -> bytes | None:
-    """Read a Debian copyright member; keep it local to this check.
+    """Read bytes or return ``None`` if the member is absent.
 
     Returns
     -------
-    bytes | None: Member contents, or ``None`` when absent.
+    bytes | None: Copyright bytes, or ``None`` when absent.
 
     Raises
     ------
@@ -332,8 +335,7 @@ def validate_linux_package_metadata(
 ) -> list[str]:
     """Validate built packages against Cargo metadata.
 
-    Example: Matching headers and Debian copyright make
-    ``validate_linux_package_metadata(request)`` return ``[]``.
+    Example: ``validate_linux_package_metadata(request)`` returns ``[]`` on a match.
 
     Returns
     -------
@@ -364,9 +366,7 @@ def main(
     *,
     runner: SubprocessRunner | None = None,
 ) -> int:
-    """Run validation and return its command status.
-
-    Example: Matching package headers make ``main([...])`` return ``0``.
+    """Run validation; matching package headers make ``main([...])`` return ``0``.
 
     Returns
     -------

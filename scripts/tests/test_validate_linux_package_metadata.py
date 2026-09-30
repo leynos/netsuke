@@ -16,24 +16,25 @@ if typ.TYPE_CHECKING:
     import types
 
 VALID_METADATA = {
-    "maintainer": "Release Maintainer <release@example.test>",
-    "homepage": "https://example.test/project",
-    "license": "ISC",
-    "description": "A useful package description.",
+    "maintainer": "Cargo Fixture Maintainer <cargo@example.test>",
+    "homepage": "https://cargo.example.test/linux-package-fixture",
+    "license": "Apache-2.0",
+    "description": "A manifest-sourced Linux package fixture.",
 }
+# Keep package-command values literal so tests compare independent sources.
 DEBIAN_FIELDS = {
-    "Maintainer": VALID_METADATA["maintainer"],
-    "Homepage": VALID_METADATA["homepage"],
-    "Description": VALID_METADATA["description"],
+    "Maintainer": "Cargo Fixture Maintainer <cargo@example.test>",
+    "Homepage": "https://cargo.example.test/linux-package-fixture",
+    "Description": "A manifest-sourced Linux package fixture.",
 }
 RPM_TAGS = {
-    "PACKAGER": VALID_METADATA["maintainer"],
-    "URL": VALID_METADATA["homepage"],
-    "LICENSE": VALID_METADATA["license"],
-    "SUMMARY": VALID_METADATA["description"],
-    "DESCRIPTION": VALID_METADATA["description"],
+    "PACKAGER": "Cargo Fixture Maintainer <cargo@example.test>",
+    "URL": "https://cargo.example.test/linux-package-fixture",
+    "LICENSE": "Apache-2.0",
+    "SUMMARY": "A manifest-sourced Linux package fixture.",
+    "DESCRIPTION": "A manifest-sourced Linux package fixture.",
 }
-LICENCE_CONTENTS = b"ISC License\nCopyright (c) Example\n"
+LICENCE_CONTENTS = b"Independent package fixture licence bytes.\n"
 VALIDATOR_MODULE_NAME = "validate_linux_package_metadata_test"
 
 
@@ -46,6 +47,7 @@ class FakePackageCommands:
         debian_fields: dict[str, str] | None = None,
         rpm_tags: dict[str, str] | None = None,
         copyright_contents: bytes | None = LICENCE_CONTENTS,
+        copyright_member_name: str = "./usr/share/doc/netsuke/copyright",
     ) -> None:
         """Configure package fields and optional copyright-file contents."""
         self.debian_fields = dict(
@@ -53,6 +55,7 @@ class FakePackageCommands:
         )
         self.rpm_tags = dict(RPM_TAGS if rpm_tags is None else rpm_tags)
         self.copyright_contents = copyright_contents
+        self.copyright_member_name = copyright_member_name
         self.calls: list[list[str]] = []
 
     def __call__(
@@ -65,7 +68,10 @@ class FakePackageCommands:
             if "--field" in argv:
                 value = self.debian_fields.get(argv[-1], "")
                 return _completed(argv, value.encode("utf-8"))
-            return _completed(argv, _copyright_archive(self.copyright_contents))
+            return _completed(
+                argv,
+                _copyright_archive(self.copyright_contents, self.copyright_member_name),
+            )
 
         query = argv[argv.index("--queryformat") + 1]
         tag = query.removeprefix("%{").removesuffix("}")
@@ -74,41 +80,23 @@ class FakePackageCommands:
 
 
 def _completed(argv: list[str], stdout: bytes) -> subprocess.CompletedProcess[bytes]:
-    """Build a result, e.g. ``_completed(["rpm"], b"ISC")`` carrying ``b"ISC"``.
-
-    Returns
-    -------
-    subprocess.CompletedProcess[bytes]
-        A successful result carrying the supplied stdout.
-    """
+    """Build a successful result carrying the supplied stdout bytes."""
     return subprocess.CompletedProcess(argv, 0, stdout, b"")
 
 
-def _copyright_archive(contents: bytes | None) -> bytes:
-    """Build a tar, e.g. ``_copyright_archive(b"ISC")`` adds the licence member.
-
-    Returns
-    -------
-    bytes
-        The generated tar archive as a byte stream.
-    """
+def _copyright_archive(contents: bytes | None, member_name: str) -> bytes:
+    """Build a tar archive with one packaged copyright member."""
     output = io.BytesIO()
     with tarfile.open(fileobj=output, mode="w") as archive:
         if contents is not None:
-            member = tarfile.TarInfo("./usr/share/doc/netsuke/copyright")
+            member = tarfile.TarInfo(member_name)
             member.size = len(contents)
             archive.addfile(member, io.BytesIO(contents))
     return output.getvalue()
 
 
 def _module() -> types.ModuleType:
-    """Load the validator; e.g. ``_module()`` exposes ``main`` for CLI tests.
-
-    Returns
-    -------
-    types.ModuleType
-        The loaded production validator module.
-    """
+    """Load the validator through the shared script test seam."""
     return load_script_module(
         VALIDATOR_MODULE_NAME, "validate_linux_package_metadata.py"
     )
@@ -117,13 +105,7 @@ def _module() -> types.ModuleType:
 def _prepare_inputs(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[pathlib.Path, pathlib.Path, pathlib.Path, list[str]]:
-    """Set up CLI inputs; returned args name one ``.deb`` and one ``.rpm``.
-
-    Returns
-    -------
-    tuple[pathlib.Path, pathlib.Path, pathlib.Path, list[str]]
-        The package directory, manifest, licence file and CLI arguments.
-    """
+    """Create CLI inputs for a fake Debian and RPM package."""
     module = _module()
     monkeypatch.setattr(module.shutil, "which", lambda name: f"/usr/bin/{name}")
     dist = tmp_path / "dist"
@@ -159,14 +141,22 @@ def _prepare_inputs(
     return dist, manifest, licence_file, arguments
 
 
+@pytest.mark.parametrize(
+    "copyright_member_name",
+    [
+        pytest.param("./usr/share/doc/netsuke/copyright", id="canonical"),
+        pytest.param("usr//share/doc/./netsuke/copyright", id="equivalent-spelling"),
+    ],
+)
 def test_main_accepts_matching_headers_and_packaged_debian_copyright(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    copyright_member_name: str,
 ) -> None:
-    """Accept matching Debian and RPM metadata and one exact licence member."""
-    _, _, _, arguments = _prepare_inputs(tmp_path, monkeypatch)
-    runner = FakePackageCommands()
+    """Accept independent sources and normalized Debian copyright paths."""
+    _, manifest, _, arguments = _prepare_inputs(tmp_path, monkeypatch)
+    runner = FakePackageCommands(copyright_member_name=copyright_member_name)
 
     status = _module().main(arguments, runner=runner)
 
@@ -188,6 +178,21 @@ def test_main_accepts_matching_headers_and_packaged_debian_copyright(
         "%{SUMMARY}",
         "%{DESCRIPTION}",
     ], "RPM metadata should use one query per required tag"
+
+    manifest_contents = manifest.read_text(encoding="utf-8")
+    manifest.write_text(
+        manifest_contents.replace(
+            VALID_METADATA["homepage"], "https://changed.example.test"
+        ),
+        encoding="utf-8",
+    )
+    status = _module().main(arguments, runner=runner)
+    captured = capsys.readouterr()
+    assert status == 1, "changed manifest metadata should fail validation"
+    assert (
+        "field Homepage does not match: expected 'https://changed.example.test'; "
+        "actual 'https://cargo.example.test/linux-package-fixture'"
+    ) in captured.err, "package metadata should be compared with the manifest"
 
 
 def test_main_reports_every_empty_or_differing_package_field(
@@ -229,7 +234,13 @@ def test_main_reports_every_empty_or_differing_package_field(
         ),
         ("netsuke.rpm", "PACKAGER", "does not match", metadata["maintainer"], "wrong"),
         ("netsuke.rpm", "URL", "is empty", metadata["homepage"], ""),
-        ("netsuke.rpm", "LICENSE", "does not match", "ISC", "MIT"),
+        (
+            "netsuke.rpm",
+            "LICENSE",
+            "does not match",
+            metadata["license"],
+            "MIT",
+        ),
         ("netsuke.rpm", "SUMMARY", "does not match", metadata["description"], "wrong"),
         ("netsuke.rpm", "DESCRIPTION", "is empty", metadata["description"], ""),
     ]
@@ -313,8 +324,8 @@ def test_main_requires_one_direct_package_of_each_format(
     status = _module().main(arguments, runner=FakePackageCommands())
 
     captured = capsys.readouterr()
-    found_count = extra_count if extra_count == 0 else extra_count + 1
     assert status == 1, "ambiguous package formats should fail"
+    found_count = extra_count if extra_count == 0 else extra_count + 1
     expected_error = (
         f"error: {dist}: expected exactly one direct {suffix} package, "
         f"found {found_count}\n"
@@ -341,7 +352,7 @@ def test_main_rejects_a_symlink_as_the_only_package_file(
     assert status == 1, "a package symlink should fail validation"
     assert (
         "netsuke.deb: expected a regular, non-symlink package file" in captured.err
-    ), "symlink diagnostics should name the package file requirement"
+    ), "symlink diagnostics should name the regular-file requirement"
 
 
 @pytest.mark.parametrize("tool", ["dpkg-deb", "rpm"])

@@ -3,9 +3,12 @@
 import copy
 import json
 import typing as typ
+import unicodedata
 
 import pytest
 from conftest import load_script_module
+from hypothesis import given
+from hypothesis import strategies as st
 
 if typ.TYPE_CHECKING:
     import pathlib
@@ -26,6 +29,8 @@ EXPECTED_GITHUB_OUTPUT = (
 EXPECTED_CONTROL_CHARACTER_ERROR = (
     "package.description must not contain control characters or line separators"
 )
+SAFE_METADATA_CHARACTERS = st.characters(blacklist_categories=("Cc", "Zl", "Zp"))
+METADATA_WHITESPACE = st.characters(whitelist_categories=("Zs",))
 
 
 def _manifest_text(overrides: dict[str, str | None] | None = None) -> str:
@@ -114,6 +119,43 @@ def test_reader_selects_the_first_author(
     assert output.read_text(encoding="utf-8").splitlines()[0] == (
         "maintainer=Release Maintainer <release@example.test>"
     ), "the first Cargo author should become the maintainer"
+
+
+@given(
+    leading=st.text(alphabet=METADATA_WHITESPACE, max_size=8),
+    core=st.text(alphabet=SAFE_METADATA_CHARACTERS, min_size=1, max_size=64).filter(
+        lambda value: bool(value.strip())
+    ),
+    trailing=st.text(alphabet=METADATA_WHITESPACE, max_size=8),
+)
+def test_required_string_trims_arbitrary_safe_unicode(
+    leading: str, core: str, trailing: str
+) -> None:
+    """Preserve every safe Unicode string after trimming its edges."""
+    reader = _reader()
+    value = leading + core + trailing
+    normalized = value.strip()
+
+    assert reader._required_string(value, "package.description") == normalized, (
+        "valid Unicode metadata should be trimmed without changing its content"
+    )
+    assert all(
+        unicodedata.category(character) not in reader.INVALID_CHARACTER_CATEGORIES
+        for character in normalized
+    ), "normalized values should contain no forbidden Unicode categories"
+
+
+@given(character=st.characters(categories=("Cc", "Zl", "Zp")))
+def test_required_string_rejects_arbitrary_forbidden_unicode(character: str) -> None:
+    """Reject every generated control or Unicode line-separator category."""
+    reader = _reader()
+
+    with pytest.raises(reader.PackageMetadataError) as error:
+        reader._required_string(f"left{character}right", "package.description")
+
+    assert error.value.issue is reader.PackageMetadataIssue.FIELD_CONTROL_CHARACTER, (
+        "forbidden Unicode categories should use the control-character issue"
+    )
 
 
 @pytest.mark.parametrize(

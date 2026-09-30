@@ -252,7 +252,7 @@ test-coverage-artifact: ## Test hostile LCOV artefact validation
 
 test-linux-package-metadata: ## Test Linux package metadata reading and validation
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
-		--with pytest==9.0.2 python -m pytest \
+		--with pytest==9.0.2 --with hypothesis==6.151.9 python -m pytest \
 		scripts/tests/test_cargo_package_metadata.py \
 		scripts/tests/test_validate_linux_package_metadata.py -c /dev/null --rootdir=. \
 		-p no:cacheprovider
