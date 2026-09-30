@@ -120,7 +120,7 @@ runs:
       id: whitaker
       if: inputs.mode == 'restore'
       # Step E. The parent directory is the cached path, never
-      # `~/.local/share/whitaker` itself: whitaker-installer 0.2.7 decides
+      # `~/.local/share/whitaker` itself: whitaker-installer 0.2.7 or later decides
       # between cloning and pulling on directory existence alone, so a cold
       # run must leave no empty suite directory behind. The installer
       # executable lives in `~/.cargo/bin` and belongs to the tool step above.

@@ -2108,7 +2108,7 @@ Install the separately versioned Whitaker installer with:
 
 CI installs Whitaker through the SHA-pinned
 `leynos/shared-actions/.github/actions/install-whitaker` action. Two jobs
-invoke it, and each passes its required `installer-version: '0.2.7'` input:
+invoke it, and each passes its required `installer-version: '0.2.9'` input:
 `build-test` in `ci.yml`, and `lint-windows` in `ci-windows.yml`.
 `build-test-windows` neither installs nor runs Whitaker; it compiles, tests,
 and runs the native Windows recipe smoke steps. There is no
@@ -2116,7 +2116,7 @@ and runs the native Windows recipe smoke steps. There is no
 installing locally so the local installer matches CI:
 
 ```bash
-INSTALLER_VERSION='0.2.7' # Read from the Install Whitaker action input in CI.
+INSTALLER_VERSION='0.2.9' # Read from the Install Whitaker action input in CI.
 cargo binstall --no-confirm --locked \
   "whitaker-installer@$INSTALLER_VERSION"
 ```
@@ -2341,7 +2341,7 @@ cache restoration, archive verification, and the delegated Makefile checks.
 
 CI installs Whitaker through the SHA-pinned
 `leynos/shared-actions/.github/actions/install-whitaker` action. Two jobs
-invoke it, and each passes its required `installer-version: '0.2.7'` input:
+invoke it, and each passes its required `installer-version: '0.2.9'` input:
 `build-test` in `ci.yml`, and `lint-windows` in `ci-windows.yml`.
 `build-test-windows` neither installs nor runs Whitaker; it compiles, tests,
 and runs the native Windows recipe smoke steps. There is no
@@ -2349,7 +2349,7 @@ and runs the native Windows recipe smoke steps. There is no
 installing locally so the local installer matches CI:
 
 ```bash
-INSTALLER_VERSION='0.2.7' # Read from the Install Whitaker action input in CI.
+INSTALLER_VERSION='0.2.9' # Read from the Install Whitaker action input in CI.
 cargo install --locked whitaker-installer \
   --version "$INSTALLER_VERSION"
 ```
@@ -7032,7 +7032,7 @@ legacy recipes, which default to PowerShell; Git Bash is used for those recipes
 only when the explicit compatibility selection is enabled. It installs the
 workflow-pinned `cargo-nextest`; the shared Rust setup action supplies
 `rustfmt` and Clippy. The SHA-pinned shared Whitaker installer receives the same
-`installer-version: '0.2.7'` input as Linux and produces a PowerShell wrapper
+`installer-version: '0.2.9'` input as Linux and produces a PowerShell wrapper
 on Windows, so `Lint (Whitaker)` invokes that wrapper directly rather than
 through a Bash shim or `make SHELL=bash lint-whitaker`. The installer resolves
 its home through Windows' `FOLDERID_Profile` known folder, not an environment
