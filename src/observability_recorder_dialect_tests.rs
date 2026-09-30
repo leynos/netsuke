@@ -10,7 +10,7 @@
 
 use super::{ConfigMetricsRecorder, SnapshotEntry};
 use anyhow::Result;
-use metrics::counter;
+use metrics::{counter, gauge, histogram};
 use metrics_util::{MetricKind, debugging::DebugValue};
 use netsuke::{
     recipe_shell::RecipeShell,
@@ -183,6 +183,79 @@ fn recorder_retains_only_the_bounded_dialect_series() {
         "only the bounded dialect/source combinations are retained"
     );
     assert!(every_series_is_bounded(&snapshot), "{snapshot:?}");
+
+    // A count alone would still pass if one combination were admitted twice
+    // and another refused, so assert each combination is present exactly once.
+    for dialect in DIALECT_VALUES {
+        for source in DIALECT_SOURCE_VALUES {
+            assert_eq!(
+                retained_count(&snapshot, dialect, source),
+                1,
+                "{dialect}/{source} should be retained exactly once: {snapshot:?}"
+            );
+        }
+    }
+}
+
+/// Record one malformed counter series under the dialect name.
+///
+/// Each expression below names a series the filter cannot produce: an unknown
+/// `dialect`, an unknown `source`, a series missing either required label, and
+/// a series carrying an extra one. The caller asserts that none of them
+/// survives into the snapshot, which is the point — a rejected registration
+/// yields a noop handle rather than an error, so nothing else in the suite
+/// would notice an over-permissive admission rule.
+fn record_malformed_dialect_series() {
+    counter!(SHELL_QUOTE_DIALECT_TOTAL, "dialect" => "unbounded", "source" => "default")
+        .increment(1);
+    counter!(SHELL_QUOTE_DIALECT_TOTAL, "dialect" => "sh", "source" => "unbounded").increment(1);
+    counter!(SHELL_QUOTE_DIALECT_TOTAL, "dialect" => "sh").increment(1);
+    counter!(SHELL_QUOTE_DIALECT_TOTAL, "source" => "default").increment(1);
+    counter!(SHELL_QUOTE_DIALECT_TOTAL, "dialect" => "sh", "source" => "default", "extra" => "unexpected")
+        .increment(1);
+    counter!(SHELL_QUOTE_DIALECT_TOTAL).increment(1);
+}
+
+/// No malformed dialect series is retained, and none of them is merely zero.
+///
+/// Every counter here is incremented, so a series that survived would appear
+/// in the snapshot with a non-zero count. Asserting on presence rather than on
+/// a value is what distinguishes "refused" from "recorded as zero", which is
+/// the distinction the admission rule exists to draw.
+#[test]
+fn recorder_refuses_every_malformed_dialect_series() {
+    let recorder = ConfigMetricsRecorder::new();
+    let snapshotter = recorder.snapshotter();
+
+    metrics::with_local_recorder(&recorder, record_malformed_dialect_series);
+
+    let snapshot = snapshotter.snapshot().into_vec();
+    assert!(
+        snapshot.is_empty(),
+        "no malformed dialect series should be retained: {snapshot:?}"
+    );
+}
+
+/// A histogram or gauge registered under the counter name is refused.
+///
+/// The name alone must not admit a series: the recorder matches on the metric
+/// kind as well, so a histogram or gauge that happens to use the dialect name
+/// is discarded rather than exported as the wrong instrument type.
+#[test]
+fn recorder_refuses_other_metric_kinds_under_the_counter_name() {
+    let recorder = ConfigMetricsRecorder::new();
+    let snapshotter = recorder.snapshotter();
+
+    metrics::with_local_recorder(&recorder, || {
+        histogram!(SHELL_QUOTE_DIALECT_TOTAL, "dialect" => "sh", "source" => "default").record(0.5);
+        gauge!(SHELL_QUOTE_DIALECT_TOTAL, "dialect" => "sh", "source" => "default").set(1.0);
+    });
+
+    let snapshot = snapshotter.snapshot().into_vec();
+    assert!(
+        snapshot.is_empty(),
+        "a histogram or gauge must not be admitted under a counter name: {snapshot:?}"
+    );
 }
 
 /// The admitted vocabulary is exactly the vocabulary the filter emits.

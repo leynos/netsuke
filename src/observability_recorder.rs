@@ -199,16 +199,11 @@ impl ConfigMetricsRecorder {
             | OMITTED_FILTERED_ENTRIES_TOTAL
             | MANIFEST_STRUCTURES_TOTAL
             | NINJA_STATUS_OVERSIZED_LINES_TOTAL => exact_labels(key, &[]),
-            FILE_READ_TOTAL => exact_labels(
-                key,
-                &[
-                    ("filter", &FILE_READ_FILTER_VALUES),
-                    ("outcome", &FILE_READ_OUTCOME_VALUES),
-                ],
-            ),
             ENV_LOOKUP_TOTAL => exact_labels(key, &[(OUTCOME_LABEL, &ENV_LOOKUP_OUTCOME_VALUES)]),
-            WHICH_CACHE_TOTAL | WHICH_RESOLUTION_TOTAL => accepts_which_registration(key),
-            SHELL_QUOTE_DIALECT_TOTAL => accepts_shell_quote_dialect_registration(key),
+            FILE_READ_TOTAL
+            | WHICH_CACHE_TOTAL
+            | WHICH_RESOLUTION_TOTAL
+            | SHELL_QUOTE_DIALECT_TOTAL => accepts_stdlib_counter_registration(key),
             _ => false,
         }
     }
@@ -300,21 +295,31 @@ fn accepts_which_registration(key: &Key) -> bool {
     }
 }
 
-/// Admit shell-quoting dialect series only when both selectors are known.
+/// Admit the standard-library counter series by their registered name.
 ///
-/// The `dialect` and `source` labels together say which encoder produced a
-/// recipe and where the choice came from. A series carrying one label but not
-/// the other, or a value outside the declared set, is refused rather than
-/// exported: no call site can produce it, so admitting it would let a typo in
-/// a future call site reach the metric backend as a silent new time series.
-fn accepts_shell_quote_dialect_registration(key: &Key) -> bool {
-    exact_labels(
-        key,
-        &[
-            ("dialect", &DIALECT_VALUES),
-            ("source", &DIALECT_SOURCE_VALUES),
-        ],
-    )
+/// The modules under `src/stdlib/` own these vocabularies; the recorder
+/// composes them here rather than redefining them. The `which` series carry
+/// more than one label shape and delegate to [`accepts_which_registration`],
+/// while a name with no arm here is refused.
+fn accepts_stdlib_counter_registration(key: &Key) -> bool {
+    match key.name() {
+        FILE_READ_TOTAL => exact_labels(
+            key,
+            &[
+                ("filter", &FILE_READ_FILTER_VALUES),
+                ("outcome", &FILE_READ_OUTCOME_VALUES),
+            ],
+        ),
+        WHICH_CACHE_TOTAL | WHICH_RESOLUTION_TOTAL => accepts_which_registration(key),
+        SHELL_QUOTE_DIALECT_TOTAL => exact_labels(
+            key,
+            &[
+                ("dialect", &DIALECT_VALUES),
+                ("source", &DIALECT_SOURCE_VALUES),
+            ],
+        ),
+        _ => false,
+    }
 }
 
 /// Whether `key`'s label set matches any of the `expected` shapes exactly.

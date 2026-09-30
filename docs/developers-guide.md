@@ -7076,11 +7076,20 @@ are absent from every captured event and span field.
 
 The counter descriptions are registered once per process behind a `Once`. Both
 counter names are listed in the application recorder's `accepts_name` and
-matched in `accepts_counter_registration` against their exact label shapes, so
-the series survive into the process snapshot rather than being discarded as
-noop handles, while any other label name, label count, or out-of-vocabulary
-value is rejected. This is the same allowlist that gates the configuration,
-runner, manifest-filtering, file-read, and environment-lookup series.
+matched in `accepts_stdlib_counter_registration`, the private helper that
+groups the standard-library counter rules, which delegates them to
+`accepts_which_registration` against their exact label shapes. The series
+survive into the process snapshot rather than being discarded as noop handles,
+while any other label name, label count, or out-of-vocabulary value is rejected.
+
+The application recorder owns counter admission. The stdlib helper composes the
+vocabularies the `src/stdlib/` modules declare rather than redefining them, so
+ownership of each vocabulary stays with its declaring module. The `which` rule
+keeps its own label-shape predicate because its resolution counter is admitted
+under two shapes — a success carries two labels and a failure three — and every
+rule, grouped or not, still validates bounded labels exactly. This is the same
+allowlist that gates the configuration, runner, manifest-filtering, file-read,
+and environment-lookup series.
 
 Tests sit beside the module: `src/stdlib/which/telemetry_tests.rs` drives the
 real `WhichResolver` against a local debugging recorder and asserts that each
@@ -7783,7 +7792,8 @@ with the locale space.
 The counter description is registered once per process behind a `Once`. The
 application recorder in `src/observability_recorder.rs` admits the series:
 `FILE_READ_TOTAL` is listed in `accepts_name` and matched in
-`accepts_counter_registration` against exactly those two label sets, so the
+`accepts_stdlib_counter_registration`, the private helper grouping the
+standard-library counter rules, against exactly those two label sets, so the
 counter survives into the process snapshot rather than being discarded as a
 noop handle, while any other label name, label count, or out-of-vocabulary
 value is rejected. This is the same allowlist that gates the configuration,
@@ -7861,7 +7871,8 @@ The counter's description is registered once per process behind a `Once`.
 
 The application recorder in `src/observability_recorder.rs` admits the series:
 `SHELL_QUOTE_DIALECT_TOTAL` is listed in `accepts_name` and matched in
-`accepts_counter_registration` against exactly those two label sets, so the
+`accepts_stdlib_counter_registration`, the private helper grouping the
+standard-library counter rules, against exactly those two label sets, so the
 counter survives into the process snapshot rather than being discarded as a
 noop handle. **The admission step is the silent one**: an unadmitted name or
 label value yields a `Counter::noop` handle, so the build, the lint, and every
