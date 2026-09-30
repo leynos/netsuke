@@ -3783,26 +3783,44 @@ catalogue has the key; there is no partial state to clean up.
   glossed, because a four-gate claim described as "the gates" is the kind of
   overstatement this plan has had to correct before. Separately,
   `make markdownlint` (the spelling gate plus `markdownlint-cli2`) was run
-  post-rebase and exits 0 with `0 error(s)` across 168 files. See the gate
-  section below for the one environmental caveat.
+  post-rebase and exits 0 with `0 error(s)` across 168 files. The environmental
+  caveat is the next paragraph.
 
   **`make lint` initially failed for a reason unrelated to this branch**, and
   the distinction is worth recording. The `lint-python` stage resolves the
   house plugin from
   `git+https://github.com/leynos/df12-python-lints.git@v0.3.0` and reported
-  `Failed to resolve --with requirement` / `Git operation failed`. The cause is
+  `Failed to resolve --with requirement` / `Git operation failed`. The chain is
   this session's harness: it injects `GIT_CONFIG_*` variables carrying
-  `url.lody-github::https.insteadof https://github.com/`, redirecting every
-  GitHub HTTPS URL to a `lody-github` remote helper that is not on `PATH`.
-  `curl` reaches GitHub fine (HTTP 200) and the pre-rebase lint log shows the
-  identical stage passing at 12:13, so the regression is the environment, not
-  the merge. Re-running `make lint` with those `GIT_CONFIG_*` entries unset let
-  the plugin resolve and the target exit 0, which is the run recorded above —
-  the same stage, the same content, with the broken redirect removed. The lone
-  remaining output is a `yamllint` *warning* in
-  `.github/workflows/release-dry-run.yml`, a file this branch never touched and
-  which is byte-identical to `main`; it arrived with `6357fda5` (#833) and is
-  the target's to fix.
+  `url.lody-github::https.insteadof https://github.com/`, which redirect every
+  GitHub HTTPS URL to a `lody-github` remote helper. `curl` reaches GitHub fine
+  (HTTP 200) and the pre-rebase lint log shows the identical stage passing at
+  12:13, so the regression is the environment, not the merge. Re-running
+  `make lint` with those `GIT_CONFIG_*` entries unset let the plugin resolve
+  and the target exit 0, which is the run recorded above — the same stage, the
+  same content, with the broken redirect removed. The lone remaining output is a
+  `yamllint` *warning* in `.github/workflows/release-dry-run.yml`, a file this
+  branch never touched and which is byte-identical to `main`; it arrived with
+  `6357fda5` (#833) and is the target's to fix.
+
+  **The redirect is the route, not the fault.** Measured later the same day,
+  the operative failure is the helper's *upstream*: it POSTs to a credential
+  broker inside the `lody start` daemon, and that daemon was pegged at ~90% CPU
+  for its entire two-hour life (`TIME 01:49:40` over `ELAPSED 01:59:56`), so
+  its event loop stopped servicing the broker. Connections were accepted by the
+  kernel and never handled — `Recv-Q` on the broker's listen socket climbed to
+  14 unaccepted connections — and the listener's fd churned, so some connects
+  were refused outright. Every client budget in the chain is 2-15s, so "slower
+  than 15s" and "never" are indistinguishable: the helper wraps its fetch in a
+  bare `catch {}` and reports `Cannot verify GitHub identity preferences`
+  whatever the transport did. Two consequences worth keeping: the error is a
+  *transport* failure, not a policy denial or a bad rewrite, and a `git push`
+  needs both the credential helper cleared **and** the `GIT_CONFIG_*` pairs
+  stripped, because `insteadof` is applied when git canonicalises the URL,
+  before any helper is consulted. `gh` does not use this path and stays
+  reliable. There is no way to fix this from inside a worktree, and none was
+  attempted: the daemon is the parent of the agent sessions themselves, so
+  restarting it is an operator action, not an agent one.
 
 - [x] (2026-09-30) CodeScene's review of `a7618c30` failed on a biomarker this
       branch introduced; fixed in `a3e546ec` by extracting one predicate.
