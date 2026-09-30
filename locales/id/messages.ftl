@@ -472,4 +472,4 @@ check.rule.unknown = Pemilih menyebut { $name }, yang bukan aturan maupun katego
 check.rule.severity = Pemilih { $name } menyebut keparahan { $severity }; diharapkan salah satu dari { $values }.
 check.fail_on.invalid = Ambang kegagalan tidak dikenal { $value }; diharapkan salah satu dari { $values }.
 check.source_index = Tidak dapat mengindeks { $path } untuk diagnostik pada baris { $line }: { $reason }.
-status.tool.check = Periksa
+status.tool.check = Pemeriksaan

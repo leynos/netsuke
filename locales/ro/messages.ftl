@@ -481,4 +481,4 @@ check.rule.unknown = Selectorul indică { $name }, care nu este nici regulă, ni
 check.rule.severity = Selectorul { $name } indică severitatea { $severity }; se aștepta una dintre { $values }.
 check.fail_on.invalid = Prag de eșec necunoscut { $value }; se aștepta unul dintre { $values }.
 check.source_index = Nu s-a putut indexa { $path } pentru diagnostice la linia { $line }: { $reason }.
-status.tool.check = Verifică
+status.tool.check = Verificare

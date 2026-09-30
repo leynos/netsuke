@@ -484,4 +484,4 @@ check.rule.unknown = Selektor wskazuje { $name }, co nie jest ani regułą, ani 
 check.rule.severity = Selektor { $name } wskazuje ważność { $severity }; oczekiwano jednej z { $values }.
 check.fail_on.invalid = Nieznany próg niepowodzenia { $value }; oczekiwano jednego z { $values }.
 check.source_index = Nie udało się zindeksować { $path } dla diagnostyki w wierszu { $line }: { $reason }.
-status.tool.check = Sprawdź
+status.tool.check = Sprawdzanie

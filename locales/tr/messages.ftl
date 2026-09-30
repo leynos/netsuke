@@ -474,4 +474,4 @@ check.rule.unknown = Seçici { $name } adını veriyor; bu ne bir kural ne de bi
 check.rule.severity = { $name } seçicisi { $severity } önem derecesini veriyor; şunlardan biri bekleniyordu: { $values }.
 check.fail_on.invalid = Bilinmeyen başarısızlık eşiği { $value }; şunlardan biri bekleniyordu: { $values }.
 check.source_index = { $path } tanılama için { $line }. satırda dizinlenemedi: { $reason }.
-status.tool.check = Denetle
+status.tool.check = Denetleme

@@ -478,4 +478,4 @@ check.rule.unknown = Tha an roghnaichear ag ainmeachadh { $name }, nach eil na r
 check.rule.severity = Tha an roghnaichear { $name } ag ainmeachadh na h-ìre { $severity }; bha dùil ri fear de { $values }.
 check.fail_on.invalid = Stairsneach fàilligidh neo-aithnichte { $value }; bha dùil ri fear de { $values }.
 check.source_index = Cha b' urrainn { $path } a chlàr-amais airson breithneachaidh air loidhne { $line }: { $reason }.
-status.tool.check = Sgrùd
+status.tool.check = Sgrùdadh
