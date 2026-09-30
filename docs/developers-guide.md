@@ -4193,6 +4193,16 @@ decision; this section is the working reference.
   entry is dropped. Its failure message names the paths; copy them into the
   scope rather than widening an entry. `rust_module_closure_test.py` drives
   each closure rule over a synthetic crate.
+  `rust_module_closure_property_test.py` generates small flat crates and checks
+  the closure against graph reachability over the generating edge list, never a
+  second parse of the source: every required dependency is reached, nothing
+  test-only is, the answer is stable under declaration and line order, and
+  adding a reference or seed never shrinks it. Unsupported layouts must raise
+  `ModuleGraphError`. The generated crates omit `impl` headers, which
+  over-approximate by design and stay pinned by the synthetic crate.
+  `kani_proof_scope_property_test.py` does the same for scope-entry matching
+  (exact file, directory boundary) and the decision (order independence, an
+  unreadable diff runs the proofs).
 - **Adding a harness.** Put it beside the module it verifies, under
   `#[cfg(kani)] mod verification`, as the existing harnesses are. Run
   `make test-workflow-contracts`; if the harness reaches code outside the
