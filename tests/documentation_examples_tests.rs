@@ -2,6 +2,9 @@
 
 mod documentation_examples;
 
+#[path = "documentation_examples_tests/release_wix_extension.rs"]
+mod release_wix_extension;
+
 use anyhow::{Context, Result, ensure};
 use documentation_examples::{
     assert_success, documented_example, load_documented_examples, manifest_workspace,
@@ -45,6 +48,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-output-streams",
     "guide-project-anchor",
     "guide-project-config",
+    "guide-release-wix-extension-version",
     "guide-serial-dependency-order-manifest",
     "guide-source-install",
     "guide-utility-commands",

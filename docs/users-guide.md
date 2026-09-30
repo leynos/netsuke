@@ -76,6 +76,8 @@ Repositories that call Netsuke's reusable release workflow can select the
 `WixToolset.UI.wixext` version with the `wix-extension-version` input in the
 caller job's `with:` block:
 
+<!-- tested-example: guide-release-wix-extension-version -->
+
 ```yaml
 with:
   wix-extension-version: '7'

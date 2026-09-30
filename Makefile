@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest test-documentation-contracts doctest test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -218,6 +218,9 @@ test-nextest: check-build-tools ## Run all non-doctest Rust tests through cargo-
 .PHONY: test-rfc-stdlib-coverage
 test-rfc-stdlib-coverage: check-build-tools ## Check the RFC 0006 split and its parsers
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test rfc_stdlib_coverage_tests --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+
+test-documentation-contracts: check-build-tools ## Validate marked documentation examples and semantic contracts
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test documentation_examples_loader_tests --test documentation_examples_tests --all-features --no-tests fail -E 'test(malformed_documented_examples_are_rejected) | test(every_documented_fence_has_a_known_unique_identifier) | test(release_wix_extension)' $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 doctest: check-build-tools ## Run doctests, which cargo-nextest cannot execute
 	$(GATE_RUSTFLAGS) $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
