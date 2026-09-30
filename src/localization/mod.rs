@@ -95,7 +95,21 @@ pub struct LocalizedMessage {
     /// Fluent message key to look up.
     key: &'static str,
     /// Named arguments to interpolate into the message.
-    args: Vec<(&'static str, String)>,
+    args: Vec<(&'static str, MessageArg)>,
+}
+
+/// One named argument's value, kept typed until the Fluent lookup.
+///
+/// Fluent only selects a CLDR plural variant (`[one]`, `[few]`, ...) for a
+/// numeric argument; a string argument matches no plural category and always
+/// falls through to the default variant. Counts are therefore carried as
+/// numbers rather than pre-rendered text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MessageArg {
+    /// Text interpolated verbatim.
+    Text(String),
+    /// A count that selects plural variants.
+    Count(usize),
 }
 
 impl LocalizedMessage {
@@ -115,7 +129,21 @@ impl LocalizedMessage {
         reason = "Accepting owned values keeps call sites ergonomic for temporaries."
     )]
     pub fn with_arg(mut self, name: &'static str, value: impl ToString) -> Self {
-        self.args.push((name, value.to_string()));
+        self.args.push((name, MessageArg::Text(value.to_string())));
+        self
+    }
+
+    /// Attach a named count, which Fluent can use to select a plural variant.
+    ///
+    /// ```
+    /// use netsuke::localization::{self, keys};
+    ///
+    /// let message = localization::message(keys::EXAMPLE_FILES_PROCESSED).with_count("count", 1);
+    /// assert!(message.to_string().contains('1'));
+    /// ```
+    #[must_use]
+    pub fn with_count(mut self, name: &'static str, count: usize) -> Self {
+        self.args.push((name, MessageArg::Count(count)));
         self
     }
 
@@ -126,8 +154,12 @@ impl LocalizedMessage {
             return None;
         }
         let mut args = LocalizationArgs::default();
-        for (name, value) in &self.args {
-            args.insert(*name, value.clone().into());
+        for (name, arg) in &self.args {
+            let value = match arg {
+                MessageArg::Text(text) => text.clone().into(),
+                MessageArg::Count(count) => (*count).into(),
+            };
+            args.insert(*name, value);
         }
         Some(args)
     }

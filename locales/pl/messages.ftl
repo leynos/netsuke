@@ -473,7 +473,12 @@ check.threshold_exceeded = Ustalenia osiągnęły próg { $severity }: { $failin
 check.threshold_exceeded.help = Popraw zgłoszone ustalenia, dostosuj --rule lub złagodź --fail-on.
 check.summary.counts = Wyniki analizy — błędy: { $errors }, ostrzeżenia: { $warnings }, porady: { $advice }, wyciszone: { $suppressed }.
 check.summary.clean = Brak ustaleń.
-check.summary.truncated = Pokazano { $shown } ustaleń; --limit pominął kolejne { $omitted }.
+check.summary.truncated = { $shown ->
+    [one] Pokazano { $shown } ustalenie; --limit pominął kolejne { $omitted }.
+    [few] Pokazano { $shown } ustalenia; --limit pominął kolejne { $omitted }.
+    [many] Pokazano { $shown } ustaleń; --limit pominął kolejne { $omitted }.
+   *[other] Pokazano { $shown } ustalenia; --limit pominął kolejne { $omitted }.
+}
 check.rule.malformed = Selektor { $selector } nie jest zapisany jako NAME=SEVERITY.
 check.rule.unknown = Selektor wskazuje { $name }, co nie jest ani regułą, ani kategorią.
 check.rule.severity = Selektor { $name } wskazuje ważność { $severity }; oczekiwano jednej z { $values }.

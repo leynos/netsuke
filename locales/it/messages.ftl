@@ -468,7 +468,10 @@ check.threshold_exceeded = I rilievi hanno raggiunto la soglia { $severity }: { 
 check.threshold_exceeded.help = Correggi i rilievi segnalati, modifica --rule oppure allenta --fail-on.
 check.summary.counts = Risultati dell'analisi — errori: { $errors }, avvisi: { $warnings }, suggerimenti: { $advice }, soppressi: { $suppressed }.
 check.summary.clean = Nessun rilievo.
-check.summary.truncated = Vengono mostrati { $shown } rilievi; --limit ne ha omessi altri { $omitted }.
+check.summary.truncated = { $shown ->
+    [one] Viene mostrato { $shown } rilievo; --limit ne ha omessi altri { $omitted }.
+   *[other] Vengono mostrati { $shown } rilievi; --limit ne ha omessi altri { $omitted }.
+}
 check.rule.malformed = Il selettore { $selector } non è scritto come NAME=SEVERITY.
 check.rule.unknown = Il selettore indica { $name }, che non è né una regola né una categoria.
 check.rule.severity = Il selettore { $name } indica la severità { $severity }; attesa una fra { $values }.

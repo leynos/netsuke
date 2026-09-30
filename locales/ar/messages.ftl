@@ -475,7 +475,10 @@ check.threshold_exceeded = بلغت النتائج عتبة { $severity }: { $fa
 check.threshold_exceeded.help = أصلح النتائج المُبلَّغ عنها، أو عدّل ‎--rule، أو خفّف ‎--fail-on.
 check.summary.counts = نتائج الفحص — أخطاء: { $errors }، تحذيرات: { $warnings }، إرشادات: { $advice }، مكبوتة: { $suppressed }.
 check.summary.clean = لا توجد نتائج.
-check.summary.truncated = يجري عرض { $shown } نتيجة؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+check.summary.truncated = { $shown ->
+    [few] يجري عرض { $shown } نتائج؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+   *[other] يجري عرض { $shown } نتيجة؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+}
 check.rule.malformed = المُحدِّد { $selector } غير مكتوب بالصيغة NAME=SEVERITY.
 check.rule.unknown = يسمي المُحدِّد { $name }، وهو ليس قاعدة ولا فئة.
 check.rule.severity = يسمي المُحدِّد { $name } درجة الخطورة { $severity }؛ كان المتوقع إحدى القيم { $values }.

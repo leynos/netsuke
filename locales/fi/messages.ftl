@@ -469,7 +469,10 @@ check.threshold_exceeded = Havainnot saavuttivat kynnyksen { $severity }: { $fai
 check.threshold_exceeded.help = Korjaa raportoidut havainnot, säädä --rule tai löysennä --fail-on.
 check.summary.counts = Tarkistuksen tulokset — virheet: { $errors }, varoitukset: { $warnings }, ohjeet: { $advice }, vaimennetut: { $suppressed }.
 check.summary.clean = Ei havaintoja.
-check.summary.truncated = Näytetään { $shown } havaintoa; --limit jätti pois { $omitted } muuta.
+check.summary.truncated = { $shown ->
+    [one] Näytetään { $shown } havainto; --limit jätti pois { $omitted } muuta.
+   *[other] Näytetään { $shown } havaintoa; --limit jätti pois { $omitted } muuta.
+}
 check.rule.malformed = Valitsin { $selector } ei ole muodossa NAME=SEVERITY.
 check.rule.unknown = Valitsin nimeää kohteen { $name }, joka ei ole sääntö eikä luokka.
 check.rule.severity = Valitsin { $name } nimeää vakavuuden { $severity }; odotettiin jotakin näistä: { $values }.

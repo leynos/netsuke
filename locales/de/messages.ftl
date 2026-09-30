@@ -467,7 +467,10 @@ check.threshold_exceeded = Lint-Befunde haben die Schwelle { $severity } erreich
 check.threshold_exceeded.help = Beheben Sie die gemeldeten Befunde, passen Sie --rule an oder lockern Sie --fail-on.
 check.summary.counts = Lint-Ergebnisse — Fehler: { $errors }, Warnungen: { $warnings }, Hinweise: { $advice }, unterdrückt: { $suppressed }.
 check.summary.clean = Keine Lint-Befunde.
-check.summary.truncated = { $shown } Befunde werden angezeigt; --limit hat { $omitted } weitere ausgelassen.
+check.summary.truncated = { $shown ->
+    [one] { $shown } Befund wird angezeigt; --limit hat { $omitted } weitere ausgelassen.
+   *[other] { $shown } Befunde werden angezeigt; --limit hat { $omitted } weitere ausgelassen.
+}
 check.rule.malformed = Der Lint-Selektor { $selector } ist nicht als NAME=SEVERITY geschrieben.
 check.rule.unknown = Der Lint-Selektor nennt { $name }, was weder eine Regel noch eine Kategorie ist.
 check.rule.severity = Der Lint-Selektor { $name } nennt den Schweregrad { $severity }; erwartet wurde einer von { $values }.
