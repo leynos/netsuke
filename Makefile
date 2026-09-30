@@ -124,7 +124,7 @@ ACTIONLINT ?= actionlint
 export ACTIONLINT
 # Single source of truth for the shared spelling gate; the Makefile and CI
 # both consume it, so the pinned builder cannot drift apart.
-TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.1
+TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.3
 YAMLLINT_VERSION ?= 1.38.0
 UV ?= uv
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
