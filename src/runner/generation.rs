@@ -104,11 +104,14 @@ pub(super) fn load_manifest_with_limits(
     budget_limits: manifest::ManifestBudgetLimits,
     on_stage: StageObserver<'_>,
 ) -> Result<NetsukeManifest> {
-    manifest::from_path_for_manifest_query_with_limits(path.as_std_path(), budget_limits, on_stage)
-        .with_context(|| {
-            localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
-                .with_arg("path", path.as_str())
-        })
+    with_manifest_load_context(
+        path,
+        manifest::from_path_for_manifest_query_with_limits(
+            path.as_std_path(),
+            budget_limits,
+            on_stage,
+        ),
+    )
 }
 
 /// Load a manifest for a query, keeping the source text it was parsed from.
@@ -128,11 +131,14 @@ pub(super) fn load_manifest_with_source(
     budget_limits: manifest::ManifestBudgetLimits,
     on_stage: StageObserver<'_>,
 ) -> Result<manifest::LoadedManifest> {
-    manifest::from_path_for_manifest_query_with_source(path.as_std_path(), budget_limits, on_stage)
-        .with_context(|| {
-            localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
-                .with_arg("path", path.as_str())
-        })
+    with_manifest_load_context(
+        path,
+        manifest::from_path_for_manifest_query_with_source(
+            path.as_std_path(),
+            budget_limits,
+            on_stage,
+        ),
+    )
 }
 
 /// Load and render a manifest with the full, effectful build stdlib.
@@ -170,15 +176,26 @@ pub(super) fn load_manifest_for_build_with_limits(
 ) -> Result<NetsukeManifest> {
     let env_reader = manifest::process_env_reader();
     let environment = ManifestEnvironment::new(&env_reader, inputs.env_access_policy.clone());
-    manifest::from_path_with_policy_and_environment_and_limits(
-        path.as_std_path(),
-        inputs.network_policy.clone(),
-        &environment,
-        inputs.budget_limits,
-        inputs.recipe_shell,
-        on_stage,
+    with_manifest_load_context(
+        path,
+        manifest::from_path_with_policy_and_environment_and_limits(
+            path.as_std_path(),
+            inputs.network_policy.clone(),
+            &environment,
+            inputs.budget_limits,
+            inputs.recipe_shell,
+            on_stage,
+        ),
     )
-    .with_context(|| {
+}
+
+/// Attach the localized "could not load the manifest" context to `result`.
+///
+/// Every manifest loader in this module reports a load failure the same way,
+/// naming the manifest path, so the context lives here once. It wraps the
+/// loader's own error rather than replacing it, keeping the full cause chain.
+fn with_manifest_load_context<T>(path: &Utf8Path, result: Result<T>) -> Result<T> {
+    result.with_context(|| {
         localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST).with_arg("path", path.as_str())
     })
 }
