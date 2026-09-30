@@ -4145,6 +4145,21 @@ catalogue has the key; there is no partial state to clean up.
   meantime, and that the local re-run afterwards removed the doubt rather than
   the outage having been imagined.
 
+  **Revision note, stated rather than re-gated.** The last revision at which
+  the full local gate set passed is `664b9422`, where `check-fmt`,
+  `markdownlint` (168 files, 0 errors), `spelling`, `nixie`, `typecheck`, and
+  `lint` all exited `0`. Every commit after it carries **only prose in this one
+  file** — 45 added lines across `7d3e2a19` and the revision note that follows
+  it — and its Rust, Python, YAML, and catalogue content is therefore
+  byte-identical to what those gates passed. The two Markdown-sensitive gates
+  were re-run on the committed revision anyway (`markdownlint` again 168 files
+  and 0 errors, `spelling` clean), because a re-wrap can break Markdown in a
+  way nothing else would catch. Repeatedly re-running the whole set here does
+  not converge: the commit that records a run moves `HEAD` past the revision
+  the run verified, so the record would demand a further run, indefinitely.
+  Closing the loop by naming the last verified revision and the delta is the
+  deliberate choice.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
