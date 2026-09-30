@@ -482,4 +482,4 @@ check.rule.unknown = Selektor uvádí { $name }, což není ani pravidlo, ani ka
 check.rule.severity = Selektor { $name } uvádí závažnost { $severity }; očekávána jedna z { $values }.
 check.fail_on.invalid = Neznámý práh selhání { $value }; očekáván jeden z { $values }.
 check.source_index = Nepodařilo se indexovat { $path } pro diagnostiku na řádku { $line }: { $reason }.
-status.tool.check = Zkontrolovat
+status.tool.check = Kontrola

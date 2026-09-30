@@ -476,4 +476,4 @@ check.rule.unknown = Der Lint-Selektor nennt { $name }, was weder eine Regel noc
 check.rule.severity = Der Lint-Selektor { $name } nennt den Schweregrad { $severity }; erwartet wurde einer von { $values }.
 check.fail_on.invalid = Unbekannte Fehlerschwelle { $value }; erwartet wurde einer von { $values }.
 check.source_index = { $path } konnte für Lint-Diagnosen in Zeile { $line } nicht indiziert werden: { $reason }.
-status.tool.check = Prüfen
+status.tool.check = Prüfung

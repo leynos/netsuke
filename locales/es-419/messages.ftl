@@ -479,4 +479,4 @@ check.rule.unknown = El selector nombra { $name }, que no es una regla ni una ca
 check.rule.severity = El selector { $name } nombra la severidad { $severity }; se esperaba una de { $values }.
 check.fail_on.invalid = Umbral de falla desconocido { $value }; se esperaba uno de { $values }.
 check.source_index = No se pudo indexar { $path } para los diagnósticos en la línea { $line }: { $reason }.
-status.tool.check = Revisar
+status.tool.check = Revisión

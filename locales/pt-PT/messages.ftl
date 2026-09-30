@@ -478,4 +478,4 @@ check.rule.unknown = O seletor indica { $name }, que não é uma regra nem uma c
 check.rule.severity = O seletor { $name } indica a severidade { $severity }; esperava-se uma de { $values }.
 check.fail_on.invalid = Limiar de falha desconhecido { $value }; esperava-se um de { $values }.
 check.source_index = Não foi possível indexar { $path } para diagnósticos na linha { $line }: { $reason }.
-status.tool.check = Verificar
+status.tool.check = Verificação
