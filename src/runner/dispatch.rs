@@ -23,7 +23,9 @@ pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'
     match command {
         Commands::Build(args) => execute_build(cli, &args, context),
         #[cfg(feature = "lint")]
-        Commands::Check(args) => execute_check(cli, &args, context.reporter),
+        Commands::Check(args) => {
+            execute_check(cli, &args, context.reporter, context.graph_generation.clock)
+        }
         Commands::Generate { output } => execute_generate(cli, output.as_ref(), context),
         Commands::Clean => execute_clean(cli, context),
         Commands::Graph(args) => graph::handle_graph(cli, &args, context),
@@ -69,8 +71,9 @@ pub(super) fn execute_check(
     cli: &Cli,
     args: &CheckArgs,
     reporter: &dyn crate::status::StatusReporter,
+    clock: &dyn monotony::MonotonicClock,
 ) -> Result<()> {
-    check::handle_check(cli, args, reporter)
+    check::handle_check(cli, args, reporter, clock)
 }
 
 /// Run the build through Ninja and emit its successful JSON result when
