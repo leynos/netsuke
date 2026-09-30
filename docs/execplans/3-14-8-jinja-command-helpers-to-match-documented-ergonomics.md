@@ -3868,6 +3868,67 @@ catalogue has the key; there is no partial state to clean up.
   is a pure move of an unchanged body, which is what makes the narrower
   evidence proportionate.
 
+- **Group the stdlib counter admission rules** (`f27f73d4`). A review request
+  asked for the CodeScene Large Method finding in
+  `accepts_counter_registration` to be refactored, naming `a7618c30` as the
+  validated baseline. Re-measured before editing:
+  `cs check a7618c30:./src/observability_recorder.rs` reports 9.60 with
+  `Large Method (LoC = 70 lines)` at line 151, so the finding was real
+  **against that baseline** — but `a3e546ec` had already fixed it, and
+  `cs check` at the then-head returned 10.00. The PR's own CodeScene check
+  passes. The extraction was implemented anyway, as a further consolidation
+  rather than a re-fix.
+
+  `accepts_stdlib_counter_registration` now groups the four standard-library
+  counter arms (`FILE_READ_TOTAL`, `WHICH_CACHE_TOTAL`,
+  `WHICH_RESOLUTION_TOTAL`, `SHELL_QUOTE_DIALECT_TOTAL`) and the caller carries
+  one grouped name arm. `ENV_LOOKUP_TOTAL` stays in the parent, because the
+  manifest module owns that metric. The single-metric
+  `accepts_shell_quote_dialect_registration` added by `a3e546ec` is removed and
+  its body inlined: the request's stated call chain permits only `exact_labels`
+  or `accepts_which_registration` from the group helper, and forbids one helper
+  per metric, so keeping that predicate would have violated both. Reversing the
+  earlier extraction is the consequence, and it is recorded here so the two
+  commits are not read as contradictory.
+
+  Method lengths, measured: `accepts_counter_registration` 64 → 50,
+  `accepts_stdlib_counter_registration` 20. `cs check` returns 10.00.
+
+  Every named invariant was checked mechanically rather than asserted:
+  `exact_labels`, `any_exact_labels`, `accepts_name`, the
+  counter/histogram/gauge classification, all three noop handles, and both
+  which-resolution shapes are untouched in the diff; each moved label array is
+  byte-identical. `docs/developers-guide.md` records the ownership boundary —
+  the application recorder owns counter admission, the stdlib helper composes
+  the vocabularies the `src/stdlib/` modules declare, the which rule keeps its
+  own label-shape predicate — with no ADR and no claim of user-facing change.
+
+- **A file-cap breach caught mid-flight.** `cargo fmt` re-expanded the grouped
+  name arm from 2 lines to 4, taking `src/observability_recorder.rs` from 399
+  to **401** lines against a 400 cap. It was the only `src/` file over the cap,
+  and it was under the cap at HEAD, so the breach was self-introduced. The
+  helper's doc comment was shortened; the file is back to 398, and
+  `cargo fmt --all -- --check` exits 0. Worth remembering: `cargo fmt` runs
+  *after* the edit, so a line count measured before formatting is not the count
+  that gets gated.
+
+- **Two self-introduced gate failures, repaired** (`efa15684`, `f27f73d4`).
+  The post-turn hook's first genuine signal in this session was not
+  environmental: `make check-fmt` failed on `mdtablefix` reflow in
+  `docs/developers-guide.md` (+9/−10, greedy 80-column fill against manually
+  narrower wrapping), and `make markdownlint` failed at its `spelling`
+  prerequisite on `canonicalises` in the caveat paragraph added by `0bf9cc66`
+  (en-GB-oxendict takes `-ize`). Both were mine. After the fixes,
+  `mdtablefix --check` reports "168 files left unchanged" and `make spelling`
+  exits 0 with `typos.toml` regenerating byte-identically. The `-ise` sweep
+  covered all added prose, not just the cited line.
+
+  This is also the evidence that the earlier environmental story had lifted:
+  the hook's
+  `uv tool run --from git+https://github.com/leynos/typos-config-builder`
+  reached its own gate logic and emitted a *content* finding, which it could
+  not do while the Lody credential broker was refusing the fetch.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
