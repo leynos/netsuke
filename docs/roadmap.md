@@ -1028,26 +1028,37 @@ delivered by [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md).
 This step answers whether ordered collection algebra can replace both
 hand-expanded target matrices and Ansible's set-backed filters without
 introducing a single unstable ordering. Its outcome is the strongest test of
-the determinism claim in RFC 0006 §6.3. See RFC 0006 §§8.3 and 8.8.
+the determinism claim in RFC 0006 §6.3. See RFC 0006 §§8.3 and 8.8, delivered by
+[RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md).
 
 - [ ] 6.4.1. Add the ordered set algebra. Requires 6.1.2.
-  - See RFC 0006 §8.3.
+  - See RFC 0006 §8.3 and
+    [RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md)
+    §§5.3, 5.7, and 7.
   - Implement `union`, `intersect`, `difference`, and `symmetric_difference`
     with first-appearance ordering and canonical-key deduplication.
   - Success: property tests show idempotence, the documented ordering, and
     that reordering an input's duplicate positions does not change the result.
 - [ ] 6.4.2. Add the bounded combinatorial filters. Requires 6.1.3.
-  - See RFC 0006 §§6.8 and 8.3.
+  - See RFC 0006 §§6.8 and 8.3 and
+    [RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md)
+    §§5.6 and 5.8.
   - Implement `product`, `combinations`, and `permutations` with checked
     cardinality and the lower ceiling for `permutations`.
+  - Report the computed cardinality and the ceiling as two distinct codes, so
+    an overflowing count does not read as an over-large one.
   - Success: an over-large request fails naming the computed cardinality and
     the ceiling, without allocating the result.
 - [ ] 6.4.3. Add `zip_longest` with a required fill value. Requires 6.4.1.
-  - See RFC 0006 §8.3.
+  - See RFC 0006 §8.3 and
+    [RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md)
+    §§5.6 and 5.9.
   - Omitting `fill_value` is an error, so a silent `none` cannot enter a build
     graph.
 - [ ] 6.4.4. Add the collection and truth predicates. Requires 6.1.2.
-  - See RFC 0006 §8.8.
+  - See RFC 0006 §8.8 and
+    [RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md)
+    §§5.7, 5.8, and 5.10.
   - Implement `any`, `all`, `subset`, `superset`, `contains`, `truthy`, and
     `falsy`.
   - Restrict `convert_bool` to the closed eight-spelling vocabulary, erroring
@@ -1056,6 +1067,9 @@ the determinism claim in RFC 0006 §6.3. See RFC 0006 §§8.3 and 8.8.
     and `contains` is documented against MiniJinja's `in` at both entries.
 - [ ] 6.4.5. Add the matrix-determinism end-to-end suite. Requires 6.4.2 and
   6.4.4.
+  - See
+    [RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md)
+    §§5.3, 5.11, and 7.
   - Compile a representative target matrix built from `product`, the set
     algebra, and `selectattr` with `contains`, twice from the same inputs.
   - Add a property test that holds the logical input order fixed while varying

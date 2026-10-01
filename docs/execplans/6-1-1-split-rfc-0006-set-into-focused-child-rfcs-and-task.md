@@ -1551,7 +1551,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   to find. What the tolerance's *reason* says is worth separating from its
   *threshold*: "a child carries no per-helper contract, so a larger one means
   section 5 has become restatement", and that diagnosis does not hold for RFC
-  RFC 0013. Its section 5 is 300 of the 470 lines and its bulk is
+  0013. Its section 5 is 300 of the 470 lines and its bulk is
   group-specific artefact rather than paraphrase — a fourteen-row diagnostic
   code table, the output-length pre-count argument with its measured
   4,194,301-byte doubling, and the canonical-JSON-domain acceptance table. The
@@ -1568,18 +1568,21 @@ Hard invariants. Violating one requires escalation, not a workaround.
   line.
 
   Consequences taken from the first finding. The 2400-line aggregate budget is
-  still the binding constraint — 0013 has already spent 470 of it, leaving a
-  mean of 322 lines for each of the remaining seven — so `EP-M4` onward are
-  written to a tighter shape than 0013 rather than to 0013's length, and each
-  child's line count is measured and recorded at its own commit. This is a
-  budget response, not a content response: every section 5 subsection still
-  states a group-specific consequence or takes the `D6` escape, because that is
-  what `CONF-1` checks and what the vacuity risk is about.
+  still the binding constraint — 0013 has already spent 470 of it, leaving 1930
+  lines and a mean of **276** for each of the remaining seven — so `EP-M4`
+  onward are written to a tighter shape than 0013 rather than to 0013's length,
+  and each child's line count is measured and recorded at its own commit. (The
+  322 this paragraph carried when it was written divided by six where the
+  sentence said seven; 1930 ÷ 7 is 276, and 276 is the figure to hold the next
+  six to.) This is a budget response, not a content response: every section 5
+  subsection still states a group-specific consequence or takes the `D6`
+  escape, because that is what `CONF-1` checks and what the vacuity risk is
+  about.
 
 - [x] (2026-10-01) `EP-M4` RFC 0014, mapping and sequence transforms (step
   6.3). **Written at 399 lines**, inside the per-file tolerance the entry above
-  records as breached by 0013, and the four-property budget is intact:
-  `every_accepted_helper_has_exactly_one_owner`,
+  records as breached by 0013, and the coverage contract's seven checks are
+  intact: `every_accepted_helper_has_exactly_one_owner`,
   `no_forbidden_helper_is_registered`, `totals_and_purity_aggregate_agree`,
   `coverage_map_status_is_reported`, `inter_document_links_resolve`,
   `every_capability_has_a_roadmap_task`, and
@@ -1599,16 +1602,16 @@ Hard invariants. Violating one requires escalation, not a workaround.
   to be planned for from the first draft rather than recovered at the end.
 
   **The `CONF-1` anti-vacuity rule bites on the diagnostics subsection, and it
-  bites silently.** Section 5.9 names fourteen error codes and no helper, so
-  the check's `escape || named` test fails: a code span is the only thing it
-  counts, and a code like `netsuke::jinja::transform::wrong_kind` is not a
-  helper's name. The fix is one sentence naming the helpers that share the
-  variant (`combine`, `dict2items`, `extract`, and `subelements`), which is
-  also better prose. This is the third vacuity shape `D6` names, and it is the
-  one a diagnostics table invites, because the table's own subject is not the
-  helpers. Each remaining child's 5.9 needs the same sentence; none of them can
-  take the `D6` escape, because a code list is exactly the group-specific
-  consequence the clause asks for.
+  bites silently.** Section 5.9's code table names no helper, so the check's
+  `escape || named` test fails: a code span is the only thing it counts, and a
+  code like `netsuke::jinja::transform::wrong_kind` is not a helper's name. The
+  fix is one sentence naming the helpers that share the variant (`combine`,
+  `dict2items`, `extract`, and `subelements`), which is also better prose. This
+  is the third vacuity shape `D6` names, and it is the one a diagnostics table
+  invites, because the table's own subject is not the helpers. Each remaining
+  child's 5.9 needs the same sentence; none of them can take the `D6` escape,
+  because a code list is exactly the group-specific consequence the clause asks
+  for.
 
   **`mdtablefix --renumber` reads a wrapped numeral as an ordered-list marker,
   and the ExecPlan's own prose is vulnerable to it.** `make fmt` rewrote "400
@@ -1619,7 +1622,63 @@ Hard invariants. Violating one requires escalation, not a workaround.
   corruption, `check-fmt` cannot see it, and the only signal is reading the
   diff. Any future numeral at a line start in this plan should be written so
   the wrap never puts it there.
-- [ ] `EP-M5` RFC 0015, ordered collection algebra and truth predicates (6.4).
+- [x] (2026-10-01) `EP-M4` **CodeRabbit review, five findings, all cleared.**
+  The review ran against `3aade3a4` after all five gates were green on that
+  revision, and took 588s without hitting the rate limit. Four findings were
+  real and repaired; one is a false positive and is recorded as rejected.
+
+  **The material finding is the one that indicts the reviewed RFC's central
+  claim.** RFC 0014 section 5.8 said "a transform cannot amplify" and excused
+  `subelements` on the grounds that each of its children is already an input
+  element. The second half is true and the conclusion does not follow: a pair
+  holds the parent's *whole* content, so a parent with `c` children yields `c`
+  copies of itself, and a top-level list and its nested children are combined
+  rather than selected. Merging a sequence with itself under `combine`'s
+  `append` policy is the same shape — the doc doubling RFC 0013 measured for a
+  serializer, reproduced by a merge. The repair adds `output_too_large` to both
+  helpers, measures result *content* rather than pairs or elements, and takes
+  the ceiling (8 MiB) and the diagnostic name from RFC 0013's serializers
+  rather than inventing either. Section 5.6's rejection column, section 5.9's
+  code table, the `6.8` clause row (fifteen codes, up from fourteen), section
+  6, and section 9 all moved with it. **The lesson for the next six children is
+  that a bounds subsection must be written from what the helper materializes,
+  not from what it consumes**: the first draft reasoned about inputs, and an
+  input-shaped argument cannot see a result that repeats content by reference.
+
+  The three ExecPlan findings were arithmetic and text defects in this plan's
+  own accounting: a duplicated "RFC RFC", a remaining-budget mean that divided
+  by six where the sentence said seven, and a "four-property budget" naming a
+  seven-member list. All three were in the same Progress entry, all three were
+  introduced by the commit that wrote it, and none was gate-detectable — which
+  is the review earning its cost rather than restating a gate.
+
+  The rejected finding asked that `docs/contents.md`'s 0014 link bullet be
+  wrapped to 80 columns. It is a false positive: the bullet is one inline link,
+  MD013 exempts a line's trailing whitespace-free run, `mdtablefix --wrap`
+  cannot split a link, and 22 sibling bullets in that file — including the
+  merged 0013 entry — already run to 103 columns with the gate green. Wrapping
+  it would also make this one entry inconsistent with the twenty-two around it.
+  Accepted as a non-defect and not repaired; the reason is recorded here so the
+  next reviewer does not re-raise it.
+- [x] (2026-10-01) `EP-M5` RFC 0015, ordered collection algebra and truth
+  predicates (step 6.4). **Written at 465 lines**, and the per-file tolerance
+  is exceeded again, by the same arithmetic that made the aggregate figure 276
+  rather than 400.
+
+  **The overrun is group size, not restatement, and the ratio is the
+  evidence.** RFC 0015 carries fifteen helpers where RFC 0014 carries six, and
+  three of its tables — 5.1's registry, 5.3's output order, 5.6's kinds and
+  rejections — have one row per helper, so 29 of its lines are table rows that
+  cannot be removed without removing a helper. Measured against the template's
+  fixed overhead, which is roughly 300 lines of preamble, sections 1 to 4, and
+  the eleven clause subsections: 0015 spends about 11 lines per helper and 0014
+  about 16. The larger document is the *denser* one; 0014 is 397 lines because
+  six helpers cannot fill a template whose fixed part is 300. A reviewer who
+  reads the line count alone will read this backwards, so both figures are
+  recorded together here. The corollary for the five children still to write is
+  that the tolerance's real ceiling is the aggregate, and a child's budget
+  should be read as "about 300 plus its helper count times its number of
+  per-helper tables".
 - [ ] `EP-M6` RFC 0016, pattern and version predicates (step 6.5).
 - [ ] `EP-M7` RFC 0017, lexical path composition (step 6.6).
 - [ ] `EP-M8` RFC 0018, host-state predicates and environment expansion (6.7).

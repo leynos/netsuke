@@ -36,7 +36,7 @@ expression at all and falls back to `shell()` out to `jq` or `yq` — turning a
 pure, cacheable, capability-free planning expression into a subprocess with
 ambient authority, which RFC 0006 section 2 records as the cost. The
 re-indexing half is the same contortion in reverse: a manifest holding a
-sequence of toolchain records has no way to build a lookup but a hand-written
+sequence of toolchain records has no way to build a lookup but a handwritten
 loop. RFC 0006 section 15.2 rejects adding nothing here, on the grounds that
 layering is the ordinary case rather than an advanced one.
 
@@ -163,14 +163,14 @@ RFC 0006 section 8.2 specifies the kinds each helper accepts. What follows is
 when a kind, a key, or an option value is rejected, each carrying a code from
 section 5.9. Options are listed in section 5.9 rather than repeated here.
 
-| Helper            | Accepted as                                   | Rejects                                                                                                                          |
-| ----------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `combine`         | mapping, subject and every positional operand | `wrong_kind` naming the position and kind found; `list_merge_invalid`; `depth_exceeded`                                          |
-| `dict2items`      | mapping                                       | `wrong_kind`; `empty_name`; `names_equal`                                                                                        |
-| `items2dict`      | sequence of mappings                          | `wrong_kind`; `missing_field` naming index and field; `key_kind`; `duplicates_invalid`; `duplicate_key` under the default policy |
-| `extract`         | mapping or sequence                           | `wrong_kind`; `index_kind` for a negative or non-integer index; `missing_key` naming the failing step; `not_a_container`         |
-| `subelements`     | sequence of mappings                          | `wrong_kind` for a non-mapping parent; `path_kind`; `missing_path`, including `none` at the path; `not_a_sequence`               |
-| `rekey_on_member` | sequence of mappings                          | `wrong_kind`; `missing_member` naming the index; `key_kind`; `duplicates_invalid`; `duplicate_key` under the default policy      |
+| Helper            | Accepted as                                   | Rejects                                                                                                                                |
+| ----------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `combine`         | mapping, subject and every positional operand | `wrong_kind` naming the position and kind found; `list_merge_invalid`; `depth_exceeded`; `output_too_large`                            |
+| `dict2items`      | mapping                                       | `wrong_kind`; `empty_name`; `names_equal`                                                                                              |
+| `items2dict`      | sequence of mappings                          | `wrong_kind`; `missing_field` naming index and field; `key_kind`; `duplicates_invalid`; `duplicate_key` under the default policy       |
+| `extract`         | mapping or sequence                           | `wrong_kind`; `index_kind` for a negative or non-integer index; `missing_key` naming the failing step; `not_a_container`               |
+| `subelements`     | sequence of mappings                          | `wrong_kind` for a non-mapping parent; `path_kind`; `missing_path`, including `none` at the path; `not_a_sequence`; `output_too_large` |
+| `rekey_on_member` | sequence of mappings                          | `wrong_kind`; `missing_member` naming the index; `key_kind`; `duplicates_invalid`; `duplicate_key` under the default policy            |
 
 Three decisions this group adds:
 
@@ -222,31 +222,28 @@ keys collide.
 ### 5.8. Resource bounds
 
 The bounds are RFC 0006 table 3's, applied through checked comparison before
-allocation. This group reaches exactly one of them: `combine` enforces nesting
-depth 128 when `recursive=true`, and the other five enforce none beyond the
-input already materialized, which is the claim the three consequences below
-have to earn rather than assert.
+allocation, plus one output ceiling this group applies. `combine` enforces
+table 3's nesting depth 128 when `recursive=true` and, with `subelements`, the
+ceiling; the other four enforce none beyond the input already materialized.
 
 Three consequences this group decides:
 
-- **A transform cannot amplify.** RFC 0013's serializers needed an output
-  pre-count because MiniJinja values are reference-counted: a value built by
-  repeated doubling has a logical size exponential in its construction depth
-  while its footprint stays linear. Nothing here has that shape. Each helper's
-  result rearranges its operands' own elements, so its logical size is bounded
-  by the sum of its inputs' sizes times the operand count, and none renders a
-  shared graph to text. `combine` under the accumulating policies is the
-  closest case and is still linear: `k` sequences of length `n` under `append`
-  yield `k·n` elements from `k·n` inputs.
-- **`subelements` will look combinatorial and is not.** Its result holds one
-  pair per (parent, child) edge and every one of those children is already an
-  element of the input, so the output cannot outgrow the input. A bound here
-  would be a second ceiling on a quantity table 3 already governs by governing
-  the input.
-- **Depth is the one bound, and it is the recursion flag's.** `combine`'s
-  `recursive=true` is the only path here that descends, so it checks depth as
-  it descends and fails with `depth_exceeded` before the descent completes
-  rather than after the result is built.
+- **Two helpers amplify; both are bounded rather than excused.** RFC 0013's
+  serializers needed an output pre-count because a shared value's logical size
+  far exceeds its footprint, and two helpers here reproduce that shape.
+  `subelements` gives each of a parent's `c` children a pair carrying the
+  parent's *whole* content, so one parent becomes `c` copies of itself; a
+  sequence merged with itself under `combine`'s `append` doubles its content
+  while both operands still hold one copy. Both count *content* rather than
+  pairs or elements, with checked arithmetic, and reject above 8 MiB before
+  allocating, per clause 6.8's rule for materialized output. A nested
+  application inherits the bound.
+- **The other four cannot amplify.** Each rearranges its operands' elements —
+  `dict2items` pairs a value with its key, `items2dict` and `rekey_on_member`
+  re-index records without copying a value, and `extract` returns a sub-value —
+  so none's logical size exceeds its inputs' sum times the operand count.
+- **Depth is the recursion flag's bound.** `combine`'s `recursive=true` is the
+  only descending path; it fails `depth_exceeded` before the result is built.
 
 ### 5.9. Diagnostics and localization
 
@@ -270,6 +267,7 @@ are enumerated rather than described.
 | value present but not a seq | `netsuke::jinja::transform::not_a_sequence`     |
 | repeated derived key        | `netsuke::jinja::transform::duplicate_key`      |
 | nesting too deep            | `netsuke::jinja::transform::depth_exceeded`     |
+| result content too large    | `netsuke::jinja::transform::output_too_large`   |
 | undefined input             | `netsuke::jinja::transform::undefined_input`    |
 
 Each code's Fluent key is its reason in upper snake case under
@@ -334,8 +332,8 @@ layers, the acceptance case for the group rather than for any one helper.
 | `6.5`  | No `dialect` argument; `subelements`' key path is not a filesystem path.                                                |
 | `6.6`  | Undefined rejected, `none` accepted; absence and shape mismatch separated; three enumerated option sets.                |
 | `6.7`  | Duplicate detection keyed on the canonical key; round trip stated over the canonical-JSON domain and tested outside it. |
-| `6.8`  | Table 3's nesting depth, enforced during `combine`'s recursive descent; no helper can amplify its input.                |
-| `6.9`  | One enum, one `From` impl, fourteen `netsuke::jinja::transform::*` codes.                                               |
+| `6.8`  | Table 3's nesting depth in `combine`'s descent, plus an 8 MiB content ceiling on `subelements` and `combine`.           |
+| `6.9`  | One enum, one `From` impl, fifteen `netsuke::jinja::transform::*` codes.                                                |
 | `6.10` | Six new names, no alias family, and the `items` collision resolved in section 5.10.                                     |
 | `6.11` | The clause's seven obligations, plus `combine`'s merge laws at the scope section 8.2 fixes.                             |
 
@@ -350,9 +348,9 @@ second wave.
 Within the RFC set it requires the shared contract RFC 0006 section 14.1's
 "slice 0" describes, which roadmap steps 6.1.2 and 6.1.3 deliver: the canonical
 value key, needed by section 5.7's duplicate detection and by `combine`'s merge
-laws, and the bounded-materialization helper, needed by section 5.8's depth
-check. It requires no other child RFC, and none requires it. RFC 0006 section
-14.3 states the same two prerequisites as slice 0.
+laws, and the bounded-materialization helper, needed by section 5.8's depth and
+output checks. It requires no other child RFC, and none requires it. RFC 0006
+section 14.3 states the same two prerequisites as slice 0.
 
 ## 7. Delivery
 
@@ -380,11 +378,11 @@ consequence rather than an omission. Question 1 and question 4 belong to RFC
 is resolved by roadmap task 7.1.1.
 
 The one question a reader might expect here is question 5, because section 5.8
-applies a bound. It applies none of its own: `combine(recursive=true)` enforces
-table 3's nesting depth, and table 3 is normative already, so the group
-inherits the value rather than deciding it. Making that value configurable
-would change the parent's table, not this RFC, and RFC 0006 section 6.8 states
-that defaults are constants in the first implementation slice.
+applies bounds. It decides no value: `combine` enforces table 3's nesting
+depth, and the 8 MiB output ceiling is the one RFC 0006 section 6.8's input row
+and RFC 0013's serializers already use, so the group inherits both rather than
+choosing them. Making either configurable would change the parent's table, not
+this RFC, which states that defaults are constants in the first slice.
 
 ## 9. Recommendation
 
@@ -393,7 +391,7 @@ section 14.11's recommended first wave already says so: it takes `combine`,
 `dict2items`, and `items2dict` from slice 2 ahead of all of slice 3. Layering
 is what `vars`, `foreach`, and per-entry overrides exist to express, and a
 manifest that cannot merge two layers writes the loop by hand or reaches for
-`shell()`. The group is also a good second step through the contract: it is the
-first with helpers that derive keys, so it is where clause 6.7 stops being a
-statement about serializers and becomes one about a decision a helper makes,
-and the first that adds a bound of its own to a helper.
+`shell()`. It is also a good second step through the contract: the first with
+helpers that derive keys, so clause 6.7 becomes a decision a helper makes
+rather than a statement about serializers, and the first where a helper's
+*output* rather than its input decides which bound applies.
