@@ -203,23 +203,23 @@ RFC 0006 sections 8.3 and 8.8 specify the kinds each helper accepts. What
 follows is when a kind, an operand, or an option value is rejected, each
 carrying a code from section 5.9.
 
-| Helper                 | Accepted as                             | Rejects                                                                                      |
-| ---------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `union`                | two sequences                           | `wrong_kind` naming the operand; `uncanonical_value`                                         |
-| `intersect`            | two sequences                           | as `union`                                                                                   |
-| `difference`           | two sequences                           | as `union`                                                                                   |
-| `symmetric_difference` | two sequences                           | as `union`                                                                                   |
-| `product`              | sequences, plus `repeat` and `*others`  | `wrong_kind`; `repeat_range`; `cardinality_exceeded`; `overflow`                             |
-| `combinations`         | a sequence, plus `r`                    | `wrong_kind`; `r_kind` for a negative or non-integer `r`; `cardinality_exceeded`; `overflow` |
-| `permutations`         | a sequence, plus `r` or `none`          | `wrong_kind`; `r_kind`; `cardinality_exceeded` naming the lower ceiling; `overflow`          |
-| `zip_longest`          | sequences, plus a required `fill_value` | `wrong_kind`; `fill_value_required` when it is omitted                                       |
-| `any`                  | a sequence                              | `wrong_kind`; `undefined_input` naming the index                                             |
-| `all`                  | a sequence                              | as `any`                                                                                     |
-| `subset`               | two sequences                           | `wrong_kind`; `uncanonical_value` naming the element's kind                                  |
-| `superset`             | two sequences                           | as `subset`                                                                                  |
-| `contains`             | a sequence, mapping, or string          | `wrong_kind` for any other container; `value_kind` for a non-string `value` against a string |
-| `truthy`               | any value, plus `convert_bool`          | `spelling_unknown` enumerating the eight accepted spellings; `undefined_input`               |
-| `falsy`                | any value, plus `convert_bool`          | as `truthy`                                                                                  |
+| Helper                 | Accepted as                             | Rejects                                                                                                                                 |
+| ---------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `union`                | two sequences                           | `wrong_kind` naming the operand; `uncanonical_value`                                                                                    |
+| `intersect`            | two sequences                           | as `union`                                                                                                                              |
+| `difference`           | two sequences                           | as `union`                                                                                                                              |
+| `symmetric_difference` | two sequences                           | as `union`                                                                                                                              |
+| `product`              | sequences, plus `repeat` and `*others`  | `wrong_kind`; `repeat_range`; `cardinality_exceeded`; `overflow`                                                                        |
+| `combinations`         | a sequence, plus `r`                    | `wrong_kind`; `r_kind` for a negative or non-integer `r`; `cardinality_exceeded`; `overflow`                                            |
+| `permutations`         | a sequence, plus `r` or `none`          | `wrong_kind`; `r_kind`; `cardinality_exceeded` naming the lower ceiling; `overflow`                                                     |
+| `zip_longest`          | sequences, plus a required `fill_value` | `wrong_kind`; `fill_value_required` when it is omitted                                                                                  |
+| `any`                  | a sequence                              | `wrong_kind`; `undefined_input` naming the index                                                                                        |
+| `all`                  | a sequence                              | as `any`                                                                                                                                |
+| `subset`               | two sequences                           | `wrong_kind`; `uncanonical_value` naming the element's kind                                                                             |
+| `superset`             | two sequences                           | as `subset`                                                                                                                             |
+| `contains`             | a sequence, mapping, or string          | `wrong_kind` for any other container; `uncanonical_value` naming the key's kind; `value_kind` for a non-string `value` against a string |
+| `truthy`               | any value, plus `convert_bool`          | `spelling_unknown` enumerating the eight accepted spellings; `undefined_input`                                                          |
+| `falsy`                | any value, plus `convert_bool`          | as `truthy`                                                                                                                             |
 
 Three decisions this group adds:
 
@@ -272,7 +272,10 @@ relation that is deterministic and does not force values through a hash set."
 - **`contains` reads membership the same way `in` does.** For a sequence it is
   canonical equality against an element; for a mapping it is membership over
   **keys**, matching Jinja's `in`; for a string it is a substring test, and a
-  non-string `value` is an error rather than `false`.
+  non-string `value` is an error rather than `false`. Because a mapping is
+  queried by key, an integer key is outside the canonical domain just as an
+  integer element is, and raises `uncanonical_value` naming the key's kind
+  rather than reporting `false`.
 - **The canonical-JSON domain is narrower than the accepted kinds.** Clause 6.7
   defines it as "string keys at every mapping level", so a mapping with an
   integer key cannot participate in any relation here — the collision RFC
@@ -332,7 +335,7 @@ are enumerated rather than described.
 | Condition                            | Code                                                |
 | ------------------------------------ | --------------------------------------------------- |
 | not the expected kind                | `netsuke::jinja::collections::wrong_kind`           |
-| element outside the canonical domain | `netsuke::jinja::collections::uncanonical_value`    |
+| element or mapping key outside it    | `netsuke::jinja::collections::uncanonical_value`    |
 | undefined value or element           | `netsuke::jinja::collections::undefined_input`      |
 | `repeat` below one or not an integer | `netsuke::jinja::collections::repeat_range`         |
 | `r` negative or not an integer       | `netsuke::jinja::collections::r_kind`               |

@@ -1728,12 +1728,13 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - [ ] `EP-M11` Reconcile, retarget roadmap citations, run all gates, mark
   roadmap 6.1.1 done.
 
-- [x] (2026-10-01) **CodeRabbit reviewed `bc80f294` and raised six findings;
-  five were real, one was real with a wrong remedy, and one was mine to find.**
-  The review completed green on the deterministic side — all six `make` gates
-  plus the coverage test at 272/272, every status file recording
-  `head_before == head_after == bc80f294` — so the findings are all beyond what
-  a gate can see, which is the standard this branch holds the review to.
+- [x] (2026-10-01) **CodeRabbit reviewed `bc80f294` and raised six findings; all
+  six were upheld, one carried a wrong remedy, and one further defect was found
+  by measurement rather than reported.** The review completed green on the
+  deterministic side — all six `make` gates plus the coverage test at 272/272,
+  every status file recording `head_before == head_after == bc80f294` — so the
+  findings are all beyond what a gate can see, which is the standard this
+  branch holds the review to.
 
   Every finding was verified against the contract files before repair, and one
   recommended remedy was rejected as wrong. The dispositions:
@@ -1743,7 +1744,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
     than excuses: it names the two admissible remedies, recommends one on a
     measured ground, and states plainly that the implementation agent cannot
     grant its own waiver — the user is the approver. This was the one finding
-    that indicted my own reasoning rather than the RFC's text.
+    that indicted this plan's own reasoning rather than an RFC's text.
   - **Minor, RFC 0015 "Fourteen of the fifteen return a sequence": upheld, and
     the suggested remedy was wrong.** CodeRabbit proposed "Fifteen"; the true
     count is **thirteen** — eight filters plus the five predicates that read
@@ -1765,10 +1766,10 @@ Hard invariants. Violating one requires escalation, not a workaround.
     it. §5.8 now requires **exact** counting, §5.6 defines `overflow` as taking
     precedence over `cardinality_exceeded` because a count that will not fit in
     the type cannot be reported as an exact one, and §6's `itertools` rationale
-    is restated to match. A repair pass caught my own first attempt at this
-    sentence asserting an overflow-frequency ordering I could not bound, and
-    the "abandons the computation" phrasing surviving in the adjacent bullet
-    was removed with it.
+    is restated to match. A repair pass caught this plan's own first attempt
+    at this sentence asserting an overflow-frequency ordering it could not
+    bound, and the "abandons the computation" phrasing surviving in the
+    adjacent bullet was removed with it.
   - **Minor, task 6.4.5 claimed as "the only task in the eight children whose
     success criterion is about *process*": upheld.** Task 6.3.5's isolated
     workspace example requires byte-identical Ninja across two runs, so the
@@ -1842,7 +1843,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
     child at **~183 lines**, so four cost **~732** against the 551 available: a
     **shortfall of about 181 lines**. The binding control stated in the
     tolerance ("the aggregate is now the binding control and it is close to its
-    limit") is therefore already past its limit, and no tightening of the
+    limit") is therefore projected to exceed it, and no tightening of the
     remaining children can recover it without dropping a section 5 subsection
     the vacuity tolerance forbids leaving empty. Raised to the user; the
     remedies are to raise the 2400-line budget, or to accept that this plan's

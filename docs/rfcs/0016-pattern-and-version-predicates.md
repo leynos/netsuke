@@ -299,9 +299,19 @@ Three consequences this group decides:
   cache is state a manifest query would share with a build, and the query
   environment's whole purpose is to be free of ambient state.
 
-The group enforces no other bound. Section 8.4's dialect has no input-length
-bound of its own; a subject is bounded only by table 3's 8 MiB input row, which
-applies to the parsers rather than here.
+The group enforces no other bound, and the absent subject ceiling is a
+consequence of the dialect rather than an omission. Section 8.4 names the
+syntax of the Rust `regex` crate and with it the property that decides this:
+matching is "guaranteed linear-time in the length of the input". The engine is
+a finite automaton, and the constructs that would break that guarantee —
+look-around, back-references, recursion, atomic groups — are rejected by the
+dialect rather than left to a runtime budget. A subject is therefore not an
+expansion hazard the way a YAML alias graph or a `product` is: matching it
+costs time linear in its own length and allocates in proportion to it, so table
+3's 8 MiB input-length row, whose purpose is to stop a small input expanding
+into a large one, has nothing to bound here. The rows that do reach this group
+bound the compiled pattern and the match count: the two quantities a *pattern*,
+rather than a subject, can make grow.
 
 ### 5.9. Diagnostics and localization
 
