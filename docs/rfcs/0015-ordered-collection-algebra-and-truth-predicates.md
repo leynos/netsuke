@@ -145,8 +145,10 @@ second traversal.
 Clause 6.3 is the clause this group exists to test, and RFC 0006 states the
 objection to Ansible's implementation in the clause's own opening line: "No
 helper may expose an iteration order derived from a hash table. This explicitly
-rejects Ansible's set-backed collection filters." Fourteen of the fifteen
-return a sequence, a decision, or a boolean derived from one.
+rejects Ansible's set-backed collection filters." Thirteen of the fifteen
+derive their result from the elements of an input collection — the eight
+filters and the five quantifier and containment predicates — so their order is
+a contract rather than an implementation detail.
 
 | Helper                                         | Output order                                  |
 | ---------------------------------------------- | --------------------------------------------- |
@@ -209,7 +211,7 @@ carrying a code from section 5.9.
 | `symmetric_difference` | two sequences                           | as `union`                                                                                   |
 | `product`              | sequences, plus `repeat` and `*others`  | `wrong_kind`; `repeat_range`; `cardinality_exceeded`; `overflow`                             |
 | `combinations`         | a sequence, plus `r`                    | `wrong_kind`; `r_kind` for a negative or non-integer `r`; `cardinality_exceeded`; `overflow` |
-| `permutations`         | a sequence, plus `r` or `none`          | `r_kind`; `cardinality_exceeded` naming the lower ceiling; `overflow`                        |
+| `permutations`         | a sequence, plus `r` or `none`          | `wrong_kind`; `r_kind`; `cardinality_exceeded` naming the lower ceiling; `overflow`          |
 | `zip_longest`          | sequences, plus a required `fill_value` | `wrong_kind`; `fill_value_required` when it is omitted                                       |
 | `any`                  | a sequence                              | `wrong_kind`; `undefined_input` naming the index                                             |
 | `all`                  | a sequence                              | as `any`                                                                                     |
@@ -228,9 +230,19 @@ Three decisions this group adds:
   clause 6.7. The code names the element's kind.
 - **Cardinality and overflow are two codes, not one.** `overflow` is checked
   arithmetic failing before a comparison can be made; `cardinality_exceeded` is
-  a computed cardinality meeting table 3's ceiling. An author fixes the first
-  by asking for fewer operands and the second by asking for a smaller `repeat`
-  or a shorter input, so the two must not read the same.
+  an exact cardinality meeting table 3's ceiling. An author fixes the first by
+  asking for fewer operands and the second by asking for a smaller `repeat` or
+  a shorter input, so the two must not read the same — and the second is only
+  actionable because section 5.8 requires the count to be exact rather than
+  abandoned at the first product past the ceiling.
+
+  The rule that keeps them distinct is that a diagnostic reports **an exact
+  cardinality or the overflow code, never an estimate**, and `overflow` takes
+  precedence: `cardinality_exceeded`'s message carries the exact count, so a
+  count that cannot be expressed at all has nothing to report under it. All
+  three helpers can reach `overflow` — a falling factorial of a long sequence
+  outgrows the type for the same reason a `product` of long operands does — and
+  the ceiling comparison decides only once the count is in hand.
 - **`fill_value_required` names the omission rather than the type.** A missing
   `fill_value` is the error an author will actually hit, so it must not be
   reported as "wrong kind of none". Section 8.3 makes the argument required
@@ -278,14 +290,17 @@ already materialized.
 
 Three consequences this group decides:
 
-- **Every cardinality is computed, never estimated, and reported.** RFC 0006
-  section 6.8 requires that "the diagnostic reports both the computed
-  cardinality and the ceiling", so the implementation counts before it
-  allocates and the message carries both numbers. `combinations` and
-  `permutations` compute a bounded binomial and factorial respectively, in
-  checked arithmetic that abandons the computation as soon as the running
-  product passes the ceiling — so an over-large request fails without ever
-  building the number, let alone the tuples.
+- **Every cardinality is computed exactly, never estimated, and reported.**
+  RFC 0006 section 6.8 requires that "the diagnostic reports both the computed
+  cardinality and the ceiling", and section 8.3 that it report "the computed
+  cardinality, the operand lengths, and the ceiling". An approximate count
+  satisfies neither, so `product` multiplies the operand lengths,
+  `combinations` evaluates a binomial, and `permutations` a falling factorial,
+  each in checked arithmetic over the full value. The arithmetic therefore runs
+  even when the result is certain to be rejected; what the check saves is the
+  tuple materialization, not the multiplication. Counting costs one factor per
+  operand, `r` factors, or `min(r, n)` respectively — never the result size —
+  so it is cheap for exactly the inputs the clause exists to refuse.
 - **`product`'s ceiling is on tuples, not on methods of reaching them.** The
   bound applies to the result's length, so `repeat` multiplies into the same
   ceiling rather than getting one of its own, and an empty operand yields an
@@ -294,10 +309,11 @@ Three consequences this group decides:
   claim.** RFC 0006 section 6.8 opens with "rejects unreasonable expansion
   **before** allocating", and roadmap task 6.4.2's success criterion restates
   it: "an over-large request fails naming the computed cardinality and the
-  ceiling, without allocating the result". A `product` of ten sets of ten
-  elements is a hundred million tuples from a hundred thousand inputs, so the
-  gap between checking and allocating is the whole point of the clause rather
-  than a performance note.
+  ceiling, without allocating the result". A `product` of ten operands of ten
+  elements each is ten billion tuples from a hundred elements of input — a
+  hundred thousand times the ceiling, written in a manifest ten lines long — so
+  the gap between checking and allocating is the whole point of the clause
+  rather than a performance note.
 
 The two `any`/`all` edge cases are not bounds and are decided here rather than
 left to the implementation: an empty sequence yields `false` for `any` and
@@ -323,7 +339,7 @@ are enumerated rather than described.
 | `zip_longest` without `fill_value`   | `netsuke::jinja::collection::fill_value_required`  |
 | `contains` value of the wrong kind   | `netsuke::jinja::collection::value_kind`           |
 | unrecognized boolean spelling        | `netsuke::jinja::collection::spelling_unknown`     |
-| computed cardinality over ceiling    | `netsuke::jinja::collection::cardinality_exceeded` |
+| exact cardinality over ceiling       | `netsuke::jinja::collection::cardinality_exceeded` |
 | checked arithmetic overflowed        | `netsuke::jinja::collection::overflow`             |
 
 Each code's Fluent key is its reason in upper snake case under
@@ -331,11 +347,11 @@ Each code's Fluent key is its reason in upper snake case under
 form, so `cardinality_exceeded` pairs with
 `STDLIB_COLLECTION_CARDINALITY_EXCEEDED`. The `From` impl is what lets the
 cardinality codes carry numbers rather than sentences: the error variant holds
-the computed cardinality, the operand lengths, and the ceiling, and the
-conversion renders them into the Fluent message. The module segment is
-`collection` rather than `sets` or `predicates`, because one enum serves both
-the eight filters and the seven tests and reads as the capability group rather
-than one subject's kind.
+the exact cardinality, the operand lengths, and the ceiling, and the conversion
+renders them into the Fluent message. The module segment is `collection` rather
+than `sets` or `predicates`, because one enum serves both the eight filters and
+the seven tests and reads as the capability group rather than one subject's
+kind.
 
 ### 5.10. Naming and alias policy
 
@@ -377,30 +393,35 @@ for every input on which both succeed". The commutativity qualification is the
 part to read twice — the property is over the canonical key set, because the
 sequences themselves legitimately differ in order.
 
-Roadmap task 6.4.5 adds the end-to-end case, and it is the only task in the
-eight children whose success criterion is about *process* rather than a helper:
-compile a representative matrix twice from the same inputs and require
-byte-identical Ninja, then hold the logical input order fixed while varying the
-internal hash state of the mappings consumed, and require the same output. The
-task is explicit that the property must **not** permute logical input order,
-because section 8.3 makes first-appearance order observable and "requiring
-otherwise would contradict the contract".
+Roadmap task 6.4.5 adds the end-to-end case, which is about *process* rather
+than a helper: compile a representative matrix twice from the same inputs and
+require byte-identical Ninja, then hold the logical input order fixed while
+varying the internal hash state of the mappings consumed, and require the same
+output. The first half is not unique to this child — task 6.3.5's isolated
+workspace example also requires byte-identical Ninja across two runs — so the
+distinction is the second half. Determinism across runs is what a build already
+promises; determinism across *hash state* is what this clause needs and what a
+run-to-run comparison cannot see, because the same process on the same machine
+will usually reach the same insertion order twice. The task is explicit that
+the property must **not** permute logical input order, because section 8.3
+makes first-appearance order observable and "requiring otherwise would
+contradict the contract".
 
 ### Clause discharge
 
-| Clause | Discharge                                                                                                             |
-| ------ | --------------------------------------------------------------------------------------------------------------------- |
-| `6.1`  | Fifteen pure `New` helpers; the fifteen section 5.1 rows are 15 of 52.                                                |
-| `6.2`  | All fifteen pure, so all register in `register_query_helpers`, none stubbed.                                          |
-| `6.3`  | Order defined from input order by all eight filters; the seven predicates reorder nothing.                            |
-| `6.4`  | No filesystem, environment, or subprocess access; no handle taken.                                                    |
-| `6.5`  | No `dialect` argument; the helpers are platform-invariant.                                                            |
-| `6.6`  | Undefined rejected; three enumerated option sets; overflow separate from the cardinality comparison.                  |
-| `6.7`  | Deduplication, subset, superset, and contains all keyed on the canonical key, never a hash set.                       |
-| `6.8`  | Table 3's 100000-tuple ceiling for `product` and `combinations`, 10000 for `permutations`, checked before allocation. |
-| `6.9`  | One enum, one `From` impl, ten `netsuke::jinja::collection::*` codes.                                                 |
-| `6.10` | Fifteen new names, two alias families resolved in section 5.10.                                                       |
-| `6.11` | The clause's seven obligations, with the algebra and complement properties the parent states.                         |
+| Clause | Discharge                                                                                                                     |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `6.1`  | Fifteen pure `New` helpers; the fifteen section 5.1 rows are 15 of 52.                                                        |
+| `6.2`  | All fifteen pure, so all register in `register_query_helpers`, none stubbed.                                                  |
+| `6.3`  | Order defined from input order by all eight filters; the seven predicates reorder nothing.                                    |
+| `6.4`  | No filesystem, environment, or subprocess access; no handle taken.                                                            |
+| `6.5`  | No `dialect` argument; the helpers are platform-invariant.                                                                    |
+| `6.6`  | Undefined rejected; three enumerated option sets; overflow separate from the cardinality comparison.                          |
+| `6.7`  | Deduplication, subset, superset, and contains all keyed on the canonical key, never a hash set.                               |
+| `6.8`  | Table 3's 100000-tuple ceiling for `product` and `combinations`, 10000 for `permutations`, counted exactly before allocation. |
+| `6.9`  | One enum, one `From` impl, ten `netsuke::jinja::collection::*` codes.                                                         |
+| `6.10` | Fifteen new names, two alias families resolved in section 5.10.                                                               |
+| `6.11` | The clause's seven obligations, with the algebra and complement properties the parent states.                                 |
 
 ## 6. Dependencies
 
@@ -409,14 +430,15 @@ group compiles against MiniJinja's value type, `indexmap` for first-appearance
 ordering, and the canonical key from `serde_json_canonicalizer`, all of which
 Netsuke already carries. `product`, `combinations`, and `permutations` are
 implemented directly rather than through the `itertools` crate, because the
-cardinality check has to run before the iterator is consumed and a lazily
-yielding adapter would move the check somewhere the clause does not put it.
+cardinality has to be counted and compared before any tuple is produced, and a
+lazily yielding adapter would either move the count somewhere the clause does
+not put it or leave the count to be inferred from a partially consumed iterator.
 
-Within the RFC set it requires the shared contract RFC 0006 section 14.1's
-"slice 0" describes, which roadmap steps 6.1.2 and 6.1.3 deliver: the canonical
-value key, needed by every relation in section 5.7, and the bounded-
-materialization helper, needed by the three cardinality checks in section 5.8.
-It requires no other child RFC, and none requires it.
+Within the RFC set, it requires the shared contract that RFC 0006 section
+14.1's "slice 0" describes, which roadmap steps 6.1.2 and 6.1.3 deliver: the
+canonical value key, needed by every relation in section 5.7, and the
+bounded-materialization helper, needed by the three cardinality checks in
+section 5.8. It requires no other child RFC, and none requires it.
 
 ## 7. Delivery
 
@@ -436,7 +458,7 @@ Each task carries the acceptance criteria that make this RFC checkable: the
 idempotence and key-set commutativity properties, the length identity, an
 over-large request failing without allocating, `truthy` and `falsy` as exact
 complements, and two compilations of the same matrix emitting byte-identical
-Ninja.
+Ninja with the hash-state property holding them there.
 
 ## 8. Open questions
 

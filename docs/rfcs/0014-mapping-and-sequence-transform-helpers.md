@@ -345,12 +345,12 @@ ordering, and the canonical key from `serde_json_canonicalizer`, all of which
 Netsuke already carries. Adding no dependency is one reason it can lead the
 second wave.
 
-Within the RFC set it requires the shared contract RFC 0006 section 14.1's
-"slice 0" describes, which roadmap steps 6.1.2 and 6.1.3 deliver: the canonical
-value key, needed by section 5.7's duplicate detection and by `combine`'s merge
-laws, and the bounded-materialization helper, needed by section 5.8's depth and
-output checks. It requires no other child RFC, and none requires it. RFC 0006
-section 14.3 states the same two prerequisites as slice 0.
+Within the RFC set, it requires the shared contract that RFC 0006 section
+14.1's "slice 0" describes, which roadmap steps 6.1.2 and 6.1.3 deliver: the
+canonical value key, needed by section 5.7's duplicate detection and by
+`combine`'s merge laws, and the bounded-materialization helper, needed by
+section 5.8's depth and output checks. It requires no other child RFC, and none
+requires it. RFC 0006 section 14.3 states the same two prerequisites as slice 0.
 
 ## 7. Delivery
 
