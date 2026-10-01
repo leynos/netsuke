@@ -4204,6 +4204,65 @@ catalogue has the key; there is no partial state to clean up.
   revision note above, and the recursion that note describes is not re-entered
   here.
 
+- **2026-10-01: rebased onto `origin/main` `d91ebb49`.** The base had moved from
+  `6357fda5` to `d91ebb49` (three commits: the Whitaker installer bump, an
+  install-action bump, and Ruff rule selection by name). The replay boundary is
+  the same one the previous rebase used — `6357fda5`, which is the parent of
+  `c46474ec`, the first branch commit — so it needed no re-derivation.
+  `git cherry` reported all 89 commits as unlanded (no squash parent to
+  exclude) and `git rev-list --merges` was empty, confirming a linear, wholly
+  branch-owned series.
+
+  **The replay was clean and byte-identical.** All 89 commits replayed with no
+  conflicts and no empty-commit stops, and `git range-diff` marks every one of
+  them `=`: not "a similar patch applied", but the same patch. The head moved
+  `8cec6d12` → `6d53180f`; the count is now 92 because the three upstream
+  commits are inherited.
+
+  **The only overlapping file was `docs/developers-guide.md`,** which both
+  sides changed. Main's edit was a five-line `installer-version: '0.2.7'` →
+  `'0.2.9'` bump in three places, none of them near this plan's sections, so
+  there was nothing to reconcile by hand and no conflict arose. The proof that
+  both sides survived is exact rather than impressionistic:
+  `git diff 8cec6d12 HEAD -- docs/developers-guide.md` is *precisely* those
+  five lines and nothing else. Main's improvement landed and this branch's three
+  `accepts_stdlib_counter_registration` sections are untouched.
+
+  **The semantic audit is worth recording because three of its four checks were
+  negative results.** The skill's audit asks for (1) target-only paths
+  byte-identical, (2) no unexplained deletions, and (3) no newly repeated
+  blocks. (1) was vacuous — there are *no* target-only paths, because main's
+  eight changed files are all also touched by the branch. (2) passed exactly:
+  the 109-file change sets of `6357fda5..8cec6d12` and `d91ebb49..HEAD` are
+  identical as sets. (3) is the one that needed care, and it needed care
+  because the first two attempts at the check were wrong. My initial script
+  compared `Counter` values but bound the tuple positionally and printed
+  `1 -> 1` as an "increase" — an impossible state that should have been
+  rejected on sight rather than reported. The corrected version produced 12,034
+  hits, which is also useless: every block a branch *adds* grows from zero. The
+  check only has meaning against the signature it was written to catch, which
+  is a block that already existed at the target and acquired *more* copies.
+  Narrowed to that, exactly seven blocks grew `1 -> 2`, and reading all seven
+  showed each to be a deliberate new test — a blocked-with-default case
+  alongside the empty-default case, a second per-lookup-determinism series, a
+  fallback-redaction case, and so on. Not one was a duplicated block.
+
+  **Gates after the replay, all green on `6d53180f`:** `make check-fmt` (167
+  files formatted; mdtablefix 168 unchanged), `make typecheck`, `make lint`
+  (Clippy, Whitaker, Ruff 0.16.4, Pylint 10.00/10 twice, `ambrleaks`,
+  `interrogate` 100%, yamllint, actionlint), `make test` (**3636 tests run,
+  3636 passed, 0 failed** across 110 binaries, plus both doctest targets), and
+  `make markdownlint` (168 files, 0 errors). The `make test` figure is worth
+  stating precisely because a naive `grep -i failed` on the log returns 41 hits
+  — every one of them a `PASS` line whose *test name* contains "failed"
+  (`a_failed_template_expansion_records_a_bounded_error_outcome`,
+  `case_04_connection_failed`, and so on). The authoritative line is nextest's
+  own `Summary: 3636 tests run: 3636 passed`.
+
+  Pushed with `--force-with-lease` bound to the pre-rebase remote head
+  `8cec6d12`, which was re-read from the GitHub API immediately before the push
+  and matched the snapshot taken before the rewrite.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
