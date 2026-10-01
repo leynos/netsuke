@@ -413,11 +413,15 @@ These helpers observe the host and should appear only in trusted manifests.
   returns `true` or `false` for ordinary misses. Example:
   `{{ command_available('guide-tool', cwd_mode='never') }}`.
 - `env(name)` returns one environment variable, and `env(name, default='...')`
-  returns `default` instead when the variable is missing. The default is
-  consulted only for a missing variable: a non-Unicode value is still an error,
-  and a variable refused by the access policy is still refused. The default
-  must be a string; a number, boolean, list, or map is rejected rather than
-  stringified. Examples: `{{ env('NETSUKE_STDLIB_TOKEN') }}` and
+  returns `default` instead when the variable is missing. A present variable
+  always takes precedence over the default, and an empty string is a present
+  value, so it yields `''` rather than the default. The default is consulted
+  only for a missing variable: a non-Unicode value is still an error, and a
+  variable refused by the access policy is still refused. The default must be a
+  string; a number, boolean, list, or map is rejected rather than stringified.
+  Omitting the default, passing `default=none`, or passing an undefined default
+  supplies no fallback at all: each behaves exactly as if the argument had not
+  been written. Examples: `{{ env('NETSUKE_STDLIB_TOKEN') }}` and
   `{{ env('CC', default='cc') }}`.
 - `glob(pattern)` returns matching workspace paths. It is host-observing;
   matches and separator syntax depend on workspace contents and platform.
