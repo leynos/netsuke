@@ -962,11 +962,14 @@ See RFC 0006 §8.1, delivered by
 This step answers whether the mapping transforms remove the merge and re-index
 loops that `vars`, `foreach`, and per-entry overrides currently force manifest
 authors to write by hand. Its outcome informs how much of the platform and
-toolchain configuration problem the template layer can own. See RFC 0006 §8.2.
+toolchain configuration problem the template layer can own. See RFC 0006 §8.2,
+delivered by [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md).
 
 - [ ] 6.3.1. Add `combine` with explicit recursion and list policies. Requires
   6.1.2 and 6.1.4.
-  - See RFC 0006 §8.2.
+  - See RFC 0006 §8.2 and
+    [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md) §§5.3,
+    5.8, and 7.
   - Support `recursive` and the `replace`, `keep`, `append`, and `prepend`
     list policies, enumerating them on an unknown one.
   - Preserve first-appearance key order, updating an overridden key in place.
@@ -983,27 +986,35 @@ toolchain configuration problem the template layer can own. See RFC 0006 §8.2.
     `append` and `prepend` policies.
 - [ ] 6.3.2. Add `dict2items` and `items2dict` with an explicit duplicate
   policy. Requires 6.3.1.
-  - See RFC 0006 §8.2.
+  - See RFC 0006 §8.2 and
+    [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md) §§5.7 and
+    5.10.
   - Reject equal `key_name` and `value_name`, and reject missing fields naming
     the element index.
   - Success: `dict2items` followed by `items2dict` is the identity, and a
     duplicate derived key fails by default rather than silently collapsing.
 - [ ] 6.3.3. Add `extract` with explicit missing-value behaviour. Requires
   6.3.2.
-  - See RFC 0006 §8.2.
+  - See RFC 0006 §8.2 and
+    [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md) §5.6.
   - Keep the key as the filter subject so the filter composes with `map`.
   - Reject negative sequence indices, and treat traversal into a
     non-container as an error even when `default` is given.
   - Success: a missing key errors naming the failing step of the path unless
     `default` is given; the filter never yields undefined.
 - [ ] 6.3.4. Add `subelements` and `rekey_on_member`. Requires 6.3.3.
-  - See RFC 0006 §8.2.
+  - See RFC 0006 §8.2 and
+    [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md) §§5.5
+    and 5.6.
   - Keep `skip_missing` scoped to absence only; a value present at the path
     but not a sequence is always an error.
   - Accept sequences only for `rekey_on_member`, rejecting the
     mapping-of-mappings form that silently discards keys.
 - [ ] 6.3.5. Add an end-to-end layered-configuration manifest example.
   Requires 6.3.4.
+  - See
+    [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md) §§5.11
+    and 7.
   - Cover defaults, a platform overlay, and a per-target overlay composed with
     `combine`, `dict2items`, and `extract`.
   - Add the example to

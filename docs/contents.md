@@ -79,6 +79,9 @@ operator, user, and contributor references are easier to find.
 - [rfcs/0013-structured-data-interchange-helpers.md](rfcs/0013-structured-data-interchange-helpers.md):
   First focused child of RFC 0006: the JSON and YAML interchange helpers and
   the cross-cutting contract discharged for them.
+- [rfcs/0014-mapping-and-sequence-transform-helpers.md](rfcs/0014-mapping-and-sequence-transform-helpers.md):
+  Second focused child of RFC 0006: the mapping and sequence transform helpers
+  and the cross-cutting contract discharged for them.
 - [rfcs/0007-netsukefile-testing-framework.md](rfcs/0007-netsukefile-testing-framework.md):
   Proposed Netsukefile testing framework: the `netsuke test` command, the YAML
   test dialect, and its mocking model.
