@@ -1213,6 +1213,16 @@ letting it compile cold. `setup_rust_sccache_test.py` derives each lane's value
 from its placement, so moving `coverage-upload` onto a fork arm fails the
 contract until its value moves too.
 
+The pin is `6cec89ba` (shared-actions #546), which gives the sccache server a
+60 s startup timeout and makes a start that still fails fall back to an
+uncached build, reporting `sccache-status` as `fallback` (a `sccache-fallback`
+annotation and a summary line accompany it). A server that never started has no
+statistics, and `sccache --show-stats` would start it again, so the
+`Show sccache statistics` step in `ci.yml`, `coverage-main.yml` and
+`netsukefile-test.yml` runs under
+`always() && steps.setup-rust.outputs.sccache-status != 'fallback'`, and
+`setup_rust_sccache_test.py` holds that condition on each.
+
 Every other Ubicloud lane keeps its plain label, and the contract asserts that
 too, so the expression does not spread by imitation. `coverage-upload` is push
 and dispatch only. Both jobs in `coverage-pr-submit.yml` trigger on

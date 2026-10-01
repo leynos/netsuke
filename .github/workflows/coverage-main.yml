@@ -261,7 +261,7 @@ jobs:
         # Zero compile requests here would mean the instrumented build never
         # reached the compiler cache, which is a failed integration rather
         # than a quiet no-op.
-        if: always()
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
           SCCACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: |

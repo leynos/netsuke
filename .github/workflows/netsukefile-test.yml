@@ -201,7 +201,7 @@ jobs:
           NINJA_MANIFEST: action.ninja
         run: scripts/assert-file-absent.sh unused.txt
       - name: Show sccache statistics
-        if: always()
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
           SCCACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: |

@@ -317,7 +317,9 @@ jobs:
         # this repository's Python project or write to its lockfile.
         run: uv run --no-project --python 3.14 .github/scripts/verify_nextest_anchored_filters.py
       - name: Show sccache statistics
-        if: always()
+        # A server that fell back (setup-rust's sccache-status) never started and
+        # has no statistics; asking would start it again and fail the job.
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
           SCCACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: |
