@@ -219,6 +219,58 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 ## Progress
 
+- [x] (2026-10-01) **Replay the review corrections onto current main.**
+  The published head `1f36a7ff6054e35dfdf22396988c72f7667606b8` became
+  conflicting. Rebase all 63 branch commits from the exclusive boundary
+  `7677c3886c0bd1cad470c3d1acd62041ec0ca0ab` onto fetched target
+  `563261b059cf985f0df0590f86ceb71baf18d192`; the replay ends at
+  `84de9442ff1c3b84083e6bebb67835e11e07ffa0`. The first branch commit's direct
+  parent and the earlier rebase receipt confirm that boundary; no merge commit
+  is replayed. Native text merge with `zdiff3` is used, with no selected custom
+  driver.
+
+  Both conflicts are in `docs/contents.md`: retain the branch's ADR-040 entry
+  and its later wording correction alongside main's ADR-041 entry. Range-diff
+  shows only those two context changes and the generated spelling hunk main
+  already contains. All 130 target-only paths and 45 branch-only paths remain
+  byte-identical to their corresponding source trees. The changed-line
+  sequences for the four overlapping Markdown files are unchanged; the fifth
+  overlapping file, `typos.toml`, already matches both sides. Main's delivered
+  shell-quoting amendment and this branch's JSON-domain amendment both survive.
+  The ignored `uv.lock` was preserved outside the worktree and restored
+  byte-identically after its historical add/remove sequence.
+
+  Main also changes workflows and the Ruff baseline, so previous green gates
+  cover historical candidates. Repeat the complete sequential gate set on the
+  rebased tree before a push leased to the recorded published head;
+  current-head CI and CodeRabbit confirmation remain required before approval
+  and merge.
+
+  The rebased lint run exited zero but emitted a `comments-indentation` warning
+  at `release-dry-run.yml:21:5`. Treat that as a failed gate: move the existing
+  explanation before `with`, without changing workflow behaviour, then repeat
+  lint and the remaining gates. The focused coverage run passed all 272 tests;
+  workflow contracts passed 1,016 tests with three skipped.
+
+  **The warning-free rerun is green.** Sequential `make fmt`,
+  `make test-workflow-contracts`, `make check-fmt`, `make lint`,
+  `make typecheck`, `make markdownlint`, `make doc-coverage`, `make nixie`, and
+  `make test` all pass at candidate `84de9442` with tree fingerprint
+  `bc2152748dfbfd6e9ccde9b456680c5d8eae224d7898fab2c12e7c39726550fc`. Workflow
+  contracts: 1,016 passed, three skipped. Rust: 3,911 passed, six skipped
+  across 111 binaries; doctests: 129 passed, 32 ignored across three targets.
+  Documentation coverage: 98.84%. The focused RFC binary passed 272 tests
+  before the comment-only workflow fix, and passes inside the full suite too.
+  Both local CodeScene reports score 10 with no findings. The immediate count
+  still reports one written group and seven remaining; these corrections do not
+  finish milestones EP-M4 through EP-M11.
+
+  Canonical full-suite log:
+  `/tmp/test-5ffbb1df-4543-4fd2-8f84-30f81650519c-6-1-1-split-rfc-0006-set-into-focused-child-rfcs-and-task-14.out`.
+  This receipt is the sole edit after that complete run; revalidate its
+  formatting, Markdown, focused coverage and ExecPlan status before committing.
+  Publication and hosted checks must cover the resulting commit separately.
+
 - [x] (2026-10-01) **Implement focused refactors for new CodeScene complexity
   findings after the functional review commit.** At `e88d0d1a`, CodeRabbit
   confirmed the four validation findings, JSON amendment, and aggregate-method
