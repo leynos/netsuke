@@ -25,6 +25,12 @@ use super::fallible;
 
 /// `OBL-COMPACT`'s witness: `0` and `false` survive, the blank members do not.
 ///
+/// All three droppable kinds appear here as members — `none`, undefined, and
+/// the empty string — because they are distinct kinds reached by distinct
+/// predicates (`is_none`, `is_undefined`, and a `ValueKind::String` guard on
+/// emptiness), and a `join` would not distinguish a member that was dropped
+/// from one that rendered as nothing.
+///
 /// The expectation is written out rather than computed from the filter's own
 /// predicate, so this cannot agree with a redefinition of "blank". It is also
 /// the naive-truthiness negative control: an implementation that dropped
@@ -38,6 +44,7 @@ fn compact_drops_witness_case_blanks_only() -> Result<()> {
         Value::from(0),
         Value::from(false),
         Value::from(""),
+        Value::UNDEFINED,
         Value::from(()),
         Value::from("x"),
     ];
@@ -80,6 +87,11 @@ fn compact_retains_an_empty_byte_array() -> Result<()> {
 }
 
 /// An explicit `none` member is droppable, not merely a coerced absence.
+///
+/// `Value::from(())` is a genuine `none`, a different kind from
+/// [`Value::UNDEFINED`] — which the witness case above carries, so the two
+/// predicates are pinned separately rather than by one member standing in for
+/// both.
 #[test]
 fn compact_drops_an_injected_none_member() -> Result<()> {
     let env = fallible::stdlib_env()?;
