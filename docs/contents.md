@@ -75,6 +75,9 @@ operator, user, and contributor references are easier to find.
   Survey of the ansible-core Jinja standard library, with an explicit
   disposition for every candidate helper and Netsuke-native contracts for the
   accepted set.
+- [rfcs/0013-structured-data-interchange-helpers.md](rfcs/0013-structured-data-interchange-helpers.md):
+  First focused child of RFC 0006: the JSON and YAML interchange helpers and
+  the cross-cutting contract discharged for them.
 - [rfcs/0007-netsukefile-testing-framework.md](rfcs/0007-netsukefile-testing-framework.md):
   Proposed Netsukefile testing framework: the `netsuke test` command, the YAML
   test dialect, and its mocking model.
@@ -232,6 +235,10 @@ operator, user, and contributor references are easier to find.
   Runtime annotation introspection declared unsupported for the workflow
   contract tests, with the loader gate's stale `TYPE_CHECKING` claim corrected
   and a revisit gate that reopens on a real consumer.
+- [ADR-040](adr-040-focused-child-rfcs-for-survey-rfcs.md): Splitting a survey
+  RFC into focused child RFCs, each owning one or more capability groups, with
+  the accepted set partitioned by a coverage map and guarded by a
+  derivation-based coverage test.
 - [ADR-041](adr-041-canonical-recipe-shell-quoting-surface.md): `shell_quote`
   and `shell_join` as the canonical recipe quoting surface, with two dialects
   and a host-dependent default.

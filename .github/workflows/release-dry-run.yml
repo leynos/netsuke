@@ -16,9 +16,9 @@ concurrency:
 jobs:
   release:
     uses: ./.github/workflows/release.yml
-    with:
-      dry-run: true
     # This workflow runs on pull requests, so it forwards no secrets. The
     # release workflow reads only `secrets.GITHUB_TOKEN`, which a called
     # workflow receives without forwarding, so `secrets: inherit` would
     # only widen what a pull request can reach.
+    with:
+      dry-run: true

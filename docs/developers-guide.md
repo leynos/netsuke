@@ -4567,6 +4567,58 @@ provisions `pytest`, `pyyaml`, `hypothesis`, and `cmd-mox==0.2.0` through
 `uv run --with`, so `uv` is the only prerequisite and no virtual environment
 needs creating by hand.
 
+### RFC 0006 standard-library coverage contract
+
+`tests/rfc_stdlib_coverage_tests.rs` runs seven repository checks:
+
+| Check                                         | Responsibility                                      |
+| --------------------------------------------- | --------------------------------------------------- |
+| `every_accepted_helper_has_exactly_one_owner` | Partition accepted helpers across child RFCs.       |
+| `no_forbidden_helper_is_registered`           | Keep deferred and rejected candidates out.          |
+| `totals_and_purity_aggregate_agree`           | Reconcile accepted totals and purity counts.        |
+| `coverage_map_status_is_reported`             | Report written and unwritten capability groups.     |
+| `inter_document_links_resolve`                | Resolve relative RFC links to files in the tree.    |
+| `every_capability_has_a_roadmap_task`         | Match owned helpers to tasks in the assigned step.  |
+| `every_child_discharges_every_clause`         | Check child RFC clause coverage and section 5 text. |
+
+The private modules in `tests/rfc_stdlib_coverage/` parse the source documents,
+derive helper sets, and validate the partition. `survey`, `section7`,
+`section8`, `totals`, and `assertions` read RFC 0006; `map`, `registries`, and
+`clauses` read its coverage map and each child RFC; `roadmap` reads
+`docs/roadmap.md`; `links` checks relative targets across the RFC corpus.
+`document` and `markdown` provide the shared structural and lexical parsing
+used by those readers. The contract therefore depends on the Markdown in RFC
+0006, child RFCs, and the roadmap staying in the supported shapes.
+
+Partial coverage can pass: unwritten child groups are allowed while the split
+is in progress, and the status check reports rather than rejects that state.
+The output count is the liveness signal; it must reach zero before the split is
+complete. `.config/nextest.toml` gives
+`test(/^coverage_map_status_is_reported($|::)/)` the
+`success-output = "immediate"` override so this count appears during the suite,
+as soon as this test finishes, including on a successful run.
+
+Run `make test-rfc-stdlib-coverage` for the focused Rust contract binary,
+`make test-workflow-contracts` for the workflow contracts, and `make test` for
+the full Rust suite. The focused target uses the repository's standard Rust
+gate flags and Nextest configuration. The parser tests live beside the private
+functions they exercise; filesystem cases use isolated temporary fixtures via
+the test-only `Repo` constructor, which is private to that module tree. Those
+fixtures are not a general-purpose Markdown parsing API. The link property's
+private depth helper belongs only to its reference model: it checks traversal
+before the model renders the normalized path. The Nextest contract's private
+policy helper checks only an override already selected by the exact filter; its
+caller owns loading and selection. Neither helper is a shared parser or a
+runtime interface.
+
+The parser intentionally handles a narrow subset: ATX headings, simple
+pipe-delimited table rows, and fenced blocks with up to three leading spaces.
+It does not parse full CommonMark or recognize fences nested in list items.
+Relative links are extracted from inline Markdown link syntax and checked for
+target-file existence; fragment anchors are not validated. See
+[ADR-040](adr-040-focused-child-rfcs-for-survey-rfcs.md) for the split and its
+coverage contract rationale.
+
 ### Configuration-precedence regression tests
 
 The config-precedence ladder and display-policy domain are covered by three

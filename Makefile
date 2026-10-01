@@ -230,6 +230,10 @@ test: test-nextest doctest ## Run every Rust test with warnings treated as error
 test-nextest: check-build-tools ## Run all non-doctest Rust tests through cargo-nextest
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
+.PHONY: test-rfc-stdlib-coverage
+test-rfc-stdlib-coverage: check-build-tools ## Check the RFC 0006 split and its parsers
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test rfc_stdlib_coverage_tests --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+
 doctest: check-build-tools ## Run doctests, which cargo-nextest cannot execute
 	$(GATE_RUSTFLAGS) $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
 
