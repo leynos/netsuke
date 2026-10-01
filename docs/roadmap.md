@@ -1141,17 +1141,20 @@ This step answers whether one uniform `dialect` mechanism can serve
 cross-compilation better than a family of Windows-specific filter names, and
 whether lexical normalization can be offered without weakening the capability
 boundary. Its outcome informs how Netsuke describes any future cross-platform
-surface. See RFC 0006 §8.6.
+surface. See RFC 0006 §8.6, delivered by
+[RFC 0017](rfcs/0017-lexical-path-composition.md).
 
 - [ ] 6.6.1. Add the `dialect` argument and its `host`, `posix`, and `windows`
   path parsers. Requires 6.1.4.
-  - See RFC 0006 §8.6.
+  - See RFC 0006 §8.6 and
+    [RFC 0017](rfcs/0017-lexical-path-composition.md) §§5.2 and 5.5.
   - Extend the existing `basename` and `dirname` filters additively, so
     omitting `dialect` preserves current behaviour.
   - Success: a Unix host parses a Windows path identically to a Windows host,
     with no host-native fallback.
 - [ ] 6.6.2. Add `path_join`, `normpath`, and `splitext`. Requires 6.6.1.
-  - See RFC 0006 §8.6.
+  - See RFC 0006 §8.6 and
+    [RFC 0017](rfcs/0017-lexical-path-composition.md) §§5.6 and 5.9.
   - Reject an absolute component after the first position in `path_join`, and
     reject empty components.
   - Document the single-suffix `splitext` rule against the existing
@@ -1159,17 +1162,20 @@ surface. See RFC 0006 §8.6.
   - Success: `['/safe/root', '/etc/passwd'] | path_join` fails naming the
     index rather than yielding `/etc/passwd`.
 - [ ] 6.6.3. Add `commonpath`, `relpath`, and `splitdrive`. Requires 6.6.2.
-  - See RFC 0006 §8.6.
+  - See RFC 0006 §8.6 and
+    [RFC 0017](rfcs/0017-lexical-path-composition.md) §§5.5 and 5.6.
   - Compare component-wise, reject mixed absolute and relative inputs, and
     reject differing drives or UNC roots under the `windows` dialect.
   - Contrast `relpath` with the stricter existing `relative_to` in the guide.
 - [ ] 6.6.4. Add the `abs` test as a pure lexical predicate. Requires 6.6.1.
-  - See RFC 0006 §8.7.
+  - See RFC 0006 §8.7 and
+    [RFC 0017](rfcs/0017-lexical-path-composition.md) §§5.2 and 8.
   - Resolve RFC 0006 §16 question 2 on the name before registering.
   - Success: `abs` is registered in the read-only manifest-query environment,
     unlike the filesystem predicates in step 6.7.
 - [ ] 6.6.5. Add the combinatorial path-dialect suite. Requires 6.6.3 and
   6.6.4.
+  - See [RFC 0017](rfcs/0017-lexical-path-composition.md) §§5.5 and 5.11.
   - Cross every lexical path helper with all three dialects and both host
     platforms, including drive-relative paths, UNC roots, trailing
     separators, and leading `..` components.

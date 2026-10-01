@@ -1720,8 +1720,8 @@ Hard invariants. Violating one requires escalation, not a workaround.
   ~161 lines per child, five children at that mean leave roughly 250 lines of
   section 5 across all five. That is the constraint the remaining milestones
   must be written to, and it is tighter than any per-file limit.
-- [ ] `EP-M6` RFC 0016, pattern and version predicates (step 6.5).
-- [ ] `EP-M7` RFC 0017, lexical path composition (step 6.6).
+- [x] `EP-M6` RFC 0016, pattern and version predicates (step 6.5).
+- [x] `EP-M7` RFC 0017, lexical path composition (step 6.6).
 - [ ] `EP-M8` RFC 0018, host-state predicates and environment expansion (6.7).
 - [ ] `EP-M9` RFC 0019, encoding, identity, and formatting (step 6.8).
 - [ ] `EP-M10` RFC 0020, date and time conversion (step 6.9).
@@ -1849,6 +1849,94 @@ Hard invariants. Violating one requires escalation, not a workaround.
     remedies are to raise the 2400-line budget, or to accept that this plan's
     eight-child split is a **nine-or-ten-child** shape and re-partition the
     remaining three groups (0017–0020) into four or five.
+
+- [x] (2026-10-01) `EP-M7` **RFC 0017 written, and the aggregate-volume
+  escalation it was written under is now measured rather than projected.** The
+  RFC owns RFC 0006 §8.6 except `expandvars`, plus §8.7's `abs` alone — the
+  pure half of slice 5 — so it carries seven `New` pure helpers (`path_join`,
+  `normpath`, `splitext`, `commonpath`, `relpath`, `splitdrive`, and the `abs`
+  test) and two `Option added` rows (`basename` and `dirname`, each gaining
+  `dialect`). Nine registry rows, taking the five written child registries to
+  **41 of the 52** pure helpers: 0013 five, 0014 six, 0015 fifteen, 0016 eight,
+  0017 seven. The three still to write — 0018, 0019, and 0020 — account for the
+  remaining eleven. Measured at commit time: **499 lines**, section 5 spanning
+  307 of them, density **34.1** section-5 lines per helper against 0016's 41.4
+  and 0015's 22.5.
+
+  **The aggregate budget is now breached, not merely approached.** The EP-M6
+  entry escalated a projection of ~183 lines per honest child against the 551
+  then available. Five children are written and the arithmetic is no longer a
+  projection: 0013 **470**, 0014 **397**, 0015 **498**, 0016 **510**, 0017
+  **499** — **2374 against the 2400-line budget, leaving 26 lines for three
+  children** against a measured honest-child floor of ~183–192. The shortfall
+  is now **~550 lines**, and the binding control the tolerance names is
+  exceeded rather than threatened: writing 0018 alone would pass the budget.
+  This entry supersedes the EP-M6 projection and is the figure to quote. No
+  remedy is available to the implementation agent — the tolerance says so
+  explicitly — so the work continues under an open escalation and the plan
+  stops for the user's decision before 0018 is written. The two remedies remain
+  as stated: raise the 2400-line budget, or accept a nine-or-ten-child
+  re-partition, which would require editing the `names.len() == 8` assertion in
+  `tests/rfc_stdlib_coverage/roadmap.rs` and is therefore an architecture
+  decision, not an editorial one.
+
+  **The row partition was re-derived from the corpus rather than trusted.** RFC
+  0006 table 16 allocates `expandvars` to RFC 0018 and `abs` to this RFC, which
+  splits §8.6 from §8.7 in both directions: this child takes ten of §8.6's
+  eleven entries and one of §8.7's six, and RFC 0018 takes the other one and
+  the other five. The reason is in the table's own preamble — the
+  pure/observing boundary is the stronger seam, so the split is at the
+  capability boundary rather than at the section boundary. Two consequences
+  worth recording because they are easy to get wrong:
+
+  - `basename` and `dirname` are `Option added`, not `New`, so they are
+    excluded from section 6.1's fifty-two. The coverage test's `OPTIONED`
+    table lists exactly three names — `basename`, `dirname`, and `glob` — and
+    `apply_optioned` inserts each from its section 7 *reject* row, so a
+    registry that marked either as `New` would fail `check_rows_agree_with_survey`
+    rather than pass quietly.
+  - The seven `New` rows are all `Pure` with manifest query `Yes`, and the
+    coverage test asserts that cell against the purity class from table 2
+    rather than trusting it, so the disposition is not decoration.
+
+  **This child reaches no row of RFC 0006 table 3, and that is stated rather
+  than papered over.** Every other written child reaches at least one bound.
+  The rationale recorded in §5.8 is that every row of table 3 bounds an
+  *allocation* — an input length, a nesting depth, an alias count, an output
+  tuple count, a match count, a compiled-pattern size — and this group
+  allocates nothing that grows faster than its input: `normpath` is
+  length-decreasing, `commonpath` is a prefix of an input, `splitext` and
+  `splitdrive` partition rather than extend, and `relpath` and `path_join` are
+  bounded by the sum of their operands. Recording "reaches none" is the honest
+  discharge; inventing a bound to have one to cite is the vacuity the discharge
+  exists to catch. The same reasoning was subsequently applied to RFC 0016 in
+  review, where a subject-size ceiling was declined on the ground that
+  `netsuke-regex-v1` matches in linear time — the two decisions are the same
+  argument about allocation versus input size.
+
+  **The child carries RFC 0006 §16 question 2 unresolved**, as RFC 0016 carried
+  question 3. The question is whether `abs` is the right test name given
+  MiniJinja registers `abs` as a numeric-absolute-value filter; §11.4 keeps it
+  and names `absolute` and `abs_path` as the alternatives, and roadmap task
+  6.6.4 asks for it to be resolved before registering. §8 states all three
+  options with their consequences and recommends keeping `abs` for the record
+  rather than as a decision. This is the second consecutive child to carry its
+  assigned question, so the pattern is now deliberate rather than incidental: a
+  manifest-visible naming or contract choice that is cheap to make late belongs
+  in the child's §8 with the argument on both sides, not in §9 as a decision
+  the child did not actually make.
+
+  The RFC was drafted and mechanically pre-verified against the coverage
+  contract **before** it entered the tree, because a new file cannot be gated
+  in place while a delegated gate run is in flight. The pre-verification used
+  the same predicates the contract uses, re-implemented in a throwaway script:
+  each of the eleven section 5 subsections names at least one owned helper (the
+  `names_an_owned_helper` rule), the discharge table's id set equals RFC 0006
+  §6's eleven clause ids exactly with no duplicate and no empty cell, and the
+  file carries no `as Ansible` or `like Ansible` deference phrase (the
+  `deference_phrase` rule). mdtablefix was then run on the draft outside the
+  worktree so the tree receives an already-canonical file and `check-fmt` has
+  nothing to reformat.
 
 - [x] (2026-09-28) **A gate run reded the current head, and the defect was the
   branch's own.** `make markdownlint` on `feed5192` exited 2, but not because
