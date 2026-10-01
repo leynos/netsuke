@@ -31,6 +31,7 @@ sources = [
   "src/ninja_gen_recipe_shell.rs",
   "src/ninja_gen_validation.rs",
   "src/recipe_shell.rs",
+  "src/shell_word.rs",
 ]
 
 # What builds and runs the proofs rather than what they prove, and the inputs of
