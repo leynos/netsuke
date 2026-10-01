@@ -197,16 +197,23 @@ RFC 0006 section 8.4 specifies the argument shapes. What follows is when a
 subject, a pattern, a replacement, or an option value is rejected, each
 carrying a code from section 5.9.
 
-| Helper          | Accepted subject    | Rejects                                                                                                                    |
-| --------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `regex_replace` | a string            | `wrong_kind` for a non-string subject, pattern, or replacement; `bad_pattern`; `bad_replacement`; `mandatory_count_unmet`  |
-| `regex_search`  | a string            | `wrong_kind`; `bad_pattern`; `no_such_group`                                                                               |
-| `regex_findall` | a string            | `wrong_kind`; `bad_pattern`; `no_such_group`; `match_limit`                                                                |
-| `regex_escape`  | a string            | `wrong_kind`; `unknown_dialect`                                                                                            |
-| `match`         | a string            | `wrong_kind` for subject or pattern; `bad_pattern`                                                                         |
-| `search`        | a string            | as `match`                                                                                                                 |
-| `regex`         | a string            | as `match`; `unknown_match_type`                                                                                           |
-| `version`       | two version strings | `wrong_kind` for either operand; `bad_version` naming the offending operand and text; `unknown_operator`; `unknown_scheme` |
+| Helper          | Accepted subject    | Rejects                                                                                                                                            |
+| --------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `regex_replace` | a string            | `wrong_kind` for a non-string subject, pattern, or replacement; `bad_pattern`; `unsupported_construct`; `bad_replacement`; `mandatory_count_unmet` |
+| `regex_search`  | a string            | `wrong_kind`; `bad_pattern`; `unsupported_construct`; `no_such_group`                                                                              |
+| `regex_findall` | a string            | `wrong_kind`; `bad_pattern`; `unsupported_construct`; `no_such_group`; `match_limit`                                                               |
+| `regex_escape`  | a string            | `wrong_kind`; `unknown_dialect`                                                                                                                    |
+| `match`         | a string            | `wrong_kind` for subject or pattern; `bad_pattern`; `unsupported_construct`                                                                        |
+| `search`        | a string            | as `match`                                                                                                                                         |
+| `regex`         | a string            | as `match`; `unknown_match_type`                                                                                                                   |
+| `version`       | two version strings | `wrong_kind` for either operand; `bad_version` naming the offending operand and text; `unknown_operator`; `unknown_scheme`                         |
+
+`unsupported_construct` reaches the six helpers that **compile** an
+author-supplied pattern — `regex_replace`, `regex_search`, `regex_findall`,
+`match`, `search`, and `regex` — because it is a property of the compiler
+rather than of a call. It does not reach `regex_escape`, which escapes text
+*into* a pattern and never parses one, nor `version`, which has no pattern at
+all.
 
 Four decisions this group adds:
 
@@ -259,11 +266,17 @@ sentinel, not a value participating in a relation.
 The bounds are RFC 0006 table 3's. This group reaches two of them, and it is
 the only child that reaches the cache row.
 
-| Bound                  | Value                           | Where it applies          |
-| ---------------------- | ------------------------------- | ------------------------- |
-| Match count            | 100000                          | `regex_findall`           |
-| Compiled pattern size  | 1 MiB                           | every helper in the group |
-| Compiled pattern cache | 64 entries, least-recently-used | every helper in the group |
+| Bound                  | Value                           | Where it applies                                       |
+| ---------------------- | ------------------------------- | ------------------------------------------------------ |
+| Match count            | 100000                          | `regex_findall`                                        |
+| Compiled pattern size  | 1 MiB                           | the six helpers below that compile an author's pattern |
+| Compiled pattern cache | 64 entries, least-recently-used | the six helpers below that compile an author's pattern |
+
+The six are `regex_replace`, `regex_search`, `regex_findall`, `match`,
+`search`, and `regex`. The two bound rows scoped to "every regular-expression
+helper" in RFC 0006 table 3 therefore reach all six and neither of the group's
+other two members: `regex_escape` escapes text *into* a pattern and never
+parses one, and `version` has no pattern to compile.
 
 Three consequences this group decides:
 
