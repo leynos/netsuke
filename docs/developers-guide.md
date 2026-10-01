@@ -4604,7 +4604,12 @@ the full Rust suite. The focused target uses the repository's standard Rust
 gate flags and Nextest configuration. The parser tests live beside the private
 functions they exercise; filesystem cases use isolated temporary fixtures via
 the test-only `Repo` constructor, which is private to that module tree. Those
-fixtures are not a general-purpose Markdown parsing API.
+fixtures are not a general-purpose Markdown parsing API. The link property's
+private depth helper belongs only to its reference model: it checks traversal
+before the model renders the normalized path. The Nextest contract's private
+policy helper checks only an override already selected by the exact filter; its
+caller owns loading and selection. Neither helper is a shared parser or a
+runtime interface.
 
 The parser intentionally handles a narrow subset: ATX headings, simple
 pipe-delimited table rows, and fenced blocks with up to three leading spaces.

@@ -97,9 +97,12 @@ fn reports_missing_and_escaping_links_with_file_and_line() -> Result<()> {
     Ok(())
 }
 
-/// Model traversal by counting depth first, then reducing matched pairs.
-fn reference_path(directory: &[String], target: &[String]) -> Option<String> {
-    let mut depth = directory.len();
+/// Validate traversal depth independently of the reference model's rendering.
+///
+/// Return `None` when any prefix climbs above the root. Only `reference_path`
+/// uses this test-only helper; it deliberately does not call the resolver.
+fn reference_depth(initial_depth: usize, target: &[String]) -> Option<usize> {
+    let mut depth = initial_depth;
     for segment in target {
         if segment == ".." {
             depth = depth.checked_sub(1)?;
@@ -107,6 +110,12 @@ fn reference_path(directory: &[String], target: &[String]) -> Option<String> {
             depth += 1;
         }
     }
+    Some(depth)
+}
+
+/// Model traversal by counting depth first, then reducing matched pairs.
+fn reference_path(directory: &[String], target: &[String]) -> Option<String> {
+    reference_depth(directory.len(), target)?;
     let mut stack = directory.to_vec();
     for segment in target {
         if segment == ".." {

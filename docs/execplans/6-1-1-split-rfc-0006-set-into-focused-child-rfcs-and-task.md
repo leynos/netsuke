@@ -219,6 +219,20 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 ## Progress
 
+- [x] (2026-10-01) **Implement focused refactors for new CodeScene complexity
+  findings after the functional review commit.** At `e88d0d1a`, CodeRabbit
+  confirmed the four validation findings, JSON amendment, and aggregate-method
+  concern resolved, and accepted the five string-argument metric exceptions.
+  Three new CodeScene findings arose: complexity and nested condition blocks in
+  `reference_path`, and complexity in `immediate_output_offences`. The separate
+  atomic refactor splits independent depth validation from model rendering, and
+  override selection from policy-field checks. A repository sweep found no
+  equivalent helpers. Their ownership and permitted callers are recorded in the
+  coverage suite's developers-guide subsection. Preserve models, diagnostics,
+  test names, and parser semantics; add no suppression. Local CodeScene and the
+  complete sequential gate set passed after the refactor. Current-head CI and
+  CodeRabbit disposition evidence are required before merging.
+
 - [x] (2026-10-01) **Implement the coverage-validation review corrections and
   fix the JSON key-type contradiction.** The starting local HEAD is
   `1c35b1d076955cf773c28672089a5c6ddd7ee98c`; the reviewed remote baseline is
@@ -2974,6 +2988,24 @@ establish semantic adequacy of their prose. The final edit recording these
 results receives its own formatting, Markdown, focused coverage, and
 ExecPlan-status checks before commit. CI and reviewer confirmation are separate
 publication evidence.
+
+### Post-commit complexity refactor verification, 2026-10-01
+
+The separate refactor candidate is based on `e88d0d1a`; its complete source
+fingerprint after formatting is
+`6ebddad1369efe49bfc1eed8fde67414b5d303bf3cd7f30ebcbafff4cf8d46a6`. The two
+targeted `cs review` checks analysed the working files, not the immutable base
+commit. Both `links_tests.rs` and `nextest_success_output.py` scored 10.0 with
+an empty findings list. No rule was suppressed.
+
+One scrutineer repeated the preceding table's complete gate set sequentially.
+The focused suite passed 272 tests, workflow contracts passed 986 with 3
+skipped, and the full Rust suite passed 3748 tests with 6 skipped and 128
+doctests with 32 ignored. Doc-comment coverage remained 98.83%. The final
+ExecPlan evidence edit receives the same focused documentation checks before
+commit. Hosted CodeScene and CI results remain separate evidence for the
+published head; CodeRabbit confirmation at the base does not substitute for
+confirmation of these new fixes.
 
 ### Review validation branch-to-test inventory, 2026-10-01
 

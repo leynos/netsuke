@@ -20,6 +20,36 @@ INHERITED_PROFILE: typ.Final[str] = "default"
 IMMEDIATE_SUCCESS_OUTPUT: typ.Final[str] = "immediate"
 
 
+def _override_offences(override: cabc.Mapping[str, object], test: str) -> list[str]:
+    """Check policy fields after selecting one exact default-profile override.
+
+    Keep this helper private to the coverage-output contract; selection and
+    duplicate detection remain the caller's responsibility.
+
+    Returns
+    -------
+    list[str]
+        Diagnostics for output mode, group, or timeout fields, or an empty list
+        when the selected override satisfies those policies.
+    """
+    offences: list[str] = []
+    if override.get("success-output") != IMMEDIATE_SUCCESS_OUTPUT:
+        offences.append(
+            f"{test}: success-output must be 'immediate'; "
+            f"found {override.get('success-output')!r}"
+        )
+    if "test-group" in override:
+        offences.append(f"{test}: output override must not set test-group")
+    timeouts = sorted(
+        key for key in override if key == "timeout" or key.endswith("-timeout")
+    )
+    if timeouts:
+        offences.append(
+            f"{test}: output override must not set timeout fields: {timeouts}"
+        )
+    return offences
+
+
 def immediate_output_offences(config: cabc.Mapping[str, object]) -> list[str]:
     """Report missing, duplicate, or altered coverage-output overrides.
 
@@ -53,19 +83,5 @@ def immediate_output_offences(config: cabc.Mapping[str, object]) -> list[str]:
                 f"filter {selector!r}; found {len(matching)}"
             )
             continue
-        override = matching[0]
-        if override.get("success-output") != IMMEDIATE_SUCCESS_OUTPUT:
-            offences.append(
-                f"{test}: success-output must be 'immediate'; "
-                f"found {override.get('success-output')!r}"
-            )
-        if "test-group" in override:
-            offences.append(f"{test}: output override must not set test-group")
-        timeouts = sorted(
-            key for key in override if key == "timeout" or key.endswith("-timeout")
-        )
-        if timeouts:
-            offences.append(
-                f"{test}: output override must not set timeout fields: {timeouts}"
-            )
+        offences.extend(_override_offences(matching[0], test))
     return offences
