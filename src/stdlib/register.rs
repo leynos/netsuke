@@ -7,7 +7,7 @@
 //! alongside `StdlibConfig` and `NetworkConfig`.
 
 use super::{
-    StdlibConfig, StdlibState, collections, command, network, path, time,
+    StdlibConfig, StdlibState, collections, command, network, path, recipe_text, time,
     which::{self, WhichConfig, WorkspaceSkipList},
 };
 use anyhow::Context;
@@ -16,19 +16,30 @@ use camino::Utf8Path;
 use cap_std::fs::FileTypeExt;
 use cap_std::{ambient_authority, fs, fs_utf8::Dir};
 use minijinja::{
-    Environment, Error, ErrorKind, State, escape_formatter,
-    value::{Kwargs, Value, ValueKind},
+    Environment, Error, escape_formatter,
+    value::{Value, ValueKind},
 };
 use std::sync::Arc;
 
 use crate::localization::{self, keys};
+use crate::recipe_shell::RecipeShell;
+
+#[path = "register/query_helpers.rs"]
+mod query_helpers;
+pub(crate) use query_helpers::is_manifest_query_disabled_error;
+use query_helpers::register_disabled_query_helpers;
 
 /// A template file test: a registration name paired with a capability file
 /// type predicate.
 type FileTest = (&'static str, fn(fs::FileType) -> bool);
 
 /// Stable text identifying helpers deliberately unavailable to manifest queries.
-const MANIFEST_QUERY_DISABLED_HELPER_MARKER: &str = concat!(
+///
+/// Shared with the [`query_helpers`] child, which appends it to every
+/// deliberate failure and matches on it to recognize one. It stays declared
+/// here, in the parent, so both the child and this module's own consumers name
+/// the same constant.
+pub(super) const MANIFEST_QUERY_DISABLED_HELPER_MARKER: &str = concat!(
     "is disabled while rendering `netsuke help targets`; manifest queries permit ",
     "only non-disclosing, side-effect-free template helpers"
 );
@@ -158,6 +169,7 @@ fn register_read_only_helpers(env: &mut Environment<'_>, config: &StdlibConfig) 
         config.file_max_read_bytes(),
     );
     collections::register_filters(env);
+    recipe_text::register_filters(env, config.dialect());
     let which_cache_capacity = config.which_cache_capacity();
     let which_skip_dirs = WorkspaceSkipList::from_names(config.workspace_skip_dirs());
     let which_cwd = config
@@ -171,120 +183,20 @@ fn register_read_only_helpers(env: &mut Environment<'_>, config: &StdlibConfig) 
 }
 
 /// Register the allowlisted helpers for manifest discovery queries.
+///
+/// The recipe-text filters quote for [`RecipeShell::host_default`] rather than
+/// for the shell the build will resolve. **This divergence is deliberate.** A
+/// query renders discovery metadata that is never executed, and reading the
+/// configured shell here would mean resolving `NETSUKE_WINDOWS_SHELL` above the
+/// early return in `src/runner/mod.rs`, which would make `netsuke help targets`
+/// fail outright on a host whose shell setting is malformed. Rendering
+/// different quoting from the build for the same expression is the lesser
+/// trade; `tests/stdlib_manifest_query_tests.rs` pins it so it stays a decision
+/// rather than a surprise.
 fn register_query_helpers(env: &mut Environment<'_>) {
     path::register_query_filters(env);
     collections::register_filters(env);
-}
-
-/// Register deliberate failures for helpers excluded from manifest queries.
-fn register_disabled_query_helpers(env: &mut Environment<'_>) {
-    register_always_disabled_query_helpers(env);
-    register_host_dependent_query_helpers(env);
-}
-
-/// Register helpers that are never safe while rendering discovery metadata.
-fn register_always_disabled_query_helpers(env: &mut Environment<'_>) {
-    env.add_function("env", |_variable: String| -> Result<String, Error> {
-        Err(manifest_query_operation_error("env"))
-    });
-    env.add_function("glob", |_pattern: String| -> Result<Value, Error> {
-        Err(manifest_query_operation_error("glob"))
-    });
-    env.add_function(
-        "fetch",
-        |_url: String, _kwargs: Kwargs| -> Result<Value, Error> {
-            Err(manifest_query_operation_error("fetch"))
-        },
-    );
-    env.add_filter(
-        "shell",
-        |_state: &State,
-         _value: Value,
-         _command: String,
-         _options: Option<Value>|
-         -> Result<Value, Error> { Err(manifest_query_operation_error("shell")) },
-    );
-    env.add_filter(
-        "grep",
-        |_state: &State,
-         _value: Value,
-         _pattern: String,
-         _flags: Option<Value>,
-         _options: Option<Value>|
-         -> Result<Value, Error> { Err(manifest_query_operation_error("grep")) },
-    );
-    env.add_filter(
-        "contents",
-        |_value: String, _encoding: Option<String>| -> Result<String, Error> {
-            Err(manifest_query_operation_error("contents"))
-        },
-    );
-}
-
-/// Register helpers whose result would disclose host state during a query.
-fn register_host_dependent_query_helpers(env: &mut Environment<'_>) {
-    env.add_filter(
-        "which",
-        |_value: Value, _kwargs: Kwargs| -> Result<Value, Error> {
-            Err(manifest_query_operation_error("which"))
-        },
-    );
-    env.add_function(
-        "which",
-        |_value: Value, _kwargs: Kwargs| -> Result<Value, Error> {
-            Err(manifest_query_operation_error("which"))
-        },
-    );
-    env.add_function(
-        "command_available",
-        |_value: Value, _kwargs: Kwargs| -> Result<bool, Error> {
-            Err(manifest_query_operation_error("command_available"))
-        },
-    );
-    env.add_function("now", |_kwargs: Kwargs| -> Result<Value, Error> {
-        Err(manifest_query_operation_error("now"))
-    });
-    env.add_filter("realpath", |_value: String| -> Result<String, Error> {
-        Err(manifest_query_operation_error("realpath"))
-    });
-    env.add_filter("expanduser", |_value: String| -> Result<String, Error> {
-        Err(manifest_query_operation_error("expanduser"))
-    });
-    env.add_filter("size", |_value: String| -> Result<u64, Error> {
-        Err(manifest_query_operation_error("size"))
-    });
-    env.add_filter("linecount", |_value: String| -> Result<usize, Error> {
-        Err(manifest_query_operation_error("linecount"))
-    });
-    env.add_filter(
-        "hash",
-        |_value: String, _algorithm: Option<String>| -> Result<String, Error> {
-            Err(manifest_query_operation_error("hash"))
-        },
-    );
-    env.add_filter(
-        "digest",
-        |_value: String,
-         _length: Option<usize>,
-         _algorithm: Option<String>|
-         -> Result<String, Error> { Err(manifest_query_operation_error("digest")) },
-    );
-}
-
-/// Explain why a restricted helper is unavailable while querying a manifest.
-fn manifest_query_operation_error(operation: &str) -> Error {
-    Error::new(
-        ErrorKind::InvalidOperation,
-        format!("{operation} {MANIFEST_QUERY_DISABLED_HELPER_MARKER}"),
-    )
-}
-
-/// Return whether an error marks a helper intentionally unavailable in queries.
-pub(crate) fn is_manifest_query_disabled_error(error: &Error) -> bool {
-    error.kind() == ErrorKind::InvalidOperation
-        && error
-            .to_string()
-            .contains(MANIFEST_QUERY_DISABLED_HELPER_MARKER)
+    recipe_text::register_filters(env, RecipeShell::host_default().dialect());
 }
 
 /// Convert UTF-8 or fall back to bytes for byte-oriented network helpers.
@@ -297,6 +209,11 @@ pub fn value_from_bytes(bytes: Vec<u8>) -> Value {
 }
 
 /// The file tests registered as template tests on Unix.
+///
+/// Shared with the [`query_helpers`] child, which registers the same names as
+/// deliberate failures. Keeping one list means a file test added here cannot
+/// reach the build surface while staying silently unregistered — and therefore
+/// merely "unknown" — on the query surface.
 #[cfg(unix)]
 const FILE_TESTS: &[FileTest] = &[
     ("dir", is_dir),

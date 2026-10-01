@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Escape-elje a fordított perjeleket, vagy távolíts
 manifest.env.missing = Egy kötelező környezeti változó nincs beállítva.
 manifest.env.invalid_utf8 = Egy környezeti változó érvénytelen UTF-8 kódolást tartalmaz.
 manifest.env.blocked = Egy környezeti változóhoz való hozzáférés le van tiltva.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Az env default értékének karakterláncnak kell lennie, ezt kaptuk: { $kind }.
 manifest.vars.not_object = A jegyzék `vars` mezőjének leképezésnek vagy objektumnak kell lennie.
 manifest.vars.reserved_name = A manifest `vars` kulcsa, '{ $name }', egy beépített sablonsegéd számára fenntartott; nevezze át a változót.
 manifest.read_failed = A jegyzéket nem sikerült beolvasni innen: { $path }.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = folyamatos átvitel
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = A shell_quote sztringet várt, de ezt kapta: { $kind }.
+stdlib.shell.quote.control_character = Nullabájtot, kocsivisszát vagy soremelést tartalmazó érték nem idézőjelezhető.
+stdlib.shell.dialect_invalid = Ismeretlen shell-dialektus: { $dialect }; a várt értékek: { $accepted }.
+stdlib.shell.dialect_not_string = A shell dialect beállításának karakterláncnak kell lennie, ezt kaptuk: { $kind }.
+stdlib.shell.join.not_sequence = A shell_join sorozatot várt, de ezt kapta: { $kind }.
+stdlib.shell.join.item_not_string = A(z) { $index }. shell_join-elem típusa { $kind }, nem sztring.
+stdlib.shell.positional_option = A(z) { $filter } a beállításait kulcsszóként várja; írja ezt: { $example }.
+
 # Az útvonalakat kezelő segédfüggvény diagnosztikája.
 stdlib.path.io.failed = A(z) „{ $action }” művelet sikertelen ehhez: { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = A(z) „{ $action }” művelet sikertelen ehhez: { $path }: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nem támogatott kivonatoló algo
 
 # A gyűjteményeket kezelő segédfüggvények diagnosztikája.
 stdlib.collections.flatten.expected_sequence = A flatten sorozatelemeket várt, de ezt találta: { $kind }.
+stdlib.collections.compact.not_sequence = A compact sorozatot várt, de ezt találta: { $kind }.
 stdlib.collections.group_by.empty_attribute = A group_by nem üres attribútumot igényel.
 stdlib.collections.group_by.unresolved = A group_by nem találta a(z) „{ $attr }” attribútumot a(z) { $kind } típusú elemen.
 

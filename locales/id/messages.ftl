@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Lakukan escape pada garis miring terbalik atau hapus
 manifest.env.missing = Variabel lingkungan wajib belum disetel.
 manifest.env.invalid_utf8 = Variabel lingkungan memuat UTF-8 yang tidak sah.
 manifest.env.blocked = Akses ke variabel lingkungan diblokir.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = default pada env harus berupa untai, menerima { $kind }.
 manifest.vars.not_object = `vars` pada manifes harus berupa pemetaan atau objek.
 manifest.vars.reserved_name = Kunci `vars` '{ $name }' pada manifes dicadangkan untuk fungsi bantu templat bawaan; ganti nama variabel tersebut.
 manifest.read_failed = Manifes di { $path } tidak dapat dibaca.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = penstriman
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote mengharapkan string, tetapi menerima { $kind }.
+stdlib.shell.quote.control_character = Nilai yang memuat byte nol, retur kereta, atau ganti baris tidak dapat diberi tanda kutip.
+stdlib.shell.dialect_invalid = Dialek shell tidak dikenal { $dialect }; diharapkan salah satu dari { $accepted }.
+stdlib.shell.dialect_not_string = Opsi dialect pada shell harus berupa untai, menerima { $kind }.
+stdlib.shell.join.not_sequence = shell_join mengharapkan urutan, tetapi menerima { $kind }.
+stdlib.shell.join.item_not_string = Item { $index } pada shell_join bertipe { $kind }, bukan string.
+stdlib.shell.positional_option = { $filter } mengambil opsinya sebagai kata kunci; tulis { $example }.
+
 # Diagnostik pembantu jalur.
 stdlib.path.io.failed = Tindakan "{ $action }" gagal untuk { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Tindakan "{ $action }" gagal untuk { $path }: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algoritme hash tidak didukung: "
 
 # Diagnostik pembantu koleksi.
 stdlib.collections.flatten.expected_sequence = flatten mengharapkan butir urutan tetapi menemukan { $kind }.
+stdlib.collections.compact.not_sequence = compact mengharapkan urutan tetapi menemukan { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by memerlukan atribut yang tidak kosong.
 stdlib.collections.group_by.unresolved = group_by tidak dapat menemukan "{ $attr }" pada butir bertipe { $kind }.
 

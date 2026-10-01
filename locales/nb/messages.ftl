@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Escape omvendte skråstreker, eller fjern ugyldige e
 manifest.env.missing = En påkrevd miljøvariabel er ikke satt.
 manifest.env.invalid_utf8 = En miljøvariabel inneholder ugyldig UTF-8.
 manifest.env.blocked = Tilgang til en miljøvariabel er blokkert.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = default i env må være en streng, mottok { $kind }.
 manifest.vars.not_object = `vars` i manifestet må være en tilordning eller et objekt.
 manifest.vars.reserved_name = Manifestets `vars`-nøkkel '{ $name }' er reservert for en innebygd malhjelper; gi variabelen et nytt navn.
 manifest.read_failed = Manifestet i { $path } kunne ikke leses.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = strømming
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote ventet en streng, men fikk { $kind }.
+stdlib.shell.quote.control_character = En verdi som inneholder en nullbyte, vognretur eller linjeskift kan ikke settes i anførselstegn.
+stdlib.shell.dialect_invalid = Ukjent shell-dialekt { $dialect }; ventet en av { $accepted }.
+stdlib.shell.dialect_not_string = dialect-alternativet i shell må være en streng, mottok { $kind }.
+stdlib.shell.join.not_sequence = shell_join ventet en sekvens, men fikk { $kind }.
+stdlib.shell.join.item_not_string = Element { $index } i shell_join er { $kind }, ikke en streng.
+stdlib.shell.positional_option = { $filter } tar alternativene sine som nøkkelord; skriv { $example }.
+
 # Diagnostikk for stihjelperen.
 stdlib.path.io.failed = { $action } mislyktes for { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } mislyktes for { $path }: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Hash-algoritmen «{ $algorithm }
 
 # Diagnostikk for samlingshjelpere.
 stdlib.collections.flatten.expected_sequence = flatten ventet elementer fra en sekvens, men fant { $kind }.
+stdlib.collections.compact.not_sequence = compact ventet en sekvens, men fant { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by krever et attributt som ikke er tomt.
 stdlib.collections.group_by.unresolved = group_by kunne ikke slå opp «{ $attr }» på et element av typen { $kind }.
 

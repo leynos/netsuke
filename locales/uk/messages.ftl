@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Екрануйте зворотні скісні р�
 manifest.env.missing = Обов’язкову змінну середовища не задано.
 manifest.env.invalid_utf8 = Змінна середовища містить некоректний UTF-8.
 manifest.env.blocked = Доступ до змінної середовища заблоковано.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Значення default у env має бути рядком, отримано { $kind }.
 manifest.vars.not_object = Поле `vars` маніфесту має бути відображенням або об’єктом.
 manifest.vars.reserved_name = Ключ `vars` '{ $name }' у маніфесті зарезервовано для вбудованої допоміжної функції шаблонів; перейменуйте змінну.
 manifest.read_failed = Не вдалося прочитати маніфест за шляхом { $path }.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = потокова передача
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote очікував рядок, але отримав { $kind }.
+stdlib.shell.quote.control_character = Значення, що містить нульовий байт, повернення каретки або переведення рядка, не можна взяти в лапки.
+stdlib.shell.dialect_invalid = Невідомий діалект оболонки { $dialect }; очікується один із { $accepted }.
+stdlib.shell.dialect_not_string = Опція dialect у shell має бути рядком, отримано { $kind }.
+stdlib.shell.join.not_sequence = shell_join очікував послідовність, але отримав { $kind }.
+stdlib.shell.join.item_not_string = Елемент { $index } у shell_join має тип { $kind }, а не рядок.
+stdlib.shell.positional_option = { $filter } приймає параметри за ключовими словами; напишіть { $example }.
+
 # Діагностика помічника для шляхів.
 stdlib.path.io.failed = Не вдалося виконати дію «{ $action }» для { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Не вдалося виконати дію «{ $action }» для { $path }: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Непідтримуваний �
 
 # Діагностика помічників для колекцій.
 stdlib.collections.flatten.expected_sequence = flatten очікував елементи послідовності, але знайшов { $kind }.
+stdlib.collections.compact.not_sequence = compact очікував послідовність, але знайшов { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by потребує непорожнього атрибута.
 stdlib.collections.group_by.unresolved = group_by не зміг знайти «{ $attr }» в елементі типу { $kind }.
 

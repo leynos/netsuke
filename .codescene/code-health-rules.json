@@ -22,6 +22,16 @@
       ]
     },
     {
+      "matching_content_path": "tests/shell_filter_property_tests/property_support.rs",
+      "matching_content_path_doc": "Test-only harness for the shell_quote and shell_join property suites, where the strings are the subject matter rather than a missing domain language. Nine of its twelve parameters are &str, and six of those are adversarial by design: an unconstrained template, a shell word drawn from a metacharacter alphabet, the encoder's own output read back through a POSIX shell, a PowerShell literal to decode, and a script to run. Constraining any of them through a newtype would defeat the suite, which exists to feed the filters inputs that are not well-formed words; a transparent wrapper would add conversion noise at every call site while enforcing nothing, exactly as in src/ir/cmd_interpolate_property_support.rs. The three remaining strings are dialect selectors, which RecipeShell could type. Measured rather than assumed, that is not the remedy: typing both selectors moves the ratio from 75.0% to 58.3%, still far above the 39.0% threshold, because the floor is set by the irreducible adversarial strings and not by the selectors. Reassess if this harness gains production callers, or if the filters stop accepting unconstrained text.",
+      "rules": [
+        {
+          "name": "String Heavy Function Arguments",
+          "weight": 0.0
+        }
+      ]
+    },
+    {
       "matching_content_path": "src/ir/cmd_interpolate_property_support.rs",
       "matching_content_path_doc": "Private test-only generated strategies and an independent POSIX scanner oracle must accept unconstrained templates, raw bindings, replacement values, and fragments. Those adversarial values intentionally include placeholders, backticks, quotes, empty text, and malformed forms. Newtypes would add conversion and borrowing noise without enforcing a constraint; reassess if this code becomes production-facing or its inputs gain a meaningful invariant.",
       "rules": [

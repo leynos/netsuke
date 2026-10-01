@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Экранируйте обратные косые �
 manifest.env.missing = Обязательная переменная окружения не задана.
 manifest.env.invalid_utf8 = Переменная окружения содержит некорректный UTF-8.
 manifest.env.blocked = Доступ к переменной окружения заблокирован.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Значение default в env должно быть строкой, получено { $kind }.
 manifest.vars.not_object = Поле `vars` манифеста должно быть отображением или объектом.
 manifest.vars.reserved_name = Ключ `vars` '{ $name }' в манифесте зарезервирован для встроенной вспомогательной функции шаблонов; переименуйте переменную.
 manifest.read_failed = Не удалось прочитать манифест по пути { $path }.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = потоковая передача
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote ожидал строку, но получил { $kind }.
+stdlib.shell.quote.control_character = Значение, содержащее нулевой байт, возврат каретки или перевод строки, нельзя заключить в кавычки.
+stdlib.shell.dialect_invalid = Неизвестный диалект оболочки { $dialect }; ожидается один из { $accepted }.
+stdlib.shell.dialect_not_string = Опция dialect в shell должна быть строкой, получено { $kind }.
+stdlib.shell.join.not_sequence = shell_join ожидал последовательность, но получил { $kind }.
+stdlib.shell.join.item_not_string = Элемент { $index } в shell_join имеет тип { $kind }, а не строку.
+stdlib.shell.positional_option = { $filter } принимает параметры по ключевым словам; напишите { $example }.
+
 # Диагностика помощника для путей.
 stdlib.path.io.failed = Не удалось выполнить действие «{ $action }» для { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Не удалось выполнить действие «{ $action }» для { $path }: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Неподдерживаемый
 
 # Диагностика помощников для коллекций.
 stdlib.collections.flatten.expected_sequence = flatten ожидал элементы последовательности, но обнаружил { $kind }.
+stdlib.collections.compact.not_sequence = compact ожидал последовательность, но обнаружил { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by требует непустой атрибут.
 stdlib.collections.group_by.unresolved = group_by не смог найти «{ $attr }» у элемента типа { $kind }.
 

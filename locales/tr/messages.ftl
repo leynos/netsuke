@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Ters eğik çizgileri kaçırın ya da geçersiz ka�
 manifest.env.missing = Gerekli bir ortam değişkeni ayarlanmamış.
 manifest.env.invalid_utf8 = Bir ortam değişkeni geçersiz UTF-8 içeriyor.
 manifest.env.blocked = Bir ortam değişkenine erişim engellendi.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env default değeri bir dizge olmalıdır, { $kind } alındı.
 manifest.vars.not_object = Bildirimin `vars` alanı bir eşleme ya da nesne olmalıdır.
 manifest.vars.reserved_name = Manifestteki `vars` anahtarı '{ $name }' yerleşik bir şablon yardımcı işlevi için ayrılmıştır; değişkeni yeniden adlandırın.
 manifest.read_failed = { $path } konumundaki bildirim okunamadı.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = akış
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote bir dize bekliyordu, ancak { $kind } aldı.
+stdlib.shell.quote.control_character = Null bayt, satır başı veya satır sonu içeren bir değer tırnak içine alınamaz.
+stdlib.shell.dialect_invalid = Bilinmeyen kabuk lehçesi { $dialect }; şunlardan biri bekleniyordu: { $accepted }.
+stdlib.shell.dialect_not_string = shell dialect seçeneği bir dizge olmalıdır, { $kind } alındı.
+stdlib.shell.join.not_sequence = shell_join bir dizi bekliyordu, ancak { $kind } aldı.
+stdlib.shell.join.item_not_string = shell_join öğesi { $index }, { $kind } türünde; dize değil.
+stdlib.shell.positional_option = { $filter } seçeneklerini anahtar sözcükle alır; şöyle yazın: { $example }.
+
 # Yol yardımcısının tanılaması.
 stdlib.path.io.failed = "{ $action }" eylemi { $path } için başarısız oldu ({ $label }).
 stdlib.path.io.failed_with_detail = "{ $action }" eylemi { $path } için başarısız oldu: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Desteklenmeyen özet algoritmas�
 
 # Koleksiyon yardımcılarının tanılaması.
 stdlib.collections.flatten.expected_sequence = flatten dizi öğeleri bekliyordu, ancak { $kind } buldu.
+stdlib.collections.compact.not_sequence = compact bir dizi bekliyordu, ancak { $kind } buldu.
 stdlib.collections.group_by.empty_attribute = group_by boş olmayan bir öznitelik gerektirir.
 stdlib.collections.group_by.unresolved = group_by, { $kind } türündeki bir öğede "{ $attr }" özniteliğini bulamadı.
 

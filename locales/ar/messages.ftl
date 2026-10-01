@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = هرّب الشرطات المائلة العكسي�
 manifest.env.missing = متغيّر بيئة مطلوب غير مضبوط.
 manifest.env.invalid_utf8 = يتضمّن متغيّر بيئة ترميز UTF-8 غير صالح.
 manifest.env.blocked = تم حظر الوصول إلى متغير بيئة.
+manifest.env.args_error = ‏[netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = يجب أن تكون قيمة default في env سلسلة نصية، وتم تلقّي { $kind }.
 manifest.vars.not_object = يجب أن يكون `vars` في ملف البيانات تخطيطًا أو كائنًا.
 manifest.vars.reserved_name = يُعدّ مفتاح `vars` المسمّى '{ $name }' في ملف البيانات محجوزًا لدالة قوالب مدمجة؛ أعد تسمية المتغيّر.
 manifest.read_failed = تعذّرت قراءة ملف البيانات من { $path }.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = التدفّق
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = ‏[netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = ‏[netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = يتوقّع shell_quote سلسلة نصية لكنه تلقّى { $kind }.
+stdlib.shell.quote.control_character = لا يمكن وضع قيمة تتضمّن بايتاً صفرياً أو إرجاع أوّل السطر أو تغذية السطر بين علامتي اقتباس.
+stdlib.shell.dialect_invalid = لهجة صدفة غير معروفة { $dialect }؛ المتوقّع أحد هذه: { $accepted }.
+stdlib.shell.dialect_not_string = يجب أن يكون خيار dialect في shell سلسلة نصية، وتم تلقّي { $kind }.
+stdlib.shell.join.not_sequence = يتوقّع shell_join تسلسلاً لكنه تلقّى { $kind }.
+stdlib.shell.join.item_not_string = العنصر { $index } في shell_join نوعه { $kind } وليس سلسلة نصية.
+stdlib.shell.positional_option = ‏{ $filter } يتلقّى خياراته ككلمات مفتاحية؛ اكتب { $example }.
+
 # تشخيصات مساعد المسارات.
 stdlib.path.io.failed = فشل الإجراء «{ $action }» على { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = فشل الإجراء «{ $action }» على { $path }: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = خوارزمية تلبيد غي
 
 # تشخيصات مساعدات المجموعات.
 stdlib.collections.flatten.expected_sequence = توقّع flatten عناصر متتالية لكنه وجد { $kind }.
+stdlib.collections.compact.not_sequence = يتطلّب compact تسلسلاً لكنه وجد { $kind }.
 stdlib.collections.group_by.empty_attribute = يتطلّب group_by سمة غير فارغة.
 stdlib.collections.group_by.unresolved = تعذّر على group_by إيجاد «{ $attr }» في عنصر من النوع { $kind }.
 

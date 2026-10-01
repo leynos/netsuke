@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Suojaa kenoviivat tai poista virheelliset ohjausmerk
 manifest.env.missing = Vaadittua ympäristömuuttujaa ei ole asetettu.
 manifest.env.invalid_utf8 = Ympäristömuuttuja sisältää virheellistä UTF-8:aa.
 manifest.env.blocked = Ympäristömuuttujan käyttö on estetty.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = default env-funktiossa on oltava merkkijono, vastaanotettiin { $kind }.
 manifest.vars.not_object = Manifestin `vars` on oltava kuvaus tai objekti.
 manifest.vars.reserved_name = Manifestin `vars`-avain '{ $name }' on varattu sisäänrakennetulle mallineapufunktiolle; nimeä muuttuja uudelleen.
 manifest.read_failed = Manifestia ei voitu lukea polusta { $path }.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = virtaus
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote odotti merkkijonoa, mutta sai { $kind }.
+stdlib.shell.quote.control_character = Arvoa, joka sisältää nollatavun, vaunupalautuksen tai rivinvaihdon, ei voi lainausmerkitä.
+stdlib.shell.dialect_invalid = Tuntematon komentotulkin murre { $dialect }; odotettiin jotakin joukosta { $accepted }.
+stdlib.shell.dialect_not_string = dialect-valinnan shell-funktiossa on oltava merkkijono, vastaanotettiin { $kind }.
+stdlib.shell.join.not_sequence = shell_join odotti jonoa, mutta sai { $kind }.
+stdlib.shell.join.item_not_string = Kohteen { $index } tyyppi shell_join-kutsussa on { $kind }, ei merkkijono.
+stdlib.shell.positional_option = { $filter } ottaa valitsimensa avainsanoina; kirjoita { $example }.
+
 # Polkuapurin diagnostiikka.
 stdlib.path.io.failed = { $action } epäonnistui polun { $path } käsittelyssä ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } epäonnistui polun { $path } käsittelyssä: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Tiivistealgoritmia ”{ $algorit
 
 # Kokoelma-apurien diagnostiikka.
 stdlib.collections.flatten.expected_sequence = flatten odotti jonon alkioita, mutta löysi { $kind }.
+stdlib.collections.compact.not_sequence = compact odotti jonoa, mutta löysi { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by vaatii määritteen, joka ei ole tyhjä.
 stdlib.collections.group_by.unresolved = group_by ei löytänyt määritettä ”{ $attr }” tyypin { $kind } alkiosta.
 

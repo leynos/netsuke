@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = 역슬래시를 이스케이프하거나 잘못된 �
 manifest.env.missing = 필수 환경 변수가 설정되지 않았습니다.
 manifest.env.invalid_utf8 = 환경 변수에 잘못된 UTF-8이 들어 있습니다.
 manifest.env.blocked = 환경 변수에 대한 접근이 차단되었습니다.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env의 default는 문자열이어야 합니다. { $kind }을(를) 받았습니다.
 manifest.vars.not_object = 매니페스트의 `vars`는 매핑이나 객체여야 합니다.
 manifest.vars.reserved_name = 매니페스트의 `vars` 키 '{ $name }'은(는) 내장 템플릿 헬퍼용으로 예약되어 있습니다. 변수 이름을 바꾸십시오.
 manifest.read_failed = { $path }의 매니페스트를 읽지 못했습니다.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = 스트리밍
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote은(는) 문자열을 기대했지만 { $kind }을(를) 받았습니다.
+stdlib.shell.quote.control_character = 널 바이트, 캐리지 리턴 또는 줄바꿈이 포함된 값은 따옴표로 감싸 수 없습니다.
+stdlib.shell.dialect_invalid = 알 수 없는 셸 방언 { $dialect }입니다. { $accepted } 중 하나여야 합니다.
+stdlib.shell.dialect_not_string = shell의 dialect 옵션은 문자열이어야 합니다. { $kind }을(를) 받았습니다.
+stdlib.shell.join.not_sequence = shell_join은(는) 열을 기대했지만 { $kind }을(를) 받았습니다.
+stdlib.shell.join.item_not_string = shell_join의 { $index }번째 항목은 { $kind }이며 문자열이 아닙니다.
+stdlib.shell.positional_option = { $filter }은(는) 옵션을 키워드로 받습니다. { $example } 형식으로 작성하세요.
+
 # 경로 도우미 진단.
 stdlib.path.io.failed = { $path }에 대한 '{ $action }'에 실패했습니다({ $label }).
 stdlib.path.io.failed_with_detail = { $path }에 대한 '{ $action }'에 실패했습니다: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = 지원하지 않는 해시 알�
 
 # 컬렉션 도우미 진단.
 stdlib.collections.flatten.expected_sequence = flatten은 열의 항목을 기대했지만 { $kind }을(를) 발견했습니다.
+stdlib.collections.compact.not_sequence = compact는 열을 기대했지만 { $kind }을(를) 발견했습니다.
 stdlib.collections.group_by.empty_attribute = group_by에는 비어 있지 않은 속성이 필요합니다.
 stdlib.collections.group_by.unresolved = group_by가 { $kind } 형식의 항목에서 '{ $attr }'을(를) 찾지 못했습니다.
 

@@ -7,8 +7,8 @@
 //! insertion context. Called by [`super::from_manifest`] during IR lowering.
 
 use crate::localization::{self, keys};
+use crate::shell_word;
 use camino::Utf8PathBuf;
-use shell_quote::{QuoteRefExt, Sh};
 
 #[cfg(test)]
 use std::cell::Cell;
@@ -135,18 +135,7 @@ fn quote_paths(paths: &[Utf8PathBuf], shell: RecipeShell) -> Vec<String> {
 
 /// Quote one path for the selected legacy recipe interpreter.
 fn quote_path(path: &Utf8PathBuf, shell: RecipeShell) -> String {
-    if shell == RecipeShell::PowerShell {
-        return format!("'{}'", path.as_str().replace('\'', "''"));
-    }
-    // Utf8PathBuf guarantees UTF-8, and shell quoting should preserve it.
-    let bytes: Vec<u8> = path.as_str().quoted(Sh);
-    match String::from_utf8(bytes) {
-        Ok(text) => text,
-        Err(err) => {
-            debug_assert!(false, "shell quoting produced non UTF-8 bytes: {err}");
-            String::from_utf8_lossy(err.as_bytes()).into_owned()
-        }
-    }
+    shell_word::quote_word(shell.dialect(), path.as_str())
 }
 
 /// Escape one path for insertion between existing POSIX double quotes.

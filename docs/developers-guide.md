@@ -115,14 +115,23 @@ rendered. It must not generate a Ninja file, call a Ninja subprocess, execute a
 recipe, or create build outputs. Its Jinja environment is a restricted,
 side-effect-free query surface. It allowlists only the lexical path filters
 `basename`, `dirname`, `with_suffix`, and `relative_to`, the collection filters
-`uniq`, `flatten`, and `group_by`, and the clock-independent `timedelta`
-function. It rejects `env()` and `glob()`, file tests, filesystem metadata
-filters such as `size` and `linecount`, `hash`, `digest`, `contents`,
+`uniq`, `flatten`, `compact`, and `group_by`, and the clock-independent
+`timedelta` function. It rejects `env()` and `glob()`, file tests, filesystem
+metadata filters such as `size` and `linecount`, `hash`, `digest`, `contents`,
 `realpath`, and `expanduser`, executable discovery through `which` and
 `command_available`, network and command helpers (`fetch`, `shell`, and
 `grep`), and the clock-dependent `now()` function. Normal build manifest
 rendering still registers the full standard library; this restriction applies
 only to query rendering.
+
+The rejection is total: every query-context `env()` call fails, and an
+`env(name, default=value)` call reports the same query-disabled marker as a bare
+`env(name)` rather than an arity error. The stub accepts a keyword-argument
+parameter precisely so a defaulted call reaches the deliberate rejection;
+without it, MiniJinja would fail the call as `too many arguments`, naming
+neither the helper nor the remedy. `tests/stdlib_manifest_query_tests.rs`
+asserts both the marker and the absence of the arity text, with a negative
+control proving the same template renders under the full stdlib.
 
 The query allowlist has one owner: `register_manifest_query`. Query loading
 does not construct `StdlibConfig`; the registration function composes the
@@ -133,6 +142,42 @@ assess and record any future allowlist change here. The no-topic and
 named-command help paths render clap help directly and do not load a manifest.
 Keep future help topics within this boundary rather than coupling read-only
 inspection to `runner::process`.
+
+The recipe-text quoting filters `shell_quote` and `shell_join` are on that
+shared query path, registered by `recipe_text::register_filters` alongside the
+collection filters. They take a `dialect` keyword argument, and with it given
+they read no host state at all, so a query that names its dialect is fully
+deterministic. With `dialect` omitted they resolve through
+`RecipeShell::host_default`, which is the value `register_query_helpers` passes.
+
+The two surfaces agree on an explicitly named dialect, on every host, and that
+is what `tests/stdlib_manifest_query_tests.rs` pins. Their *defaults* are a
+different matter, and the difference is wider than "the same value reached
+twice". The query surface takes `host_default()`; the build surface takes the
+shell the runner resolves, which on Windows honours `NETSUKE_WINDOWS_SHELL`. So
+a Windows host configured for Bash renders `sh` quoting for the build and
+PowerShell quoting for `help targets` from the same manifest expression — the
+divergence `register_query_helpers` and `ManifestLoadMode::ManifestQuery` each
+document as deliberate. What keeps that divergence unobservable today is only
+that `execute_help` returns before `resolve_recipe_shell()` is reached
+(`src/runner/mod.rs:149-153`); it is masked, not absent. On a non-Windows host
+`resolve_recipe_shell_with` returns `Posix` before it reads the environment at
+all, so the two defaults genuinely coincide there.
+
+Keep the masked divergence rather than closing it. Threading the resolution
+through would mean hoisting a fallible environment read above that early
+return, where a malformed `NETSUKE_WINDOWS_SHELL` would start failing a
+metadata query that never uses it — and the query renders discovery metadata
+that is never executed. A resolved shell is also not query-reachable for the
+metadata-only load, which does not construct `StdlibConfig` at all.
+
+The explicit-dialect agreement is pinned twice over. A probe that *names* its
+dialect is the case the keyword overrides the registration's default, so it can
+never catch a wrong default in `register_query_helpers` — the dialect-omitting
+probes do that, comparing each against the twin `host_default_field` selects
+for this host rather than against a hardcoded `sh`, because the file runs on
+Windows too. `assert_full_stdlib_renders` is the negative control on the
+explicit comparison: without it, two identical failures would satisfy it.
 
 Manifest rendering has two caller-selected modes. Full rendering evaluates all
 manifest fields, including recipe bodies, for build, generate, and manifest
@@ -147,6 +192,40 @@ preserves the historical lowercase `true` and `false` spelling when a Boolean
 helper result is interpolated into a string field, while delegating all
 non-Boolean values to MiniJinja's `escape_formatter`. Keep this as one
 registration-wide policy: do not add per-helper or per-call formatter variants.
+
+Add a new helper to **both** registration surfaces.
+`register_read_only_helpers` serves the build, and `register_query_helpers`
+serves manifest discovery; the shared sub-registrations they call —
+`collections::register_filters`, `path::register_filters`,
+`path::register_query_filters`, and `recipe_text::register_filters` — are what
+make a helper reach both, so a helper registered privately to one surface is
+reachable from a build but invisible to `netsuke help targets`, or the reverse.
+Where the two surfaces must differ, the difference is a deliberate decision to
+record here rather than an accident of which function happened to be edited:
+the recipe-text dialect default above is the one live example, and
+`register_disabled_query_helpers` is the mechanism for a helper the query
+surface must *refuse* rather than serve.
+
+Argument style follows the shape of the options, not the author's taste. A
+trailing sequence of `Option<T>` parameters, as in
+`contents(raw, encoding, kwargs)`, `hash(raw, alg, kwargs)`, and
+`digest(raw, len, alg, kwargs)` (`src/stdlib/path/filters.rs`), is for options
+that read naturally in a fixed order and that a caller would plausibly give
+positionally. `Kwargs` alone, as in `linecount`, `now`, `timedelta`, `fetch`,
+`which`, and `command_available`, is for independent named options and for any
+enumerated value set expected to widen. Always terminate with `kwargs: Kwargs`
+and call `kwargs.assert_all_used()` so an unrecognized keyword is an error
+rather than a silent no-op.
+
+`Value::try_iter()` is **not** a sequence check, and must not be used as one
+(decision D8). It succeeds on a map, yielding its keys, and on a string,
+yielding its characters, so a filter that guards with it alone would quietly
+return the wrong thing rather than fail: `{{ my_map | compact }}` would render
+the map's keys. Guard on `Value::kind()` against `ValueKind::Seq | Iterable`
+first, as `compact_filter` does (`src/stdlib/collections.rs`), and raise a
+localized error naming the received kind. The same confusion awaits any helper
+that appears to accept both `none` and a sequence: `is_blank` in that module is
+the worked example of drawing the line deliberately rather than by truthiness.
 
 Helpers excluded from the query allowlist are registered as deliberate
 query-disabled stubs by the standard-library adapter. The stubs return a
@@ -557,11 +636,21 @@ Every user-facing string is a Fluent message keyed from
 `src/localization/keys.rs`. Adding one means adding the constant, adding the
 message to all 35 catalogues, and keeping its `{ $variables }` identical across
 them: the build audit rejects a missing key, an orphaned key, or a variable set
-that differs from `en-US`. The audit lives in `build_l10n_audit/`, split into
-`keys.rs` and `scanner.rs` (the `define_keys!` scanner, with `byte_index.rs`
-for its byte-position bookkeeping), `ftl.rs` (catalogues), `metadata.rs` (the
-Cargo metadata), and `compare.rs` (the rules). Because build scripts are not
-test targets, those modules are included by path from four test files:
+that differs from `en-US`.
+
+A *diagnostic* message whose text carries a bracketed code such as
+`[netsuke::jinja::shell::args]` must have that code copied **verbatim** into
+every catalogue. The code is part of the message text rather than a field, so a
+translator who rewords, translates, or re-punctuates the bracket is not
+producing a translation — the code is an identifier a reader greps for, and the
+localized catalogues assert on the exact spelling. Copy the bracketed span
+unchanged and translate only the prose around it.
+
+The audit lives in `build_l10n_audit/`, split into `keys.rs` and `scanner.rs`
+(the `define_keys!` scanner, with `byte_index.rs` for its byte-position
+bookkeeping), `ftl.rs` (catalogues), `metadata.rs` (the Cargo metadata), and
+`compare.rs` (the rules). Because build scripts are not test targets, those
+modules are included by path from four test files:
 `tests/build_l10n_keys_tests.rs` exercises the `define_keys!` scanner
 (`keys.rs`, `scanner.rs`, `byte_index.rs`); `tests/build_l10n_parser_tests.rs`
 exercises the catalogue and metadata parsers (`ftl.rs`, `metadata.rs`);
@@ -715,16 +804,51 @@ failed subcommand's stderr on its own stdout, build runs retain only a fixed
 512-byte stdout tail and use its parsed marker only after a non-zero exit.
 Ordinary child stdout streams forward directly and must not use this tail.
 
-The lowest-layer POSIX shell-word quoting used for input/output paths during IR
-lowering is `shell_quote::QuoteRefExt::quoted(Sh)`. It performs minimal,
-fragmented shell quoting, which is appropriate for a literal shell word but not
-for the command-list `eval` payload. That renderer requires a canonical
-single-quoted payload so existing generated Ninja list text remains
+The lowest-layer shell-word quoting used for input/output paths during IR
+lowering, and for the `shell_quote` and `shell_join` template filters, is
+[`src/shell_word.rs`](../src/shell_word.rs). `quote_word` is its one entry
+point, and `is_recipe_admissible` is a separate predicate: encoding is total,
+while which inputs a recipe may carry is a question the caller owns and asks
+separately, a split `quote_path` depends on to keep its existing total
+behaviour. It is the single encoding of a recipe shell word, and a constraint
+test holds the delegation to one call site per layer rather than to convention.
+It performs minimal, fragmented shell quoting — `shell-quote`'s `Sh` encoder
+leaves the longest safe prefix bare and quotes only the remainder, so `a b`
+encodes as `a' b'` and not `'a b'` — which is appropriate for a literal shell
+word but not for the command-list `eval` payload. That renderer requires a
+canonical single-quoted payload so existing generated Ninja list text remains
 byte-for-byte stable, and the delimiter/boundary tests continue to hold. Keep
 that quoting in the deliberately local `shell_single_quote` function; it is not
-a general-purpose helper. Neither quoting path is the platform-specific
-`src/stdlib/command/quote.rs` implementation behind the `command.quote`
-template wrapper, which must retain its `cmd.exe` quoting behaviour on Windows.
+a general-purpose helper, and it is the one remaining quoter outside
+`src/shell_word.rs`.
+
+The third path is the platform-specific `src/stdlib/command/child_argument.rs`
+implementation behind the `command.quote` template wrapper. That file was named
+`quote.rs` before this milestone; the rename records that it answers a narrower
+question than the other two — how one argument is spelled for the interpreter a
+structured command will run under, including `cmd.exe` on Windows — and is
+therefore deliberately distinct from the recipe-shell word encoding.
+
+`quote_word` takes a `ShellDialect`, the two-variant enum `Sh` and `PowerShell`
+declared in `src/shell_word.rs` with `as_str`, `telemetry_name`, and `parse`
+accessors. `parse` deliberately rejects the string `"bash"` (decision D3):
+`RecipeShell::Bash` maps to `Sh` because `Sh` output is valid Bash, but the
+`shell-quote` crate's `Bash` encoder emits a different `$'...'` form that
+Netsuke does not compile in, so accepting the name now would lock in a meaning
+a real `bash` dialect would have to break. `RecipeShell::dialect()` is the
+three-to-two surjection onto that enum, and has no inverse by design — an
+inverse would have to pick one of `Posix` or `Bash` arbitrarily:
+
+- `Posix | Bash => ShellDialect::Sh`
+- `PowerShell => ShellDialect::PowerShell`
+
+`StdlibConfig::with_recipe_shell` stores only the dialect, not the interpreter,
+for that same reason: `Posix` and `Bash` quote identically, so keeping the
+wider type would leave a `recipe_shell()` accessor inviting a question the
+configuration cannot answer honestly. The closed `sh`/`powershell` label set
+that [Recipe-text dialect telemetry](#recipe-text-dialect-telemetry) admits is
+exactly the `ShellDialect` spelling, so the surjection above is what keeps a
+build's quoting reachable from the telemetry vocabulary.
 
 Attributed list failures emit the bounded tracing fields `command_list_action`
 (a fixed-width action fingerprint) and `command_list_entry` (the one-based
@@ -6310,12 +6434,22 @@ so an untrusted manifest cannot grant itself access or activate default-deny;
 primary-project block entries remain cumulative because they only restrict
 access.
 
-Policy enforcement belongs at the registered `env()` call boundary. The closure
-evaluates the requested name before invoking `EnvReader`, so a blocked lookup
-cannot obtain a process value. It returns the fixed, localized
-`manifest.env.blocked` diagnostic and emits only the bounded
-`failure_kind="blocked"` trace field. Neither the requested name nor its value
-may appear in that diagnostic or trace.
+Argument validation and policy enforcement are separate concerns, and the
+module boundary follows that split. `register_env_function` in
+`src/manifest/registration.rs` owns the registration half: it reads the optional
+`default` keyword, rejects a defined non-string value with the localized
+`manifest.env.default_not_string` diagnostic, and rejects leftover keyword
+arguments by delegating to MiniJinja's `Kwargs::assert_all_used` — all before
+any lookup happens. The closure then delegates to `env_var_with_default` in
+`src/manifest/env_reader.rs`, which owns the leaf half: it evaluates the
+requested name against the policy before invoking `EnvReader`, reads through
+the reader, and resolves the three-way result — value, absence, or undecodable
+bytes — substituting a supplied fallback for absence and raising a fixed,
+localized Jinja error otherwise. A blocked lookup therefore cannot obtain a
+process value, and a rejected argument never reaches the lookup counter at all.
+The blocked path returns the `manifest.env.blocked` diagnostic and emits only
+the bounded `failure_kind="blocked"` trace field. Neither the requested name
+nor its value may appear in that diagnostic or trace.
 
 #### Ownership and permitted call sites
 
@@ -6325,11 +6459,11 @@ may appear in that diagnostic or trace.
   `ManifestEnvironment` around that borrow and `EnvAccessPolicy::default()`,
   which is permissive for compatibility; the environment-aware entry points
   such as `from_path_with_policy_and_environment` carry the caller's policy
-  instead. `from_str_named` then clones the reader into the registered closure,
-  so the closure co-owns the `Arc` alongside the caller. `from_str_named`
-  remains the only place the `env()` function is registered. In production
-  nothing else constructs a reader; tests build their own with `Arc::new`,
-  which is the point of the seam.
+  instead. `register_env_function` then clones the reader into the registered
+  closure, so the closure co-owns the `Arc` alongside the caller. That helper
+  is reached through `from_str_named`, which remains the only route by which the
+  `env()` function is registered. In production nothing else constructs a
+  reader; tests build their own with `Arc::new`, which is the point of the seam.
 - `process_env_reader()` is the sole production supplier and the only place
   `std::env::var` appears in the module.
 - The two test layers cover different things, and both are needed:
@@ -6337,8 +6471,8 @@ may appear in that diagnostic or trace.
     registration — that the reader actually reaches the `env()` function
     Jinja calls. Covering the leaf mapper alone would leave that untested,
     which is the gap the earlier process-mutating tests existed to fill.
-  - **Unit tests may call `env_var_with` directly** to cover error mapping.
-    `src/manifest/tests/env_function.rs` does so deliberately: the
+  - **Unit tests may call `env_var_with_default` directly** to cover error
+    mapping. `src/manifest/tests/env_function.rs` does so deliberately: the
     present, absent, and non-UTF-8 branches are cheaper to drive at the leaf,
     and the non-UTF-8 case is unreachable through a real environment without
     platform-specific `OsString` surgery.
@@ -6986,11 +7120,20 @@ are absent from every captured event and span field.
 
 The counter descriptions are registered once per process behind a `Once`. Both
 counter names are listed in the application recorder's `accepts_name` and
-matched in `accepts_counter_registration` against their exact label shapes, so
-the series survive into the process snapshot rather than being discarded as
-noop handles, while any other label name, label count, or out-of-vocabulary
-value is rejected. This is the same allowlist that gates the configuration,
-runner, manifest-filtering, file-read, and environment-lookup series.
+matched in `accepts_stdlib_counter_registration`, the private helper that
+groups the standard-library counter rules, which delegates them to
+`accepts_which_registration` against their exact label shapes. The series
+survive into the process snapshot rather than being discarded as noop handles,
+while any other label name, label count, or out-of-vocabulary value is rejected.
+
+The application recorder owns counter admission. The stdlib helper composes the
+vocabularies the `src/stdlib/` modules declare rather than redefining them, so
+ownership of each vocabulary stays with its declaring module. The `which` rule
+keeps its own label-shape predicate because its resolution counter is admitted
+under two shapes — a success carries two labels and a failure three — and every
+rule, grouped or not, still validates bounded labels exactly. This is the same
+allowlist that gates the configuration, runner, manifest-filtering, file-read,
+and environment-lookup series.
 
 Tests sit beside the module: `src/stdlib/which/telemetry_tests.rs` drives the
 real `WhichResolver` against a local debugging recorder and asserts that each
@@ -7693,7 +7836,8 @@ with the locale space.
 The counter description is registered once per process behind a `Once`. The
 application recorder in `src/observability_recorder.rs` admits the series:
 `FILE_READ_TOTAL` is listed in `accepts_name` and matched in
-`accepts_counter_registration` against exactly those two label sets, so the
+`accepts_stdlib_counter_registration`, the private helper grouping the
+standard-library counter rules, against exactly those two label sets, so the
 counter survives into the process snapshot rather than being discarded as a
 noop handle, while any other label name, label count, or out-of-vocabulary
 value is rejected. This is the same allowlist that gates the configuration,
@@ -7710,11 +7854,20 @@ values and a series missing a label.
 ### Manifest environment-lookup telemetry
 
 `src/manifest/env_telemetry.rs` owns telemetry for the `env()` lookup boundary.
-`env_var_with` in `src/manifest/env_reader.rs` is the only place an `env()`
-call reaches: it evaluates the access policy, reads through the injected
-reader, and maps failures to Jinja errors, so it also hands each result to
-`record_env_lookup`, which returns that result unchanged and counts the lookup
-exactly once whatever the outcome.
+`env_var_with_default` in `src/manifest/env_reader.rs` is the only place an
+`env()` call reaches: it evaluates the access policy, reads through the
+injected reader, and maps failures to Jinja errors, so it also hands each
+result to `record_env_lookup`, which returns that result unchanged and counts
+the lookup exactly once whatever the outcome.
+
+When the variable is absent and the call supplied a `default=`,
+`substitute_fallback` substitutes it and counts the lookup as `success`: the
+manifest asked for a substitution and got one, so it is not a fifth outcome.
+The substitution is marked instead by a bounded trace field on a debug event,
+`fallback_used = true` on `manifest env lookup substituted default`, which is
+the only place that field appears. A fallback does not rescue a value that is
+present but not valid UTF-8: that remains `not_unicode`, because a
+present-but-undecodable value is a configuration fault rather than an absence.
 
 The counter is `netsuke_manifest_env_lookups_total`, with one `outcome` label
 drawn from the closed set `success`, `blocked`, `not_present`, and
@@ -7735,12 +7888,60 @@ noop handle, while any other label name, label count, or out-of-vocabulary
 value is rejected.
 
 Tests sit beside the boundary: `src/manifest/tests/env_telemetry.rs` drives
-`env_var_with` against a local debugging recorder and asserts each outcome
-reaches exactly one bounded series, while
+`env_var_with_default` against a local debugging recorder and asserts each
+outcome reaches exactly one bounded series, while
 `recorder_retains_bounded_env_lookup_series` in
 `src/observability_recorder_tests.rs` proves the production recorder retains
 the four bounded series and rejects an out-of-vocabulary outcome, an extra
 label, and a series missing its label.
+
+### Recipe-text dialect telemetry
+
+`src/stdlib/recipe_text/dialect_telemetry.rs` owns telemetry for the dialect
+boundary. Both `shell_quote` and `shell_join` reach exactly one place when they
+decide which encoding to apply — `resolve_dialect` in
+`src/stdlib/recipe_text/mod.rs` — so that boundary is also the single telemetry
+point. `record_dialect` returns the resolved dialect unchanged and counts the
+resolution exactly once, whether the call site named a dialect or omitted it.
+
+The counter is `netsuke_manifest_shell_quote_dialect_total`, with two labels.
+`dialect` is drawn from the closed set `sh` and `powershell`, and `source` from
+`explicit` and `default`. Both are the module constants `DIALECT_VALUES` and
+`DIALECT_SOURCE_VALUES`, re-exported through `netsuke::stdlib`, so the series
+count is fixed at four by the module rather than by anything a manifest
+supplies. Nothing else is recorded: no template source, no manifest text, and
+no rendered value.
+
+The `source` label is the reason the series exists. A call that omits `dialect`
+receives a host- and configuration-dependent default, so the rendered text of
+such a manifest can change between hosts or releases with no manifest edit —
+ADR-041 records this as the accepted cost of the two-dialect surface. Nothing
+else aggregates that population: the affected manifests are otherwise
+indistinguishable from those that pin the dialect, and the difference is
+invisible in the generated Ninja. Counting it makes the exposed set measurable,
+which turns "pin your dialect" from advice into something an operator can size.
+The counter's description is registered once per process behind a `Once`.
+
+The application recorder in `src/observability_recorder.rs` admits the series:
+`SHELL_QUOTE_DIALECT_TOTAL` is listed in `accepts_name` and matched in
+`accepts_stdlib_counter_registration`, the private helper grouping the
+standard-library counter rules, against exactly those two label sets, so the
+counter survives into the process snapshot rather than being discarded as a
+noop handle. **The admission step is the silent one**: an unadmitted name or
+label value yields a `Counter::noop` handle, so the build, the lint, and every
+other test still pass while the counter records nothing. The test for it
+therefore drives the real filters under a local recorder and asserts the
+increments arrive, rather than recording the series by hand — a hand-recorded
+series would pass even if no filter ever called the recorder.
+
+Tests sit beside the boundary: the `tests` module in
+`src/stdlib/recipe_text/dialect_telemetry.rs` pins the label vocabularies to
+`ShellDialect::ALL`, the set the encoder can actually produce, since the
+recorder imports them as `'static` arrays that cannot be derived from that enum
+at compile time. `src/observability_recorder_dialect_tests.rs` drives both
+filters through `shell_quote_dialect_total` under the production recorder and
+proves the four bounded series are retained while an out-of-vocabulary value, a
+missing label, and an unlabelled series are rejected.
 
 ## Digest rendering
 
@@ -7842,14 +8043,48 @@ yardstick for production cache keys.
 
 ## Manifest processing helpers
 
+### Manifest helper registration
+
+`src/manifest/registration.rs` holds the two helpers that bind the manifest's
+own Jinja functions:
+
+- `register_env_function(jinja, env_reader, env_access_policy)` clones the
+  `Arc<EnvReader>` and the policy into the closure and installs
+  `jinja.add_function("env", ...)`. The clone is what lets the registered
+  helper outlive the parse inputs it was built from: MiniJinja keeps the
+  function for the life of the environment, while the reader and the policy
+  arrive as borrows.
+- `register_glob_function(jinja, manifest_root)` builds a `GlobBaseCache` from
+  the optional root and installs `add_function("glob", ...)`. A `None` root
+  leaves relative patterns anchored at the process current directory, which is
+  the composition root's fallback.
+
+`evaluate_manifest` owns the literal registration order: it calls both helpers,
+then installs the stdlib, then calls `register_manifest_vars`, and only then
+`register_manifest_macros` and `expand_foreach`. `from_str_named` reaches that
+function through the budget adapter, which adds exhaustion telemetry for full
+loads.
+
+Argument validation stays in the closure, not in the leaf. The closure is the
+only place holding a MiniJinja `Kwargs`, so reading the optional `default` and
+asserting that no keyword argument is left over happen there, before the leaf
+is reached; a rejected argument therefore never reaches the lookup counter. Two
+different diagnostics come out of that validation, and only the first is
+Netsuke's: a defined non-string `default` is rejected by `default_as_string`
+with the localized `manifest.env.default_not_string`, while a leftover keyword
+is rejected by MiniJinja's own `Kwargs::assert_all_used`, raising
+`ErrorKind::TooManyArguments` with the engine's `unknown keyword argument` text.
+`env_args_message` and the `manifest.env.args_error` key wrap only the first.
+The leaf function is deliberately Jinja-free, taking a plain read closure,
+which is what lets its error mapping be unit-tested directly.
+
 ### Variable registration
 
-`register_manifest_vars` runs inside `from_str_named` immediately after the
-stdlib is installed in the MiniJinja environment and before
-`register_manifest_macros` and `expand_foreach`. Registering the manifest's
-`vars` first is what makes those variables visible to macro bodies, to
-`foreach` and `when` expressions, and to every string field rendered later by
-`render_manifest`.
+`register_manifest_vars` runs after the stdlib is installed in the MiniJinja
+environment and before `register_manifest_macros` and `expand_foreach`.
+Registering the manifest's `vars` first is what makes those variables visible
+to macro bodies, to `foreach` and `when` expressions, and to every string field
+rendered later by `render_manifest`.
 
 The helper is a no-op when the manifest omits `vars`. When the key is present
 it must deserialize to a JSON object; a list or a scalar produces a localized
@@ -7955,7 +8190,9 @@ template and installs both the import declaration used by
 reference and resolves it against the active MiniJinja state on each
 invocation, so it must not be treated as a reusable global template cache.
 Errors remain at the manifest boundary and retain their localized failure
-category.
+category. These are the two boundaries
+[Manifest telemetry: template render and macro invocation](#manifest-telemetry-template-render-and-macro-invocation)
+instruments.
 
 ### Manifest telemetry: template render and macro invocation
 
@@ -8007,8 +8244,10 @@ values, and environment variable names must never reach telemetry. Manifest
 content is caller-controlled and unbounded, so recording it in a metric label
 would make the metric series unbounded, and recording it in a span or event
 risks leaking secrets — environment variable names routinely identify
-credentials. This mirrors the redaction rule `env_var_with` already applies to
-`env()` lookup failures; see [Manifest `env()` reader](#manifest-env-reader).
+credentials. This mirrors the redaction rule `env_var_with_default` already
+applies to `env()` lookup failures, including the fallback-substitution event,
+which carries only the boolean `fallback_used` and neither the variable name
+nor its value; see [Manifest `env()` reader](#manifest-env-reader).
 
 `describe_macro_metrics` and `describe_render_metrics` register each metric's
 description exactly once, guarded by `std::sync::Once`. Neither is called from

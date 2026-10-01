@@ -364,20 +364,28 @@ and agents.
   - [x] Add command and script regression tests that distinguish Netsuke
     markers, internal tokens, shell variables such as `$in` / `$out`, and
     unrelated identifiers such as `$input`.
-- [ ] 3.14.8. Make Jinja command helpers match the documented ergonomics.
+- [x] 3.14.8. Make Jinja command helpers match the documented ergonomics.
   Depends on archived task `2.2.4` and 3.14.4. See
-  [netsuke-design.md §§4.4 and 4.5](netsuke-design.md).
-  - [ ] Add `env(name, default=...)` without changing the existing missing and
+  [netsuke-design.md §§4.4 and 4.5](netsuke-design.md) and
+  [ADR-041](adr-041-canonical-recipe-shell-quoting-surface.md).
+  - [x] Add `env(name, default=...)` without changing the existing missing and
     invalid UTF-8 diagnostics.
-  - [ ] Implement or remove the documented `shell_escape` helper so the user
+  - [x] Implement or remove the documented `shell_escape` helper so the user
     guide and code agree.
-  - [ ] Add `shell_join` and `compact` helpers for deliberate shell recipes.
-  - [ ] Add documentation and tests showing optional `RUSTFLAGS` construction
+  - [x] Add `shell_join` and `compact` helpers for deliberate shell recipes.
+  - [x] Add documentation and tests showing optional `RUSTFLAGS` construction
     without shell parameter expansion.
-  - Note: `env(name)` already exists in `src/manifest/mod.rs` but without the
-    `default=` kwarg (it raises on missing and non-UTF-8 values). The
-    `shell_escape`, `shell_join`, and `compact` helpers are not yet
-    implemented.
+  - Note: `env(name)` shipped with a `default=` kwarg that is consulted only for
+    a *missing* variable: a non-Unicode value and a policy-denied name are still
+    errors, and a non-string default is rejected rather than stringified. The
+    `shell_escape` helper was **superseded**, not implemented: `shell_quote`
+    takes its place, with `shell_join` beside it and `compact` in the collection
+    filters. The two shell filters each take a `dialect` of `sh` or
+    `powershell`, defaulting to the dialect implied by the active recipe shell,
+    and are correct only in unquoted argv position. The design and user guides
+    no longer name `shell_escape`; the tested `RUSTFLAGS` example lives in
+    `docs/stdlib-yaml-and-jinja-guide.md` and asserts one shell-quoted
+    `RUSTFLAGS` assignment with the variable both set and unset.
 - [ ] 3.14.9. Add structured recipe environment mappings.
   Requires 3.14.7, 3.14.8, and the follow-on design decision in 15.1.1. See
   [netsuke-design.md §2.6](netsuke-design.md#26-planned-recipe-ergonomics-and-execution-feedback).
@@ -1192,6 +1200,11 @@ RFC 0006 §8.9.
   - Adopt `shell_quote` as the canonical name that resolves the documented but
     unimplemented `shell_escape` helper, and add the `dialect` argument with
     an enumerated value set.
+  - Note: 3.14.8 delivered the canonical name, the `dialect` argument, and the
+    single implementation in `src/shell_word.rs`, so what remains here is the
+    wider RFC 0006 dialect set beyond `sh` and `powershell` — `bash` in
+    particular, which 3.14.8 deliberately refuses. See
+    [ADR-041](adr-041-canonical-recipe-shell-quoting-surface.md).
   - Success: the user guide and the registered surface agree, and no second
     quoting implementation is introduced.
 - [ ] 6.8.4. Add `comment` with a closing-marker guard. Requires 6.1.4.

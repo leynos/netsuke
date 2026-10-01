@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = בצעו מילוט ללוכסנים אחוריים 
 manifest.env.missing = משתנה סביבה נדרש אינו מוגדר.
 manifest.env.invalid_utf8 = משתנה סביבה מכיל UTF-8 לא תקין.
 manifest.env.blocked = הגישה למשתנה סביבה חסומה.
+manifest.env.args_error = ‏[netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = הערך default של env חייב להיות מחרוזת, התקבל { $kind }.
 manifest.vars.not_object = השדה `vars` של המניפסט חייב להיות מיפוי או אובייקט.
 manifest.vars.reserved_name = מפתח `vars` בשם '{ $name }' במניפסט שמור לפונקציית עזר מובנית של תבניות; שנה את שם המשתנה.
 manifest.read_failed = לא ניתן היה לקרוא את המניפסט מ‑{ $path }.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = הזרמה
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = ‏[netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = ‏[netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = ‏shell_quote ציפה למחרוזת אך קיבל { $kind }.
+stdlib.shell.quote.control_character = לא ניתן להקיף במרכאות ערך המכיל בייט אפס, החזרת גרר או מעבר שורה.
+stdlib.shell.dialect_invalid = דיאלקט מעטפת לא מוכר { $dialect }; צפוי אחד מבין { $accepted }.
+stdlib.shell.dialect_not_string = האפשרות dialect של shell חייבת להיות מחרוזת, התקבל { $kind }.
+stdlib.shell.join.not_sequence = ‏shell_join ציפה לרצף אך קיבל { $kind }.
+stdlib.shell.join.item_not_string = הפריט { $index } ב-shell_join הוא { $kind }, לא מחרוזת.
+stdlib.shell.positional_option = ‏{ $filter } מקבל את אפשרויותיו כמילת מפתח; כתבו { $example }.
+
 # אבחון עוזר הנתיבים.
 stdlib.path.io.failed = הפעולה „{ $action }” נכשלה עבור { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = הפעולה „{ $action }” נכשלה עבור { $path }: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = אלגוריתם גיבוב שא
 
 # אבחון עוזרי האוספים.
 stdlib.collections.flatten.expected_sequence = ‏flatten ציפה לפריטים של סדרה אך מצא { $kind }.
+stdlib.collections.compact.not_sequence = ‏compact ציפה לסדרה אך מצא { $kind }.
 stdlib.collections.group_by.empty_attribute = ‏group_by מחייב תכונה שאינה ריקה.
 stdlib.collections.group_by.unresolved = ‏group_by לא הצליח לאתר את „{ $attr }” בפריט מסוג { $kind }.
 

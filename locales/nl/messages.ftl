@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Escape de backslashes of verwijder ongeldige escaper
 manifest.env.missing = Een vereiste omgevingsvariabele is niet ingesteld.
 manifest.env.invalid_utf8 = Een omgevingsvariabele bevat ongeldige UTF-8.
 manifest.env.blocked = Toegang tot een omgevingsvariabele is geblokkeerd.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = De default van env moet een tekenreeks zijn, ontvangen { $kind }.
 manifest.vars.not_object = De `vars` van het manifest moet een toewijzing of object zijn.
 manifest.vars.reserved_name = De `vars`-sleutel '{ $name }' in het manifest is gereserveerd voor een ingebouwde sjabloonfunctie; hernoem de variabele.
 manifest.read_failed = Het manifest in { $path } kon niet worden gelezen.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = streamen
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote verwachtte een tekenreeks, maar kreeg { $kind }.
+stdlib.shell.quote.control_character = Een waarde met een nulbyte, regelterugloop of regeleinde kan niet tussen aanhalingstekens worden gezet.
+stdlib.shell.dialect_invalid = Onbekend shell-dialect { $dialect }; verwacht een van { $accepted }.
+stdlib.shell.dialect_not_string = De optie dialect van shell moet een tekenreeks zijn, ontvangen { $kind }.
+stdlib.shell.join.not_sequence = shell_join verwachtte een reeks, maar kreeg { $kind }.
+stdlib.shell.join.item_not_string = Element { $index } van shell_join is { $kind }, geen tekenreeks.
+stdlib.shell.positional_option = { $filter } neemt zijn opties als trefwoord; schrijf { $example }.
+
 # Diagnostiek van de padhelper.
 stdlib.path.io.failed = { $action } is mislukt voor { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } is mislukt voor { $path }: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Het hash-algoritme ‘{ $algorit
 
 # Diagnostiek van de verzamelinghelpers.
 stdlib.collections.flatten.expected_sequence = flatten verwachtte items uit een reeks, maar vond { $kind }.
+stdlib.collections.compact.not_sequence = compact verwachtte een reeks, maar vond { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by vereist een attribuut dat niet leeg is.
 stdlib.collections.group_by.unresolved = group_by kon ‘{ $attr }’ niet vinden op een item van het type { $kind }.
 

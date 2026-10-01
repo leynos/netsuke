@@ -1,11 +1,11 @@
 //! Telemetry coverage for the manifest `env()` lookup boundary.
 //!
-//! These drive `env_var_with` under a local recorder, so they pin that every
-//! lookup outcome — including the blocked refusal the access policy produces —
-//! reaches the bounded counter exactly once, and that nothing a manifest
-//! supplies reaches a label.
+//! These drive `env_var_with_default` under a local recorder, so they pin that
+//! every lookup outcome — including the blocked refusal the access policy
+//! produces — reaches the bounded counter exactly once, and that nothing a
+//! manifest supplies reaches a label.
 
-use crate::manifest::{EnvAccessPolicy, EnvReadError, env_reader::env_var_with};
+use crate::manifest::{EnvAccessPolicy, EnvReadError, env_reader::env_var_with_default};
 use metrics::SharedString;
 use metrics_util::{
     CompositeKey, MetricKind,
@@ -39,8 +39,9 @@ fn recorded(
 ) -> (Result<String, minijinja::Error>, Snapshot) {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
-    let result =
-        metrics::with_local_recorder(&recorder, || env_var_with(SENTINEL, policy, |_| read()));
+    let result = metrics::with_local_recorder(&recorder, || {
+        env_var_with_default(SENTINEL, policy, None, |_| read())
+    });
     (result, snapshotter.snapshot().into_vec())
 }
 
@@ -107,6 +108,48 @@ fn each_lookup_outcome_is_counted_once(#[case] blocked: bool, #[case] expected_o
     );
 }
 
+/// A substituted fallback is a *successful* lookup, and nothing more.
+///
+/// The default does not paper over the absence into a distinct outcome: the
+/// manifest asked for a substitution and got one, so exactly one `success`
+/// series appears and the closed vocabulary stays closed. Whether a default was
+/// taken is visible through the `fallback_used` tracing event instead, which is
+/// what keeps the counter bounded.
+#[test]
+fn a_substituted_fallback_counts_one_success_series() {
+    let policy = EnvAccessPolicy::default();
+
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let value = metrics::with_local_recorder(&recorder, || {
+        env_var_with_default(SENTINEL, &policy, Some(String::from("fallback")), |_| {
+            Err(EnvReadError::NotPresent)
+        })
+        .expect("an absent variable with a fallback must resolve")
+    });
+    let snapshot = snapshotter.snapshot().into_vec();
+
+    assert_eq!(value, "fallback");
+    assert_eq!(
+        lookup_count(&snapshot, "success"),
+        Some(1),
+        "a substituted fallback is a successful lookup: {snapshot:?}"
+    );
+    assert_eq!(
+        snapshot.len(),
+        1,
+        "the substitution must not add a second series: {snapshot:?}"
+    );
+    assert!(
+        lookup_count(&snapshot, "not_present").is_none(),
+        "the absence must not also be counted once it is substituted: {snapshot:?}"
+    );
+    assert!(
+        every_series_is_bounded(&snapshot),
+        "the retained series must carry only the bounded outcome label: {snapshot:?}"
+    );
+}
+
 /// A blocked lookup is counted before the reader can disclose a value, and the
 /// blocked series is the only one the call produces.
 #[test]
@@ -117,7 +160,7 @@ fn blocked_lookup_increments_only_the_blocked_series() {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
     let error = metrics::with_local_recorder(&recorder, || {
-        env_var_with(SENTINEL, &policy, |_| {
+        env_var_with_default(SENTINEL, &policy, None, |_| {
             reader_was_called = true;
             Ok(String::from(SENTINEL_VALUE))
         })

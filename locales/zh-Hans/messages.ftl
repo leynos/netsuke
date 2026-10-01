@@ -138,6 +138,8 @@ manifest.yaml.hint.escape = 请转义反斜杠，或删除无效的转义序列�
 manifest.env.missing = 未设置必需的环境变量。
 manifest.env.invalid_utf8 = 环境变量包含无效的 UTF-8。
 manifest.env.blocked = 对环境变量的访问已被阻止。
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env 的 default 必须是字符串，但收到了 { $kind }。
 manifest.vars.not_object = 清单的 `vars` 必须是映射或对象。
 manifest.vars.reserved_name = 清单的 `vars` 键 '{ $name }' 已保留给内置模板辅助函数；请重命名该变量。
 manifest.read_failed = 无法读取 { $path } 处的清单。
@@ -284,6 +286,17 @@ stdlib.command.output.mode.streaming = 流式
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote 期望字符串，却收到 { $kind }。
+stdlib.shell.quote.control_character = 含有空字节、回车或换行的值无法加引号。
+stdlib.shell.dialect_invalid = 未知的 shell 方言 { $dialect }；应为 { $accepted } 之一。
+stdlib.shell.dialect_not_string = shell 的 dialect 选项必须是字符串，但收到了 { $kind }。
+stdlib.shell.join.not_sequence = shell_join 期望序列，却收到 { $kind }。
+stdlib.shell.join.item_not_string = shell_join 的第 { $index } 项为 { $kind }，不是字符串。
+stdlib.shell.positional_option = { $filter } 以关键字接收选项；请写作 { $example }。
+
 # 路径辅助函数的诊断。
 stdlib.path.io.failed = 对 { $path } 执行“{ $action }”失败（{ $label }）。
 stdlib.path.io.failed_with_detail = 对 { $path } 执行“{ $action }”失败：{ $detail }。
@@ -339,6 +352,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = 不支持的散列算法“{ $al
 
 # 集合辅助函数的诊断。
 stdlib.collections.flatten.expected_sequence = flatten 期望序列元素，却发现 { $kind }。
+stdlib.collections.compact.not_sequence = compact 期望序列，却发现 { $kind }。
 stdlib.collections.group_by.empty_attribute = group_by 需要非空的属性。
 stdlib.collections.group_by.unresolved = group_by 无法在类型为 { $kind } 的元素上解析“{ $attr }”。
 

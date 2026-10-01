@@ -140,6 +140,8 @@ manifest.yaml.hint.escape = Escape backslashes or remove invalid escape sequence
 manifest.env.missing = A required environment variable is not set.
 manifest.env.invalid_utf8 = An environment variable contains invalid UTF-8.
 manifest.env.blocked = Access to an environment variable is blocked.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env default must be a string, received { $kind }.
 manifest.vars.not_object = Manifest `vars` must be a map/object.
 manifest.vars.reserved_name = Manifest `vars` key '{ $name }' is reserved for a built-in template helper; rename the variable.
 manifest.read_failed = Failed to read manifest at { $path }.
@@ -286,6 +288,17 @@ stdlib.command.output.mode.streaming = streaming
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote expects a string, received { $kind }.
+stdlib.shell.quote.control_character = A value containing a null byte, carriage return, or line feed cannot be quoted.
+stdlib.shell.dialect_invalid = Unknown shell dialect { $dialect }; expected one of { $accepted }.
+stdlib.shell.dialect_not_string = The shell dialect option must be a string, received { $kind }.
+stdlib.shell.join.not_sequence = shell_join expects a sequence, received { $kind }.
+stdlib.shell.join.item_not_string = shell_join item { $index } is { $kind }, not a string.
+stdlib.shell.positional_option = { $filter } takes its options by keyword; write { $example }.
+
 # Path helper diagnostics.
 stdlib.path.io.failed = { $action } failed for { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } failed for { $path }: { $detail }.
@@ -341,6 +354,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Unsupported hash algorithm '{ $a
 
 # Collection helper diagnostics.
 stdlib.collections.flatten.expected_sequence = Flatten expected sequence items but found { $kind }.
+stdlib.collections.compact.not_sequence = compact expects a sequence, received { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by requires a non-empty attribute.
 stdlib.collections.group_by.unresolved = group_by could not resolve '{ $attr }' on item of kind { $kind }.
 

@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Teich na slaisean-cùil no thoir air falbh na sreath
 manifest.env.missing = Chan eil caochladair àrainneachd riatanach air a shuidheachadh.
 manifest.env.invalid_utf8 = Tha UTF-8 mì-dhligheach ann an caochladair àrainneachd.
 manifest.env.blocked = Tha inntrigeadh do chaochladair àrainneachd air a bhacadh.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Feumaidh default env a bhith na shreang; fhuaras { $kind }.
 manifest.vars.not_object = Feumaidh `vars` an fhoirm-liosta a bhith na mhapadh no na oibseact.
 manifest.vars.reserved_name = Tha an iuchair `vars` '{ $name }' sa mhanifest glèidhte do chuidiche teamplaid na broinn; thoir ainm ùr air a' chaochladair.
 manifest.read_failed = Cha b' urrainnear am foirm-liosta a leughadh o { $path }.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = sruthadh
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = Bha dùil aig shell_quote ri sreang ach fhuair e { $kind }.
+stdlib.shell.quote.control_character = Chan urrainnear luach le baidht neoni, tilleadh-carbaid no briseadh-loidhne a chur ann an comharran-labhairt.
+stdlib.shell.dialect_invalid = Dual-chainnt sligean neo-aithnichte { $dialect }; bha dùil ri aon de { $accepted }.
+stdlib.shell.dialect_not_string = Feumaidh roghainn dialect shell a bhith na shreang; fhuaras { $kind }.
+stdlib.shell.join.not_sequence = Bha dùil aig shell_join ri sreath ach fhuair e { $kind }.
+stdlib.shell.join.item_not_string = Tha nì { $index } aig shell_join na { $kind }, chan e sreang.
+stdlib.shell.positional_option = Bidh { $filter } a' gabhail a roghainnean mar fhacal-luirg; sgrìobh { $example }.
+
 # Breithneachadh cuidiche nan slighean.
 stdlib.path.io.failed = Dh'fhàillig an gnìomh “{ $action }” airson { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Dh'fhàillig an gnìomh “{ $action }” airson { $path }: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algairim hais gun taic: “{ $al
 
 # Breithneachadh chuidichean nan cruinneachaidhean.
 stdlib.collections.flatten.expected_sequence = Bha dùil aig flatten ri nithean sreath ach fhuair e { $kind }.
+stdlib.collections.compact.not_sequence = Bha dùil aig compact ri sreath ach fhuair e { $kind }.
 stdlib.collections.group_by.empty_attribute = Tha group_by ag iarraidh buadh nach eil falamh.
 stdlib.collections.group_by.unresolved = Cha b' urrainn do group_by “{ $attr }” a lorg air nì den t-seòrsa { $kind }.
 

@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Escapa omvända snedstreck eller ta bort ogiltiga es
 manifest.env.missing = En obligatorisk miljövariabel är inte satt.
 manifest.env.invalid_utf8 = En miljövariabel innehåller ogiltig UTF-8.
 manifest.env.blocked = Åtkomst till en miljövariabel är blockerad.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = default i env måste vara en sträng, tog emot { $kind }.
 manifest.vars.not_object = Manifestets `vars` måste vara en mappning eller ett objekt.
 manifest.vars.reserved_name = Manifestets `vars`-nyckel '{ $name }' är reserverad för en inbyggd mallhjälpare; byt namn på variabeln.
 manifest.read_failed = Manifestet i { $path } kunde inte läsas.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = strömning
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote väntade en sträng men fick { $kind }.
+stdlib.shell.quote.control_character = Ett värde som innehåller en nollbyte, vagnretur eller radmatning kan inte citeras.
+stdlib.shell.dialect_invalid = Okänd shelldialekt { $dialect }; väntade en av { $accepted }.
+stdlib.shell.dialect_not_string = dialect-alternativet i shell måste vara en sträng, tog emot { $kind }.
+stdlib.shell.join.not_sequence = shell_join väntade en sekvens men fick { $kind }.
+stdlib.shell.join.item_not_string = Element { $index } i shell_join är { $kind }, inte en sträng.
+stdlib.shell.positional_option = { $filter } tar sina alternativ som nyckelord; skriv { $example }.
+
 # Diagnostik för sökvägshjälparen.
 stdlib.path.io.failed = { $action } misslyckades för { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } misslyckades för { $path }: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Hashalgoritmen ”{ $algorithm }
 
 # Diagnostik för samlingshjälpare.
 stdlib.collections.flatten.expected_sequence = flatten väntade poster från en sekvens men fann { $kind }.
+stdlib.collections.compact.not_sequence = compact väntade en sekvens men fann { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by kräver ett attribut som inte är tomt.
 stdlib.collections.group_by.unresolved = group_by kunde inte slå upp ”{ $attr }” på en post av typen { $kind }.
 

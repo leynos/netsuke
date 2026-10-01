@@ -140,6 +140,8 @@ manifest.yaml.hint.escape = Διαφύγετε τις ανάστροφες κα�
 manifest.env.missing = Μια απαιτούμενη μεταβλητή περιβάλλοντος δεν έχει οριστεί.
 manifest.env.invalid_utf8 = Μια μεταβλητή περιβάλλοντος περιέχει μη έγκυρο UTF-8.
 manifest.env.blocked = Η πρόσβαση σε μεταβλητή περιβάλλοντος έχει αποκλειστεί.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Το default του env πρέπει να είναι συμβολοσειρά· τύπος τιμής που ελήφθη: { $kind }.
 manifest.vars.not_object = Το `vars` του δηλωτικού πρέπει να είναι αντιστοίχιση ή αντικείμενο.
 manifest.vars.reserved_name = Το κλειδί `vars` '{ $name }' του μανιφέστου είναι δεσμευμένο για ενσωματωμένη βοηθητική συνάρτηση προτύπων· μετονομάστε τη μεταβλητή.
 manifest.read_failed = Δεν ήταν δυνατή η ανάγνωση του δηλωτικού από { $path }.
@@ -286,6 +288,17 @@ stdlib.command.output.mode.streaming = συνεχής ροή
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = Το shell_quote περίμενε συμβολοσειρά, αλλά έλαβε { $kind }.
+stdlib.shell.quote.control_character = Μια τιμή που περιέχει μηδενικό byte, επιστροφή ή αλλαγή γραμμής δεν μπορεί να τεθεί σε εισαγωγικά.
+stdlib.shell.dialect_invalid = Άγνωστη διάλεκτος κελύφους { $dialect }· αναμενόταν μία από { $accepted }.
+stdlib.shell.dialect_not_string = Η επιλογή dialect του shell πρέπει να είναι συμβολοσειρά· τύπος τιμής που ελήφθη: { $kind }.
+stdlib.shell.join.not_sequence = Το shell_join περίμενε ακολουθία, αλλά έλαβε { $kind }.
+stdlib.shell.join.item_not_string = Το στοιχείο { $index } του shell_join είναι { $kind }, όχι συμβολοσειρά.
+stdlib.shell.positional_option = Το { $filter } δέχεται τις επιλογές του ως λέξεις-κλειδιά· γράψτε { $example }.
+
 # Διαγνωστικά του βοηθήματος διαδρομών.
 stdlib.path.io.failed = Η ενέργεια «{ $action }» απέτυχε για { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Η ενέργεια «{ $action }» απέτυχε για { $path }: { $detail }.
@@ -341,6 +354,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Μη υποστηριζόμεν�
 
 # Διαγνωστικά των βοηθημάτων συλλογών.
 stdlib.collections.flatten.expected_sequence = Το flatten περίμενε στοιχεία ακολουθίας αλλά βρήκε { $kind }.
+stdlib.collections.compact.not_sequence = Το compact περιμένει ακολουθία· τύπος τιμής που βρέθηκε: { $kind }.
 stdlib.collections.group_by.empty_attribute = Το group_by απαιτεί μη κενό γνώρισμα.
 stdlib.collections.group_by.unresolved = Το group_by δεν μπόρεσε να εντοπίσει το «{ $attr }» σε στοιχείο τύπου { $kind }.
 

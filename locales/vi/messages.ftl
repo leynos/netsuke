@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Hãy thoát dấu gạch chéo ngược hoặc bỏ 
 manifest.env.missing = Một biến môi trường bắt buộc chưa được đặt.
 manifest.env.invalid_utf8 = Một biến môi trường chứa UTF-8 không hợp lệ.
 manifest.env.blocked = Quyền truy cập vào biến môi trường đã bị chặn.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Giá trị default của env phải là chuỗi, nhưng nhận được { $kind }.
 manifest.vars.not_object = Trường `vars` của tệp kê khai phải là ánh xạ hoặc đối tượng.
 manifest.vars.reserved_name = Khóa `vars` '{ $name }' của tệp kê khai được dành riêng cho hàm trợ giúp mẫu tích hợp; hãy đổi tên biến.
 manifest.read_failed = Không đọc được tệp kê khai tại { $path }.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = truyền luồng
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote mong đợi một chuỗi nhưng lại nhận { $kind }.
+stdlib.shell.quote.control_character = Giá trị chứa byte null, ký tự về đầu dòng hoặc xuống dòng không thể đặt trong dấu nháy.
+stdlib.shell.dialect_invalid = Phương ngữ shell không xác định { $dialect }; mong đợi một trong { $accepted }.
+stdlib.shell.dialect_not_string = Tùy chọn dialect của shell phải là chuỗi, nhưng nhận được { $kind }.
+stdlib.shell.join.not_sequence = shell_join mong đợi một dãy nhưng lại nhận { $kind }.
+stdlib.shell.join.item_not_string = Phần tử { $index } của shell_join có kiểu { $kind }, không phải chuỗi.
+stdlib.shell.positional_option = { $filter } nhận tùy chọn theo từ khóa; hãy viết { $example }.
+
 # Chẩn đoán của hàm trợ giúp đường dẫn.
 stdlib.path.io.failed = Hành động “{ $action }” thất bại với { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Hành động “{ $action }” thất bại với { $path }: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Thuật toán băm không đư�
 
 # Chẩn đoán của các hàm trợ giúp tập hợp.
 stdlib.collections.flatten.expected_sequence = flatten mong đợi các phần tử của một dãy nhưng lại gặp { $kind }.
+stdlib.collections.compact.not_sequence = compact mong đợi một dãy nhưng lại gặp { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by cần một thuộc tính không rỗng.
 stdlib.collections.group_by.unresolved = group_by không tìm được “{ $attr }” trên phần tử kiểu { $kind }.
 

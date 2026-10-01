@@ -48,7 +48,7 @@ pub(super) fn generate_ninja_with_shell(
     let manifest_path = path_helpers::resolve_manifest_path(cli)?;
     path_helpers::ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
 
-    let inputs = generation::ManifestLoadInputs::from_cli(cli)?;
+    let inputs = generation::ManifestLoadInputs::from_cli(cli, graph_generation.recipe_shell)?;
     let manifest = load_manifest_with_stage_reporting(&manifest_path, &inputs, reporter)?;
     record_manifest_structure(&manifest);
 

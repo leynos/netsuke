@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = โปรดหลีกอักขระแบ็�
 manifest.env.missing = ยังไม่ได้ตั้งค่าตัวแปรสภาพแวดล้อมที่จำเป็น
 manifest.env.invalid_utf8 = ตัวแปรสภาพแวดล้อมมี UTF-8 ที่ไม่ถูกต้อง
 manifest.env.blocked = การเข้าถึงตัวแปรสภาพแวดล้อมถูกบล็อก
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = ค่า default ของ env ต้องเป็นสายอักขระ แต่ได้รับ { $kind }
 manifest.vars.not_object = `vars` ของไฟล์รายการต้องเป็นการจับคู่หรือวัตถุ
 manifest.vars.reserved_name = คีย์ `vars` '{ $name }' ของมานิเฟสต์ถูกสงวนไว้สำหรับฟังก์ชันช่วยเทมเพลตในตัว โปรดเปลี่ยนชื่อตัวแปร
 manifest.read_failed = อ่านไฟล์รายการที่ { $path } ไม่สำเร็จ
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = การส่งเป็นสาย�
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote คาดหวังสตริง แต่ได้รับ { $kind }
+stdlib.shell.quote.control_character = ค่าที่มีไบต์ศูนย์ ปัดแคร่ หรือขึ้นบรรทัดใหม่ไม่สามารถใส่เครื่องหมายอัญประกาศได้
+stdlib.shell.dialect_invalid = ไม่รู้จักไดอาเล็กต์ของเชลล์ { $dialect } คาดว่าจะเป็นหนึ่งใน { $accepted }
+stdlib.shell.dialect_not_string = ออปชัน dialect ของ shell ต้องเป็นสายอักขระ แต่ได้รับ { $kind }
+stdlib.shell.join.not_sequence = shell_join คาดหวังลำดับ แต่ได้รับ { $kind }
+stdlib.shell.join.item_not_string = รายการ { $index } ของ shell_join เป็น { $kind } ไม่ใช่สตริง
+stdlib.shell.positional_option = { $filter } รับตัวเลือกเป็นคีย์เวิร์ด เขียน { $example }
+
 # การวินิจฉัยของตัวช่วยด้านเส้นทาง
 stdlib.path.io.failed = การกระทำ “{ $action }” ล้มเหลวสำหรับ { $path } ({ $label })
 stdlib.path.io.failed_with_detail = การกระทำ “{ $action }” ล้มเหลวสำหรับ { $path }: { $detail }
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = ไม่รองรับข�
 
 # การวินิจฉัยของตัวช่วยด้านคอลเลกชัน
 stdlib.collections.flatten.expected_sequence = flatten คาดว่าจะพบสมาชิกของลำดับ แต่พบ { $kind }
+stdlib.collections.compact.not_sequence = compact คาดว่าจะพบลำดับ แต่พบ { $kind }
 stdlib.collections.group_by.empty_attribute = group_by ต้องมีแอตทริบิวต์ที่ไม่ว่างเปล่า
 stdlib.collections.group_by.unresolved = group_by หา “{ $attr }” ในสมาชิกชนิด { $kind } ไม่พบ
 

@@ -10,7 +10,7 @@ use super::{
     EnvAccessPolicy, EnvReader, ManifestBudgetLimits, ManifestEnvironment, ManifestLoadStage,
     process_env_reader, query,
 };
-use crate::{ast::NetsukeManifest, stdlib::NetworkPolicy};
+use crate::{ast::NetsukeManifest, recipe_shell::RecipeShell, stdlib::NetworkPolicy};
 use anyhow::Result;
 use std::path::Path;
 
@@ -149,6 +149,7 @@ pub fn from_path_with_policy_and_env_and_limits(
         policy,
         &environment,
         budget_limits,
+        RecipeShell::host_default(),
         on_stage,
     )
 }
@@ -177,29 +178,40 @@ pub fn from_path_with_policy_and_environment(
         policy,
         environment,
         ManifestBudgetLimits::default(),
+        RecipeShell::host_default(),
         on_stage,
     )
 }
 
-/// Load a manifest with explicit policy, environment inputs, and resource
-/// ceilings.
+/// Load a manifest with explicit policy, environment inputs, resource
+/// ceilings, and recipe interpreter.
 ///
 /// This is the fullest-parameterized loader entry point: an injected reader
-/// and its access policy, plus the parse ceilings trusted configuration
-/// resolved before loading.
+/// and its access policy, the parse ceilings trusted configuration resolved
+/// before loading, and the interpreter whose quoting rules the template
+/// filters follow.
+///
+/// `recipe_shell` is the one input here that is *not* re-derivable from the
+/// others. A caller that has resolved `NETSUKE_WINDOWS_SHELL` must pass the
+/// result in, so the manifest's `shell_quote` and `shell_join` filters quote
+/// for the same interpreter that will later receive the generated recipe text.
+/// A caller with no resolved interpreter passes
+/// [`RecipeShell::host_default`], which is what this repository's convenience
+/// wrappers do.
 ///
 /// # Errors
 ///
 /// Returns an error if the manifest cannot be read, rendered, or parsed.
 #[expect(
     clippy::too_many_arguments,
-    reason = "This compatibility entry point keeps the policy, environment, budget, and stage-observer seams explicit."
+    reason = "This compatibility entry point keeps the policy, environment, budget, shell, and stage-observer seams explicit."
 )]
 pub fn from_path_with_policy_and_environment_and_limits(
     path: impl AsRef<Path>,
     policy: NetworkPolicy,
     environment: &ManifestEnvironment<'_>,
     budget_limits: ManifestBudgetLimits,
+    recipe_shell: RecipeShell,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
     query::from_path_with_policy_and_environment_and_limits(
@@ -207,6 +219,7 @@ pub fn from_path_with_policy_and_environment_and_limits(
         policy,
         environment,
         budget_limits,
+        recipe_shell,
         on_stage,
     )
 }

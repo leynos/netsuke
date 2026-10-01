@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = ممیزهای وارونه را بگریزانید 
 manifest.env.missing = یک متغیر محیطی الزامی تنظیم نشده است.
 manifest.env.invalid_utf8 = یک متغیر محیطی دربردارندهٔ UTF-8 نامعتبر است.
 manifest.env.blocked = دسترسی به یک متغیر محیطی مسدود شده است.
+manifest.env.args_error = ‏[netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = مقدار default در env باید رشته باشد، اما { $kind } دریافت شد.
 manifest.vars.not_object = ‏`vars` در مانیفست باید نگاشت یا شیء باشد.
 manifest.vars.reserved_name = کلید `vars` با نام '{ $name }' در مانیفست برای یک کمک‌کننده داخلی قالب رزرو شده است؛ نام متغیر را تغییر دهید.
 manifest.read_failed = خواندن مانیفست از { $path } ممکن نشد.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = جریان
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = ‏[netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = ‏[netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = ‏shell_quote یک رشته انتظار داشت اما { $kind } دریافت کرد.
+stdlib.shell.quote.control_character = مقداری که شامل بایت صفر، بازگشت به ابتدای خط یا شکست سطر باشد را نمی‌توان میان گیومه گذاشت.
+stdlib.shell.dialect_invalid = لهجهٔ پوستهٔ ناشناخته { $dialect }؛ یکی از { $accepted } انتظار می‌رفت.
+stdlib.shell.dialect_not_string = گزینه dialect در shell باید رشته باشد، اما { $kind } دریافت شد.
+stdlib.shell.join.not_sequence = ‏shell_join یک دنباله انتظار داشت اما { $kind } دریافت کرد.
+stdlib.shell.join.item_not_string = آیتم { $index } در shell_join از نوع { $kind } است، نه رشته.
+stdlib.shell.positional_option = ‏{ $filter } گزینه‌های خود را به‌صورت کلیدواژه می‌گیرد؛ { $example } بنویسید.
+
 # تشخیص‌های یاور مسیرها.
 stdlib.path.io.failed = کنش «{ $action }» برای { $path } ناکام ماند ({ $label }).
 stdlib.path.io.failed_with_detail = کنش «{ $action }» برای { $path } ناکام ماند: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = الگوریتم درهم‌سا
 
 # تشخیص‌های یاورهای گردایه‌ها.
 stdlib.collections.flatten.expected_sequence = ‏flatten عضوهای یک دنباله را انتظار داشت اما { $kind } یافت.
+stdlib.collections.compact.not_sequence = ‏compact یک دنباله را انتظار داشت اما { $kind } یافت.
 stdlib.collections.group_by.empty_attribute = ‏group_by به ویژگی‌ای ناتهی نیاز دارد.
 stdlib.collections.group_by.unresolved = ‏group_by نتوانست «{ $attr }» را روی عضوی از گونهٔ { $kind } بیابد.
 

@@ -392,3 +392,42 @@ fn stdlib_host_context_example_uses_controlled_process_state() -> Result<()> {
     );
     Ok(())
 }
+
+/// The documented `RUSTFLAGS` example survives both environment states.
+///
+/// The example's whole purpose is that an unset variable and a set one both
+/// produce a recipe whose argument count does not change, so both states are
+/// exercised here: the unset arm is the one a naive `join(' ')` would get wrong
+/// by emitting an empty argument, and the set arm is the one that would be
+/// word-split without the quoting.
+#[rstest]
+#[case::unset(None, "RUSTFLAGS=-D warnings\n")]
+#[case::set(
+    Some("-C target-cpu=native --cfg 'a b'"),
+    "RUSTFLAGS=-D warnings -C target-cpu=native --cfg 'a b'\n"
+)]
+fn stdlib_optional_rustflags_example_pins_one_shell_word(
+    #[case] rustflags: Option<&str>,
+    #[case] expected: &str,
+) -> Result<()> {
+    let Ok(_ninja_probe) = ninja_integration_workspace() else {
+        return Ok(());
+    };
+    let workspace = manifest_workspace("stdlib-optional-rustflags-manifest")?;
+    // Built the way `run_build` builds it, so the child can reach the host's
+    // Ninja, and then extended with the variable under test.
+    let path = host_executable_path()?;
+    let mut environment = vec![("NETSUKE_NINJA", "ninja"), ("PATH", path.as_str())];
+    if let Some(value) = rustflags {
+        environment.push(("RUSTFLAGS", value));
+    }
+    let run = run_netsuke_in_with_env(workspace.path(), &[], &environment)?;
+    assert_success(&run, "stdlib optional RUSTFLAGS example")?;
+
+    let output = test_fs::read_to_string(workspace.path().join("rustflags.txt"))?;
+    ensure!(
+        output == expected,
+        "RUSTFLAGS {rustflags:?} rendered {output:?}, expected {expected:?}"
+    );
+    Ok(())
+}

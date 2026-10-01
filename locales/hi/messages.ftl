@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = बैकस्लैश को एस्केप �
 manifest.env.missing = एक आवश्यक परिवेश चर निर्धारित नहीं है।
 manifest.env.invalid_utf8 = एक परिवेश चर में अमान्य UTF-8 है।
 manifest.env.blocked = किसी परिवेश चर तक पहुँच अवरुद्ध है।
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env का default स्ट्रिंग होना चाहिए, { $kind } प्राप्त हुआ।
 manifest.vars.not_object = मैनिफ़ेस्ट का `vars` प्रतिचित्रण अथवा वस्तु होना चाहिए।
 manifest.vars.reserved_name = मैनिफ़ेस्ट की `vars` कुंजी '{ $name }' अंतर्निहित टेम्पलेट सहायक के लिए आरक्षित है; चर का नाम बदलें।
 manifest.read_failed = { $path } से मैनिफ़ेस्ट नहीं पढ़ा जा सका।
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = धारा
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote ने एक स्ट्रिंग की अपेक्षा की, किंतु { $kind } प्राप्त हुआ।
+stdlib.shell.quote.control_character = शून्य बाइट, गाड़ी वापसी या पंक्ति परिवर्तन वाले मान को उद्धृत नहीं किया जा सकता।
+stdlib.shell.dialect_invalid = अज्ञात शेल बोली { $dialect }; इनमें से एक अपेक्षित थी: { $accepted }।
+stdlib.shell.dialect_not_string = shell का dialect विकल्प स्ट्रिंग होना चाहिए, { $kind } प्राप्त हुआ।
+stdlib.shell.join.not_sequence = shell_join ने अनुक्रम की अपेक्षा की, किंतु { $kind } प्राप्त हुआ।
+stdlib.shell.join.item_not_string = shell_join का आइटम { $index } { $kind } है, स्ट्रिंग नहीं।
+stdlib.shell.positional_option = { $filter } अपने विकल्प कीवर्ड के रूप में लेता है; { $example } लिखें।
+
 # पथ सहायक के निदान।
 stdlib.path.io.failed = { $path } पर क्रिया “{ $action }” विफल रही ({ $label })।
 stdlib.path.io.failed_with_detail = { $path } पर क्रिया “{ $action }” विफल रही: { $detail }।
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = असमर्थित है�
 
 # संग्रह सहायकों के निदान।
 stdlib.collections.flatten.expected_sequence = flatten को अनुक्रम की मदें अपेक्षित थीं, किंतु { $kind } मिला।
+stdlib.collections.compact.not_sequence = compact को अनुक्रम अपेक्षित था, किंतु { $kind } मिला।
 stdlib.collections.group_by.empty_attribute = group_by को अरिक्त गुण चाहिए।
 stdlib.collections.group_by.unresolved = group_by { $kind } प्रकार की मद पर “{ $attr }” नहीं खोज सका।
 

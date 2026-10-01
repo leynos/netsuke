@@ -48,15 +48,20 @@ pub(crate) fn from_path_for_manifest_query_with_limits(
 
 /// Load a full manifest with explicit policy, environment inputs, and
 /// resource ceilings.
+///
+/// `recipe_shell` is the interpreter the runner resolved; the template
+/// filters and IR lowering must agree on it, so it is threaded here rather
+/// than re-derived from the environment.
 #[expect(
     clippy::too_many_arguments,
-    reason = "This compatibility entry point keeps the established policy, environment, budget, and stage-observer seams explicit."
+    reason = "This compatibility entry point keeps the established policy, environment, budget, shell, and stage-observer seams explicit."
 )]
 pub(super) fn from_path_with_policy_and_environment_and_limits(
     path: impl AsRef<Path>,
     policy: NetworkPolicy,
     environment: &ManifestEnvironment<'_>,
     budget_limits: ManifestBudgetLimits,
+    recipe_shell: crate::recipe_shell::RecipeShell,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
     from_path_with_registration(ManifestLoadRequest {
@@ -64,15 +69,33 @@ pub(super) fn from_path_with_policy_and_environment_and_limits(
         environment,
         budget_limits,
         on_stage,
-        mode: ManifestLoadMode::Full(policy),
+        mode: ManifestLoadMode::Full {
+            policy,
+            recipe_shell,
+        },
     })
 }
 
 /// Select the standard-library boundary for a manifest load.
 enum ManifestLoadMode {
-    /// A normal build load with a configured network policy.
-    Full(NetworkPolicy),
+    /// A normal build load with a configured network policy and the
+    /// interpreter the runner resolved.
+    Full {
+        /// Network grant ceiling applied to fetch helpers.
+        policy: NetworkPolicy,
+        /// Interpreter whose quoting rules the template filters follow.
+        recipe_shell: crate::recipe_shell::RecipeShell,
+    },
     /// A metadata-only load that must not construct an ambient stdlib config.
+    ///
+    /// The query surface quotes recipe text for the host default interpreter
+    /// rather than for the shell the build will resolve. **This divergence is
+    /// deliberate**: `resolve_recipe_shell` sits behind the runner's command
+    /// dispatch, and reaching it from here would make `netsuke help targets`
+    /// fail on a host whose `NETSUKE_WINDOWS_SHELL` is malformed — turning a
+    /// metadata query into a command that can error on configuration it never
+    /// uses. `tests/stdlib_manifest_query_tests.rs` pins the divergence so it
+    /// stays a decision rather than becoming a surprise.
     ManifestQuery,
 }
 
@@ -108,11 +131,15 @@ fn from_path_with_registration(
         StdlibRegistration,
         Option<ExpansionReportObserver>,
     ) = match request.mode {
-        ManifestLoadMode::Full(policy) => (
+        ManifestLoadMode::Full {
+            policy,
+            recipe_shell,
+        } => (
             StdlibRegistration::Full(Box::new(
                 StdlibConfig::new(workspace.dir)?
                     .with_workspace_root_path(&workspace.root)?
-                    .with_network_policy(policy),
+                    .with_network_policy(policy)
+                    .with_recipe_shell(recipe_shell),
             )),
             Some(trace_expansion_report),
         ),

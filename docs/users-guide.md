@@ -515,7 +515,14 @@ list of strings.
 
 Netsuke quotes paths inserted through `{{ ins }}` and `{{ outs }}`. Other Jinja
 values render as ordinary command text and are not automatically shell-quoted.
-The `shell_escape` filter described in older drafts is not implemented in beta4.
+Use the `shell_quote` filter to encode one value as a single shell word, and
+`shell_join` to encode a list as a command line. Both take a `dialect` of `sh`
+or `powershell` and otherwise use the dialect implied by the recipe's shell, so
+the default differs between Unix and Windows; pin `dialect` when the generated
+text must be byte-stable. Both are correct only in unquoted argv position. See
+[Build shell recipe text](stdlib-yaml-and-jinja-guide.md#build-shell-recipe-text)
+for the full contract, and "Write recipes that work on Windows" below for why
+the default differs.
 
 Cycle detection follows `sources` and `deps`. Order-only dependencies enforce
 ordering but do not participate in cycle detection.
@@ -798,8 +805,16 @@ Both helpers accept:
   a checkout-controlled executable, so use it only when that trust boundary is
   intended.
 
-The `env(name)` function reads one required environment variable. Beta4 does
-not accept a default argument; an absent or non-Unicode value is an error.
+The `env(name)` function reads one environment variable, and
+`env(name, default='...')` supplies the value to use when it is absent. A
+present variable always takes precedence over the default. An empty string is a
+present value, so it yields `''` rather than the default. The default is
+consulted only for a missing variable: a non-Unicode value is still an error,
+and a variable refused by the access policy is still refused. The default must
+be a string; a number, boolean, list, or map is rejected rather than
+stringified. Omitting the default, passing `default=none`, or passing an
+undefined default supplies no fallback at all: each behaves exactly as if the
+argument had not been written.
 
 #### `which` resolver observability
 
@@ -1083,12 +1098,12 @@ The command loads, expands, renders, and validates the manifest through the
 same structural stages as a build, but performs no recipes and creates no build
 outputs. Rendering uses a restricted, side-effect-free Jinja surface. Queries
 allow only the lexical path filters `basename`, `dirname`, `with_suffix`, and
-`relative_to`, the collection filters `uniq`, `flatten`, and `group_by`, and
-the clock-independent `timedelta` function. Query rendering skips command and
-script recipe bodies, so build-only helpers in those recipes are not evaluated
-and do not make discovery fail. Metadata such as `vars`, names, dependencies,
-and descriptions is still rendered; structural rule selectors are rendered as
-needed for graph validation.
+`relative_to`, the collection filters `uniq`, `flatten`, `compact`, and
+`group_by`, and the clock-independent `timedelta` function. Query rendering
+skips command and script recipe bodies, so build-only helpers in those recipes
+are not evaluated and do not make discovery fail. Metadata such as `vars`,
+names, dependencies, and descriptions is still rendered; structural rule
+selectors are rendered as needed for graph validation.
 
 Queries reject direct use of `env()` and `glob()`, file tests, filesystem
 metadata filters such as `size` and `linecount`, `hash`, `digest`, `contents`,
@@ -1101,6 +1116,13 @@ excluded from graph validation. An ordinary false `when` expression still
 filters its entry out. Normal build manifest rendering retains the full
 standard library and its existing `when` semantics; these restrictions apply
 only to query rendering.
+
+`compact` accepts a `Seq` or `Iterable` subject and removes `none`, undefined,
+and empty-string members while preserving order. It removes nothing else: `0`,
+`false`, whitespace-only strings, empty lists, and empty maps are retained.
+Example: `{{ ['a', none, '', 'b'] | compact | join(',') }}` produces `a,b`. The
+[template standard-library guide](stdlib-yaml-and-jinja-guide.md)
+gives the full filter reference.
 
 In human-readable output, a conditional entry carries `[◇ conditional]` when
 emoji output is allowed, or `[? conditional]` in the ASCII theme. JSON output
@@ -1340,16 +1362,29 @@ rendered manifest values can carry secret material interpolated through `env()`.
 Loading a manifest counts every `env()` lookup in one bounded series:
 
 - `netsuke_manifest_env_lookups_total` — a counter with a single `outcome`
-  label that counts each `env()` lookup. `outcome` is `success` when the
-  variable resolved, `blocked` when the
+  label that counts each `env()` lookup. `outcome` is `success` when the lookup
+  produced a value, `blocked` when the
   [environment access policy](#control-manifest-environment-access) denied the
-  name, `not_present` when the variable is absent, and `not_unicode` when its
-  value is not valid UTF-8.
+  name, `not_present` when the variable is absent and no default is available,
+  and `not_unicode` when its value is not valid UTF-8.
+
+The outcome tracks whether a value was produced, not whether the variable was
+present. A missing variable resolved through a supplied default is therefore
+counted as `success`: the manifest asked for a substitution and received one.
+Only a missing variable with no fallback available counts as `not_present`, so
+an absent variable does not by itself imply that outcome.
+
+The four outcomes are the complete vocabulary; a substituted fallback is not a
+fifth. That case is instead marked by a bounded `fallback_used` field on a
+`tracing::debug!` event emitted only on the substitution path. The field is not
+a metric outcome and carries no name or value of its own, but it lets an
+operator see an exported variable stop propagating even though the lookup still
+counts as a success.
 
 The `blocked` outcome is what makes an effective policy measurable: it is the
 rate at which the policy is refusing manifest access. Variable names and their
-values never appear in the label, because environment variable names routinely
-identify credentials.
+values never appear in the label, and neither do the contents of a fallback,
+because environment variable names routinely identify credentials.
 
 The annotated [sample configuration](sample-netsuke.toml) lists every key. A
 small project configuration looks like this:

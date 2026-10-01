@@ -139,6 +139,8 @@ manifest.yaml.hint.escape = Escapujte zpětná lomítka nebo odstraňte neplatn�
 manifest.env.missing = Povinná proměnná prostředí není nastavena.
 manifest.env.invalid_utf8 = Proměnná prostředí obsahuje neplatné UTF-8.
 manifest.env.blocked = Přístup k proměnné prostředí je zablokován.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Hodnota default v env musí být řetězec; typ obdržené hodnoty: { $kind }.
 manifest.vars.not_object = Položka `vars` manifestu musí být mapování nebo objekt.
 manifest.vars.reserved_name = Klíč `vars` '{ $name }' v manifestu je vyhrazen pro vestavěného pomocníka šablon; přejmenujte proměnnou.
 manifest.read_failed = Manifest v { $path } se nepodařilo přečíst.
@@ -285,6 +287,17 @@ stdlib.command.output.mode.streaming = proudové zpracování
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote očekával řetězec, ale obdržel { $kind }.
+stdlib.shell.quote.control_character = Hodnotu obsahující nulový bajt, návrat vozíku nebo konec řádku nelze uzavřít do uvozovek.
+stdlib.shell.dialect_invalid = Neznámý dialekt shellu { $dialect }; očekáván jeden z { $accepted }.
+stdlib.shell.dialect_not_string = Volba dialect v shell musí být řetězec; typ obdržené hodnoty: { $kind }.
+stdlib.shell.join.not_sequence = shell_join očekával posloupnost, ale obdržel { $kind }.
+stdlib.shell.join.item_not_string = Prvek { $index } v shell_join má typ { $kind }, nikoli řetězec.
+stdlib.shell.positional_option = { $filter } přijímá své volby jako klíčová slova; zapište { $example }.
+
 # Diagnostika pomocníka pro cesty.
 stdlib.path.io.failed = Akce „{ $action }“ selhala pro { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Akce „{ $action }“ selhala pro { $path }: { $detail }.
@@ -340,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nepodporovaný hashovací algori
 
 # Diagnostika pomocníků pro kolekce.
 stdlib.collections.flatten.expected_sequence = flatten očekával prvky posloupnosti, ale nalezl { $kind }.
+stdlib.collections.compact.not_sequence = compact očekává posloupnost; typ obdržené hodnoty: { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by vyžaduje neprázdný atribut.
 stdlib.collections.group_by.unresolved = group_by nedokázal najít „{ $attr }“ u prvku typu { $kind }.
 

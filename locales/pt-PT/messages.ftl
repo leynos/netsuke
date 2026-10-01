@@ -140,6 +140,8 @@ manifest.yaml.hint.escape = Faça o escape das barras invertidas ou remova as se
 manifest.env.missing = Uma variável de ambiente obrigatória não está definida.
 manifest.env.invalid_utf8 = Uma variável de ambiente contém UTF-8 inválido.
 manifest.env.blocked = O acesso a uma variável de ambiente está bloqueado.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = O default de env tem de ser uma cadeia de carateres, recebido { $kind }.
 manifest.vars.not_object = `vars` do manifesto tem de ser um mapa ou objeto.
 manifest.vars.reserved_name = A chave `vars` '{ $name }' do manifesto está reservada a uma função auxiliar de modelo integrada; mude o nome da variável.
 manifest.read_failed = Não foi possível ler o manifesto em { $path }.
@@ -286,6 +288,17 @@ stdlib.command.output.mode.streaming = fluxo contínuo
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = O shell_quote esperava uma cadeia de caracteres, mas recebeu { $kind }.
+stdlib.shell.quote.control_character = Um valor que contenha um byte nulo, retorno de carro ou quebra de linha não pode ser colocado entre aspas.
+stdlib.shell.dialect_invalid = Dialeto de shell desconhecido { $dialect }; esperado um de { $accepted }.
+stdlib.shell.dialect_not_string = A opção dialect de shell tem de ser uma cadeia de carateres, recebido { $kind }.
+stdlib.shell.join.not_sequence = O shell_join esperava uma sequência, mas recebeu { $kind }.
+stdlib.shell.join.item_not_string = O item { $index } de shell_join é { $kind }, não uma cadeia de caracteres.
+stdlib.shell.positional_option = { $filter } recebe as suas opções por palavra-chave; escreva { $example }.
+
 # Diagnósticos do auxiliar de caminhos.
 stdlib.path.io.failed = { $action } falhou para { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } falhou para { $path }: { $detail }.
@@ -341,6 +354,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algoritmo de hash não suportado
 
 # Diagnósticos dos auxiliares de coleções.
 stdlib.collections.flatten.expected_sequence = O flatten esperava itens de uma sequência, mas encontrou { $kind }.
+stdlib.collections.compact.not_sequence = O compact esperava uma sequência, mas encontrou { $kind }.
 stdlib.collections.group_by.empty_attribute = O group_by exige um atributo não vazio.
 stdlib.collections.group_by.unresolved = O group_by não conseguiu resolver «{ $attr }» num item do tipo { $kind }.
 

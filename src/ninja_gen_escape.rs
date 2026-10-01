@@ -40,11 +40,15 @@ impl Display for NinjaValue {
 }
 
 /// Reject text that cannot remain within one Ninja binding.
+///
+/// The predicate itself lives in `shell_word` so the Ninja writer and the
+/// recipe-text template filters share one definition rather than a copy at
+/// each enforcement point; this wrapper only supplies the error type.
 pub(super) fn validate_ninja_value(text: &str) -> Result<(), NinjaGenError> {
-    if text.contains(['\n', '\r', '\0']) {
-        return Err(NinjaGenError::UnsafeNinjaValue);
+    if crate::shell_word::is_recipe_admissible(text) {
+        return Ok(());
     }
-    Ok(())
+    Err(NinjaGenError::UnsafeNinjaValue)
 }
 
 /// Escape fully assembled shell text for one Ninja binding.

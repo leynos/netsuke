@@ -60,6 +60,14 @@ Feature: Template stdlib filters
     When I render template "{{ [['a'], 'b'] | flatten }}" at stdlib path "file"
     Then the stdlib error contains "Flatten expected sequence items"
 
+  Scenario: compact drops empty strings and nulls but keeps falsy values
+    When I render template "{{ ['a', '', none, 0, false, 'b'] | compact | join(',') }}" at stdlib path "file"
+    Then the stdlib output equals "a,0,False,b"
+
+  Scenario: compact reports errors for non-sequences
+    When I render template "{{ 'abc' | compact }}" at stdlib path "file"
+    Then the stdlib error contains "compact expects a sequence"
+
   Scenario: group_by clusters items by attribute
     When I render template "{{ ([{'name': 'one', 'kind': 'tool'}, {'name': 'two', 'kind': 'tool'}, {'name': 'three', 'kind': 'material'}] | group_by('kind')).tool | length }}" at stdlib path "file"
     Then the stdlib output equals "2"
@@ -232,3 +240,49 @@ Feature: Template stdlib filters
     When I render template "{{ fetch(url, cache=true, cache_dir='../cache') }}" with stdlib url
     Then the stdlib error contains "cache_dir"
     And the stdlib template is pure
+
+  Scenario: compact drops empty and null members but keeps zero
+    When I render the stdlib template "{{ [0, '', none, 'x'] | compact | join(',') }}" without context
+    Then the stdlib output equals "0,x"
+
+  Scenario: shell_quote makes a metacharacter-bearing value one sh word
+    When I render the stdlib template "{{ 'a b \'$HOME\'' | shell_quote(dialect='sh') }}" without context
+    Then the stdlib output equals "a' b '\''$HOME'\'"
+
+  Scenario: shell_join quotes each element separately
+    When I render the stdlib template "{{ ['-C', 'target-cpu=native', 'a b'] | shell_join(dialect='sh') }}" without context
+    Then the stdlib output equals "-C target-cpu'=native' a' b'"
+
+  Scenario: shell_quote rejects an unknown dialect and names the accepted set
+    When I render the stdlib template "{{ 'x' | shell_quote(dialect='bash') }}" without context
+    Then the stdlib error contains "netsuke::jinja::shell::args"
+    And the stdlib error contains "powershell"
+
+  Scenario: shell_quote rejects a non-string dialect as a type error
+    When I render the stdlib template "{{ 'x' | shell_quote(dialect=3) }}" without context
+    Then the stdlib error contains "netsuke::jinja::shell::args"
+    And the stdlib error contains "must be a string"
+    And the stdlib error contains "number"
+
+  Scenario: shell_join rejects a non-string dialect as a type error
+    When I render the stdlib template "{{ ['x'] | shell_join(dialect=true) }}" without context
+    Then the stdlib error contains "netsuke::jinja::shell::args"
+    And the stdlib error contains "must be a string"
+    And the stdlib error contains "bool"
+
+  Scenario: shell_quote rejects a value containing a line feed
+    When I render the stdlib template "{{ 'a\nb' | shell_quote(dialect='sh') }}" without context
+    Then the stdlib error contains "netsuke::jinja::shell::unquotable"
+
+  Scenario: shell filter errors keep their code when localised
+    Given the localisation locale is "es-ES"
+    When I render the stdlib template "{{ 'x' | shell_quote(dialect='bash') }}" without context
+    Then the stdlib error contains "netsuke::jinja::shell::args"
+
+  Scenario: shell_join rejects a string subject rather than quoting its characters
+    When I render the stdlib template "{{ 'abc' | shell_join(dialect='sh') }}" without context
+    Then the stdlib error contains "netsuke::jinja::shell::args"
+
+  Scenario: shell_quote rejects a positional dialect
+    When I render the stdlib template "{{ 'x' | shell_quote('sh') }}" without context
+    Then the stdlib error contains "netsuke::jinja::shell::args"
