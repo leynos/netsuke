@@ -378,6 +378,12 @@ values through a hash set.
   order-preserving map keyed on the canonical key; they must not expose the
   map's iteration order.
 
+The canonical-JSON domain is the set of values for which RFC 8785 produces a
+canonical JSON representation, with string keys at every mapping level and no
+value excluded above. Round-trip claims in section 8.1 are limited to that
+domain. A serializer may accept additional native values, but converting them
+does not establish canonical equality with the original value.
+
 ### 6.8. Resource bounds
 
 Every parser, combinatorial helper, regular-expression operation, and
@@ -739,9 +745,9 @@ Deterministically serializes a native value as block-style YAML.
   timestamp, or an empty value, and whenever it has leading or trailing
   whitespace. This explicitly covers the YAML 1.1 spellings `yes`, `no`, `on`,
   `off`, `y`, and `n`, so the Norway problem cannot reach a generated file.
-- Round trip: `value | to_yaml | from_yaml` returns a value equal to `value`
-  under section 6.7 canonical equality, for every value expressible in YAML.
-  This is a property test.
+- Round trip: for values in the section 6.7 canonical-JSON domain that are
+  expressible in YAML, `value | to_yaml | from_yaml` returns a value equal to
+  `value` under section 6.7 canonical equality. This is a property test.
 - Undefined input is an error.
 
 #### `value | to_nice_json(indent=2, sort_keys=false)`
@@ -755,8 +761,19 @@ Pretty-prints JSON. MiniJinja's `tojson` remains the compact serializer; no
 - Output uses LF line endings and does **not** end with a trailing newline, so
   the result composes inside a larger document.
 - Integer and boolean mapping keys are rendered in their canonical string
-  form. Other key kinds are rejected rather than coerced.
-- Round trip: `value | to_nice_json | from_json` returns an equal value.
+  form. Other key kinds are rejected rather than coerced. This conversion is
+  lossy: `from_json` reads the rendered key as a string, so the original key
+  type is not preserved.
+- Distinct source keys that render to the same string are rejected with
+  `duplicate_key`. For example, a mapping containing integer key `1` and string
+  key `"1"`, or boolean key `true` and string key `"true"`, is rejected.
+- Round trip: for values in the section 6.7 canonical-JSON domain,
+  `value | to_nice_json | from_json` returns a value equal to `value`. Inputs
+  with converted integer or boolean keys are outside this guarantee, including
+  such mappings nested in sequences.
+
+The normative amendment and its acceptance cases are recorded in
+[RFC 0013](0013-structured-data-interchange-helpers.md).
 
 ### 8.2. Mapping and sequence transforms
 

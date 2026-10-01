@@ -38,11 +38,16 @@ mod markdown;
 mod partition;
 mod progress;
 mod registries;
+#[cfg(test)]
+#[path = "repo_tests.rs"]
+mod repo_tests;
 mod roadmap;
 mod section7;
 mod section8;
 mod survey;
 mod totals;
+#[cfg(test)]
+mod validation_fixtures;
 
 pub use partition::{
     every_accepted_helper_has_exactly_one_owner, no_forbidden_helper_is_registered,
@@ -158,6 +163,17 @@ pub(super) struct Repo {
 }
 
 impl Repo {
+    /// Open an isolated fixture root for parser and validator tests.
+    ///
+    /// Keep fixture access capability-scoped like repository access; callers
+    /// own the temporary directory and never mutate tracked documents.
+    #[cfg(test)]
+    fn fixture(root: &Utf8Path) -> Result<Self> {
+        let dir = Dir::open_ambient_dir(root, ambient_authority())
+            .with_context(|| format!("open fixture root {root}"))?;
+        Ok(Self { dir })
+    }
+
     /// Open the package root named by Cargo at build time.
     pub(super) fn open() -> Result<Self> {
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));

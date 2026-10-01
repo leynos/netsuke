@@ -294,3 +294,7 @@ mod fence_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "markdown_property_tests.rs"]
+mod property_tests;

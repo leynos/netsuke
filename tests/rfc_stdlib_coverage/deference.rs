@@ -192,6 +192,20 @@ mod deference_tests {
         );
     }
 
+    #[rstest::rstest]
+    #[case::underscore("_as Ansible", None)]
+    #[case::number("2as Ansible", None)]
+    #[case::unicode_word("éAs Ansible", None)]
+    #[case::punctuation("(as Ansible)", Some("as Ansible"))]
+    #[case::unicode_punctuation("—Like Ansible", Some("like Ansible"))]
+    #[case::later_real_appeal("such as Ansible; as Ansible does", Some("as Ansible"))]
+    fn phrase_boundaries_and_later_matches_are_respected(
+        #[case] text: &str,
+        #[case] expected: Option<&str>,
+    ) {
+        assert_eq!(deference_phrase(text), expected);
+    }
+
     /// A sentence mentioning Ansible for another reason is not flagged.
     #[test]
     fn an_unrelated_mention_is_not_flagged() {

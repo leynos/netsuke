@@ -256,3 +256,7 @@ fn names_an_owned_helper(body: &str, owned: &BTreeSet<String>) -> bool {
         .iter()
         .any(|name| owned.contains(name.trim()))
 }
+
+#[cfg(test)]
+#[path = "clauses_tests.rs"]
+mod tests;

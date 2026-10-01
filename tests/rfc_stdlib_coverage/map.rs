@@ -341,3 +341,7 @@ pub(super) fn resolve_owns(
     );
     Ok(claimed)
 }
+
+#[cfg(test)]
+#[path = "map_tests.rs"]
+mod tests;

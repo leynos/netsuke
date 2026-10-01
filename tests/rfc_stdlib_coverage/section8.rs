@@ -99,3 +99,7 @@ fn mentions(lines: &[&str], name: &str) -> bool {
             .any(|token| token == name)
     })
 }
+
+#[cfg(test)]
+#[path = "section8_tests.rs"]
+mod tests;

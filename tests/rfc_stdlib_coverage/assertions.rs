@@ -152,3 +152,7 @@ pub(super) fn check_denied(survey: &Survey) -> Result<()> {
     );
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "assertions_tests.rs"]
+mod tests;

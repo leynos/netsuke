@@ -219,6 +219,42 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 ## Progress
 
+- [x] (2026-10-01) **Implement the coverage-validation review corrections and
+  fix the JSON key-type contradiction.** The starting local HEAD is
+  `1c35b1d076955cf773c28672089a5c6ddd7ee98c`; the reviewed remote baseline is
+  `2db228aabc60bde4f75d1d453ef78584706c51bc`. Inspect parser branches and
+  callers, add direct rejection tests and independent bounded properties, guard
+  the immediate-output override through the existing TOML loader, and document
+  the suite. Retain integer and boolean JSON key conversion as explicitly
+  lossy; restrict canonical round-trip equality to the canonical JSON domain,
+  including string keys at every nesting level. Amend the normative parent and
+  align the child and ADR specimen. These changes implement review corrections;
+  milestones EP-M4 to EP-M11 remain outstanding.
+
+  Tests use isolated temporary capability roots through a private test-only
+  `Repo::fixture` constructor. Synthetic `World` constructors belong only to
+  this test module tree. Private validators accept those fixtures while the
+  seven repository-check wrappers continue loading the same documents once. No
+  runtime helper is implemented and no tracked document is mutated by a test.
+  CodeGraph tools are unavailable in this session and Leta has no registered
+  workspace; direct source and caller inspection is the fallback.
+
+  The first focused run found a property-assertion format capture error; after
+  correction the binary passed all 272 tests, and workflow contracts passed 986
+  tests with 3 skipped. Clippy then rejected assertion panics in fallible
+  tests, unchecked indexing, shadowing, and string construction. Those patterns
+  were corrected without suppressions. A second lint pass found sixteen further
+  statement-terminator and string-collection findings, also corrected without
+  suppressions. Python docstring sections and assertion failure messages were
+  corrected as their successive lint stages exposed them. The first full Rust
+  run found the focused Makefile target missing from the existing
+  `NEXTEST_TARGETS` inventory; that inventory now includes it and checks its
+  worker bounds. All required local gates then passed sequentially through one
+  scrutineer, including the full Rust suite. The verification subsection
+  records the measured results. Review replies and merge remain conditional on
+  current-head CI evidence and explicit CodeRabbit confirmation; no further
+  review will be requested.
+
 - [x] (2026-09-08) Rewrite roadmap task 6.1.1 to the child-RFC wording and
   record that delivery is tracked by roadmap checkboxes, not issues (`D8`).
 - [x] (2026-09-11) `EP-M0` Audit; confirm the partition and the derivation
@@ -2908,6 +2944,74 @@ ADR-040      -> EP-M1 -> docs/adr-040-focused-child-rfcs-for-survey-rfcs.md
 
 ## Verification plan
 
+### Review remediation local verification, 2026-10-01
+
+The successful integrated candidate had starting HEAD `1c35b1d0` and a complete
+tracked-and-untracked source fingerprint of
+`7058af8061276b28875ba959e1e335c8626ebc2f37c73fec2d05378637e9510d`. One
+scrutineer ran the gates sequentially, with logs under `/tmp`. Conflicting
+`FORCE_COLOR` was removed from the runner environment, retaining `NO_COLOR`, to
+avoid the tools' warning about both settings being present.
+
+| Command                         | Result                                                                 |
+| ------------------------------- | ---------------------------------------------------------------------- |
+| `make fmt`                      | Passed.                                                                |
+| `make test-rfc-stdlib-coverage` | 272 passed.                                                            |
+| `make test-workflow-contracts`  | 986 passed, 3 skipped.                                                 |
+| `make check-fmt`                | Passed.                                                                |
+| `make lint`                     | Rustdoc, Clippy, Whitaker, Python and Actions checks passed.           |
+| `make typecheck`                | Rust and Python checks passed.                                         |
+| `make markdownlint`             | Spelling passed; 170 files, zero Markdown errors.                      |
+| `make doc-coverage`             | 98.83%, above the 80% threshold.                                       |
+| `make nixie`                    | Passed.                                                                |
+| `make test`                     | 3748 Nextest tests passed, 6 skipped; 128 doctests passed, 32 ignored. |
+
+The full Rust run printed
+`coverage map: 1 of 8 capability groups written; 7 remaining`. The coverage
+binary's 272 passes include its seven repository checks and direct fixtures and
+properties. This evidence does not complete the seven unwritten child RFCs or
+establish semantic adequacy of their prose. The final edit recording these
+results receives its own formatting, Markdown, focused coverage, and
+ExecPlan-status checks before commit. CI and reviewer confirmation are separate
+publication evidence.
+
+### Review validation branch-to-test inventory, 2026-10-01
+
+The direct tests live beside the private implementation through test-only
+sibling modules. Each invalid fixture changes one condition and checks the
+existing diagnostic, including file and absolute line when the reader supplies
+that context. The seven repository checks retain their public names.
+
+| Implementation                | Direct tests and guarded branches                                                                                                                                                |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `document.rs`                 | `document_tests.rs`: section boundaries, fence opacity, absolute lines, table/header/separator recognition, missing cells.                                                       |
+| `markdown.rs`                 | `markdown_property_tests.rs`: independent opening and closing predicates; delimiter, run, information, indentation, tabs, and later structure. Existing heading examples remain. |
+| `totals.rs`                   | `totals_tests.rs`: complete counts, missing/duplicate/ambiguous/non-numeric tally, missing count cell, purity evidence and wrapping.                                             |
+| `section7.rs`, `inventory.rs` | `section7_tests.rs`: disposition and citation errors, narrow cells, namespace conflicts, rename/option witnesses, every table descriptor, ignored tables.                        |
+| `section8.rs`                 | `section8_tests.rs`: missing contract or citation, whole-token matching, exact section number, fenced boundaries.                                                                |
+| `survey.rs`                   | `survey_tests.rs`: isolated derivation, missing file/section, propagated failures, deny complement and namespace totals.                                                         |
+| `map.rs`                      | `map_tests.rs`: numbers, status and link disagreement, duplicate reservations/claims, ownership grammar and unknown references; independent set-operation properties.            |
+| `registries.rs`               | `registries_tests.rs`: missing data, filename and cell vocabularies, duplicate names, purity/query disagreement, reserved corpus selection and counts.                           |
+| `clauses.rs`, `deference.rs`  | `clauses_tests.rs` and adjacent deference cases: malformed/duplicate IDs, empty bodies/cells, owned-helper evidence, explicit escape, Ansible deference and word boundaries.     |
+| `roadmap.rs`                  | `roadmap_tests.rs`: missing/invalid steps, scheduled helpers, task headings, fence opacity and complete step order.                                                              |
+| `links.rs`                    | `links_tests.rs`: relative targets and source lines, missing files, above-root traversal; independent bounded traversal model, fragments and dot/empty segments.                 |
+| `partition.rs`                | `partition_tests.rs`: missing/extra ownership, registry number/name/namespace/registration mismatches, denied registration.                                                      |
+| `assertions.rs`               | `assertions_tests.rs`: every aggregate mismatch, deny count and required/forbidden witnesses.                                                                                    |
+| `progress.rs`                 | `progress_tests.rs`: partial upper bounds, complete helper/purity/option equalities, forbidden purity, status, schedule and discharge consistency.                               |
+| `mod.rs`                      | `repo_tests.rs`: isolated capability reads/listing, missing/non-UTF-8 documents, fixture open context, token and alias readers.                                                  |
+| Nextest contracts             | `nextest_success_output_test.py`: exact override and declared name, valid fixture, ten single-condition mutations and mutation completeness.                                     |
+
+Not every defensive return is input-reachable. Immutable offsets found in the
+same section cannot subsequently exceed its bounds; a tally lookup cannot
+vanish after its single-hit check; and ownership `only`/`except` token access
+cannot fail after the two-token arity check. These branches remain intact. The
+tests exercise the reachable rejection that precedes each defensive return
+rather than changing visibility or inventing an impossible fixture. Parsed
+Markdown rows always have a first cell, so the generic missing-cell accessor is
+tested directly while later missing columns are tested through readers. No
+claim of semantic proof or exhaustive random-input coverage is made: bounded
+properties supplement the explicit diagnostic cases.
+
 This change adds no runtime behaviour, so there is no invariant over program
 state. It introduces a combinatorial invariant over documents — a bijection
 between the accepted helper set and its owning child RFCs — which is statable
@@ -2922,21 +3026,20 @@ an anti-vacuity rule a reviewer applies in one pass; `CONF-1` mechanically
 rejects the three commonest vacuity shapes; and `EP-M3` is a hard go/no-go on
 the first completed child. The pull request must not claim more.
 
-Method selection: table-driven Rust tests over parsed Markdown tables. The
-domain is a fixed finite set, fully enumerable, so exhaustive enumeration is
-the strongest available evidence and property testing would add nothing.
-Recorded explicitly because repository guidance otherwise prefers property
-tests for invariants over ranges.
+Method selection: table-driven Rust tests enumerate the fixed document
+inventory and explicit rejection cases. Bounded property tests independently
+model the general fence, path, and ownership parsers, whose input domains are
+not that finite inventory. Both forms run in the same focused test binary.
 
-**Parser contract, common to all obligations.** The parser reads only Markdown
-table rows, never headings, and only within a named section: RFC 0006's section
-7 subtables and its section 14 coverage map, and each child's section 5.1
-registry. It splits on the cell separator, trims, and strips one pair of
-backticks. It matches names by whole-token equality, never substring — the
-vocabulary contains `abs` against `is_abs`, `quote` against `shell_quote`,
-`hash` against `text_hash`, and `subset` against `issubset`, and substring
-matching would be wrong on all four. It records file and line for every parsed
-row so failures name a location.
+**Parser contract, common to all obligations.** Helper inventories come from
+Markdown table rows rather than helper headings. Structural headings delimit
+the named sections: RFC 0006's section 7 subtables and its section 14 coverage
+map, and each child's section 5.1 registry. It splits on the cell separator,
+trims, and strips one pair of backticks. It matches names by whole-token
+equality, never substring — the vocabulary contains `abs` against `is_abs`,
+`quote` against `shell_quote`, `hash` against `text_hash`, and `subset` against
+`issubset`, and substring matching would be wrong on all four. It records file
+and line for every parsed row so failures name a location.
 
 ### Obligation `COV-1`: exactly one designated owner
 

@@ -22,6 +22,11 @@ use super::{Registration, Repo, World, registries, survey};
 /// together claim every accepted helper exactly once.
 pub fn every_accepted_helper_has_exactly_one_owner(repo: &Repo) -> Result<()> {
     let world = World::load(repo)?;
+    check_ownership(&world)
+}
+
+/// Validate ownership against one already parsed document snapshot.
+fn check_ownership(world: &World) -> Result<()> {
     let ownership = world.map.ownership()?;
 
     let accepted: BTreeSet<String> = world.survey.accepted.keys().cloned().collect();
@@ -117,6 +122,11 @@ fn check_rows_agree_with_survey(
 /// No child RFC registers a name RFC 0006 defers or rejects.
 pub fn no_forbidden_helper_is_registered(repo: &Repo) -> Result<()> {
     let world = World::load(repo)?;
+    check_forbidden(&world)
+}
+
+/// Reject denied registrations in one already parsed document snapshot.
+fn check_forbidden(world: &World) -> Result<()> {
     let mut violations = Vec::new();
     for registry in &world.registries {
         for name in registry.names() {
@@ -134,3 +144,7 @@ pub fn no_forbidden_helper_is_registered(repo: &Repo) -> Result<()> {
     );
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "partition_tests.rs"]
+mod tests;

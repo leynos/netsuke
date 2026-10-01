@@ -153,3 +153,7 @@ pub(super) fn derive(repo: &Repo) -> Result<Survey> {
         proposed: PROPOSED_HELPERS,
     })
 }
+
+#[cfg(test)]
+#[path = "survey_tests.rs"]
+mod tests;

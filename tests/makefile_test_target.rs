@@ -37,7 +37,8 @@ use toml::Value;
 /// runs on its own because that suite needs a per-user systemd manager rather
 /// than the whole workspace. `test-kani-mutations` runs the same runner over
 /// the `#[ignore]`-gated mutation compile gate, which is too expensive for the
-/// default profile. A contributor sets the bounds once and expects them
+/// default profile. `test-rfc-stdlib-coverage` runs the RFC parser and coverage
+/// contract in isolation. A contributor sets the bounds once and expects them
 /// honoured wherever nextest runs, so the list is a contract rather than a
 /// note of what happens to be true today.
 ///
@@ -45,10 +46,11 @@ use toml::Value;
 /// [`behavioural_nextest_targets_forward_both_worker_bounds`] discovers the
 /// targets that actually invoke the runner and fails when the two disagree, so
 /// a new recipe joins the contract or breaks the build.
-const NEXTEST_TARGETS: [&str; 3] = [
+const NEXTEST_TARGETS: [&str; 4] = [
     "test-kani-mutations",
     "test-kani-scope-wrapper",
     "test-nextest",
+    "test-rfc-stdlib-coverage",
 ];
 
 /// True when `line` is a tab-indented recipe line that invokes the nextest

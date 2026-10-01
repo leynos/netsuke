@@ -24,7 +24,11 @@ use super::{Registration, Repo, World, clauses, links, registries};
 /// The derived totals and the registries' purity aggregate agree with RFC 0006.
 pub fn totals_and_purity_aggregate_agree(repo: &Repo) -> Result<()> {
     let world = World::load(repo)?;
+    check_totals(&world)
+}
 
+/// Validate helper totals against one already parsed document snapshot.
+fn check_totals(world: &World) -> Result<()> {
     let registered: usize = world
         .registries
         .iter()
@@ -56,7 +60,7 @@ pub fn totals_and_purity_aggregate_agree(repo: &Repo) -> Result<()> {
         );
     }
 
-    check_registry_aggregate(&world)
+    check_registry_aggregate(world)
 }
 
 /// The registries' purity classes and `option added` count, against RFC 0006.
@@ -160,6 +164,11 @@ pub fn coverage_map_status_is_reported(repo: &Repo) -> Result<()> {
         world.map.rows.len() - unwritten,
         world.map.rows.len()
     );
+    check_status(repo, &world)
+}
+
+/// Validate reported map status against parsed registries and file existence.
+fn check_status(repo: &Repo, world: &World) -> Result<()> {
     ensure!(
         world.map.rows.len() == 8,
         "the coverage map has {} rows; expected 8",
@@ -238,6 +247,11 @@ pub fn inter_document_links_resolve(repo: &Repo) -> Result<()> {
 /// Every capability has a roadmap task, and each child's step names what it owns.
 pub fn every_capability_has_a_roadmap_task(repo: &Repo) -> Result<()> {
     let world = World::load(repo)?;
+    check_schedule(&world)
+}
+
+/// Validate that each accepted helper is scheduled in its owning step.
+fn check_schedule(world: &World) -> Result<()> {
     let unscheduled = world.roadmap.unscheduled(world.survey.accepted.keys());
     ensure!(
         unscheduled.is_empty(),
@@ -278,6 +292,11 @@ pub fn every_capability_has_a_roadmap_task(repo: &Repo) -> Result<()> {
 /// Every child RFC discharges every clause of RFC 0006 section 6.
 pub fn every_child_discharges_every_clause(repo: &Repo) -> Result<()> {
     let world = World::load(repo)?;
+    check_discharges(repo, &world)
+}
+
+/// Validate child discharges against the parent clauses in one snapshot.
+fn check_discharges(repo: &Repo, world: &World) -> Result<()> {
     let clauses: BTreeSet<String> = clauses::clause_ids(repo)?.into_iter().collect();
     for registry in &world.registries {
         let discharged = clauses::discharged(repo, &registry.file)?;
@@ -310,3 +329,7 @@ pub fn every_child_discharges_every_clause(repo: &Repo) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "progress_tests.rs"]
+mod tests;

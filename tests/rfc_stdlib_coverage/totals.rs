@@ -122,3 +122,7 @@ pub(super) fn purity_aggregate(document: &Section<'_>) -> Result<(usize, usize, 
     );
     Ok(PURITY)
 }
+
+#[cfg(test)]
+#[path = "totals_tests.rs"]
+mod tests;

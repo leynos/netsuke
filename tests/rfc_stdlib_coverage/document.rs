@@ -267,3 +267,7 @@ impl RawRow {
             .with_context(|| format!("row at line {} has no {what} column", self.line))
     }
 }
+
+#[cfg(test)]
+#[path = "document_tests.rs"]
+mod tests;

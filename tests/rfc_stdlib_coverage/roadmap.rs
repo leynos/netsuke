@@ -159,3 +159,7 @@ fn step_of(heading: &str, in_range: &mut bool) -> Result<Option<String>> {
     );
     Ok(Some(number))
 }
+
+#[cfg(test)]
+#[path = "roadmap_tests.rs"]
+mod tests;

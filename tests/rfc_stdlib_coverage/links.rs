@@ -137,3 +137,7 @@ pub(super) fn dangling(repo: &Repo) -> Result<Vec<String>> {
     }
     Ok(failures)
 }
+
+#[cfg(test)]
+#[path = "links_tests.rs"]
+mod tests;

@@ -3,6 +3,7 @@
 ## Preamble
 
 - **RFC number:** 0013
+- **Amends:** RFC 0006, sections 6.7 and 8.1
 - **Status:** Proposed
 - **Created:** 2026-09-24
 - **Parent RFC:** [RFC 0006, Ansible-inspired template standard-library
@@ -60,9 +61,9 @@ JSON without one, so a manifest that needs it reads
     over the `serde-saphyr` stack [ADR-001](../adr-001-replace-serde-yml-with-serde-saphyr.md)
     already adopts.
   - Serialize deterministically to block-style YAML and to pretty-printed JSON,
-    with quoting that cannot be read back as another type.
-  - Make both round trips hold under RFC 0006 section 6.7 canonical equality, as
-    property tests rather than examples.
+    with string scalars quoted so they cannot be read back as another type.
+  - Test both round trips under RFC 0006 section 6.7 canonical equality for
+    values in its canonical-JSON domain, rather than relying on examples.
 - Non-goals:
   - `to_json`: rejected in RFC 0006 section 7 as redundant with MiniJinja's
     `tojson`, which remains the compact serializer.
@@ -187,7 +188,8 @@ and the two serializers do not share a rejection set.
 - `to_nice_json` accepts any value except undefined, and rejects the same five
   conditions as `to_yaml`, with the difference that section 8.1 states its key
   rule directly: integer and boolean keys are rendered in canonical string form
-  and every other key kind is rejected rather than coerced.
+  and every other key kind is rejected rather than coerced. It also rejects
+  distinct source keys that render to one JSON key, with `duplicate_key`.
 
 Three decisions this group adds:
 
@@ -210,9 +212,10 @@ Three decisions this group adds:
 
 ### 5.7. Canonical value equality
 
-Clause 6.7 governs `to_yaml`'s and `to_nice_json`'s `sort_keys=true` and
-nothing else in this group. The obligation here is to say which of the clause's
-exclusions this group can meet, and to fix how the round trips are stated.
+Clause 6.7 governs serializer key sorting and canonical round-trip claims. The
+obligation here is to say which of the clause's exclusions this group can meet,
+and to define the domain of its round-trip guarantees. This RFC amends RFC 0006
+sections 6.7 and 8.1 to make that domain explicit.
 
 - `sort_keys=true` sorts mapping keys by their RFC 8785 canonical key, so two
   mappings that differ only in insertion order serialize identically. That is
@@ -225,21 +228,33 @@ exclusions this group can meet, and to fix how the round trips are stated.
   `now()` and pass it to a serializer, and clause 6.7 makes that a typed error
   naming the value kind rather than a silent rendering.
 - The group defines **no second equality relation** for round-trip testing.
-  `value | to_yaml | from_yaml` and `value | to_nice_json | from_json` are
-  asserted equal under clause 6.7's relation. A looser relation for tests would
-  make the property tests agree with an implementation the clause does not
-  describe.
-- **The JSON round trip is stated over the mappings `to_nice_json` accepts, and
-  the rendering can collapse two keys into one.** An integer or boolean key
-  renders as its canonical string form, so the integer `1` and the string `"1"`
-  produce one JSON key. A mapping holding both — which `from_yaml` can build,
-  since `1: a` and `"1": b` are distinct keys in YAML — would emit a document
-  with a duplicate key that `from_json`, the stated inverse, rejects with
-  `duplicate_key`. `to_nice_json` therefore rejects a mapping whose rendered
-  keys are not distinct, with the same `duplicate_key` code and naming both
-  source keys, and the round trip is asserted over every mapping it accepts.
-  The check is on the rendered key, not the source key, because that is the
-  level at which the collision exists.
+  Both `value | to_yaml | from_yaml` and `value | to_nice_json | from_json` are
+  asserted equal under clause 6.7 only for values in its canonical-JSON domain:
+  JSON-compatible values whose mapping keys are strings at every nesting level.
+  The serializer may accept other values, but their conversion does not promise
+  canonical equality.
+- **Integer and boolean JSON keys convert lossily.** A single integer key `1`
+  serializes as the JSON property `"1"`; a single boolean key `true` serializes
+  as `"true"`. `from_json` reads either as a string key, so neither input is
+  within the JSON round-trip guarantee. The same applies when a mapping with
+  such keys is nested inside a sequence. String-keyed mappings, including
+  nested mappings, remain within the guarantee.
+- **Rendered-key collisions remain errors.** A mapping containing integer key
+  `1` alongside string key `"1"`, or boolean key `true` alongside string key
+  `"true"`, is rejected with `duplicate_key`, naming both source keys. The
+  check is on rendered keys because that is where the collision occurs.
+
+The acceptance cases make the boundary concrete:
+
+| Input mapping                   | Result                        | Canonical round trip |
+| ------------------------------- | ----------------------------- | -------------------- |
+| `{"name": "value"}`             | String key preserved          | Equal                |
+| `{"outer": {"inner": "value"}}` | Nested string keys preserved  | Equal                |
+| `{1: "value"}`                  | Key becomes `"1"`             | Lossy; excluded      |
+| `{true: "value"}`               | Key becomes `"true"`          | Lossy; excluded      |
+| `[{1: "value"}]`                | Nested key becomes `"1"`      | Lossy; excluded      |
+| `{1: "a", "1": "b"}`            | Rejected with `duplicate_key` | Not serialized       |
+| `{true: "a", "true": "b"}`      | Rejected with `duplicate_key` | Not serialized       |
 
 ### 5.8. Resource bounds
 
@@ -363,8 +378,9 @@ redundancy is with a MiniJinja builtin that is likewise already reachable.
 
 No additional obligation beyond RFC 0006 section 6.11. The clause's seven
 obligations apply unmodified. One group-specific note rather than a
-restatement: the round-trip property tests clause 6.11.4 requires are the two
-named in section 5.7 under clause 6.7 canonical equality, and the
+restatement: the two round-trip properties required by clause 6.11.4 use the
+canonical-JSON domain stated in section 5.7. The serializer's lossy integer and
+boolean key cases and collision errors are separate acceptance tests. The
 serialization-determinism property it names is the same proposition as section
 5.3's key-order requirement, tested from the other side.
 
@@ -378,7 +394,7 @@ serialization-determinism property it names is the same proposition as section
 | `6.4`  | No filesystem, environment, or subprocess access; no handle taken.                                                                        |
 | `6.5`  | No `dialect` argument; all five emit LF everywhere.                                                                                       |
 | `6.6`  | Undefined rejected, `none` accepted; duplicates rejected positionally; both `indent` ranges enumerated.                                   |
-| `6.7`  | `sort_keys` sorts by canonical key; both round trips under canonical equality.                                                            |
+| `6.7`  | `sort_keys` sorts by canonical key; round trips use the canonical-JSON domain; converted JSON keys are lossy and excluded.                |
 | `6.8`  | Table 3's input and depth bounds, stream-wide for `from_yaml_all`, plus the alias budget; both serializers pre-check their output length. |
 | `6.9`  | One enum, one `From` impl, fourteen `netsuke::jinja::interchange::*` codes.                                                               |
 | `6.10` | Five new names, no alias family, none reused across namespaces.                                                                           |
@@ -409,9 +425,9 @@ Roadmap step 6.2, which implements this RFC in three tasks:
 Each task carries the acceptance criteria that make this RFC checkable: the
 duplicate-key diagnostic naming the key and its second offset, the
 alias-expansion bomb failing with a bounded-resource diagnostic rather than
-exhausting memory, and the two round-trip property tests together with the YAML
-1.1 `yes`, `no`, `on`, and `off` spellings being unable to reach a generated
-file unquoted.
+exhausting memory, and round-trip property tests over the canonical-JSON domain
+alongside the YAML 1.1 `yes`, `no`, `on`, and `off` spellings being unable to
+reach a generated file unquoted.
 
 ## 8. Open questions
 

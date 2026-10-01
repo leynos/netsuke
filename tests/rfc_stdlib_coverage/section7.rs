@@ -330,3 +330,7 @@ pub(super) fn section_ref(text: &str) -> Option<String> {
     }
     Some(found.to_owned())
 }
+
+#[cfg(test)]
+#[path = "section7_tests.rs"]
+mod tests;

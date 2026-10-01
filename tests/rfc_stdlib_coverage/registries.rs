@@ -273,3 +273,7 @@ pub(super) fn parse_all(repo: &Repo, children: &[String]) -> Result<Vec<Registry
     found.sort_by(|left, right| left.number.cmp(&right.number));
     Ok(found)
 }
+
+#[cfg(test)]
+#[path = "registries_tests.rs"]
+mod tests;
