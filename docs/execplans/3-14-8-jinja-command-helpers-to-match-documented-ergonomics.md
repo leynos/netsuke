@@ -4160,6 +4160,36 @@ catalogue has the key; there is no partial state to clean up.
   Closing the loop by naming the last verified revision and the delta is the
   deliberate choice.
 
+  **The local linter version moved under the run, so the markdown figures need
+  their version attached.** The gate shells out to
+  `uv tool run markdownlint-cli2` without a version pin, and the tool drifted
+  from `v0.22.1 (markdownlint v0.40.0)` to `v0.23.2 (markdownlint v0.41.1)`
+  while this session was in progress. Both exits were `0`, but `0 errors` from
+  one version is not the same evidence as `0 errors` from another, and a bare
+  "168 files, 0 errors" hides which one spoke — the same failure of provenance
+  as quoting a gate result without the revision. So: the `664b9422` figures are
+  `v0.22.1`'s, and the later re-runs are `v0.23.2`'s. CI pins the linter through
+  `DavidAnson/markdownlint-cli2-action`, so the authoritative result for any
+  head is the action's, not either local run.
+
+- **CI re-ran on the tip and stayed green, so the claim survives its own
+  commit.** The push that recorded `664b9422`'s green moved the PR head to
+  `84a155f5`, superseding that run, and `pull_request: [synchronize]` means a
+  docs-only commit still gets the full workflow. It was worth watching rather
+  than assuming: the new run `36793325099` completed `success`, with all five
+  jobs green — `build-test` (40 steps), `kani-smoke` (18), `build-test-windows`
+  (19), `lint-windows` (21), `windows-msi-upgrade` (11) — plus all six release
+  artefact builds and `release-admission-canaries`. Every required context
+  passes on `84a155f5`, and `mergeStateStatus` is again `CLEAN` with
+  `mergeable: MERGEABLE`.
+
+  `reviewDecision` remains `CHANGES_REQUESTED` on this head too, which is the
+  cleanest demonstration of the point that entry was making: the field is a
+  historical record of the stale review, not a live gate, and it will keep
+  reading that way on every future head until a human dismisses it. Reading it
+  as an active blocker would mean ignoring `mergeStateStatus: CLEAN` in the
+  same response, which is why the two are recorded together.
+
 ## Surprises & discoveries
 
 - Observation: **A test that asserts a substring can pass on the strength of
