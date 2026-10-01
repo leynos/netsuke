@@ -138,7 +138,7 @@ No helper in this group exposes an iteration order, and none depends on one.
 directed at *pattern* determinism rather than collection ordering, and it has
 two parts this group decides.
 
-- **The compiled-pattern cache is an optimising cache, never a semantic one.**
+- **The compiled-pattern cache is an optimizing cache, never a semantic one.**
   Table 3's cache is 64 entries, least-recently-used, so two identical calls
   can compile the pattern once or twice depending on what else ran between
   them. That must not be observable: a cache miss recompiles the same pattern
@@ -398,7 +398,7 @@ SemVer specification.
 | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `6.1`  | Eight pure `New` helpers; the eight section 5.1 rows are 8 of 52.                                                                                    |
 | `6.2`  | All eight pure, so all register in `register_query_helpers`, none stubbed.                                                                           |
-| `6.3`  | `regex_findall` returns leftmost-first input order; the cache is an optimisation whose hit or miss is unobservable.                                  |
+| `6.3`  | `regex_findall` returns leftmost-first input order; the cache is an optimization whose hit or miss is unobservable.                                  |
 | `6.4`  | No filesystem, environment, or subprocess access; no handle taken, and the linear-time engine is what keeps a pattern from becoming one.             |
 | `6.5`  | No platform `dialect` argument; `regex_escape`'s dialect names a syntax, and the helpers are defined over Unicode strings.                           |
 | `6.6`  | Non-string subjects and operands rejected rather than stringified; four enumerated option sets; `bad_pattern` separate from `unsupported_construct`. |
