@@ -4162,15 +4162,18 @@ catalogue has the key; there is no partial state to clean up.
 
   **The local linter version moved under the run, so the markdown figures need
   their version attached.** The gate shells out to
-  `uv tool run markdownlint-cli2` without a version pin, and the tool drifted
-  from `v0.22.1 (markdownlint v0.40.0)` to `v0.23.2 (markdownlint v0.41.1)`
-  while this session was in progress. Both exits were `0`, but `0 errors` from
-  one version is not the same evidence as `0 errors` from another, and a bare
-  "168 files, 0 errors" hides which one spoke — the same failure of provenance
-  as quoting a gate result without the revision. So: the `664b9422` figures are
-  `v0.22.1`'s, and the later re-runs are `v0.23.2`'s. CI pins the linter through
-  `DavidAnson/markdownlint-cli2-action`, so the authoritative result for any
-  head is the action's, not either local run.
+  `uv tool run markdownlint-cli2` without a version pin, and the tool moved
+  between `v0.22.1 (markdownlint v0.40.0)` and `v0.23.2 (markdownlint v0.41.1)`
+  while this session was in progress. It is not a one-way upgrade, which is the
+  part worth recording: a later run of this same session reported `v0.22.1`
+  again, so successive local runs are not even mutually comparable. Every exit
+  was `0`, but `0 errors` from one version is not the same evidence as
+  `0 errors` from another, and a bare "168 files, 0 errors" hides which one
+  spoke — the same failure of provenance as quoting a gate result without its
+  revision. So the figures here name their version: the `664b9422` run was
+  `v0.22.1`'s and the `v0.23.2` re-run was `v0.23.2`'s, and neither subsumes
+  the other. CI pins the linter through `DavidAnson/markdownlint-cli2-action`,
+  so the authoritative result for any head is the action's, not a local run's.
 
 - **CI re-ran on the tip and stayed green, so the claim survives its own
   commit.** The push that recorded `664b9422`'s green moved the PR head to
@@ -4189,6 +4192,17 @@ catalogue has the key; there is no partial state to clean up.
   reading that way on every future head until a human dismisses it. Reading it
   as an active blocker would mean ignoring `mergeStateStatus: CLEAN` in the
   same response, which is why the two are recorded together.
+
+- **The last CI run of this session is green on `ad83a5d3`.** Recorded because
+  it is the tip at the time of writing, and the same trap that made the
+  `84a155f5` run worth watching applies to it: this very entry moves the head
+  again. Run `36795395610` completed `success` with all five jobs green
+  (`build-test` 40 steps, `kani-smoke` 18, `build-test-windows` 19,
+  `lint-windows` 21, `windows-msi-upgrade` 11). Every required context passes on
+  `ad83a5d3` and the PR is `CLEAN`. No further local gate runs are claimed for
+  it — the delta from `664b9422` is prose in this one file, stated under the
+  revision note above, and the recursion that note describes is not re-entered
+  here.
 
 ## Surprises & discoveries
 
