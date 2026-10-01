@@ -167,7 +167,7 @@ fn compact_accepts_an_empty_sequence() -> Result<()> {
 ///
 /// `compact_filter` admits `ValueKind::Seq` and `ValueKind::Iterable` and
 /// refuses everything else, but every other case here reaches it through a
-/// rendered list — which is a `Seq`. A MiniJinja `range()` reports
+/// rendered list — which is a `Seq`. A `MiniJinja` `range()` reports
 /// `ObjectRepr::Iterable` instead, so it is the only subject that exercises the
 /// second arm of that match; delete the arm and this test stops compiling the
 /// same expectation.
@@ -265,19 +265,32 @@ fn compact_retains_the_empty_containers() -> Result<()> {
         "the retained containers must keep their kinds, seq then map, but got {:?}",
         kept.iter().map(Value::kind).collect::<Vec<_>>()
     );
+    // A slice pattern rather than two indexed reads: it fails the same way when
+    // the length is wrong, and it says so once instead of relying on `get`.
+    let [retained_seq, retained_map] = kept.as_slice() else {
+        bail!(
+            "compact must retain exactly the two empty containers, but {subject:?} yielded \
+             {kept:?}"
+        );
+    };
     ensure!(
-        kept[0]
-            .try_iter()
-            .is_ok_and(|mut members| members.next().is_none()),
-        "the retained sequence must still be empty, but was {:?}",
-        kept[0]
+        is_empty_iterable(retained_seq),
+        "the retained sequence must still be empty, but was {retained_seq:?}"
     );
     ensure!(
-        kept[1]
-            .try_iter()
-            .is_ok_and(|mut members| members.next().is_none()),
-        "the retained map must still be empty, but was {:?}",
-        kept[1]
+        is_empty_iterable(retained_map),
+        "the retained map must still be empty, but was {retained_map:?}"
     );
     Ok(())
+}
+
+/// Whether `value` iterates and yields nothing.
+///
+/// A value that cannot iterate answers `false` rather than erroring: every
+/// caller is asserting emptiness, so "cannot iterate" and "is not empty" fail
+/// the assertion alike, and returning `bool` keeps that out of their hands.
+fn is_empty_iterable(value: &Value) -> bool {
+    value
+        .try_iter()
+        .is_ok_and(|mut members| members.next().is_none())
 }
