@@ -85,6 +85,9 @@ operator, user, and contributor references are easier to find.
 - [rfcs/0015-ordered-collection-algebra-and-truth-predicates.md](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md):
   Third focused child of RFC 0006: the ordered set algebra, the bounded
   combinatorial filters, and the collection and truth predicates.
+- [rfcs/0016-pattern-and-version-predicates.md](rfcs/0016-pattern-and-version-predicates.md):
+  Fourth focused child of RFC 0006: the `netsuke-regex-v1` pattern family, the
+  bounded pattern cache, and the strict version predicate.
 - [rfcs/0007-netsukefile-testing-framework.md](rfcs/0007-netsukefile-testing-framework.md):
   Proposed Netsukefile testing framework: the `netsuke test` command, the YAML
   test dialect, and its mocking model.

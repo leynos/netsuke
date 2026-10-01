@@ -329,29 +329,37 @@ one `impl From<CollectionError> for minijinja::Error`, per clause 6.9. Every
 message is a Fluent key and every error carries a machine code, so the codes
 are enumerated rather than described.
 
-| Condition                            | Code                                               |
-| ------------------------------------ | -------------------------------------------------- |
-| not the expected kind                | `netsuke::jinja::collection::wrong_kind`           |
-| element outside the canonical domain | `netsuke::jinja::collection::uncanonical_value`    |
-| undefined value or element           | `netsuke::jinja::collection::undefined_input`      |
-| `repeat` below one or not an integer | `netsuke::jinja::collection::repeat_range`         |
-| `r` negative or not an integer       | `netsuke::jinja::collection::r_kind`               |
-| `zip_longest` without `fill_value`   | `netsuke::jinja::collection::fill_value_required`  |
-| `contains` value of the wrong kind   | `netsuke::jinja::collection::value_kind`           |
-| unrecognized boolean spelling        | `netsuke::jinja::collection::spelling_unknown`     |
-| exact cardinality over ceiling       | `netsuke::jinja::collection::cardinality_exceeded` |
-| checked arithmetic overflowed        | `netsuke::jinja::collection::overflow`             |
+| Condition                            | Code                                                |
+| ------------------------------------ | --------------------------------------------------- |
+| not the expected kind                | `netsuke::jinja::collections::wrong_kind`           |
+| element outside the canonical domain | `netsuke::jinja::collections::uncanonical_value`    |
+| undefined value or element           | `netsuke::jinja::collections::undefined_input`      |
+| `repeat` below one or not an integer | `netsuke::jinja::collections::repeat_range`         |
+| `r` negative or not an integer       | `netsuke::jinja::collections::r_kind`               |
+| `zip_longest` without `fill_value`   | `netsuke::jinja::collections::fill_value_required`  |
+| `contains` value of the wrong kind   | `netsuke::jinja::collections::value_kind`           |
+| unrecognized boolean spelling        | `netsuke::jinja::collections::spelling_unknown`     |
+| exact cardinality over ceiling       | `netsuke::jinja::collections::cardinality_exceeded` |
+| checked arithmetic overflowed        | `netsuke::jinja::collections::overflow`             |
 
 Each code's Fluent key is its reason in upper snake case under
-`STDLIB_COLLECTION_`, per clause 6.9's `keys::STDLIB_<MODULE>_<CONDITION>`
+`STDLIB_COLLECTIONS_`, per clause 6.9's `keys::STDLIB_<MODULE>_<CONDITION>`
 form, so `cardinality_exceeded` pairs with
-`STDLIB_COLLECTION_CARDINALITY_EXCEEDED`. The `From` impl is what lets the
+`STDLIB_COLLECTIONS_CARDINALITY_EXCEEDED`. The `From` impl is what lets the
 cardinality codes carry numbers rather than sentences: the error variant holds
 the exact cardinality, the operand lengths, and the ceiling, and the conversion
-renders them into the Fluent message. The module segment is `collection` rather
-than `sets` or `predicates`, because one enum serves both the eight filters and
-the seven tests and reads as the capability group rather than one subject's
-kind.
+renders them into the Fluent message.
+
+The module segment is `collections`, in the plural, because it names the module
+the helpers live in rather than describing the capability:
+`src/stdlib/collections.rs` already exists and already holds `uniq`, `compact`,
+`flatten`, and `group_by`, whose messages are already keyed
+`stdlib.collections.*` and whose constants are already
+`keys::STDLIB_COLLECTIONS_*`. A singular `collection` would put this group in a
+Fluent namespace one character from an existing one, so a translator or a test
+author reading `stdlib.collection.wrong_kind` would have no way to tell a typo
+from a real key. Clause 6.9's `<MODULE>` is the module, and the module is
+`collections`.
 
 ### 5.10. Naming and alias policy
 
@@ -419,7 +427,7 @@ contradict the contract".
 | `6.6`  | Undefined rejected; three enumerated option sets; overflow separate from the cardinality comparison.                          |
 | `6.7`  | Deduplication, subset, superset, and contains all keyed on the canonical key, never a hash set.                               |
 | `6.8`  | Table 3's 100000-tuple ceiling for `product` and `combinations`, 10000 for `permutations`, counted exactly before allocation. |
-| `6.9`  | One enum, one `From` impl, ten `netsuke::jinja::collection::*` codes.                                                         |
+| `6.9`  | One enum, one `From` impl, ten `netsuke::jinja::collections::*` codes.                                                        |
 | `6.10` | Fifteen new names, two alias families resolved in section 5.10.                                                               |
 | `6.11` | The clause's seven obligations, with the algebra and complement properties the parent states.                                 |
 

@@ -1088,11 +1088,13 @@ This step answers whether a coherent, bounded Netsuke regular-expression
 dialect and a strict version predicate can replace the `shell()` calls that
 manifests currently use to inspect `--version` output and filter path lists.
 Its outcome determines whether conditional flag selection can be expressed at
-manifest time. See RFC 0006 §§8.4 and 8.5.
+manifest time. See RFC 0006 §§8.4 and 8.5, delivered by
+[RFC 0016](rfcs/0016-pattern-and-version-predicates.md).
 
 - [ ] 6.5.1. Establish the `netsuke-regex-v1` dialect and the bounded pattern
   cache. Requires 6.1.3 and 6.1.4.
-  - See RFC 0006 §8.4.
+  - See RFC 0006 §8.4 and
+    [RFC 0016](rfcs/0016-pattern-and-version-predicates.md) §§5.3 and 5.8.
   - Add the `regex` dependency, name the supported and unsupported constructs
     in the standard-library guide, and enforce the compiled-pattern size limit
     and least-recently-used cache from RFC 0006 table 3.
@@ -1101,26 +1103,31 @@ manifest time. See RFC 0006 §§8.4 and 8.5.
     failure.
 - [ ] 6.5.2. Add `regex_replace` with dollar-form replacements. Requires
   6.5.1.
-  - See RFC 0006 §8.4.
+  - See RFC 0006 §8.4 and
+    [RFC 0016](rfcs/0016-pattern-and-version-predicates.md) §§5.6 and 5.9.
   - Support `count` and `mandatory_count`, and reject a Python-style `\1` or
     `\g<name>` replacement with a diagnostic pointing at the `$1` form.
   - Success: a replacement pasted from an Ansible playbook fails loudly rather
     than emitting the literal text `\1`.
 - [ ] 6.5.3. Add `regex_search`, `regex_findall`, and `regex_escape`. Requires
   6.5.2.
-  - See RFC 0006 §8.4.
+  - See RFC 0006 §8.4 and
+    [RFC 0016](rfcs/0016-pattern-and-version-predicates.md) §§5.6, 5.7, 5.8,
+    and 5.9.
   - Return `none` for a non-match, keep the `regex_findall` return shape
     dependent only on the arguments, and accept only the `netsuke` escape
     dialect.
   - Success: `regex_findall` returns a sequence of strings whether the pattern
     has zero, one, or several capture groups.
 - [ ] 6.5.4. Add the `match`, `search`, and `regex` tests. Requires 6.5.1.
-  - See RFC 0006 §8.4.
+  - See RFC 0006 §8.4 and
+    [RFC 0016](rfcs/0016-pattern-and-version-predicates.md) §§5.6 and 5.9.
   - Support `match_type` values `search`, `match`, and `fullmatch`,
     enumerating them on an unknown value.
 - [ ] 6.5.5. Add the `version` test over the existing `semver` dependency.
   Requires 6.1.4.
-  - See RFC 0006 §8.5.
+  - See RFC 0006 §8.5 and
+    [RFC 0016](rfcs/0016-pattern-and-version-predicates.md) §§5.9 and 8.
   - Make `operator` required, accept the six symbolic and six mnemonic forms,
     and accept only `semver` for `scheme`.
   - Resolve RFC 0006 §16 question 3 on whether a `v` prefix is tolerated

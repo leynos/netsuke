@@ -1793,6 +1793,62 @@ Hard invariants. Violating one requires escalation, not a workaround.
   measure the section boundaries independently, which is exactly why the
   figures are now recorded with their method.
 
+- [x] (2026-10-01) `EP-M6` **RFC 0016 written, and two findings the writing
+  surfaced are recorded here rather than deferred.** The RFC owns RFC 0006
+  §§8.4 and 8.5 — the `netsuke-regex-v1` pattern family (`regex_replace`,
+  `regex_search`, `regex_findall`, `regex_escape`, and the `match`, `search`,
+  and `regex` tests) plus the strict `version` predicate — so it carries eight
+  registry rows, taking the four written child registries to **34 of the 52**
+  pure helpers (0013 five, 0014 six, 0015 fifteen). It is wired into RFC 0006
+  table 16 as `written`, into `docs/contents.md`, and into all six of roadmap
+  step 6.5's citation sites. The coverage contract passes 272/272. Measured at
+  commit time: **487 lines**, section 5 spanning 308 of them, density **38.5**
+  section-5 lines per helper against 0015's 22.3 and 0014's 42.3.
+
+  **RFC 0006 §16 question 3 is carried unresolved, which is a departure from
+  the pattern the earlier children set.** The question — whether `version`
+  tolerates a `v` prefix — is assigned to this group and step 6.5 says to
+  resolve it "before registering the test". RFC 0016 section 8 states both
+  options and their consequences and leaves roadmap task 6.5.5 to choose. That
+  is deliberate: the choice is an implementation decision with a
+  manifest-visible contract consequence, and recording it as open with the
+  argument on both sides is more honest than picking one here and describing it
+  as settled. A reviewer should read section 8 as the escalation, not as an
+  omission.
+
+  The two findings:
+
+  - **The module-segment convention clash surfaced while preparing this RFC,
+    and the defect was in RFC 0015, not the code.** RFC 0015 §5.9 specified
+    singular `netsuke::jinja::collection::*` and `STDLIB_COLLECTION_*`, but
+    `src/stdlib/collections.rs` already exists, already holds `uniq`, `compact`,
+    `flatten`, and `group_by`, and already keys its messages
+    `stdlib.collections.*` under `keys::STDLIB_COLLECTIONS_*`. The singular
+    would have created a Fluent namespace one character from the existing one.
+    RFC 0015 §5.9 and its `6.9` discharge row are corrected to the plural, with
+    the module-naming rule stated; RFC 0016 §5.9 takes the singular `pattern`
+    and cites `shell`, `which`, and `register` as the existing singular forms.
+    Both are recorded so the next child resolves the choice deliberately.
+  - **The aggregate volume tolerance is now arithmetically unreachable, and
+    this is an escalation rather than a note.** Measured after `make fmt`:
+    0013 **470**, 0014 **397**, 0015 **495**, 0016 **487** — **1849** against
+    the 2400-line aggregate budget, leaving **551 for the four children still to
+    write, a mean of 138**. The observed per-child fixed overhead (everything
+    outside section 5) across the four is 169, 143, 161, and 179; the minimum,
+    143, is set by RFC 0014, whose sections 1–4 and 6–9 are the shortest that
+    still discharge the skeleton ADR-040 parses by heading. Adding section 5's
+    structural floor — two headings, eleven subsection headings, eleven
+    non-empty bodies, and the thirteen-row discharge table — puts an honest
+    child at **~183 lines**, so four cost **~732** against the 551 available: a
+    **shortfall of about 181 lines**. The binding control stated in the
+    tolerance ("the aggregate is now the binding control and it is close to its
+    limit") is therefore already past its limit, and no tightening of the
+    remaining children can recover it without dropping a section 5 subsection
+    the vacuity tolerance forbids leaving empty. Raised to the user; the
+    remedies are to raise the 2400-line budget, or to accept that this plan's
+    eight-child split is a **nine-or-ten-child** shape and re-partition the
+    remaining three groups (0017–0020) into four or five.
+
 - [x] (2026-09-28) **A gate run reded the current head, and the defect was the
   branch's own.** `make markdownlint` on `feed5192` exited 2, but not because
   `markdownlint` found anything: its `spelling` prerequisite aborts on
