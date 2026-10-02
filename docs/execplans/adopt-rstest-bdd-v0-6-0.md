@@ -186,6 +186,28 @@ the conflict in `Decision log` before proceeding.
   revision (166 files, 0 issues) before committing, and the commit contains the
   ExecPlan alone, with the gate-regenerated `typos.toml` drift reverted to keep
   the commit atomic.
+- [x] (2026-10-02) Rebase onto `upstream/main` (`84447f0e`) and re-resolve the
+  three conflicting files (`manifest/env_reader.rs`, `runner/graph.rs`,
+  `stdlib/which/cache.rs`). The rebase replayed all nine commits linearly with
+  none behind. `cache.rs` resolved to `main` exactly, taking `main`'s deletion
+  of the recorder functions, with the hoist ported to `main`'s new
+  `stdlib/which/telemetry.rs` instead.
+- [x] (2026-10-02) Re-run the honest Clippy probe on the rebased tree, which is
+  the step that invalidated the earlier "all clear". Two `cognitive_complexity`
+  errors appeared in `tests/kani_mutation_evidence_tests/compile_guard.rs`, a
+  file `main` added after this branch was opened. A counter-control reverting
+  only `rstest-bdd` to 0.5.0 re-ran the identical probe to exit 0, proving the
+  errors are this migration's rather than `main`'s — the diagnosis the plan had
+  already withdrawn once.
+- [x] (2026-10-02) Clear all three complexity sites by hoisting, and record the
+  measured cost model: +7 per inline `tracing` macro under `log`, +1 without,
+  and nothing extra for a caller that merely invokes an emitter.
+- [x] (2026-10-02) Discover and fix a second cascade-masked failure: hoisting
+  pushed `compile_guard.rs` to 413 lines, past Whitaker's 400-line
+  `module_max_lines` cap, which had never run because Clippy failed ahead of
+  it. Split the patch-application machinery into a sibling `apply_patch`
+  module, leaving the guard at 294 lines. `make lint-whitaker` now passes both
+  of its passes. Committed as `dd93120a`.
 
 ## Surprises & discoveries
 
@@ -517,6 +539,63 @@ the conflict in `Decision log` before proceeding.
   this is API-compatible for the listed features but is only *executed* on
   Windows CI, so the Windows job is the oracle. Verified statically here; see
   the Risk entry on the Windows toolchain.
+
+- Observation: the `cognitive_complexity` failures this migration caused are
+  not a property of the files that carry them; they are a property of the
+  *feature-unified build*. A change to `rstest-bdd` versions can therefore make
+  a test that nobody edited start failing, and can make a file that was
+  comfortably inside a size limit exceed it.
+
+  Evidence: `span_fields_are_captured_by_name_and_recording_point` was added by
+  `main` after this branch was opened and had never been compiled with
+  `tracing`'s `log` feature enabled. Rebased into this branch it reports
+  `cognitive complexity` over the threshold of 9, because the `log` feature
+  expands each inline `trace_span!` into extra branches and the metric is
+  measured after expansion. The same effect pushed `compile_guard.rs` from 393
+  to 413 lines once its two macros were hoisted, past Whitaker's 400-line cap.
+
+  Impact: on any branch that unifies a feature enabled by `rstest-bdd`, lint
+  expectations are a function of the dependency graph, not only of the files. A
+  rebase has to re-run the gates rather than inherit their verdicts.
+
+- Observation: `make lint` is a cascade that aborts at the first failing stage,
+  so a single Clippy error reports four stages as "not run", and a file-size
+  violation sits behind it unobserved.
+
+  Evidence: at the `-m4` revision `make lint` aborted at `lint-clippy`, and
+  `lint-whitaker`, `lint-python` and `github-actions-lint` were recorded as
+  *unavailable*. After the Clippy sites were cleared, `lint-whitaker` ran for
+  the first time and immediately reported
+  `Module compile_guard spans 413 lines, exceeding the allowed 400` — a failure
+  that had existed for the whole of the earlier sweeps without ever being
+  visible.
+
+  Impact: a "pass" recorded for a cascade is a statement about the stages that
+  ran. Recording which stages were *reached* is the part that carries
+  information; recording only the exit status does not.
+
+- Observation: Clippy's reported problem count is a lower bound, because each
+  fix unmasks whatever the abort was hiding.
+
+  Evidence: the two known Kani sites were cleared, and the next probe revealed
+  a third at `src/test_tracing_capture.rs:316`. The pattern repeated with the
+  size cap once Clippy was green.
+
+  Impact: repeated probing after each fix is required; a single "we fixed the N
+  reported problems" statement is not a claim that the gate passes.
+
+- Observation: the same property makes Clippy's own output misleading when a
+  narrowed target is used. `cargo clippy --lib` does not unify the
+  dev-dependency's `log` feature and reports a clean lib that the real gate
+  rejects.
+
+  Evidence: the honest probe is
+  `cargo clippy --workspace --all-targets --all-features`, run with
+  `RUSTC_WRAPPER` and `SCCACHE_DIR` unset because the ambient `notdeadyet`
+  wrapper intercepts the invocation.
+
+  Impact: every Clippy verdict in this plan comes from the
+  `--workspace --all-targets --all-features` form.
 
 ## Imported-document provenance and link mapping
 
@@ -1108,12 +1187,13 @@ Editing this document after the `-m4` sweep shifted the revision, so the
 Markdown-scoped gates were re-run on the final revision; those logs are
 separate and are named with the `-m5` suffix.
 
-#### Final sweep at `31d103de`
+#### Pre-rebase sweep at `ec1d0498` (superseded)
 
 The `-m4` and `-m5` sweeps above predate the macro-hoisting refactor, so the
 `unavailable — pre-existing red` row for `make lint` in that table describes a
-state the branch no longer has. The final sweep below is the one that gates the
-delivered revision. Its logs carry no `-m` suffix.
+state the branch no longer has. The sweep below was the one that gated the
+pre-rebase revision; it is retained as history and is superseded by the rebased
+sweep further down. Its logs carry no `-m` suffix.
 
 | Gate                | Status                      | Log                                               |
 | ------------------- | --------------------------- | ------------------------------------------------- |
@@ -1139,22 +1219,91 @@ dictionary on every run. At both revisions it produced the same one-line drift
 unrelated to this branch, which was reverted rather than committed so the
 branch's diff stays focused on the migration.
 
+#### Rebased sweep at `dd93120a`
+
+Rebasing onto `upstream/main` (`84447f0e`) brought in work that had landed
+while this branch was in review, and that work reintroduced the
+`cognitive_complexity` failure in a place the earlier sweep could not have
+seen. The rebased sweep below is the one that gates the delivered revision.
+
+| Gate                | Status  | Log                                    |
+| ------------------- | ------- | -------------------------------------- |
+| `make check-fmt`    | PENDING | `/tmp/check-fmt-gates-dd93120a.out`    |
+| `make lint`         | PENDING | `/tmp/lint-gates-dd93120a.out`         |
+| `make typecheck`    | PENDING | `/tmp/typecheck-gates-dd93120a.out`    |
+| `make doc-coverage` | PENDING | `/tmp/doc-coverage-gates-dd93120a.out` |
+| `make markdownlint` | PENDING | `/tmp/markdownlint-gates-dd93120a.out` |
+| `make nixie`        | PENDING | `/tmp/nixie-gates-dd93120a.out`        |
+| `make test`         | PENDING | `/tmp/test-gates-dd93120a.out`         |
+
+Filled in from the gate runner's report; a gate is recorded as passing only
+once its own log has been read and its exit status confirmed.
+
+The rebase's headline finding is that `make lint` is a cascade: it aborts at
+the first failing stage, so every stage after the failure is *unavailable*
+rather than passing. The `-m4` sweep had recorded `make lint` as
+`unavailable — pre-existing red`, which was true but incomplete; the diagnosis
+that accompanied it — that the complexity errors were inherited from `main` —
+was wrong, and was withdrawn once a counter-control showed otherwise.
+
+That counter-control is worth recording because it is cheap and decisive.
+Reverting *only* `rstest-bdd` to 0.5.0 — the sole `tracing`/`log` enabler in
+the graph — and re-running the identical Clippy probe produced exit 0 with zero
+complexity errors, against exit 101 with two at 0.6.0.
+`cargo tree -e features -i tracing` shows `rstest-bdd v0.6.0` as the only
+enabler of `tracing`'s `default` feature. The failures are therefore this
+migration's, not `main`'s.
+
+Two sites were already known and were cleared by hoisting their macros. A third
+was revealed only after the first two were fixed — Clippy's reported count is a
+lower bound, because clearing one error unmasks whatever the abort was hiding.
+That third site is `span_fields_are_captured_by_name_and_recording_point` in
+`src/test_tracing_capture.rs`, a test `main` added after this branch was
+opened: it had never been compiled under unified `tracing` features before the
+rebase, so the branch had never charged it. Its three inline `trace_span!`
+macros move into span-opening emitters, preserving the span names, the
+`field::Empty` declarations, the recording order and the guard lifetime, so the
+test's exact captured-string assertions still pin the behaviour.
+
+Hoisting the two Kani sites pushed `compile_guard.rs` from 393 to 413 lines,
+past Whitaker's 400-line `module_max_lines` cap. That failure was likewise
+invisible until now, for the same cascade reason: Clippy failed ahead of
+Whitaker, so `lint-whitaker` never ran. Measured directly, Whitaker reported
+`Module compile_guard spans 413 lines, exceeding the allowed 400`. The
+patch-application machinery moves to a sibling `apply_patch` module, leaving
+the guard at 294 lines. Whitaker's prescribed fix is exactly this split, and it
+runs along a real seam: one module runs `git apply` and decides when a reverse
+is owed, the other decides which patches exist and what compiling them proves.
+
 ### Session provenance
 
 The work session that produced this migration is recorded at
 <https://lody.ai/leynos/sessions/7bb1d019-44e1-4cc0-b860-e7ac1b312667>.
 
-The delivered revision is `ec1d0498` on `adopt-rstest-bdd-v0-6-0`, pushed to
-`origin` and opened as draft pull request
-[#805](https://github.com/leynos/netsuke/pull/805). Eight commits carry the
-work: `e62af317` imports the authoritative documentation byte-for-byte and
-drafts this plan; `c68cd30f` performs the dependency bump, adds the INV-3
-regression guard, and corrects the developer guidance; `b8d1192c` marks the
-plan complete; `7ac904e8` corrects the withdrawn "pre-existing on `main`"
-diagnosis and raises the escalation; `27a95bbf` records the re-delivery and the
-root cause; `f7915286` hoists the charged `tracing` macros to clear the
-complexity cascade; `31d103de` reformats this document to the canonical
-Markdown form; and `ec1d0498` records the resolved state and closes the plan.
+The branch is `adopt-rstest-bdd-v0-6-0`, pushed to `origin` and opened as draft
+pull request [#805](https://github.com/leynos/netsuke/pull/805). The pre-rebase
+revision was `ec1d0498`; the branch has since been rebased onto `upstream/main`
+(`84447f0e`), so the SHAs below are the rebased ones and the earlier SHAs in
+this document refer to the superseded history.
+
+Rebase mapping (pre-rebase → rebased): `e62af317`→`75e15a08`,
+`c68cd30f`→`28b5c8d7`, `b8d1192c`→`f5547fbf`, `7ac904e8`→`5392a0da`,
+`27a95bbf`→`fd09dacb`, `f7915286`→`e65044bd`, `31d103de`→`f85487be`,
+`ec1d0498`→`d95c1631`, `e5aa844c`→`236ba673`.
+
+Nine commits carry the work: `75e15a08` imports the authoritative documentation
+byte-for-byte and drafts this plan; `28b5c8d7` performs the dependency bump,
+adds the INV-3 regression guard, and corrects the developer guidance;
+`f5547fbf` marks the plan complete; `5392a0da` corrects the withdrawn
+"pre-existing on `main`" diagnosis and raises the escalation; `fd09dacb`
+records the re-delivery and the root cause; `e65044bd` hoists the charged
+`tracing` macros to clear the complexity cascade; `f85487be` reformats this
+document to the canonical Markdown form; `d95c1631` records the resolved state
+and closes the plan; and `236ba673` closes the migration plan.
+
+A later commit re-opens the complexity work, because the rebase brought in a
+site the hoist sweep had not seen. See the rebased sweep below.
+
 The pull request is a draft and has not been merged.
 
 ## Revision note
@@ -1183,7 +1332,20 @@ committed tree. The earlier `COMPLETE` rested on a diagnosis that was wrong in
 two places: the `make lint` failure was caused by this migration's feature
 unification rather than being pre-existing on `main`, and the escalation the
 plan raised against the fix was superseded once measurement showed every site
-needed only its macros hoisted. The final sweep at `ec1d0498` is added under
-`### Gate logs` and is the one that gates the delivered revision: all six gates
-pass with every stage reached, including the four `make lint` stages that the
-failing revision never got to.
+needed only its macros hoisted. The sweep at `ec1d0498` is added under
+`### Gate logs`; it passed with every stage reached, including the four
+`make lint` stages that the failing revision never got to.
+
+2026-10-02 — rebased revision. The branch was rebased onto `upstream/main`
+(`84447f0e`); the pre-rebase sweep survives under `### Gate logs` as history,
+with the pre-rebase SHAs mapped to their rebased equivalents in
+`### Session provenance`. The rebase invalidated the earlier "all clear": work
+that landed on `main` while this branch was in review reintroduced the
+`cognitive_complexity` failure at a site the branch had never compiled under
+unified `tracing` features, and hoisting the two known Kani sites pushed
+`compile_guard.rs` past Whitaker's 400-line cap — a failure that the
+Clippy-first cascade had been hiding. Both are fixed in `dd93120a`; the
+`#### Rebased sweep at dd93120a` table is the one that gates the delivered
+revision. The lesson recorded in `## Surprises & discoveries` is that a green
+`make lint` on a pre-rebase revision says nothing about the rebased one, and
+that a cascade's first failure hides every stage after it.
