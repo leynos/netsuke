@@ -128,6 +128,8 @@ TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.3
 YAMLLINT_VERSION ?= 1.38.0
 UV ?= uv
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
+# Public GitHub tool sources must not inherit workspace-specific URL rewrites.
+PUBLIC_GIT_SOURCE_ENV = GIT_CONFIG_COUNT=0
 # The Python baseline every uv-driven helper pins. Bump this alongside the
 # `target-version`/`py-version` settings in pyproject.toml and the
 # `python-version` inputs in .github/workflows/ci.yml, release.yml, and
@@ -173,16 +175,19 @@ PYLINT = $(UV_ENV) $(UV) tool run --managed-python --python $(PYLINT_PYTHON) \
 DF12_PYTHON_LINTS_REF ?= v0.3.0
 DF12_PYTHON_LINTS = git+https://github.com/leynos/df12-python-lints.git@$(DF12_PYTHON_LINTS_REF)
 DF12_PYLINT_MESSAGES = R9101,C9102,R9103,R9104,C9105,C9106,C9107,R9108,R9109,R9110,R9111,R9112,C9112
-DF12_PYLINT = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
+DF12_PYLINT = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run \
+	--python $(PYTHON_BASELINE) \
 	--from 'pylint' --with '$(DF12_PYTHON_LINTS)' pylint \
 	--disable=all --load-plugins=df12_python_lints \
 	--enable=$(DF12_PYLINT_MESSAGES)
-AMBRLEAKS = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
+AMBRLEAKS = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run \
+	--python $(PYTHON_BASELINE) \
 	--from '$(DF12_PYTHON_LINTS)' ambrleaks
 # The shared en-GB-oxendict spelling gate. It regenerates `typos.toml` from
 # the live shared dictionary and the `typos.local.toml` overlay on every run,
 # then runs Typos and the prohibited-phrase check.
-TYPOS_CONFIG_BUILDER = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
+TYPOS_CONFIG_BUILDER = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run \
+	--python $(PYTHON_BASELINE) \
 	--from "git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_VERSION)" \
 	typos-config-builder
 PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@b07ef696f8373d54ae68e517d39d47a5d27a5bd5
