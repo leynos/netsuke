@@ -49,7 +49,7 @@ class UnsupportedExpressionError(ValueError):
         """Record the failure class and optional expression detail."""
         self.issue = issue
         self.detail = detail
-        super().__init__()
+        super().__init__(issue, detail)
 
     def __str__(self) -> str:
         """Render a stable failure class with optional diagnostic detail."""

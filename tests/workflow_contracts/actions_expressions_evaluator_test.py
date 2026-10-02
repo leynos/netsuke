@@ -1,7 +1,11 @@
 """Test the bounded Actions expression evaluator's accepted grammar."""
 
 import pytest
-from actions_expressions import UnsupportedExpressionError, evaluate_expression
+from actions_expressions import (
+    ExpressionIssue,
+    UnsupportedExpressionError,
+    evaluate_expression,
+)
 
 CONTEXTS = {
     "github": {"event": {"action": "opened"}},
@@ -12,6 +16,16 @@ CONTEXTS = {
     "status": {"cancelled": False, "failure": False, "success": True},
     "steps": {"release_modes": {"outputs": {"dry-run": "true"}}},
 }
+
+
+def test_unsupported_expression_error_preserves_standard_exception_arguments() -> None:
+    """Keep the issue and detail available through ValueError.args."""
+    detail = "needs.unknown.result"
+    error = UnsupportedExpressionError(ExpressionIssue.UNKNOWN_PATH, detail)
+
+    assert error.args == (ExpressionIssue.UNKNOWN_PATH, detail), (
+        "ValueError args should retain the expression issue and detail"
+    )
 
 
 @pytest.mark.parametrize(
