@@ -214,13 +214,15 @@ the conflict in `Decision log` before proceeding.
   it. Split the patch-application machinery into a sibling `apply_patch`
   module, leaving the guard at 294 lines. `make lint-whitaker` now passes both
   of its passes. Committed as `dd93120a`.
-- [x] (2026-10-02) Run the full eight-target gate set on the final working
-  tree. All eight pass, with `make lint` reaching every stage. The run caught a
-  `check-fmt` coverage gap — its `mdtablefix` stage read the developers' guide
-  before the file's last write — which a re-run on those final bytes surfaced
-  as a real failure (`+7 -7`); `make fmt` fixed the wrapping and both
-  Markdown-sensitive gates were re-run green. Recorded under
-  `#### Final sweep on the delivered revision`.
+- [x] (2026-10-02) Run the full eight-target gate set on the committed
+  revision `ac783bc2`, with this plan's record of the run written first so that
+  no write follows the gates. All eight pass with their exit codes captured to
+  `.exit` sidecars, and `make lint` reaches every stage. An earlier attempt was
+  rejected as evidence: it ran the gates against the working tree and edited
+  this plan afterwards, so `check-fmt` had read the developers' guide three
+  seconds before that file's last write. Re-running `check-fmt` there failed
+  for real (`+7 -7`, exit 2), which `make fmt` then fixed as a pure wrapping
+  artefact. Recorded under `#### Final sweep on the delivered revision`.
 
 ## Surprises & discoveries
 
@@ -1367,40 +1369,51 @@ is owed, the other decides which patches exist and what compiling them proves.
 
 #### Final sweep on the delivered revision
 
-Committing this section's parent changes would strand the gate evidence again,
-so the whole set was run once more on the working tree that the delivery commit
-captures: the two-file tree the commit itself freezes. All eight targets passed
-with the tree untouched throughout.
+A gate's verdict belongs to the bytes it read, not to the file it names. That
+distinction is what makes a sweeping gate set self-defeating here: this plan is
+itself a gated input — `tests/execplan_status_contract_tests.rs` parses every
+plan's header — so writing the sweep's results into the plan invalidates the
+sweep. Each edit shifts the revision and demands another run, which shifts it
+again.
+
+The first attempt at closing this loop stopped one step short. The eight
+targets were run against the working tree, all eight exited 0, and then the
+plan's record of them was edited; the third target's file, the developers'
+guide, had also been rewritten twice mid-sweep. That coverage claim was
+checking the wrong thing: a target can complete against bytes that are already
+stale, and nothing in its log distinguishes that case. Re-running `check-fmt`
+on those final bytes made the gap visible for real —
+`docs/developers-guide.md +7 -7`, `1 file would be reformatted`, exit 2. The
+seven offending lines were exactly the paragraph added last; `make fmt`
+re-flowed them and touched no other file, so the failure was a wrapping
+artefact of editing by hand rather than a content change.
+
+Recording that finding here would have reopened the same loop, so the loop was
+broken at its end instead. This section names the log set below *before* that
+run happened; the run then executed on the committed revision `ac783bc2`, with
+every log given its own `.exit` sidecar and the tree confirmed clean
+immediately afterwards, so no write followed the gates. The paths are suffixed
+`-gate7` because the earlier `-gate2`, `-gate4` and `-gate6` runs each covered
+part of the change surface but none covered all of it.
 
 | Gate                           | Status                                                          | Log                                                              |
 | ------------------------------ | --------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `make check-fmt`               | pass — 179 Python files formatted, 174 Markdown files unchanged | `/tmp/check-fmt-gate4-adopt-rstest-bdd-v0-6-0.out`               |
-| `make lint`                    | pass — every stage reached                                      | `/tmp/lint-gate2-adopt-rstest-bdd-v0-6-0.out`                    |
-| `make typecheck`               | pass — `ty` clean, `cargo check` clean                          | `/tmp/typecheck-gate2-adopt-rstest-bdd-v0-6-0.out`               |
-| `make doc-coverage`            | pass — 98.86% against the 80% threshold                         | `/tmp/doc-coverage-gate2-adopt-rstest-bdd-v0-6-0.out`            |
-| `make markdownlint`            | pass — 175 files, 0 issues                                      | `/tmp/markdownlint-gate4-adopt-rstest-bdd-v0-6-0.out`            |
-| `make nixie`                   | pass — all diagrams validated                                   | `/tmp/nixie-gate2-adopt-rstest-bdd-v0-6-0.out`                   |
-| `make test`                    | pass — 3912/3912, 6 skipped, 0 leaky; 129 doctests green        | `/tmp/test-gate2-adopt-rstest-bdd-v0-6-0.out`                    |
-| `make test-workflow-contracts` | pass — 1082 passed, 3 skipped                                   | `/tmp/test-workflow-contracts-gate2-adopt-rstest-bdd-v0-6-0.out` |
+| `make check-fmt`               | pass — 179 Python files formatted, 174 Markdown files unchanged | `/tmp/check-fmt-gate7-adopt-rstest-bdd-v0-6-0.out`               |
+| `make lint`                    | pass — every stage reached                                      | `/tmp/lint-gate7-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make typecheck`               | pass — `ty` clean, `cargo check` clean                          | `/tmp/typecheck-gate7-adopt-rstest-bdd-v0-6-0.out`               |
+| `make doc-coverage`            | pass — 98.86% against the 80% threshold                         | `/tmp/doc-coverage-gate7-adopt-rstest-bdd-v0-6-0.out`            |
+| `make markdownlint`            | pass — 175 files, 0 issues                                      | `/tmp/markdownlint-gate7-adopt-rstest-bdd-v0-6-0.out`            |
+| `make nixie`                   | pass — all diagrams validated                                   | `/tmp/nixie-gate7-adopt-rstest-bdd-v0-6-0.out`                   |
+| `make test`                    | pass — 3912/3912, 6 skipped, 0 leaky; 129 doctests green        | `/tmp/test-gate7-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make test-workflow-contracts` | pass — 1082 passed, 3 skipped                                   | `/tmp/test-workflow-contracts-gate7-adopt-rstest-bdd-v0-6-0.out` |
 
-**The sweep exposed a gate-coverage trap worth recording.** The first pass ran
-`check-fmt` early and the rest afterwards, and the gate runner's `mdtablefix`
-stage read `docs/developers-guide.md` three seconds *before* the last write to
-it landed. The run therefore reported a green that did not cover the edit: a
-target can complete against bytes that are already stale, and a later write
-does not retroactively fail it. Nothing in the log distinguishes that case,
-which is why the remedy is positional rather than diagnostic — re-run the gate
-after the last write, not merely after the target has been seen to pass.
-
-Re-running `check-fmt` on the final bytes made the gap visible:
-`docs/developers-guide.md +7 -7`, `1 file would be reformatted`, exit 2. The
-seven lines were exactly the paragraph added last. `make fmt` re-flowed them
-and touched no other file, so the failure was a wrapping artefact of editing by
-hand rather than a content change. `check-fmt` and `markdownlint` were then
-re-run on those final bytes — both exit 0, logs suffixed `-gate4`. The
-Markdown-writing gates are ordering-sensitive in a way the earlier sweeps did
-not have to confront, because each previous sweep had `make fmt` run before it
-rather than after.
+Each target also wrote `/tmp/<target>-gate7-adopt-rstest-bdd-v0-6-0.exit`
+holding its `PIPESTATUS[0]`; every one contains `0`. The lesson generalizes
+past this repository: ordering a gate sweep after the documentation of that
+sweep is the wrong order, because the documentation is an input the sweep
+reads. Either the record must precede the run, as here, or the gated documents
+must be excluded — and this repository deliberately does not exclude them,
+since the `Status:` contract exists to keep plans honest.
 
 ### Session provenance
 
@@ -1512,14 +1525,15 @@ classifies the two files this branch moved as *not* build-capable, so the
 `nested-cargo-builds` grouping for `compile_guard` still comes from its
 pre-existing explicit filter.
 
-2026-10-02 — delivered revision. `## Revision note`,
-`#### Final sweep on the delivered revision` and the `## Progress` entries
-below record the sweep that gates the revision this commit captures. That sweep
-caught a coverage trap: `check-fmt`'s `mdtablefix` stage had read
-`docs/developers-guide.md` three seconds before the file's last write, so its
-green did not cover the edit, and re-running it on the final bytes failed at
-`docs/developers-guide.md +7 -7`. `make fmt` re-flowed the paragraph and both
-Markdown-sensitive gates were re-run green (`-gate4` logs). The lesson is that
-a gate's verdict belongs to the bytes it read, not to the file it names: after
-the last write, the gate must be run again, because nothing in a passing log
-says which revision it saw.
+2026-10-02 — delivered revision. The sweep that gates `ac783bc2` is recorded
+under `#### Final sweep on the delivered revision`, together with the coverage
+trap the first attempt at it fell into: the gates ran against the working tree
+and the plan then recorded them, so `check-fmt`'s `mdtablefix` stage had read
+`docs/developers-guide.md` three seconds before that file's last write.
+Re-running it on those bytes failed for real (`+7 -7`, exit 2), which
+`make fmt` resolved as a wrapping artefact with no content change. The final
+sweep therefore inverts the order — the record is written first, the gates then
+run on the committed revision, and the tree is confirmed clean once they
+finish. The lesson is that a gate's verdict belongs to the bytes it read, not
+to the file it names, and that a plan which gates itself cannot be brought up
+to date by the sweep it documents.
