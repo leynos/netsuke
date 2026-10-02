@@ -432,6 +432,19 @@ as `--toolchain`.
   child process. A test manipulating the environment in-process does not
   qualify, whatever layer it claims to occupy.
 
+### Executable documentation
+
+Every new fenced example in `README.md`, `docs/users-guide.md`, or
+`docs/stdlib-yaml-and-jinja-guide.md` needs a stable `tested-example` marker,
+an entry in `EXPECTED_EXAMPLE_IDS`, and validation appropriate to its domain.
+The YAML language tag alone does not identify a Netsukefile: workflow fragments
+and other YAML examples need their own semantic contract, not inclusion in
+Netsukefile generation or execution cases. Run
+`make test-documentation-contracts` for the loader, exact-set registry, and
+semantic documentation contracts. For changes to these examples, also run
+`make check-fmt`, `make lint`, `make doc-coverage`, `make markdownlint`,
+`make test`, and `make test-workflow-contracts`.
+
 ### Dependency management
 
 - **Mandate caret requirements for all dependencies.** All crate versions

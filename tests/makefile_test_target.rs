@@ -32,13 +32,15 @@ use toml::Value;
 /// Every Make target that invokes `cargo nextest run`, and so shares the
 /// worker-bound contract.
 ///
-/// `test-nextest` is the gate `make test` composes. `test-kani-scope-wrapper`
-/// is the scope wrapper's own end-to-end suite, which the `kani-smoke` lane
-/// runs on its own because that suite needs a per-user systemd manager rather
-/// than the whole workspace. `test-kani-mutations` runs the same runner over
-/// the `#[ignore]`-gated mutation compile gate, which is too expensive for the
-/// default profile. `test-rfc-stdlib-coverage` runs the RFC parser and coverage
-/// contract in isolation. A contributor sets the bounds once and expects them
+/// `test-nextest` is the gate `make test` composes.
+/// `test-documentation-contracts` is a focused local contract loop.
+/// `test-kani-scope-wrapper` is the scope wrapper's own end-to-end suite, which
+/// the `kani-smoke` lane runs on its own because that suite needs a per-user
+/// systemd manager rather than the whole workspace. `test-kani-mutations` runs
+/// the same runner over the `#[ignore]`-gated mutation compile gate, which is
+/// too expensive for the default profile.
+/// `test-rfc-stdlib-coverage` runs the RFC parser and coverage contract in
+/// isolation. A contributor sets the worker bounds once and expects them
 /// honoured wherever nextest runs, so the list is a contract rather than a
 /// note of what happens to be true today.
 ///
@@ -46,7 +48,8 @@ use toml::Value;
 /// [`behavioural_nextest_targets_forward_both_worker_bounds`] discovers the
 /// targets that actually invoke the runner and fails when the two disagree, so
 /// a new recipe joins the contract or breaks the build.
-const NEXTEST_TARGETS: [&str; 4] = [
+const NEXTEST_TARGETS: [&str; 5] = [
+    "test-documentation-contracts",
     "test-kani-mutations",
     "test-kani-scope-wrapper",
     "test-nextest",
@@ -148,6 +151,47 @@ fn behavioural_nextest_targets_forward_both_worker_bounds() -> Result<()> {
         let recipe = target_recipe(&makefile, target)
             .with_context(|| format!("Makefile should declare a {target} target"))?;
         ensure_worker_bounds_reach_nextest(target, &recipe)?;
+    }
+    Ok(())
+}
+
+/// Verify that the focused documentation target selects its contracts and fails empty.
+#[test]
+fn behavioural_documentation_contract_target_selects_its_tests() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    let phony = phony_targets(&makefile);
+    ensure!(
+        phony.contains(&"test-documentation-contracts"),
+        ".PHONY must include test-documentation-contracts"
+    );
+
+    let prerequisites = target_prerequisites(&makefile, "test-documentation-contracts")
+        .context("Makefile should declare test-documentation-contracts")?;
+    ensure!(
+        prerequisites
+            .iter()
+            .any(|prerequisite| prerequisite == "check-build-tools"),
+        "documentation contracts should check build tools, found {prerequisites:?}"
+    );
+    let recipe = target_recipe(&makefile, "test-documentation-contracts")
+        .context("Makefile should define the focused documentation target")?;
+    for required in [
+        "--test documentation_examples_loader_tests",
+        "--test documentation_examples_tests",
+        "--all-features",
+        "--no-tests fail",
+        "-E",
+        "test(malformed_documented_examples_are_rejected)",
+        "test(every_documented_fence_has_a_known_unique_identifier)",
+        "test(release_wix_extension)",
+        "$(GATE_RUSTFLAGS)",
+        "$(NEXTEST_BUILD_JOBS)",
+        "$(NEXTEST_TEST_JOBS)",
+    ] {
+        ensure!(
+            recipe.contains(required),
+            "documentation contract recipe should contain {required:?}, found {recipe:?}"
+        );
     }
     Ok(())
 }

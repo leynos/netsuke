@@ -1065,6 +1065,15 @@ The Windows packaging workflow passes the repository-owned authoring file as
 when changing the packaging action: the caller owns the WiX v4 authoring and
 the shared action passes it to the pinned WiX compiler unchanged.
 
+Callers of `.github/workflows/release.yml` may set the `wix-extension-version`
+`workflow_call` input to select the `WixToolset.UI.wixext` version. The input
+defaults to `7`, and omitted or empty values resolve to `7` before the value
+reaches the shell step. The metadata job exposes the resolved value as
+`wix_extension_version`; `build-windows` passes that output to
+`build-and-package.yml` as `wix-extension-version`. The shell step rejects an
+unexpectedly empty resolved environment value. It also rejects values
+containing carriage returns or line feeds before writing the output.
+
 The merge gate's dedicated `windows-msi-upgrade` job runs on `windows-latest`.
 It uses the local `.github/actions/windows-msi-upgrade-validation` adapter for
 fixture creation, package builds, and the install-transition checks. Keep the
@@ -4743,14 +4752,25 @@ Every fenced example in `README.md`, `docs/users-guide.md`, and
 immediately before its opening fence. The shared
 `tests/documentation_examples/mod.rs` loader owns this marker format and may be
 called only by documentation-focused integration or behavioural tests. It
-rejects unmarked fences, duplicate identifiers and unterminated examples.
+rejects unmarked fences, duplicate identifiers and unterminated examples. For
+every new fence, add its stable identifier to `EXPECTED_EXAMPLE_IDS` and
+validate its meaning in the domain it documents. The `yaml` fence language does
+not make a fragment a Netsukefile: for example, a reusable-workflow fragment
+needs a semantic workflow contract and must stay out of Netsukefile generation
+and execution cases. Run `make test-documentation-contracts` for the
+documentation loader, exact-set registry check, and semantic contracts.
+
+For a change to these examples, run the full required gates: `make check-fmt`,
+`make lint`, `make doc-coverage`, `make markdownlint`, `make test`, and
+`make test-workflow-contracts`.
 
 This guide is loaded under the `FencePolicy::MarkedOnly` policy instead. Its
 many illustrative fences stay unmarked and are skipped, bodies included, while
 the marked `devguide-*` Rust snippets in
 [Unstable Rust API for embedders](#unstable-rust-api-for-embedders) are loaded
 and pinned to the doctests they mirror. The users' guide carries no Rust
-examples: its interface is the Netsukefile manifest and the command line.
+examples. Its YAML fences include Netsukefile manifests and examples from other
+documented interfaces, such as reusable-workflow inputs.
 
 `tests/documentation_examples_tests.rs` loads the exact fenced text, generates
 Ninja for the registered accepting manifest cases and each complete manifest
