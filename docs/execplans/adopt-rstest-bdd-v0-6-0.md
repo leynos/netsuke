@@ -5,16 +5,16 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
-The migration work itself is complete and all its behavioural evidence is
-green. The 39 `cognitive_complexity` errors the dependency bump introduces in
-the `make lint` gate have been resolved by hoisting the charged `tracing`
-macros into per-macro emitters across 40 files; the root cause, the cost model,
-the escalation that was raised and then superseded, and the resolution are
-recorded in `Surprises & discoveries` and `Decision log`. `Status:` remains
-`IN PROGRESS` rather than `COMPLETE` until the full gate set has been run green
-on the committed tree.
+The migration work is complete and all its behavioural evidence is green. The 39
+`cognitive_complexity` errors the dependency bump introduces in the
+`make lint` gate have been resolved by hoisting the charged `tracing` macros
+into per-macro emitters across 40 files; the root cause, the cost model, the
+escalation that was raised and then superseded, and the resolution are recorded
+in `Surprises & discoveries` and `Decision log`. The full gate set runs green
+at the delivered revision, with every stage of every gate reached; see
+`### Gate logs`.
 
 Roadmap item: none. Origin: `leynos/rstest-bdd` v0.6.0 release and its
 `docs/v0-6-0-migration-guide.md`.
@@ -1144,17 +1144,18 @@ branch's diff stays focused on the migration.
 The work session that produced this migration is recorded at
 <https://lody.ai/leynos/sessions/7bb1d019-44e1-4cc0-b860-e7ac1b312667>.
 
-The delivered revision is `31d103de` on `adopt-rstest-bdd-v0-6-0`, pushed to
+The delivered revision is `ec1d0498` on `adopt-rstest-bdd-v0-6-0`, pushed to
 `origin` and opened as draft pull request
-[#805](https://github.com/leynos/netsuke/pull/805). Seven commits carry the
+[#805](https://github.com/leynos/netsuke/pull/805). Eight commits carry the
 work: `e62af317` imports the authoritative documentation byte-for-byte and
 drafts this plan; `c68cd30f` performs the dependency bump, adds the INV-3
 regression guard, and corrects the developer guidance; `b8d1192c` marks the
 plan complete; `7ac904e8` corrects the withdrawn "pre-existing on `main`"
 diagnosis and raises the escalation; `27a95bbf` records the re-delivery and the
 root cause; `f7915286` hoists the charged `tracing` macros to clear the
-complexity cascade; and `31d103de` reformats this document to the canonical
-Markdown form. The pull request is a draft and has not been merged.
+complexity cascade; `31d103de` reformats this document to the canonical
+Markdown form; and `ec1d0498` records the resolved state and closes the plan.
+The pull request is a draft and has not been merged.
 
 ## Revision note
 
@@ -1176,12 +1177,13 @@ these edits shifted the revision after the `-m4` sweep, the Markdown-scoped
 gates were re-run on it; those `-m5` logs are the ones that describe the
 revision now pushed. Both pass.
 
-2026-10-02 — corrected revision. `Status:` moved back to `BLOCKED` and then to
-`IN PROGRESS`. The earlier `COMPLETE` rested on a diagnosis that was wrong in
+2026-10-02 — corrected revision. `Status:` moved back to `BLOCKED`, then to
+`IN PROGRESS`, and finally to `COMPLETE` once the gates were green on a
+committed tree. The earlier `COMPLETE` rested on a diagnosis that was wrong in
 two places: the `make lint` failure was caused by this migration's feature
 unification rather than being pre-existing on `main`, and the escalation the
 plan raised against the fix was superseded once measurement showed every site
-needed only its macros hoisted. The final sweep at `31d103de` is added under
-`### Gate logs` and is the one that gates this revision. `Status:` stays
-`IN PROGRESS` rather than `COMPLETE` until this document's own edits have been
-committed and the push confirmed.
+needed only its macros hoisted. The final sweep at `ec1d0498` is added under
+`### Gate logs` and is the one that gates the delivered revision: all six gates
+pass with every stage reached, including the four `make lint` stages that the
+failing revision never got to.
