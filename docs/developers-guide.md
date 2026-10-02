@@ -1057,6 +1057,30 @@ writes. It also runs the step's own script over two fixed `readelf` outputs,
 `tests/data/readelf-version-info-aarch64.txt`, whose floors differ, and asserts
 the floor each reports.
 
+### Linux package metadata
+
+Linux package metadata comes from the active Cargo manifest, not a second set
+of workflow literals. `scripts/cargo_package_metadata.py` reads the first
+`[package].authors` entry as the maintainer and reads `homepage`, `license`, and
+`description` from `[package]`. It trims surrounding whitespace and rejects
+missing, empty, non-string, or values containing Unicode categories `Cc`, `Zl`,
+or `Zp` (control, line, or paragraph separators) before writing the four
+`key=value` entries to `GITHUB_OUTPUT`. The release metadata job exposes them as
+`package_maintainer`, `package_homepage`, `package_license`, and
+`package_description`, and `build-and-package.yml` forwards them to the Linux
+packaging action.
+
+Before upload, `scripts/validate_linux_package_metadata.py` checks the built
+packages against the same manifest. Its required arguments are `--dist`,
+`--manifest`, `--package-name`, and `--license-file`. The Debian check compares
+`Maintainer`, `Homepage`, and the first line of `Description`; Debian has no
+license control field here, so the check extracts
+`usr/share/doc/<package-name>/copyright` and compares its bytes with the
+specified licence file. The RPM check compares `PACKAGER`, `URL`, `LICENSE`,
+`SUMMARY`, and `DESCRIPTION`. A missing or differing field fails the Linux
+packaging job before artefact upload. Run `make test-linux-package-metadata`
+for the focused reader and package-validator tests.
+
 ### Windows MSI packaging and upgrade validation
 
 The Windows packaging workflow passes the repository-owned authoring file as

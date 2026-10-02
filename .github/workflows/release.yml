@@ -74,6 +74,11 @@ jobs:
     outputs:
       version: ${{ steps.ensure_version.outputs['crate-version'] }}
       bin_name: ${{ steps.bin_name.outputs['bin-name'] }}
+      package_maintainer: ${{ steps.package_metadata.outputs.maintainer }}
+      package_homepage: ${{ steps.package_metadata.outputs.homepage }}
+      package_license: ${{ steps.package_metadata.outputs.license }}
+      package_description: ${{ steps.package_metadata.outputs.description }}
+      package_manifest: ${{ steps.manifest_path.outputs.value }}
       should_publish: ${{ steps.release_modes.outputs['should-publish'] }}
       dry_run: ${{ steps.release_modes.outputs['dry-run'] }}
       should_upload_workflow_artifacts: ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] }}
@@ -121,6 +126,21 @@ jobs:
           set -euo pipefail
           manifest_path="${CARGO_TOML_PATH:-Cargo.toml}"
           echo "value=$manifest_path" >>"$GITHUB_OUTPUT"
+      - name: Install Python for package metadata
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          python-version: '3.14'
+          enable-cache: false
+      - id: package_metadata
+        name: Read Linux package metadata from Cargo.toml
+        shell: bash
+        env:
+          CARGO_MANIFEST_PATH: ${{ steps.manifest_path.outputs.value }}
+        run: |
+          set -euo pipefail
+          uv run --no-project --python 3.14 \
+            scripts/cargo_package_metadata.py \
+            --manifest "$CARGO_MANIFEST_PATH"
       - id: bin_name
         name: Extract binary name from Cargo.toml
         uses: >-
@@ -158,6 +178,11 @@ jobs:
       target: ${{ matrix.target }}
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
+      package-manifest: ${{ needs.metadata.outputs.package_manifest }}
+      package-maintainer: ${{ needs.metadata.outputs.package_maintainer }}
+      package-homepage: ${{ needs.metadata.outputs.package_homepage }}
+      package-license: ${{ needs.metadata.outputs.package_license }}
+      package-description: ${{ needs.metadata.outputs.package_description }}
       artifact-name: ${{ needs.metadata.outputs.repo_name }}-${{ matrix.artefact }}
       should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
       package-arch: ${{ matrix.package_arch }}
