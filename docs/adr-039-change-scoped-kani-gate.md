@@ -132,10 +132,11 @@ when a required infrastructure entry is dropped, and when a `sources` entry
 covers a compiled file the closure does not reach or covers nothing it reaches.
 The last two keep the scope from quietly widening to the whole crate, which
 would satisfy every sufficiency check and run the proofs on every pull request
-again. At adoption the closure is 43 paths: `src/ir/`, `src/ast/`,
-`src/ninja_gen/` and six of its sibling `src/ninja_gen_*.rs` modules, the
-localization modules and `locales/`, `src/hasher.rs`, `src/hex.rs`,
-`src/recipe_shell.rs`, and the crate root.
+again. At adoption the closure is 44 files, listed as 18 `sources` entries:
+`src/ir/`, `src/ast/`, `src/ninja_gen/` and six of its sibling
+`src/ninja_gen_*.rs` modules, the localization modules and `locales/`,
+`src/hasher.rs`, `src/hex.rs`, `src/recipe_shell.rs`, `src/shell_word.rs` (which
+`recipe_shell` imports), and the crate root.
 
 ## Consequences
 

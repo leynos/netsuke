@@ -372,9 +372,11 @@ jobs:
     # A required check, so it runs and reports on every trigger; it is never
     # skipped by a `paths` filter or a job-level `if:`, since a required check
     # that never reports blocks the pull request. An early step decides
-    # whether the proofs can differ from `main`'s: on a pull request that
-    # changes nothing in tools/kani/proof-scope.toml every later step skips
-    # and the job ends green, saying why in its summary. A push to `main`, the
+    # whether the proofs can differ from `main`'s: on a pull request whose
+    # changed paths match no entry in either list of
+    # tools/kani/proof-scope.toml (an edit to the TOML file itself is a
+    # change to `tools/kani/`, which is an entry) every later step skips and
+    # the job ends green, saying why in its summary. A push to `main`, the
     # nightly schedule and a dispatch always run every harness. See
     # docs/adr-039-change-scoped-kani-gate.md. A dispatch cannot publish a
     # generation, since the save gates on a push to `main`, so all it can do
