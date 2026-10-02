@@ -1037,6 +1037,32 @@ as workflow-level `env`. Each pin is still declared once at workflow scope in
 value. `tests/workflow_contracts/ci_windows_job_test.py` holds the caller's
 literals equal to those pins, so the two copies cannot drift.
 
+### Release workflow helpers
+
+The release workflows keep non-trivial shell behaviour in tested Python
+helpers. Each script declares `requires-python = ">=3.14"` and its dependencies
+in PEP 723 metadata, and the workflow invokes it with `uv run` on Python 3.14.
+Cyclopts reads the inputs from `INPUT_*` environment variables supplied through
+the step's `env:`. Keep this wiring aligned with the script when changing
+either side.
+
+- `release.yml` owns `ensure_draft_release.py`. It receives `INPUT_TAG` from
+  `github.ref_name`; `GITHUB_TOKEN` and `GH_TOKEN` stay in the process
+  environment for `gh`. It depends on Cyclopts `>=4.25.3,<5` and Cuprum
+  `>=0.1.0,<0.2.0`; see `scripts/tests/test_ensure_draft_release.py`.
+- `build-and-package.yml` owns `install_orthohelp.py`. `INPUT_VERSION` selects
+  the pinned tool, and `GITHUB_TOKEN` stays in the process environment for
+  `cargo binstall`. It depends on Cyclopts `>=4.25.3,<5` and Cuprum
+  `>=0.1.0,<0.2.0`; see `scripts/tests/test_install_orthohelp.py`.
+- `build-and-package.yml` owns `report_glibc_floor.py`. `INPUT_TARGET` and
+  `INPUT_BIN_NAME` select the binary, and `GITHUB_STEP_SUMMARY` identifies the
+  summary file. It depends on Cyclopts `>=4.25.3,<5` and Cuprum
+  `>=0.1.0,<0.2.0`; see `scripts/tests/test_report_glibc_floor.py`.
+- `release.yml` owns `resolve_wix_extension_version.py`. `INPUT_EVENT_NAME`
+  and `INPUT_EVENT_PATH` describe the GitHub event, and `GITHUB_OUTPUT`
+  identifies the output file. Its only dependency is Cyclopts `>=4.25.3,<5`; see
+  `scripts/tests/test_resolve_wix_extension_version.py`.
+
 ### Linux glibc floor
 
 A Linux release binary's highest required GLIBC symbol version is its
@@ -2961,36 +2987,16 @@ environment or file source. It omits the structural `cmds` container. Keep
 project-discovery rooting and manifest lookup in that discovery boundary, as
 required by [ADR 014]. During ordinary Cargo builds, `build.rs` generates the
 local manual page and shell completions, and audits the localization keys.
-Release automation installs the pinned tool in two stages, neither of which can
-compile it.
-
-The lane first probes for an already-installed tool at the pinned version,
-which is the warm path: the `cargo-orthohelp` cache entry owns `~/.cargo/bin`,
-and an install refuses to overwrite a binary that is already present, so a warm
-run must not reach the installer.
-
-```bash
-cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.9\.1([[:space:]]|$)'
-```
-
-On a miss it installs the published archive:
-
-```bash
-cargo binstall --no-confirm --locked \
-  --disable-strategies compile cargo-orthohelp@0.9.1
-```
-
-`--disable-strategies compile` is what makes the no-source-build rule
-structural here rather than hopeful. This lane once carried a documented
-exception: `ortho-config` published no binaries until 0.9.1 (
-[leynos/ortho-config#479][ortho-config-479]), so the step listed the
-binary-only strategies it preferred and fell through to `cargo install` when
-they missed. 0.9.1 ships five checksum-verified archives with working binstall
-metadata ([leynos/ortho-config#480][ortho-config-480]), so the fallback is gone
-and the tool cannot be compiled at all. A release that stopped publishing
-assets would now fail the lane rather than quietly building from source, which
-is the behaviour worth having. **Only 0.9.1 and later carry assets**, so
-pinning below that reintroduces the compile.
+Release automation delegates installation to
+[`install_orthohelp.py`](../scripts/install_orthohelp.py), with the pinned
+version supplied as `INPUT_VERSION`. The helper probes the cached binary and,
+on a miss, runs `cargo binstall` with `--disable-strategies compile`; the
+workflow does not fall back to compiling the tool from source. The cache entry
+owns `~/.cargo/bin`, and its key includes the tool version and pinned
+`rust-build-release` revision because that action provisions `cargo-binstall`
+there. Only cargo-orthohelp 0.9.1 and later publish the required assets (
+[leynos/ortho-config#479][ortho-config-479],
+[leynos/ortho-config#480][ortho-config-480]).
 
 Three contracts hold this: `workflow_orthohelp_install.rs` requires the
 disabling flag and rejects any `cargo install` naming the tool,

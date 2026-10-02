@@ -5,6 +5,8 @@ import typing as typ
 
 import pytest
 import report_glibc_floor as reporter
+from hypothesis import given
+from hypothesis import strategies as st
 
 if typ.TYPE_CHECKING:
     from cmd_mox import CmdMox
@@ -34,6 +36,29 @@ pytest_plugins = ("cmd_mox.pytest_plugin",)
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 READELF_FIXTURES = REPO_ROOT / "tests" / "data"
+
+
+@given(
+    versions=st.lists(
+        st.lists(st.integers(min_value=0, max_value=1000), min_size=1, max_size=5),
+        min_size=1,
+        max_size=12,
+    )
+)
+def test_highest_glibc_version_uses_numeric_order_within_needs_section(
+    versions: list[list[int]],
+) -> None:
+    """Select the numeric maximum and ignore a higher version in a later section."""
+    highest = ".".join(map(str, max(versions)))
+    rendered = [".".join(map(str, version)) for version in versions]
+    irrelevant = f"{max(version[0] for version in versions) + 1}.0"
+    output = "Version needs section x\n"
+    output += "\n".join(f"GLIBC_{version}" for version in rendered)
+    output += f"\nVersion symbols section x\nGLIBC_{irrelevant}\n"
+
+    assert reporter._highest_glibc_version(output) == f"GLIBC_{highest}", (
+        "the floor must be the highest numeric requirement from the needs section"
+    )
 
 
 @pytest.mark.parametrize(

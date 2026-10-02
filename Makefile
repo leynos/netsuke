@@ -234,8 +234,8 @@ test-workflow-contracts: ## Validate GitHub Actions workflow contracts
 		--with 'cmd-mox==0.2.0' --with 'cuprum==0.1.0' \
 		--with 'cyclopts==4.25.3' pytest tests/workflow_contracts -q --doctest-modules
 	PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
-		--with 'pytest>=8' --with 'cmd-mox==0.2.0' \
-		--with 'cyclopts==4.25.3' --with 'cuprum==0.1.0' \
+		--with 'pytest>=8' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' \
+		--with 'cyclopts>=4.25.3,<5' --with 'cuprum>=0.1.0,<0.2.0' \
 		pytest scripts/tests/test_ensure_draft_release.py \
 			scripts/tests/test_install_orthohelp.py \
 			scripts/tests/test_report_glibc_floor.py \
