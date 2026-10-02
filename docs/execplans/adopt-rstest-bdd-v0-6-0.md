@@ -27,18 +27,21 @@ step whose return type is a *type alias* of `Result<T, E>` previously had its
 `Err` silently discarded, so the scenario passed even though an assertion
 failed. Netsuke's step functions are declared `-> Result<()>` where `Result` is
 `anyhow::Result`, which is exactly such an alias. After this migration the
-suite runs on 0.6.0, under the same 254 scenarios, and the four published
+suite runs on 0.6.0, under the same scenarios as `main`, and the four published
 breaking changes that touch this repository are applied deliberately rather
 than discovered as compile errors.
 
 Success is observable by running `make test` and seeing all behavioural tests
 pass from `tests/features/*.feature` and `tests/features_unix/*.feature` while
 `Cargo.toml` declares `rstest-bdd = "0.6.0"` and `Cargo.lock` resolves the whole
-`rstest-bdd` family to 0.6.0. The scenario inventory is unchanged at 254
-tests, and deliberately so: this plan migrates an existing consumer and
-introduces no new BDD. A scenario that turns red because the alias fix exposed
-a previously-swallowed `Err` is a finding to investigate, not a regression to
-suppress.
+`rstest-bdd` family to 0.6.0. The migration changes the swept scenario
+inventory by **zero** tests, and deliberately so: this plan migrates an
+existing consumer and introduces no new BDD. `main` grew the inventory from 254
+to 269 while this branch was in review, so the current figure is 269 — equal to
+`origin/main` and a superset of the 254-name baseline. See
+`Surprises & discoveries` for the three-revision reconciliation. A scenario
+that turns red because the alias fix exposed a previously-swallowed `Err` is a
+finding to investigate, not a regression to suppress.
 
 ## Constraints
 
@@ -128,7 +131,7 @@ the conflict in `Decision log` before proceeding.
 - [x] (2026-09-26) Inventory manifests, dependencies, step/scenario counts, and
   direct runtime API usage.
 - [x] (2026-09-26) Establish the baseline BDD inventory: 254 scenarios, 254
-  generated tests.
+  generated tests, captured to `/tmp/bdd-before.txt` at `ebcedaef`.
 - [x] (2026-09-26) Import `docs/users-guide.md` and
   `docs/v0-6-0-migration-guide.md` from the pinned commit; record provenance.
   Committed as `e62af317`.
@@ -147,13 +150,16 @@ the conflict in `Decision log` before proceeding.
   `adopt-rstest-bdd-v0-6-0.md` plan reference.
 - [x] (2026-09-26) Discharge INV-3: probe the corrected `Err` propagation, then
   add `tests/step_error_propagation_tests.rs` as its durable guard, validated
-  green-to-red-to-green. The swept BDD inventory remains exactly 254.
+  green-to-red-to-green. The guard is a separate target, so the *swept* BDD
+  inventory is untouched by it and remains exactly 254 at `c68cd30f` — the
+  figure that was correct then.
 - [x] (2026-09-26) Run the full gate set on a frozen revision and compare the
   migrated inventory against baseline. Six of seven gates pass, including
   `markdownlint`, whose `markdownlint-cli2` stage had never previously executed.
   `make lint` is red with 39 `cognitive_complexity` errors and is recorded as
   **unavailable**, not as a pass. Logs are in `### Gate logs`. Inventory
-  comparison: 254 scenario names before and after, identical as sets.
+  comparison: 254 scenario names before and after, identical as sets — correct
+  for this date, since `main` had not yet grown the inventory.
 - [x] (2026-09-26) Commit as `c68cd30f`, push, and open draft PR
   [#805](https://github.com/leynos/netsuke/pull/805) against `main`. Not merged
   and no release published, per the session's instructions.
@@ -208,6 +214,13 @@ the conflict in `Decision log` before proceeding.
   it. Split the patch-application machinery into a sibling `apply_patch`
   module, leaving the guard at 294 lines. `make lint-whitaker` now passes both
   of its passes. Committed as `dd93120a`.
+- [x] (2026-10-02) Run the full eight-target gate set on the final working
+  tree. All eight pass, with `make lint` reaching every stage. The run caught a
+  `check-fmt` coverage gap — its `mdtablefix` stage read the developers' guide
+  before the file's last write — which a re-run on those final bytes surfaced
+  as a real failure (`+7 -7`); `make fmt` fixed the wrapping and both
+  Markdown-sensitive gates were re-run green. Recorded under
+  `#### Final sweep on the delivered revision`.
 
 ## Surprises & discoveries
 
@@ -296,7 +309,28 @@ the conflict in `Decision log` before proceeding.
   `3413 tests run: 3413 passed, 5 skipped`. Extracting the generated scenario
   tests from that run and comparing them as sets against the pre-migration
   baseline gives exact equality: 254 scenarios before, 254 after, with no
-  additions and no losses.
+  additions and no losses. The baseline artefact is `/tmp/bdd-before.txt`, 254
+  names captured at `ebcedaef`.
+
+  The 254 figure is only meaningful against that baseline. Measured at three
+  revisions, the swept inventory (the `features_scenarios::` and
+  `features_unix_scenarios::` tests generated from `tests/features/` and
+  `tests/features_unix/`) is:
+
+  | Revision              | Scenario names | Note                          |
+  | --------------------- | -------------- | ----------------------------- |
+  | `ebcedaef` (baseline) | 254            | the recorded baseline         |
+  | `84447f0e` (`main`)   | 269            | `main` added 15 during review |
+  | `HEAD`                | 269            | migration's own delta is zero |
+
+  `main`'s 15 additions are the
+  `shell_quote`/`shell_join`/`compact`/env-default scenarios from the 3.14.8
+  and Jinja-ergonomics work that landed while this branch was in review. The
+  `HEAD` name set equals `main`'s exactly, and the 254 baseline names are a
+  subset of it, so the migration moved the count by zero and lost nothing. Two
+  independent measurements agree on 269: a grep of
+  `Scenario:`/`Scenario Outline:` lines across the swept directories, and the
+  generated test names in the `make test` log.
 
   Impact: invariant INV-1 (coverage preservation) and INV-3's central worry (a
   former false green becoming red) are both discharged by observation. No
@@ -437,11 +471,11 @@ the conflict in `Decision log` before proceeding.
 
   Evidence: every scenario that passes walks a green path whose steps return
   `Ok`. A green suite is therefore consistent both with propagation working and
-  with it being silently reverted; the 254-scenario equality proves the first,
-  not the second. A deliberate injection into `documentation_file_contains`
-  settled the behaviour question: with the step forced to `Err`, both dependent
-  scenarios failed, naming the injected string, and reverted cleanly. That
-  experiment was a *probe*, not a permanent guard, so
+  with it being silently reverted; the scenario-set equality against the
+  baseline proves the first, not the second. A deliberate injection into
+  `documentation_file_contains` settled the behaviour question: with the step
+  forced to `Err`, both dependent scenarios failed, naming the injected string,
+  and reverted cleanly. That experiment was a *probe*, not a permanent guard, so
   `tests/step_error_propagation_tests.rs` was added to hold the property
   durably.
 
@@ -465,7 +499,8 @@ the conflict in `Decision log` before proceeding.
   sweep, for the same reason.
 
   Impact: INV-3 is discharged, and INV-1 is unaffected — the new test is a
-  separate target, and the swept BDD inventory remains exactly 254 names.
+  separate target, so it never enters the swept inventory, which the migration
+  leaves at exactly `main`'s 269 names.
 
 - Observation: the only step body that can skip, `tests/bdd/steps/fs.rs:62`,
   calls `rstest_bdd::skip!`, which remains present in 0.6.0.
@@ -841,12 +876,12 @@ The exposure the migration carried. The 0.6.0 headline is a correctness fix: a
 step whose return type is a type alias of `Result<T, E>` previously had its
 `Err` discarded and the scenario stayed green. Netsuke's 177 fallible steps are
 declared `-> Result<()>` with `anyhow::Result`, which is exactly such an alias.
-No scenario of the 254 turned red, so the fix exposed no latent swallowed error
-here. That is a weaker result than it looks, and the difference matters: a
-green suite is equally consistent with the propagation working and with it
-being silently reverted, and no existing scenario has a step that returns `Err`
-at all. The fix therefore arrived unguarded, and the migration's job was not
-finished until it was guarded.
+No scenario of the unredacted suite turned red, so the fix exposed no latent
+swallowed error here. That is a weaker result than it looks, and the difference
+matters: a green suite is equally consistent with the propagation working and
+with it being silently reverted, and no existing scenario has a step that
+returns `Err` at all. The fix therefore arrived unguarded, and the migration's
+job was not finished until it was guarded.
 
 The artefact that closed it. `tests/step_error_propagation_tests.rs` is a
 self-contained `#[scenario]` with `#[should_panic]`, deliberately driven to
@@ -974,7 +1009,7 @@ Trace links:
 - EP-M2 (dependency) → `Cargo.toml:165-166`, `Cargo.lock` → acceptance:
   `cargo tree -p rstest-bdd` resolves 0.6.0 and `make test` compiles.
 - EP-M3 (source reconciliation) → migration-guide breaking changes 1, 3, 4, 5
-  → acceptance: `make lint` clean, inventory unchanged at 254.
+  → acceptance: `make lint` clean, inventory unchanged at `main`'s 269 names.
 - EP-M4 (documentation) → `docs/developers-guide.md:4384`,
   `docs/contents.md` → acceptance: `make markdownlint` clean.
 - EP-M5 (validation) → `make test`, `make lint`, `make check-fmt`,
@@ -985,13 +1020,20 @@ Trace links:
 ### Obligations
 
 - **INV-1 (coverage preservation).** The set of generated behavioural tests
-  after migration equals the baseline set captured at `ebcedaef`. Method:
-  `cargo nextest list --test bdd_tests` before and after, diffed as sorted name
-  lists. Artefact: `/tmp/bdd-before.txt` (254 names) and the post-migration
-  equivalent. Discharge: the diff is empty. Non-vacuity: the list is non-empty
-  (254) and is produced by the same command in both runs, so a macro that
-  silently generated nothing would be caught as a 254-line deletion rather than
-  an empty-vs-empty match.
+  after migration equals the set `main` generates, and contains every name the
+  pre-migration baseline captured at `ebcedaef`. Equality with the baseline is
+  the wrong test once the branch is rebased: `main` legitimately added 15
+  scenarios during review, and refusing them would be refusing upstream work
+  rather than preserving coverage. Method:
+  `cargo nextest list --test bdd_tests` at each revision, diffed as sorted name
+  lists. Artefacts: `/tmp/bdd-before.txt` (254 names, `ebcedaef`) and the
+  equivalent at `origin/main` and `HEAD`. Discharge: `HEAD` is set-equal to
+  `main`, and the baseline's 254 names are a subset of it. Non-vacuity: the
+  lists are non-empty (269 names) and are produced by the same command in every
+  run, so a macro that silently generated nothing would be caught as a
+  whole-list deletion rather than an empty-vs-empty match; and the subset check
+  is one-directional, so a *lost* scenario cannot pass by being merely absent
+  from an aggregate count.
 
 - **INV-2 (behaviour preservation).** Every scenario that passed before still
   passes, and any new failure is explained as a genuine defect the alias fix
@@ -1232,17 +1274,26 @@ dictionary on every run. At both revisions it produced the same one-line drift
 unrelated to this branch, which was reverted rather than committed so the
 branch's diff stays focused on the migration.
 
-#### Rebased sweep at `4c93ba63`
+#### Rebased sweep
 
 Rebasing onto `upstream/main` (`84447f0e`) brought in work that had landed
 while this branch was in review, and that work reintroduced the
 `cognitive_complexity` failure in a place the earlier sweep could not have
-seen. The rebased sweep below is the one that gates the delivered revision.
+seen. The rebased sweep below records the rebase's own verification; the
+delivered revision is gated by the final sweep further down, which re-ran the
+whole set after this plan's last edit.
 
-It was run at `4c93ba63`, which carries this plan's post-rebase updates on top
-of the fixes committed as `dd93120a`. Every row is recorded from that gate's
-own log — read directly, not taken from a summary — and every exit status was
-confirmed as zero.
+It was run twice, because this plan's own edits shift the revision each time
+one is written. The first run gated `4c93ba63`, which carries the post-rebase
+updates on top of the fixes committed as `dd93120a`; the second gated
+`3afbd5a0`, which adds this document's corrected log provenance. The first
+run's logs were archived to
+`/tmp/prior-sweep-archive-adopt-rstest-bdd-v0-6-0-20261002T191145Z/` rather
+than overwritten in place; the second run's are at the paths in the table
+below. Both runs are green and the two sets agree on every verdict, so the
+table is a statement about the rebased branch rather than about one lucky run.
+Every row is recorded from that gate's own log — read directly, not taken from
+a summary — and every exit status was confirmed as zero.
 
 | Gate                | Status                                                          | Log                                                   |
 | ------------------- | --------------------------------------------------------------- | ----------------------------------------------------- |
@@ -1313,6 +1364,43 @@ patch-application machinery moves to a sibling `apply_patch` module, leaving
 the guard at 294 lines. Whitaker's prescribed fix is exactly this split, and it
 runs along a real seam: one module runs `git apply` and decides when a reverse
 is owed, the other decides which patches exist and what compiling them proves.
+
+#### Final sweep on the delivered revision
+
+Committing this section's parent changes would strand the gate evidence again,
+so the whole set was run once more on the working tree that the delivery commit
+captures: the two-file tree the commit itself freezes. All eight targets passed
+with the tree untouched throughout.
+
+| Gate                           | Status                                                          | Log                                                              |
+| ------------------------------ | --------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `make check-fmt`               | pass — 179 Python files formatted, 174 Markdown files unchanged | `/tmp/check-fmt-gate4-adopt-rstest-bdd-v0-6-0.out`               |
+| `make lint`                    | pass — every stage reached                                      | `/tmp/lint-gate2-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make typecheck`               | pass — `ty` clean, `cargo check` clean                          | `/tmp/typecheck-gate2-adopt-rstest-bdd-v0-6-0.out`               |
+| `make doc-coverage`            | pass — 98.86% against the 80% threshold                         | `/tmp/doc-coverage-gate2-adopt-rstest-bdd-v0-6-0.out`            |
+| `make markdownlint`            | pass — 175 files, 0 issues                                      | `/tmp/markdownlint-gate4-adopt-rstest-bdd-v0-6-0.out`            |
+| `make nixie`                   | pass — all diagrams validated                                   | `/tmp/nixie-gate2-adopt-rstest-bdd-v0-6-0.out`                   |
+| `make test`                    | pass — 3912/3912, 6 skipped, 0 leaky; 129 doctests green        | `/tmp/test-gate2-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make test-workflow-contracts` | pass — 1082 passed, 3 skipped                                   | `/tmp/test-workflow-contracts-gate2-adopt-rstest-bdd-v0-6-0.out` |
+
+**The sweep exposed a gate-coverage trap worth recording.** The first pass ran
+`check-fmt` early and the rest afterwards, and the gate runner's `mdtablefix`
+stage read `docs/developers-guide.md` three seconds *before* the last write to
+it landed. The run therefore reported a green that did not cover the edit: a
+target can complete against bytes that are already stale, and a later write
+does not retroactively fail it. Nothing in the log distinguishes that case,
+which is why the remedy is positional rather than diagnostic — re-run the gate
+after the last write, not merely after the target has been seen to pass.
+
+Re-running `check-fmt` on the final bytes made the gap visible:
+`docs/developers-guide.md +7 -7`, `1 file would be reformatted`, exit 2. The
+seven lines were exactly the paragraph added last. `make fmt` re-flowed them
+and touched no other file, so the failure was a wrapping artefact of editing by
+hand rather than a content change. `check-fmt` and `markdownlint` were then
+re-run on those final bytes — both exit 0, logs suffixed `-gate4`. The
+Markdown-writing gates are ordering-sensitive in a way the earlier sweeps did
+not have to confront, because each previous sweep had `make fmt` run before it
+rather than after.
 
 ### Session provenance
 
@@ -1389,10 +1477,49 @@ pre-rebase revision says nothing about the rebased one, and that a cascade's
 first failure hides every stage after it.
 
 2026-10-02 — swept revision. The rebased sweep was run at `4c93ba63`, and the
-`#### Rebased sweep at 4c93ba63` table now records its seven verdicts from the
-logs themselves. It carried a `PENDING` table whose log paths named a revision
+`#### Rebased sweep` table now records its seven verdicts from the logs
+themselves. It carried a `PENDING` table whose log paths named a revision
 (`-gates-dd93120a.out`) that no run had written, because the repository's log
 template ends in the *branch* name, not a SHA; the paths and the table's
 heading are corrected together. The table was deliberately left `PENDING`
 rather than filled from the gate runner's prose, so that a gate is recorded as
 passing only once its own log has been read — which is what caught it.
+
+2026-10-02 — inventory correction. The scenario inventory was quoted as a flat
+"254 scenarios" throughout this document and in the pull request. That figure
+was right at the `ebcedaef` baseline and is still the right *baseline*, but
+`main` added 15 scenarios while this branch was in review, so it is no longer
+the current count. Re-measured at three revisions the inventory is 254
+(`ebcedaef`), 269 (`84447f0e`) and 269 (`HEAD`): the migration's own delta is
+zero and no baseline name is lost. The equality claim in INV-1, the acceptance
+item under EP-M3 and the `## Outcomes & retrospective` figure were restated
+accordingly, and a table recording all three revisions was added to
+`## Surprises & discoveries`. The lesson is that a count captured against a
+now-stale baseline silently becomes a false present-tense claim, and that the
+durable form of a coverage-preservation claim is a *set relation* — `HEAD` is
+set-equal to `main` and a superset of the baseline — not a scalar that upstream
+work can invalidate.
+
+2026-10-02 — sweep provenance. The rebased sweep was re-run on `3afbd5a0`, the
+revision this plan's own edits produced, and the gate runner archived the
+`4c93ba63` logs to
+`/tmp/prior-sweep-archive-adopt-rstest-bdd-v0-6-0-20261002T191145Z/` rather
+than overwriting them. Both runs are green and agree on every verdict, which is
+what lets the table stand as a claim about the rebased branch rather than one
+run. `make test-workflow-contracts` — which none of the four `make` gates
+depends on — was run separately and passes (1082 passed, 3 skipped), and it
+classifies the two files this branch moved as *not* build-capable, so the
+`nested-cargo-builds` grouping for `compile_guard` still comes from its
+pre-existing explicit filter.
+
+2026-10-02 — delivered revision. `## Revision note`,
+`#### Final sweep on the delivered revision` and the `## Progress` entries
+below record the sweep that gates the revision this commit captures. That sweep
+caught a coverage trap: `check-fmt`'s `mdtablefix` stage had read
+`docs/developers-guide.md` three seconds before the file's last write, so its
+green did not cover the edit, and re-running it on the final bytes failed at
+`docs/developers-guide.md +7 -7`. `make fmt` re-flowed the paragraph and both
+Markdown-sensitive gates were re-run green (`-gate4` logs). The lesson is that
+a gate's verdict belongs to the bytes it read, not to the file it names: after
+the last write, the gate must be run again, because nothing in a passing log
+says which revision it saw.
