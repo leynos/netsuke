@@ -1,13 +1,28 @@
 """Prove the release-path contract rejects each named regression."""
 
 import pytest
-from release_publish_path_mutations import MUTATION_LABELS, mutate_workflows
+from release_publish_path_mutations import (
+    MUTATION_LABELS,
+    MutationError,
+    MutationIssue,
+    mutate_workflows,
+)
 from release_publish_path_test import CALLER_WORKFLOW_PATH, check_release_publish_path
 from workflow_loading import (
     PACKAGE_WORKFLOW_PATH,
     RELEASE_WORKFLOW_PATH,
     load_workflow,
 )
+
+
+def test_mutation_error_preserves_standard_exception_arguments() -> None:
+    """Keep the issue and detail available through AssertionError.args."""
+    detail = ("guard expression", 0)
+    error = MutationError(MutationIssue.PATTERN_MISMATCH, detail)
+
+    assert error.args == (MutationIssue.PATTERN_MISMATCH, detail), (
+        "AssertionError args should retain mutation context"
+    )
 
 
 @pytest.fixture(scope="module")

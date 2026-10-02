@@ -71,6 +71,7 @@ class MutationError(AssertionError):
         """Record the mutation error category and optional detail."""
         self.issue = issue
         self.detail = detail
+        super().__init__(issue, detail)
 
     def __str__(self) -> str:
         """Render the mutation error with any stale pattern or label."""

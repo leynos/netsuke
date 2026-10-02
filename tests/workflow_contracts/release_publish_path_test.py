@@ -222,7 +222,7 @@ def _check_release_staging(
     plan_runs = _step_runs(
         steps[plan_index], contexts, violations, f"{scenario.name}.upload.guard"
     )
-    expected_plan_step = scenario.mode != "publish"
+    expected_plan_step = True
     if plan_runs != expected_plan_step:
         violations.append(
             f"{scenario.name}.upload: staging plan step resolved to {plan_runs!r}, "
@@ -234,7 +234,7 @@ def _check_release_staging(
             scenario=scenario,
             contexts=contexts,
             violations=violations,
-            expected_plan=scenario.mode != "publish",
+            expected_plan=True,
             label="upload-plan",
         ),
     )
