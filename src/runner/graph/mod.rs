@@ -29,6 +29,16 @@ use super::{
     ExecutionContext, generation as build_generation, load_manifest_with_stage_reporting, process,
 };
 
+/// Note that a build-graph render has started and which artefact it targets.
+fn info_graph_render_started_from_fields(html: bool) {
+    info!(
+        target: "netsuke::subcommand",
+        subcommand = "graph",
+        html,
+        "Rendering build graph in-process"
+    );
+}
+
 /// Render the build graph in-process and write the selected artefact.
 ///
 /// Loads and validates the manifest, projects it through the IR, renders DOT
@@ -44,12 +54,7 @@ pub(super) fn handle_graph(
     context: &ExecutionContext<'_>,
 ) -> Result<()> {
     let reporter = context.reporter;
-    info!(
-        target: "netsuke::subcommand",
-        subcommand = "graph",
-        html = args.html,
-        "Rendering build graph in-process"
-    );
+    info_graph_render_started_from_fields(args.html);
     let manifest_path = resolve_manifest_path(cli)?;
     ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
     let inputs =

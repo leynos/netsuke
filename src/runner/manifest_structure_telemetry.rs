@@ -55,6 +55,17 @@ pub fn record_manifest_structure(manifest: &NetsukeManifest) {
         default_count = manifest.defaults.len(),
     );
     let _guard = span.enter();
+    record_structure_event_from_fields(manifest);
+    counter!(MANIFEST_STRUCTURES_TOTAL).increment(1);
+}
+
+/// Emit one manifest structure summary.
+///
+/// Only collection sizes are read from `manifest`; no name, recipe, or other
+/// manifest-controlled text is projected into the event, so the summary is
+/// bounded by construction. Reading the counts here rather than at the call
+/// site keeps the projection in one place, beside the event that discloses it.
+fn record_structure_event_from_fields(manifest: &NetsukeManifest) {
     trace!(
         variable_count = manifest.vars.len(),
         macro_count = manifest.macros.len(),
@@ -64,7 +75,6 @@ pub fn record_manifest_structure(manifest: &NetsukeManifest) {
         default_count = manifest.defaults.len(),
         "manifest structure summary"
     );
-    counter!(MANIFEST_STRUCTURES_TOTAL).increment(1);
 }
 
 #[cfg(test)]

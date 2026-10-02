@@ -205,17 +205,20 @@ fn remaining_budget(deadline: Instant, url: &Url) -> Result<Duration, Error> {
     match deadline.checked_duration_since(Instant::now()) {
         Some(remaining) if !remaining.is_zero() => Ok(remaining),
         _ => {
-            // Log the host, not the full URL, which may carry userinfo.
-            tracing::warn!(
-                host = url.host_str().unwrap_or(""),
-                "fetch redirect chain exhausted its budget"
-            );
+            warn_redirect_budget_exhausted(url.host_str().unwrap_or(""));
             Err(fetch_failed_error(
                 url,
                 "Redirect chain exceeded its deadline",
             ))
         }
     }
+}
+
+/// Warn that a redirect chain ran out of time before its next hop.
+///
+/// The host is logged rather than the full URL, which may carry userinfo.
+fn warn_redirect_budget_exhausted(host: &str) {
+    tracing::warn!(host, "fetch redirect chain exhausted its budget");
 }
 
 /// Send one GET request that must finish within the remaining chain budget.

@@ -271,6 +271,26 @@ pub(super) fn record_resolution_found(span: &tracing::Span, cwd_mode: &'static s
     .increment(1);
 }
 
+/// Emit a resolution failure's bounded outcome and error category.
+///
+/// Hoisted out of [`record_resolution_error`] so the recorder's cognitive
+/// complexity stays structural: the `log` feature, enabled transitively by a
+/// dev-dependency, expands every `tracing` macro into extra branches. Every
+/// label is one this module declares, so the event carries nothing derived
+/// from the manifest or from the filesystem.
+fn debug_resolution_error_from_fields(
+    cwd_mode: &'static str,
+    outcome: &'static str,
+    error_category: &'static str,
+) {
+    tracing::debug!(
+        cwd_mode,
+        outcome,
+        error_category,
+        "which resolver finished with non-success result",
+    );
+}
+
 /// Record a resolution failure's outcome and bounded error category as metrics.
 ///
 /// A search or direct-path miss is counted as `not_found` and every other
@@ -295,12 +315,7 @@ pub(super) fn record_resolution_error(
     };
     span.record("result", outcome);
     span.record("error_category", category);
-    tracing::debug!(
-        cwd_mode,
-        outcome,
-        error_category = category,
-        "which resolver finished with non-success result",
-    );
+    debug_resolution_error_from_fields(cwd_mode, outcome, category);
     counter!(
         WHICH_RESOLUTION_TOTAL,
         "cwd_mode" => cwd_mode,

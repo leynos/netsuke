@@ -208,6 +208,19 @@ fn create_empty_tempfile(
     persist_tempfile(tempfile)
 }
 
+/// Emit a bounded warning that a pipe reader failed during cleanup.
+fn warn_pipe_reader_failed_from_fields(stream: &str, err: &CommandFailure) {
+    tracing::warn!(stream, ?err, "pipe reader failed during cleanup");
+}
+
+/// Emit a bounded warning that a pipe reader thread panicked.
+///
+/// The join error is an opaque `Any` payload, so it is rendered through
+/// [`std::fmt::Debug`] rather than named.
+fn warn_pipe_reader_panicked_from_fields(stream: &str, join_err: &dyn std::fmt::Debug) {
+    tracing::warn!(stream, ?join_err, "pipe reader thread panicked");
+}
+
 /// Join a single pipe reader thread during cleanup, logging any failure.
 fn join_pipe_for_cleanup(
     label: &str,
@@ -217,10 +230,10 @@ fn join_pipe_for_cleanup(
         match join_handle.join() {
             Ok(Ok(_)) => {}
             Ok(Err(err)) => {
-                tracing::warn!(stream = label, ?err, "pipe reader failed during cleanup");
+                warn_pipe_reader_failed_from_fields(label, &err);
             }
             Err(join_err) => {
-                tracing::warn!(stream = label, ?join_err, "pipe reader thread panicked");
+                warn_pipe_reader_panicked_from_fields(label, &join_err);
             }
         }
     }

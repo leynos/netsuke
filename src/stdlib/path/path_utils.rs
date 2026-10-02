@@ -171,6 +171,12 @@ pub(super) fn normalise_parent(parent: Option<&Utf8Path>) -> Utf8PathBuf {
         .map_or_else(|| Utf8PathBuf::from("."), Utf8Path::to_path_buf)
 }
 
+/// Keep the bounded path emitters below the module line cap.
+#[path = "path_emitters.rs"]
+mod emitters;
+
+use emitters::{debug_home_resolved_from_fields, debug_home_unavailable_from_fields};
+
 /// Resolve the home and report which source supplied it.
 ///
 /// This is the telemetry boundary for home resolution: the ladders stay pure
@@ -196,12 +202,7 @@ where
     } else {
         HOME_OUTCOME_UNAVAILABLE
     };
-    tracing::debug!(
-        event = EXPANDUSER_HOME_EVENT,
-        source,
-        found = resolved.is_some(),
-        "resolved the home directory for expanduser",
-    );
+    debug_home_resolved_from_fields(source, resolved.is_some());
     // Exactly one increment per resolution, whatever the outcome, so the
     // counter totals resolutions rather than events: the failure path below
     // adds a second *event* but no second sample.
@@ -212,12 +213,7 @@ where
     )
     .increment(1);
     resolved.map(|(home, _)| home).ok_or_else(|| {
-        tracing::debug!(
-            event = EXPANDUSER_HOME_EVENT,
-            source,
-            outcome = HOME_OUTCOME_UNAVAILABLE,
-            "expanduser found no home directory",
-        );
+        debug_home_unavailable_from_fields(source);
         Error::new(
             ErrorKind::InvalidOperation,
             localization::message(keys::STDLIB_PATH_EXPANDUSER_NO_HOME).to_string(),

@@ -70,6 +70,32 @@ fn describe_file_read_metrics() {
     });
 }
 
+/// Emit one file-read event carrying the policy the call ran under.
+fn debug_file_read_from_fields(
+    filter: &'static str,
+    outcome: &'static str,
+    limits: &FileReadLimits,
+) {
+    tracing::debug!(
+        event = FILE_READ_EVENT,
+        filter,
+        outcome,
+        limit = limits.max_bytes,
+        follow_symlinks = limits.follow_symlinks,
+        "read a file for a stdlib filter",
+    );
+}
+
+/// Emit one file-read event for a call refused before its limits resolved.
+fn debug_file_read_unresolved_from_fields(filter: &'static str, outcome: &'static str) {
+    tracing::debug!(
+        event = FILE_READ_EVENT,
+        filter,
+        outcome,
+        "a stdlib filter call was refused before its read limits resolved",
+    );
+}
+
 /// Record one file-reading filter call and return its result unchanged.
 ///
 /// This is the telemetry boundary for the four filters: every call is counted
@@ -90,21 +116,9 @@ pub(super) fn record_file_read<T>(
         OUTCOME_REJECTED
     };
     if let Some(resolved) = limits {
-        tracing::debug!(
-            event = FILE_READ_EVENT,
-            filter,
-            outcome,
-            limit = resolved.max_bytes,
-            follow_symlinks = resolved.follow_symlinks,
-            "read a file for a stdlib filter",
-        );
+        debug_file_read_from_fields(filter, outcome, resolved);
     } else {
-        tracing::debug!(
-            event = FILE_READ_EVENT,
-            filter,
-            outcome,
-            "a stdlib filter call was refused before its read limits resolved",
-        );
+        debug_file_read_unresolved_from_fields(filter, outcome);
     }
     counter!(
         FILE_READ_TOTAL,

@@ -60,13 +60,33 @@ pub(super) fn check_exit_status_with_context<Clock: MonotonicClock>(
     }
 }
 
+/// Note that a partially configured child could not be terminated.
+fn debug_child_kill_failed(context: &str, error: &io::Error) {
+    tracing::debug!("failed to kill child after {context}: {error}");
+}
+
+/// Note that a terminated child could not be reaped.
+fn debug_child_reap_failed(context: &str, error: &io::Error) {
+    tracing::debug!("failed to reap child after {context}: {error}");
+}
+
+/// Note that a forwarding thread panicked and its stats were discarded.
+fn warn_forwarding_thread_panicked(panic: &dyn std::fmt::Debug) {
+    tracing::warn!("stderr forwarding thread panicked: {panic:?}");
+}
+
+/// Note that a forwarding stream hit a closed pipe and truncated its output.
+fn debug_forwarding_stream_truncated(stream_name: &str) {
+    tracing::debug!("{stream_name} forwarding encountered closed pipe; output truncated");
+}
+
 /// Terminate a partially configured child and reap it before returning an error.
 pub(super) fn terminate_child(child: &mut Child, context: &str) {
     if let Err(error) = child.kill() {
-        tracing::debug!("failed to kill child after {context}: {error}");
+        debug_child_kill_failed(context, &error);
     }
     if let Err(error) = child.wait() {
-        tracing::debug!("failed to reap child after {context}: {error}");
+        debug_child_reap_failed(context, &error);
     }
 }
 
@@ -95,7 +115,7 @@ pub(super) fn finalize_streaming(
             context
         }
         Err(error) => {
-            tracing::warn!("stderr forwarding thread panicked: {error:?}");
+            warn_forwarding_thread_panicked(&error);
             None
         }
     };
@@ -105,6 +125,6 @@ pub(super) fn finalize_streaming(
 /// Log a truncation debug event when a forwarding stream hit a closed pipe.
 fn handle_forwarding_stats(stats: ForwardStats, stream_name: &str) {
     if stats.write_failed {
-        tracing::debug!("{stream_name} forwarding encountered closed pipe; output truncated");
+        debug_forwarding_stream_truncated(stream_name);
     }
 }

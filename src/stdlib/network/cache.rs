@@ -101,6 +101,16 @@ pub(super) fn open_cache_dir(root: &Dir, relative: &Utf8Path) -> Result<Dir, Err
     })
 }
 
+/// Emit a bounded note that the requested cache entry is absent.
+fn debug_cache_entry_not_found_from_fields(key: &str) {
+    tracing::debug!(key, "cache entry not found");
+}
+
+/// Emit a bounded warning that opening a cache entry failed.
+fn warn_cache_read_failed_from_fields(key: &str, error: &io::Error) {
+    tracing::warn!(key, error = %error, "cache read failed");
+}
+
 /// Read a cached entry, returning `None` when it does not exist.
 ///
 /// Enforces the response size limit on the exact bytes read from the entry.
@@ -116,11 +126,11 @@ pub(super) fn read_cached(dir: &Dir, name: &str, limit: u64) -> Result<Option<Ve
     match dir.open_with(path, &options) {
         Ok(file) => read_cached_file(name, file, limit).map(Some),
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            tracing::debug!(key = name, "cache entry not found");
+            debug_cache_entry_not_found_from_fields(name);
             Ok(None)
         }
         Err(err) => {
-            tracing::warn!(key = name, error = %err, "cache read failed");
+            warn_cache_read_failed_from_fields(name, &err);
             Err(Error::new(
                 ErrorKind::InvalidOperation,
                 localization::message(keys::STDLIB_FETCH_CACHE_OPEN_FAILED)
