@@ -1393,6 +1393,43 @@ the guard at 294 lines. Whitaker's prescribed fix is exactly this split, and it
 runs along a real seam: one module runs `git apply` and decides when a reverse
 is owed, the other decides which patches exist and what compiling them proves.
 
+#### Defect-closing sweep
+
+Three defects were found after the delivered sweep, each on CI rather than
+locally, and each fixed in its own commit. This section names the `-gate9` log
+set *before* the run, repeating the order-inverting remedy recorded below: the
+plan is a gated input, so its record of a sweep must precede the sweep.
+
+`bf004c5b` converged this document to the fixpoint that both `mdtablefix`
+0.6.0, which CI pins, and 0.6.1, which was installed locally, accept. The
+required `build-test` check had failed at its `Format` step and skipped every
+gate behind it, because the local `make fmt` had written a form only 0.6.1
+accepted.
+
+`84df11c0` moved four `tracing` emitters out of
+`src/runner/process/child_exit.rs` into a sibling `child_exit_emitters.rs`.
+Hoisting them during the complexity work had taken the file from 2 of 5
+functions taking a string argument to 5 of 9, and CodeScene's *String Heavy
+Function Arguments* rule reads that ratio at file granularity: the file fell
+from 10.00 to 9.68 and the non-required `CodeScene Code Health Review` check
+reported `10.00 → 9.69`. Both files now score 10.00.
+
+| Gate                           | Status | Log                                                              |
+| ------------------------------ | ------ | ---------------------------------------------------------------- |
+| `make check-fmt`               |        | `/tmp/check-fmt-gate9-adopt-rstest-bdd-v0-6-0.out`               |
+| `make lint`                    |        | `/tmp/lint-gate9-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make typecheck`               |        | `/tmp/typecheck-gate9-adopt-rstest-bdd-v0-6-0.out`               |
+| `make doc-coverage`            |        | `/tmp/doc-coverage-gate9-adopt-rstest-bdd-v0-6-0.out`            |
+| `make markdownlint`            |        | `/tmp/markdownlint-gate9-adopt-rstest-bdd-v0-6-0.out`            |
+| `make nixie`                   |        | `/tmp/nixie-gate9-adopt-rstest-bdd-v0-6-0.out`                   |
+| `make test`                    |        | `/tmp/test-gate9-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make test-workflow-contracts` |        | `/tmp/test-workflow-contracts-gate9-adopt-rstest-bdd-v0-6-0.out` |
+
+The status column is intentionally blank here and filled from the logs after
+the run, never from a runner's prose. Each target writes a
+`/tmp/<target>-gate9-adopt-rstest-bdd-v0-6-0.exit` sidecar holding its
+`PIPESTATUS[0]`.
+
 #### Final sweep on the delivered revision
 
 A gate's verdict belongs to the bytes it read, not to the file it names. That
