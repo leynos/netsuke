@@ -111,31 +111,36 @@ def _render_template(template: object, contexts: cabc.Mapping[str, object]) -> s
     rendered: list[str] = []
     cursor = 0
     for match in _EXPRESSION.finditer(template):
-        literal = template[cursor : match.start()]
-        if "${{" in literal or "}}" in literal:
-            raise UnsupportedExpressionError(
-                ExpressionIssue.INCOMPLETE_ARTIFACT_EXPRESSION
-            )
-        rendered.append(literal)
+        rendered.append(_checked_literal(template[cursor : match.start()]))
         value = evaluate_expression(match.group(), contexts)
-        if not isinstance(value, (str, bool, int, float)):
-            raise UnsupportedExpressionError(ExpressionIssue.INVALID_ARTIFACT_VALUE)
-        rendered.append(str(value).lower() if isinstance(value, bool) else str(value))
+        rendered.append(_artifact_scalar(value))
         cursor = match.end()
-    tail = template[cursor:]
-    if "${{" in tail or "}}" in tail:
-        raise UnsupportedExpressionError(ExpressionIssue.INCOMPLETE_ARTIFACT_EXPRESSION)
-    rendered.append(tail)
+    rendered.append(_checked_literal(template[cursor:]))
     return "".join(rendered)
 
 
-def check_artifact_names(
-    release: dict[str, object],
-    build: dict[str, object],
-    repo_name: str,
-    violations: list[str],
+def _checked_literal(fragment: str) -> str:
+    """Return literal text unless it contains an unmatched expression delimiter."""
+    if "${{" in fragment or "}}" in fragment:
+        raise UnsupportedExpressionError(ExpressionIssue.INCOMPLETE_ARTIFACT_EXPRESSION)
+    return fragment
+
+
+def _artifact_scalar(value: object) -> str:
+    """Format an accepted expression scalar or refuse a structured value."""
+    match value:
+        case bool() as boolean:
+            return "true" if boolean else "false"
+        case str() | int() | float():
+            return str(value)
+        case _:
+            raise UnsupportedExpressionError(ExpressionIssue.INVALID_ARTIFACT_VALUE)
+
+
+def _check_caller_artifact_names(
+    release: dict[str, object], repo_name: str, violations: list[str]
 ) -> None:
-    """Check matrix-resolved caller names and each platform's name forwarding."""
+    """Validate artifact names after resolving every caller matrix row."""
     for job_name in BUILD_JOBS:
         job = workflow_job(release, job_name)
         with_values = require_mapping(job.get("with"), f"{job_name}.with")
@@ -155,6 +160,11 @@ def check_artifact_names(
             if not fnmatch.fnmatchcase(name, f"{repo_name}-*"):
                 violations.append(f"{label}: {name!r} does not match {repo_name}-*")
 
+
+def _check_upload_name_forwarding(
+    build: dict[str, object], violations: list[str]
+) -> None:
+    """Require each platform uploader to forward its caller's artifact name."""
     steps = job_steps(build, "build")
     for platform, step_name in UPLOAD_STEPS.items():
         upload = named_step(steps, step_name)
@@ -163,6 +173,17 @@ def check_artifact_names(
             violations.append(
                 f"build.{platform}.artifact-name: upload must use its caller name"
             )
+
+
+def check_artifact_names(
+    release: dict[str, object],
+    build: dict[str, object],
+    repo_name: str,
+    violations: list[str],
+) -> None:
+    """Check matrix-resolved caller names and each platform's name forwarding."""
+    _check_caller_artifact_names(release, repo_name, violations)
+    _check_upload_name_forwarding(build, violations)
 
 
 def check_download_pattern(
