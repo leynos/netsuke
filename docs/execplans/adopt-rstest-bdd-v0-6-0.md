@@ -1719,7 +1719,7 @@ which is a transport failure, not a defect. The harness injects
 `GH_TOKEN`; the pairs define a `credential.helper` that shells out to a Lody
 node helper and, decisively, a
 `url.<lody-github::https://github.com/>.insteadOf` rewrite. An `insteadOf`
-rewrite is applied when git canonicalises a URL, before any helper is
+rewrite is applied when git canonicalizes a URL, before any helper is
 consulted, so `uv`'s fetch of the pinned `df12-python-lints` dependency was
 routed to the Lody remote helper, which fails closed when its broker is
 starved. The mechanism was isolated before acting on it:
