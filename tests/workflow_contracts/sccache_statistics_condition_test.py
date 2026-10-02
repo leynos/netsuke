@@ -43,22 +43,40 @@ CASES: typ.Final = [
 ]
 
 
+def _with_implicit_success(condition: str) -> str:
+    """Return the condition text GitHub would evaluate, braces stripped.
+
+    GitHub prepends `success() &&` to a condition that names no status
+    function, so a bare comparison does not run after a failed step.
+
+    Returns
+    -------
+    str
+        The condition with an implicit `success() &&` made explicit.
+    """
+    text = condition.strip().removeprefix("${{").removesuffix("}}").strip()
+    if re.search(r"\b(?:always|success|failure|cancelled)\(\)", text):
+        return text
+    return f"success() && {text}" if text else "success()"
+
+
+def _arm_holds(
+    arm: str, outputs: dict[tuple[str, str], str], *, job_failed: bool
+) -> bool:
+    """Return whether every `&&` conjunct of one `||` arm holds."""
+    return all(
+        _atom(atom.strip(), outputs, job_failed=job_failed) for atom in arm.split("&&")
+    )
+
+
 def evaluate(
     condition: str, outputs: dict[tuple[str, str], str], *, job_failed: bool
 ) -> bool:
     """Evaluate a step `if:` the way GitHub Actions would for the given state."""
-    text = condition.strip().removeprefix("${{").removesuffix("}}").strip()
-    # GitHub prepends `success() &&` to a condition that names no status
-    # function, so a bare comparison does not run after a failed step.
-    if not re.search(r"\b(?:always|success|failure|cancelled)\(\)", text):
-        text = f"success() && {text}" if text else "success()"
-    for arm in text.split("||"):
-        if all(
-            _atom(atom.strip(), outputs, job_failed=job_failed)
-            for atom in arm.split("&&")
-        ):
-            return True
-    return False
+    text = _with_implicit_success(condition)
+    return any(
+        _arm_holds(arm, outputs, job_failed=job_failed) for arm in text.split("||")
+    )
 
 
 def _atom(atom: str, outputs: dict[tuple[str, str], str], *, job_failed: bool) -> bool:
