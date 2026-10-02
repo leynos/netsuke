@@ -990,11 +990,13 @@ issue-#381 expectations is either still fulfilled or removed with evidence.
 `tests/bdd/steps/mod.rs` documentation matches reality.
 
 Acceptance: the `-D warnings` compilation inside `make test-nextest` is clean
-with zero `unfulfilled_lint_expectations` diagnostics; INV-1 holds. The
-original acceptance named `make lint-clippy`, which is **unavailable** on this
-branch because it aborts in `src/` on a pre-existing red; the substitute is
-stronger for this question, since it is the compile that actually reaches the
-test targets. **Discharged 2026-09-26** — see `Surprises & discoveries`.
+with zero `unfulfilled_lint_expectations` diagnostics; INV-1 holds. At the time
+this milestone was discharged the original acceptance named `make lint-clippy`,
+which was then unavailable because it aborted in `src/` on the complexity
+cascade; the substitute used was the `-D warnings` compile, since that is the
+compile which actually reaches the test targets. That substitution is no longer
+needed — `make lint` now runs end to end and passes at `31d103de`. **Discharged
+2026-09-26** — see `Surprises & discoveries`.
 
 Recovery: each expectation removal is independently revertible.
 
@@ -1017,11 +1019,11 @@ and a draft PR is open.
 
 Acceptance: INV-1 through INV-5 discharged with recorded evidence; `make test`,
 `make check-fmt`, `make typecheck`, `make doc-coverage`, `make markdownlint` and
-`make nixie` all pass. `make lint` is recorded as an **unavailable** check
-with its pre-existing-red evidence, never as a pass; the `-D warnings`
-compilation inside `make test-nextest` stands in for the one question
-`make lint` would have answered about `tests/`. Unavailable checks are named
-rather than claimed.
+`make nixie` all pass. At the `-m4` revision `make lint` was recorded as an
+**unavailable** check rather than a pass, because `lint-clippy` aborted and the
+four later stages never ran. That condition is resolved: at `31d103de` every
+stage of `make lint` runs and passes, so the check is now available and green.
+**Discharged 2026-10-02** — see `### Gate logs`.
 
 ## Outputs and evidence
 
@@ -1106,18 +1108,53 @@ Editing this document after the `-m4` sweep shifted the revision, so the
 Markdown-scoped gates were re-run on the final revision; those logs are
 separate and are named with the `-m5` suffix.
 
+#### Final sweep at `31d103de`
+
+The `-m4` and `-m5` sweeps above predate the macro-hoisting refactor, so the
+`unavailable — pre-existing red` row for `make lint` in that table describes a
+state the branch no longer has. The final sweep below is the one that gates the
+delivered revision. Its logs carry no `-m` suffix.
+
+| Gate                | Status                      | Log                                               |
+| ------------------- | --------------------------- | ------------------------------------------------- |
+| `make check-fmt`    | pass                        | `/tmp/check-fmt-2-adopt-rstest-bdd-v0-6-0.out`    |
+| `make lint`         | pass — all 11 stages ran    | `/tmp/lint-2-adopt-rstest-bdd-v0-6-0.out`         |
+| `make typecheck`    | pass — `ty` + `cargo check` | `/tmp/typecheck-2-adopt-rstest-bdd-v0-6-0.out`    |
+| `make markdownlint` | pass — 166 files, 0 issues  | `/tmp/markdownlint-2-adopt-rstest-bdd-v0-6-0.out` |
+| `make nixie`        | pass                        | `/tmp/nixie-2-adopt-rstest-bdd-v0-6-0.out`        |
+| `make test`         | pass — 3414/3414, 5 skipped | `/tmp/test-2-adopt-rstest-bdd-v0-6-0.out`         |
+
+`make lint` completing is the headline: at the `-m4` revision it aborted at
+`lint-clippy`, so `lint-whitaker`, `lint-python` and `github-actions-lint` were
+recorded as *unavailable* rather than passing. All three now run and pass,
+which discharges the checks this plan previously listed as unavailable. The
+five gates other than `check-fmt` were re-run at `31d103de` specifically
+because the delta since `f7915286` is a Markdown document, and the
+Markdown-sensitive gates (`markdownlint`, `nixie`) are sensitive to that delta
+class; `check-fmt` was verified at `31d103de` in a separate run, so all six are
+green at one revision.
+
+The `spelling` stage rewrites `typos.toml` from the live shared estate
+dictionary on every run. At both revisions it produced the same one-line drift
+unrelated to this branch, which was reverted rather than committed so the
+branch's diff stays focused on the migration.
+
 ### Session provenance
 
 The work session that produced this migration is recorded at
 <https://lody.ai/leynos/sessions/7bb1d019-44e1-4cc0-b860-e7ac1b312667>.
 
-The delivered revision is `c68cd30f` on `adopt-rstest-bdd-v0-6-0`, pushed to
+The delivered revision is `31d103de` on `adopt-rstest-bdd-v0-6-0`, pushed to
 `origin` and opened as draft pull request
-[#805](https://github.com/leynos/netsuke/pull/805). Two commits carry the work:
-`e62af317` imports the authoritative documentation byte-for-byte and drafts
-this plan, and `c68cd30f` performs the dependency bump, adds the INV-3
-regression guard, corrects the developer guidance, and closes the plan's living
-sections. Both are pushed; the pull request is a draft and has not been merged.
+[#805](https://github.com/leynos/netsuke/pull/805). Seven commits carry the
+work: `e62af317` imports the authoritative documentation byte-for-byte and
+drafts this plan; `c68cd30f` performs the dependency bump, adds the INV-3
+regression guard, and corrects the developer guidance; `b8d1192c` marks the
+plan complete; `7ac904e8` corrects the withdrawn "pre-existing on `main`"
+diagnosis and raises the escalation; `27a95bbf` records the re-delivery and the
+root cause; `f7915286` hoists the charged `tracing` macros to clear the
+complexity cascade; and `31d103de` reformats this document to the canonical
+Markdown form. The pull request is a draft and has not been merged.
 
 ## Revision note
 
@@ -1138,3 +1175,13 @@ to `COMPLETE` and the delivery recorded in `### Session provenance`. Because
 these edits shifted the revision after the `-m4` sweep, the Markdown-scoped
 gates were re-run on it; those `-m5` logs are the ones that describe the
 revision now pushed. Both pass.
+
+2026-10-02 — corrected revision. `Status:` moved back to `BLOCKED` and then to
+`IN PROGRESS`. The earlier `COMPLETE` rested on a diagnosis that was wrong in
+two places: the `make lint` failure was caused by this migration's feature
+unification rather than being pre-existing on `main`, and the escalation the
+plan raised against the fix was superseded once measurement showed every site
+needed only its macros hoisted. The final sweep at `31d103de` is added under
+`### Gate logs` and is the one that gates this revision. `Status:` stays
+`IN PROGRESS` rather than `COMPLETE` until this document's own edits have been
+committed and the push confirmed.
