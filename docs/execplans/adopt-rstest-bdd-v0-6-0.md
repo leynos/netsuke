@@ -1665,3 +1665,41 @@ produced twenty new SHAs — and invalidated every review, gate log and CI run
 tied to `4bd2aa88` — into a no-op that invalidated nothing. It is also worth
 recording that the estate's stored `main` ref in the bare repository
 (`1e60fb18`) is stale and is not the target; only the fetched remote ref is.
+
+2026-10-02 — the no-op rebase is recorded, gated and pushed. Recording it in
+this document moved `HEAD` to `373de50b`, which invalidated the gate logs that
+had read `4bd2aa88`, so all four `make` gates were re-run on the committed
+revision rather than cited
+(`/tmp/<target>-gate-rebase2-adopt-rstest-bdd-v0-6-0.out`, each sidecar `0`),
+reproducing the earlier counts exactly: 3912 nextest tests with 6 skipped, 179
+Rust and Python files formatted, 174 Markdown files left unchanged. The four
+required checks the pull request's ruleset enforces are `build-test`,
+`kani-smoke`, `netsukefile` and `release / metadata`; the local gates are the
+same family but not the same jobs, so CI remains the authority on the pushed
+revision.
+
+The push used the command-scoped SSH transport
+(`git push git@github.com:leynos/netsuke.git HEAD:refs/heads/adopt-rstest-bdd-v0-6-0`)
+with `--force-with-lease` bound to the head recorded *before* the rebase began
+(`4bd2aa88`), not to a value refreshed at push time. The lease mattered here
+even though the rebase was a no-op: the branch is shared, and a lease taken
+fresh would silently accept a peer session's concurrent commit. `origin`'s
+stored head was confirmed equal to the recorded value immediately before the
+push, and the push reported `4bd2aa88..373de50b`. The pull request stayed a
+draft, as the migration brief requires; only the branch moved.
+
+2026-10-02 — one error in the record, found and corrected. The entry above
+describing the no-op rebase said the test gate had reached "the three doctest
+binaries". Both runs print exactly two `Doc-tests` headers —
+`Doc-tests netsuke` and `Doc-tests test_support` — and this document already
+stated the right figure forty lines earlier ("129 across two `Doc-tests`
+binaries"). The wrong number came from reading a subagent's report, which had
+counted the `running 2 tests` sub-block inside the netsuke doctest run as a
+third target; the count is settled by counting `Doc-tests` headers, which is
+measurable from the log rather than inferred from the shape of a summary.
+Correcting it moved `HEAD` to `659aad7f`, so the four gates were run a third
+time, on the correction's own bytes, recording the same two-target structure
+they had been miscounted from
+(`/tmp/<target>-gate-doctestfix-adopt-rstest-bdd-v0-6-0.out`, each sidecar
+`0`). A prose claim about a log is still a claim about evidence: it has to be
+read back from the log, not restated from memory of it.
