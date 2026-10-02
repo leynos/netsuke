@@ -19,8 +19,10 @@
 
 #[path = "cargo_artifacts.rs"]
 pub(crate) mod cargo_artifacts;
+
 #[path = "cargo_features.rs"]
 mod cargo_features;
+
 #[path = "rustc_response_file.rs"]
 pub(crate) mod rustc_response_file;
 
@@ -52,10 +54,7 @@ impl TestSupportRlib {
             .args(cargo_features::LIBRARY_BUILD_ARGUMENTS);
         let started_at = Instant::now();
         let output = command.output()?;
-        tracing::info!(
-            elapsed_seconds = started_at.elapsed().as_secs_f64(),
-            "cargo check test_support completed"
-        );
+        info_test_support_build_completed_from_fields(started_at.elapsed().as_secs_f64());
         if !output.status.success() {
             return Err(io::Error::other(format!(
                 "checking test_support failed:\n{}",
@@ -138,10 +137,7 @@ impl TestSupportRlib {
         // `output_dir` owns the response file and stays in scope across the
         // call below, so the file still exists when `rustc` opens it at spawn.
         let output = Command::new(rustc()).arg(response).output()?;
-        tracing::info!(
-            elapsed_seconds = started_at.elapsed().as_secs_f64(),
-            "rustc metadata harness completed"
-        );
+        info_rustc_metadata_harness_completed_from_fields(started_at.elapsed().as_secs_f64());
         Ok(output)
     }
 }
@@ -149,6 +145,21 @@ impl TestSupportRlib {
 /// Locate the workspace root containing the compile-time fixtures.
 pub fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
+/// Note that the Cargo check of `test_support` finished.
+///
+/// The emitter exists because a `tracing` macro written inline counts against
+/// its enclosing function's cognitive complexity: the `log` feature, enabled
+/// transitively by a dev-dependency, expands every macro into extra branches.
+/// Hoisting keeps `TestSupportRlib::build` structural.
+fn info_test_support_build_completed_from_fields(elapsed_seconds: f64) {
+    tracing::info!(elapsed_seconds, "cargo check test_support completed");
+}
+
+/// Note that the `rustc` metadata harness finished.
+fn info_rustc_metadata_harness_completed_from_fields(elapsed_seconds: f64) {
+    tracing::info!(elapsed_seconds, "rustc metadata harness completed");
 }
 
 /// Locate the Cargo that built the calling test.

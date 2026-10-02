@@ -4,9 +4,13 @@
 //! `ninja`, overridable with `NETSUKE_NINJA`).
 
 mod dispatch;
+
 mod dyndep;
+
 mod error;
+
 mod manifest_structure_telemetry;
+
 mod reporter;
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::keys;
@@ -23,7 +27,9 @@ use tracing::info;
 
 /// Default Ninja executable to invoke.
 pub const NINJA_PROGRAM: &str = "ninja";
+
 mod generation;
+
 /// Environment variable override for the Ninja executable.
 ///
 /// # Examples
@@ -38,10 +44,15 @@ mod generation;
 pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 
 mod graph;
+
 mod help;
+
 mod ninja;
+
 mod path_helpers;
+
 mod process;
+
 mod recipe_shell;
 pub use ninja::{NinjaContent, run_ninja, run_ninja_tool};
 #[cfg(doctest)]
@@ -76,6 +87,7 @@ struct ExecutionContext<'a> {
 /// Target list passed through to Ninja; an empty slice uses IR defaults.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuildTargets<'a>(&'a [String]);
+
 impl<'a> BuildTargets<'a> {
     /// Wrap a borrowed list of command-line target names.
     #[must_use]
@@ -287,6 +299,15 @@ fn handle_ninja_tool(
 ///
 /// # Errors
 ///
+/// Note that a Ninja tool invocation is being prepared.
+fn info_ninja_tool_preparing_from_fields(subcommand: &str) {
+    info!(
+        target: "netsuke::subcommand",
+        subcommand,
+        "Preparing Ninja tool invocation"
+    );
+}
+
 /// Returns an error if manifest generation or Ninja execution fails.
 fn execute_ninja_tool(
     cli: &Cli,
@@ -294,11 +315,7 @@ fn execute_ninja_tool(
     context: &ExecutionContext<'_>,
     graph_generation: &GraphGenerationContext<'_>,
 ) -> Result<()> {
-    info!(
-        target: "netsuke::subcommand",
-        subcommand = tool.name,
-        "Preparing Ninja tool invocation"
-    );
+    info_ninja_tool_preparing_from_fields(tool.name);
     let bundle =
         generate_ninja_with_shell(cli, context.reporter, Some(tool.key), graph_generation)?;
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
@@ -354,6 +371,7 @@ fn stage_reporting_callback(
         report_pipeline_stage(reporter, pipeline_stage, None);
     }
 }
+
 /// Load the manifest, translating loading stages into reporter updates.
 ///
 /// Thin reporting wrapper over [`generation::load_manifest`].

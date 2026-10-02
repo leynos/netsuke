@@ -97,10 +97,7 @@ pub(super) fn instrument_recipe_shell_resolution(
     span.record("recipe_shell", shell);
     span.record("outcome", outcome);
     span.record("error_category", error_category);
-    info!(
-        recipe_shell = shell,
-        outcome, error_category, "Resolved recipe shell"
-    );
+    info_recipe_shell_resolved_from_fields(shell, outcome, error_category);
     counter!(
         RECIPE_SHELL_RESOLUTIONS_TOTAL,
         "recipe_shell" => shell,
@@ -128,12 +125,7 @@ pub(super) fn instrument_bash_preflight<T>(
     let result = preflight();
     let outcome = if result.is_ok() { "success" } else { "error" };
     span.record("outcome", outcome);
-    info!(
-        recipe_shell = "bash",
-        outcome,
-        probe_outcome = probe_outcome_label,
-        "Completed Bash preflight"
-    );
+    info_bash_preflight_completed_from_fields(outcome, probe_outcome_label);
     counter!(
         BASH_PREFLIGHT_TOTAL,
         "recipe_shell" => "bash",
@@ -172,9 +164,11 @@ pub(in crate::runner) fn instrument_legacy_recipe_operation<T>(
     };
     span.record("outcome", outcome);
     span.record("failure_category", failure_category);
-    info!(
-        operation = operation_label,
-        recipe_shell, outcome, failure_category, "Completed generated-recipe runner operation"
+    info_legacy_recipe_operation_completed_from_fields(
+        operation_label,
+        recipe_shell,
+        outcome,
+        failure_category,
     );
     counter!(
         LEGACY_RECIPE_EXECUTIONS_TOTAL,
@@ -229,6 +223,39 @@ const fn shell_label(shell: RecipeShell) -> &'static str {
         RecipeShell::PowerShell => "powershell",
         RecipeShell::Bash => "bash",
     }
+}
+
+/// Emit the bounded result of one recipe-shell resolution.
+fn info_recipe_shell_resolved_from_fields(
+    shell: &'static str,
+    outcome: &'static str,
+    error_category: &'static str,
+) {
+    info!(
+        recipe_shell = shell,
+        outcome, error_category, "Resolved recipe shell"
+    );
+}
+
+/// Emit the bounded result of one Bash compatibility preflight.
+fn info_bash_preflight_completed_from_fields(outcome: &'static str, probe_outcome: &'static str) {
+    info!(
+        recipe_shell = "bash",
+        outcome, probe_outcome, "Completed Bash preflight"
+    );
+}
+
+/// Emit the bounded result of one generated-recipe runner operation.
+fn info_legacy_recipe_operation_completed_from_fields(
+    operation: &'static str,
+    recipe_shell: &'static str,
+    outcome: &'static str,
+    failure_category: &'static str,
+) {
+    info!(
+        operation,
+        recipe_shell, outcome, failure_category, "Completed generated-recipe runner operation"
+    );
 }
 
 /// Describe the stable bounded recipe-shell metrics once per process.

@@ -197,6 +197,16 @@ mod tests {
     use super::*;
     use std::sync::{Arc, Barrier};
 
+    /// Emit one `INFO` probe event for the nesting tests below.
+    ///
+    /// The emitter exists because a `tracing` macro written inline counts
+    /// against its enclosing function's cognitive complexity: the `log`
+    /// feature, enabled transitively by a dev-dependency, expands every macro
+    /// into extra branches. Hoisting keeps the test bodies structural.
+    fn probe_event(scope: &'static str, message: &'static str) {
+        tracing::info!(scope, message);
+    }
+
     /// Snapshot `captured` from another thread once every reader has arrived.
     ///
     /// Extracted so the spawning closure stays shallow and the cloned barrier
@@ -274,12 +284,12 @@ mod tests {
     #[test]
     fn nested_subscribers_capture_only_their_own_scope() {
         let (outer, inner) = with_test_subscriber(LevelFilter::TRACE, |outer_captured| {
-            tracing::info!(scope = "outer_before", "outer");
+            probe_event("outer_before", "outer");
             let inner_events = with_test_subscriber(LevelFilter::TRACE, |inner_captured| {
-                tracing::info!(scope = "inner", "inner");
+                probe_event("inner", "inner");
                 inner_captured.snapshot()
             });
-            tracing::info!(scope = "outer_after", "outer");
+            probe_event("outer_after", "outer");
             (outer_captured.snapshot(), inner_events)
         });
 

@@ -14,7 +14,13 @@ use std::{
     path::PathBuf,
     process::{Command, ExitStatus},
 };
-use tracing::{debug, field, info, info_span, warn};
+use tracing::{field, info_span, warn};
+
+/// Keep the bounded command emitters below the module line cap.
+#[path = "command_logging_emitters.rs"]
+mod emitters;
+
+use emitters::{debug_command_line_from_fields, info_command_execution_from_fields};
 
 /// Prepared, redacted logging representation of a Ninja [`Command`].
 ///
@@ -99,22 +105,8 @@ pub(super) fn log_command_execution(
     operation: &str,
     stderr_mode: StderrMode,
 ) {
-    info!(
-        operation,
-        ninja_program = %context.program_display,
-        arg_count = context.arg_count,
-        env_override_count = context.env_override_count,
-        path_overridden = context.is_path_overridden,
-        suppress_stderr = stderr_mode.is_suppress(),
-        "Executing Ninja subprocess",
-    );
-    debug!(
-        operation,
-        ninja_program = %context.program_display,
-        suppress_stderr = stderr_mode.is_suppress(),
-        "Executing command: {}",
-        context.redacted_command,
-    );
+    info_command_execution_from_fields(context, operation, stderr_mode);
+    debug_command_line_from_fields(context, operation, stderr_mode);
 }
 
 /// Records a structured warning when spawning the Ninja subprocess fails.

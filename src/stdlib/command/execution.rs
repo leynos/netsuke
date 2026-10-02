@@ -182,6 +182,14 @@ pub(super) fn run_program(
     )
 }
 
+/// Emit the bounded failure category for a failed configured child process.
+fn debug_child_process_failed_from_fields(error_category: &'static str) {
+    tracing::debug!(
+        error_category = error_category,
+        "configured child process failed"
+    );
+}
+
 /// Run a configured child, recording metrics and a trace span for the
 /// execution and its outcome.
 ///
@@ -214,10 +222,7 @@ fn run_child(
         Err(error) => {
             span.record("outcome", "error");
             span.record("error_category", error.category());
-            tracing::debug!(
-                error_category = error.category(),
-                "configured child process failed"
-            );
+            debug_child_process_failed_from_fields(error.category());
             "error"
         }
     };
@@ -300,7 +305,7 @@ fn run_child_inner(
     let stderr = match stderr_outcome {
         PipeOutcome::Bytes(bytes) => bytes,
         PipeOutcome::Tempfile(path) => {
-            tracing::warn!(?path, "stderr reader returned a temp file; discarding path");
+            warn_stderr_tempfile_from_fields(&path);
             Vec::new()
         }
     };
@@ -318,6 +323,16 @@ fn run_child_inner(
             stderr,
         })
     }
+}
+
+/// Emit a bounded warning that a stderr reader produced a temp-file path.
+fn warn_stderr_tempfile_from_fields(path: &dyn std::fmt::Debug) {
+    tracing::warn!(?path, "stderr reader returned a temp file; discarding path");
+}
+
+/// Emit a bounded warning that a timed-out child could not be reaped.
+fn warn_timed_out_reap_failed_from_fields(err: &io::Error) {
+    tracing::warn!("failed to reap timed-out command: {err}");
 }
 
 /// Wait for a child to exit within `timeout`, killing and reaping it when the
@@ -340,7 +355,7 @@ pub(super) fn wait_for_exit(
             return Err(CommandFailure::Io(err));
         }
         if let Err(err) = child.wait() {
-            tracing::warn!("failed to reap timed-out command: {err}");
+            warn_timed_out_reap_failed_from_fields(&err);
         }
         Err(CommandFailure::Timeout(timeout))
     }

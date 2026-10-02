@@ -57,6 +57,15 @@ pub(super) struct ManifestWorkspace {
 
 /// Open the directory containing `path` as a capability-scoped workspace.
 ///
+/// Note the workspace and manifest a manifest-workspace open is about to use.
+fn debug_manifest_workspace_opening(root: &Utf8Path, manifest_file: &str) {
+    tracing::debug!(
+        workspace = %root,
+        manifest = %manifest_file,
+        "opening manifest workspace directory"
+    );
+}
+
 /// `base` anchors relative manifest paths for tests; `None` keeps the ambient
 /// current-directory resolution used by production callers.
 pub(super) fn open_manifest_workspace(
@@ -93,7 +102,7 @@ pub(super) fn open_manifest_workspace(
         )
     })?;
     let root = resolve_absolute_workspace_root(utf8_parent, base)?;
-    tracing::debug!(workspace = %root, manifest = %manifest_file, "opening manifest workspace directory");
+    debug_manifest_workspace_opening(&root, &manifest_file);
     let dir = Dir::open_ambient_dir(root.as_path(), ambient_authority())
         .inspect_err(|err| {
             tracing::warn!(workspace = %root, manifest = %manifest_file, error = %err, "failed to open manifest workspace directory");
