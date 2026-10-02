@@ -7781,6 +7781,11 @@ outcome reaches exactly one bounded series, while
 retains the four bounded series and rejects an out-of-vocabulary outcome, an
 extra label, and a series missing its label.
 
+The recorder keeps exact label-shape matching in
+`src/observability/recorder/labels.rs`. These queries serve only the recorder;
+metric-specific admission rules supply the reviewed names and value sets, so
+composing label shapes never widens the accepted vocabulary.
+
 ### Recipe-text dialect telemetry
 
 `src/stdlib/recipe_text/dialect_telemetry.rs` owns telemetry for the dialect
@@ -7824,10 +7829,10 @@ Tests sit beside the boundary: the `tests` module in
 `src/stdlib/recipe_text/dialect_telemetry.rs` pins the label vocabularies to
 `ShellDialect::ALL`, the set the encoder can actually produce, since the
 recorder imports them as `'static` arrays that cannot be derived from that enum
-at compile time. `src/observability_recorder_dialect_tests.rs` drives both
-filters through `shell_quote_dialect_total` under the production recorder and
-proves the four bounded series are retained while an out-of-vocabulary value, a
-missing label, and an unlabelled series are rejected.
+at compile time. `src/observability/recorder/tests/dialect_tests.rs` drives
+both filters through `shell_quote_dialect_total` under the production recorder
+and proves the four bounded series are retained while an out-of-vocabulary
+value, a missing label, and an unlabelled series are rejected.
 
 ## Digest rendering
 

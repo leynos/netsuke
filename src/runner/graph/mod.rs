@@ -25,7 +25,9 @@ use crate::status::{LocalizationKey, PipelineStage, report_pipeline_stage};
 use super::path_helpers::{
     ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path,
 };
-use super::{ExecutionContext, generation as build_generation, load_manifest_with_stage_reporting, process};
+use super::{
+    ExecutionContext, generation as build_generation, load_manifest_with_stage_reporting, process,
+};
 
 /// Render the build graph in-process and write the selected artefact.
 ///

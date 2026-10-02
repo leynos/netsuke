@@ -36,7 +36,6 @@ mod env_lookup_tests;
 mod which_tests;
 
 /// Cover the bounded recipe-text dialect counter series separately.
-#[path = "observability_recorder_dialect_tests.rs"]
 mod dialect_tests;
 
 /// Define the rejected label variants for recipe-shell resolution metrics.

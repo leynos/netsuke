@@ -8,6 +8,10 @@
 //! vocabularies prevent manifest- or process-controlled data from entering the
 //! retained snapshot.
 
+mod labels;
+
+use labels::{any_exact_labels, exact_labels};
+
 use super::{
     CONFIG_LOAD_COUNTER, CONFIG_LOAD_DURATION, DIAG_MODE_PHASE, MERGE_PHASE,
     STARTUP_CONFIG_LOAD_COUNTER, STARTUP_CONFIG_LOAD_DURATION,
@@ -320,31 +324,6 @@ fn accepts_stdlib_counter_registration(key: &Key) -> bool {
         ),
         _ => false,
     }
-}
-
-/// Whether `key`'s label set matches any of the `expected` shapes exactly.
-///
-/// One counter may be recorded under more than one bounded label shape: the
-/// `which` resolution counter carries a `category` label only when it fails,
-/// so its success series have two labels and its failure series three. Each
-/// shape is admitted independently and a series matching none is still
-/// rejected, so the alternation widens the vocabulary without letting an
-/// unreviewed label set through.
-fn any_exact_labels(key: &Key, expected: &[&[(&str, &[&str])]]) -> bool {
-    expected.iter().any(|shape| exact_labels(key, shape))
-}
-
-/// Whether `key`'s label set matches `expected` exactly.
-///
-/// Mirrors the exact-match assertions in [`super::tests`] so production and
-/// tests share one label vocabulary.
-fn exact_labels(key: &Key, expected: &[(&str, &[&str])]) -> bool {
-    let labels: Vec<_> = key.labels().collect();
-    labels.len() == expected.len()
-        && labels
-            .iter()
-            .zip(expected)
-            .all(|(label, &(name, values))| label.key() == name && values.contains(&label.value()))
 }
 
 impl metrics::Recorder for ConfigMetricsRecorder {
