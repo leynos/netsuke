@@ -215,7 +215,7 @@ the conflict in `Decision log` before proceeding.
   module, leaving the guard at 294 lines. `make lint-whitaker` now passes both
   of its passes. Committed as `dd93120a`.
 - [x] (2026-10-02) Run the full eight-target gate set on the committed
-  revision `ac783bc2`, with this plan's record of the run written first so that
+  revision `4f0ac198`, with this plan's record of the run written first so that
   no write follows the gates. All eight pass with their exit codes captured to
   `.exit` sidecars, and `make lint` reaches every stage. An earlier attempt was
   rejected as evidence: it ran the gates against the working tree and edited
@@ -1390,7 +1390,7 @@ artefact of editing by hand rather than a content change.
 
 Recording that finding here would have reopened the same loop, so the loop was
 broken at its end instead. This section names the log set below *before* that
-run happened; the run then executed on the committed revision `ac783bc2`, with
+run happened; the run then executed on the committed revision `4f0ac198`, with
 every log given its own `.exit` sidecar and the tree confirmed clean
 immediately afterwards, so no write followed the gates. The paths are suffixed
 `-gate7` because the earlier `-gate2`, `-gate4` and `-gate6` runs each covered
@@ -1525,10 +1525,11 @@ classifies the two files this branch moved as *not* build-capable, so the
 `nested-cargo-builds` grouping for `compile_guard` still comes from its
 pre-existing explicit filter.
 
-2026-10-02 — delivered revision. The sweep that gates `ac783bc2` is recorded
-under `#### Final sweep on the delivered revision`, together with the coverage
-trap the first attempt at it fell into: the gates ran against the working tree
-and the plan then recorded them, so `check-fmt`'s `mdtablefix` stage had read
+2026-10-02 — delivered revision. The sweep that gates `4f0ac198` (the child of
+`ac783bc2` that records it) is recorded under
+`#### Final sweep on the delivered revision`, together with the coverage trap
+the first attempt at it fell into: the gates ran against the working tree and
+the plan then recorded them, so `check-fmt`'s `mdtablefix` stage had read
 `docs/developers-guide.md` three seconds before that file's last write.
 Re-running it on those bytes failed for real (`+7 -7`, exit 2), which
 `make fmt` resolved as a wrapping artefact with no content change. The final
