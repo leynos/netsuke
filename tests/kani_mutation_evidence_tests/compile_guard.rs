@@ -22,7 +22,9 @@
 //! depends on. [`sandbox`] gives the mechanism, and why a timed-out run can
 //! strand a mutation it never reverts. The parent contract
 //! `every_patch_applies_cleanly` reads the working tree too, so the two agree
-//! on which tree they describe.
+//! on which tree they describe. [`apply_patch`] owns the application and the
+//! reverse-on-drop guarantee; this module owns which patches exist and what
+//! compiling them proves.
 //!
 //! # Why Kani compiles the tree, not `cargo check`
 //!
@@ -49,8 +51,10 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 
 use super::{MUTATIONS_DIR, is_git_work_tree, manifest_dir};
 
+mod apply_patch;
 mod sandbox;
 
+use apply_patch::AppliedPatch;
 use sandbox::Sandbox;
 
 /// Target directory shared by every patched build in one run.
@@ -67,119 +71,6 @@ const SHARED_TARGET_DIR: &str = "target/kani-mutation-compile";
 /// that inherited instead would silently stop checking anything the day the
 /// caller's environment changed.
 const DENY_WARNINGS: &str = "-D warnings";
-
-/// Apply `patch` to the sandbox, then revert it — explicitly on the normal
-/// path, and through `Drop` when unwinding.
-///
-/// Both paths matter and they are not interchangeable. The explicit
-/// [`Self::revert`] makes a failed reverse a test failure, so a run cannot
-/// report success with a seeded mutation left behind; `Drop` covers the panic
-/// — or early return from a failed assertion — that would otherwise strand a
-/// mutation for every later patch to trip over.
-///
-/// The revert is now a tidiness step rather than a safety one. What it
-/// protects is the sandbox itself, which the next `create` replaces wholesale,
-/// so a mutation that survives this run cannot reach the developer's checkout.
-struct AppliedPatch<'a> {
-    /// Repository-relative path of the patch that was applied.
-    ///
-    /// This names the patch within the *sandbox*, which is what `git apply`
-    /// resolves against when the sandbox is the working directory.
-    patch: &'a Utf8Path,
-    /// The sandboxed tree the patch is applied to, and its isolation env.
-    ///
-    /// Both halves are needed by every `git` call this type makes: the tree
-    /// is the working directory, and the env is what stops `git` walking up
-    /// from it into the real checkout.
-    sandbox: &'a Sandbox,
-    /// True while the patch is still applied to the sandbox.
-    ///
-    /// Cleared by [`Self::revert`] so the `Drop` fallback does not attempt a
-    /// second reverse, which would fail and log a spurious error on every
-    /// successful patch.
-    applied: bool,
-}
-
-impl<'a> AppliedPatch<'a> {
-    /// Apply `patch` to the sandbox, failing when it does not apply.
-    fn apply(patch: &'a Utf8Path, sandbox: &'a Sandbox) -> Result<Self> {
-        run_git_apply(["apply", patch.as_str()], patch, sandbox, "apply")?;
-        Ok(Self {
-            patch,
-            sandbox,
-            applied: true,
-        })
-    }
-
-    /// Revert the patch, propagating a failure to the caller.
-    ///
-    /// Reverting here rather than relying on `Drop` is what stops a failed
-    /// reverse from passing quietly: without it the test returns `Ok(())` and
-    /// the sandbox keeps a mutation nothing reports, which would then be
-    /// compiled into every later patch's tree.
-    ///
-    /// `applied` is cleared only when the reverse actually succeeded, so a
-    /// failure leaves the flag set and `Drop` still attempts the reverse as
-    /// the run unwinds. Clearing it unconditionally would disable that retry
-    /// at the one moment it is wanted, turning a recoverable failure into a
-    /// lingering mutation.
-    fn revert(mut self) -> Result<()> {
-        let outcome = run_git_apply(
-            ["apply", "--reverse", self.patch.as_str()],
-            self.patch,
-            self.sandbox,
-            "reverse",
-        );
-        if outcome.is_ok() {
-            self.applied = false;
-        }
-        outcome
-    }
-}
-
-impl Drop for AppliedPatch<'_> {
-    fn drop(&mut self) {
-        if !self.applied {
-            return;
-        }
-        if let Err(err) = run_git_apply(
-            ["apply", "--reverse", self.patch.as_str()],
-            self.patch,
-            self.sandbox,
-            "reverse",
-        ) {
-            // A panic is already unwinding when this runs, so the failure is
-            // reported rather than raised: replacing the panic's message with
-            // a revert error would hide the defect that caused it.
-            tracing::error!("failed to revert {patch}: {err}", patch = self.patch);
-        }
-    }
-}
-
-/// Run one `git apply`-family invocation against the sandbox.
-///
-/// The working directory is the sandbox tree, and the environment carries the
-/// ceiling that keeps `git` from walking out of it, so a patch can only ever
-/// be applied to the copy.
-fn run_git_apply<const N: usize>(
-    args: [&str; N],
-    patch: &Utf8Path,
-    sandbox: &Sandbox,
-    action: &str,
-) -> Result<()> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(sandbox.tree())
-        .envs(sandbox.isolation_env())
-        .output()
-        .with_context(|| format!("run git apply to {action} {patch}"))?;
-    ensure!(
-        output.status.success(),
-        "git apply to {action} {patch} failed: {}",
-        String::from_utf8_lossy(&output.stderr).trim(),
-    );
-    Ok(())
-}
 
 /// Compile the patched tree under `-D warnings`, returning its failure output.
 ///
@@ -320,6 +211,21 @@ fn ensure_no_untracked_patches(manifest_dir: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
+/// Note that the compile gate cannot run because there is no git checkout.
+///
+/// Hoisted out of the test body because a `tracing` macro written inline counts
+/// against its enclosing function's cognitive complexity: the `log` feature,
+/// enabled transitively by a dev-dependency, expands every macro into extra
+/// branches. The event is bounded, so it costs nothing to emit from here.
+fn warn_no_git_checkout_to_compile() {
+    tracing::warn!(
+        "skipping: source tree is not a git checkout; \
+         operation=compile mutation patches under denied warnings; \
+         repository={path}",
+        path = manifest_dir()
+    );
+}
+
 /// Every mutation patch must still produce a tree that compiles.
 ///
 /// A patch that applies but does not compile is dead evidence: `cargo kani`
@@ -330,8 +236,8 @@ fn ensure_no_untracked_patches(manifest_dir: &Utf8Path) -> Result<()> {
 /// the checkout the test runs in, so a run that ends without unwinding — a
 /// Nextest timeout signalling the process group, which `Drop` cannot survive —
 /// cannot leave a seeded mutation where a developer would find it. "Current
-/// revision" is the working tree, captured by [`sandbox`], so an edit to a
-/// patch is what this compiles without first being committed.
+/// revision" is the working tree, captured by [`Sandbox::create`], so an edit
+/// to a patch is what this compiles without first being committed.
 #[test]
 #[ignore = "compiles each patched tree through the Kani frontend; run via `make test-kani-mutations`"]
 fn every_patched_tree_compiles_under_denied_warnings() -> Result<()> {
@@ -339,12 +245,7 @@ fn every_patched_tree_compiles_under_denied_warnings() -> Result<()> {
         // cargo-mutants copies omit `.git`, so no patch can be applied there.
         // Matches `every_patch_applies_cleanly`, which skips for the same
         // reason.
-        tracing::warn!(
-            "skipping: source tree is not a git checkout; \
-             operation=compile mutation patches under denied warnings; \
-             repository={path}",
-            path = manifest_dir()
-        );
+        warn_no_git_checkout_to_compile();
         return Ok(());
     }
 
