@@ -16,6 +16,15 @@ use super::{
     streaming::ForwardStats,
 };
 
+/// Keep the bounded child-shutdown emitters below the module line cap.
+#[path = "child_exit_emitters.rs"]
+mod emitters;
+
+use emitters::{
+    debug_child_kill_failed, debug_child_reap_failed, debug_forwarding_stream_truncated,
+    warn_forwarding_thread_panicked,
+};
+
 /// Context retained until the child process has completed.
 #[derive(Clone, Copy)]
 pub(super) struct ExitFailureContext<'failure, 'clock, Clock> {
@@ -58,26 +67,6 @@ pub(super) fn check_exit_status_with_context<Clock: MonotonicClock>(
         }
         ninja_exit_error(status, failure_context.command_list_failure)
     }
-}
-
-/// Note that a partially configured child could not be terminated.
-fn debug_child_kill_failed(context: &str, error: &io::Error) {
-    tracing::debug!("failed to kill child after {context}: {error}");
-}
-
-/// Note that a terminated child could not be reaped.
-fn debug_child_reap_failed(context: &str, error: &io::Error) {
-    tracing::debug!("failed to reap child after {context}: {error}");
-}
-
-/// Note that a forwarding thread panicked and its stats were discarded.
-fn warn_forwarding_thread_panicked(panic: &dyn std::fmt::Debug) {
-    tracing::warn!("stderr forwarding thread panicked: {panic:?}");
-}
-
-/// Note that a forwarding stream hit a closed pipe and truncated its output.
-fn debug_forwarding_stream_truncated(stream_name: &str) {
-    tracing::debug!("{stream_name} forwarding encountered closed pipe; output truncated");
 }
 
 /// Terminate a partially configured child and reap it before returning an error.
