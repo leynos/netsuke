@@ -1703,3 +1703,42 @@ they had been miscounted from
 (`/tmp/<target>-gate-doctestfix-adopt-rstest-bdd-v0-6-0.out`, each sidecar
 `0`). A prose claim about a log is still a claim about evidence: it has to be
 read back from the log, not restated from memory of it.
+
+2026-10-03 — a red `make lint` that was not a code finding. The first gate run
+on `8ac67a28` failed `make lint` at `lint-python` with
+
+```plaintext
+   Updating https://github.com/leynos/df12-python-lints.git (v0.3.0)
+  × Failed to resolve `--with` requirement
+  ╰─▶ Git operation failed
+make: *** [Makefile:264: lint-python] Error 1
+```
+
+which is a transport failure, not a defect. The harness injects
+`GIT_CONFIG_COUNT`, paired `GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` entries and
+`GH_TOKEN`; the pairs define a `credential.helper` that shells out to a Lody
+node helper and, decisively, a
+`url.<lody-github::https://github.com/>.insteadOf` rewrite. An `insteadOf`
+rewrite is applied when git canonicalises a URL, before any helper is
+consulted, so `uv`'s fetch of the pinned `df12-python-lints` dependency was
+routed to the Lody remote helper, which fails closed when its broker is
+starved. The mechanism was isolated before acting on it:
+`git ls-remote https://github.com/leynos/df12-python-lints.git refs/tags/v0.3.0`
+fails with `fatal: remote helper 'lody-github' aborted session` under the
+ambient environment and returns `4cf41736…` with the variables stripped. The
+repository is public, so the remedy is a clean environment rather than a
+credential; a third run through a wrapper removing exactly those variables and
+the `~/.lody` `PATH` entries reached every stage — both pylint invocations at
+10.00/10, ambrleaks, interrogate, yamllint and actionlint — and exited zero on
+the same bytes that had failed. Nothing in the repository was changed to
+appease it.
+
+The episode also records a self-inflicted error in evidence handling.
+Re-running that lint by hand wrote to the path the gate runner owned,
+destroying its failure log in place; the failure's decisive lines survive only
+because they were transcribed into an attributed note before the file was
+reused. A re-run belongs at a new log suffix, never at another writer's path.
+The final evidence set is one single-author run under `-gate-pushrecord2-`, with
+`head=`, `head_after=` and `exit=` carried inside each log: 3912 nextest tests
+with 6 skipped, two `Doc-tests` targets (88 + 2 + 39 passed), 179 formatted
+files and 174 unchanged Markdown files.
