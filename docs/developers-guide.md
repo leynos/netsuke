@@ -1217,11 +1217,16 @@ The pin is `6cec89ba` (shared-actions #546), which gives the sccache server a
 60 s startup timeout and makes a start that still fails fall back to an
 uncached build, reporting `sccache-status` as `fallback` (a `sccache-fallback`
 annotation and a summary line accompany it). A server that never started has no
-statistics, and `sccache --show-stats` would start it again, so the
+statistics; with no server `sccache --show-stats` prints empty defaults rather
+than starting one, which would read as a broken integration. So the
 `Show sccache statistics` step in `ci.yml`, `coverage-main.yml` and
 `netsukefile-test.yml` runs under
-`always() && steps.setup-rust.outputs.sccache-status != 'fallback'`, and
-`setup_rust_sccache_test.py` holds that condition on each.
+`always() && steps.setup-rust.outputs.sccache-status != 'fallback'`.
+`setup_rust_sccache_test.py` holds that condition's text on each, and
+`sccache_statistics_condition_test.py` evaluates it the way a runner would for
+a fallback, a started server and no status, each with the job green and with an
+earlier step failed: a fallback skips the report in both states, and every
+other case runs it.
 
 Every other Ubicloud lane keeps its plain label, and the contract asserts that
 too, so the expression does not spread by imitation. `coverage-upload` is push
@@ -1458,9 +1463,11 @@ than GitHub with `ubi gh leynos/netsuke list-cache-entries`. That command only
 works once the Ubicloud GitHub App covers this repository; see "GitHub Actions
 runner placement" for that prerequisite.
 
-`setup-rust` is pinned to `4fb8eb7ad52454678a0662865d81d3cd17aa6e0e`, the merge
-of leynos/shared-actions#523 that makes it choose sccache's backend from the
-runner; every `setup-rust` reference holds that one pin. Most other
+`setup-rust` is pinned to `6cec89bac47a21cf756d68d638a9a510998e57f8`, the merge
+of leynos/shared-actions#546, which sits on #523 (it makes `setup-rust` choose
+sccache's backend from the runner) and adds a 60 s server startup timeout with
+a fail-open start; every `setup-rust` reference, including the one
+`rust-build-release` nests, holds that one pin. Most other
 `leynos/shared-actions` references are pinned to
 `e041cb75c35c3524201a32d5e57c87408fbd5874`. That revision introduces
 `cache-provider: external`; installs `whitaker-installer` and `cargo-nextest`

@@ -291,8 +291,8 @@ def test_statistics_follow_the_last_compile_and_name_the_backend(
         f"always() && steps.{SETUP_RUST_ID}.outputs.sccache-status != 'fallback'"
     ), (
         f"{workflow_name} {job_name} must report its statistics on failure too, "
-        "and stand down when setup-rust reports a sccache fallback (a dead "
-        "server has no statistics, and asking would start it again)"
+        "and stand down when setup-rust reports a sccache fallback (an uncached "
+        "job has no statistics to publish)"
     )
     backend = f"steps.{SETUP_RUST_ID}.outputs.cache-backend"
     assert backend in str(show.get("env", {})), (
