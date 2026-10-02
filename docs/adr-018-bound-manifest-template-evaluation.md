@@ -104,12 +104,12 @@ operator-established ceiling.
 
 - [`src/manifest/budget/`](../src/manifest/budget/)
 - [`src/manifest/expand/`](../src/manifest/expand/)
-- [`src/manifest/render.rs`](../src/manifest/render.rs)
+- [`src/manifest/render/mod.rs`](../src/manifest/render/mod.rs)
 - [`src/manifest/jinja_macros/`](../src/manifest/jinja_macros/)
-- [`src/manifest/budget_adapter.rs`](../src/manifest/budget_adapter.rs)
+- [`src/manifest/budget/adapter.rs`](../src/manifest/budget/adapter.rs)
 - [`src/manifest/loading.rs`](../src/manifest/loading.rs)
-- [`src/cli/discovery_layers.rs`](../src/cli/discovery_layers.rs)
-- [`src/cli/manifest_budget_policy.rs`](../src/cli/manifest_budget_policy.rs)
+- [`src/cli/discovery/layers/mod.rs`](../src/cli/discovery/layers/mod.rs)
+- [`src/cli/policy/manifest_budget.rs`](../src/cli/policy/manifest_budget.rs)
 
 ## Addendum A: Corrected guarantee and residual risk (2026-09-16)
 

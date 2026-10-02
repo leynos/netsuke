@@ -115,6 +115,13 @@ in the job summary and as a `::notice::` annotation.
   refused, so a layout the reader does not model fails the contract instead of
   shrinking the scope.
 
+  After the directory-module refactor in #811, the scope is recomputed at the
+  moved paths. Nesting CLI localization under `cli` makes the conservative
+  module walk reach the CLI facade and its dependencies, so the derived source
+  set grows. The additional entries name the files the closure reaches; they do
+  not replace the closure with a blanket `src/` prefix. The sufficiency and
+  minimality contracts continue to hold each entry to the current module tree.
+
 - `infrastructure` names what builds and runs the proofs, which no source
   closure can find: `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`,
   `build.rs`, `.cargo/`, `tools/kani/`, `.github/actions/kani-cache/`, the

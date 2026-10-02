@@ -111,7 +111,7 @@ fn declared_function_name(declaration: &str) -> Option<String> {
 ///
 /// The repository convention wires harness bodies as `mod verification`
 /// declared by the sibling module they verify, so
-/// `src/ir/cycle_verification.rs` maps to `ir::cycle::verification`, while
+/// `src/ir/cycle/verification.rs` maps to `ir::cycle::verification`, while
 /// `src/ir/cmd_interpolate/verification.rs` maps to
 /// `ir::cmd_interpolate::verification`.
 fn module_path_for_source(relative: &Utf8Path) -> Result<String> {
@@ -199,7 +199,7 @@ fn patch_stem_for_harness(harness: &str) -> String {
     harness.replace("::", "__")
 }
 
-/// Derive the source file and property function named by a supplemental patch.
+/// Derive the directory-module source and property named by a supplemental patch.
 fn supplemental_property_location(patch_stem: &str) -> Result<(Utf8PathBuf, String)> {
     let mut segments: Vec<&str> = patch_stem.split("__").collect();
     let property_name = segments
@@ -216,11 +216,11 @@ fn supplemental_property_location(patch_stem: &str) -> Result<(Utf8PathBuf, Stri
         !module_segments.is_empty(),
         "supplemental patch {patch_stem} has no property module",
     );
-    let source_name = module_segments.join("_");
     Ok((
         Utf8Path::new("src")
             .join(root)
-            .join(format!("{source_name}.rs")),
+            .join(module_segments.join("/"))
+            .join("mod.rs"),
         property_name.to_owned(),
     ))
 }

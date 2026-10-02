@@ -29,30 +29,33 @@ const REQUIRED_EXTERNS: &[&str] = &[
 ];
 
 /// The exact module declarations that the fixture mirrors from `build.rs`.
-const BUILD_SLICE_MODULES: &[(&str, &str)] = &[
-    ("config.rs", "pub mod config;"),
-    ("validation.rs", "mod validation;"),
-    ("help.rs", "mod help;"),
-    ("command.rs", "mod command;"),
+const BUILD_SLICE_MODULES: &[&str] = &[
+    "pub mod config;",
+    "mod validation;",
+    "mod help;",
+    "mod command;",
 ];
 
 /// The CLI source paths that the build-script facade compiles and tracks.
 const BUILD_SLICE_RERUN_PATHS: &[&str] = &[
     "src/cli/command.rs",
-    "src/cli/config.rs",
-    "src/cli/manifest_budget_config.rs",
+    "src/cli/config/mod.rs",
+    "src/cli/config/validation.rs",
+    "src/cli/config/budget.rs",
+    "src/cli/config/no_input.rs",
+    "src/cli/config/policy_definitions.rs",
     "src/cli/help.rs",
     "src/cli/validation.rs",
 ];
 
 /// Runtime-only modules that must not widen the build-script module slice.
 const RUNTIME_ONLY_RERUN_PATHS: &[&str] = &[
-    "src/cli/diag.rs",
-    "src/cli/discovery.rs",
+    "src/cli/diag/mod.rs",
+    "src/cli/discovery/mod.rs",
     "src/cli/merge.rs",
-    "src/cli/parser.rs",
+    "src/cli/parser/mod.rs",
     "src/cli/parsing.rs",
-    "src/host_matching.rs",
+    "src/host/matching.rs",
 ];
 
 /// Verify the production build-script module root and its runtime boundary.
@@ -206,22 +209,29 @@ fn assert_fixture_matches_build_source(build_script: &str) -> io::Result<()> {
         .get(slice_start..)
         .and_then(|slice| {
             slice
-                .find("#[path = \"src/cli_localization.rs\"]")
+                .find("#[path = \"src/cli/localization/mod.rs\"]")
                 .and_then(|slice_end| slice.get(..slice_end))
         })
         .ok_or_else(|| {
             io::Error::other("could not locate the end of build.rs's cli module slice")
         })?;
 
-    for (path, declaration) in BUILD_SLICE_MODULES {
-        let expected = format!("#[path = \"{path}\"]\n    {declaration}");
-        if !declared_slice.contains(&expected) {
-            return Err(io::Error::other(format!(
-                "build.rs's cli slice no longer matches the UI fixture: missing {expected:?}",
-            )));
-        }
+    let mut declared_modules = declared_slice
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            (line.starts_with("mod ") || line.starts_with("pub mod ")) && line.ends_with(';')
+        })
+        .collect::<Vec<_>>();
+    declared_modules.sort_unstable();
+    let mut expected_modules = BUILD_SLICE_MODULES.to_vec();
+    expected_modules.sort_unstable();
+    if declared_modules != expected_modules {
+        return Err(io::Error::other(format!(
+            "build.rs's cli slice no longer matches the UI fixture: {declared_modules:?}",
+        )));
     }
-    if declared_slice.matches("#[path = ").count() != BUILD_SLICE_MODULES.len() + 1 {
+    if declared_slice.matches("#[path = ").count() != 1 {
         return Err(io::Error::other(
             "build.rs's cli slice contains a different set of path modules than the UI fixture",
         ));
@@ -232,16 +242,37 @@ fn assert_fixture_matches_build_source(build_script: &str) -> io::Result<()> {
 #[test]
 fn fixture_contract_accepts_crlf_build_script_source() -> io::Result<()> {
     let mut build_script = String::from("#[path = \"src/cli\"]\r\nmod cli {\r\n");
-    for (path, declaration) in BUILD_SLICE_MODULES {
-        build_script.push_str("    #[path = \"");
-        build_script.push_str(path);
-        build_script.push_str("\"]\r\n    ");
+    for declaration in BUILD_SLICE_MODULES {
+        build_script.push_str("    ");
         build_script.push_str(declaration);
         build_script.push_str("\r\n");
     }
-    build_script.push_str("}\r\n#[path = \"src/cli_localization.rs\"]\r\n");
+    build_script.push_str("}\r\n#[path = \"src/cli/localization/mod.rs\"]\r\n");
 
     assert_fixture_matches_build_source(&build_script)
+}
+
+/// Reject a runtime child added to the build-script module slice.
+#[test]
+fn fixture_contract_rejects_extra_plain_child_module() -> io::Result<()> {
+    let build_script = test_support::fs::read_to_string(manifest_dir().join("build.rs"))?;
+    let widened_slice = build_script.replacen(
+        "    mod command;",
+        "    mod command;\n    mod discovery;",
+        1,
+    );
+
+    let error = assert_fixture_matches_build_source(&widened_slice)
+        .expect_err("an extra runtime module must widen the declared slice");
+    if !error
+        .to_string()
+        .contains("no longer matches the UI fixture")
+    {
+        return Err(io::Error::other(format!(
+            "unexpected fixture mismatch: {error}",
+        )));
+    }
+    Ok(())
 }
 
 /// Verify rerun directives track only the build-script's compiled module slice.
@@ -263,12 +294,12 @@ fn build_script_rerun_directives_match_the_compiled_module_slice() -> io::Result
     }
     if rerun_paths
         .iter()
-        .filter(|path| **path == "src/host_pattern.rs")
+        .filter(|path| **path == "src/host/pattern.rs")
         .count()
         != 1
     {
         return Err(io::Error::other(
-            "build.rs must track src/host_pattern.rs exactly once",
+            "build.rs must track src/host/pattern.rs exactly once",
         ));
     }
     for &path in RUNTIME_ONLY_RERUN_PATHS {

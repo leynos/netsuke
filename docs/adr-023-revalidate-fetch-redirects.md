@@ -79,13 +79,13 @@ The adapter emits four bounded metric families and nothing else:
   `policy_rejected`.
 
 Every label value comes from a closed set declared in
-[`src/stdlib/network/telemetry.rs`](../src/stdlib/network/telemetry.rs), so the
-number of series is fixed by the code and never by input. No series carries a
-URL, host, location, or userinfo, which keeps the counter cardinality bounded
-under ADR-009's redaction contract. The library only emits these series.
-Installing a recorder and deciding what to retain stays the application's
-decision under ADR-013, so no stdlib fetch series is added to the in-process
-recorder allowlist.
+[`src/stdlib/network/telemetry/mod.rs`](../src/stdlib/network/telemetry/mod.rs),
+so the number of series is fixed by the code and never by input. No series
+carries a URL, host, location, or userinfo, which keeps the counter cardinality
+bounded under ADR-009's redaction contract. The library only emits these
+series. Installing a recorder and deciding what to retain stays the
+application's decision under ADR-013, so no stdlib fetch series is added to the
+in-process recorder allowlist.
 
 ## Alternatives considered
 
@@ -102,31 +102,28 @@ recorder allowlist.
 
 - Pure redirect decisions about an already-resolved target — the hop limit, loop
   detection, cross-origin credential removal, and the ordering of the policy
-  check — in
-  [`src/stdlib/network/redirect_chain.rs`](../src/stdlib/network/redirect_chain.rs),
+  check — in [redirect chain](../src/stdlib/network/redirect/chain/mod.rs),
   with unit and property tests in
-  [`src/stdlib/network/redirect_chain_tests.rs`](../src/stdlib/network/redirect_chain_tests.rs)
+  [chain tests](../src/stdlib/network/redirect/chain/tests.rs)
 - The fetch adapter that composes the transport, the chain budget, telemetry,
   and localized diagnostics. It reads the supported redirect statuses and
   resolves the `Location` header into a typed target before the chain sees it,
-  in [`src/stdlib/network/redirect.rs`](../src/stdlib/network/redirect.rs),
-  tested by
-  [`src/stdlib/network/redirect_adapter_tests.rs`](../src/stdlib/network/redirect_adapter_tests.rs)
+  in
+  [`src/stdlib/network/redirect/mod.rs`](../src/stdlib/network/redirect/mod.rs),
+  tested by [adapter tests](../src/stdlib/network/redirect/tests/mod.rs)
 - The metric names and their closed label vocabularies in
-  [`src/stdlib/network/telemetry.rs`](../src/stdlib/network/telemetry.rs),
-  tested by
-  [`src/stdlib/network/telemetry_tests.rs`](../src/stdlib/network/telemetry_tests.rs)
+  [`src/stdlib/network/telemetry/mod.rs`](../src/stdlib/network/telemetry/mod.rs),
+  tested by [telemetry tests](../src/stdlib/network/telemetry_tests.rs)
 - Policy evaluation in
   [`src/stdlib/network/policy/mod.rs`](../src/stdlib/network/policy/mod.rs)
 - The original-URL cache key in
   [`src/stdlib/network/cache.rs`](../src/stdlib/network/cache.rs)
 - End-to-end coverage of every supported redirect status, the method used at
   each hop, and multi-hop refusal in
-  [`tests/std_filter_tests/network_redirect_chain_tests.rs`](../tests/std_filter_tests/network_redirect_chain_tests.rs),
+  [chain tests](../tests/std_filter_tests/network_redirect_chain_tests.rs),
   with two-server and cache coverage in
-  [`tests/std_filter_tests/network_redirect_tests.rs`](../tests/std_filter_tests/network_redirect_tests.rs)
-  and
-  [`src/stdlib/network/redirect_tests.rs`](../src/stdlib/network/redirect_tests.rs)
+  [redirect tests](../tests/std_filter_tests/network_redirect_tests.rs) and
+  [cache tests](../src/stdlib/network/redirect/cache_tests.rs)
 
 ## Addendum — 2026-09-18: resolve the Location header at the transport boundary
 
@@ -135,10 +132,10 @@ The decision above is unchanged. This addendum settles a review follow-up from
 the transport/domain boundary, not about the policy check the decision adds.
 The adapter now resolves the `Location` header and owns the "absent" and
 "present but unparsable" diagnostics, and
-[`RedirectChain::advance`](../src/stdlib/network/redirect_chain.rs) receives an
-already-resolved `Url` instead of a raw header string. The chain no longer
-parses the header, so its `RedirectRejection` vocabulary is reduced to the four
-redirect *decisions* it actually makes: `CredentialsNotRemovable`,
+[`RedirectChain::advance`](../src/stdlib/network/redirect/chain/mod.rs)
+receives an already-resolved `Url` instead of a raw header string. The chain no
+longer parses the header, so its `RedirectRejection` vocabulary is reduced to
+the four redirect *decisions* it actually makes: `CredentialsNotRemovable`,
 `LimitExceeded`, `Loop`, and `Policy`.
 
 The rationale is the dependency rule. A `Location` header is an HTTP response
@@ -164,7 +161,7 @@ The invariants the original decision relies on do not change:
   only, exactly as the variants they replace did.
 - **Metric cardinality.** `location_missing` and `location_invalid` remain in
   the closed `redirect_failure` vocabulary of
-  [`src/stdlib/network/telemetry.rs`](../src/stdlib/network/telemetry.rs). The
-  adapter still records both reasons, so the series count stays fixed by the
-  code. The two Fluent keys and their messages are reused unchanged in every
-  locale, so the user-visible text is unchanged too.
+  [`src/stdlib/network/telemetry/mod.rs`](../src/stdlib/network/telemetry/mod.rs).
+  The adapter still records both reasons, so the series count stays fixed by
+  the code. The two Fluent keys and their messages are reused unchanged in
+  every locale, so the user-visible text is unchanged too.

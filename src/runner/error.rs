@@ -54,7 +54,7 @@ pub enum RunnerError {
 /// Drop the enclosing error chain for this diagnostic because template errors
 /// and command contexts can contain project-controlled or secret-bearing text.
 pub(super) fn promote_manifest_budget(error: anyhow::Error) -> anyhow::Error {
-    crate::manifest::budget_adapter::budget_exhaustion_message(&error).map_or(error, |message| {
+    crate::manifest::budget_exhaustion_message(&error).map_or(error, |message| {
         RunnerError::ManifestBudgetExceeded { message }.into()
     })
 }

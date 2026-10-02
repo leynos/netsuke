@@ -43,31 +43,28 @@ const FALLBACK_DATE: &str = "1970-01-01";
 // `src/cli/command.rs` holds command-schema and default-command behaviour,
 // including `Cli::with_default_command`, with runtime preferences in
 // `src/cli/preferences.rs` and the localisation-aware parsing entry point in
-// `src/cli/parser.rs`; matching logic is split out of `src/host_pattern.rs`
-// into `src/host_matching.rs`. Adding a dependency on anything outside this
+// `src/cli/parser/mod.rs`; matching logic is split out of `src/host/pattern.rs`
+// into `src/host/matching.rs`. Adding a dependency on anything outside this
 // slice will surface here as a compile error, which is the intended signal.
 #[path = "src/cli"]
 mod cli {
     //! The Clap schema slice of `src/cli`, mirroring `src/cli/mod.rs`.
 
-    #[path = "config.rs"]
     pub mod config;
-    #[path = "validation.rs"]
     mod validation;
 
-    #[path = "help.rs"]
     mod help;
 
-    #[path = "command.rs"]
     mod command;
 
     pub use command::Cli;
     pub use config::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
 }
 
-#[path = "src/cli_localization.rs"]
+#[path = "src/cli/localization/mod.rs"]
 mod cli_localization;
-#[path = "src/host_pattern.rs"]
+// The build-script slice compiles pattern syntax without runtime matching.
+#[path = "src/host/pattern.rs"]
 mod host_pattern;
 
 /// The locale registry, shared with the library crate.
@@ -78,13 +75,13 @@ mod host_pattern;
 /// module cannot be re-exported from a public path. The build script itself
 /// reads `SUPPORTED_LOCALES` to emit one `rerun-if-changed` directive per
 /// catalogue.
-#[path = "src/locale_catalogues.rs"]
+#[path = "src/locale/catalogues.rs"]
 pub mod locale_catalogues;
 
 mod build_l10n_audit;
 /// Message rendering, shared with the library crate.
 ///
-/// Exposed as `crate::localization`, which `cli`, `cli_l10n`, and
+/// Exposed as `crate::localization`, which `cli`, `cli::l10n`, and
 /// `host_pattern` reach for `localization::keys` when building the clap
 /// command for man-page generation. Public so its `locales` re-export stays
 /// reachable at `crate::localization::locales`.
@@ -173,11 +170,14 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
 fn emit_rerun_directives() {
     // Only the modules this script actually compiles need to trigger a rerun.
     println!("cargo:rerun-if-changed=src/cli/command.rs");
-    println!("cargo:rerun-if-changed=src/cli/config.rs");
-    println!("cargo:rerun-if-changed=src/cli/manifest_budget_config.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/mod.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/validation.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/budget.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/no_input.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/policy_definitions.rs");
     println!("cargo:rerun-if-changed=src/cli/help.rs");
     println!("cargo:rerun-if-changed=src/cli/validation.rs");
-    println!("cargo:rerun-if-changed=src/host_pattern.rs");
+    println!("cargo:rerun-if-changed=src/host/pattern.rs");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_DESCRIPTION");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_AUTHORS");
@@ -185,7 +185,7 @@ fn emit_rerun_directives() {
     println!("cargo:rerun-if-env-changed=TARGET");
     println!("cargo:rerun-if-env-changed=PROFILE");
     println!("cargo:rerun-if-changed=src/localization/keys.rs");
-    println!("cargo:rerun-if-changed=src/locale_catalogues.rs");
+    println!("cargo:rerun-if-changed=src/locale/catalogues.rs");
     println!("cargo:rerun-if-changed=Cargo.toml");
     // The locale registry owns the catalogue list, so the rerun directives are
     // derived from it rather than repeated by hand.

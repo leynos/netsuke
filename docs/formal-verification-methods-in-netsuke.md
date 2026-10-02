@@ -54,7 +54,7 @@ The first Kani harnesses should cover these properties:
 - Acyclic bounded graphs (same size limits) are never rejected as cyclic.
 - Missing dependencies are recorded without creating false cycles.
 
-`src/ir/cycle.rs` is the strongest narrow proof candidate in the current
+`src/ir/cycle/mod.rs` is the strongest narrow proof candidate in the current
 repository. `canonicalize_cycle` has a crisp normalization contract that is
 small enough for Kani immediately and remains a plausible later Verus kernel if
 stronger proof obligations become worthwhile.[^7]
@@ -122,7 +122,7 @@ as part of the phase-1 boundary.
 
 Verus is not the correct first tool for the manifest or command-interpolation
 layers. The only current entry point worth preserving for later evaluation is a
-cycle canonicalization model related to `src/ir/cycle.rs`. That model is
+cycle canonicalization model related to `src/ir/cycle/mod.rs`. That model is
 appropriate because `canonicalize_cycle` exposes a clear mathematical contract:
 
 - output length is preserved,
@@ -352,12 +352,13 @@ into a proof-first shape that its current architecture does not need.
   current continuous integration workflow.
 [^4]: [`README.md`](../README.md) describes Netsuke as a compiler from YAML and
   Jinja to Ninja, with deterministic graph generation and Ninja execution.
-[^5]: [`src/ir/from_manifest.rs`](../src/ir/from_manifest.rs) defines
+[^5]: [`src/ir/from_manifest/mod.rs`](../src/ir/from_manifest/mod.rs) defines
   `BuildGraph::from_manifest`, duplicate-output rejection, rule resolution, and
   cycle reporting.
-[^6]: [`src/ninja_gen.rs`](../src/ninja_gen.rs) sorts actions, edges, and
+[^6]: [`src/ninja_gen/mod.rs`](../src/ninja_gen/mod.rs) sorts actions, edges,
+      and
   default targets to keep emitted Ninja text deterministic.
-[^7]: [`src/ir/cycle.rs`](../src/ir/cycle.rs) defines cycle analysis and
+[^7]: [`src/ir/cycle/mod.rs`](../src/ir/cycle/mod.rs) defines cycle analysis and
   `canonicalize_cycle`.
 [^8]: [`src/ir/cmd_interpolate/mod.rs`](../src/ir/cmd_interpolate/mod.rs)
   defines placeholder substitution and command validation.

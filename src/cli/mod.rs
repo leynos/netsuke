@@ -17,16 +17,13 @@ mod constants;
 mod diag;
 mod discovery;
 mod environment;
-mod fetch_policy;
 mod help;
-mod manifest_budget_policy;
+pub(crate) mod l10n;
+pub mod localization;
 mod merge;
-mod merge_apply;
-mod merge_input;
-mod merge_observability;
 mod parser;
 mod parsing;
-mod policy_values;
+mod policy;
 mod preferences;
 mod release_help;
 #[cfg(test)]
@@ -51,14 +48,14 @@ pub use discovery::StdEnvProvider as ConfigStdEnvProvider;
 /// Record the discovery metric series for an already-timed phase.
 pub use discovery::record_discovery_outcome;
 pub use help::{HelpArgs, HelpTopic};
+/// Input for an event-collecting merge using previously discovered layers.
+pub use merge::CachedMergeInput;
+/// Bounded events and the production tracing adapter for application-side replay.
+pub use merge::{MergeEvent, MergeObserver, TracingMergeObserver};
 pub use merge::{
     merge_with_cached_file_layers, merge_with_cached_file_layers_with_observer, merge_with_config,
     merge_with_config_and_env,
 };
-/// Input for an event-collecting merge using previously discovered layers.
-pub use merge_input::CachedMergeInput;
-/// Bounded events and the production tracing adapter for application-side replay.
-pub use merge_observability::{MergeEvent, MergeObserver, TracingMergeObserver};
 pub(crate) use parser::configured_command;
 pub use parser::{json_hint_from_args, locale_hint_from_args, parse_with_localizer_from};
 pub use release_help::ReleaseHelpCli;
@@ -75,6 +72,3 @@ pub const PATH_VALIDATION_TOTAL: &str = "netsuke_cli_path_validation_total";
 pub const PATH_VALIDATION_SOURCE_VALUES: [&str; 2] = ["file", "directory"];
 /// Bounded rejection reasons admitted on the CLI path-validation counter series.
 pub const PATH_VALIDATION_REASON_VALUES: [&str; 1] = ["non_utf8"];
-#[cfg(test)]
-#[path = "merge_logging_proptests.rs"]
-mod merge_logging_proptests;

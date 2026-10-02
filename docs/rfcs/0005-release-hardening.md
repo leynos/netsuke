@@ -101,13 +101,13 @@ The release test set must exercise every supported command path that can reach
 the seven production `debug_assert*` sites, including boundary inputs for
 arithmetic that can overflow. The sites are:
 
-- `src/ir/cycle_support.rs`
-- `src/ir/cycle_detector.rs`
+- `src/ir/cycle/support.rs`
+- `src/ir/cycle/detector.rs`
 - `src/ir/cmd_interpolate/mod.rs`
 - `src/stdlib/time/format.rs`
 - `src/stdlib/command/quote.rs`
 - `src/ninja_gen/mod.rs`
-- `src/cli/discovery_layers.rs`
+- `src/cli/discovery/layers.rs`
 
 Coverage must also include the supported `Recipe::Rule` rejection path in
 `src/ninja_gen/mod.rs`: `NamedAction::write_into` calls

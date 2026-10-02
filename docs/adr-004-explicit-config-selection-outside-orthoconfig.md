@@ -5,7 +5,7 @@
 Accepted.
 
 Accepted: 2026-05-31. Netsuke will resolve explicit configuration file
-selection in `src/cli/discovery.rs` rather than delegate this behaviour to
+selection in `src/cli/discovery/mod.rs` rather than delegate this behaviour to
 OrthoConfig's built-in discovery attributes.
 
 ## Date
@@ -81,7 +81,7 @@ environment selection, diagnostics, and automatic discovery are combined.
 
 ## Decision outcome
 
-Netsuke resolves explicit configuration paths in `src/cli/discovery.rs`.
+Netsuke resolves explicit configuration paths in `src/cli/discovery/mod.rs`.
 
 - `resolve_config_selector` applies `--config` > `NETSUKE_CONFIG`, ignoring
   empty environment values.
@@ -124,8 +124,8 @@ bypasses automatic discovery. Relative selectors retain process-working-
 directory semantics independently of `-C/--directory`; absolute selectors
 remain unchanged. The `-C/--directory` value anchors automatic project
 discovery and manifest lookup only. The production implementation is
-`selector::resolve_config_selector` in `src/cli/discovery_selector.rs`, with
-`src/cli/discovery.rs` owning the layer-loading boundary.
+`selector::resolve_config_selector` in `src/cli/discovery/selector.rs`, with
+`src/cli/discovery/mod.rs` owning the layer-loading boundary.
 
 ## Related documents
 

@@ -42,14 +42,11 @@ impl DiagMode {
     }
 }
 mod observability;
-#[path = "startup_tracing.rs"]
 mod startup_tracing;
 
 #[cfg(test)]
-#[path = "test_tracing_capture.rs"]
 mod test_tracing_capture;
 
-#[path = "config_load.rs"]
 mod config_load;
 use startup_tracing::StartupWriter;
 
@@ -379,5 +376,4 @@ fn render_runtime_error_json(err: &anyhow::Error) -> serde_json::Result<String> 
 }
 
 #[cfg(test)]
-#[path = "main_tests.rs"]
 mod tests;

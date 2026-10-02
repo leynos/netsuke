@@ -52,7 +52,7 @@ impl StringOrList {
             Self::Empty => Vec::new(),
             Self::String(s) => vec![f(s)],
             // Indexed iteration keeps the Kani harnesses in
-            // `crate::ir::from_manifest_verification` tractable; an iterator
+            // `crate::ir::from_manifest::verification` tractable; an iterator
             // chain here defeats their loop unwinding bounds.
             Self::List(v) => {
                 let mut mapped = Vec::with_capacity(v.len());

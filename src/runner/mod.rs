@@ -4,11 +4,8 @@
 //! `ninja`, overridable with `NETSUKE_NINJA`).
 
 mod dispatch;
-mod dyndep_generation_telemetry;
-mod dyndep_publication;
+mod dyndep;
 mod error;
-mod graph_generation;
-mod graph_generation_telemetry;
 mod manifest_structure_telemetry;
 mod reporter;
 use crate::cli::{BuildArgs, Cli, Commands};
@@ -42,14 +39,11 @@ pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 
 mod graph;
 mod help;
-mod ninja_content;
-mod ninja_process_adapter;
+mod ninja;
 mod path_helpers;
 mod process;
 mod recipe_shell;
-mod recipe_shell_telemetry;
-pub use ninja_content::NinjaContent;
-pub use ninja_process_adapter::{run_ninja, run_ninja_tool};
+pub use ninja::{NinjaContent, run_ninja, run_ninja_tool};
 #[cfg(doctest)]
 pub use process::doc;
 pub use process::{
@@ -57,15 +51,15 @@ pub use process::{
     NinjaJobCount, NinjaProcessOptions, NinjaToolRequest, StderrMode, run_ninja_tool_with,
     run_ninja_with,
 };
-pub use recipe_shell_telemetry::{
+pub use recipe_shell::telemetry::{
     BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
     RECIPE_SHELL_RESOLUTIONS_TOTAL,
 };
 
-use dyndep_publication::{materialize_dyndep_bundle, prune_dyndep_bundle};
-use graph_generation::{GraphGenerationContext, generate_ninja_with_shell};
+use dyndep::{materialize_dyndep_bundle, prune_dyndep_bundle};
+use graph::generation::{GraphGenerationContext, generate_ninja_with_shell};
 use path_helpers::resolve_output_path;
-use recipe_shell_telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
+use recipe_shell::telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
 
 /// Runtime dependencies shared by command dispatch handlers.
 struct ExecutionContext<'a> {
@@ -215,7 +209,7 @@ fn execute_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) ->
         )
     };
     if context.progress_enabled {
-        let options = ninja_process_adapter::ninja_process_options(cli)?;
+        let options = ninja::ninja_process_options(cli)?;
         let mut on_task_progress = on_task_progress_callback(context.reporter);
         process::run_ninja_with_status(
             process::NinjaBuildRequest {
@@ -302,7 +296,7 @@ fn execute_ninja_tool(
         )
     };
     if context.progress_enabled {
-        let options = ninja_process_adapter::ninja_process_options(cli)?;
+        let options = ninja::ninja_process_options(cli)?;
         let mut on_task_progress = on_task_progress_callback(context.reporter);
         process::run_ninja_tool_with_status(
             process::NinjaToolRequest {

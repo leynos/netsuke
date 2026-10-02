@@ -352,7 +352,7 @@ and agents.
   - [ ] Add parser, IR, Ninja output, and user-guide coverage once the feature
     is implemented.
   - Note: the IR sink already exists but is unwired. `Action.depfile` and
-    `Action.deps_format` are defined in `src/ir/graph.rs` and emitted by
+    `Action.deps_format` are defined in `src/ir/graph/mod.rs` and emitted by
     `src/ninja_gen.rs`; only manifest parsing and population from `deps_from`
     remain.
 - [x] 3.14.7. Escape backend dollar syntax after Netsuke placeholder lowering.
@@ -1967,10 +1967,10 @@ the accepted size and performance budgets.
     64 MiB, and every property run to 256 cases; retain each counterexample as
     a checked-in regression that the blocking suite replays.
   - Exercise every supported command path that can reach the seven production
-    `debug_assert*` sites in `src/ir/cycle_support.rs`,
-    `src/ir/cycle_detector.rs`, `src/ir/cmd_interpolate/mod.rs`,
+    `debug_assert*` sites in `src/ir/cycle/support.rs`,
+    `src/ir/cycle/detector.rs`, `src/ir/cmd_interpolate/mod.rs`,
     `src/stdlib/time/format.rs`, `src/stdlib/command/quote.rs`,
-    `src/ninja_gen/mod.rs`, and `src/cli/discovery_layers.rs`, plus selected
+    `src/ninja_gen/mod.rs`, and `src/cli/discovery/layers.rs`, plus selected
     arithmetic boundaries, valid inputs, and intentionally rejected inputs.
   - Cover `NamedAction::write_into` for `Recipe::Rule`: assert the
     debug-assertion panic in its applicable profile and

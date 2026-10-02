@@ -3,7 +3,7 @@
 use super::{
     ExpansionContext, FilteredEntry, ManifestMap, ManifestValue, WhenEvaluation, WhenResolution,
 };
-use crate::manifest::budget_adapter::BudgetErrorExt;
+use crate::manifest::budget::adapter::BudgetErrorExt;
 use crate::{
     hex::push_lower_hex_byte,
     localization::{self, keys},

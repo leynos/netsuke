@@ -22,7 +22,7 @@
 //! know about was a form it could get wrong.
 //!
 //! The other direction — that the two taxonomies still agree on every spelling
-//! — is an executable property and is asserted in `telemetry_tests` instead.
+//! — is an executable property and is asserted in `telemetry::tests` instead.
 //!
 //! The scan is a whole-set equality rather than a deny-list: the modules that
 //! may name telemetry are enumerated, and the set found on disk must equal it.
@@ -59,11 +59,11 @@ const MINIMUM_DOMAIN_SOURCES: usize = 5;
 /// which modules *reach into* telemetry, and this one is the thing reached
 /// into. Its own imports point the other way — it names the domain taxonomy, so
 /// that the mapping from category to label lives on this side of the boundary.
-const TELEMETRY_BOUNDARY_SOURCE: &str = "src/stdlib/which/telemetry.rs";
+const TELEMETRY_BOUNDARY_SOURCE: &str = "src/stdlib/which/telemetry/mod.rs";
 
 /// The module name a `use` reaches telemetry under.
 ///
-/// This is the file stem of [`TELEMETRY_BOUNDARY_SOURCE`], which the test
+/// This is the parent directory of [`TELEMETRY_BOUNDARY_SOURCE`], which the test
 /// asserts rather than leaving the two to drift: the name searched for in a
 /// `use` tree and the source the walk must find are statements about one
 /// module, and a rename that moved only one of them would silently stop
@@ -87,18 +87,18 @@ const PERMITTED_TELEMETRY_IMPORTERS: [&str; 4] = [
     "src/stdlib/which/mod.rs",
     // The tests that assert the boundary's contract, including the one that
     // pins the mapping between the two taxonomies.
-    "src/stdlib/which/telemetry_tests.rs",
+    "src/stdlib/which/telemetry/tests/mod.rs",
     // The counter-series cases those tests are split into.
-    "src/stdlib/which/telemetry_tests/outcome_series.rs",
+    "src/stdlib/which/telemetry/tests/outcome_series.rs",
 ];
 
-/// The submodules of `telemetry_tests` are permitted wholesale.
+/// The submodules of `telemetry::tests` are permitted wholesale.
 ///
 /// They are test cases for the telemetry boundary, so naming it is their
 /// subject rather than a leak; listing each one by hand would mean editing
 /// this file every time the tests are split further, for a decision that was
 /// already made when the directory was allowed.
-const PERMITTED_TELEMETRY_TEST_DIRECTORY: &str = "src/stdlib/which/telemetry_tests/";
+const PERMITTED_TELEMETRY_TEST_DIRECTORY: &str = "src/stdlib/which/telemetry/tests/";
 
 /// Return whether `path` may name the telemetry module.
 fn is_permitted(path: &str) -> bool {
@@ -182,7 +182,7 @@ fn collect_entry_sources(
 /// ```
 ///
 /// Comparing identifiers against the parse tree is what makes the rule exact:
-/// `telemetry_tests` is a different module rather than a longer spelling of
+/// `telemetry_tests` is a different identifier rather than a longer spelling of
 /// this one, and a comment or a string holding the same text is not a `use` at
 /// all — neither distinction has to be re-stated as a matching rule here.
 fn names_segment(tree: &UseTree, wanted: &str) -> bool {
@@ -263,7 +263,10 @@ fn only_the_telemetry_boundary_names_telemetry_in_the_resolver_domain() -> Resul
         .with_context(|| format!("open {RESOLVER_DOMAIN}"))?;
 
     ensure!(
-        Utf8Path::new(TELEMETRY_BOUNDARY_SOURCE).file_stem() == Some(TELEMETRY_MODULE),
+        Utf8Path::new(TELEMETRY_BOUNDARY_SOURCE)
+            .parent()
+            .and_then(Utf8Path::file_name)
+            == Some(TELEMETRY_MODULE),
         "{TELEMETRY_MODULE} is the module a `use` reaches {TELEMETRY_BOUNDARY_SOURCE} \
          under, so the two must name the same module"
     );

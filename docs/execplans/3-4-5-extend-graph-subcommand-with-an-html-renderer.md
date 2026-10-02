@@ -298,7 +298,7 @@ timestamp.
   `self_named_module_files` by keeping tests in
   `src/graph_view/render_html_tests.rs`. This is superseded as of the
   post-review split: the HTML adapter now lives under
-  `src/graph_view/render_html/` with `mod`, `escape`, `layout`, `noscript`,
+  `src/graph_view/render/html/` with `mod`, `escape`, `layout`, `noscript`,
   `outline`, `style`, `svg`, and `tests` modules, keeping each module focused
   and under the 400-line file cap.
 - 2026-05-26 (Stage B): `write_ninja_file_utf8` became a thin wrapper
@@ -356,7 +356,7 @@ Add further decisions as work proceeds.
 - Decision: at the Stage C go/no-go gate, neither the `layout` crate nor
   the vendored viz-js fallback was adopted. Instead, the HTML renderer uses a
   hand-rolled topological-depth layered SVG layout written inline in
-  `src/graph_view/render_html/layout.rs`. Rationale: the layout crate adds
+  `src/graph_view/render/html/layout.rs`. Rationale: the layout crate adds
   approximately 8 transitive dependencies and ~700 KB of release binary growth
   even for the smoke fixture, exceeding the 1 MB net budget when combined with
   other in-flight features. The vendored viz-js fallback ships a 3 MB WASM blob
@@ -388,7 +388,7 @@ Add further decisions as work proceeds.
 - **Stage C (2026-05-26):** the HTML renderer landed without any new
   dependency. The Stage C go/no-go gate accepted a hand-rolled
   topological-depth layered SVG layout now housed in
-  `src/graph_view/render_html/layout.rs`; the `layout` crate and the vendored
+  `src/graph_view/render/html/layout.rs`; the `layout` crate and the vendored
   viz-js fallback were both rejected for binary-size reasons (see Decision
   log). The renderer produces a byte-identical document across runs (proven by
   `rendering_is_byte_identical_across_runs`), has golden DOT/HTML snapshots
@@ -715,7 +715,7 @@ observed output quality.
    each HTML artefact. Do not silently switch — escalate first.
 
 3. **Promote the spike** (assuming the gate passed). Move the
-   `HtmlRenderer` into the `src/graph_view/render_html/` module tree and drop
+   `HtmlRenderer` into the `src/graph_view/render/html/` module tree and drop
    the `html-renderer-spike` cargo feature, unless the binary-size budget
    dictates gating it behind a default-off feature (`html-renderer`). The
    renderer constructs the document using Rust string-writing helpers:
@@ -910,8 +910,8 @@ continue to read `GraphView` only.
 
 [graph-view-mod]: ../../src/graph_view/mod.rs
 [graph-view-dot]: ../../src/graph_view/render_dot.rs
-[graph-view-html]: ../../src/graph_view/render_html/mod.rs
-[graph-view-html-tests]: ../../src/graph_view/render_html/tests.rs
+[graph-view-html]: ../../src/graph_view/render/html/mod.rs
+[graph-view-html-tests]: ../../src/graph_view/render/html/tests.rs
 [graph-view-tests]: ../../src/graph_view/tests.rs
 
 ## Concrete steps
@@ -1186,7 +1186,7 @@ pub struct GraphArgs {
 }
 ```
 
-End of Stage C — `src/graph_view/render_html/` module tree:
+End of Stage C — `src/graph_view/render/html/` module tree:
 
 ```rust
 use std::sync::Arc;

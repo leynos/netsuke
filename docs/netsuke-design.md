@@ -1018,7 +1018,7 @@ interpreted only at the manifest-to-IR boundary.*
 `as_single` build on it. Path conversion deliberately does not live here. The
 AST models the manifest's surface syntax, in which `sources`, `deps` and
 `order_only_deps` are plain strings; only manifest-to-IR lowering decides they
-name files on disk, so `src/ir/from_manifest_support.rs::to_paths` performs
+name files on disk, so `src/ir/from_manifest/support/mod.rs::to_paths` performs
 that interpretation at the boundary. Keeping `camino` out of `src/ast/mod.rs`
 stops filesystem concerns leaking into the domain model.
 
@@ -1529,8 +1529,8 @@ Implementation notes:
   this policy is enforced once rather than re-implemented per filter.
   `FileReadLimits` and `open_file_checked` in `src/stdlib/path/fs_utils.rs`
   decide what may be opened; `BoundedRead` and `read_bounded_chunk` in
-  `src/stdlib/path/bounded_read.rs` stream the bytes and charge the budget as
-  they arrive, so no buffer grows with the length of a line. See the
+  `src/stdlib/path/bounded_read/mod.rs` stream the bytes and charge the budget
+  as they arrive, so no buffer grows with the length of a line. See the
   [developer's guide](developers-guide.md#file-reading-filter-boundary).
 - The configured ceiling is `DEFAULT_FILE_MAX_READ_BYTES` (8 MiB) in
   `src/stdlib/config_types.rs`, stored as `FileConfig::max_read_bytes` and set
@@ -1565,7 +1565,7 @@ Implementation notes:
   `linecount` validates UTF-8 incrementally as it counts, so a file that is not
   text is rejected rather than silently counted as opaque bytes.
 - Each of the four filter closures records its call through
-  `src/stdlib/path/read_telemetry.rs`: one sample of the bounded counter
+  `src/stdlib/path/read_telemetry/mod.rs`: one sample of the bounded counter
   `netsuke_stdlib_file_read_total`, labelled `filter` (`contents`, `linecount`,
   `hash`, or `digest`) and `outcome` (`ok` or `rejected`), plus a
   `stdlib.file_read.read` debug event carrying the same two facts with the
@@ -2220,17 +2220,18 @@ the Ninja build system, which consists of "Action" nodes (commands) and
 "Target" nodes (files).[^7] This close mapping simplifies the final code
 generation step.
 
-The authoritative live IR contract is [src/ir/graph.rs](../src/ir/graph.rs),
-re-exported through [src/ir/mod.rs](../src/ir/mod.rs). There is no top-level IR
-file in the current codebase. Fields and types marked `FUTURE` in the snippet
-below are forward-looking IR sketches rather than implemented Rust definitions.
+The authoritative live IR contract is
+[src/ir/graph/mod.rs](../src/ir/graph/mod.rs), re-exported through
+[src/ir/mod.rs](../src/ir/mod.rs). There is no top-level IR file in the current
+codebase. Fields and types marked `FUTURE` in the snippet below are
+forward-looking IR sketches rather than implemented Rust definitions.
 `Action.env`, `EnvBinding`, and the `Exec` recipe variant capture the intended
 lowering target for roadmap tasks `3.14.9` and `3.14.10`.
 
 Rust
 
 ```rust
-// In src/ir/graph.rs
+// In src/ir/graph/mod.rs
 
 use std::collections::HashMap;
 use camino::Utf8PathBuf;
@@ -2263,7 +2264,7 @@ pub struct BuildGraph {
 pub struct Action {
     pub recipe: Recipe,
     pub description: Option<String>,
-    // FUTURE: planned Action.env extension; not present in src/ir/graph.rs yet.
+    // FUTURE: planned Action.env extension; not present in src/ir/graph/mod.rs yet.
     pub env: HashMap<String, EnvBinding>,
     pub depfile: Option<String>, // Template for the .d file path, e.g., "$out.d"
     pub deps_format: Option<String>, // "gcc" or "msvc"
@@ -2627,15 +2628,16 @@ default my_app
 
 ### 5.5 Design Decisions
 
-The live IR structures defined in [src/ir/graph.rs](../src/ir/graph.rs), and
-re-exported through [src/ir/mod.rs](../src/ir/mod.rs), are minimal containers
-that mirror Ninja's conceptual model while remaining backend-agnostic.
-`BuildGraph` collects actions in a hash map, canonical edges in an
-insertion-ordered arena, and output aliases in a `Utf8PathBuf` to `EdgeId` hash
-map. Actions hold the parsed `Recipe` and optional execution metadata.
-`BuildEdge` connects inputs to outputs using an action identifier and carries
-the `phony` and `always` flags verbatim from the manifest. No Ninja-specific
-placeholders are stored in the IR to keep the representation portable.
+The live IR structures defined in
+[src/ir/graph/mod.rs](../src/ir/graph/mod.rs), and re-exported through
+[src/ir/mod.rs](../src/ir/mod.rs), are minimal containers that mirror Ninja's
+conceptual model while remaining backend-agnostic. `BuildGraph` collects
+actions in a hash map, canonical edges in an insertion-ordered arena, and
+output aliases in a `Utf8PathBuf` to `EdgeId` hash map. Actions hold the parsed
+`Recipe` and optional execution metadata. `BuildEdge` connects inputs to
+outputs using an action identifier and carries the `phony` and `always` flags
+verbatim from the manifest. No Ninja-specific placeholders are stored in the IR
+to keep the representation portable.
 
 - Actions are deduplicated using a SHA-256 hash of a canonical JSON
   serialization of their recipe, inputs, and outputs. Because commands embed
@@ -2712,9 +2714,9 @@ parameter list: `NinjaBuildRequest` for a build and `NinjaToolRequest` for
 file, the targets or tool, a `&CommandEnv` describing the child's environment,
 and the `stderr_mode: StderrMode` policy field. `run_ninja_with` and
 `run_ninja_tool_with` consume these; the convenience wrappers `run_ninja` and
-`run_ninja_tool` live in `runner::ninja_process_adapter`, translate `Cli` state
-at the runner boundary, call them with `CommandEnv::inherit()`, and derive the
-`stderr_mode` policy from the CLI via
+`run_ninja_tool` live in `runner::ninja::process_adapter`, translate `Cli`
+state at the runner boundary, call them with `CommandEnv::inherit()`, and
+derive the `stderr_mode` policy from the CLI via
 `StderrMode::from_json_enabled(cli.json)`, which is production behaviour.
 Process requests never import `Cli`; callers without parser state construct
 `NinjaProcessOptions` directly. The CLI parser rejects a non-UTF-8 `--file` or
@@ -2791,7 +2793,7 @@ where it is not — and `CommandEnv` replaces same-key overrides by the same
 rule, so its view of the environment always matches the child's.
 
 The developers' guide documents the module layout and the `PATH` composition
-helper under "Module: `runner::process::command_env`".
+helper under "Module: `runner::process::environment`".
 
 Integration-test support finds the already-built `netsuke` executable before
 spawning it. Its locator derives an ordered candidate list from the test
@@ -2952,7 +2954,7 @@ context and polished user output.[^27]
 Rust
 
 ```rust
-// In src/ir/graph.rs use thiserror::Error; use camino::Utf8PathBuf;
+// In src/ir/graph/error.rs use thiserror::Error; use camino::Utf8PathBuf;
 
 #[derive(Debug, Error)]
 pub enum IrGenError {
@@ -3221,7 +3223,7 @@ the targets listed in the `defaults` section of the manifest are built.
   self-contained, offline-safe HTML document with a server-rendered SVG, an
   accessible textual outline, and a `<noscript>` fallback. The renderer
   adapters consume a canonical [`GraphView`](../src/graph_view/mod.rs)
-  projection of [`BuildGraph`](../src/ir/graph.rs); deterministic output is
+  projection of [`BuildGraph`](../src/ir/graph/mod.rs); deterministic output is
   guaranteed because the projection sorts every collection at the IR boundary.
   Ninja is not invoked.
 
@@ -3232,17 +3234,17 @@ the targets listed in the `defaults` section of the manifest are built.
 ### 8.4 Design Decisions
 
 The parser-facing `Cli` type is now defined in `src/cli/command.rs`, with the
-localisation-aware parsing entry point in `src/cli/parser.rs` and the runtime
-preference accessors in `src/cli/preferences.rs`, while layered configuration
-lives in a dedicated `CliConfig` struct derived with OrthoConfig in
-`src/cli/config.rs`. The top-level `src/cli/mod.rs` module re-exports that
-public CLI surface. This separation keeps parsing, configuration discovery, and
-runtime command selection as distinct concerns while preserving the existing
-command syntax. Invoking `netsuke` with no explicit subcommand still resolves to
-`build`, and the `build` command can now take default `emit` and `targets`
-values from `[cmds.build]` in configuration files or `NETSUKE_CMDS__BUILD__*`
-environment variables. Explicit CLI targets or `--emit` values still override
-those defaults.
+localisation-aware parsing entry point in `src/cli/parser/mod.rs` and the
+runtime preference accessors in `src/cli/preferences.rs`, while layered
+configuration lives in a dedicated `CliConfig` struct derived with OrthoConfig
+in `src/cli/config/mod.rs`. The top-level `src/cli/mod.rs` module re-exports
+that public CLI surface. This separation keeps parsing, configuration
+discovery, and runtime command selection as distinct concerns while preserving
+the existing command syntax. Invoking `netsuke` with no explicit subcommand
+still resolves to `build`, and the `build` command can now take default `emit`
+and `targets` values from `[cmds.build]` in configuration files or
+`NETSUKE_CMDS__BUILD__*` environment variables. Explicit CLI targets or
+`--emit` values still override those defaults.
 
 Configuration is layered in the order defaults -> configuration files ->
 environment variables -> CLI overrides. Explicit discovery honours
@@ -3259,11 +3261,11 @@ versioned diagnostic document on failure.
 #### Configuration observability
 
 Configuration loading remains a plain query. The application-owned recorder
-boundary in `src/observability.rs` composes instrumentation at the CLI root,
-around the diagnostic-mode resolution and full-merge queries; configuration
-loading itself does not install a recorder or emit metrics. The process-wide
-recorder is installed by the application after tracing is ready, while tests
-use local recorders.
+boundary in `src/observability/mod.rs` composes instrumentation at the CLI
+root, around the diagnostic-mode resolution and full-merge queries;
+configuration loading itself does not install a recorder or emit metrics. The
+process-wide recorder is installed by the application after tracing is ready,
+while tests use local recorders.
 
 The metric vocabulary keeps labels bounded: `config_load_total` uses only
 `phase` (`diag_mode` or `merge`) and `outcome` (`success` or `failure`), while
@@ -3292,7 +3294,7 @@ its tracing filter before this merge and turns it off for JSON diagnostics,
 preserving machine-readable stderr.
 
 CLI help and clap errors are localized via Fluent resources; locale resolution
-is handled in `src/locale_resolution.rs` in two phases. Before the
+is handled in `src/locale/resolution.rs` in two phases. Before the
 configuration merge, `startup_localizer` (`src/main.rs`) resolves the locale
 used for help and clap errors, with the precedence `--locale` ->
 `NETSUKE_LOCALE` -> system locale -> `en-US`; configuration cannot take part
@@ -3307,7 +3309,7 @@ Startup diagnostics are buffered rather than written. The locale is resolved
 before the command line is parsed, so a fallback can be reported before the
 effective diagnostic mode is known, and the JSON diagnostic document is written
 to stderr — an eagerly emitted warning could corrupt it. `StartupWriter` in
-`src/startup_tracing.rs` therefore holds startup tracing until the mode is
+`src/startup_tracing/mod.rs` therefore holds startup tracing until the mode is
 settled. `settle_startup_diagnostics` in `src/main.rs` then releases the buffer
 to stderr in human mode, or discards it in JSON mode so that stderr carries a
 single diagnostic document. Settlement happens after the JSON mode is resolved
@@ -3326,11 +3328,11 @@ then replays the outcome's deferred diagnostics and passes the cached layers to
 `cli::merge_with_cached_file_layers_with_observer`. That query returns bounded
 merge events alongside the result, which `config_load::resolve_configuration`
 replays through `cli::TracingMergeObserver`. The ordinary query functions do
-not install a recorder or emit tracing. `src/observability.rs` owns the phase
-recorder and bounded phase/outcome vocabulary, while `src/config_load.rs` owns
-the startup-attempt series. The application installs an in-process
-`DebuggingRecorder`; it does not open a metrics listener as a side effect of a
-command invocation.
+not install a recorder or emit tracing. `src/observability/mod.rs` owns the
+phase recorder and bounded phase/outcome vocabulary, while
+`src/config_load/mod.rs` owns the startup-attempt series. The application
+installs an in-process `DebuggingRecorder`; it does not open a metrics listener
+as a side effect of a command invocation.
 
 Metric labels are closed sets: phase-level series use `diag_mode` or `merge`,
 and both phase-level and startup-attempt counters use `success` or `failure`.
@@ -3344,7 +3346,7 @@ full metric names, phase boundaries, and test-recorder rules are documented in
 the configuration-load observability section of the
 [developer's guide](developers-guide.md).
 
-`src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.
+`src/locale/catalogues.rs` is the authoritative registry of shipped catalogues.
 A `define_locales!` macro embeds `locales/<tag>/messages.ftl` for each declared
 tag, so a registry entry without a catalogue fails to compile. Every other
 surface reads that registry rather than repeating the list: the build-time
@@ -3391,11 +3393,11 @@ matches a real directory change. Error scenarios are validated using clap's
 `ErrorKind` enumeration in unit tests and via rstest-bdd behavioural
 steps/scenarios.
 
-Real-time stage reporting now uses a six-stage model in `src/status.rs` backed
-by `indicatif::MultiProgress` for standard terminals. The reporter keeps one
-persistent summary line per stage and updates each line through localized state
-labels (`pending`, `in progress`, `done`, `failed`) plus localized stage text.
-During Stage 6, Netsuke parses Ninja status lines of the form
+Real-time stage reporting now uses a six-stage model in `src/status/mod.rs`
+backed by `indicatif::MultiProgress` for standard terminals. The reporter keeps
+one persistent summary line per stage and updates each line through localized
+state labels (`pending`, `in progress`, `done`, `failed`) plus localized stage
+text. During Stage 6, Netsuke parses Ninja status lines of the form
 `[current/total] ...` and emits localized task progress updates. It retains a
 fixed, bounded number of bytes for each candidate line. An oversized line is
 ignored for progress purposes until its newline, while every byte continues to
@@ -3423,7 +3425,7 @@ Timing summaries are completion diagnostics. They are suppressed when verbose
 mode is off and also suppressed on failed runs so failures do not imply a
 successful pipeline completion.
 
-Theme resolution for CLI output is centralized in `src/theme.rs`. Netsuke
+Theme resolution for CLI output is centralized in `src/theme/mod.rs`. Netsuke
 derives an internal theme preference from the `--emoji` policy
 (`emoji = always` selects Unicode, `never` selects ASCII, and `auto` falls back
 to the mode default) and hands the resulting symbol and spacing tokens to
@@ -3521,7 +3523,7 @@ flowchart LR
   N --> O[Run Netsuke with final behaviour]
 ```
 
-Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
+Netsuke configuration discovery is implemented in `src/cli/discovery/mod.rs`.
 Explicit file selection is handled by `selector::resolve_config_selector(...)`,
 which applies the precedence `--config` > `NETSUKE_CONFIG`.
 `discover_file_layers(...)` performs one overall discovery pass, applying the
@@ -3737,10 +3739,10 @@ existing CLI Fluent keys onto published configuration fields, omits the
 structural `cmds` container, and adds both selectors as help-only metadata with
 no environment or file source. It must not add selector precedence,
 configuration loading, or discovery policy to OrthoConfig. Those
-responsibilities remain in `src/cli/discovery.rs`: [ADR 004] governs `--config`
-precedence and fail-closed selected-file loading, while [ADR 014] governs
-`-C/--directory` project-discovery rooting and manifest lookup. This boundary
-avoids a duplicate CLI model and is recorded in [ADR 016].
+responsibilities remain in `src/cli/discovery/mod.rs`: [ADR 004] governs
+`--config` precedence and fail-closed selected-file loading, while [ADR 014]
+governs `-C/--directory` project-discovery rooting and manifest lookup. This
+boundary avoids a duplicate CLI model and is recorded in [ADR 016].
 
 Manual pages are generated under
 `target/orthohelp/<target>/release/man/man1/netsuke.1`. Windows targets also

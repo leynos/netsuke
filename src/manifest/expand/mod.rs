@@ -3,7 +3,7 @@ use super::{
     ManifestMap, ManifestValue,
     budget::{ManifestBudget, ManifestBudgetStage},
 };
-use crate::manifest::budget_adapter::BudgetErrorExt;
+use crate::manifest::budget::adapter::BudgetErrorExt;
 use anyhow::{Context, Result};
 use minijinja::Environment;
 
@@ -288,5 +288,4 @@ fn expand_static_target(
 }
 
 #[cfg(test)]
-#[path = "../expand_tests.rs"]
 mod tests;

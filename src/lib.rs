@@ -5,25 +5,24 @@
 
 pub mod ast;
 pub mod cli;
-mod cli_l10n;
-pub mod cli_localization;
-mod cli_policy;
+pub use cli::localization as cli_localization;
 pub mod diagnostic_json;
 pub(crate) mod diagnostics;
 pub mod graph_view;
 pub mod hasher;
 pub mod hex;
-mod host_matching;
-pub mod host_pattern;
+mod host;
+pub(crate) use host::matching as host_matching;
+pub use host::pattern as host_pattern;
 pub mod ir;
 mod json_envelope;
-pub mod locale_catalogues;
-pub mod locale_resolution;
+mod locale;
+pub use locale::{catalogues as locale_catalogues, resolution as locale_resolution};
 pub mod localization;
 pub mod manifest;
 pub mod ninja_gen;
-pub mod output_mode;
-pub mod output_prefs;
+mod output;
+pub use output::{mode as output_mode, prefs as output_prefs};
 pub mod recipe_shell;
 mod result_json;
 pub mod runner;
@@ -33,6 +32,5 @@ mod snapshot_test_support;
 pub mod status;
 pub mod stdlib;
 #[cfg(test)]
-#[path = "test_tracing_capture.rs"]
 pub(crate) mod test_tracing_capture;
 pub mod theme;

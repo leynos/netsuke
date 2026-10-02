@@ -11,7 +11,7 @@ use minijinja::{Error, ErrorKind};
 
 use super::fs_utils::{ParentDir, open_parent_dir};
 use crate::localization::{self, keys};
-use crate::stdlib::config_types::HomeDirectory;
+use crate::stdlib::config::types::HomeDirectory;
 use crate::stdlib::io_helpers::io_to_error;
 
 /// Return the final path component, or the whole path when it has no file name.

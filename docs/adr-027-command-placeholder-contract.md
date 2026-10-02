@@ -137,7 +137,7 @@ command substitution, or inside any quoted region, as protected and rejects it
 `src/ir/cmd_interpolate/substitution.rs:174-179`) — the same outcome as POSIX,
 by a different rule, pinned by
 `power_shell_rejects_markers_without_a_context_safe_encoder`
-(`src/ir/cmd_interpolate_power_shell_tests.rs:9-22`). The parity check is also
+(`src/ir/cmd_interpolate/power_shell_tests.rs:9-22`). The parity check is also
 `command:`-only: a `script:` recipe gets the marker invariant but no parity
 check, because scripts may legitimately contain heredocs and other text that
 `shlex` cannot model.
@@ -277,7 +277,7 @@ published interface.
 - Marker recognizer proofs:
   [`src/ir/cmd_interpolate/verification.rs`](../src/ir/cmd_interpolate/verification.rs).
 - Backtick and guard properties:
-  [`src/ir/cmd_interpolate_property_tests.rs`](../src/ir/cmd_interpolate_property_tests.rs).
+  [property test module](../src/ir/cmd_interpolate/property_tests/mod.rs).
 - Diagnostic text: [`locales/en-GB/messages.ftl`](../locales/en-GB/messages.ftl)
   (`ir.invalid_command`).
 - User-facing statement of this contract: the `README.md` section *Security and

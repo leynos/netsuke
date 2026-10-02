@@ -5,12 +5,7 @@ mod clock;
 mod recipe_shell;
 mod which;
 
-use super::config_types::HomeDirectory;
-pub use super::config_types::{
-    DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES, DEFAULT_COMMAND_TEMP_DIR,
-    DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES, DEFAULT_FILE_MAX_READ_BYTES,
-    DEFAULT_WHICH_CACHE_CAPACITY, FileConfig, NetworkConfig,
-};
+pub(super) mod types;
 use super::{command, network::NetworkPolicy, time::WallClock, which::WORKSPACE_SKIP_DIRS};
 use crate::localization::{self, keys};
 use crate::recipe_shell::RecipeShell;
@@ -19,6 +14,12 @@ use anyhow::{anyhow, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use std::{ffi::OsString, num::NonZeroUsize, sync::Arc};
+use types::HomeDirectory;
+pub use types::{
+    DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES, DEFAULT_COMMAND_TEMP_DIR,
+    DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES, DEFAULT_FILE_MAX_READ_BYTES,
+    DEFAULT_WHICH_CACHE_CAPACITY, FileConfig, NetworkConfig,
+};
 
 /// Configuration for registering Netsuke's standard library helpers.
 #[derive(Debug, Clone)]
@@ -393,5 +394,4 @@ impl StdlibConfig {
 }
 
 #[cfg(test)]
-#[path = "../config_tests.rs"]
 mod tests;

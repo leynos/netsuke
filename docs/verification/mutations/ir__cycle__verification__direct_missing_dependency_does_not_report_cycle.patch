@@ -1,7 +1,7 @@
-diff --git a/src/ir/cycle_detector.rs b/src/ir/cycle_detector.rs
+diff --git a/src/ir/cycle/detector.rs b/src/ir/cycle/detector.rs
 index a08fe7b9..61b6989f 100644
---- a/src/ir/cycle_detector.rs
-+++ b/src/ir/cycle_detector.rs
+--- a/src/ir/cycle/detector.rs
++++ b/src/ir/cycle/detector.rs
 @@ -343,7 +343,11 @@ impl<'targets> CycleDetector<'targets> {
              if matches!(search, CycleSearch::Path) {
                  self.record_missing_dependency(node, dep);

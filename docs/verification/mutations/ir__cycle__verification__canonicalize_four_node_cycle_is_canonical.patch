@@ -1,7 +1,7 @@
-diff --git a/src/ir/cycle_support.rs b/src/ir/cycle_support.rs
+diff --git a/src/ir/cycle/support.rs b/src/ir/cycle/support.rs
 index 59012331..fdd314ed 100644
---- a/src/ir/cycle_support.rs
-+++ b/src/ir/cycle_support.rs
+--- a/src/ir/cycle/support.rs
++++ b/src/ir/cycle/support.rs
 @@ -118,7 +118,8 @@ pub(super) fn compare_cycle_paths(left: &Utf8PathBuf, right: &Utf8PathBuf) -> Or
  /// Rotate `offset` forward from `start` within a cycle of length `len`.
  pub(super) const fn rotate_index(start: usize, offset: usize, len: usize) -> usize {

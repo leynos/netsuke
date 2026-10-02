@@ -1,0 +1,134 @@
+//! Dispatch and artefact-writing for the `graph` subcommand.
+//!
+//! The runner builds the in-process [`BuildGraph`], projects it through
+//! [`GraphView`], and hands the deterministic projection to one of two
+//! adapters: [`DotRenderer`] by default, [`HtmlRenderer`] when `--html` is
+//! set. The rendered artefact is then written via the shared
+//! [`super::process`] sinks, honouring the `-` stdout sentinel and
+//! `-C/--directory` resolution for relative `--output` paths.
+
+pub(super) mod generation;
+
+use anyhow::{Context, Result};
+use std::path::Path;
+use tracing::info;
+
+use crate::cli::{Cli, GraphArgs};
+use crate::graph_view::GraphView;
+use crate::graph_view::render::GraphRenderer;
+use crate::graph_view::render_dot::DotRenderer;
+use crate::graph_view::render_html::HtmlRenderer;
+use crate::localization::{self, keys};
+use crate::result_json;
+use crate::status::{LocalizationKey, PipelineStage, report_pipeline_stage};
+
+use super::path_helpers::{
+    ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path,
+};
+use super::{
+    ExecutionContext, generation as build_generation, load_manifest_with_stage_reporting, process,
+};
+
+/// Render the build graph in-process and write the selected artefact.
+///
+/// Loads and validates the manifest, projects it through the IR, renders DOT
+/// or HTML per the `--html` flag, and reports the rendering stage.
+///
+/// # Errors
+///
+/// Returns an error when the manifest cannot be resolved, loaded, or validated,
+/// when rendering fails, or when the artefact cannot be written.
+pub(super) fn handle_graph(
+    cli: &Cli,
+    args: &GraphArgs,
+    context: &ExecutionContext<'_>,
+) -> Result<()> {
+    let reporter = context.reporter;
+    info!(
+        target: "netsuke::subcommand",
+        subcommand = "graph",
+        html = args.html,
+        "Rendering build graph in-process"
+    );
+    let manifest_path = resolve_manifest_path(cli)?;
+    ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
+    let inputs =
+        build_generation::ManifestLoadInputs::from_cli(cli, context.graph_generation.recipe_shell)?;
+    let manifest = load_manifest_with_stage_reporting(&manifest_path, &inputs, reporter)?;
+    report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
+    let graph = build_generation::build_graph(&manifest)?;
+    let view = GraphView::from_build_graph(&graph);
+
+    let status_key: LocalizationKey = if args.html {
+        keys::STATUS_TOOL_GRAPH_HTML.into()
+    } else {
+        keys::STATUS_TOOL_GRAPH.into()
+    };
+    report_pipeline_stage(reporter, PipelineStage::GraphRendering, Some(status_key));
+
+    let mut buffer: Vec<u8> = Vec::new();
+    if args.html {
+        HtmlRenderer::new(cli.locale.as_deref())
+            .render(&view, &mut buffer)
+            .context(localization::message(keys::RUNNER_CONTEXT_RENDER_GRAPH))?;
+    } else {
+        DotRenderer::new()
+            .render(&view, &mut buffer)
+            .context(localization::message(keys::RUNNER_CONTEXT_RENDER_GRAPH))?;
+    }
+    let rendered = String::from_utf8(buffer)
+        .context(localization::message(keys::RUNNER_CONTEXT_RENDER_GRAPH))?;
+
+    write_graph_artefact(cli, args.output.as_deref(), &rendered)?;
+    reporter.report_complete(status_key);
+    Ok(())
+}
+
+/// Write the rendered graph to stdout, an output file, or a JSON envelope.
+///
+/// # Errors
+///
+/// Returns an error when the output cannot be written.
+fn write_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) -> Result<()> {
+    if cli.json {
+        return write_json_graph_artefact(cli, output, content);
+    }
+    match output {
+        None => process::write_text_stdout(content),
+        Some(path) if process::is_stdout_path(path) => process::write_text_stdout(content),
+        Some(path) => {
+            let resolved = resolve_output_path(cli, path);
+            process::write_text_file(resolved.as_ref(), content)
+        }
+    }
+}
+
+/// Write the rendered graph and its JSON result document under `--json`.
+///
+/// A real output path receives the rendered graph while the JSON client
+/// document goes to stdout; a stdout path embeds the graph in the result.
+///
+/// # Errors
+///
+/// Returns an error when the output cannot be written.
+fn write_json_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) -> Result<()> {
+    match output.filter(|path| !process::is_stdout_path(path)) {
+        Some(path) => {
+            let resolved = resolve_output_path(cli, path);
+            process::write_text_file(resolved.as_ref(), content)?;
+            write_json_result(None)
+        }
+        None => write_json_result(Some(content)),
+    }
+}
+
+/// Render the `graph` JSON result envelope and write it to stdout.
+///
+/// # Errors
+///
+/// Returns an error when JSON serialization or the stdout write fails.
+fn write_json_result(content: Option<&str>) -> Result<()> {
+    let rendered = result_json::render_result_json("graph", content)
+        .context(localization::message(keys::RUNNER_CONTEXT_RENDER_GRAPH))?;
+    process::write_text_stdout(&rendered)
+}

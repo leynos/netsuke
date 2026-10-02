@@ -7,18 +7,15 @@ use std::{io, process::Command};
 
 use camino::Utf8Path;
 mod child_exit;
-mod command_list_telemetry;
-mod command_logging;
+mod list_failure_telemetry;
+mod logging;
 
-mod dyndep_files;
-mod dyndep_retention;
-mod dyndep_telemetry;
+mod dyndep;
 #[cfg(test)]
 mod exit_status_tests;
 mod failure_attribution;
 mod file_io;
-mod ninja_program;
-mod ninja_status;
+mod ninja;
 mod output_forwarding;
 mod paths;
 mod redaction;
@@ -27,24 +24,21 @@ mod streaming;
 mod tests;
 
 use child_exit::{ExitFailureContext, check_exit_status_with_context};
-use command_logging::{
-    CommandLogContext, command_span, log_command_execution, log_command_spawn_failure,
-};
-pub(crate) use dyndep_files::materialize_dyndep_files;
-pub use dyndep_retention::MAX_RETAINED_DYNDEP_FILES;
-pub(crate) use dyndep_retention::{DyndepPublicationLease, prune_dyndep_cache};
+pub use dyndep::MAX_RETAINED_DYNDEP_FILES;
+pub(crate) use dyndep::{DyndepPublicationLease, materialize_dyndep_files, prune_dyndep_cache};
 pub use file_io::*;
-pub use ninja_program::resolve_ninja_program;
+use logging::{CommandLogContext, command_span, log_command_execution, log_command_spawn_failure};
+pub use ninja::resolve_ninja_program;
 use output_forwarding::{StatusObserver, spawn_and_stream_output};
 pub use streaming::NINJA_STATUS_OVERSIZED_LINES_TOTAL;
 
-mod command_env;
 mod configure;
+mod environment;
 mod job_count;
 mod request;
 mod stderr_mode;
-pub use command_env::CommandEnv;
 use configure::{configure_ninja_build_command, configure_ninja_tool_command};
+pub use environment::CommandEnv;
 pub use job_count::NinjaJobCount;
 pub use paths::*;
 pub use request::{NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest};
