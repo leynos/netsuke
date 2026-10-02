@@ -306,7 +306,6 @@ def _check_scenario(check: ScenarioCheck) -> None:
             release=check.release,
             scenario=scenario,
             outputs=outputs,
-            release_runs=release_runs,
             violations=check.violations,
         )
     )

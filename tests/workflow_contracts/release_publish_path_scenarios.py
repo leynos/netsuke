@@ -104,7 +104,7 @@ SCENARIOS = (
         "",
         _needs_results(),
         cancelled=False,
-        release_runs=True,
+        release_runs=False,
     ),
     Scenario(
         "tag-publish-skipped-smoke",
@@ -119,6 +119,14 @@ SCENARIOS = (
         "publish",
         "",
         _needs_results(smoke="failure"),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "tag-publish-failed-build",
+        "publish",
+        "",
+        _needs_results(failed_build="build-linux"),
         cancelled=False,
         release_runs=False,
     ),

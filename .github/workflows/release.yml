@@ -407,8 +407,7 @@ jobs:
       (needs.windows-native-recipe-smoke.result == 'success' ||
        (needs.metadata.outputs.dry_run == 'true' &&
         needs.windows-native-recipe-smoke.result == 'skipped')) &&
-      (needs.metadata.outputs.should_publish == 'true' ||
-       needs.metadata.outputs.dry_run == 'true')
+      needs.metadata.outputs.dry_run == 'true'
     permissions:
       contents: read
     needs:
@@ -481,14 +480,21 @@ jobs:
     if: >-
       !cancelled() &&
       needs.metadata.result == 'success' &&
-      needs.release.result == 'success' &&
+      needs.build-linux.result == 'success' &&
+      needs.build-windows.result == 'success' &&
+      needs.build-macos.result == 'success' &&
+      needs.windows-native-recipe-smoke.result == 'success' &&
       needs.metadata.outputs.should_publish == 'true'
+    # Only publication needs contents: write access to the release API.
     permissions:
       contents: write
     needs:
       - metadata
-      - release
-    # Publication is API-bound: only this job receives contents: write.
+      - build-linux
+      - build-windows
+      - build-macos
+      - windows-native-recipe-smoke
+    # Only publication needs contents: write access to the release API.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
