@@ -1655,8 +1655,8 @@ against the target has the same SHA-256 (`50fb53a6…`) before and after. Becaus
 rebase still describe this revision; they were run again anyway
 (`/tmp/<target>-gate-rebase-adopt-rstest-bdd-v0-6-0.out`, each with a
 `PIPESTATUS[0]` sidecar containing `0`) rather than cited from the earlier
-evidence. The test gate re-ran 3912 nextest tests with 6 skipped and the three
-doctest binaries, byte-for-byte the same counts as before.
+evidence. The test gate re-ran 3912 nextest tests with 6 skipped and both
+`Doc-tests` targets, byte-for-byte the same counts as before.
 
 The lesson is the boundary check earns its place even when the answer is
 "nothing to do": the skill forbids discovering the replay range by rebasing,
