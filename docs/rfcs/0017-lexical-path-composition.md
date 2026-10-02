@@ -411,7 +411,7 @@ reaches for host-native parsing when an explicit dialect was supplied.
 
 **No new dependency.** The group is lexical string manipulation over UTF-8 path
 text, which `camino`'s `Utf8Path` provides and which is a normal dependency
-dependency at `1.2.0`. Parsing is a hand-written pass over separators and
+dependency at `1.2.0`. Parsing is a handwritten pass over separators and
 components rather than a call into a platform path library, because the whole
 point of the group is that the platform is a parameter rather than a fact about
 the machine. A dependency that parses Windows paths on Unix would be a second
