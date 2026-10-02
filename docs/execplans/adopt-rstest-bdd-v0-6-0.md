@@ -5,7 +5,13 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: COMPLETE
+Status: BLOCKED
+
+The migration work itself is complete and all its behavioural evidence is
+green. The plan is `BLOCKED` solely on the disposition of the 39
+`cognitive_complexity` errors the dependency bump introduces in the `make lint`
+gate; that trigger and the escalation are recorded in `Surprises & discoveries`
+and `Decision log`.
 
 Roadmap item: none. Origin: `leynos/rstest-bdd` v0.6.0 release and its
 `docs/v0-6-0-migration-guide.md`.
@@ -142,37 +148,110 @@ the conflict in `Decision log` before proceeding.
 - [x] (2026-09-26) Run the full gate set on a frozen revision and compare the
   migrated inventory against baseline. Six of seven gates pass, including
   `markdownlint`, whose `markdownlint-cli2` stage had never previously executed.
-  `make lint` is red on the pre-existing `src/`-only `cognitive_complexity`
-  condition and is recorded as **unavailable**, not as a pass. Logs are in
-  `### Gate logs`. Inventory comparison: 254 scenario names before and after,
-  identical as sets.
+  `make lint` is red with 39 `cognitive_complexity` errors and is recorded as
+  **unavailable**, not as a pass. Logs are in `### Gate logs`. Inventory
+  comparison: 254 scenario names before and after, identical as sets.
 - [x] (2026-09-26) Commit as `c68cd30f`, push, and open draft PR
   [#805](https://github.com/leynos/netsuke/pull/805) against `main`. Not merged
   and no release published, per the session's instructions.
+- [x] (2026-10-02) Root-cause the `make lint` failure. Earlier sessions had
+  recorded it as pre-existing on `main` and "environmental"; that was **wrong**
+  and is corrected in `Surprises & discoveries`. The failure is caused by the
+  migration: `rstest-bdd` 0.6.0 is the only release of that crate that declares
+  `tracing` at all, it declares it non-optionally with `features = ["log"]`,
+  and because `rstest-bdd` is a dev-dependency while `tracing` is a normal
+  dependency of this package, Cargo unifies `tracing/log` onto the library's
+  own node. `tracing`'s `log` feature expands every `tracing::*` macro into
+  extra `log` calls, which inflates the AST that the syntactic
+  `cognitive_complexity` metric counts. Proven by a minimal repro, by a
+  repository-scale positive control on byte-identical `src/`, and by a
+  counter-control that patches only `features = ["log"]` out of 0.6.0's
+  manifest. The shipped library is unaffected: `--lib` resolves 0 `log` edges
+  and exits 0, while `--all-targets` resolves 1 and exits 101.
+- [ ] (2026-10-02) **Escalated, awaiting direction.** Dispose of the 39
+  `cognitive_complexity` errors. Four options were tested and rejected on
+  evidence; refactoring all 39 exceeds the plan's own 30-file scope tolerance.
+  See `Decision log`. Until this is resolved, `make lint` and the CI jobs
+  `build-test` and `Windows / lint-windows` are red on this branch.
 
 ## Surprises & discoveries
 
 - Observation: `make lint` is red on this branch with 39
-  `cognitive_complexity` errors, and the failure is pre-existing on `main`, not
-  caused by the migration.
+  `cognitive_complexity` errors in `netsuke-build (lib)`. The migration **is**
+  the cause, by a feature-unification edge the dependency bump introduces — not
+  by any change to `src/`, which is byte-identical to the base.
 
-  Evidence: every diagnostic names a file under `src/`; none is under `tests/`.
-  All 31 named files, plus `clippy.toml` (threshold 9) and
-  `rust-toolchain.toml` (pin `nightly-2026-08-23`), are byte-identical to
-  `origin/main` — a 33-file `git diff --quiet origin/main` sweep reports zero
-  differences. `clippy`'s `cognitive_complexity` is a syntactic AST metric, so
-  it cannot be affected by a dev-dependency version. The branch's only
-  `Cargo.toml` change is the two version strings in `[dev-dependencies]`. CI on
-  the base commit `ebcedaef` (run `36194972050`, job `build-test`) did pass the
-  identical
-  `cargo clippy --workspace --all-targets --all-features -- -D warnings`, so
-  the local red and CI's green disagree about the same tree; that discrepancy
-  is environmental and is not resolved here.
+  Root cause: `rstest-bdd` 0.6.0 declares
+  `tracing = { version = "0.1", features = ["log"] }` as a **normal**
+  (non-optional) dependency of the library. No earlier release does; 0.5.0 and
+  every 0.6.0 pre-release declare no `tracing` dependency at all. Because
+  `rstest-bdd` is a dev-dependency of the root package but the root package's
+  library depends on `tracing` non-dev, Cargo's default resolver **unifies** the
+  `tracing/log` feature onto the single `tracing` node the library itself
+  compiles against. `tracing`'s `log` feature expands each `tracing::*` macro
+  to also call into the `log` crate, which grows the expanded AST that Clippy's
+  syntactic `cognitive_complexity` metric counts. The error message changes from
+  `netsuke-build (build script)` to `netsuke-build (lib)` precisely because
+  the node whose feature set changed is the library's.
 
-  Impact: `make lint` cannot be used as a green signal for this branch, and the
-  migration is not the cause. The gate stops at `lint-clippy`, so
-  `lint-whitaker`, `lint-python` and `github-actions-lint` never ran. This must
-  be reported as an unavailable check rather than claimed as passing.
+  Minimal repro (isolated scratch crate, threshold forced to 0 so any value is
+  reported; `debug!` is the only statement in the function):
+
+  ```plaintext
+  $ cargo clippy --lib --no-default-features -- -W clippy::cognitive-complexity
+  warning: the function has a cognitive complexity of (2/0)   # debug!(x, "one event")
+
+  $ cargo clippy --lib --no-default-features --features trace-log \
+      -- -W clippy::cognitive-complexity
+  warning: the function has a cognitive complexity of (8/0)   # identical body
+  ```
+
+  Positive control at repository scale, arm-for-arm: base commit `ebcedaef` with
+  `src/` byte-identical and `cognitive_complexity` demoted to `warn` so Clippy
+  reports every site instead of aborting at the first:
+
+  | Arm | Dependency set                                                                   | lib warnings | sites             |
+  | --- | -------------------------------------------------------------------------------- | ------------ | ----------------- |
+  | A   | base (`rstest-bdd` 0.5.0)                                                        | 0            | 0                 |
+  | P   | base `src/` + `tracing = { features = ["log"] }`                                 | 39           | 39, identical set |
+  | B   | base `src/` + `rstest-bdd` 0.6.0 + `tracing/log` patched out of 0.6.0's manifest | 0            | 0                 |
+
+  The 39 sites in arm P are the same `file:line:col` set that CI reports on the
+  branch (verified by `comm` on cleaned logs; arm P additionally lists
+  `src/main.rs:342` and `src/test_tracing_capture.rs:233`, which are outside the
+  `(lib)` unit). Patching `features = ["log"]` out of 0.6.0's manifest alone
+  restores green with 0.6.0 still selected, which isolates the cause to that
+  one feature edge rather than to the version bump at large.
+
+  Scope of the damage, measured by `cargo tree -e features -i tracing` on the
+  branch: the `tracing/log` edge appears only when dev-dependencies are in the
+  graph. `--lib` and `--bin netsuke` each resolve it to **0** edges;
+  `--all-targets` resolves it to **1**. The consequence is that
+  `cargo clippy --lib --all-features -- -D warnings` on the branch exits 0 with
+  zero diagnostics, while
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings` exits
+  101 with 39. The shipped library never links `log`; only the lint build that
+  merges in the test graph sees the inflated expansion.
+
+  Not the cause, each ruled out by direct measurement: Clippy's threshold (9
+  since the initial commit), `clippy.toml` and `[lints] workspace = true`
+  (byte-identical across base, branch and `main`), `[features]`, the `build.rs`
+  slice list, and CI caching — the base run is green cold in CI *and* in a cold
+  local worktree, while the branch is red cold in both. The `#[path]`-declared
+  modules under `src/cli/discovery*.rs` were investigated and are a red
+  herring: they are declared at module scope, not behind `#[cfg(test)]`, so
+  they are reachable from `--lib` too. Two candidate mechanisms were tested and
+  **failed**: setting `resolver = "3"` leaves the edge intact (it does not
+  apply, because the unifying pair is a normal dependency unified against a
+  dev-dependency of the same package), and cargo's plain
+  `--no-dev-dependencies` view does not model the lint build.
+
+  Impact: this is a real regression in a repository gate caused by the
+  migration, and it is reported as such. `make lint` cannot be used as a green
+  signal for this branch. Because the gate stops at `lint-clippy`,
+  `lint-whitaker`, `lint-python` and `github-actions-lint` never ran, and are
+  unavailable checks rather than passes. Disposition of the 39 sites is
+  recorded in `Decision log`.
 
 - Observation: the 0.6.0 dependency bump did **not** turn any BDD scenario red,
   despite 177 of 185 step functions returning the `anyhow::Result<()>` alias
@@ -518,6 +597,28 @@ the link site.
   coverage, so the new test was validated in both directions before being kept.
   Date/Author: 2026-09-26, implementing agent.
 
+- Decision: **escalate** the 39 `cognitive_complexity` errors rather than
+  refactoring them or suppressing the lint, and set the plan status to
+  `BLOCKED` pending direction. Rationale: the plan's own `Tolerances` fix the
+  trigger — "if migration requires touching more than 30 files or 1,500 net
+  lines, stop and escalate". The 39 diagnostics span 31 files, so the
+  prescribed response is escalation, not a unilateral refactor. Suppression is
+  independently barred by the task's instruction that the migration must not
+  "suppress warnings, disable compile-time validation, add ignores, use
+  `--ignore-rust-version` or claim unavailable checks passed"; and the four
+  alternatives tested were each rejected on evidence. `resolver = "3"` does not
+  apply (it is MSRV-aware version selection, not feature splitting, and the
+  unifying pair is a normal dependency against a dev-dependency of the same
+  package). `tracing = { default-features = false }` cannot help, because a
+  feature another crate enables cannot be removed by a weaker request for the
+  same crate. `check-macro-expansion = false` does suppress the diagnostic —
+  measured, in the minimal repro — but it changes the measurement for every
+  lint in the workspace, which is a broader silence than the problem it fixes.
+  Refactoring 39 unrelated functions inside a dependency-migration branch would
+  also violate the repository's own rule that refactors land as separate atomic
+  commits, and would expand this branch far past its stated scope. Date/Author:
+  2026-10-02, implementing agent.
+
 ## Outcomes & retrospective
 
 What was achieved. Netsuke's behavioural suite runs on the published
@@ -580,15 +681,27 @@ Lessons learned.
 4. A test that can only pass is not coverage. Green-to-red-to-green, with the
    red failing for the intended reason, is the evidence that the new guard
    actually binds the behaviour.
+5. "Pre-existing" is a claim about causality, and it needs the same evidence as
+   any other. The first pass at this failure reasoned that
+   `cognitive_complexity` is a syntactic AST metric, so a dev-dependency
+   version "cannot" affect it, and concluded the problem was environmental.
+   Both halves of that inference were wrong in the same direction: the metric
+   is syntactic over the *expanded* AST, and a dev-dependency can reach the
+   library's own dependency node through Cargo's feature unification. The rule
+   the repository already states — a suppression or a dismissal needs a
+   mechanism, not a plausibility argument — applies to conclusions of innocence
+   too.
 
 Residual gaps, stated rather than papered over. `make lint` did not complete on
 this revision and is recorded as unavailable: `lint-clippy` aborts with 39
 `cognitive_complexity` diagnostics across 31 files, all under `src/`, and
 `lint-whitaker`, `lint-python` and `github-actions-lint` therefore never ran.
-The 0.5.0 false green itself was not reproduced on a 0.5.0 build; what is
-evidenced is 0.6.0's corrected behaviour, which is the behaviour the repository
-now depends on. `make test-podman` was out of scope, as no path under
-`ansible/` appears in this change surface.
+That condition is **caused by this migration**, not pre-existing, and its
+disposition is escalated and open; the plan is `BLOCKED` on it. The 0.5.0 false
+green itself was not reproduced on a 0.5.0 build; what is evidenced is 0.6.0's
+corrected behaviour, which is the behaviour the repository now depends on.
+`make test-podman` was out of scope, as no path under `ansible/` appears in
+this change surface.
 
 ## Context and orientation
 
