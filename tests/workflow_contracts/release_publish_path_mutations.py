@@ -150,8 +150,7 @@ def _mutate_smoke_tolerance(release: dict[str, object], *, allow_publish: bool) 
     else:
         pattern = (
             r"needs\.windows-native-recipe-smoke\.result == 'success'\s*\|\|\s*"
-            r"\(\s*needs\.metadata\.outputs\.dry_run == 'true'\s*&&\s*"
-            r"needs\.windows-native-recipe-smoke\.result == 'skipped'\s*\)"
+            r"needs\.windows-native-recipe-smoke\.result == 'skipped'"
         )
         replacement = "needs.windows-native-recipe-smoke.result == 'success'"
     job["if"] = _replace_once(guard, pattern, replacement)

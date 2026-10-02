@@ -1,15 +1,13 @@
 """Keep release staging read-only and isolate publishing credentials."""
 
 from workflow_loading import (
-    REPO_ROOT,
+    RELEASE_WORKFLOW_PATH,
     job_steps,
     load_workflow,
     require_mapping,
     step_index_by_key,
     workflow_job,
 )
-
-RELEASE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "release.yml"
 
 
 def test_staging_is_read_only_and_only_publication_can_write() -> None:
