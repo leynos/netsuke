@@ -1738,7 +1738,49 @@ Re-running that lint by hand wrote to the path the gate runner owned,
 destroying its failure log in place; the failure's decisive lines survive only
 because they were transcribed into an attributed note before the file was
 reused. A re-run belongs at a new log suffix, never at another writer's path.
-The final evidence set is one single-author run under `-gate-pushrecord2-`, with
-`head=`, `head_after=` and `exit=` carried inside each log: 3912 nextest tests
-with 6 skipped, two `Doc-tests` targets (88 + 2 + 39 passed), 179 formatted
-files and 174 unchanged Markdown files.
+
+That `-gate-pushrecord2-` run gated `8ac67a28`, not the delivered revision, and
+a later sweep supersedes it. The delivered revision `b9bdc38a` was gated by an
+eight-target run under `-gate-spellfix-`. Seven targets passed — `check-fmt`
+(179 Python files formatted, 174 Markdown unchanged), `typecheck`, `lint`
+(every stage reached, both pylint invocations at 10.00/10), `spelling`,
+`markdownlint` (175 files, 0 issues), `nixie`, and `doc-coverage` (4942/4999,
+98.86%) — and `make test` failed with `TIMEOUT` on
+`packaged_manifest_retains_build_script_sources`, exit 2. The timeout is
+environmental rather than a regression. The same test passed in three earlier
+runs on this branch (80.448s, 145.467s, 149.945s); the only delta between the
+last of those and this run is one word in this document; and the host carried
+load 48 on 24 cores, with a peer session running `make test` in another
+worktree across the window. CI is the stable oracle for this test and settled
+it: on the same SHA `b9bdc38a`, `build-test` completed in `success` with the
+packaging test finishing in 148.706s inside its 300s allowance. The local
+verdict is recorded as a timeout, not as a pass, because that is what the log
+says.
+
+2026-10-03 — a spelling failure that only CI could see, and the gate-scope gap
+that explains it. `fc656f72`, a documentation-only commit, introduced
+`canonicalises` into this document. CI's required `build-test` check failed at
+its `Spelling` step — `error: 'canonicalises' should be 'canonicalizes'` at
+line 1722 — and skipped the five steps behind it, `Validate Mermaid diagrams`,
+`Workflow contract tests`, `Release-admission runtime tests`,
+`Test and Measure Coverage` and the anchored-nextest verification. `b9bdc38a`
+corrects the word and CI is green on it, with all forty steps of `build-test`
+reaching `success`.
+
+The gap is that the four gates the delivery instruction names — `check-fmt`,
+`test`, `typecheck`, `lint` — are not a superset of the ones that matter. The
+`-ize` vocabulary is enforced by `make spelling`, and within the Makefile the
+only route to it is `make markdownlint`, which declares it as a prerequisite at
+`Makefile:367`; none of the four named targets reaches it. The four-target
+sweep was therefore green on `fc656f72` while the word sat unexamined. The word
+was never undetectable locally — `typos` flags it under the repository's own
+`typos.toml` — but no gate in that sweep read it, so the first reader was CI's
+separate `Spelling` step (`ci.yml:258`), after the revision had been pushed.
+The remedy is to run the five `make` targets the stop hook runs — `check-fmt`,
+`lint`, `typecheck`, `markdownlint`, `nixie` — alongside the four named, since
+`markdownlint` is the local path to the spelling gate. `b9bdc38a` was gated
+that way, and the gate was probed for liveness by re-injecting the typo (exit 2
+on the same line) before restoring it. The lesson matches the one already
+recorded for `Format`: an instruction that names a gate subset describes a
+floor, not a ceiling, and the subset's complement has to be run deliberately or
+named as uncovered.
