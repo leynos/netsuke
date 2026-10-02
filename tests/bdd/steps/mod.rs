@@ -14,9 +14,12 @@
 //! is resolved, these suppressions may be removable.
 //!
 //! Migrating to `rstest-bdd` 0.6.0 did not change any of this. All 45
-//! suppressions remain achieved, verified by the `-D warnings` build inside
-//! `make test-nextest` — not by `make lint`, which aborts in `src/` first.
-//! Remove one only when the compiler proves its lint no longer fires.
+//! suppressions remain achieved, confirmed by two independent `-D warnings`
+//! builds over these sources: the test compilation inside `make test-nextest`
+//! and `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+//! inside `make lint`. Neither reports an unfulfilled expectation, and this
+//! branch neither added nor removed one. Remove a suppression only when the
+//! compiler proves its lint no longer fires.
 
 mod accessibility_preferences;
 mod accessible_output;

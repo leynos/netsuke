@@ -5116,9 +5116,11 @@ Current usage in this repository is:
 - Select async execution with
   `harness = rstest_bdd_harness_tokio::TokioHarness`, **not** the legacy
   `runtime = "tokio-current-thread"` syntax. 0.6.0 keeps the legacy syntax only
-  as a deprecated compatibility alias and emits a `deprecated` warning for it
-  (`crates/rstest-bdd-macros/src/macros/scenarios/mod.rs`), which this
-  repository's `-D warnings` builds would escalate to an error. Nothing here
+  as a deprecated compatibility alias: `emit_runtime_deprecation_warning` in
+  the macros crate turns it into a warning, and that warning reaches the
+  compiler because this repository builds on a nightly channel
+  (`nightly-2026-08-23`), which is the condition `rstest_bdd_nightly` selects. A
+  `-D warnings` build would therefore escalate it to an error. Nothing here
   selects a harness yet; ordinary synchronous scenarios stay ordinary and need
   no harness at all.
 - Restrict `#[once]` fixtures to expensive, effectively read-only
