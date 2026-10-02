@@ -173,6 +173,13 @@ the conflict in `Decision log` before proceeding.
   evidence; refactoring all 39 exceeds the plan's own 30-file scope tolerance.
   See `Decision log`. Until this is resolved, `make lint` and the CI jobs
   `build-test` and `Windows / lint-windows` are red on this branch.
+- [x] (2026-10-02) Correct the record and re-deliver. The plan's `COMPLETE`
+  status and the PR description both carried the wrong "pre-existing on `main`"
+  diagnosis; both are corrected, and the corrected revision `7ac904e8` is
+  pushed. `make check-fmt` and `make markdownlint` are re-run green on that
+  revision (166 files, 0 issues) before committing, and the commit contains the
+  ExecPlan alone, with the gate-regenerated `typos.toml` drift reverted to keep
+  the commit atomic.
 
 ## Surprises & discoveries
 
@@ -542,6 +549,23 @@ The last entry is the one genuine hazard: a reader following that link inside
 this repository lands on a plausible-looking but unrelated file. The mapping is
 recorded here because the byte-for-byte constraint forbids an inline note at
 the link site.
+
+- Observation: during final delivery, four tracked files in the working tree
+  (`Cargo.toml`, `Cargo.lock`, `clippy.toml`, `src/lib.rs`) were found to hold
+  the contents of a `/tmp` scratch crate used earlier to build the minimal
+  reproduction, rather than their repository contents. The scratch tree had
+  been copied *into* the worktree rather than out of it. Nothing was lost:
+  `HEAD` was intact, the index was clean, and all four files were restored from
+  `HEAD` and verified by per-file `sha256sum` against `git show HEAD:<path>`.
+  The discovery came from reading diff *content* while checking commit scope —
+  `git status` showed four ordinary `M` entries throughout, which is
+  indistinguishable from deliberate edits. The affected `target/` directory was
+  replaced by the scratch crate's as a side effect, which is why gate runs
+  after that point were cold. Lesson recorded: a clobbered tracked file and an
+  edited one are byte-wise identical to `git status`, so verification must read
+  content or compare hashes, never infer from status.
+  `git restore --source=HEAD --worktree -- <paths>` is the recovery, and it is
+  only correct with a clean index.
 
 ## Decision log
 
