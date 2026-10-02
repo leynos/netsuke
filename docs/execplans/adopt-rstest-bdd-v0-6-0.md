@@ -1442,6 +1442,29 @@ The doc-coverage numerator moves from 4941/4998 to 4942/4999 against the
 delivered sweep, because `child_exit_emitters.rs` adds one documented item. The
 percentage is unchanged at 98.86%.
 
+##### CI confirmation on the pushed revision
+
+The `-gate9` sweep describes the local gates. CI ran independently against the
+pushed head `8caf62b0`, and it is CI that settles the two defects, because both
+were found there rather than locally.
+
+`build-test` passed in 21m32s, and its step list is the evidence that matters:
+`Format` is `success`, and the steps CI had previously skipped behind that
+failure — `Lint Markdown`, `Install Whitaker`, `Lint`, `Typecheck`,
+`Doc coverage`, `Spelling`, `Validate Mermaid diagrams`,
+`Workflow contract tests` and `Release-admission runtime tests` — all ran and
+passed, as did `Test and Measure Coverage` and the anchored-nextest-filter
+verification. The earlier run had failed at `Format` and skipped every one of
+them.
+
+All four checks in the `main-required-checks` ruleset pass — `build-test`
+(21m32s), `kani-smoke` (13m28s), `netsukefile` (2m1s) and `release / metadata`
+(19s) — and no check on the head is failing or pending. The non-required
+`CodeScene Code Health Review (main)` check also passes, having previously
+failed on `child_exit.rs`; the release build matrix and `Gecko Security Review`
+pass as well. The pull request reports `mergeStateStatus: CLEAN`, where it had
+reported `BLOCKED` beforehand.
+
 #### Final sweep on the delivered revision
 
 A gate's verdict belongs to the bytes it read, not to the file it names. That
