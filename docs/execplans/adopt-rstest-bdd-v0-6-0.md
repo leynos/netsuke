@@ -1414,21 +1414,33 @@ Function Arguments* rule reads that ratio at file granularity: the file fell
 from 10.00 to 9.68 and the non-required `CodeScene Code Health Review` check
 reported `10.00 → 9.69`. Both files now score 10.00.
 
-| Gate                           | Status | Log                                                              |
-| ------------------------------ | ------ | ---------------------------------------------------------------- |
-| `make check-fmt`               |        | `/tmp/check-fmt-gate9-adopt-rstest-bdd-v0-6-0.out`               |
-| `make lint`                    |        | `/tmp/lint-gate9-adopt-rstest-bdd-v0-6-0.out`                    |
-| `make typecheck`               |        | `/tmp/typecheck-gate9-adopt-rstest-bdd-v0-6-0.out`               |
-| `make doc-coverage`            |        | `/tmp/doc-coverage-gate9-adopt-rstest-bdd-v0-6-0.out`            |
-| `make markdownlint`            |        | `/tmp/markdownlint-gate9-adopt-rstest-bdd-v0-6-0.out`            |
-| `make nixie`                   |        | `/tmp/nixie-gate9-adopt-rstest-bdd-v0-6-0.out`                   |
-| `make test`                    |        | `/tmp/test-gate9-adopt-rstest-bdd-v0-6-0.out`                    |
-| `make test-workflow-contracts` |        | `/tmp/test-workflow-contracts-gate9-adopt-rstest-bdd-v0-6-0.out` |
+| Gate                           | Status                                                          | Log                                                              |
+| ------------------------------ | --------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `make check-fmt`               | pass — 179 Python files formatted, 174 Markdown files unchanged | `/tmp/check-fmt-gate9-adopt-rstest-bdd-v0-6-0.out`               |
+| `make lint`                    | pass — all 11 stage invocations reached                         | `/tmp/lint-gate9-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make typecheck`               | pass — `ty` clean, `cargo check` clean                          | `/tmp/typecheck-gate9-adopt-rstest-bdd-v0-6-0.out`               |
+| `make doc-coverage`            | pass — 98.86% (4942/4999) against the 80% threshold             | `/tmp/doc-coverage-gate9-adopt-rstest-bdd-v0-6-0.out`            |
+| `make markdownlint`            | pass — 175 files, 0 issues                                      | `/tmp/markdownlint-gate9-adopt-rstest-bdd-v0-6-0.out`            |
+| `make nixie`                   | pass — all diagrams validated                                   | `/tmp/nixie-gate9-adopt-rstest-bdd-v0-6-0.out`                   |
+| `make test`                    | pass — 3912/3912, 6 skipped, 0 leaky; 129 doctests green        | `/tmp/test-gate9-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make test-workflow-contracts` | pass — 1082 passed, 3 skipped                                   | `/tmp/test-workflow-contracts-gate9-adopt-rstest-bdd-v0-6-0.out` |
 
-The status column is intentionally blank here and filled from the logs after
-the run, never from a runner's prose. Each target writes a
+The status column was left blank in the pre-written record and is filled here
+from the logs, never from a runner's prose. Each target wrote a
 `/tmp/<target>-gate9-adopt-rstest-bdd-v0-6-0.exit` sidecar holding its
-`PIPESTATUS[0]`.
+`PIPESTATUS[0]`; all eight contain `0`, and the tree was confirmed clean both
+before the sweep and after it, at `94835c96`.
+
+The doctest total is 129 across two `Doc-tests` binaries — 88 passed with 26
+ignored in `Doc-tests netsuke`, plus 2 compile-fail cases in the same binary,
+plus 39 passed with 6 ignored in `Doc-tests test_support`. Lint reached
+`lint-clippy`, `lint-whitaker` for both crates, `lint-workflow-scripts`, all
+five stages of `lint-python` — Ruff, Pylint at 10.00/10, the df12 house lints,
+`ambrleaks`, and `interrogate` at 100% — and `github-actions-lint`.
+
+The doc-coverage numerator moves from 4941/4998 to 4942/4999 against the
+delivered sweep, because `child_exit_emitters.rs` adds one documented item. The
+percentage is unchanged at 98.86%.
 
 #### Final sweep on the delivered revision
 
