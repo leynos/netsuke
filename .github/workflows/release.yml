@@ -511,6 +511,7 @@ jobs:
           # adds an unnecessary supply-chain input.
           enable-cache: false
       - name: Ensure release exists (draft)
+        # Retain this step guard as defence in depth after the job-level check.
         if: needs.metadata.outputs.should_publish == 'true'
         shell: bash
         env:
