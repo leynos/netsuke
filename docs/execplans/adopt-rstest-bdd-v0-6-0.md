@@ -325,14 +325,13 @@ the conflict in `Decision log` before proceeding.
   | `84447f0e` (`main`)   | 269            | `main` added 15 during review |
   | `HEAD`                | 269            | migration's own delta is zero |
 
-  `main`'s 15 additions are the
-  `shell_quote`/`shell_join`/`compact`/env-default scenarios from the 3.14.8
-  and Jinja-ergonomics work that landed while this branch was in review. The
-  `HEAD` name set equals `main`'s exactly, and the 254 baseline names are a
-  subset of it, so the migration moved the count by zero and lost nothing. Two
-  independent measurements agree on 269: a grep of
-  `Scenario:`/`Scenario Outline:` lines across the swept directories, and the
-  generated test names in the `make test` log.
+  `main`'s 15 additions are the `shell_quote`/`shell_join`/`compact`
+  /env-default scenarios from the 3.14.8 and Jinja-ergonomics work that landed
+  while this branch was in review. The `HEAD` name set equals `main`'s exactly,
+  and the 254 baseline names are a subset of it, so the migration moved the
+  count by zero and lost nothing. Two independent measurements agree on 269: a
+  grep of `Scenario:`/`Scenario Outline:` lines across the swept directories,
+  and the generated test names in the `make test` log.
 
   Impact: invariant INV-1 (coverage preservation) and INV-3's central worry (a
   former false green becoming red) are both discharged by observation. No
@@ -633,6 +632,33 @@ the conflict in `Decision log` before proceeding.
 
   Impact: every Clippy verdict in this plan comes from the
   `--workspace --all-targets --all-features` form.
+
+- Observation: a *tool* version, not a dependency version, is the one place in
+  this migration where the local gate and the CI gate disagreed. The local
+  `mdtablefix` was 0.6.1 and CI pins 0.6.0, and the two have **different
+  canonical wrap points**, so each considers the other's output unformatted.
+
+  Evidence: `make fmt` run under 0.6.1 rewrote two paragraphs of this plan and
+  left a tree that 0.6.1 accepted; `make check-fmt` under 0.6.0 then reported
+  `docs/execplans/adopt-rstest-bdd-v0-6-0.md +11 -12`, exit 1. CI's
+  `build-test` job failed at its `Format` step — `run: make check-fmt` — and
+  skipped Lint, Typecheck, Doc coverage, Spelling, Mermaid, Workflow contracts
+  and Test behind it, so the entire required gate set was blocked by a wrapping
+  disagreement. The two spellings differ only in where the line breaks fall over
+  `shell_quote`/`shell_join`/`compact` and over the rebase SHA mapping.
+
+  Impact: the fixpoint is the answer, not either tool's output. Neither 0.6.0's
+  nor 0.6.1's first-pass result is being accepted on the other's behalf by
+  fiat: running 0.6.0 to convergence and then checking with 0.6.1, and the
+  reverse, both report `174 files left unchanged`, and `--in-place` under
+  either version is a no-op on the result. The converged file is identical to
+  what 0.6.1 wrote when compared with all whitespace removed, so nothing but
+  line breaks moved. The durable lesson is that this gate's verdict belongs to a
+  `(file bytes, tool version)` pair — checking in a form accepted only by the
+  newer tool would have shipped a red gate to every contributor pinned to CI's
+  version, and the reason it was invisible locally is that `make fmt` (which
+  *writes*) and CI's `make check-fmt` (which *reads*) were resolving
+  `mdtablefix` from different places.
 
 ## Imported-document provenance and link mapping
 
@@ -1426,10 +1452,10 @@ revision was `ec1d0498`; the branch has since been rebased onto `upstream/main`
 (`84447f0e`), so the SHAs below are the rebased ones and the earlier SHAs in
 this document refer to the superseded history.
 
-Rebase mapping (pre-rebase → rebased): `e62af317`→`75e15a08`,
-`c68cd30f`→`28b5c8d7`, `b8d1192c`→`f5547fbf`, `7ac904e8`→`5392a0da`,
-`27a95bbf`→`fd09dacb`, `f7915286`→`e65044bd`, `31d103de`→`f85487be`,
-`ec1d0498`→`d95c1631`, `e5aa844c`→`236ba673`.
+Rebase mapping (pre-rebase → rebased): `e62af317`→`75e15a08`, `c68cd30f`→
+`28b5c8d7`, `b8d1192c`→`f5547fbf`, `7ac904e8`→`5392a0da`, `27a95bbf`→`fd09dacb`,
+`f7915286`→`e65044bd`, `31d103de`→`f85487be`, `ec1d0498`→`d95c1631`,
+`e5aa844c` →`236ba673`.
 
 Nine commits carry the work: `75e15a08` imports the authoritative documentation
 byte-for-byte and drafts this plan; `28b5c8d7` performs the dependency bump,
