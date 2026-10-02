@@ -456,7 +456,6 @@ jobs:
           INPUT_VERSION: ${{ needs.metadata.outputs.version }}
       - id: upload_assets
         name: Upload artefacts to release
-        if: needs.metadata.outputs.should_publish != 'true'
         uses: >-
           leynos/shared-actions/.github/actions/upload-release-assets@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
