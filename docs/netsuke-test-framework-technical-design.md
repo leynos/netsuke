@@ -347,7 +347,7 @@ at the double syntax. The test mode supplies its own message keys through the
 existing `manifest_query_operation_error` shape.
 
 `workspace_root` alone does not achieve that scoping, and the design must not
-pretend otherwise. Two filesystem helpers bypass it today:
+pretend otherwise. Three groups of filesystem helpers bypass it today:
 
 - `glob()` is registered in `src/manifest/mod.rs` over
   `glob::expand_glob(&pattern)`, which takes no workspace root. Its matcher
@@ -359,17 +359,24 @@ pretend otherwise. Two filesystem helpers bypass it today:
   `path::file_type_matches`, whose `parent_dir` helper calls
   `Dir::open_ambient_dir(.., ambient_authority())`. `register_file_tests` never
   receives `StdlibConfig` at all.
+- The file-reading filters `contents`, `size`, `linecount`, `hash`, `digest`,
+  and `realpath` (`src/stdlib/path/filters.rs`) resolve their argument against
+  the process working directory rather than the configured workspace root.
 
 Left unaddressed, a fixture-built project would be globbed from the runner's
 working directory instead of its own sandbox, which is both host-dependent and
 the exact non-determinism this framework exists to remove. The test
-registration therefore supplies sandbox-rooted adapters for both helpers:
+registration therefore supplies sandbox-rooted adapters for all three groups:
 `glob()` resolves relative patterns against the case sandbox `Dir`, and the
-file tests resolve their paths through the same handle, rejecting escapes
-rather than falling back to ambient authority. These adapters are test-mode
-components, not changes to the build path's behaviour, so ADR-010's accepted
-limitation stands for builds while tests get the stronger guarantee they
-require.
+file tests and file-reading filters resolve their paths through the same
+handle, rejecting escapes rather than falling back to ambient authority. The
+filters matter as much as the other two because filters cannot be replaced by
+doubles in the first version (UX design §8.6): without an adapter, a manifest
+that hashes or reads a file could never be tested. Until roadmap 7.4.1 lands,
+the test registration refuses all three groups (roadmap 7.1.2). These adapters
+are test-mode components, not changes to the build path's behaviour, so
+ADR-010's accepted limitation stands for builds while tests get the stronger
+guarantee they require.
 
 With those adapters in place the visibility consequence is worth stating
 plainly: the project tree is _not_ visible to a manifest under test. A
