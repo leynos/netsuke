@@ -3956,9 +3956,11 @@ supervised command's group rather than only its immediate child, and under
 share one. Two other limits still make it the worse bound. The `--kill-after=`
 grace is added to the deadline rather than nested inside it, so a workload that
 ignores the first signal is bounded by the sum of the two figures. And a
-descendant that leaves the process group, by `setsid` or a double fork, escapes
-a process-group signal altogether, while the scope's cgroup stop does not
-depend on signal propagation.
+descendant that changes its process-group membership, by `setsid()` or
+`setpgid()`, escapes a process-group signal altogether, while the scope's
+cgroup stop does not depend on signal propagation. A double fork alone does not
+escape it: the descendant keeps the group it inherited, so the signal still
+reaches it.
 
 The wrapper's own end-to-end suite is `tests/kani_scope_wrapper_e2e_tests.rs`,
 run by `make test-kani-scope-wrapper`; it exercises the documented shape at
