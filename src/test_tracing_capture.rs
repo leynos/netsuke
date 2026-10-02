@@ -207,6 +207,39 @@ mod tests {
         tracing::info!(scope, message);
     }
 
+    /// Create the bounded discovery span the capture layer keys on.
+    ///
+    /// Hoisted for the same reason as [`probe_event`]: the macro's expansion
+    /// counts against its enclosing function's cognitive complexity. `outcome`
+    /// is declared [`tracing::field::Empty`] so the caller can record it, which
+    /// is the recording point the discovery assertion pins.
+    fn create_discovery_span() -> tracing::Span {
+        tracing::trace_span!("collect_diag_file_layers", outcome = tracing::field::Empty)
+    }
+
+    /// Create a span carrying one field at creation and one declared for later.
+    ///
+    /// The two recording points are the point of the `other_span` case: a value
+    /// given up front reaches `on_new_span` and not `on_record`, while `later`
+    /// is declared `Empty` so recording it resolves against the span's declared
+    /// set and reaches `on_record` rather than being dropped.
+    fn create_other_span() -> tracing::Span {
+        tracing::trace_span!(
+            "other_span",
+            at_creation = "visible",
+            later = tracing::field::Empty,
+        )
+    }
+
+    /// Create a span whose only field is declared and never set.
+    ///
+    /// Nothing may be recorded on this span: the assertion it feeds is that an
+    /// `Empty` field never recorded reads as absent rather than as an empty
+    /// value.
+    fn create_unset_span() -> tracing::Span {
+        tracing::trace_span!("unset_span", never_set = tracing::field::Empty)
+    }
+
     /// Snapshot `captured` from another thread once every reader has arrived.
     ///
     /// Extracted so the spawning closure stays shallow and the cloned barrier
@@ -314,21 +347,16 @@ mod tests {
     #[test]
     fn span_fields_are_captured_by_name_and_recording_point() {
         let (discovery, other, unset) = with_test_subscriber(LevelFilter::TRACE, |captured| {
-            let discovery =
-                tracing::trace_span!("collect_diag_file_layers", outcome = tracing::field::Empty,);
+            let discovery = create_discovery_span();
             discovery.record("outcome", "success");
             // A value supplied at creation never reaches `on_record`, so the
             // layer has to capture `on_new_span` as well to see this one. The
             // recorded field is declared `Empty` first: `record` resolves its
             // name against the span's declared set and drops a name the span
             // never declared, which would leave `on_record` unexercised.
-            let other = tracing::trace_span!(
-                "other_span",
-                at_creation = "visible",
-                later = tracing::field::Empty,
-            );
+            let other = create_other_span();
             other.record("later", "also_visible");
-            let unset = tracing::trace_span!("unset_span", never_set = tracing::field::Empty);
+            let unset = create_unset_span();
             let _guard = unset.enter();
             (
                 captured.discovery_span_fields(),
