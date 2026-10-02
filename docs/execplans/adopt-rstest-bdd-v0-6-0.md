@@ -9,12 +9,12 @@ Status: IN PROGRESS
 
 The migration work itself is complete and all its behavioural evidence is
 green. The 39 `cognitive_complexity` errors the dependency bump introduces in
-the `make lint` gate have been resolved by hoisting the charged `tracing` macros
-into per-macro emitters across 40 files; the root cause, the cost model, the
-escalation that was raised and then superseded, and the resolution are recorded
-in `Surprises & discoveries` and `Decision log`. `Status:` remains `IN PROGRESS`
-rather than `COMPLETE` until the full gate set has been run green on the
-committed tree.
+the `make lint` gate have been resolved by hoisting the charged `tracing`
+macros into per-macro emitters across 40 files; the root cause, the cost model,
+the escalation that was raised and then superseded, and the resolution are
+recorded in `Surprises & discoveries` and `Decision log`. `Status:` remains
+`IN PROGRESS` rather than `COMPLETE` until the full gate set has been run green
+on the committed tree.
 
 Roadmap item: none. Origin: `leynos/rstest-bdd` v0.6.0 release and its
 `docs/v0-6-0-migration-guide.md`.
@@ -648,8 +648,8 @@ the link site.
 
 - Decision: **supersede the escalation above and hoist the charged macros into
   per-macro emitters**, in this branch, as a single follow-up commit on the
-  migration. Rationale: two measurements made after the escalation was
-  recorded changed its premises. First, the earlier note here asserted that
+  migration. Rationale: two measurements made after the escalation was recorded
+  changed its premises. First, the earlier note here asserted that
   `check-macro-expansion = false` "does suppress the diagnostic — measured, in
   the minimal repro". **That was wrong and is withdrawn: no such Clippy option
   exists.** It is absent from the pinned toolchain's own binary and
@@ -660,15 +660,15 @@ the link site.
   `if`s *after* Clippy's syntactic metric has been measured. The `log` feature
   is declared non-optionally by `rstest-bdd` 0.6.0, and Cargo unifies a
   dev-dependency's features onto the normal-dependency node whenever tests are
-  built, so the feature cannot be declined from this repository.
-  Date/Author: 2026-10-02, implementing agent.
+  built, so the feature cannot be declined from this repository. Date/Author:
+  2026-10-02, implementing agent.
 
   Second, the scope the escalation was triggered by is smaller than the raw
   diagnostic count suggests. A minimal repro measures the cost model directly:
   an inline `tracing` macro adds **+7** to its enclosing function under the
   `log` feature and **+1** without it, while a function that merely *calls* an
-  emitter holding that macro measures at its structural baseline exactly
-  (`3`, identical to the macro-free control). An emitter holding one macro —
+  emitter holding that macro measures at its structural baseline exactly (`3`,
+  identical to the macro-free control). An emitter holding one macro —
   including one with six fields, and including a `trace_span!` opener —
   measures **8**, one under the threshold of 9. Macros written inside a closure
   are charged to the closure, not the enclosing function. Re-deriving every
@@ -703,14 +703,14 @@ the link site.
 
   The problem count behaved as a lower bound throughout, exactly as the lint
   cascade predicts. The enumeration with the threshold demoted to `warn`
-  reported 39 sites; the honest probe rounds then measured 32, 28, 0, 2, 3, 0, 0
-  complexity diagnostics in turn (`/tmp/cc-batch1…7`). The zero at round three
-  is not a pass: two *hard* errors (a missing import, an associated-function
-  call site) had replaced them, and clearing those exposed two more complexity
-  sites at round four and three more at round five. Seven probe rounds were
-  needed, not one. The final round is recorded at
-  `/tmp/cc-batch7-adopt-rstest-bdd-v0-6-0.out`, which ends
-  `Finished \`dev\` profile … in 12.67s` with zero `error` lines.
+  reported 39 sites; the honest probe rounds then measured 32, 28, 0, 2, 3, 0,
+  0 complexity diagnostics in turn (`/tmp/cc-batch1…7`). The zero at round
+  three is not a pass: two *hard* errors (a missing import, an
+  associated-function call site) had replaced them, and clearing those exposed
+  two more complexity sites at round four and three more at round five. Seven
+  probe rounds were needed, not one. The final round is recorded at
+  `/tmp/cc-batch7-adopt-rstest-bdd-v0-6-0.out`, which ends `Finished \`dev\`
+  profile … in 12.67s` with zero `error` lines.
 
   One probe round's output also shows why the diagnostic summary alone is not
   enough to act on: `grep -E '^(error|warning)'` drops the `-->` location
@@ -724,8 +724,8 @@ the link site.
   `src/stdlib/path/path_utils.rs` at 402, from 398 and 394 at `HEAD`), so both
   gained a `#[path]`-declared sibling module (`register_emitters.rs`,
   `path_emitters.rs`) holding the emitters — the same idiom already used for
-  `src/runner/process/command_logging_emitters.rs`. All four emitter modules are
-  new files, and every edited file is now within the cap.
+  `src/runner/process/command_logging_emitters.rs`. All four emitter modules
+  are new files, and every edited file is now within the cap.
 
 ## Outcomes & retrospective
 
@@ -801,16 +801,16 @@ Lessons learned.
    too.
 
 Residual gaps, stated rather than papered over. `make lint` did not complete on
-the revision that first raised the `cognitive_complexity` failure: `lint-clippy`
-aborted with 39 diagnostics across 31 files, and `lint-whitaker`, `lint-python`
-and `github-actions-lint` therefore never ran on that revision. That condition
-was **caused by this migration**, not pre-existing, and it has since been
-resolved by the macro-hoisting refactor recorded in `Decision log`; the full
-gate set is re-run on the committed tree and its result recorded under
+the revision that first raised the `cognitive_complexity` failure:
+`lint-clippy` aborted with 39 diagnostics across 31 files, and `lint-whitaker`,
+`lint-python` and `github-actions-lint` therefore never ran on that revision.
+That condition was **caused by this migration**, not pre-existing, and it has
+since been resolved by the macro-hoisting refactor recorded in `Decision log`;
+the full gate set is re-run on the committed tree and its result recorded under
 `### Gate logs`. The four suppression stages that never ran on the failing
 revision are therefore exercised for the first time here, and remain
-unavailable checks until that run reports them. The 0.5.0 false green itself was
-not reproduced on a 0.5.0 build; what is evidenced is 0.6.0's corrected
+unavailable checks until that run reports them. The 0.5.0 false green itself
+was not reproduced on a 0.5.0 build; what is evidenced is 0.6.0's corrected
 behaviour, which is the behaviour the repository now depends on.
 `make test-podman` was out of scope, as no path under `ansible/` appears in
 this change surface.
