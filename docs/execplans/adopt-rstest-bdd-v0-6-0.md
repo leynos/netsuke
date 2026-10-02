@@ -663,10 +663,23 @@ the link site.
   checksum verifiability. Date/Author: 2026-09-26, implementing agent.
 
 - Decision: resolve the `rstest-bdd` family with a targeted lockfile update
-  against the published 0.6.0 packages, leaving the rest of the graph alone.
-  Rationale: `AGENTS.md` mandates caret requirements and prohibits unrelated
-  churn. A `--precise 0.6.0` update for each family member confines the change.
-  Date/Author: 2026-09-26, implementing agent.
+  against the published 0.6.0 packages, leaving packages outside that family's
+  transitive closure alone. Rationale: `AGENTS.md` mandates caret requirements
+  and prohibits unrelated churn. A `--precise 0.6.0` update for each family
+  member confines the change. Date/Author: 2026-09-26, implementing agent.
+
+  Verified 2026-10-02, because "the rest of the graph" is easy to overclaim:
+  the lockfile delta is 22 packages, and every one of them lies inside the
+  union of the family's transitive closure before and after the bump (157
+  packages at 0.5.0, 176 at 0.6.0). The churn is real but entirely family-owned:
+  `rstest-bdd-macros` 0.6.0 moved from `proc-macro-error` 1.0.4 to
+  `proc-macro-error3` 3.1.1, taking `convert_case`, `heck` and `windows-sys`
+  with it; it also pulled in `cargo_metadata`, `link-section`,
+  `linktime-proc-macro`, `derive_more` and `syn` 3. No package outside the
+  closure changed version, and none was added or removed. Note that
+  `proc-macro-error`/`-attr` are *removals* and so are not in the post-bump
+  closure — they were in the pre-bump one, which is the relevant comparison.
+  Date/Author: 2026-10-02, implementing agent.
 
 - Decision: treat upstream relative links from the imported guides as a
   documented link mapping rather than vendoring upstream design documents.
@@ -1219,25 +1232,51 @@ dictionary on every run. At both revisions it produced the same one-line drift
 unrelated to this branch, which was reverted rather than committed so the
 branch's diff stays focused on the migration.
 
-#### Rebased sweep at `dd93120a`
+#### Rebased sweep at `4c93ba63`
 
 Rebasing onto `upstream/main` (`84447f0e`) brought in work that had landed
 while this branch was in review, and that work reintroduced the
 `cognitive_complexity` failure in a place the earlier sweep could not have
 seen. The rebased sweep below is the one that gates the delivered revision.
 
-| Gate                | Status  | Log                                    |
-| ------------------- | ------- | -------------------------------------- |
-| `make check-fmt`    | PENDING | `/tmp/check-fmt-gates-dd93120a.out`    |
-| `make lint`         | PENDING | `/tmp/lint-gates-dd93120a.out`         |
-| `make typecheck`    | PENDING | `/tmp/typecheck-gates-dd93120a.out`    |
-| `make doc-coverage` | PENDING | `/tmp/doc-coverage-gates-dd93120a.out` |
-| `make markdownlint` | PENDING | `/tmp/markdownlint-gates-dd93120a.out` |
-| `make nixie`        | PENDING | `/tmp/nixie-gates-dd93120a.out`        |
-| `make test`         | PENDING | `/tmp/test-gates-dd93120a.out`         |
+It was run at `4c93ba63`, which carries this plan's post-rebase updates on top
+of the fixes committed as `dd93120a`. Every row is recorded from that gate's
+own log — read directly, not taken from a summary — and every exit status was
+confirmed as zero.
 
-Filled in from the gate runner's report; a gate is recorded as passing only
-once its own log has been read and its exit status confirmed.
+| Gate                | Status                                                          | Log                                                   |
+| ------------------- | --------------------------------------------------------------- | ----------------------------------------------------- |
+| `make check-fmt`    | pass — 179 Python files formatted, 174 Markdown files unchanged | `/tmp/check-fmt-gates-adopt-rstest-bdd-v0-6-0.out`    |
+| `make lint`         | pass — every stage reached                                      | `/tmp/lint-gates-adopt-rstest-bdd-v0-6-0.out`         |
+| `make typecheck`    | pass — `ty` clean, `cargo check` clean                          | `/tmp/typecheck-gates-adopt-rstest-bdd-v0-6-0.out`    |
+| `make doc-coverage` | pass — 98.86% against the 80% threshold                         | `/tmp/doc-coverage-gates-adopt-rstest-bdd-v0-6-0.out` |
+| `make markdownlint` | pass — 175 files, 0 issues                                      | `/tmp/markdownlint-gates-adopt-rstest-bdd-v0-6-0.out` |
+| `make nixie`        | pass — all diagrams validated                                   | `/tmp/nixie-gates-adopt-rstest-bdd-v0-6-0.out`        |
+| `make test`         | pass — 3912/3912, 6 skipped, 0 leaky; 129 doctests green        | `/tmp/test-gates-adopt-rstest-bdd-v0-6-0.out`         |
+
+The logs are named for the *branch*, following the
+`/tmp/$ACTION-$(get-project)-$(git branch --show-current).out` template this
+repository uses, so the suffix is `adopt-rstest-bdd-v0-6-0` rather than a
+revision. A SHA suffix would have been the better choice — it encodes the
+provenance the template does not — and an earlier draft of this table cited
+`-gates-dd93120a.out` paths that no run ever wrote. The paths above are the
+ones that exist; each gate additionally has `.start`, `.end` and `.exit`
+sidecars recording its timestamps and its `PIPESTATUS[0]`.
+
+`make lint` reaching every stage is the headline, because the failing revision
+never got past `lint-clippy`. `lint-whitaker` passed for both crates, so the
+400-line split is genuinely inside the cap rather than merely unblocked;
+`lint-workflow-scripts` loaded every module under `.github/scripts`;
+`lint-python` passed all five of its stages (`ruff`, `pylint` 10.00/10, the
+df12 house lints, `ambrleaks`, and `interrogate` at 100%); and
+`github-actions-lint` ran `yamllint` and `actionlint` with no diagnostics.
+
+`make markdownlint` passing is itself worth recording. On the earliest
+revisions this target died at its preceding `spelling` stage, so
+`markdownlint-cli2` had never actually executed; on this run it linted 175
+files and reported nothing. The `spelling` stage regenerated `typos.toml` from
+the live shared estate dictionary and produced no drift, so the tree was left
+clean and there was nothing to revert.
 
 The rebase's headline finding is that `make lint` is a cascade: it aborts at
 the first failing stage, so every stage after the failure is *unavailable*
@@ -1344,8 +1383,16 @@ that landed on `main` while this branch was in review reintroduced the
 `cognitive_complexity` failure at a site the branch had never compiled under
 unified `tracing` features, and hoisting the two known Kani sites pushed
 `compile_guard.rs` past Whitaker's 400-line cap — a failure that the
-Clippy-first cascade had been hiding. Both are fixed in `dd93120a`; the
-`#### Rebased sweep at dd93120a` table is the one that gates the delivered
-revision. The lesson recorded in `## Surprises & discoveries` is that a green
-`make lint` on a pre-rebase revision says nothing about the rebased one, and
-that a cascade's first failure hides every stage after it.
+Clippy-first cascade had been hiding. Both are fixed in `dd93120a`. The lesson
+recorded in `## Surprises & discoveries` is that a green `make lint` on a
+pre-rebase revision says nothing about the rebased one, and that a cascade's
+first failure hides every stage after it.
+
+2026-10-02 — swept revision. The rebased sweep was run at `4c93ba63`, and the
+`#### Rebased sweep at 4c93ba63` table now records its seven verdicts from the
+logs themselves. It carried a `PENDING` table whose log paths named a revision
+(`-gates-dd93120a.out`) that no run had written, because the repository's log
+template ends in the *branch* name, not a SHA; the paths and the table's
+heading are corrected together. The table was deliberately left `PENDING`
+rather than filled from the gate runner's prose, so that a gate is recorded as
+passing only once its own log has been read — which is what caught it.
