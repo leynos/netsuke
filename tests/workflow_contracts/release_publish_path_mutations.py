@@ -32,7 +32,7 @@ EXPECTED_VIOLATIONS = {
     "remove-cancelled-guard": (("cancelled-ready-for-review", "release-job"),),
     "remove-caller-event": (("caller", "pull-request-types"),),
     "remove-skipped-smoke-tolerance": (("opened", "release-job"),),
-    "allow-skipped-smoke-on-publish": (("tag-publish-skipped-smoke", "release-job"),),
+    "allow-skipped-smoke-on-publish": (("tag-publish-skipped-smoke", "publish-job"),),
     "use-diagnostics-upload-mode": tuple(
         item
         for job, platform in BUILD_JOBS.items()
@@ -137,14 +137,15 @@ def _mutate_cancelled_guard(release: dict[str, object]) -> None:
 
 def _mutate_smoke_tolerance(release: dict[str, object], *, allow_publish: bool) -> None:
     """Remove skipped-smoke tolerance or make it apply to publication too."""
-    job = workflow_job(release, "release")
+    job_name = "publish-release" if allow_publish else "release"
+    job = workflow_job(release, job_name)
     guard = str(job.get("if", ""))
     if allow_publish:
-        pattern = (
-            r"\(\s*needs\.metadata\.outputs\.dry_run == 'true'\s*&&\s*"
-            r"needs\.windows-native-recipe-smoke\.result == 'skipped'\s*\)"
+        pattern = r"needs\.windows-native-recipe-smoke\.result == 'success'"
+        replacement = (
+            "(needs.windows-native-recipe-smoke.result == 'success' || "
+            "needs.windows-native-recipe-smoke.result == 'skipped')"
         )
-        replacement = "needs.windows-native-recipe-smoke.result == 'skipped'"
     else:
         pattern = (
             r"needs\.windows-native-recipe-smoke\.result == 'success'\s*\|\|\s*"

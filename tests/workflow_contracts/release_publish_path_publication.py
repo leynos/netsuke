@@ -4,6 +4,7 @@ import dataclasses
 import typing as typ
 
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
+from release_publish_path_scenarios import REQUIRED_NEEDS
 from workflow_loading import (
     job_steps,
     named_step,
@@ -23,7 +24,6 @@ class PublicationCheck:
     release: dict[str, object]
     scenario: Scenario
     outputs: dict[str, str]
-    release_runs: bool
     violations: list[str]
 
 
@@ -107,7 +107,7 @@ def _publication_needs(
     job: dict[str, object],
     check: PublicationCheck,
 ) -> dict[str, object]:
-    """Resolve only the publication job's declared metadata and staging needs."""
+    """Resolve the metadata, build and smoke jobs required for publication."""
     raw_needs = job.get("needs", [])
     declared = [raw_needs] if isinstance(raw_needs, str) else raw_needs
     if not isinstance(declared, list) or any(
@@ -115,26 +115,18 @@ def _publication_needs(
     ):
         check.violations.append("publish-release.needs: dependencies must be job names")
         return {}
-    required = {"metadata", "release"}
+    required = REQUIRED_NEEDS
     declared_needs = set(declared)
     if declared_needs != required:
         check.violations.append(
-            "publish-release.needs: expected metadata and release dependencies"
+            "publish-release.needs: expected metadata, build and smoke dependencies"
         )
     needs: dict[str, object] = {}
-    if "metadata" in declared_needs:
-        needs["metadata"] = {
-            "result": check.scenario.needs_results["metadata"],
-            "outputs": check.outputs,
-        }
-    if "release" in declared_needs:
-        needs["release"] = {
-            "result": "cancelled"
-            if check.scenario.cancelled
-            else "success"
-            if check.release_runs
-            else "skipped"
-        }
+    for name in sorted(required & declared_needs):
+        dependency: dict[str, object] = {"result": check.scenario.needs_results[name]}
+        if name == "metadata":
+            dependency["outputs"] = check.outputs
+        needs[name] = dependency
     return needs
 
 
@@ -152,7 +144,10 @@ def _check_publication_job(
             job_level=True,
         ),
     )
-    expected_job = scenario.mode == "publish" and check.release_runs
+    all_dependencies_succeeded = all(
+        scenario.needs_results[name] == "success" for name in REQUIRED_NEEDS
+    )
+    expected_job = scenario.mode == "publish" and all_dependencies_succeeded
     publication_runs = actual_job is not MISSING and bool(actual_job)
     if publication_runs != expected_job:
         check.violations.append(
