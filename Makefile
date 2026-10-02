@@ -124,7 +124,7 @@ ACTIONLINT ?= actionlint
 export ACTIONLINT
 # Single source of truth for the shared spelling gate; the Makefile and CI
 # both consume it, so the pinned builder cannot drift apart.
-TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.1
+TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.3
 YAMLLINT_VERSION ?= 1.38.0
 UV ?= uv
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
@@ -179,21 +179,6 @@ DF12_PYLINT = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 	--enable=$(DF12_PYLINT_MESSAGES)
 AMBRLEAKS = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 	--from '$(DF12_PYTHON_LINTS)' ambrleaks
-# The estate-synchronised spelling helpers retain their standalone coverage
-# policy. Keep this explicit so Interrogate covers every other owned Python
-# definition in the same source boundary as Ruff and Pylint.
-INTERROGATE_EXCLUDES = $(addprefix --exclude ,$(SPELLING_HELPER_FILES))
-SPELLING_HELPER_COVERAGE = --cov=generate_typos_config --cov=typos_rollout_check --cov=typos_rollout \
-	--cov=typos_rollout_cache --cov=typos_rollout_http
-SPELLING_HELPER_FILES = scripts/generate_typos_config.py \
-	scripts/typos_rollout_check.py \
-	scripts/typos_rollout.py scripts/typos_rollout_cache.py \
-	scripts/typos_rollout_http.py scripts/tests/conftest.py \
-	scripts/tests/test_typos_rollout.py \
-	scripts/tests/test_typos_rollout_check.py \
-	scripts/tests/test_typos_rollout_hardening.py \
-	scripts/tests/test_typos_rollout_refresh.py \
-	scripts/tests/typos_rollout_test_support.py
 # The shared en-GB-oxendict spelling gate. It regenerates `typos.toml` from
 # the live shared dictionary and the `typos.local.toml` overlay on every run,
 # then runs Typos and the prohibited-phrase check.
@@ -278,7 +263,7 @@ lint-python: lint-workflow-scripts ## Run Ruff, Pylint, Interrogate, the df12 ho
 	$(PYLINT) $(PYLINT_TARGETS)
 	$(DF12_PYLINT) $(PYLINT_TARGETS)
 	$(AMBRLEAKS) $(PYTHON_SOURCES)
-	$(INTERROGATE) $(INTERROGATE_EXCLUDES) $(PYTHON_SOURCES)
+	$(INTERROGATE) $(PYTHON_SOURCES)
 
 lint-workflow-scripts: ## Load every trusted workflow module under the Python baseline
 	# The trusted coverage workflow runs these through GitHub Actions' `python`
