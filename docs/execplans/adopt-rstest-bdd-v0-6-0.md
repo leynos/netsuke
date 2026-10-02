@@ -1636,3 +1636,32 @@ run on the committed revision, and the tree is confirmed clean once they
 finish. The lesson is that a gate's verdict belongs to the bytes it read, not
 to the file it names, and that a plan which gates itself cannot be brought up
 to date by the sweep it documents.
+
+2026-10-02 — second rebase, and a no-op. A requested rebase onto the pull
+request's target branch re-established the boundary rather than assuming it,
+and the boundary turned out already to hold: `origin/main` was still
+`84447f0e`, exactly as the first rebase recorded, so the target was a direct
+ancestor of the branch head. Three independent sources agreed on that SHA —
+`git ls-remote` over SSH, the GitHub API's `refs/heads/main`, and the pull
+request's own `baseRefOid` — and `git rev-list --count origin/main ^HEAD`
+returned zero, so no target commit was missing from the branch. Git therefore
+reported "up to date" and replayed nothing.
+
+The evidence that this was a no-op is that every identity survived: `HEAD` is
+unchanged at `4bd2aa88`, `git range-diff 84447f0e..4bd2aa88` against the same
+range after the rebase maps all twenty commits with `=`, and the branch's diff
+against the target has the same SHA-256 (`50fb53a6…`) before and after. Because
+`HEAD` did not move, the four `make` gates that gated `4bd2aa88` before the
+rebase still describe this revision; they were run again anyway
+(`/tmp/<target>-gate-rebase-adopt-rstest-bdd-v0-6-0.out`, each with a
+`PIPESTATUS[0]` sidecar containing `0`) rather than cited from the earlier
+evidence. The test gate re-ran 3912 nextest tests with 6 skipped and the three
+doctest binaries, byte-for-byte the same counts as before.
+
+The lesson is the boundary check earns its place even when the answer is
+"nothing to do": the skill forbids discovering the replay range by rebasing,
+and here reasoning about it first turned a history rewrite that would have
+produced twenty new SHAs — and invalidated every review, gate log and CI run
+tied to `4bd2aa88` — into a no-op that invalidated nothing. It is also worth
+recording that the estate's stored `main` ref in the bare repository
+(`1e60fb18`) is stale and is not the target; only the fetched remote ref is.
