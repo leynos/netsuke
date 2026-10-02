@@ -410,27 +410,101 @@ jobs:
       (needs.metadata.outputs.should_publish == 'true' ||
        needs.metadata.outputs.dry_run == 'true')
     permissions:
-      contents: write
+      contents: read
     needs:
       - metadata
       - build-linux
       - build-windows
       - build-macos
       - windows-native-recipe-smoke
-    # Publication is API-bound: it downloads artefacts and calls the releases
-    # API, so a GitHub-hosted runner is the right placement.
+    # Staging downloads artefacts and validates the upload plan, so a
+    # GitHub-hosted runner is the right placement.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: >-
+          actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        # v8.0.1
+        with:
+          path: dist
+          pattern: ${{ needs.metadata.outputs.repo_name }}-*
       - name: Install uv
-        # The privileged job runs inline-metadata Python scripts without a
-        # shared dependency cache.
+        # Pins the interpreter the hoist script runs under to the Python 3.14
+        # baseline the repository's Python tooling targets, rather than
+        # whichever `python3` the runner image happens to ship.
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           python-version: '3.14'
+          # The hoist script is stdlib-only and runs with --no-project, so a
+          # restored cache buys nothing and adds an unnecessary supply-chain
+          # input to the staging rehearsal.
+          enable-cache: false
+      - name: Hoist cargo-binstall archives to the release root
+        shell: bash
+        # Validates that every target listed in release-staging.toml staged
+        # its archive and checksum sidecar, then moves the pairs to dist/ so
+        # they upload under the plain names the binstall metadata resolves.
+        # A missing target or sidecar fails the release with the names listed.
+        run: |
+          set -euo pipefail
+          uv run --no-project --python 3.14 scripts/hoist_binstall_archives.py
+        env:
+          INPUT_VERSION: ${{ needs.metadata.outputs.version }}
+      - id: upload_assets
+        name: Upload artefacts to release
+        if: needs.metadata.outputs.should_publish != 'true'
+        uses: >-
+          leynos/shared-actions/.github/actions/upload-release-assets@a5765019912a8ab6882b12db049c7cde635f3a85
+        with:
+          release-tag: ${{ github.ref_name }}
+          bin-name: ${{ needs.metadata.outputs.bin_name }}
+          dist-dir: dist
+          dry-run: ${{ needs.metadata.outputs.should_publish != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check asset upload errors
+        if: steps.upload_assets.outputs.upload-error == 'true'
+        env:
+          ERROR_MESSAGE: ${{ steps.upload_assets.outputs.error-message }}
+        run: |
+          echo "Error uploading release assets:"
+          printf '%s\n' "$ERROR_MESSAGE"
+          exit 1
+
+  publish-release:
+    if: >-
+      !cancelled() &&
+      needs.metadata.result == 'success' &&
+      needs.release.result == 'success' &&
+      needs.metadata.outputs.should_publish == 'true'
+    permissions:
+      contents: write
+    needs:
+      - metadata
+      - release
+    # Publication is API-bound: only this job receives contents: write.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        # Pins the interpreter the release helper scripts run under to the
+        # Python 3.14 baseline the repository's Python tooling targets.
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          python-version: '3.14'
+          # These helpers are stdlib-only, so restoring a dependency cache
+          # adds an unnecessary supply-chain input.
           enable-cache: false
       - name: Ensure release exists (draft)
         if: needs.metadata.outputs.should_publish == 'true'

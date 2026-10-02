@@ -123,7 +123,9 @@ def _mutate_upload_dry_run(release: dict[str, object], *, falsify: bool) -> None
 
 def _mutate_draft_guard(release: dict[str, object]) -> None:
     """Remove the publish-only condition from draft creation."""
-    draft = named_step(_release_steps(release), "Ensure release exists (draft)")
+    draft = named_step(
+        job_steps(release, "publish-release"), "Ensure release exists (draft)"
+    )
     draft.pop("if", None)
 
 

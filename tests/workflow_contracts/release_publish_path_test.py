@@ -1,10 +1,6 @@
 """Prove dry runs reach release staging without publishing a release."""
 
 import dataclasses
-import typing as typ
-
-if typ.TYPE_CHECKING:
-    import collections.abc as cabc
 
 from release_publish_path_artifacts import (
     MISSING,
@@ -14,6 +10,13 @@ from release_publish_path_artifacts import (
     check_build_uploads,
     check_download_pattern,
     evaluate_field,
+)
+from release_publish_path_publication import (
+    PublicationCheck,
+    UploadPlanCheck,
+    _check_upload_plan,
+    _step_runs,
+    check_publication_path,
 )
 from release_publish_path_scenarios import (
     _MODE_OUTPUTS,
@@ -29,7 +32,6 @@ from workflow_loading import (
     REPO_ROOT,
     job_steps,
     load_workflow,
-    named_step,
     require_list,
     require_mapping,
     step_index_by_key,
@@ -165,25 +167,7 @@ def _check_caller(
     release: dict[str, object], caller: dict[str, object], violations: list[str]
 ) -> None:
     """Require the dry-run caller and reusable release defaults to stay safe."""
-    triggers = require_mapping(caller.get("on", caller.get(True)), "caller triggers")
-    pull_request = require_mapping(triggers.get("pull_request"), "caller pull_request")
-    event_types = {
-        str(event)
-        for event in require_list(
-            pull_request.get("types"), "caller pull_request.types"
-        )
-    }
-    scenario_events = {
-        scenario.event_action for scenario in SCENARIOS if scenario.mode == "dry-run"
-    }
-    if (
-        event_types != REQUIRED_DRY_RUN_EVENTS
-        or scenario_events != REQUIRED_DRY_RUN_EVENTS
-    ):
-        violations.append(
-            "caller.pull-request-types: dry-run triggers and scenarios must cover "
-            f"{sorted(REQUIRED_DRY_RUN_EVENTS)!r}"
-        )
+    _check_caller_events(caller, violations)
 
     caller_job = workflow_job(caller, "release")
     caller_inputs = require_mapping(caller_job.get("with"), "caller release.with")
@@ -199,19 +183,21 @@ def _check_caller(
         violations.append("caller.release-workflow: caller must use release.yml")
 
 
-def _step_runs(
-    step: dict[str, object],
-    contexts: cabc.Mapping[str, object],
-    violations: list[str],
-    label: str,
-) -> bool:
-    """Evaluate one optional step guard; an absent guard means the step runs."""
-    guard = step.get("if", True)
-    value = evaluate_field(
-        guard,
-        FieldEvaluation(contexts=contexts, violations=violations, label=label),
-    )
-    return value is not MISSING and bool(value)
+def _check_caller_events(caller: dict[str, object], violations: list[str]) -> None:
+    """Require caller pull-request triggers to cover every dry-run scenario."""
+    triggers = require_mapping(caller.get("on", caller.get(True)), "caller triggers")
+    pull_request = require_mapping(triggers.get("pull_request"), "caller pull_request")
+    raw_types = require_list(pull_request.get("types"), "caller pull_request.types")
+    event_types = {str(event) for event in raw_types}
+    scenario_events = {
+        scenario.event_action for scenario in SCENARIOS if scenario.mode == "dry-run"
+    }
+    expected_events = REQUIRED_DRY_RUN_EVENTS
+    if event_types != expected_events or scenario_events != expected_events:
+        violations.append(
+            "caller.pull-request-types: dry-run triggers and scenarios must cover "
+            f"{sorted(REQUIRED_DRY_RUN_EVENTS)!r}"
+        )
 
 
 def _check_release_staging(
@@ -220,21 +206,11 @@ def _check_release_staging(
     contexts: dict[str, object],
     violations: list[str],
 ) -> None:
-    """Check draft, download, hoist, and upload reachability for an entered job."""
+    """Check artifact download, hoist, and plan reachability for staging."""
     steps = job_steps(release, "release")
-    draft = named_step(steps, "Ensure release exists (draft)")
-    draft_runs = _step_runs(draft, contexts, violations, f"{scenario.name}.draft.guard")
-    expected_draft = scenario.mode == "publish"
-    if draft_runs != expected_draft:
-        violations.append(
-            f"{scenario.name}.draft: resolved to {draft_runs!r}, "
-            f"expected {expected_draft!r}"
-        )
-
     staging_steps = (
         ("download", step_index_by_key(steps, "uses", "actions/download-artifact@")),
         ("hoist", step_index_by_key(steps, "run", "hoist_binstall_archives.py")),
-        ("upload", step_index_by_key(steps, "id", "upload_assets")),
     )
     for label, index in staging_steps:
         if not _step_runs(
@@ -242,37 +218,26 @@ def _check_release_staging(
         ):
             violations.append(f"{scenario.name}.{label}: staging step is guarded off")
 
-    _check_upload_plan(steps, scenario, contexts, violations)
-
-
-def _check_upload_plan(
-    steps: list[dict[str, object]],
-    scenario: Scenario,
-    contexts: dict[str, object],
-    violations: list[str],
-) -> None:
-    """Require plan mode for staging and upload mode for publication."""
-    upload = named_step(steps, "Upload artefacts to release")
-    upload_with = require_mapping(upload.get("with"), "upload-release-assets.with")
-    dry_run = upload_with.get("dry-run", MISSING)
-    expected_plan = scenario.mode != "publish"
-    if dry_run is MISSING:
-        violations.append(f"{scenario.name}.upload-plan: dry-run input is missing")
-    else:
-        value = evaluate_field(
-            dry_run,
-            FieldEvaluation(
-                contexts=contexts,
-                violations=violations,
-                label=f"{scenario.name}.upload-plan",
-            ),
+    plan_index = step_index_by_key(steps, "id", "upload_assets")
+    plan_runs = _step_runs(
+        steps[plan_index], contexts, violations, f"{scenario.name}.upload.guard"
+    )
+    expected_plan_step = scenario.mode != "publish"
+    if plan_runs != expected_plan_step:
+        violations.append(
+            f"{scenario.name}.upload: staging plan step resolved to {plan_runs!r}, "
+            f"expected {expected_plan_step!r}"
         )
-        actual_plan = str(value).lower() == "true" if value is not MISSING else False
-        if actual_plan != expected_plan:
-            violations.append(
-                f"{scenario.name}.upload-plan: resolved to {value!r}, "
-                f"expected {expected_plan!r}"
-            )
+    _check_upload_plan(
+        steps,
+        UploadPlanCheck(
+            scenario=scenario,
+            contexts=contexts,
+            violations=violations,
+            expected_plan=scenario.mode != "publish",
+            label="upload-plan",
+        ),
+    )
 
 
 def _check_release_needs(release: dict[str, object], violations: list[str]) -> None:
@@ -287,11 +252,10 @@ def _check_release_needs(release: dict[str, object], violations: list[str]) -> N
 def _check_release_step_order(
     release: dict[str, object], violations: list[str]
 ) -> None:
-    """Keep draft, download, hoist, and upload steps in staging order."""
+    """Keep download, hoist, and plan steps in staging order."""
     steps = job_steps(release, "release")
     try:
         order = (
-            step_index_by_key(steps, "name", "Ensure release exists (draft)"),
             step_index_by_key(steps, "uses", "actions/download-artifact@"),
             step_index_by_key(steps, "run", "hoist_binstall_archives.py"),
             step_index_by_key(steps, "id", "upload_assets"),
@@ -300,9 +264,7 @@ def _check_release_step_order(
         violations.append(f"release.step-order: staging step is missing: {error}")
         return
     if tuple(sorted(order)) != order:
-        violations.append(
-            "release.step-order: draft, download, hoist, upload order changed"
-        )
+        violations.append("release.step-order: download, hoist, plan order changed")
 
 
 def _check_scenario(check: ScenarioCheck) -> None:
@@ -339,6 +301,15 @@ def _check_scenario(check: ScenarioCheck) -> None:
         )
     if release_runs and scenario.release_runs:
         _check_release_staging(check.release, scenario, contexts, check.violations)
+    check_publication_path(
+        PublicationCheck(
+            release=check.release,
+            scenario=scenario,
+            outputs=outputs,
+            release_runs=release_runs,
+            violations=check.violations,
+        )
+    )
 
 
 def check_release_publish_path(
