@@ -1070,8 +1070,8 @@ Callers of `.github/workflows/release.yml` may set the `wix-extension-version`
 defaults to `7`, and omitted or empty values resolve to `7` before the value
 reaches the shell step. The metadata job exposes the resolved value as
 `wix_extension_version`; `build-windows` passes that output to
-`build-and-package.yml` as `wix-extension-version`. The shell step fails only
-if the resolved environment value is unexpectedly empty, and rejects values
+`build-and-package.yml` as `wix-extension-version`. The shell step rejects an
+unexpectedly empty resolved environment value. It also rejects values
 containing carriage returns or line feeds before writing the output.
 
 The merge gate's dedicated `windows-msi-upgrade` job runs on `windows-latest`.
