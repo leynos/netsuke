@@ -6,7 +6,14 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
+
+The eight child RFCs and the coverage contract are delivered and the full
+deterministic gate set is green at `7b0794af`. Two volume tolerances are
+breached and recorded rather than waived — the aggregate budget and the
+per-file 400-line limit — and neither blocks the milestone, for the reasons the
+Tolerances section and `D12`'s amendment give. The branch remains open for
+review.
 
 ## Purpose / big picture
 
@@ -201,7 +208,18 @@ Hard invariants. Violating one requires escalation, not a workaround.
   which is 14 lines further over and projects the set to about **2960**. Each
   figure is now cited with the revision it was measured at, so a later repair
   cannot silently make it false: the number is a property of a revision, not of
-  the branch.
+  the branch. **Final correction at `EP-M11`: the breach covers seven of the
+  eight children, and the count closes the record rather than opening a new
+  escalation.** Measured at `7b0794af`, the children run 0013 **470**, 0014
+  **397**, 0015 **502**, 0016 **538**, 0017 **521**, 0018 **708**, 0019
+  **733**, and 0020 **664** — 0014 alone is under the 400-line limit. Only
+  0013's and 0015's breaches had been recorded while they were written; the
+  other five were not, because the tolerance's escalation was already open and
+  standing. The remedy is the same one the aggregate control takes, for the
+  same reason: the eight are written, the per-file limit cannot be met without
+  cutting per-helper prose the clauses require, and the density control — not
+  the raw limit — is what distinguishes a padded child from a dense one.
+  Recorded here so the breach count is complete rather than partial.
 - **Vacuity.** If any section 5 subsection cannot state a group-specific
   consequence — a bound, a registry row, a diagnostic code, a purity
   assignment, a named error condition — and cannot honestly say "no additional
@@ -4141,9 +4159,88 @@ the RFC review process.
 
 ## Outcomes & retrospective
 
-To be completed at `EP-M11`. Before marking `COMPLETE`, reconcile every
-discovery against RFC 0006, `docs/roadmap.md`, and the style guide, and confirm
-no disposition changed.
+Roadmap task 6.1.1 is delivered. RFC 0006's accepted set is partitioned across
+eight focused child RFCs, one per capability step, and the partition is
+enforced by an executable contract rather than by reading.
+
+**What a reader can observe.** `make test` runs
+`tests/rfc_stdlib_coverage_tests`, whose 272 cases derive the accepted and
+forbidden sets from RFC 0006's own section 7 disposition tables and assert that
+each accepted name appears in exactly one child registry and no rejected or
+deferred name appears in any. RFC 0006 section 14.13 prints
+`coverage map: 8 of 8 capability groups written; 0 remaining` — the target the
+milestone was written against, and a decrement from the `5 of 8 … 3 remaining`
+the `EP-M11` reconnaissance recorded. The contract never reads `src/`, so the
+split is verified as a property of the documents, not of an implementation.
+
+**What was built.**
+
+- RFCs **0013** to **0020**, one per roadmap step 6.2 to 6.9, each carrying the
+  five-column registry that section 6.1 asks for and a clause-discharge table.
+  RFC 0013 landed in the merged #697; this branch adds the other seven and
+  repairs one ungrammatical sentence in 0013.
+- RFC 0006 **table 16**, now fully `written` and linked, superseding the
+  placeholder rows.
+- Roadmap steps **6.2 to 6.9** retargeted: every task bullet's `See` citation
+  now names its owning child alongside the survey section. Section 6 citations
+  are deliberately untouched — the split moves section 8 ownership, not the
+  cross-cutting contract.
+- Roadmap task **6.1.1** marked done, which is where the amended task tracks
+  delivery, since the wording moved the burn-down from issues to committed
+  checkboxes.
+
+**The figures, re-derived from the files at `7b0794af` rather than carried
+forward.** The eight registries hold **60 rows**. The accepted set is 60
+helpers by a compound derivation: **57 new** — 55 accept rows plus the two
+rename exceptions that arrive from reject rows — plus the **3 existing**
+helpers gaining a behaviour-preserving option (`basename`, `dirname`, `glob`).
+Section 6.1's purity aggregate counts the 57 **proposed** helpers only, and
+reads **52/4/1**; the registries, which carry all 60, agree once the three
+optioned names are excluded. Aggregate without that exclusion and it reads
+**54/5/1** against section 6.1 — which is why the contract's purity check
+filters, and why the unfiltered accessor would fail a correct set.
+
+**Tolerances: two breached, both recorded and neither waived.** The aggregate
+budget was raised to 4000 by `D12`; the measured set is **4533**, 533 over, and
+the density control fired at **48.0** section-5 lines per helper against a 36.5
+baseline. The per-file 400-line tolerance is breached by **seven of the eight
+children** — 0014, at 397, is the only one under. Neither control blocks the
+task: the child count is fixed at eight by four contract tests, the eight are
+written, and the only remaining remedy would be to move the number a third
+time. The density figure is what makes the breach assessable rather than merely
+counted — it identifies RFC 0018 as the child whose section 5 is closest to
+restatement, which is the finding the control exists to produce.
+
+**Lessons that outlive the task.**
+
+- **A figure belongs to a revision.** Three separate corrections in this plan
+  were forced by a total that had been true at one commit and was silently
+  false at another. The remedy adopted — cite every count with the revision it
+  was measured at — is why the `EP-M11` reconciliation could proceed by
+  re-deriving from files rather than re-reading prose.
+- **Two gates can agree with each other and disagree with CI.** The host
+  `mdtablefix` is 0.6.1 while CI pins 0.6.0, and the two canonicalize to
+  different wrap points. A local `make fmt` followed by a local
+  `make check-fmt` is self-consistent under either version, so the skew is
+  invisible until CI rejects prose that was locally green. Gating against the
+  pin is the only sound form.
+- **A blocked gate can ship defects.** `make spelling` was failing on harness
+  infrastructure — `GIT_CONFIG_*` URL rewrites sent its `git` fetch to a remote
+  helper that aborts — and a blocked gate produces no verdict rather than a
+  passing one. Once the environment was cleaned the gate immediately caught a
+  spelling violation that had already been committed.
+- **A predicted guard is not evidence until it opens.** The purity-aggregate
+  assertion in the contract was guarded by `written == rows.len()` and so could
+  not fire while any child was unwritten. `EP-M11` is the point at which it
+  opened, and it passes on its strict branch: the aggregate reads 52/4/1
+  against section 6.1, where the unfiltered accessor would have read 54/5/1.
+
+**What is not claimed.** This plan specifies the eight capability groups; it
+does not implement them. No Netsuke helper, registration, locale key, flag,
+configuration field, or dependency changed — the branch is documentation plus
+the one pre-existing test binary. RFC 0006's seven section 16 open questions
+are carried into their owning children unresolved, as the constraints require.
+Each child's implementation remains the work of its own roadmap step.
 
 ## Context and orientation
 
@@ -4926,6 +5023,39 @@ The harness restored both documents from their pristine copies after every
 probe, and the working tree carried only the nine intended files afterwards;
 `git diff` on the survey showed the two prose edits and nothing else.
 
+### Closing verification, 2026-10-03
+
+The reconciled set was verified at `7b0794af`, whose tree was clean before and
+after the run. One scrutineer ran the gates sequentially, with logs under
+`/tmp`, against the CI-pinned `mdtablefix` 0.6.0 and with the harness's
+`GIT_CONFIG_*` URL rewrites stripped from the environment.
+
+| Command                                              | Log                                | Result                                                                           |
+| ---------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------- |
+| `make fmt`                                           | `/tmp/EPM11-fmt.out`               | Passed; modified nothing.                                                        |
+| `make check-fmt`                                     | `/tmp/EPM11-check-fmt.out`         | 170 Python files formatted; 178 Markdown files unchanged.                        |
+| `make lint`                                          | `/tmp/EPM11-lint.out`              | Rustdoc, Clippy, Whitaker, Pylint 10.00/10, yamllint, and actionlint all passed. |
+| `make doc-coverage`                                  | `/tmp/EPM11-doc-coverage.out`      | 65 script tests passed; 98% script coverage.                                     |
+| `make test`                                          | `/tmp/EPM11-test.out`              | 3911 nextest passed (1 slow), 6 skipped; 88 + 2 + 39 doctests passed.            |
+| `make markdownlint`                                  | `/tmp/EPM11-markdownlint.out`      | 178 files, 0 issues; typos gate clean.                                           |
+| `make nixie`                                         | `/tmp/EPM11-nixie.out`             | All diagrams validated successfully.                                             |
+| `make spelling`                                      | `/tmp/EPM11-spelling.out`          | Passed; `typos.toml` not rewritten.                                              |
+| `cargo nextest run --test rfc_stdlib_coverage_tests` | `/tmp/EPM11-coverage-contract.out` | 272 tests run, 272 passed, 0 skipped.                                            |
+
+The contract's final case, `totals_and_purity_aggregate_agree`, passes on its
+**strict** branch. That branch was unreachable while any child was unwritten —
+the check is guarded by `written == rows.len()` — so `EP-M11` is the first
+point at which it has run over the complete set. It reports the aggregate as
+52/4/1, matching RFC 0006 section 6.1, where the same accessor without the
+`New`-row filter would report 54/5/1 and fail a correct set.
+
+**Two tolerances remain breached, and both are recorded rather than waived**
+(the aggregate budget at 4533 against 4000, and the per-file 400-line limit
+against seven of the eight children). Neither blocks this milestone: the child
+count is fixed at eight by four contract tests, all eight are written, and the
+only remaining remedy would move a control that has already been moved once. See
+`D12`'s amendment, and the Tolerances section, for the measurements.
+
 ### Axioms
 
 - RFC 0006's dispositions are correct. This task partitions them.
@@ -5646,3 +5776,27 @@ normative edit to RFC 0006 is made now.
   findings in `tests/rfc_stdlib_coverage/markdown.rs` and `map.rs` that this
   session verified as already-fixed, and which are therefore closed rather than
   carried.
+
+Revised 2026-10-03 to `Status: COMPLETE` at `EP-M11`. The header moved from
+`IN PROGRESS` once the eight child RFCs were written, RFC 0006 table 16 was
+fully `written`, the roadmap citations were retargeted, and the whole
+deterministic gate set passed at `7b0794af` — nine commands, the coverage
+contract at 272 of 272, and the `execplan_status_contract_tests` unchanged
+because that suite asserts the field's shape rather than any plan's value.
+
+The reconciliation found the citation work already done rather than pending:
+`COV-4` printed the milestone's target,
+`coverage map: 8 of 8 capability groups written; 0 remaining`, against
+`5 of 8 … 3 remaining` when the reconnaissance was recorded. Two citations that
+looked wrong were verified as correct — step 6.7's `§8.6` for `expandvars`,
+because that helper is specified inside section 8.6's subsection list, and step
+6.2.3's apparent `§8.2`, which belongs to the *next* step's introductory prose.
+Two genuine defects in RFC 0006's parent graph were corrected.
+
+Both volume tolerances remain breached and both are now recorded completely:
+the aggregate at 4533 against a 4000 budget, and the per-file limit against
+seven of the eight children, where only 0013's and 0015's breaches had
+previously been written down. Neither is waived; the reasoning is in the
+Tolerances section, and the mid-flight correction to `D12`'s projection is
+recorded there as the ordinary error it was — extrapolating from the five
+shortest children.
