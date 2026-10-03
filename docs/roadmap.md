@@ -1235,11 +1235,14 @@ capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7, delivered b
 This step answers whether Netsuke can produce comment banners, encoded
 payloads, quoted shell words, human-readable sizes, and content-derived
 identifiers without either a subprocess or a second quoting implementation. See
-RFC 0006 §8.9.
+RFC 0006 §8.9, delivered by
+[RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md).
 
 - [ ] 6.8.1. Add `b64encode`, `b64decode`, and `urldecode`. Requires 6.1.3 and
   6.1.4.
-  - See RFC 0006 §8.9.
+  - See RFC 0006 §8.9 and
+    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.6,
+    5.9, and 5.11.
   - Add the Base64 dependency, support both alphabets and configurable
     padding, and default `urldecode` to `plus=false` so it round-trips with
     MiniJinja's `urlencode`.
@@ -1247,7 +1250,9 @@ RFC 0006 §8.9.
     round-trip, and invalid input errors naming the offset.
 - [ ] 6.8.2. Add `to_uuid` over a documented Netsuke namespace. Requires
   6.1.4.
-  - See RFC 0006 §8.9.
+  - See RFC 0006 §8.9 and
+    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.3
+    and 5.6.
   - Use the frozen namespace recorded in the RFC, accept an explicit
     `namespace`, and record why UUID version 5 does not fall under the
     `legacy-digests` policy.
@@ -1255,7 +1260,9 @@ RFC 0006 §8.9.
     records both its derivation and its literal value.
 - [ ] 6.8.3. Add `shell_quote` over the existing quoting machinery. Requires
   3.14.8 and 6.1.4.
-  - See RFC 0006 §§8.9 and 13.3.
+  - See RFC 0006 §8.9 and
+    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.5
+    and 5.10.
   - Adopt `shell_quote` as the canonical name that resolves the documented but
     unimplemented `shell_escape` helper, and add the `dialect` argument with
     an enumerated value set.
@@ -1263,24 +1270,33 @@ RFC 0006 §8.9.
     single implementation in `src/shell_word.rs`, so what remains here is the
     wider RFC 0006 dialect set beyond `sh` and `powershell` — `bash` in
     particular, which 3.14.8 deliberately refuses. See
-    [ADR-041](adr-041-canonical-recipe-shell-quoting-surface.md).
+    [ADR-041](adr-041-canonical-recipe-shell-quoting-surface.md). The
+    registry row in RFC 0019 §5.1 records the capability as `New` because the
+    coverage contract classifies a renamed capability as new, not because the
+    implementation is absent.
   - Success: the user guide and the registered surface agree, and no second
     quoting implementation is introduced.
 - [ ] 6.8.4. Add `comment` with a closing-marker guard. Requires 6.1.4.
-  - See RFC 0006 §8.9.
+  - See RFC 0006 §8.9 and
+    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.4
+    and 5.9.
   - Support the three line styles, the two block styles, and an explicit
     `prefix`, emitting no trailing whitespace.
   - Success: a block style whose input already contains the closing marker
     fails, so comment text cannot escape into a generated file as live syntax.
 - [ ] 6.8.5. Add `human_readable` and `human_to_bytes`. Requires 6.1.3.
-  - See RFC 0006 §8.9.
+  - See RFC 0006 §8.9 and
+    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.3
+    and 5.8.
   - Pin locale-independent output, parse case-insensitively, select bits by
     keyword rather than by letter case, and use checked integer arithmetic.
   - Success: overflow and non-integral results error rather than truncating,
     and unknown units are rejected with the valid set enumerated.
 - [ ] 6.8.6. Add `text_hash` without disturbing the existing `hash` contract.
   Requires 6.1.4.
-  - See RFC 0006 §§8.9 and 11.1.
+  - See RFC 0006 §§8.9 and 11.1 and
+    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.6
+    and 5.10.
   - Reuse the existing `legacy-digests` gating for `sha1` and `md5`, and
     register neither `hash_text` nor `checksum`.
   - Success: `hash` continues to hash the file at the supplied path, and the

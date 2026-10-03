@@ -2108,7 +2108,7 @@ that owns it. The convention and its amendment procedure are recorded in
 | [0016](0016-pattern-and-version-predicates.md)                  | Pattern and version predicates                  | `8.4`; `8.5`                                | —                     | 6.5          | written   |
 | [0017](0017-lexical-path-composition.md)                        | Lexical path composition                        | `8.6` except `expandvars`; `8.7` only `abs` | `basename`; `dirname` | 6.6          | written   |
 | [0018](0018-host-state-predicates-and-environment-expansion.md) | Host-state predicates and environment expansion | `8.7` except `abs`; `8.6` only `expandvars` | `glob`                | 6.7          | written   |
-| `0019`                                                          | Encoding, identity, and formatting helpers      | `8.9`                                       | —                     | 6.8          | unwritten |
+| [0019](0019-encoding-identity-and-formatting-helpers.md)        | Encoding, identity, and formatting helpers      | `8.9`                                       | —                     | 6.8          | written   |
 | `0020`                                                          | Date and time conversion helpers                | `8.10`                                      | —                     | 6.9          | unwritten |
 
 _Table 16: Allocation of the accepted set to focused child RFCs and roadmap
