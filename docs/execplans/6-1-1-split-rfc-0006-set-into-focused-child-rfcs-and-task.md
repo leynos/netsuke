@@ -151,9 +151,9 @@ Hard invariants. Violating one requires escalation, not a workaround.
   the escalation is answered in the `EP-M5` Progress entry. **The intent to
   write the remaining children to a tighter shape did not hold, and the
   tolerance was breached with them rather than narrowly avoided** — five
-  children now total 2404 against the 2400 budget, as the 2026-10-03 correction
-  below records. Each child's line count is recorded at its own commit, which is
-  how the drift was caught. **The aggregate is the
+  children now total **2418** against the 2400 budget at `3c337c89`, as the
+  2026-10-03 corrections below record. Each child's line count is recorded at
+  its own commit, which is how the drift was caught. **The aggregate is the
   binding control and it is now breached, not approached**: five children are
   written at 2374 lines against the 2400 budget, leaving 26 for three children
   whose measured floor is ~183 each. **The figures in this paragraph are
@@ -171,7 +171,12 @@ Hard invariants. Violating one requires escalation, not a workaround.
   honest-child floor of roughly 183 lines each project the complete set to
   about **2950**, a shortfall near **550 lines**. The figure is re-derived from
   the files rather than carried forward, because the repair that fixed the
-  wrestling match also moved the number the escalation is about.
+  wrestling match also moved the number the escalation is about. **Second
+  correction, same day: the round-3 repairs moved it again, to 2418 at
+  `3c337c89`** — 0016 is **538** and 0017 is **515** — which is 14 lines further
+  over and projects the set to about **2960**. Each figure is now cited with
+  the revision it was measured at, so a later repair cannot silently make it
+  false: the number is a property of a revision, not of the branch.
 - **Vacuity.** If any section 5 subsection cannot state a group-specific
   consequence — a bound, a registry row, a diagnostic code, a purity
   assignment, a named error condition — and cannot honestly say "no additional
@@ -2046,7 +2051,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   and re-deriving the count from the files rather than carrying the entry
   forward showed the budget is now exceeded by the **five children written
   alone**: 0013 **470**, 0014 **397**, 0015 **498**, 0016 **537**, 0017 **502**
-  — **2404 against 2400**. The earlier figure of 2374 was true at `5895fc4c`;
+  — **2404 against 2400**, measured at `e359cd66`. The earlier figure of 2374 was true at `5895fc4c`;
   the round-2 review repairs then grew RFC 0016 by **27** lines (the
   `regex_replace` output ceiling: a bounds row, a fourth consequence, a
   diagnostic row, and their discharge prose) and RFC 0017 by **3**, crossing
@@ -2111,7 +2116,9 @@ Hard invariants. Violating one requires escalation, not a workaround.
   This entry supersedes the EP-M6 projection. **Correction, added 2026-10-03:
   the 0016 and 0017 figures and the 2374 total are themselves superseded** —
   the round-2 repairs took 0016 to **537** and 0017 to **502**, so the five
-  written children total **2404 against 2400** with three still to write. The
+  written children total **2404 against 2400** at `e359cd66` with three still
+  to write; the round-3 repairs then took them to **538** and **515**, for
+  **2418** at `3c337c89`. The
   re-derived figures are in the tolerance clause and in the 2026-10-03 Progress
   entry, and those are the figures to quote. No
   remedy is available to the implementation agent — the tolerance says so
