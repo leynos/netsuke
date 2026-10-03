@@ -594,16 +594,19 @@ temporary directory before it reaches the manifest. The value is inserted
 verbatim, and whatever resolves it afterwards does so under its own rules.
 Those rules differ by position.
 
-A captured value used as a path in a `cwd`, `stdin`, `stdout`, `stderr`, or
-`tee` position is resolved by the ordinary path rules for that position. A
-relative value resolves against the effective `-C` directory, as section 9.1
-already states for `cwd: { env: NAME }`, and remains subject to the
-workspace-confinement check, not to the temporary directory the capture came
-from and not automatically to the capturing stage's `cwd`. Because the
-resolution happens after capture, a stage cannot use a captured relative path
-to reach the secure temporary directory that another stage created; section
-11.4 rejects an out-of-workspace value, and section 13 records the runtime
-forms of that rejection.
+A captured value used as a `cwd` resolves against the effective `-C` directory
+when it is relative, exactly as section 9.1 states for `cwd: { env: NAME }`,
+and remains subject to the workspace-confinement check.
+
+A captured value used as a `stdin`, `stdout`, `stderr`, or `tee` path is a
+stream path, so it resolves against the consuming stage's resolved `cwd` — the
+base this section opened with — and not against the effective `-C` directory.
+
+Neither resolution uses the temporary directory the capture came from, and
+neither uses the capturing stage's `cwd`. Because both happen after capture, a
+stage cannot use a captured relative path to reach the secure temporary
+directory that another stage created; section 11.4 rejects an out-of-workspace
+value, and section 13 records the runtime forms of that rejection.
 
 A destination that must outlive the temporary directory is named on its own
 terms. The manifest either names an absolute path directly, as the paragraph
