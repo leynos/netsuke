@@ -173,7 +173,9 @@ The following mapping identifies one implementation owner for each contract;
 shared integration work does not duplicate those implementations.
 
 - [RFC 0001](rfcs/0001-structured-command-blocks.md): phases 12 to 14,
-  with deferred execution extensions in phase 15.
+  with deferred execution extensions in phase 15. Task 12.1.1 consolidated the
+  amended contract in
+  [ADR-043](adr-043-consolidated-structured-command-execution-contract.md).
 - [RFC 0002](rfcs/0002-repository-relative-includes.md): phase 16 in the
   [composition roadmap](roadmap-composition.md).
 - [RFC 0003](rfcs/0003-versioned-local-bundles.md): phase 17, including
@@ -181,17 +183,20 @@ shared integration work does not duplicate those implementations.
 - [RFC 0004](rfcs/0004-digest-pinned-external-bundles.md): phase 18 after
   local include and bundle acceptance; deferred provenance policy in phase 19.
 - [RFC 0009](rfcs/0009-structured-command-working-directories.md): 12.1.1
-  reconciles path contracts, 12.2.3 implements literal directories, 13.3.1
-  covers independent stage directories, and 17.4.4 covers fragment and bundle
-  provenance without changing the importing-workspace anchor.
+  reconciled the path contracts in
+  [ADR-043](adr-043-consolidated-structured-command-execution-contract.md),
+  12.2.3 implements literal directories, 13.3.1 covers independent stage
+  directories, and 17.4.4 covers fragment and bundle provenance without
+  changing the importing-workspace anchor.
 - [RFC 0010](rfcs/0010-runtime-bindings-and-secure-tempdirs.md): step 13.2
   owns stderr pipelines, steps 14.1 and 14.2 own runtime bindings and secure
   directories, and 14.3.1 plus 17.4.4 cover execution and composition matrices.
 - [RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md): phase 11
   owns registry primitives and resolved-shell integration. Task 11.3.1 needs
   the codec and basic runner, not completed runtime bindings; 11.3.2 waits for
-  the full pipeline and directory facilities it exercises. Task 12.1.1 must
-  reconcile RFC 0011 §6.2 and ADR-019 with the other stream-path contracts.
+  the full pipeline and directory facilities it exercises. Task 12.1.1
+  reconciled RFC 0011 §6.2 and ADR-019 with the other stream-path contracts in
+  [ADR-043](adr-043-consolidated-structured-command-execution-contract.md).
 - [RFC 0026](rfcs/0026-hexagonal-domain-hardening.md): phase 26 in the
   [architecture roadmap](roadmap-hexagonal-hardening.md) owns trustworthy
   resolved build semantics, and phase 27 owns the application and diagnostic
@@ -2496,21 +2501,24 @@ This step asks whether one closed command grammar can preserve source identity
 and argv boundaries through typed interpolation. Its outcome fixes the compiler
 contract before any new command can execute.
 
-- [ ] 12.1.1. Consolidate and ratify the amended execution contract.
-  - Reconcile RFC 0001 §§9 and 12.1, RFC 0009 §§5 and 11, and RFC 0011 §6.2
-    on absolute `cwd`, capability confinement, and workspace-relative versus
-    `cwd`-relative stream paths. Include ADR-019 in the decision, updating
-    any affected accepted architecture through its documented decision process,
-    and align every RFC example before implementation.
-  - Distinguish ephemeral `capture_stdout` from `stdout: { env: NAME }`,
+- [x] 12.1.1. Consolidate and ratify the amended execution contract.
+  Ratified by
+  [ADR-043](adr-043-consolidated-structured-command-execution-contract.md); see
+  that record for the decision and its rationale.
+  - [x] Reconcile RFC 0001 §§9 and 12.1, RFC 0009 §§5 and 11, and RFC 0011
+    §6.2 on absolute `cwd`, capability confinement, and workspace-relative
+    versus `cwd`-relative stream paths. Include ADR-019 in the decision,
+    updating any affected accepted architecture through its documented decision
+    process, and align every RFC example before implementation.
+  - [x] Distinguish ephemeral `capture_stdout` from `stdout: { env: NAME }`,
     and per-stage `temp_dir` variable overrides from `cwd: { tempdir: {} }`
     directory selection. Record whether both spellings remain and how their
     combinations validate, without losing either amendment's requirements.
-  - Record acceptance, the next available manifest minor version, action-plan
-    versioning, and bounded termination and stale-plan cleanup policies. Keep
-    the trust boundary from ADR-019 and defer the extensions in phase 15.
-    Coordinate schema allocation with 16.1.1 and 17.1.1 without requiring their
-    implementations to complete first.
+  - [x] Record acceptance, the next available manifest minor version,
+    action-plan versioning, and bounded termination and stale-plan cleanup
+    policies. Keep the trust boundary from ADR-019 and defer the extensions in
+    phase 15. Coordinate schema allocation with 16.1.1 and 17.1.1 without
+    requiring their implementations to complete first.
   - See [RFC 0001 §§19 and 23](rfcs/0001-structured-command-blocks.md),
     [RFC 0009 §§5 and 11](rfcs/0009-structured-command-working-directories.md),
     [RFC 0010 §§7 and 10](rfcs/0010-runtime-bindings-and-secure-tempdirs.md),
@@ -2519,6 +2527,19 @@ contract before any new command can execute.
     disputed case, including temporary-directory precedence and lifetime;
     direct, default-shell, and named-shell implementations share one path
     contract rather than selecting contradictory paragraphs.
+  - Outcome: relative stream paths resolve against the block's resolved `cwd`,
+    and RFC 0009 §11's contrary summary of RFC 0001 §12.1 is corrected as a
+    drafting error rather than a competing design. An absolute `cwd` is
+    rejected in the initial surface, resolving RFC 0001 §9 against RFC 0009 §5
+    in favour of confinement. Both capture spellings remain and are mutually
+    exclusive per stage: `capture_stdout` is an ephemeral raw-byte sink, and
+    `stdout: { env: NAME }` commits a sequence-local UTF-8 binding. Both
+    temporary-directory spellings remain and may combine: the tempdir `cwd`
+    form sets the working directory, and `temp_dir` binds `TMPDIR`, `TMP`, and
+    `TEMP` to a separate per-stage directory. Manifest minor version `1.1.0` is
+    reserved for the shared mapping schema, persisted plans are versioned
+    independently by the variants they contain, and bounded termination and
+    bounded stale-plan cleanup are now defined in RFC 0001 §13.3 and §17.4.
 - [ ] 12.1.2. Add the closed structured-command AST and schema version gate.
   - Requires 12.1.1 and 11.2.1.
   - Preserve scalar commands and all-string lists; accept an `invoke` mapping

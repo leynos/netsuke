@@ -250,24 +250,34 @@ capture_stdout: 65536
 temp_dir: true
 ```
 
-| Field            | Type                         | Default             | Meaning                                                                                            |
-| ---------------- | ---------------------------- | ------------------- | -------------------------------------------------------------------------------------------------- |
-| `invoke`         | string                       | required            | Direct argv template, or shell source when `shell` is `true` or a name.                            |
-| `shell`          | Boolean or shell name        | `false`             | Select direct, platform-default shell, or named allow-listed shell execution.                      |
-| `env`            | mapping of string to string  | empty               | Exact child-environment overlay.                                                                   |
-| `stdin`          | string path                  | inherited           | Read the child's standard input from a file.                                                       |
-| `stdout`         | string path                  | inherited           | Write standard output to a truncated file.                                                         |
-| `stderr`         | string path                  | inherited           | Write standard error to a truncated file.                                                          |
-| `tee`            | string path                  | absent              | Copy standard output to inherited stdout and a truncated file.                                     |
-| `pipe`           | Boolean or `stdout`/`stderr` | `false`             | Connect the selected stream to the next structured block's stdin. `true` is an alias for `stdout`. |
-| `cwd`            | string path                  | effective directory | Run this block relative to the effective `-C` directory.                                           |
-| `capture_stdout` | non-negative integer         | absent              | Retain at most this many stdout bytes for the action result.                                       |
-| `temp_dir`       | Boolean                      | `false`             | Bind a private, per-stage runtime temporary directory.                                             |
+| Field            | Type                         | Default                  | Meaning                                                                                            |
+| ---------------- | ---------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------- |
+| `invoke`         | string                       | required                 | Direct argv template, or shell source when `shell` is `true` or a name.                            |
+| `shell`          | Boolean or shell name        | `false`                  | Select direct, platform-default shell, or named allow-listed shell execution.                      |
+| `env`            | mapping of string to string  | empty                    | Exact child-environment overlay.                                                                   |
+| `stdin`          | string path                  | inherited                | Read the child's standard input from a file.                                                       |
+| `stdout`         | string path                  | inherited                | Write standard output to a truncated file.                                                         |
+| `stderr`         | string path                  | inherited                | Write standard error to a truncated file.                                                          |
+| `tee`            | string path                  | absent                   | Copy standard output to inherited stdout and a truncated file.                                     |
+| `pipe`           | Boolean or `stdout`/`stderr` | `false`                  | Connect the selected stream to the next structured block's stdin. `true` is an alias for `stdout`. |
+| `cwd`            | string path                  | effective `-C` directory | Child working directory; a relative value resolves against the effective `-C` directory.           |
+| `capture_stdout` | non-negative integer         | absent                   | Retain at most this many stdout bytes ephemerally for the action result.                           |
+| `temp_dir`       | Boolean                      | `false`                  | Bind a private, per-stage runtime temporary directory to the conventional temporary variables.     |
 
 Table 1: Structured command block fields.
 
 Unknown keys are invalid. `invoke` must be present exactly once. The mapping
 may not contain `rule` or `script`.
+
+`cwd`, `capture_stdout`, and `temp_dir` are three distinct facilities. `cwd`
+selects the child's process working directory. `capture_stdout` selects an
+ephemeral standard-output sink. `temp_dir` binds environment variables and
+creates a directory without changing the process working directory.
+[RFC 0010](0010-runtime-bindings-and-secure-tempdirs.md) adds the named
+`stdout: { env: NAME }` and `cwd: { tempdir: ... }` forms that extend these
+fields, and
+[ADR-043](../adr-043-consolidated-structured-command-execution-contract.md)
+records how the spellings combine.
 
 ### 6.3 Reference and script items
 
@@ -589,11 +599,17 @@ unless it is absolute.
 The effective working directory starts with the directory selected by the
 command-line `-C` option. A block without `cwd` runs there. When `cwd` is
 present, Netsuke renders it as a path and resolves it relative to that
-effective directory; an absolute path remains absolute. Each block resolves its
-own `cwd`, so a pipeline stage does not inherit the preceding stage's working
-directory. The resolved directory must exist and be a directory before the
-stage starts. This block or stage directory is the base for all relative stream
-paths and is the child's working directory.
+effective directory. Each block resolves its own `cwd`, so a pipeline stage
+does not inherit the preceding stage's working directory. The resolved
+directory must exist and be a directory before the stage starts. This block or
+stage directory is the base for all relative stream paths and is the child's
+working directory.
+
+The initial structured-command surface rejects an absolute `cwd`. A rendered
+string must not silently expand the process's ambient filesystem authority, and
+a capability-scoped external directory handle is a later extension.
+[RFC 0009](0009-structured-command-working-directories.md) section 5 owns the
+resolution and confinement rules.
 
 On Windows, direct mode must reject a resolved `cmd.exe`, `.bat`, or `.cmd`
 target. Rust preserves Windows batch-file launching through `cmd.exe`, whose
@@ -653,6 +669,12 @@ Each stage retains independent working-directory and stream semantics, so a
 shell block may participate in a structured pipeline without placing the outer
 pipe operator in shell source.
 
+Shell mode does not change the stream-path base. A relative stream path still
+resolves against the block's resolved `cwd`, including when `shell: true` or a
+named shell is selected. The selected shell receives the rendered `invoke`
+source and an already-configured working directory; Netsuke never emits a `cd`
+prefix, so the shell's own directory state begins at that directory.
+
 ## 11. Environment semantics
 
 ### 11.1 Exact overlay
@@ -709,6 +731,15 @@ set those variables normally, but Netsuke does not create or remove a
 directory. The runner never exposes the generated path to a later execution
 unit or persists it in the action plan.
 
+`temp_dir` is an environment-binding facility. It does **not** change the
+child's process working directory, and it does not make the directory available
+for reuse by a later stage.
+[RFC 0010](0010-runtime-bindings-and-secure-tempdirs.md) section 6.4 defines
+the separate `cwd: { tempdir: ... }` forms, which select a working directory
+and, when named, publish a sequence-local directory binding. Section 12.1
+records how the two forms combine and which one wins on the conventional
+variables.
+
 ### 11.4 Deferred operations
 
 This RFC deliberately defers object-valued operations such as `default`,
@@ -724,6 +755,22 @@ Every stream path is rendered at manifest compilation time and resolved
 relative to the block's resolved `cwd`. An absent `cwd` resolves to the
 effective working directory after command-line `-C` processing. Netsuke opens
 the path when the action executes, not while the manifest is compiled.
+
+A relative `cwd` itself resolves against that effective `-C` directory, so the
+base for a relative stream path is always determined: effective `-C` directory,
+then the stage's normalized `cwd` relative to it, then the stream path relative
+to that result. A manifest may therefore select a directory once and have the
+stage's inputs and outputs follow it without repeating the prefix.
+[RFC 0009](0009-structured-command-working-directories.md) sections 5 and 11
+own the `cwd` confinement rules and the worked example.
+
+The base is whatever directory the stage actually selected, including a secure
+temporary directory supplied by
+[RFC 0010](0010-runtime-bindings-and-secure-tempdirs.md) section 6.4. A
+relative stream destination under such a stage therefore lives inside the
+temporary directory and is removed with it. A stage that needs a destination to
+outlive itself must not combine a relative stream path with a temporary working
+directory; RFC 0010 section 9.5 states the rule and the alternatives.
 
 Validation occurs independently when each execution unit starts. For a maximal
 structured pipeline, the unit's destination set is the union of `stdin`,
@@ -797,11 +844,21 @@ than silently truncating the capture. Captured bytes remain available only in
 the runner's bounded result and diagnostics until the unit completes; they are
 then discarded and cannot be consumed by a later unit.
 
+`capture_stdout` is an ephemeral sink. It creates no binding, is never visible
+to a later execution unit, and is not serialized into the action plan. A
+manifest that needs a value to outlive its producer uses the named
+`stdout: { env: NAME }` form defined by
+[RFC 0010](0010-runtime-bindings-and-secure-tempdirs.md) section 6.1, which
+commits a sequence-local runtime binding. The two forms are different
+facilities with different lifetimes, and a stage selects at most one of them.
+
 `pipe: true` or `pipe: "stdout"` directs the child's standard output to the
 next structured command block's standard input. `true` is exactly an alias for
 `"stdout"`.
 
-`stdout`, `tee`, `capture_stdout`, and a stdout pipe are mutually exclusive.
+`stdout`, `tee`, `capture_stdout`, a named environment capture, and a stdout
+pipe are mutually exclusive; at most one standard-output sink may be selected
+per stage.
 
 ### 12.4 Standard error
 
@@ -894,6 +951,37 @@ This is equivalent to a strict `pipefail` policy, but Netsuke derives it from
 the child statuses directly rather than from shell configuration. When multiple
 stages fail, diagnostics report every failed stage in lexical order. The
 pipeline's failure stops the enclosing sequence.
+
+### 13.3 Bounded termination
+
+Termination is bounded, and every affected process is reaped. When the runner
+must stop a started execution unit, it:
+
+1. closes its own managed pipe, relay, and tee endpoints so downstream readers
+   observe end of file;
+2. requests termination of every still-running child in the execution unit,
+   using the documented process-group or job-object policy;
+3. waits a bounded interval for each child to exit;
+4. escalates to forceful termination for any child still running after that
+   interval; and
+5. reaps every child and joins every relay before reporting a status.
+
+The runner never abandons a child, a relay, or a handle because a termination
+request was slow. A child that refuses to exit does not become an unbounded
+wait: the escalation step applies to it too.
+
+The same policy covers stage-spawn failure, pipe, relay, or tee I/O failure,
+capture-limit overflow under
+[RFC 0010](0010-runtime-bindings-and-secure-tempdirs.md) section 7.1,
+cancellation, and timeout.
+[RFC 0010](0010-runtime-bindings-and-secure-tempdirs.md) section 10.5 describes
+cleanup after the reaping step, and section 10.6 states the detached-descendant
+limitation: a child that deliberately detaches an untracked descendant may keep
+files or handles alive, and that is reported rather than waited on indefinitely.
+
+The execution IR therefore carries the resolved process-group or job-object
+mode. A generated action plan must let a runner that does not understand that
+mode reject the plan rather than adopt an unbounded wait.
 
 ## 14. Command-list sequencing
 
@@ -989,10 +1077,13 @@ the required information is available at compile time.
   output handle is truncated. Provisional handles are closed on rejection.
   Destinations in separate sequential units are checked independently.
 - `capture_stdout` must be a non-negative byte limit. It is mutually exclusive
-  with `stdout`, `tee`, and a stdout pipe; a limit violation fails the unit.
+  with `stdout`, `tee`, a named environment capture, and a stdout pipe; a limit
+  violation fails the unit.
 - `cwd` must resolve to an existing directory before its execution unit starts.
+- An absolute `cwd` is invalid in the initial surface.
 - `temp_dir: true` creates one private runtime directory for each stage and
-  binds the conventional temporary-directory environment variables to it.
+  binds the conventional temporary-directory environment variables to it. It
+  does not select a working directory.
 
 ### 15.4 Reference validation
 
@@ -1146,6 +1237,19 @@ pipe ends. `cwd` is resolved per block before stream paths are resolved, and
 `temp_dir` is materialized per stage at execution time; neither value is
 inherited from a preceding sequential unit.
 
+`cwd`, `env`, `streams`, `capture_stdout`, and `temp_dir` carry the five
+distinct facets of the consolidated contract.
+[RFC 0010](0010-runtime-bindings-and-secure-tempdirs.md) section 12 extends
+`StreamBindings` with the named capture sink and `cwd` with the environment and
+secure-tempdir selectors. Whatever the eventual type names, the following
+distinctions are normative:
+
+- a stream path is resolved against the resolved `cwd`, and never the reverse;
+- an ephemeral `capture_stdout` value and a named environment capture are
+  different sinks with different lifetimes; and
+- a `temp_dir` environment binding and a secure-tempdir working directory are
+  different facilities that may both be present.
+
 `ResolvedShell` contains the allow-listed registry name, resolved executable,
 and fixed invocation arguments. The compiler resolves `PlatformDefault` and
 `Named` before constructing the IR. The runner does not consult `CliConfig` or
@@ -1201,6 +1305,28 @@ The generated-output association must not allow a manifest or action identifier
 to select a plan outside its private sidecar set. A later `netsuke generate`
 must either publish a complete replacement or leave the previous usable
 association intact.
+
+Stale-plan cleanup is bounded in both arms:
+
+- **Build-time plans.** After abnormal termination, cleanup removes plans whose
+  exclusive lease is no longer held, but only within the private temporary
+  directory Netsuke created for that build. It does not scan an arbitrary
+  directory, and it never removes a plan whose lease is still held.
+- **Persistent sidecars.** Cleanup follows the recorded manifest-local index
+  rather than walking the filesystem. A sidecar named by the current index, or
+  protected by a live lease, is retained; an interrupted publication leaves the
+  previous complete association usable, as above. An abandoned lease is
+  reclaimed only through the index and only after the lease's recorded owner
+  can no longer be running.
+
+A cleanup pass therefore touches a bounded, enumerable set of paths and fails
+closed: when it cannot establish that a plan is unreferenced and unleased, it
+retains the plan and reports the condition. Cleanup never removes a plan that a
+concurrent Netsuke process may still execute.
+[RFC 0010](0010-runtime-bindings-and-secure-tempdirs.md) section 16 and
+[RFC 0009](0009-structured-command-working-directories.md) section 13 require
+the same plan to carry enough schema versioning for an uncomprehending runner
+to reject it rather than ignore a field.
 
 A recipe containing only legacy command text may continue to lower directly to
 Ninja command text. Once a recipe contains a structured block, rule item, or
@@ -1286,6 +1412,23 @@ structured mappings ship first, named selection must use the next additive
 minor version. The implementation pull request may select a different minor
 version if intervening schema work consumes the provisional number.
 
+Version allocation is shared across the structured-command amendments.
+[ADR-043](../adr-043-consolidated-structured-command-execution-contract.md)
+records `1.1.0` as reserved for the next additive mapping schema, which RFC
+0009, RFC 0010, and RFC 0011 share: they amend the same mapping schema rather
+than introducing separate syntax generations, so they add no second increment.
+A later amendment must not claim `1.1.0` for an unrelated schema; it takes the
+next number, and roadmap tasks 16.1.1 and 17.1.1 coordinate that allocation.
+
+Persisted action plans use an independent version namespace. RFC 0001 section
+17.4 owns the plan lifecycle, and
+[RFC 0010](0010-runtime-bindings-and-secure-tempdirs.md) section 12 owns the
+plan vocabulary. A plan is versioned by the variants it contains: a runner that
+cannot represent a plan's `cwd` selector, binding, or capture form rejects the
+plan rather than ignoring the unknown field. Plan versions advance when the
+persisted vocabulary changes, not when the manifest-format minor version does,
+and the two numbers are recorded separately.
+
 ### 19.3 Documentation migration
 
 After acceptance and implementation:
@@ -1362,10 +1505,29 @@ The implementation should include:
   stderr bytes, and exit status for cross-platform integration tests;
 - per-block and per-stage `cwd` tests, including relative stream-path
   resolution and independent pipeline-stage directories;
+- consolidated stream-path tests proving that `stdin`, `stdout`, `stderr`, and
+  `tee` resolve against the stage's `cwd` in direct, default-shell, and
+  named-shell modes, that a stage with a different `cwd` resolves its own paths
+  independently, and that a relative `cwd` composes with a relative stream path
+  exactly once;
 - bounded stdout-capture tests for the limit, overflow failure, stream
   exclusivity, discarded completion lifetime, and captured-byte diagnostics;
+- named environment-capture tests proving the opposite lifetime: the binding is
+  visible to later sequence items, is not visible across a rule, script, or
+  legacy boundary, and is redacted from diagnostics and plans;
 - per-stage temporary-directory tests for `TMPDIR`, `TMP`, and `TEMP`
   precedence, isolation, cleanup, and distinction from action-plan sidecars;
+- combined temporary-directory tests covering `temp_dir: true` together with
+  `cwd: { tempdir: {} }` and `cwd: { tempdir: { env: NAME } }`, verifying that
+  the process working directory is the secure tempdir, that the conventional
+  variables are the stage's own private directory and not the secure tempdir,
+  and that the named binding outlives the stage while the private directory
+  does not;
+- bounded-termination tests covering spawn failure, relay I/O failure,
+  capture-limit overflow, cancellation, and timeout, asserting that every
+  started child is reaped and no relay is left detached;
+- stale-plan cleanup tests covering build-time plans and persistent sidecars,
+  including a live lease that must survive a cleanup pass; and
 - pipeline tests where the first, middle, and final stages fail independently;
 - finite pipelines that verify unused pipe ends close, downstream stages
   receive EOF, all relays join, and successful stages terminate;
@@ -1513,6 +1675,12 @@ skyscrapers from argument lists.
 - [Netsuke design document](../netsuke-design.md)
 - [ADR-019: Select allow-listed structured-command
   shells](../adr-019-structured-command-shell-selection.md)
+- [ADR-043: Consolidated structured-command execution
+  contract](../adr-043-consolidated-structured-command-execution-contract.md)
+- [RFC 0009: Structured-command working
+  directories](0009-structured-command-working-directories.md)
+- [RFC 0010: Runtime bindings and secure
+  tempdirs](0010-runtime-bindings-and-secure-tempdirs.md)
 - [RFC 0011: Allow-listed structured-command
   shells](0011-allow-listed-structured-command-shells.md)
 - [Rust `std::process` module](https://doc.rust-lang.org/stable/std/process/)

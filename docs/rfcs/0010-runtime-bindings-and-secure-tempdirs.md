@@ -565,6 +565,47 @@ After resolving the directory, direct and shell execution follow RFC 0009:
 - shell mode receives the directory through the process API, not generated
   `cd` source.
 
+### 9.5 Stream-path base
+
+Whichever form selected the directory, the result is the block's resolved
+`cwd`, and RFC 0001 section 12.1 resolves every relative `stdin`, `stdout`,
+`stderr`, and `tee` path against it. An environment-selected directory is not a
+special case: a stage that resolves its directory from `WORKSPACE_DIR` resolves
+its relative stream paths from the same normalized directory.
+
+Two consequences follow from the lifetime rules above:
+
+- a relative stream path under a stage-scoped `cwd: { tempdir: {} }` resolves
+  inside the secure temporary directory, which is removed when the stage
+  finishes. Such a path must be treated as scratch data, because the file is
+  deleted with the directory; and
+- a relative stream path under a named sequence-scoped tempdir resolves inside
+  that directory and therefore disappears when the sequence finishes, for the
+  same reason.
+
+Absolute paths are unaffected, because they do not resolve against the base. A
+stage that needs a destination to outlive the temporary directory therefore has
+two options: name an absolute path, or take the path from a runtime binding.
+Binding values are inserted as template data, and the path produced that way is
+absolute, so it also does not resolve against the base:
+
+```yaml
+command:
+  - invoke: scratch-tool prepare
+    cwd:
+      tempdir:
+        env: SCRATCH_DIR
+  - invoke: scratch-tool emit --target "{{ env('ARTEFACT_PATH') }}"
+    cwd:
+      env: SCRATCH_DIR
+```
+
+This RFC introduces no `relative_to` selector on stream paths. RFC 0009 section
+20.3 considered a stream-path base independent of `cwd` and was rejected by
+[ADR-043](../adr-043-consolidated-structured-command-execution-contract.md), so
+a manifest declares an absolute path when it wants one rather than opting a
+relative path out of the base.
+
 ## 10. Secure temporary-directory semantics
 
 ### 10.1 Root selection
@@ -623,6 +664,60 @@ references are supported in environment overlays by a later amendment.
 
 The child always starts with its process working directory set to the secure
 temporary directory.
+
+### 10.4.1 Relationship to `temp_dir: true`
+
+RFC 0001 section 11.3 defines `temp_dir: true` as an independent facility: it
+creates a private per-stage directory, binds `TMPDIR`, `TMP`, and `TEMP` in the
+stage's child environment, and then removes the directory when the stage and
+its relays finish. It does not change the working directory, publishes nothing
+to later units, and stores nothing in the action plan.
+
+The two facilities may appear on one block, and they then behave as follows:
+
+| Aspect                    | `temp_dir: true`                        | `cwd: { tempdir: ... }`                        |
+| ------------------------- | --------------------------------------- | ---------------------------------------------- |
+| Process working directory | unchanged                               | set to the secure temporary directory          |
+| Conventional variables    | bound to the stage-private directory    | not rewritten                                  |
+| Child-visible environment | `TMPDIR`, `TMP`, `TEMP` only            | the named binding, when `env` is present       |
+| Visible to later units    | never                                   | only when `env` is present                     |
+| Lifetime                  | one stage, including its relays         | one stage, or one complete sequence when named |
+| Serialized in the plan    | no generated path                       | binding name and lifecycle scope, no path      |
+| Directory relationship    | outside the workspace unless configured | outside the workspace by design                |
+
+_Table 3: Combined temporary-directory behaviour._
+
+On a block that declares both, the process working directory is the secure
+temporary directory created by the `cwd` form, while the conventional temporary
+variables name the stage-private directory created by `temp_dir`. Each facility
+keeps its own owner and cleanup path, and both are removed on the same
+completion paths. A tool that honours the conventional variables therefore
+writes into the stage-private directory, and a tool that honours its process
+working directory writes into the secure temporary directory. Neither directory
+is a subtree of the other, and Netsuke does not create a link between them.
+
+A stage that needs the conventional variables to name its working directory
+disables the stage-private directory with `temp_dir: false` and sets the
+variables itself. Ambient values cannot be referenced from `env`, because the
+secure path is generated at execution time and is not a manifest-time value;
+the supported spelling is a typed runtime binding reference in an environment
+overlay, which section 19 defers to a later amendment. Until that lands, a
+manifest either accepts the distinct directories or names its own directory
+explicitly.
+
+This amendment does not merge the two spellings. RFC 0001 section 11.3 and this
+section describe different capabilities, and roadmap task 14.2.2 implements
+them separately.
+[ADR-043](../adr-043-consolidated-structured-command-execution-contract.md)
+records that decision.
+
+For a structured pipeline, both facilities materialize before the first stage
+is spawned. Section 10.3 requires every secure temporary directory and
+directory binding required by any stage to exist before the first spawn; the
+`temp_dir` form follows the same pre-spawn rule so that no stage observes a
+partially prepared unit. `temp_dir` creates one directory per stage, so a
+pipeline with `n` stages creates `n` private directories even when the stages
+share a named secure tempdir.
 
 ### 10.5 Cleanup
 
@@ -708,6 +803,38 @@ command:
 
 The compiler's standard error feeds the normalizer. Its standard output is
 captured separately and commits only if the complete pipeline succeeds.
+
+### 11.5 Distinguish ephemeral and named standard-output capture
+
+RFC 0001 section 12.3 defines `capture_stdout: LIMIT` as a bounded ephemeral
+sink. The journal of the two forms is:
+
+| Aspect            | `capture_stdout: LIMIT`                  | `stdout: { env: NAME }`                    |
+| ----------------- | ---------------------------------------- | ------------------------------------------ |
+| Result            | bounded byte buffer in the action result | sequence-local runtime binding             |
+| Visibility        | the runner's result and diagnostics      | later items in the same sequence           |
+| Lifetime          | discarded when the unit completes        | until the sequence finishes                |
+| Encoding          | raw bytes, no decoding required          | validated UTF-8 text                       |
+| Limit             | the stated byte bound; over-limit fails  | `max_bytes`, default 65536, 16 MiB cap     |
+| Line handling     | none                                     | `chomp`, default true                      |
+| Argument delivery | never                                    | through the child environment              |
+| Plan content      | the limit only                           | binding name, limit, chomp, and provenance |
+
+_Table 4: Ephemeral and named standard-output capture._
+
+Both forms are in the initial surface and both remain. A stage selects exactly
+one standard-output sink, so the two spellings cannot be combined on one stage;
+section 7.4 and RFC 0001 section 12.3 state the same exclusivity from their own
+sides. Section 13 rejects a manifest that selects more than one.
+
+A named capture is the only form whose value can be consumed by a later
+command, and it is the only form that must be redacted from diagnostics and
+excluded from plans. An ephemeral capture has no consumer beyond the runner's
+own result, so it needs no binding name, no collision rule, and no commit
+protocol.
+[ADR-043](../adr-043-consolidated-structured-command-execution-contract.md)
+records the distinction and roadmap task 13.1.5 implements the ephemeral form
+while 14.1.2 implements the named one.
 
 ### 11.4 Reject an untrusted absolute path
 
@@ -795,14 +922,18 @@ Manifest compilation rejects:
 - a pipeline stage that consumes an execution-produced binding from another
   stage because that binding cannot commit before pipeline spawn;
 - zero or excessive capture limits;
-- standard-output capture combined with another standard-output sink;
+- standard-output capture combined with another standard-output sink, including
+  `capture_stdout` combined with a named `stdout: { env: NAME }` capture;
 - `pipe: stderr` combined with another standard-error sink;
 - any pipe on the terminal stage;
 - a downstream stage with both a predecessor pipe and explicit `stdin`;
 - two predecessor streams targeting one standard input;
 - a pipeline crossing a rule, script, or legacy boundary;
-- a tempdir mapping containing fields other than optional `env`; and
-- an action plan whose runner schema cannot represent the required variants.
+- a tempdir mapping containing fields other than optional `env`;
+- an absolute `cwd` in any form, including a rendered absolute literal and an
+  environment-selected text value; and
+- an action plan whose runner schema cannot represent the required variants,
+  including the process-group or job-object termination mode.
 
 Runtime validation rejects:
 
@@ -869,10 +1000,28 @@ unless another sandbox policy restricts it.
 Existing RFC 0001 forms remain valid:
 
 - `stdout: path` retains file-redirection semantics;
+- `capture_stdout` retains its ephemeral bounded sink, which this amendment
+  does not replace (section 11.5 distinguishes it from the named capture);
+- `temp_dir: true` retains its per-stage environment binding, which this
+  amendment does not replace (section 10.4.1 states how it combines with the
+  tempdir `cwd` form);
 - `pipe: false` and `pipe: true` retain their meanings, with `true` normalized
   to `stdout`;
-- literal string `cwd` retains RFC 0009's semantics; and
+- literal string `cwd` retains RFC 0009's semantics, including the stream-path
+  base in its section 11; and
 - legacy command strings and command-string lists remain unchanged.
+
+The manifest-format minor version is shared with the other structured-command
+amendments rather than allocated here.
+[ADR-043](../adr-043-consolidated-structured-command-execution-contract.md)
+reserves `1.1.0` for the next additive mapping schema, which RFC 0009, RFC
+0010, and RFC 0011 land inside. This amendment does not add a second increment.
+
+Persisted plans are versioned separately from the manifest format. A plan
+records the variants it contains, and a runner that cannot represent a
+directory binding, an environment capture, a tempdir working directory, or a
+process-group termination mode rejects the plan rather than ignoring the
+unknown field.
 
 Mechanical migrations include:
 
@@ -944,6 +1093,20 @@ The implementation must include:
 - producer and consumer failure propagation;
 - cancellation and reaping; and
 - capture-stdout plus pipe-stderr coexistence.
+
+### Combined stream paths, captures, and temporary directories
+
+- a relative stream path resolving under an environment-selected `cwd` and under
+  each secure-tempdir form;
+- `capture_stdout` and a named capture excluded from one stage and accepted on
+  separate stages;
+- `temp_dir: true` combined with `cwd: { tempdir: {} }` and with
+  `cwd: { tempdir: { env: NAME } }`, verifying the working directory, the
+  conventional variables, both lifetimes, and both cleanups;
+- a pipeline preparing every stage's `temp_dir` before the first spawn, creating
+  one private directory per stage; and
+- bounded termination after capture-limit overflow, asserting that every started
+  process is reaped and every relay joined.
 
 ### Secure temporary directories
 
@@ -1031,6 +1194,14 @@ makes cleanup non-deterministic. Rejected from the initial surface.
 
 These questions do not alter the initial requirements for bounded capture,
 typed directory authority, parent-environment isolation, or mandatory cleanup.
+
+[ADR-043](../adr-043-consolidated-structured-command-execution-contract.md)
+settles the two questions this amendment raised against RFC 0001 and removes
+them from the open set: `capture_stdout` and `stdout: { env: NAME }` remain
+distinct (section 11.5), and `temp_dir` and `cwd: { tempdir: ... }` remain
+distinct and combinable (section 10.4.1). The runtime binding reference in an
+environment overlay stays open, and a manifest that needs the conventional
+variables to name a secure temporary directory still waits for it.
 
 ## 20. Recommendation
 

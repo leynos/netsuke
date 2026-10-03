@@ -246,6 +246,11 @@ operator, user, and contributor references are easier to find.
 - [ADR-041](adr-041-canonical-recipe-shell-quoting-surface.md): `shell_quote`
   and `shell_join` as the canonical recipe quoting surface, with two dialects
   and a host-dependent default.
+- [ADR-043](adr-043-consolidated-structured-command-execution-contract.md):
+  One structured-command execution contract across RFC 0001, RFC 0009, RFC
+  0010, RFC 0011, and ADR-019: the `cwd` stream-path base, absolute-`cwd`
+  rejection, the two capture forms, the two temporary-directory spellings, and
+  the reserved `1.1.0` manifest minor version.
 
 ## Proposals
 
