@@ -5,12 +5,6 @@
 
 #[cfg(feature = "lint")]
 mod check;
-#[cfg(feature = "lint")]
-pub mod check_diagnostics;
-#[cfg(feature = "lint")]
-mod check_documentation;
-#[cfg(feature = "lint")]
-mod check_telemetry;
 mod dispatch;
 mod dyndep;
 mod error;
@@ -24,8 +18,11 @@ use crate::output_prefs::OutputPrefs;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 use anyhow::{Context, Result};
 pub use camino::{Utf8Path, Utf8PathBuf};
+// `check_diagnostics` predates the move under `check/`; keep the public path.
 #[cfg(feature = "lint")]
-pub use check_diagnostics::FindingDiagnostic;
+pub use check::diagnostics as check_diagnostics;
+#[cfg(feature = "lint")]
+pub use check::diagnostics::FindingDiagnostic;
 pub use error::RunnerError;
 use monotony::StdMonotonicClock;
 use std::io::IsTerminal;
@@ -54,7 +51,7 @@ mod path_helpers;
 mod process;
 mod recipe_shell;
 #[cfg(feature = "lint")]
-pub use check_telemetry::{CHECK_DURATION, CHECK_TOTAL};
+pub use check::telemetry::{CHECK_DURATION, CHECK_TOTAL};
 pub use ninja::{NinjaContent, run_ninja, run_ninja_tool};
 #[cfg(doctest)]
 pub use process::doc;
