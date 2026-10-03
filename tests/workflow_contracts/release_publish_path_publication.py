@@ -38,7 +38,7 @@ class UploadPlanCheck:
     label: str
 
 
-def _step_runs(
+def step_runs(
     step: dict[str, object],
     contexts: dict[str, object],
     violations: list[str],
@@ -52,7 +52,7 @@ def _step_runs(
     return value is not MISSING and bool(value)
 
 
-def _check_upload_plan(
+def check_upload_plan(
     steps: list[dict[str, object]],
     check: UploadPlanCheck,
 ) -> None:
@@ -165,7 +165,7 @@ def _check_draft_guard(
     """Require draft creation to run only in tag-publish scenarios."""
     scenario = check.scenario
     draft = named_step(steps, "Ensure release exists (draft)")
-    draft_runs = _step_runs(
+    draft_runs = step_runs(
         draft, contexts, check.violations, f"{scenario.name}.draft.guard"
     )
     expected_draft = scenario.mode == "publish"
@@ -188,7 +188,7 @@ def _check_publication_steps(
         ("hoist", step_index_by_key(steps, "run", "hoist_binstall_archives.py")),
         ("upload", step_index_by_key(steps, "id", "upload_assets")),
     ):
-        if not _step_runs(
+        if not step_runs(
             steps[index],
             contexts,
             check.violations,
@@ -197,7 +197,7 @@ def _check_publication_steps(
             check.violations.append(
                 f"{scenario.name}.publish-{label}: step is guarded off"
             )
-    _check_upload_plan(
+    check_upload_plan(
         steps,
         UploadPlanCheck(
             scenario=scenario,

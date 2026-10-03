@@ -6,7 +6,7 @@ import typing as typ
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
-_MODE_OUTPUTS = {
+MODE_OUTPUTS = {
     "dry-run": {
         "should-publish": "false",
         "dry-run": "true",
@@ -23,7 +23,7 @@ _MODE_OUTPUTS = {
         "should-upload-workflow-artifacts": "false",
     },
 }
-_PACKAGE_UPLOAD = {"dry-run": True, "publish": True, "neither": False}
+PACKAGE_UPLOAD = {"dry-run": True, "publish": True, "neither": False}
 REQUIRED_DRY_RUN_EVENTS = {"opened", "synchronize", "reopened", "ready_for_review"}
 REQUIRED_NEEDS = {
     "metadata",

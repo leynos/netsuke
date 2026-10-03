@@ -32,8 +32,14 @@ def test_unsupported_expression_error_preserves_standard_exception_arguments() -
     ("expression", "expected"),
     [
         ("${{ (true && !false) || false }}", True),
+        ("true || false && false", True),
+        ("false || true && false", False),
         ("'false' && true", True),
-        ("false || 'false'", True),
+        ("false || 'false'", "false"),
+        ("'false' || 'fallback'", "false"),
+        ("'' || 'fallback'", "fallback"),
+        ("'false' && 'selected'", "selected"),
+        ("'' && 'not-selected'", ""),
         ("needs.metadata.result == 'success'", True),
         ("needs.metadata.result != 'failure'", True),
         ("fromJSON('true') == true", True),
@@ -45,8 +51,14 @@ def test_unsupported_expression_error_preserves_standard_exception_arguments() -
     ],
     ids=[
         "wrapper-parentheses-and-unary-not",
+        "and-binds-tighter-than-or",
+        "precedence-still-evaluates-the-right-branch",
         "and",
-        "or",
+        "or-returns-selected-string",
+        "truthy-or-returns-left-operand",
+        "falsy-or-returns-right-operand",
+        "truthy-and-returns-right-operand",
+        "falsy-and-returns-left-operand",
         "equal-string",
         "not-equal-string",
         "equal-boolean",
@@ -61,7 +73,7 @@ def test_supported_expression_operators_and_paths(
     expression: str, expected: object
 ) -> None:
     """Evaluate each supported operator and both path forms."""
-    assert evaluate_expression(expression, CONTEXTS) is expected, (
+    assert evaluate_expression(expression, CONTEXTS) == expected, (
         f"supported expression {expression!r} should resolve to {expected!r}"
     )
 
