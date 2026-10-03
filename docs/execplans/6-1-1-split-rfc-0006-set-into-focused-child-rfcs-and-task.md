@@ -2527,7 +2527,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 - Observation: **a check whose instrument cannot fail will always pass, and a
   passing check is not evidence.** While repairing the round-3 findings I
-  canonicalised three Markdown files with
+  canonicalized three Markdown files with
   `mdtablefix --wrap --renumber --breaks --ellipsis --fences <file>` and then
   compared `sha256sum` before and after, reporting "canonical OK" three times
   on an unchanged hash. **Without `--in-place`, `mdtablefix` is a stdout
@@ -2541,7 +2541,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `+9 -9` non-canonical, exactly the rewrap the vacuous check had certified as
   absent. Impact: the false green nearly shipped — it was caught only because
   the *real* target was run afterwards by a separate agent, not because the
-  check was scrutinised. The same run also surfaced three spelling errors in
+  check was scrutinized. The same run also surfaced three spelling errors in
   the prose I had just written, which the vacuous check had no chance of
   detecting. Lesson: **before trusting a comparison, ask what result the
   instrument would report if the thing under test were wrong.** A check that
