@@ -53,10 +53,9 @@ fn stage_audit_inputs(destination: &Path) -> Result<()> {
     let root = repository_root();
     fs::create_dir_all(destination.join("src/localization"))?;
     fs::copy(root.join("Cargo.toml"), destination.join("Cargo.toml"))?;
-    fs::copy(
-        root.join("src/localization/keys.rs"),
-        destination.join("src/localization/keys.rs"),
-    )?;
+    for keys in ["src/localization/keys.rs", "src/localization/check_keys.rs"] {
+        fs::copy(root.join(keys), destination.join(keys))?;
+    }
     for entry in SUPPORTED_LOCALES {
         let relative = Path::new("locales").join(entry.tag());
         fs::create_dir_all(destination.join(&relative))?;
@@ -139,6 +138,18 @@ fn the_staged_copy_reproduces_a_passing_audit(
     let mutated = text.replacen(
         "define_keys! {",
         "define_keys! {\n    UNSHIPPED_KEY => \"netsuke.unshipped.key\",",
+        1,
+    );
+    ensure!(mutated != text, "expected the define_keys! macro to rewrite");
+    fs::write(&keys, mutated)?;
+    Ok(())
+})]
+#[case::a_key_is_declared_twice("is already declared", &|root: &Path| {
+    let keys = root.join("src/localization/check_keys.rs");
+    let text = fs::read_to_string(&keys)?;
+    let mutated = text.replacen(
+        "define_keys! {",
+        "define_keys! {\n    DUPLICATE_ABOUT => \"cli.about\",",
         1,
     );
     ensure!(mutated != text, "expected the define_keys! macro to rewrite");

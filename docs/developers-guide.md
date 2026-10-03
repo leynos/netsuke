@@ -636,7 +636,9 @@ Every user-facing string is a Fluent message keyed from
 `src/localization/keys.rs`. Adding one means adding the constant, adding the
 message to all 35 catalogues, and keeping its `{ $variables }` identical across
 them: the build audit rejects a missing key, an orphaned key, or a variable set
-that differs from `en-US`.
+that differs from `en-US`. The `netsuke check` keys live in
+`src/localization/check_keys.rs`, which `keys.rs` re-exports; the audit reads
+both files as one key set and rejects a key declared in both.
 
 A *diagnostic* message whose text carries a bracketed code such as
 `[netsuke::jinja::shell::args]` must have that code copied **verbatim** into
@@ -993,16 +995,16 @@ release shape.
 and above its other attributes.
 
 **No-op twins.** Where both configurations need a definition — for example
-`apply_check_defaults` in `src/cli/merge_apply.rs` and `is_check_metric` in the
+`apply_check_defaults` in `src/cli/merge/apply.rs` and `is_check_metric` in the
 observability recorder — provide two definitions: one under
 `#[cfg(feature = "lint")]` and a `#[cfg(not(feature = "lint"))]` no-op twin.
 
 **Fluent keys stay ungated.** The Fluent message keys in
-`src/localization/keys.rs`, their catalogue entries, and the subcommand-to-key
-routing in `src/cli_l10n.rs` are deliberately not gated. The build-time
-localization audit is bidirectional across all 35 catalogues, and gating the
-constants would make every locale look orphaned; the routing only maps command
-names and carries no linting logic.
+`src/localization/keys.rs` and `src/localization/check_keys.rs`, their
+catalogue entries, and the subcommand-to-key routing in `src/cli/l10n/mod.rs`
+are deliberately not gated. The build-time localization audit is bidirectional
+across all 35 catalogues, and gating the constants would make every locale look
+orphaned; the routing only maps command names and carries no linting logic.
 
 **Test gating.** Check-only integration tests gate the whole test binary with
 an inner `#![cfg(feature = "lint")]` (`tests/check_command_tests.rs`,

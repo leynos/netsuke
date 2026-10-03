@@ -1,8 +1,11 @@
 //! Fluent message identifiers used by Netsuke.
 //!
 //! This file holds only the key table: the build-time localization audit
-//! parses its single `define_keys!` invocation, and the macro itself is
-//! defined in the parent module.
+//! parses its `define_keys!` invocation, and the macro itself is defined in
+//! the parent module. The `netsuke check` keys live in `check_keys.rs` and
+//! are re-exported here, so every key is still reached as `keys::NAME`.
+
+pub use super::check_keys::*;
 
 define_keys! {
     CLI_ABOUT => "cli.about",
@@ -38,22 +41,6 @@ define_keys! {
     CLI_FLAG_DEFAULT_TARGETS_HELP => "cli.flag.default_targets.help",
     CLI_SUBCOMMAND_BUILD_ABOUT => "cli.subcommand.build.about",
     CLI_SUBCOMMAND_BUILD_LONG_ABOUT => "cli.subcommand.build.long_about",
-    CLI_SUBCOMMAND_CHECK_ABOUT => "cli.subcommand.check.about",
-    CLI_SUBCOMMAND_CHECK_LONG_ABOUT => "cli.subcommand.check.long_about",
-    CLI_SUBCOMMAND_CHECK_FLAG_RULE_HELP => "cli.subcommand.check.flag.rule.help",
-    CLI_SUBCOMMAND_CHECK_FLAG_FAIL_ON_HELP => "cli.subcommand.check.flag.fail_on.help",
-    CLI_SUBCOMMAND_CHECK_FLAG_LIMIT_HELP => "cli.subcommand.check.flag.limit.help",
-    CLI_SUBCOMMAND_CHECK_FLAG_EXPLAIN_HELP => "cli.subcommand.check.flag.explain.help",
-    CHECK_THRESHOLD_EXCEEDED => "check.threshold_exceeded",
-    CHECK_THRESHOLD_EXCEEDED_HELP => "check.threshold_exceeded.help",
-    CHECK_SUMMARY_COUNTS => "check.summary.counts",
-    CHECK_SUMMARY_CLEAN => "check.summary.clean",
-    CHECK_SUMMARY_TRUNCATED => "check.summary.truncated",
-    CHECK_RULE_MALFORMED => "check.rule.malformed",
-    CHECK_RULE_UNKNOWN => "check.rule.unknown",
-    CHECK_RULE_SEVERITY => "check.rule.severity",
-    CHECK_FAIL_ON_INVALID => "check.fail_on.invalid",
-    CHECK_SOURCE_INDEX => "check.source_index",
     CLI_SUBCOMMAND_CLEAN_ABOUT => "cli.subcommand.clean.about",
     CLI_SUBCOMMAND_CLEAN_LONG_ABOUT => "cli.subcommand.clean.long_about",
     CLI_SUBCOMMAND_GRAPH_ABOUT => "cli.subcommand.graph.about",
@@ -385,7 +372,6 @@ define_keys! {
     STATUS_TIMING_STAGE_LINE => "status.timing.stage_line",
     STATUS_TIMING_TOTAL_LINE => "status.timing.total_line",
     STATUS_TOOL_BUILD => "status.tool.build",
-    STATUS_TOOL_CHECK => "status.tool.check",
     STATUS_TOOL_CLEAN => "status.tool.clean",
     STATUS_TOOL_GRAPH => "status.tool.graph",
     STATUS_TOOL_GRAPH_HTML => "status.tool.graph_html",
