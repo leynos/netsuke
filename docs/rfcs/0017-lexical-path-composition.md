@@ -67,8 +67,8 @@ learn that from the name.
   - Add `dialect` to the existing `basename` and `dirname` **additively**, so a
     manifest that omits it keeps today's behaviour byte for byte.
   - Refuse the two compositions that would otherwise be silently wrong:
-    `path_join` resetting at an absolute component, and `commonpath` or
-    `relpath` comparing a path that can ascend.
+    `path_join` resetting at an absolute component, and `commonpath`
+    comparing a path that can ascend.
   - Keep every helper lexical, so all seven new helpers are usable from
     manifest queries and none needs a capability handle.
 - Non-goals:
@@ -243,12 +243,18 @@ Four decisions this group adds:
   manifest joining eight components needs to know *which* one reset the path,
   and `['/safe/root', '/etc/passwd']` is a two-line reproduction while
   `index 4` is a pointer into the caller's own expression.
-- **`commonpath` rejects `..` inputs with a code of their own.** Section 8.6
-  says inputs containing `..` are rejected "because a purely lexical common
-  prefix is not meaningful once a path can ascend". That is a different failure
-  from mixing absolute and relative paths and has a different remedy — the
-  author wants `realpath`, or wants to normalize first — so it gets
-  `parent_component` rather than being folded into `mixed_path_kind`.
+- **`commonpath` rejects `..` inputs with a code of their own, and `relpath`
+  does not.** Section 8.6 says `commonpath`'s inputs containing `..` are
+  rejected "because a purely lexical common prefix is not meaningful once a
+  path can ascend". That is a different failure from mixing absolute and
+  relative paths and has a different remedy — the author wants `realpath`, or
+  wants to normalize first — so it gets `parent_component` rather than being
+  folded into `mixed_path_kind`. `relpath` is the deliberate exception, and
+  section 8.6 says so in its own words: it "may contain `..`" and "is for the
+  cases that genuinely need to ascend", which the existing `relative_to` filter
+  refuses. Adding `parent_component` to `relpath` would therefore remove the
+  one helper the RFC keeps for ascent, so the rejection belongs to `commonpath`
+  alone.
 - **`different_drive` is one code across three helpers.** `path_join`,
   `commonpath`, and `relpath` all reach it under the `windows` dialect, and all
   three mean the same thing by it. One code keeps the diagnostic vocabulary

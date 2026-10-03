@@ -278,9 +278,13 @@ relation that is deterministic and does not force values through a hash set."
   rather than reporting `false`.
 - **The canonical-JSON domain is narrower than the accepted kinds.** Clause 6.7
   defines it as "string keys at every mapping level", so a mapping with an
-  integer key cannot participate in any relation here — the collision RFC
-  0014's section 5.7 separates rather than a defect of this group. The
-  diagnostic names the kind, per the clause's "typed error naming the value
+  integer key cannot participate in any relation here. The limit is deliberate
+  rather than a defect of this group. RFC 0014's section 5.7 separates an
+  integer key `1` from a string key `"1"` when it detects a derived-key
+  collision, but that is a rule about *which derived keys collide*, not an
+  admission of integer keys to the canonical-JSON domain; the two documents
+  agree rather than conflict, and section 5.7 says so in its own third bullet.
+  The diagnostic names the kind, per the clause's "typed error naming the value
   kind".
 
 ### 5.8. Resource bounds

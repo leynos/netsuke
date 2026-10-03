@@ -1212,10 +1212,13 @@ capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7, delivered b
   Requires 6.7.1.
   - See RFC 0006 §8.7,
     [RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md)
-    §§5.3 and 5.8, and
+    §§5.3, 5.8, and 8, and
     [adr-010-scope-glob-capability-to-literal-prefix.md](adr-010-scope-glob-capability-to-literal-prefix.md).
   - Leave the existing capability scoping, ordering, and observability
     contracts unchanged, and do not introduce a second glob implementation.
+  - Settle RFC 0018 §8's `files_only` default conflict before the option
+    registers, and enforce the 100000-match ceiling section 5.8 assigns to
+    `files_only=false`.
 - [ ] 6.7.4. Add `expandvars` through an injected environment reader. Requires
   6.1.5 and 6.6.1.
   - See RFC 0006 §8.6,

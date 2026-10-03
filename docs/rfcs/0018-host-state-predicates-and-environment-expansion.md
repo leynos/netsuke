@@ -18,11 +18,10 @@
 This RFC specifies Netsuke's filesystem predicates and its one
 environment-observing helper: the tests `exists`, `link_exists`, `same_file`,
 and `mount`, the `files_only` option added to the existing `glob` function, and
-the filter `expandvars`. Section 5.1's registry lists seven members: **five new
-helpers**, one existing function gaining an option, and one existing helper
-already registered. The five are the four tests plus `expandvars`. `glob` is
-registered already and takes `files_only` additively rather than being
-registered anew.
+the filter `expandvars`. Section 5.1's registry lists six members: **five new
+helpers** and one existing function gaining an option. The five are the four
+tests plus `expandvars`. `glob` is the sixth, and it is registered already: it
+takes `files_only` additively rather than being registered anew.
 
 The group takes the observing members of RFC 0006 section 14.6's slice 5 —
 `exists`, `link_exists`, `same_file`, `mount`, and `glob(files_only=...)` — and
@@ -274,11 +273,11 @@ a subject or an option value is rejected, each carrying a code from section 5.9.
 | `same_file`   | two strings      | `wrong_kind`; `outside_capability`; `missing_operand`; `identity_unavailable`                     |
 | `mount`       | a string         | `wrong_kind`; `outside_capability`; `unsupported_platform`                                        |
 | `expandvars`  | a string         | `wrong_kind`; `malformed_reference`; `non_utf8_value`; `unknown_missing_value`; `unknown_dialect` |
-| `glob`        | a string         | `wrong_kind`; `outside_capability`; `unknown_dialect`                                             |
+| `glob`        | a string         | `wrong_kind`; `outside_capability`                                                                |
 
 Four decisions this group adds:
 
-- **`outside_capability` is one code across four helpers, and it is not
+- **`outside_capability` is one code across five helpers, and it is not
   `missing_operand`.** `exists`, `link_exists`, `same_file`, `mount`, and
   `glob` all reach it, and all five mean the same thing by it: the path is not
   within the workspace the manifest was given. Keeping it distinct from "the
@@ -327,8 +326,13 @@ give and, in the hard-link case, the one that is actually wanted.
 
 ### 5.8. Resource bounds
 
-The bounds are RFC 0006 table 3's. **This group reaches one of them, and it is
-the one row that must be reached rather than a row the group chooses.**
+The bounds are RFC 0006 table 3's, and this group reaches **two** of its rows —
+the input-length row, which every path argument meets, and the match-count row
+by adoption — **plus two ceilings of its own** on the two members that
+materialize: 100000 matches for `glob(files_only=false)` and 8 MiB of output for
+`expandvars`. Each of the four is stated where it applies rather than folded
+into one sentence, because three of them bound different things and the fourth
+is the status quo.
 
 The input-length row bounds a subject at 8 MiB, and a path supplied to `exists`,
 `link_exists`, `same_file`, or `mount` arrives through the same template
@@ -344,43 +348,57 @@ ordering and observability contracts unchanged. What the option changes is
 which entries reach that collection, and the resource obligation runs in the
 direction the new value opens.
 
-`files_only=true` is the status quo, so its bound is the existing one: it
-returns no candidate the metadata check rejected, and it adds no traversal,
-because the check it relies on already runs per candidate. It **cannot
-increase** the result size relative to what ships today.
+`files_only=true` is the status quo, and its bound is **unchanged**: it adds no
+traversal, because the check it relies on already runs per candidate, and it
+returns the regular-file subset of the same match set. It carries no
+cardinality ceiling today, and this group does not add one — section 12's "no
+existing contract changes" promise covers a manifest that matches a very large
+tree, so a ceiling introduced on the shipped spelling would break it.
 
-`files_only=false` is the newly reachable path, and it is the one that needs a
-statement because it is the one whose result can be larger. It admits
-`NotAFile` entries as well as `Path` ones, so its result is bounded by the
-match set rather than by the regular-file subset — larger, but not unbounded:
-the `glob` crate enumerates a finite tree, and the existing skipped-entry
-accounting in `GlobSkippedEntries` is where an operator sees the counts either
-way. The bound this clause imposes is on *implementation* rather than on size:
-the `false` path must reuse the same per-entry metadata check and the same
-capability root, not a second traversal. A `false` implemented as an additional
-`stat` pass, or as a second glob expression, would double the syscall cost of
-an expansion and would be a resource regression in a change whose entire
-argument is that it avoids a second glob. Roadmap task 6.7.3's "do not
-introduce a second glob implementation" is the same constraint stated from the
-design side.
+`files_only=false` is the newly reachable path, and it is the one whose result
+is larger, because it admits `NotAFile` entries as well as `Path` ones. **A
+larger result is not by itself an unbounded one, but neither is it a bound**:
+the result is limited only by the number of entries the pattern matches, and
+that count is a property of the workspace rather than of the argument, so no
+length of `pattern` limits it. The clause asks a materialized output to reject
+unreasonable expansion *before* allocating, so the group applies a
+**match-count ceiling** of 100000 to this path alone: the count is checked as
+the collection grows, and exceeding it fails with `match_limit` before the
+sequence is materialized, which is the discipline RFC 0016's section 5.8
+requires of `regex_findall` for the same reason. The ceiling is the one row
+this group *adds* rather than inherits, and it is confined to the value that
+opens the larger result because only that value can be widened by an argument.
+The existing skipped-entry accounting in `GlobSkippedEntries` is unchanged and
+remains where an operator sees the rejections either way.
 
-`expandvars` is bounded by its input in the way section 8.6's rules guarantee:
-a variable reference is replaced by the value the injected reader returns, so
-the output is bounded by the input plus the total length of the environment
-values referenced. That is a *multiple* of the operands rather than a function
-of their content, which is the distinction the clause's materialization test
-turns on — a helper that multiplied by a *count* the manifest supplied
-separately, or by the *value* of a component, would reach an output the input
-length does not bound, and an output ceiling would then be owed. The one thing
-worth naming is that the multiplier is bounded by the environment's own size,
-which is bounded by the process's environment, so no manifest input can drive
-it.
+The clause imposes a second bound here, on *implementation* rather than on
+size: the `false` path must reuse the same per-entry metadata check and the
+same capability root, not a second traversal. A `false` implemented as an
+additional `stat` pass, or as a second glob expression, would double the
+syscall cost of an expansion and would be a resource regression in a change
+whose entire argument is that it avoids a second glob. Roadmap task 6.7.3's "do
+not introduce a second glob implementation" is the same constraint stated from
+the design side.
 
-The output-length row is **not** reached, and stating why is part of the honest
-discharge: no helper in this group produces text whose size a manifest argument
-controls independently of its input. `expandvars` cannot emit more than its
-input plus the referenced values; the four tests emit nothing; `glob`'s output
-is the existing implementation's, and the option only removes from it.
+`expandvars` is the second member the clause reaches, and it is the one member
+of the group whose output is not bounded by its input. A variable reference is
+replaced by the value the injected reader returns, so the output is bounded by
+the input plus the total length of the environment values referenced; that
+total is bounded by the process environment, which the operating system caps
+and which **no manifest input can drive**. A multiplier bounded by the operand
+count rather than by an argument is the shape RFC 0017's composing helpers also
+carry, and it is not by itself an expansion this clause refuses. It is
+nevertheless not a bound on the output, because the injected reader is under
+the *host's* control rather than the manifest's and can return a value far
+larger than the subject being expanded — so the group adds an **output
+ceiling** of 8 MiB, checked before the expanded string is materialized, and
+rejects an expansion that would exceed it with `output_too_large`. Naming both
+the multiplier and the ceiling is the honest discharge: the first is why the
+multiplier is not manifest-driven, and the second is why the result is bounded
+anyway.
+
+The four tests reach no row of table 3. Each consumes a path bounded by the
+input row, allocates nothing that grows with it, and returns a boolean.
 
 ### 5.9. Diagnostics and localization
 
@@ -400,6 +418,8 @@ are enumerated rather than described.
 | non-UTF-8 environment value          | `netsuke::jinja::path::non_utf8_value`        |
 | unknown `missing` value              | `netsuke::jinja::path::unknown_missing_value` |
 | unknown `dialect` value              | `netsuke::jinja::path::unknown_dialect`       |
+| `glob` match count exceeded          | `netsuke::jinja::path::match_limit`           |
+| `expandvars` output too large        | `netsuke::jinja::path::output_too_large`      |
 
 Each code's Fluent key is its reason in upper snake case under `STDLIB_PATH_`,
 per clause 6.9's `keys::STDLIB_<MODULE>_<CONDITION>` form, so
@@ -511,19 +531,19 @@ removed without the inventory disagreeing.
 
 ### Clause discharge
 
-| Clause | Discharge                                                                                                                                                          |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `6.1`  | Five `New` helpers and one `Option added`; none is pure, so the group contributes 0 of 52 and the six written children remain at 41.                               |
-| `6.2`  | All six register stubs in `register_disabled_query_helpers`; `expandvars` is excluded exactly as `env` is, and `glob`'s registration is unchanged.                 |
-| `6.3`  | Four tests return booleans; `expandvars` substitutes in one left-to-right pass; `files_only` filters the existing result rather than reordering it.                |
-| `6.4`  | Every path resolves through the injected `cap_std` handle; a path outside it errors; `expandvars` reads the injected environment reader.                           |
-| `6.5`  | Platform is uniform for four helpers, identity-based for `same_file`, divergent only in `mount`, and dialect-sensitive in `expandvars`'s input.                    |
-| `6.6`  | Nine rejected conditions with their own codes; `outside_capability` is distinct from not-found; both platform codes name the platform.                             |
-| `6.7`  | No value is keyed or deduplicated; `same_file`'s identity relation is a filesystem fact, not the canonical key.                                                    |
-| `6.8`  | Table 3's input row bounds every path; `files_only` cannot increase the result and adds no traversal; `expandvars` is bounded by its input plus referenced values. |
-| `6.9`  | One enum, one `From` impl, nine `netsuke::jinja::path::*` codes extending the existing module namespace, with `unknown_dialect` shared with RFC 0017.              |
-| `6.10` | Five new names, none an alias; `mount` keeps the noun spelling the test namespace supplies the "is" for; `fileglob` stays rejected.                                |
-| `6.11` | Five guide entries, five `tested-example` fences, the dangling-link and subsequence laws, the two-platform suite, and the all-stubs disposition suite.             |
+| Clause | Discharge                                                                                                                                                                                       |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `6.1`  | Five `New` helpers and one `Option added`; none is pure, so the group contributes 0 of 52 and the six written children remain at 41.                                                            |
+| `6.2`  | All six register stubs in `register_disabled_query_helpers`; `expandvars` is excluded exactly as `env` is, and `glob`'s registration is unchanged.                                              |
+| `6.3`  | Four tests return booleans; `expandvars` substitutes in one left-to-right pass; `files_only` filters the existing result rather than reordering it.                                             |
+| `6.4`  | Every path resolves through the injected `cap_std` handle; a path outside it errors; `expandvars` reads the injected environment reader.                                                        |
+| `6.5`  | Platform is uniform for four helpers, identity-based for `same_file`, divergent only in `mount`, and dialect-sensitive in `expandvars`'s input.                                                 |
+| `6.6`  | Eleven rejected conditions with their own codes; `outside_capability` is distinct from not-found; both platform codes name the platform.                                                        |
+| `6.7`  | No value is keyed or deduplicated; `same_file`'s identity relation is a filesystem fact, not the canonical key.                                                                                 |
+| `6.8`  | Table 3's input row bounds every path; `files_only=false` adds a 100000-match ceiling checked before materialization; `expandvars` adds an 8 MiB output ceiling checked before materialization. |
+| `6.9`  | One enum, one `From` impl, eleven `netsuke::jinja::path::*` codes extending the existing module namespace, with `unknown_dialect` shared with RFC 0017 and `match_limit` shared with RFC 0016.  |
+| `6.10` | Five new names, none an alias; `mount` keeps the noun spelling the test namespace supplies the "is" for; `fileglob` stays rejected.                                                             |
+| `6.11` | Five guide entries, five `tested-example` fences, the dangling-link and subsequence laws, the two-platform suite, and the all-stubs disposition suite.                                          |
 
 ## 6. Dependencies
 
@@ -656,6 +676,15 @@ directories to it, which is a silent behaviour change of exactly the kind RFC
 the task that can test it, rather than discovered by a user. Sections 5.3 and
 5.8 are written so that both readings hold: the resource bound of `false` is
 stated separately from the unchanged bound of `true`.
+
+The choice also decides whether section 5.8's new match-count ceiling can ever
+fire under the shipped default. If 6.7.3 adopts the first reading, `false`
+becomes what an existing `glob()` call gets, and the ceiling applies to those
+calls; if it adopts the second or third, the ceiling is reached only by a
+manifest that opts in. The ceiling itself is owed either way, because the
+*wider* result is what the clause's materialization test turns on, but the task
+should record which reading it chose so a user meeting `match_limit` knows
+whether it was reachable from a call they did not change.
 
 ## 9. Recommendation
 

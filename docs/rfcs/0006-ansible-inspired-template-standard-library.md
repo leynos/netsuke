@@ -1922,10 +1922,10 @@ becomes a focused child RFC that can ship, be reviewed, and be reverted
 independently, and each carries the full cross-cutting contract from section 6
 rather than saying only "match Ansible".
 
-For screen readers: the following flowchart shows slice 0 as the sole
-prerequisite for slices 1, 2, 3 and 8; slice 5 as the prerequisite for slice 6;
-and roadmap task 3.14.8 as an external prerequisite for slice 7. Slices 4, 5
-and 9 have no prerequisites within this RFC.
+For screen readers: the following flowchart shows slice 0 as a prerequisite for
+every other slice; slice 5 as an additional prerequisite for slice 6; and
+roadmap task 3.14.8 as an external prerequisite for slice 7. No slice has
+another slice as its only prerequisite.
 
 ```mermaid
 flowchart TD
@@ -1943,7 +1943,12 @@ flowchart TD
     S0 --> S1
     S0 --> S2
     S0 --> S3
+    S0 --> S4
+    S0 --> S5
+    S0 --> S6
+    S0 --> S7
     S0 --> S8
+    S0 --> S9
     S5 --> S6
     R8 --> S7
 ```
@@ -1952,8 +1957,13 @@ _Figure 1: Prerequisite relationships between the delivery slices._
 
 ### 14.1. Slice 0: shared contract and inventory foundation
 
-This slice exists because seven of the eight remaining slices would otherwise
-each invent their own version of the same shared machinery.
+This slice exists because every one of the eight remaining slices would
+otherwise invent its own version of the same shared machinery. Figure 1 shows
+it as a prerequisite for all eight: a slice that adds no helper still uses the
+domain-error scaffolding for the helpers it does add, and a slice whose helpers
+materialize nothing still declares the bounds it does not reach, which is why
+the edge is drawn to slices 4, 5, and 9 as well as to the four that plainly
+need the canonical key or the cardinality helper.
 
 - The canonical value key and equality relation from section 6.7, with its
   property tests.
@@ -2007,8 +2017,10 @@ equality and the cardinality bound.
 ### 14.5. Slice 4: pattern and version predicates
 
 `regex_replace`, `regex_search`, `regex_findall`, `regex_escape`, and the tests
-`match`, `search`, `regex`, and `version`. Adds the `regex` dependency and the
-bounded compiled-pattern cache. The version predicate has no dependency on the
+`match`, `search`, `regex`, and `version`. Requires slice 0 for the
+bounded-materialization helper, which bounds `regex_findall`'s match count and
+`regex_replace`'s output. Adds the `regex` dependency and the bounded
+compiled-pattern cache. The version predicate has no dependency on the
 regular-expression work and may be split out if the slice grows too large for
 one review.
 
@@ -2017,6 +2029,8 @@ one review.
 `path_join`, `normpath`, `splitext`, `commonpath`, `relpath`, `splitdrive`, the
 `dialect` argument on `basename` and `dirname`, the tests `exists`,
 `link_exists`, `abs`, `same_file`, and `mount`, and `glob(files_only=...)`.
+Requires slice 0 for the domain-error and diagnostic scaffolding every helper
+in the slice raises through.
 
 Order within the slice: the `dialect` mechanism first, then the pure lexical
 helpers, then the filesystem predicates, then `mount` last for the reason in
@@ -2024,9 +2038,11 @@ section 8.7.
 
 ### 14.7. Slice 6: environment-backed path expansion
 
-`expandvars`. Separated from slice 5 because it is the only
-environment-observing helper in the RFC and therefore the only one that needs
-an injected reader, a manifest-query stub, and its own capability review.
+`expandvars`. Requires slice 5 for the `dialect` argument it shares with that
+slice's helpers, and slice 0 for the domain-error scaffolding it raises
+through. Separated from slice 5 because it is the only environment-observing
+helper in the RFC and therefore the only one that needs an injected reader, a
+manifest-query stub, and its own capability review.
 
 ### 14.8. Slice 7: encoding, identity, and formatting
 
@@ -2043,7 +2059,8 @@ whichever larger slice lands alongside it.
 ### 14.10. Slice 9: date and time conversion
 
 `to_datetime` and `strftime`, plus the shared conversion-specifier table and
-its invariant-locale renderer.
+its invariant-locale renderer. Requires slice 0 for the domain-error and
+diagnostic scaffolding both helpers raise through.
 
 ### 14.11. Recommended first wave
 
