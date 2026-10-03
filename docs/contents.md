@@ -91,6 +91,9 @@ operator, user, and contributor references are easier to find.
 - [rfcs/0017-lexical-path-composition.md](rfcs/0017-lexical-path-composition.md):
   Fifth focused child of RFC 0006: the `dialect` path parsers, the lexical
   composition filters, and the pure `abs` test.
+- [rfcs/0018-host-state-predicates-and-environment-expansion.md](rfcs/0018-host-state-predicates-and-environment-expansion.md):
+  Sixth focused child of RFC 0006: the filesystem predicates, the `files_only`
+  option on `glob`, and the environment-expanding filter.
 - [rfcs/0007-netsukefile-testing-framework.md](rfcs/0007-netsukefile-testing-framework.md):
   Proposed Netsukefile testing framework: the `netsuke test` command, the YAML
   test dialect, and its mocking model.

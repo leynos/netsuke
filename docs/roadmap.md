@@ -1187,16 +1187,21 @@ surface. See RFC 0006 §8.6, delivered by
 This step answers whether existence probing and environment expansion can be
 added without a second ambient-authority path and without any helper silently
 disappearing from a manifest query. Its outcome is the practical test of the
-capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7.
+capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7, delivered by
+[RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md).
 
 - [ ] 6.7.1. Add the `exists` and `link_exists` tests. Requires 6.1.6.
-  - See RFC 0006 §8.7.
+  - See RFC 0006 §8.7 and
+    [RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md)
+    §§5.4 and 5.11.
   - Route both through the injected `cap_std` workspace handle, and treat a
     path outside the capability boundary as an error rather than `false`.
   - Success: a dangling symbolic link is `false` for `exists` and `true` for
     `link_exists`.
 - [ ] 6.7.2. Add the `same_file` and `mount` tests. Requires 6.7.1.
-  - See RFC 0006 §§6.5 and 8.7.
+  - See RFC 0006 §§6.5 and 8.7 and
+    [RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md)
+    §§5.5 and 5.6.
   - Compare file identity rather than path spelling, and error on a missing
     operand rather than reporting `false`.
   - Qualify `mount` explicitly per platform; an unsupported platform errors
@@ -1205,13 +1210,17 @@ capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7.
     exercised on Unix and Windows continuous integration.
 - [ ] 6.7.3. Add the `files_only` option to the existing `glob` function.
   Requires 6.7.1.
-  - See RFC 0006 §8.7 and
+  - See RFC 0006 §8.7,
+    [RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md)
+    §§5.3 and 5.8, and
     [adr-010-scope-glob-capability-to-literal-prefix.md](adr-010-scope-glob-capability-to-literal-prefix.md).
   - Leave the existing capability scoping, ordering, and observability
     contracts unchanged, and do not introduce a second glob implementation.
 - [ ] 6.7.4. Add `expandvars` through an injected environment reader. Requires
   6.1.5 and 6.6.1.
-  - See RFC 0006 §8.6 and
+  - See RFC 0006 §8.6,
+    [RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md)
+    §§5.2 and 5.9, and
     [adr-008-environment-seam-taxonomy.md](adr-008-environment-seam-taxonomy.md).
   - Support `missing` values `error`, `empty`, and `preserve`, defaulting to
     `error`, and reject malformed references rather than passing them through.
