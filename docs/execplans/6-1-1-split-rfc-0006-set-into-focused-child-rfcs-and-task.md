@@ -2101,10 +2101,10 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `dialect`). Nine registry rows, taking the five written child registries to
   **41 of the 52** pure helpers: 0013 five, 0014 six, 0015 fifteen, 0016 eight,
   0017 seven. The three still to write — 0018, 0019, and 0020 — account for the
-  remaining eleven. Measured at commit time: **499 lines**, rising to **502**
-  after the round-2 review repairs, section 5 spanning 307 of the original 499,
-  density **34.1** section-5 lines per helper against 0016's 41.4 and 0015's
-  22.5.
+  remaining eleven. Measured at commit time: **499 lines**, reaching **515** at
+  `71e33e9f` after two rounds of review repairs, section 5 spanning 307 of the
+  original 499, density **34.1** section-5 lines per helper against 0016's 41.4
+  and 0015's 22.5.
 
   **The aggregate budget is now breached, not merely approached.** The EP-M6
   entry escalated a projection of ~183 lines per honest child against the 551
@@ -2524,6 +2524,33 @@ Hard invariants. Violating one requires escalation, not a workaround.
   has; or re-partition if smaller *files* are the objective, accepting the
   larger total and the `names.len() == 8` edit in
   `tests/rfc_stdlib_coverage/roadmap.rs` that it requires.
+
+- Observation: **a check whose instrument cannot fail will always pass, and a
+  passing check is not evidence.** While repairing the round-3 findings I
+  canonicalised three Markdown files with
+  `mdtablefix --wrap --renumber --breaks --ellipsis --fences <file>` and then
+  compared `sha256sum` before and after, reporting "canonical OK" three times
+  on an unchanged hash. **Without `--in-place`, `mdtablefix` is a stdout
+  filter: it writes the canonical text to standard output and never touches the
+  file**, so the hash was identical *by construction*, whatever the file
+  contained. The three verdicts were produced by an instrument with no failure
+  mode — the equivalent of checking that a stopped clock agrees with itself.
+  Evidence: a probe on a scratch copy shows `no-inplace … identical=yes` with
+  stdout demonstrably differing from the input, and `in-place … identical=no`;
+  the same three files then failed `make check-fmt` with `+72 -74`, `+4 -4`, and
+  `+9 -9` non-canonical, exactly the rewrap the vacuous check had certified as
+  absent. Impact: the false green nearly shipped — it was caught only because
+  the *real* target was run afterwards by a separate agent, not because the
+  check was scrutinised. The same run also surfaced three spelling errors in
+  the prose I had just written, which the vacuous check had no chance of
+  detecting. Lesson: **before trusting a comparison, ask what result the
+  instrument would report if the thing under test were wrong.** A check that
+  returns "unchanged" for any input is not a passing check, it is an absent
+  one; the file-rewriting operation needs `--in-place`, and the verdict needs
+  the target CI runs rather than a hand-rolled proxy for it. This is the same
+  failure shape the plan already records under "two independent safety nets can
+  both report success while neither is watching" — a green signal from a
+  channel that was never connected.
 
 - Observation: **a branch's recorded gate verdict stops covering the gate once
   the base branch moves the gate's own pin.** Every spelling verdict in this
