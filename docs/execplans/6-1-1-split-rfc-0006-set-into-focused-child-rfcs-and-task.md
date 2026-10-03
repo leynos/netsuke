@@ -1982,6 +1982,31 @@ Hard invariants. Violating one requires escalation, not a workaround.
   to re-derive every count in a child's prose from the table it describes at
   the moment the table changes.
 
+- [x] (2026-10-03) **Continuous integration is green at the branch head on the
+  merge commit, which retires the typos-pin escalation by measurement.** All 20
+  required checks passed on `3ff1afff`. The `build-test` job's `Format` step
+  logs `HEAD is now at 7f4d23a Merge 3ff1afff… into fce1a746…`, confirming that
+  `actions/checkout` resolves `refs/pull/860/merge` even though the run's
+  `head_sha` is the branch head, and its `Spelling` step logs
+  `typos-config-builder.git@v0.1.3` with exit 0. So the newer builder — the one
+  `main` adopted in #843 while this branch sat unrebased — passes the branch's
+  prose, and the rebase is not owed on that account. The same question is
+  answerable locally without rebasing, because the pin is a `?=` variable:
+  `make TYPOS_CONFIG_BUILDER_VERSION=v0.1.3 spelling` exits 0 with `typos.toml`
+  unchanged. **Evidence chain:** the branch head is `3ff1afff`; the merge
+  commit is `7f4d23a`; the run is `37093054896`; the log is
+  `/tmp/ci-run-37093054896.log`; the two lines that carry the finding are the
+  `HEAD is now at` line and the `Spelling` step's `uv tool run …@v0.1.3` line.
+
+  **The aggregate-volume escalation is still open** and remains the only
+  blocker before `EP-M8`. It has been escalated three times and the question
+  tooling aborted each time
+  (`Tool permission request failed: Error: Tool use aborted`), which is a
+  harness fault and not a decline — no answer has been given and none has been
+  assumed. The remaining work — RFCs 0018 to 0020, and `EP-M11`'s roadmap
+  retargeting — stays stopped until it is answered, as the tolerance clause
+  requires.
+
 - [x] (2026-10-03) **Four confirming gate runs were needed to get back to green,
   and the last one gave `markdownlint-cli2` its first verdict at this tip.**
   Green at `15ae9e51`: `check-fmt` exit 0 under **both** mdtablefix 0.6.1
@@ -2601,7 +2626,23 @@ Hard invariants. Violating one requires escalation, not a workaround.
   under the branch.** Rebase (or merge `main`) and re-run the gate before
   treating any verdict as covering the merge commit, and prefer re-running over
   reasoning about whether the bump *could* matter — the word list is a data
-  file, not a semver contract.
+  file, not a semver contract. *Resolved by measurement, same day.* The
+  prediction was right about the mechanism and the outcome was green, which is
+  the useful part. `gh run view 37093054896 --log` shows the `Format` step's
+  `HEAD is now at 7f4d23a Merge 3ff1afff… into fce1a746…` — the run's
+  `head_sha` is the branch head, but `actions/checkout` resolves
+  `refs/pull/860/merge`, so the tree the gates read is the merge commit,
+  exactly as predicted. Its `Spelling` step logs
+  `typos-config-builder.git@v0.1.3` and exit 0, so the branch's prose passes
+  under 1.50.1 as well. A local confirmation is available too, because the pin
+  is a `?=` variable: `make TYPOS_CONFIG_BUILDER_VERSION=v0.1.3 spelling` runs
+  the newer gate against the working tree without rebasing, and it also exits 0
+  with `typos.toml` unchanged. **The rebase is therefore not owed on the
+  spelling gate's account** — the risk was real, was stated as a mechanism, and
+  was retired by evidence rather than by argument. Lesson: **a prediction about
+  a gate can be tested directly by parameterizing the pin, which is cheaper and
+  stronger than reasoning about whether the bump could matter.** A `?=`
+  variable is a seam for exactly this.
 
 - Observation: **the same skew exists on the writing side, and there the base
   branch is not involved at all — the host is.** This plan had recorded the
