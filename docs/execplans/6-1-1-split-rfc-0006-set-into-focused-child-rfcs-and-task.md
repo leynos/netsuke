@@ -2697,7 +2697,20 @@ Hard invariants. Violating one requires escalation, not a workaround.
   than trusting the host's agreement with itself. The two other entries in this
   list are the read-side and self-consistency faces of the same structural
   hazard: **a gate's verdict belongs to the bytes *and the tooling* it actually
-  read.**
+  read.** *Decision recorded, same day: the shared host binary is deliberately
+  left at 0.6.1.* The prior session's note on this hazard ends with "replace
+  the local binary", and an attempt was made to act on it. It was stopped for
+  two reasons, neither of which is inertia. First, `~/.cargo/bin` is shared
+  with every other agent on this host, and a version swap is a machine-wide
+  change to a tool the repository's own gates shell out to — the blast radius
+  is not this branch's. Second, it addresses the *symptom*: the durable fix is
+  to pass the pin at the point of use,
+  `make MDTABLEFIX=/tmp/mdtablefix-pin/mdtablefix check-fmt`, which this plan
+  now does, and which is non-mutating. The pinned binary was staged and verified
+  (`sha256 b78b2ac9…`, identical to the copy the earlier round used), so the
+  parameterized invocation is available without any host change. Recorded
+  because "the note said to replace the binary and the plan did not" would
+  otherwise read as an omission rather than a choice.
 
 - Observation: **two independent safety nets can both report success while
   neither is watching.** Evidence: `EP-M3`'s acceptance criterion is "every
