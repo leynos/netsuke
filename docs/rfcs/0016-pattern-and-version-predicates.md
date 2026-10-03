@@ -197,16 +197,16 @@ RFC 0006 section 8.4 specifies the argument shapes. What follows is when a
 subject, a pattern, a replacement, or an option value is rejected, each
 carrying a code from section 5.9.
 
-| Helper          | Accepted subject    | Rejects                                                                                                                                            |
-| --------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `regex_replace` | a string            | `wrong_kind` for a non-string subject, pattern, or replacement; `bad_pattern`; `unsupported_construct`; `bad_replacement`; `mandatory_count_unmet` |
-| `regex_search`  | a string            | `wrong_kind`; `bad_pattern`; `unsupported_construct`; `no_such_group`                                                                              |
-| `regex_findall` | a string            | `wrong_kind`; `bad_pattern`; `unsupported_construct`; `no_such_group`; `match_limit`                                                               |
-| `regex_escape`  | a string            | `wrong_kind`; `unknown_dialect`                                                                                                                    |
-| `match`         | a string            | `wrong_kind` for subject or pattern; `bad_pattern`; `unsupported_construct`                                                                        |
-| `search`        | a string            | as `match`                                                                                                                                         |
-| `regex`         | a string            | as `match`; `unknown_match_type`                                                                                                                   |
-| `version`       | two version strings | `wrong_kind` for either operand; `bad_version` naming the offending operand and text; `unknown_operator`; `unknown_scheme`                         |
+| Helper          | Accepted subject    | Rejects                                                                                                                                                                |
+| --------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `regex_replace` | a string            | `wrong_kind` for a non-string subject, pattern, or replacement; `bad_pattern`; `unsupported_construct`; `bad_replacement`; `mandatory_count_unmet`; `output_too_large` |
+| `regex_search`  | a string            | `wrong_kind`; `bad_pattern`; `unsupported_construct`; `no_such_group`                                                                                                  |
+| `regex_findall` | a string            | `wrong_kind`; `bad_pattern`; `unsupported_construct`; `no_such_group`; `match_limit`                                                                                   |
+| `regex_escape`  | a string            | `wrong_kind`; `unknown_dialect`                                                                                                                                        |
+| `match`         | a string            | `wrong_kind` for subject or pattern; `bad_pattern`; `unsupported_construct`                                                                                            |
+| `search`        | a string            | as `match`                                                                                                                                                             |
+| `regex`         | a string            | as `match`; `unknown_match_type`                                                                                                                                       |
+| `version`       | two version strings | `wrong_kind` for either operand; `bad_version` naming the offending operand and text; `unknown_operator`; `unknown_scheme`                                             |
 
 `unsupported_construct` reaches the six helpers that **compile** an
 author-supplied pattern — `regex_replace`, `regex_search`, `regex_findall`,
@@ -263,14 +263,16 @@ sentinel, not a value participating in a relation.
 
 ### 5.8. Resource bounds
 
-The bounds are RFC 0006 table 3's. This group reaches two of them, and it is
-the only child that reaches the cache row.
+The bounds are RFC 0006 table 3's, applied through checked comparison before
+allocation, plus one output ceiling this group applies. This group reaches
+three of table 3's rows, and it is the only child that reaches the cache row.
 
 | Bound                  | Value                           | Where it applies                                       |
 | ---------------------- | ------------------------------- | ------------------------------------------------------ |
 | Match count            | 100000                          | `regex_findall`                                        |
 | Compiled pattern size  | 1 MiB                           | the six helpers below that compile an author's pattern |
 | Compiled pattern cache | 64 entries, least-recently-used | the six helpers below that compile an author's pattern |
+| Output length          | 8 MiB                           | `regex_replace`                                        |
 
 The six are `regex_replace`, `regex_search`, `regex_findall`, `match`,
 `search`, and `regex`. The two bound rows scoped to "every regular-expression
@@ -278,7 +280,7 @@ helper" in RFC 0006 table 3 therefore reach all six and neither of the group's
 other two members: `regex_escape` escapes text *into* a pattern and never
 parses one, and `version` has no pattern to compile.
 
-Three consequences this group decides:
+Four consequences this group decides:
 
 - **The match ceiling can be reached before the input is exhausted.** 100000
   matches from a small pattern is easy to hit — a pattern matching every
@@ -298,6 +300,24 @@ Three consequences this group decides:
   `static`. Clause 6.2 makes this load-bearing rather than tidy — a global
   cache is state a manifest query would share with a build, and the query
   environment's whole purpose is to be free of ambient state.
+- **`regex_replace` bounds its output, because a match count is not an output
+  size.** The first row above bounds how many matches `regex_findall` may
+  return, and it is scoped to that helper: it says nothing about how much text
+  `regex_replace` may emit. Those are different quantities, and a pattern
+  decides the second independently of the first. A subject of 1 MiB and a
+  pattern matching one character per position is 1,048,576 matches, and a
+  replacement naming `$0` twice emits 2 MiB from a template shorter than this
+  paragraph — the count is under the ceiling while the output is arbitrary,
+  because the replacement's length is the author's to choose and multiplies the
+  match count. Matching that subject still costs time linear in its length, so
+  section 8.4's guarantee holds unchanged; what the guarantee does not cover is
+  the materialization the *replacement* asks for. Clause 6.8 names
+  "materialized output" for exactly this case and requires the rejection before
+  allocating, so `regex_replace` counts its output with checked arithmetic as
+  the matches are walked, abandoning the walk the moment the running total
+  passes 8 MiB, and fails with `output_too_large` at the ceiling RFC 0013's
+  serializers and RFC 0014's amplifying transforms already apply. The count is
+  taken before the result string is built rather than measured after.
 
 The group enforces no other bound, and the absent subject ceiling is a
 consequence of the dialect rather than an omission. Section 8.4 names the
@@ -310,8 +330,11 @@ expansion hazard the way a YAML alias graph or a `product` is: matching it
 costs time linear in its own length and allocates in proportion to it, so table
 3's 8 MiB input-length row, whose purpose is to stop a small input expanding
 into a large one, has nothing to bound here. The rows that do reach this group
-bound the compiled pattern and the match count: the two quantities a *pattern*,
-rather than a subject, can make grow.
+bound the compiled pattern, the match count, and `regex_replace`'s output: the
+quantities a *pattern*, rather than a subject, can make grow. The output row is
+the one that keeps the distinction honest — it bounds text rather than matches,
+and it exists because a pattern can drive the former past the ceiling without
+approaching the latter.
 
 ### 5.9. Diagnostics and localization
 
@@ -331,6 +354,7 @@ enumerated rather than described.
 | unknown `match_type`                  | `netsuke::jinja::pattern::unknown_match_type`    |
 | unknown `regex_escape` dialect        | `netsuke::jinja::pattern::unknown_dialect`       |
 | `regex_findall` match count exceeded  | `netsuke::jinja::pattern::match_limit`           |
+| `regex_replace` output too large      | `netsuke::jinja::pattern::output_too_large`      |
 | version operand does not parse        | `netsuke::jinja::pattern::bad_version`           |
 | unknown version operator              | `netsuke::jinja::pattern::unknown_operator`      |
 | unknown version scheme                | `netsuke::jinja::pattern::unknown_scheme`        |
@@ -417,19 +441,19 @@ SemVer specification.
 
 ### Clause discharge
 
-| Clause | Discharge                                                                                                                                            |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `6.1`  | Eight pure `New` helpers; the eight section 5.1 rows are 8 of 52.                                                                                    |
-| `6.2`  | All eight pure, so all register in `register_query_helpers`, none stubbed.                                                                           |
-| `6.3`  | `regex_findall` returns leftmost-first input order; the cache is an optimization whose hit or miss is unobservable.                                  |
-| `6.4`  | No filesystem, environment, or subprocess access; no handle taken, and the linear-time engine is what keeps a pattern from becoming one.             |
-| `6.5`  | No platform `dialect` argument; `regex_escape`'s dialect names a syntax, and the helpers are defined over Unicode strings.                           |
-| `6.6`  | Non-string subjects and operands rejected rather than stringified; four enumerated option sets; `bad_pattern` separate from `unsupported_construct`. |
-| `6.7`  | No value is keyed or deduplicated; `regex_search`'s `none` is a matched-absence sentinel, not a relation over the canonical key.                     |
-| `6.8`  | Table 3's 100000-match ceiling for `regex_findall`, 1 MiB compiled pattern, and the 64-entry least-recently-used pattern cache.                      |
-| `6.9`  | One enum, one `From` impl, twelve `netsuke::jinja::pattern::*` codes.                                                                                |
-| `6.10` | Eight new names, none an alias; `version_compare` rejected and the two reshaped names documented in section 5.10.                                    |
-| `6.11` | The clause's seven obligations, with the `regex_escape` and cache-invisibility properties the parent states.                                         |
+| Clause | Discharge                                                                                                                                                                |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `6.1`  | Eight pure `New` helpers; the eight section 5.1 rows are 8 of 52.                                                                                                        |
+| `6.2`  | All eight pure, so all register in `register_query_helpers`, none stubbed.                                                                                               |
+| `6.3`  | `regex_findall` returns leftmost-first input order; the cache is an optimization whose hit or miss is unobservable.                                                      |
+| `6.4`  | No filesystem, environment, or subprocess access; no handle taken, and the linear-time engine is what keeps a pattern from becoming one.                                 |
+| `6.5`  | No platform `dialect` argument; `regex_escape`'s dialect names a syntax, and the helpers are defined over Unicode strings.                                               |
+| `6.6`  | Non-string subjects and operands rejected rather than stringified; four enumerated option sets; `bad_pattern` separate from `unsupported_construct`.                     |
+| `6.7`  | No value is keyed or deduplicated; `regex_search`'s `none` is a matched-absence sentinel, not a relation over the canonical key.                                         |
+| `6.8`  | Table 3's 100000-match ceiling for `regex_findall`, 1 MiB compiled pattern, the 64-entry least-recently-used pattern cache, and an 8 MiB `regex_replace` output ceiling. |
+| `6.9`  | One enum, one `From` impl, thirteen `netsuke::jinja::pattern::*` codes.                                                                                                  |
+| `6.10` | Eight new names, none an alias; `version_compare` rejected and the two reshaped names documented in section 5.10.                                                        |
+| `6.11` | The clause's seven obligations, with the `regex_escape` and cache-invisibility properties the parent states.                                                             |
 
 ## 6. Dependencies
 
@@ -447,10 +471,11 @@ section 5.8 specify the pattern cache without a new crate.
 
 Within the RFC set, it requires the shared contract that RFC 0006 section
 14.1's "slice 0" describes, which roadmap steps 6.1.2 and 6.1.3 deliver: the
-bounded-materialization helper, needed by `regex_findall`'s match ceiling. It
-requires no other child RFC, and none requires it — section 14.5 notes that the
-version predicate has no dependency on the regular-expression work, and this
-RFC keeps both in one document without making either depend on the other.
+bounded-materialization helper, needed by `regex_findall`'s match ceiling and by
+`regex_replace`'s output ceiling. It requires no other child RFC, and none
+requires it — section 14.5 notes that the version predicate has no dependency
+on the regular-expression work, and this RFC keeps both in one document without
+making either depend on the other.
 
 ## 7. Delivery
 
@@ -459,8 +484,8 @@ Roadmap step 6.5, which implements this RFC in five tasks:
 - 6.5.1. The `netsuke-regex-v1` dialect and the bounded pattern cache,
   including the compiled-pattern size limit and the 64-entry
   least-recently-used cache.
-- 6.5.2. `regex_replace`, with `count`, `mandatory_count`, and the rejection of
-  Python-style replacements.
+- 6.5.2. `regex_replace`, with `count`, `mandatory_count`, the rejection of
+  Python-style replacements, and the 8 MiB output ceiling.
 - 6.5.3. `regex_search`, `regex_findall`, and `regex_escape`.
 - 6.5.4. The `match`, `search`, and `regex` tests.
 - 6.5.5. The `version` test over the existing `semver` dependency.
@@ -469,8 +494,10 @@ Each task carries the acceptance criteria that make this RFC checkable: an
 unsupported construct producing a typed diagnostic naming the construct and the
 offset; a Python-style replacement failing loudly rather than emitting `\1`;
 `regex_findall` returning a sequence of strings whether the pattern has zero,
-one, or several capture groups; and a version parse failure naming which
-operand failed and the offending text.
+one, or several capture groups; a `regex_replace` whose replacement doubles
+every match failing with `output_too_large` on a subject whose match count is
+under the ceiling; and a version parse failure naming which operand failed and
+the offending text.
 
 ## 8. Open questions
 

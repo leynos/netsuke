@@ -150,9 +150,15 @@ Hard invariants. Violating one requires escalation, not a workaround.
   the tolerance's stated failure mode is absent, and the escalation is answered
   in the `EP-M5` Progress entry. The remaining children are written to a
   tighter shape so the aggregate tolerance is not breached with them, and each
-  child's line count is recorded at its own commit. **The aggregate is now the
-  binding control and it is close to its limit** — see the budget figure in
-  that same entry.
+  child's line count is recorded at its own commit. **The aggregate is the
+  binding control and it is now breached, not approached**: five children are
+  written at 2374 lines against the 2400 budget, leaving 26 for three children
+  whose measured floor is ~183 each. The `EP-M7` Progress entry carries the
+  figures and the escalation, and its correction records that a
+  nine-or-ten-child re-partition **raises** the aggregate rather than relieving
+  it. The remedies that address this control are to raise the budget or to
+  record a decided waiver; the plan stops for that decision before RFC 0018 is
+  written.
 - **Vacuity.** If any section 5 subsection cannot state a group-specific
   consequence — a bound, a registry row, a diagnostic code, a purity
   assignment, a named error condition — and cannot honestly say "no additional
@@ -1683,7 +1689,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   - **Remedy 1, recommended: keep RFC 0015 whole and let the aggregate
     tolerance bind instead.** Ground: the per-helper density measured below,
     which shows the per-file threshold's stated failure mode is absent.
-  - **Remedy 2: trim RFC 0015 to 400 lines.** Ground against: the 87 lines
+  - **Remedy 2: trim RFC 0015 to 400 lines.** Reason against: the 87 lines
     would come out of a section that is already the densest of the three
     children, so the cut is helpers or contracts rather than prose — and
     section 5 subsections are what `CONF-1` and the anti-vacuity rule exist to
@@ -1850,6 +1856,96 @@ Hard invariants. Violating one requires escalation, not a workaround.
     eight-child split is a **nine-or-ten-child** shape and re-partition the
     remaining three groups (0017–0020) into four or five.
 
+    *Amendment, added 2026-10-03: the second remedy does not serve this
+    control.* The aggregate counts total lines, and a re-partition adds a whole
+    child's cost per extra child, so it **raises** the total by roughly 366
+    lines rather than relieving it. It is a remedy for the per-file tolerance.
+    The reasoning and the figures are in the EP-M7 entry's correction and under
+    `Surprises & discoveries`; the aggregate remedies are to raise the budget or
+    to record a decided waiver.
+
+- [x] (2026-10-03) **CodeRabbit reviewed `5895fc4c` and raised four findings;
+  all four were upheld, and two further defects were found by reading rather
+  than reported.** All four docs gates ran green first — `check-fmt` (175 files
+  unchanged), `markdownlint` (0 issues, reaching the real `typos` verdict
+  through `typos-config-builder` under the cleaned environment), `nixie`, and
+  the coverage contract at **272/272, 0 skipped** with
+  `coverage map: 5 of 8 capability groups written; 3 remaining`. None of the
+  five `878f1489` findings recurred. The review completed rather than
+  rate-limiting.
+
+  **The major finding was upheld, and it is the one that corrects a position
+  this plan had argued for.** It asked RFC 0016 §5.8 to bound `regex_replace`'s
+  output. The earlier declination had been of a *subject* ceiling, on the
+  ground that `netsuke-regex-v1` matches in linear time — and that ground is
+  sound but does not reach this case. A match count is not an output size:
+  table 3's 100000 row is scoped to `regex_findall`, and `regex_replace`'s
+  output is the match count **times the replacement's length**, which is the
+  author's to choose. A 1 MiB subject matched one character per position is
+  1,048,576 matches — under the ceiling — while a replacement naming `$0` twice
+  emits 2 MiB from a short template. Clause 6.8 names "materialized output" for
+  exactly this and requires rejection *before* allocating, and both sibling
+  children already apply the same 8 MiB ceiling: RFC 0013's serializers (§5.8,
+  `interchange::output_too_large`) and RFC 0014's amplifying transforms (§5.8,
+  `transform::output_too_large`). The RFC now carries an 8 MiB output row, an
+  `output_too_large` code, the counting-before-building mechanism, a
+  delivery-task mention, and an acceptance criterion. The distinction recorded
+  for the next reviewer is that the subject-ceiling declination and this
+  upholding are **not** in tension: matching a subject costs time linear in its
+  length, and materializing a replacement does not.
+
+  **A consequential edit the finding did not mention.** Adding the code row
+  made two count claims stale in the same table's own section: §5.9's `6.9`
+  discharge row read "twelve `netsuke::jinja::pattern::*` codes" and now reads
+  **thirteen**. The §5.8 opening sentence also claimed the bounds "are RFC 0006
+  table 3's" outright; since the output ceiling is the group's own rather than
+  the parent's, it now reads "table 3's, applied through checked comparison
+  before allocation, plus one output ceiling this group applies" — the wording
+  RFC 0014 §5.8 established for the same situation. Both were caught by
+  re-reading around the edit rather than by the reviewer.
+
+  The remaining three findings and the two non-gate defects, all upheld:
+
+  - **Minor, RFC 0017 §1: "Seven of the eight are new pure helpers" did not
+    reconcile with the nine-row registry.** Rewritten to state the taxonomy
+    the registry asserts: nine members, seven new pure helpers, and two
+    existing filters taking `dialect` additively. `basename` and `dirname` are
+    `Option added` and therefore excluded from the fifty-two, so a bare count
+    was the wrong shape for the sentence.
+  - **Minor, RFC 0017 §5.6: `path_join` and `commonpath` were marked as taking
+    "a non-empty string" when RFC 0006 §8.6 specifies `path_join(paths)` and
+    `commonpath(paths)` — `paths`, plural.** Both cells now read "a non-empty
+    sequence of strings", matching §5.2's own rejection text, which already
+    spoke of a non-string *component*.
+  - **Minor, RFC 0017 §6: "dependency dependency" across a wrap boundary.**
+    A duplicated word from the earlier count fix, removed.
+  - **Observed, not reported: the aggregate-volume remedy space was stated
+    wrongly.** The EP-M6 entry offered a nine-or-ten-child re-partition as a
+    way to serve the aggregate tolerance. Measured against the five written
+    children's fixed overhead (169, 143, 161, 179, 192), every extra child adds
+    a whole child's cost while its share of the eight-step range shrinks only
+    slightly, so five children instead of three come to ≈915 against 549 — a
+    re-partition **increases** the aggregate by roughly 366 lines and cannot
+    serve an aggregate control at all. It would serve the *per-file* tolerance,
+    which is a different argument. The corrected remedy space is recorded under
+    `Surprises & discoveries`, and no entry presents option 3 as an aggregate
+    remedy any more.
+  - **Observed, not reported: "Ground against:" at the remedy list was a
+    heading error.** Its sibling reads "Reason against:", and the entry's
+    opening says the remedies are stated as grounds; the label is now
+    "Reason against:" to match.
+
+  This is the second review round on RFC 0016's bounds and the first on RFC
+  0017's internal counts, and the pattern is worth naming: **both rounds found
+  the same class of defect — a stated quantity that the document's own tables
+  contradict.** The first round found three such (a helper count, a product
+  cardinality stated twice, and a sentence claiming to enumerate seven names
+  while listing six); this round found three more. The contract suite does not
+  parse any of them, because they are prose claims *about* tables rather than
+  table cells, so no gate can catch them. The practice the plan now adopts is
+  to re-derive every count in a child's prose from the table it describes at
+  the moment the table changes.
+
 - [x] (2026-10-01) `EP-M7` **RFC 0017 written, and the aggregate-volume
   escalation it was written under is now measured rather than projected.** The
   RFC owns RFC 0006 §8.6 except `expandvars`, plus §8.7's `abs` alone — the
@@ -1874,11 +1970,23 @@ Hard invariants. Violating one requires escalation, not a workaround.
   This entry supersedes the EP-M6 projection and is the figure to quote. No
   remedy is available to the implementation agent — the tolerance says so
   explicitly — so the work continues under an open escalation and the plan
-  stops for the user's decision before 0018 is written. The two remedies remain
-  as stated: raise the 2400-line budget, or accept a nine-or-ten-child
-  re-partition, which would require editing the `names.len() == 8` assertion in
-  `tests/rfc_stdlib_coverage/roadmap.rs` and is therefore an architecture
-  decision, not an editorial one.
+  stops for the user's decision before 0018 is written.
+
+  **Correction, added 2026-10-03: one of the two remedies this entry carried
+  does not serve this control.** The remedies as first written were "raise the
+  2400-line budget, or accept a nine-or-ten-child re-partition". The second was
+  offered as an aggregate remedy and cannot be one, because the aggregate
+  counts total lines and every extra child adds a full child's cost:
+  re-partitioning the three remaining groups into five *raises* the total by
+  roughly 366 lines (see `Surprises & discoveries`, "re-partitioning a fixed
+  set into more children raises the aggregate"). It is a remedy for the
+  per-file tolerance, which is a separate control and already carries a
+  reasoned waiver. The aggregate remedies are therefore: raise the budget with
+  the figure set from the measured floor, or keep 2400 and record a decided
+  waiver. A re-partition remains available if smaller *files* are the
+  objective, and it would require editing the `names.len() == 8` assertion in
+  `tests/rfc_stdlib_coverage/roadmap.rs` — an architecture decision, not an
+  editorial one — while accepting the larger aggregate.
 
   **The row partition was re-derived from the corpus rather than trusted.** RFC
   0006 table 16 allocates `expandvars` to RFC 0018 and `abs` to this RFC, which
@@ -2228,6 +2336,35 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `6720c2b9`.
 
 ## Surprises & discoveries
+
+- Observation: **re-partitioning a fixed set into more children raises the
+  aggregate, so it cannot serve an aggregate budget.** The EP-M6 and EP-M7
+  entries offered a nine-or-ten-child re-partition as one of two remedies for
+  the breached 2400-line tolerance, and the phrasing implied it would relieve
+  the aggregate. Measured, it does the opposite. Evidence: fixed overhead
+  (everything outside section 5) across the five written children is 0013
+  **169**, 0014 **143**, 0015 **161**, 0016 **179**, 0017 **192**. A
+  re-partition adds whole children, each carrying a full section 5 *and* a full
+  overhead; the only saving is that a smaller group's section 5 is somewhat
+  shorter, which is a partial offset rather than a net reduction. Writing the
+  three remaining groups as five children instead of three adds two extra
+  children at the 143-line floor each: 3 × 183 ≈ **549** versus 5 × 183 ≈
+  **915**, so the aggregate rises from ≈2923 to ≈3289 — an increase of roughly
+  **366 lines**. Impact: the third remedy was stated for a purpose it cannot
+  achieve, and had a reviewer accepted it on that basis the aggregate would
+  have grown by more than the shortfall it was meant to close. Lesson: **before
+  offering a remedy for a budget, check the arithmetic against the budget's own
+  unit.** An aggregate control counts total lines, so any remedy that adds
+  structural units works against it; only raising the limit or recording a
+  decided waiver addresses it. Re-partitioning is a remedy for a *per-file*
+  limit, which is a different control with a different unit, and it was the
+  per-file tolerance that already carried a reasoned waiver. The corrected
+  remedy space is: raise the aggregate budget with the figure set from the
+  measured floor (≈2900–3000 for eight children); or keep 2400 and record a
+  decided waiver as the per-file tolerance has; or re-partition if smaller
+  *files* are the objective, accepting the larger total and the
+  `names.len() == 8` edit in `tests/rfc_stdlib_coverage/roadmap.rs` that it
+  requires.
 
 - Observation: **two independent safety nets can both report success while
   neither is watching.** Evidence: `EP-M3`'s acceptance criterion is "every

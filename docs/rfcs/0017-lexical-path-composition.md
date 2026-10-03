@@ -21,11 +21,14 @@ and the three parsers behind it, the filters `path_join`, `normpath`,
 to the existing `basename` and `dirname` filters, and the pure test `abs`.
 Together they let a manifest compose and inspect Windows path text on a Unix
 host, which is the concrete form of the cross-compilation problem this group
-exists to solve. Seven of the eight are new pure helpers; `basename` and
-`dirname` are existing filters gaining an option rather than new registrations,
-and `abs` is the only member of RFC 0006 section 8.7 that is pure rather than
-filesystem-observing. All of it is lexical: the group reads no filesystem
-metadata, takes no capability handle, and resolves nothing.
+exists to solve. Section 5.1's registry lists nine members: **seven new pure
+helpers** and two existing filters gaining an option. The seven are the six
+filters `path_join`, `normpath`, `splitext`, `commonpath`, `relpath`, and
+`splitdrive` plus the pure test `abs`, which is the only member of RFC 0006
+section 8.7 that observes no filesystem; `basename` and `dirname` are
+registered already and take `dialect` additively rather than being registered
+anew. All of it is lexical: the group reads no filesystem metadata, takes no
+capability handle, and resolves nothing.
 
 The group is the pure half of RFC 0006 section 14.6's slice 5. The observing
 half — `exists`, `link_exists`, `same_file`, `mount`, and `expandvars` — is RFC
@@ -220,17 +223,17 @@ RFC 0006 section 8.6 specifies the argument shapes. What follows is when a
 subject, a component list, or an option value is rejected, each carrying a code
 from section 5.9.
 
-| Helper       | Accepted subject   | Rejects                                                                                                                                                                                  |
-| ------------ | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `path_join`  | a non-empty string | `wrong_kind` for a non-sequence or a non-string component; `empty_input` for an empty sequence or component; `absolute_component` naming the index; `different_drive`; `unknown_dialect` |
-| `normpath`   | a string           | `wrong_kind`; `unknown_dialect`                                                                                                                                                          |
-| `splitext`   | a string           | `wrong_kind`; `unknown_dialect`                                                                                                                                                          |
-| `commonpath` | a non-empty string | `wrong_kind`; `empty_input`; `mixed_path_kind`; `parent_component`; `different_drive`; `unknown_dialect`                                                                                 |
-| `relpath`    | a string           | `wrong_kind`; `mixed_path_kind`; `different_drive`; `unknown_dialect`                                                                                                                    |
-| `splitdrive` | a string           | `wrong_kind`; `unknown_dialect`                                                                                                                                                          |
-| `abs`        | a string           | `wrong_kind`; `unknown_dialect`                                                                                                                                                          |
-| `basename`   | a string           | `wrong_kind`; `unknown_dialect`                                                                                                                                                          |
-| `dirname`    | a string           | `wrong_kind`; `unknown_dialect`                                                                                                                                                          |
+| Helper       | Accepted subject                | Rejects                                                                                                                                                                                  |
+| ------------ | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path_join`  | a non-empty sequence of strings | `wrong_kind` for a non-sequence or a non-string component; `empty_input` for an empty sequence or component; `absolute_component` naming the index; `different_drive`; `unknown_dialect` |
+| `normpath`   | a string                        | `wrong_kind`; `unknown_dialect`                                                                                                                                                          |
+| `splitext`   | a string                        | `wrong_kind`; `unknown_dialect`                                                                                                                                                          |
+| `commonpath` | a non-empty sequence of strings | `wrong_kind`; `empty_input`; `mixed_path_kind`; `parent_component`; `different_drive`; `unknown_dialect`                                                                                 |
+| `relpath`    | a string                        | `wrong_kind`; `mixed_path_kind`; `different_drive`; `unknown_dialect`                                                                                                                    |
+| `splitdrive` | a string                        | `wrong_kind`; `unknown_dialect`                                                                                                                                                          |
+| `abs`        | a string                        | `wrong_kind`; `unknown_dialect`                                                                                                                                                          |
+| `basename`   | a string                        | `wrong_kind`; `unknown_dialect`                                                                                                                                                          |
+| `dirname`    | a string                        | `wrong_kind`; `unknown_dialect`                                                                                                                                                          |
 
 Four decisions this group adds:
 
@@ -410,13 +413,13 @@ reaches for host-native parsing when an explicit dialect was supplied.
 ## 6. Dependencies
 
 **No new dependency.** The group is lexical string manipulation over UTF-8 path
-text, which `camino`'s `Utf8Path` provides and which is a normal dependency
-dependency at `1.2.0`. Parsing is a handwritten pass over separators and
-components rather than a call into a platform path library, because the whole
-point of the group is that the platform is a parameter rather than a fact about
-the machine. A dependency that parses Windows paths on Unix would be a second
-implementation of rules RFC 0006 section 8.6 already states, and the dialect
-would then be documented in two places.
+text, which `camino`'s `Utf8Path` provides and which is a normal dependency at
+`1.2.0`. Parsing is a handwritten pass over separators and components rather
+than a call into a platform path library, because the whole point of the group
+is that the platform is a parameter rather than a fact about the machine. A
+dependency that parses Windows paths on Unix would be a second implementation
+of rules RFC 0006 section 8.6 already states, and the dialect would then be
+documented in two places.
 
 Within the RFC set, the group requires the shared contract that RFC 0006
 section 14.1's "slice 0" describes, which roadmap steps 6.1.2 and 6.1.3
