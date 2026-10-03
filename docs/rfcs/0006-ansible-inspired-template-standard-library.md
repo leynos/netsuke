@@ -2100,16 +2100,16 @@ child registry, and that no helper in this map is missing from the roadmap step
 that owns it. The convention and its amendment procedure are recorded in
 [ADR-040](../adr-040-focused-child-rfcs-for-survey-rfcs.md).
 
-| Child RFC                                                       | Title                                           | Owns                                        | Optioned              | Roadmap step | Status    |
-| --------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------- | --------------------- | ------------ | --------- |
-| [0013](0013-structured-data-interchange-helpers.md)             | Structured data interchange helpers             | `8.1`                                       | —                     | 6.2          | written   |
-| [0014](0014-mapping-and-sequence-transform-helpers.md)          | Mapping and sequence transform helpers          | `8.2`                                       | —                     | 6.3          | written   |
-| [0015](0015-ordered-collection-algebra-and-truth-predicates.md) | Ordered collection algebra and truth predicates | `8.3`; `8.8`                                | —                     | 6.4          | written   |
-| [0016](0016-pattern-and-version-predicates.md)                  | Pattern and version predicates                  | `8.4`; `8.5`                                | —                     | 6.5          | written   |
-| [0017](0017-lexical-path-composition.md)                        | Lexical path composition                        | `8.6` except `expandvars`; `8.7` only `abs` | `basename`; `dirname` | 6.6          | written   |
-| [0018](0018-host-state-predicates-and-environment-expansion.md) | Host-state predicates and environment expansion | `8.7` except `abs`; `8.6` only `expandvars` | `glob`                | 6.7          | written   |
-| [0019](0019-encoding-identity-and-formatting-helpers.md)        | Encoding, identity, and formatting helpers      | `8.9`                                       | —                     | 6.8          | written   |
-| `0020`                                                          | Date and time conversion helpers                | `8.10`                                      | —                     | 6.9          | unwritten |
+| Child RFC                                                       | Title                                           | Owns                                        | Optioned              | Roadmap step | Status  |
+| --------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------- | --------------------- | ------------ | ------- |
+| [0013](0013-structured-data-interchange-helpers.md)             | Structured data interchange helpers             | `8.1`                                       | —                     | 6.2          | written |
+| [0014](0014-mapping-and-sequence-transform-helpers.md)          | Mapping and sequence transform helpers          | `8.2`                                       | —                     | 6.3          | written |
+| [0015](0015-ordered-collection-algebra-and-truth-predicates.md) | Ordered collection algebra and truth predicates | `8.3`; `8.8`                                | —                     | 6.4          | written |
+| [0016](0016-pattern-and-version-predicates.md)                  | Pattern and version predicates                  | `8.4`; `8.5`                                | —                     | 6.5          | written |
+| [0017](0017-lexical-path-composition.md)                        | Lexical path composition                        | `8.6` except `expandvars`; `8.7` only `abs` | `basename`; `dirname` | 6.6          | written |
+| [0018](0018-host-state-predicates-and-environment-expansion.md) | Host-state predicates and environment expansion | `8.7` except `abs`; `8.6` only `expandvars` | `glob`                | 6.7          | written |
+| [0019](0019-encoding-identity-and-formatting-helpers.md)        | Encoding, identity, and formatting helpers      | `8.9`                                       | —                     | 6.8          | written |
+| [0020](0020-date-and-time-conversion-helpers.md)                | Date and time conversion helpers                | `8.10`                                      | —                     | 6.9          | written |
 
 _Table 16: Allocation of the accepted set to focused child RFCs and roadmap
 steps._

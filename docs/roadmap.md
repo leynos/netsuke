@@ -1306,11 +1306,13 @@ RFC 0006 §8.9, delivered by
 
 This step answers whether timestamp parsing and formatting can be added as pure
 helpers over the existing `now()` value, leaving clock access as the only
-host-observing time operation. See RFC 0006 §8.10.
+host-observing time operation. See RFC 0006 §8.10, delivered by
+[RFC 0020](rfcs/0020-date-and-time-conversion-helpers.md).
 
 - [ ] 6.9.1. Add the shared conversion-specifier set and `strftime`. Requires
   6.1.4.
-  - See RFC 0006 §8.10 and table 12.
+  - See RFC 0006 §8.10 and table 12 and
+    [RFC 0020](rfcs/0020-date-and-time-conversion-helpers.md) §§5.3 and 5.9.
   - Pin the invariant C locale for the name-producing specifiers, and reject
     every specifier outside the accepted set with the supported set
     enumerated.
@@ -1319,11 +1321,18 @@ host-observing time operation. See RFC 0006 §8.10.
   - Success: identical manifests produce identical text on machines with
     different locales.
 - [ ] 6.9.2. Add `to_datetime`. Requires 6.9.1.
-  - See RFC 0006 §8.10.
+  - See RFC 0006 §8.10 and
+    [RFC 0020](rfcs/0020-date-and-time-conversion-helpers.md) §§5.6 and 5.11.
   - Accept `UTC` and fixed offsets for `timezone`, rejecting IANA zone names
     so no time-zone database is required.
   - Success: a property test shows that `to_datetime` followed by `strftime`
     round-trips for every lossless format.
+
+Both filters extend the existing `stdlib.time.*` family rather than founding a
+namespace, and neither observes the clock: only `now` keeps a refusing stub in
+the manifest-query registration. See
+[RFC 0020](rfcs/0020-date-and-time-conversion-helpers.md) §§5.2 and 5.9 and
+[adr-008-environment-seam-taxonomy.md](adr-008-environment-seam-taxonomy.md).
 
 ### 6.10. Decide the deferred candidates on evidence rather than parity
 

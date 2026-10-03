@@ -98,6 +98,9 @@ operator, user, and contributor references are easier to find.
   Seventh focused child of RFC 0006: the Base64 and URL codecs, the
   deterministic UUID derivation, the shell quoter, the comment decorator, the
   size formatters, and the text digest.
+- [rfcs/0020-date-and-time-conversion-helpers.md](rfcs/0020-date-and-time-conversion-helpers.md):
+  Eighth and final focused child of RFC 0006: the shared conversion-specifier
+  set, the timestamp parser, and the locale-pinned formatter.
 - [rfcs/0007-netsukefile-testing-framework.md](rfcs/0007-netsukefile-testing-framework.md):
   Proposed Netsukefile testing framework: the `netsuke test` command, the YAML
   test dialect, and its mocking model.
