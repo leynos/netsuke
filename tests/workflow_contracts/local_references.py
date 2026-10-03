@@ -8,17 +8,17 @@ release helpers need an exemption.
 Run via ``make test-workflow-contracts``.
 """
 
+import dataclasses
 import re
 import typing as typ
 from pathlib import Path
 
 from cargo_test_targets import read_repository_file
+from local_reference_comments import strip_reference_comments
 from local_reference_sources import (
     ReferenceSource,
     relative_script_is_referenced,
     scripts_package_imports_module,
-    strip_script_comments,
-    without_dot_relative_paths,
     workflow_reference_sources,
 )
 from local_reference_test_trees import load_test_tree_reference_sources
@@ -48,6 +48,9 @@ CONTRACT_SOURCE_PATHS = frozenset({
     "tests/workflow_contracts/local_reference_coverage_test.py",
     "tests/workflow_contracts/local_reference_edge_cases_test.py",
     "tests/workflow_contracts/local_reference_inventory.py",
+    "tests/workflow_contracts/local_reference_inventory_test.py",
+    "tests/workflow_contracts/local_reference_property_test.py",
+    "tests/workflow_contracts/local_reference_comments.py",
     "tests/workflow_contracts/local_reference_sources.py",
     "tests/workflow_contracts/local_reference_test_trees.py",
     "tests/workflow_contracts/local_reference_test_support.py",
@@ -146,8 +149,10 @@ def referenced_items(
     frozenset[str]
         Paths of referenced local actions and scripts.
     """
-    if source.script_suffix is not None:
-        source = strip_script_comments(source)
+    source_suffix = source.script_suffix or source.source_suffix
+    source = dataclasses.replace(
+        source, text=strip_reference_comments(source.text, source_suffix)
+    )
     text = source.text
     action_references = {
         item_path
@@ -272,12 +277,11 @@ def _script_is_referenced(source: ReferenceSource, script_path: str) -> bool:
     bool
         Whether the source references the inventoried script.
     """
-    if source.working_directory is not None:
-        if relative_script_is_referenced(source, script_path):
-            return True
-        text = without_dot_relative_paths(source)
-    else:
-        text = source.text
+    if source.working_directory is not None and relative_script_is_referenced(
+        source, script_path
+    ):
+        return True
+    text = source.text
     if _script_path_is_referenced(text, script_path, source.working_directory):
         return True
     return _python_module_is_imported(source, text, script_path)
@@ -293,13 +297,14 @@ def _script_path_is_referenced(
     escaped_name = re.escape(script_name)
     escaped_path = re.escape(script_path).replace(r"/", r"[/\\]")
     shell_variable = r"(?:\$\([^)]*\)|\$\{[^}]+\}|\$[A-Za-z_]\w*)"
-    filename_patterns: tuple[str, ...] = (
-        rf"(?<![\w./\\-]){escaped_name}(?![\w.\\-])",
-        rf"(?<![\w./\\-]){escaped_path}(?![\w.\\-])"
-        if working_directory is not None
-        else rf"(?<![\w./\\-])(?:\./)?{escaped_path}(?![\w.\\-])",
-        rf"(?<![\w.\\-]){shell_variable}[/\\](?:{escaped_path}|{escaped_name})(?![\w.\\-])",
-    )
+    filename_patterns = [
+        rf"(?<![\w.\\-]){shell_variable}[/\\](?:{escaped_path}|{escaped_name})(?![\w.\\-])"
+    ]
+    if working_directory is None:
+        filename_patterns.extend((
+            rf"(?<![\w./\\-]){escaped_name}(?![\w.\\-])",
+            rf"(?<![\w./\\-])(?:\./)?{escaped_path}(?![\w.\\-])",
+        ))
     return any(re.search(pattern, text) is not None for pattern in filename_patterns)
 
 
