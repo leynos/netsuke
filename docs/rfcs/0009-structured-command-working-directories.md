@@ -330,13 +330,22 @@ command:
   - invoke: generator --format json
     cwd: producer
     stdout: generated/items.json
-  - invoke: validator generated/items.json
+  - invoke: validator ../producer/generated/items.json
     cwd: consumer
 ```
 
-The first stage writes under `producer`; the second resolves
-`generated/items.json` under `consumer`. Each stage is self-consistent, and
+The first stage writes under `producer`. The second runs under `consumer`, so
+its own relative base is `consumer`; it reaches the artefact only because it
+names the producer's directory explicitly. Each stage is self-consistent, and
 neither inherits the other's directory.
+
+A consumer's argument is not rewritten. Section 7 states that Netsuke passes
+relative path arguments unchanged, because only the called program knows their
+grammar, so the argument is interpreted from the consumer's working directory
+and must be spelled to match. Declaring the artefact from the effective `-C`
+directory instead would also work and would spare the consumer any knowledge of
+where the producer was placed, at the cost of pinning the pipeline to one
+layout.
 
 Keeping the bases distinct was considered and rejected by ADR-043. It would let
 a stage write outside the directory it was placed in while the child still ran
