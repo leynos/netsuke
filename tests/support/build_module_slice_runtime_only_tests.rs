@@ -42,7 +42,7 @@ fn insert_after_host_pattern_directive(build_script: &str) -> io::Result<String>
     let mut mutated_build_script = String::with_capacity(build_script.len());
     for line in lines.by_ref() {
         mutated_build_script.push_str(line);
-        if line.trim() == "println!(\"cargo:rerun-if-changed=src/host_pattern.rs\");" {
+        if line.trim() == "println!(\"cargo:rerun-if-changed=src/host/pattern.rs\");" {
             let indentation_end = line.len() - line.trim_start().len();
             let indentation = line
                 .get(..indentation_end)
@@ -58,6 +58,6 @@ fn insert_after_host_pattern_directive(build_script: &str) -> io::Result<String>
         }
     }
     Err(io::Error::other(
-        "build.rs has no src/host_pattern.rs rerun directive",
+        "build.rs has no src/host/pattern.rs rerun directive",
     ))
 }
