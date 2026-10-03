@@ -348,5 +348,4 @@ pub fn json_hint_from_args(args: &[OsString]) -> Option<bool> {
 }
 
 #[cfg(test)]
-#[path = "cli_l10n_tests.rs"]
 mod tests;

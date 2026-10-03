@@ -34,11 +34,9 @@ mod env_lookup_tests;
 
 /// Cover the bounded `netsuke check` series, which exist only with `lint`.
 #[cfg(feature = "lint")]
-#[path = "observability_recorder_check_tests.rs"]
 mod check_tests;
 
 /// Cover bounded CLI path-validation metric registrations separately.
-#[path = "observability_recorder_path_validation_tests.rs"]
 mod path_validation_tests;
 /// Cover the bounded `which` resolver counter series separately.
 mod which_tests;

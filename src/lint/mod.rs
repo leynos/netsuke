@@ -12,7 +12,6 @@
 //! behind them.
 
 pub mod document;
-mod document_build;
 pub mod engine;
 pub mod finding;
 pub mod policy;
@@ -28,13 +27,12 @@ pub mod suppress;
 pub mod test_support;
 
 #[cfg(test)]
-#[path = "example_manifest_tests.rs"]
 mod example_manifest_tests;
 
 use crate::ast::NetsukeManifest;
 use crate::ir::BuildGraph;
 
-pub use document_build::ParseFailure;
+pub use document::build::ParseFailure;
 pub use engine::Outcome;
 pub use finding::{Finding, Location};
 pub use policy::{Policy, PolicyError};
