@@ -11,6 +11,8 @@
 //!
 //! Only bounding labels are ever emitted — never a resolved home, an
 //! environment value, or a variable's contents.
+//!
+//! Declared into `path_utils/` by `#[path]`; see `docs/repository-layout.md`.
 
 use super::{EXPANDUSER_HOME_EVENT, HOME_OUTCOME_UNAVAILABLE};
 

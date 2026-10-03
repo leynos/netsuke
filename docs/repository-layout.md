@@ -401,6 +401,36 @@ This test-only module owns the command-interpolation cases for protected
 PowerShell contexts. Keep those cases here to hold the parent test module below
 the 400-line cap; production code must not depend on this test module.
 
+### `src/runner/process/child_exit/emitters.rs`
+
+Bounded `tracing` emitters for child-process shutdown, declared by
+`src/runner/process/child_exit.rs` through a `#[path]` declaration into a
+same-stem directory. Each function owns exactly one `tracing` macro, because the
+`log` feature that a dev-dependency enables transitively expands every macro
+into extra branches that the caller's `cognitive_complexity` budget counts. Only
+`child_exit.rs` calls these; they are `pub(super)` and must not be
+re-exported. The `#[path]` form is required here rather than incidental, as
+[Placement conventions](#placement-conventions) explains.
+
+### `src/stdlib/path/path_utils/emitters.rs`
+
+Bounded `tracing` emitters for the path filters beyond their host's own line
+budget, declared by `src/stdlib/path/path_utils.rs` through a `#[path]`
+declaration into a same-stem directory. It owns the two `expanduser`
+home-resolution outcomes and shares the parent's bounded event and outcome
+labels; only bounding labels are ever emitted, never a resolved home, an
+environment value, or a variable's contents. Only `path_utils.rs` calls these;
+they are `pub(super)` and must not be re-exported.
+
+### `src/stdlib/register/emitters.rs`
+
+Bounded `tracing` emitters for stdlib registration, declared by
+`src/stdlib/register.rs` through a `#[path]` declaration into the `register/`
+directory it already shares with `query_helpers.rs`. It reports the registered
+time helpers' clock source and file filters' byte budget, the split holding
+`register.rs` within the 400-line cap. Only `register.rs` calls these; they are
+`pub(super)` and must not be re-exported.
+
 ## Placement conventions
 
 Keep every source file below the 400-line cap enforced by Whitaker's
@@ -414,6 +444,19 @@ sibling `.rs` files and directory modules with `mod.rs` for shared prefixes.
 Keep new concern-specific tests under their owner's test directory, as with
 `src/observability/recorder/tests/which_tests.rs` for the `which` resolver
 counter series and `src/stdlib/which/telemetry/tests/` for its emitter.
+
+A split that is forced by the line cap, rather than chosen for structure, needs
+care, because the two obvious shapes are both refused. Splitting `foo.rs` into
+`foo.rs` plus `foo/mod.rs` and `foo/bar.rs` trips the layout contract: `foo/`
+and `foo.rs` are then siblings sharing the `foo` prefix. Using a plain
+`mod bar;` beside a non-`mod.rs` parent makes Clippy demand `foo/mod.rs` under
+`self_named_module_files`, which the workspace denies. The shape that satisfies
+both is to keep the parent file where it is and declare the child with an
+explicit `#[path]` into a same-stem directory —
+`#[path = "foo/bar.rs"] mod bar;` — so no second sibling joins the parent's
+prefix and no implicit `mod.rs` is required. A `#[path]` changes which file
+backs a module, never the module's path in the tree, so every `super::` and
+`pub(super)` reference keeps resolving unchanged.
 
 Do not use `#[path]` to reach a sibling or parent file. Keep it only when a
 specific requirement still needs it, and add a comment explaining that reason.

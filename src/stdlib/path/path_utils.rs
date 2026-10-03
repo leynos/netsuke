@@ -172,7 +172,15 @@ pub(super) fn normalise_parent(parent: Option<&Utf8Path>) -> Utf8PathBuf {
 }
 
 /// Keep the bounded path emitters below the module line cap.
-#[path = "path_emitters.rs"]
+///
+/// The `#[path]` attribute is required rather than incidental: a plain
+/// `mod emitters;` would need `path_utils/mod.rs`, which denies
+/// `clippy::self_named_module_files` beside this non-`mod.rs` parent, while
+/// naming the file `path_emitters.rs` beside this one forms a shared `path_`
+/// prefix that the module-layout contract rejects. Pointing `#[path]` into a
+/// same-stem directory satisfies both, and leaves the module's path — and so
+/// every `super::` reference — unchanged.
+#[path = "path_utils/emitters.rs"]
 mod emitters;
 
 use emitters::{debug_home_resolved_from_fields, debug_home_unavailable_from_fields};

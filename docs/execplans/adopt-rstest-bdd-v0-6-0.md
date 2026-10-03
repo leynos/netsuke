@@ -230,13 +230,32 @@ the conflict in `Decision log` before proceeding.
   had reported the merge clean; the fetched ref, `git ls-remote`, and the pull
   request's `baseRefOid` then agreed on `fce1a746`.
 - [x] (2026-10-03) Rebase onto `fce1a746` and resolve the two conflicts that
-  the module reorganisation created, keeping this branch's hoisted emitters and
+  the module reorganization created, keeping this branch's hoisted emitters and
   taking main's relocated module paths. Replay touched 26 commits; the
   range-diff maps 25 with `=` and exactly one — the hoisting commit — with `!`.
 - [x] (2026-10-03) Confirm no dependency manifest moved on the target side
   between the old merge base and the new one, so no lock-file rebuild was
   needed, and check the lock file against the manifests with
   `cargo metadata --locked --offline` rather than assuming agreement.
+- [x] (2026-10-03) Clear the two contract failures `fce1a746` introduced. That
+  commit added `tests/workflow_contracts/rust_module_layout_test.py`, which
+  rejects sibling Rust modules sharing a first `_`-delimited prefix unless the
+  group is recorded in `DISPARATE_PREFIX_EXCEPTIONS` with an exact sibling set
+  and a rationale. The three hoisted emitter modules are `child_exit.rs` +
+  `child_exit_emitters.rs`, `path_utils.rs` + `path_emitters.rs`, and
+  `register.rs` + `register_emitters.rs`, so all three tripped it; the two
+  stdlib emitters are also reachable from the Kani harnesses and so had to
+  appear in `tools/kani/proof-scope.toml`, which `fce1a746` likewise rewrote.
+  Resolved by moving each emitter into a same-stem directory beside its host —
+  `child_exit/emitters.rs`, `path_utils/emitters.rs`, `register/emitters.rs` —
+  declared with an explicit `#[path]`, which is the shape `register/` already
+  uses for `query_helpers.rs`. That removes the shared prefix outright, so no
+  exception entry is needed, and a `#[path]` changes only which file backs a
+  module, never the module's path in the tree: every `super::` and `pub(super)`
+  reference resolves exactly as before. `make spelling` was red in the same
+  sweep on one en-GB token, `reorganisation`, at line 233 of this plan, which
+  `typos.toml` maps to `-z-`; both it and `markdownlint` (whose recipe is
+  `markdownlint: spelling`) were failing on that word alone.
 
 ## Surprises & discoveries
 
@@ -673,6 +692,26 @@ the conflict in `Decision log` before proceeding.
   version, and the reason it was invisible locally is that `make fmt` (which
   *writes*) and CI's `make check-fmt` (which *reads*) were resolving
   `mdtablefix` from different places.
+
+- Observation: the branch's three hoisted emitter modules were structurally
+  invisible to every gate the branch had been run against, until the rebase onto
+  `fce1a746` put a contract under them. `rust_module_layout_test.py` arrived
+  in that commit, and `tools/kani/proof-scope.toml` gained 153 lines there; the
+  branch's own diff never touches `tests/workflow_contracts/`, and
+  `git cat-file -e 84447f0e:tests/workflow_contracts/rust_module_layout_test.py`
+  reports the file absent at the old base and present at `fce1a746`, with
+  `git log --diff-filter=A` naming `fce1a746` as its author commit.
+
+  The lesson generalizes past this task: a `<parent>_<role>.rs` sibling is the
+  natural way to satisfy a line cap or a complexity threshold, but it is also
+  the exact shape a prefix-grouping convention exists to forbid, and the two
+  constraints can meet only after both have been written. A same-stem directory
+  with an explicit `#[path]` satisfies both at once and is the safer default.
+  It is worth noting that the naming convention is now enforced: the surviving
+  `src/runner/process/command_logging_emitters.rs` is a genuine coincidence,
+  since no other sibling there begins `command`, and the contract examines
+  prefixes, not suffixes — it would fire the moment a `command_logging.rs`
+  appeared beside it.
 
 ## Imported-document provenance and link mapping
 
@@ -1804,12 +1843,12 @@ boundary moved twice while the previous delivery was being validated. The
 second rebase had recorded `origin/main` as `84447f0e` and concluded no replay
 was warranted; that conclusion was sound when it was reached and stale by the
 time the push landed, because the target then advanced to `6b01bb65` and again
-to `fce1a746` (*Group prefix-named modules under directory modules*,
-#811/#813). That one commit is 393 files changed, 1804 insertions and 1459
-deletions, with 264 renames; measured as the distance from the old merge base
-it is 408 files and 4147 insertions, and it is the range figure the earlier
-reading of this boundary had recorded. The signal that the earlier conclusion
-had expired was the pull request itself: #805 reported
+to `fce1a746` (*Group prefix-named modules under directory modules*, pull
+request #811/#813). That one commit is 393 files changed, 1804 insertions and
+1459 deletions, with 264 renames; measured as the distance from the old merge
+base it is 408 files and 4147 insertions, and it is the range figure the
+earlier reading of this boundary had recorded. The signal that the earlier
+conclusion had expired was the pull request itself: #805 reported
 `"mergeable":"CONFLICTING"` and `"mergeStateStatus":"DIRTY"`, and a conflicted
 pull request dispatches no workflows at all, which is why `8bcba867` sat with a
 skipped `dependabot-automerge` run and no CI. Had the boundary been trusted

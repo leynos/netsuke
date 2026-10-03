@@ -13,6 +13,8 @@
 //! added to an otherwise numeric module pushed that ratio from 2/5 to 5/9 and
 //! dropped the file from 10.00 to 9.68; siting them here keeps every doc-comment
 //! emitter in the module whose subject is tracing.
+//!
+//! Declared into `child_exit/` by `#[path]`; see `docs/repository-layout.md`.
 
 use std::io;
 
