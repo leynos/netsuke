@@ -6,6 +6,7 @@ Run via ``make test-workflow-contracts``.
 import typing as typ
 
 import pytest
+from local_reference_inventory import discover_local_items
 from local_reference_test_support import (
     create_synthetic_workspace as _create_workspace,
 )
@@ -13,9 +14,7 @@ from local_reference_test_support import (
     write_synthetic_file as _write,
 )
 from local_references import (
-    LocalItemInventory,
     covered_items,
-    discover_local_items,
     exemption_issues,
     root_source_texts,
     uncovered_items,
@@ -26,6 +25,8 @@ EXEMPTIONS: dict[str, str] = {}
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
+
+    from local_reference_inventory import LocalItemInventory
 
 
 @pytest.fixture(scope="module")

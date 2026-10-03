@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 from cargo_test_targets import RepositoryFileError
+from local_reference_inventory import discover_local_items
 from local_reference_test_support import (
     create_synthetic_workspace,
     write_synthetic_file,
 )
 from local_references import (
     covered_items,
-    discover_local_items,
     root_source_texts,
     uncovered_items,
 )
@@ -54,33 +54,20 @@ def test_action_child_path_does_not_cover_action(tmp_path: Path) -> None:
     )
 
 
-def test_script_current_directory_invocation_is_referenced(tmp_path: Path) -> None:
-    """Recognise a script invoked from its containing directory."""
-    create_synthetic_workspace(
-        tmp_path,
-        (
-            "name: Synthetic\n"
-            "jobs:\n"
-            "  test:\n"
-            "    steps:\n"
-            "      - run: ./helper.sh\n"
-            "        working-directory: scripts\n"
-        ),
-        "all:\n\t@true\n",
-        {"scripts/helper.sh": ""},
-    )
-    inventory = discover_local_items(tmp_path)
-    covered = covered_items(inventory, root_source_texts(tmp_path))
-
-    assert "scripts/helper.sh" in covered, (
-        "a ./filename invocation from scripts must cover the script"
-    )
-
-
+@pytest.mark.parametrize(
+    ("working_directory", "expected_uncovered"),
+    [
+        ("scripts", frozenset()),
+        ("vendor", frozenset({"scripts/helper.sh"})),
+    ],
+    ids=["script-directory", "different-directory"],
+)
 def test_script_current_directory_invocation_respects_working_directory(
     tmp_path: Path,
+    working_directory: str,
+    expected_uncovered: frozenset[str],
 ) -> None:
-    """Do not resolve a workflow's relative command from another directory."""
+    """Resolve a relative workflow command from its declared directory."""
     create_synthetic_workspace(
         tmp_path,
         (
@@ -89,7 +76,7 @@ def test_script_current_directory_invocation_respects_working_directory(
             "  test:\n"
             "    steps:\n"
             "      - run: ./helper.sh\n"
-            "        working-directory: vendor\n"
+            f"        working-directory: {working_directory}\n"
         ),
         "all:\n\t@true\n",
         {"scripts/helper.sh": ""},
@@ -97,9 +84,9 @@ def test_script_current_directory_invocation_respects_working_directory(
     inventory = discover_local_items(tmp_path)
     covered = covered_items(inventory, root_source_texts(tmp_path))
 
-    assert uncovered_items(inventory, covered, {}) == frozenset({
-        "scripts/helper.sh"
-    }), "a path from a different working directory must not cover the script"
+    assert uncovered_items(inventory, covered, {}) == expected_uncovered, (
+        "a ./filename invocation must be resolved against its working directory"
+    )
 
 
 @pytest.mark.parametrize(

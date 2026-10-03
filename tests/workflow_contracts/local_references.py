@@ -8,8 +8,8 @@ release helpers need an exemption.
 Run via ``make test-workflow-contracts``.
 """
 
-import dataclasses
 import re
+import typing as typ
 from pathlib import Path
 
 from cargo_test_targets import read_repository_file
@@ -24,8 +24,9 @@ from local_reference_sources import (
 from local_reference_test_trees import load_test_tree_reference_sources
 from workflow_loading import all_workflow_documents, read_workflow_document
 
-ACTION_DIRECTORY = ".github/actions"
-SCRIPT_SUFFIXES = frozenset({".bash", ".py", ".ps1", ".sh"})
+if typ.TYPE_CHECKING:
+    from local_reference_inventory import LocalItemInventory
+
 TEST_SOURCE_SUFFIXES = frozenset({
     ".feature",
     ".json",
@@ -46,73 +47,11 @@ CONTRACT_SOURCE_PATHS = frozenset({
     "tests/workflow_contracts/local_references.py",
     "tests/workflow_contracts/local_reference_coverage_test.py",
     "tests/workflow_contracts/local_reference_edge_cases_test.py",
+    "tests/workflow_contracts/local_reference_inventory.py",
     "tests/workflow_contracts/local_reference_sources.py",
     "tests/workflow_contracts/local_reference_test_trees.py",
     "tests/workflow_contracts/local_reference_test_support.py",
 })
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class LocalItemInventory:
-    """Map each local action or script path to the file that defines it."""
-
-    action_manifests: dict[str, tuple[Path, ...]]
-    scripts: dict[str, Path]
-
-    @property
-    def paths(self) -> frozenset[str]:
-        """Repository-relative paths for all inventoried items.
-
-        Returns
-        -------
-        frozenset[str]
-            Paths for every action directory and top-level script.
-        """
-        return frozenset(self.action_manifests) | frozenset(self.scripts)
-
-
-def discover_local_items(repository_root: Path) -> LocalItemInventory:
-    """Inventory action directories and directly contained script files.
-
-    Action directories need an ``action.yml`` or ``action.yaml`` manifest.
-    Scripts must be regular files directly in ``scripts/`` with a supported
-    suffix; nested tests, data, bytecode caches and ``__init__.py`` are not
-    executable top-level scripts and are excluded.
-
-    Parameters
-    ----------
-    repository_root : Path
-        Root of the repository to scan.
-
-    Returns
-    -------
-    LocalItemInventory
-        The action manifests and scripts found under the repository root.
-    """
-    action_root = repository_root / ACTION_DIRECTORY
-    action_manifests: dict[str, tuple[Path, ...]] = {}
-    for directory in sorted(action_root.iterdir()):
-        if not directory.is_dir() or directory.is_symlink():
-            continue
-        manifests = tuple(
-            path
-            for path in (directory / "action.yml", directory / "action.yaml")
-            if path.is_file() and not path.is_symlink()
-        )
-        if manifests:
-            item_path = directory.relative_to(repository_root).as_posix()
-            action_manifests[item_path] = manifests
-
-    scripts_root = repository_root / "scripts"
-    scripts = {
-        path.relative_to(repository_root).as_posix(): path
-        for path in sorted(scripts_root.iterdir())
-        if path.suffix in SCRIPT_SUFFIXES
-        and path.name != "__init__.py"
-        and path.is_file()
-        and not path.is_symlink()
-    }
-    return LocalItemInventory(action_manifests, scripts)
 
 
 def strip_makefile_comments(text: str) -> str:
@@ -209,15 +148,18 @@ def referenced_items(
     """
     if source.script_suffix is not None:
         source = strip_script_comments(source)
-    found: set[str] = set()
     text = source.text
-    for item_path in inventory.action_manifests:
-        if item_path != source_item and _action_is_referenced(text, item_path):
-            found.add(item_path)
-    for item_path in inventory.scripts:
-        if item_path != source_item and _script_is_referenced(source, item_path):
-            found.add(item_path)
-    return frozenset(found)
+    action_references = {
+        item_path
+        for item_path in inventory.action_manifests
+        if item_path != source_item and _action_is_referenced(text, item_path)
+    }
+    script_references = {
+        item_path
+        for item_path in inventory.scripts
+        if item_path != source_item and _script_is_referenced(source, item_path)
+    }
+    return frozenset(action_references | script_references)
 
 
 def covered_items(
@@ -336,6 +278,17 @@ def _script_is_referenced(source: ReferenceSource, script_path: str) -> bool:
         text = without_dot_relative_paths(source)
     else:
         text = source.text
+    if _script_path_is_referenced(text, script_path, source.working_directory):
+        return True
+    return _python_module_is_imported(source, text, script_path)
+
+
+def _script_path_is_referenced(
+    text: str,
+    script_path: str,
+    working_directory: str | None,
+) -> bool:
+    """Match a script filename or path in command text."""
     script_name = Path(script_path).name
     escaped_name = re.escape(script_name)
     escaped_path = re.escape(script_path).replace(r"/", r"[/\\]")
@@ -343,12 +296,19 @@ def _script_is_referenced(source: ReferenceSource, script_path: str) -> bool:
     filename_patterns: tuple[str, ...] = (
         rf"(?<![\w./\\-]){escaped_name}(?![\w.\\-])",
         rf"(?<![\w./\\-]){escaped_path}(?![\w.\\-])"
-        if source.working_directory is not None
+        if working_directory is not None
         else rf"(?<![\w./\\-])(?:\./)?{escaped_path}(?![\w.\\-])",
         rf"(?<![\w.\\-]){shell_variable}[/\\](?:{escaped_path}|{escaped_name})(?![\w.\\-])",
     )
-    if any(re.search(pattern, text) is not None for pattern in filename_patterns):
-        return True
+    return any(re.search(pattern, text) is not None for pattern in filename_patterns)
+
+
+def _python_module_is_imported(
+    source: ReferenceSource,
+    text: str,
+    script_path: str,
+) -> bool:
+    """Match supported Python imports for an inventoried module."""
     if not script_path.endswith(".py") or source.source_suffix != ".py":
         return False
     module_name = Path(script_path).stem
