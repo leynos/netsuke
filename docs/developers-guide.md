@@ -1049,7 +1049,9 @@ from the `bin-name` field that
   path it wrote through `cargo:rustc-env=NETSUKE_GENERATED_MAN_PAGE`, and
   `tests/man_page_contract_tests.rs` asserts the file is `netsuke.1`, is staged
   under `target/generated-man/<target>/<profile>/`, and carries a title that
-  never mentions `netsuke-build`.
+  never mentions `netsuke-build`. A build with the `lint` feature stages its
+  page and completions in a `lint/` subdirectory instead, so they never
+  overwrite the default-feature artefacts that release packaging ships.
 - Release packaging takes `bin-name` from the `metadata` job in
   `.github/workflows/release.yml`, so `.github/release-staging.toml`, the
   Debian and RPM payloads, the Windows Installer product, and the macOS
