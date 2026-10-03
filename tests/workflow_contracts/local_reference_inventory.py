@@ -30,12 +30,12 @@ class LocalItemInventory:
 
 
 def discover_local_items(repository_root: Path) -> LocalItemInventory:
-    """Inventory action directories and directly contained script files.
+    """Inventory action directories and supported scripts recursively.
 
     Action directories need an ``action.yml`` or ``action.yaml`` manifest.
-    Scripts must be regular files directly in ``scripts/`` with a supported
-    suffix; nested tests, data, bytecode caches and ``__init__.py`` are not
-    executable top-level scripts and are excluded.
+    Scripts are regular files at any depth under ``scripts/`` with a supported
+    suffix. Package markers, data files, bytecode caches and symlinks are
+    excluded because they are not executable script entry points.
 
     Parameters
     ----------
@@ -49,7 +49,7 @@ def discover_local_items(repository_root: Path) -> LocalItemInventory:
     """
     return LocalItemInventory(
         _discover_action_manifests(repository_root),
-        _discover_top_level_scripts(repository_root),
+        _discover_scripts(repository_root),
     )
 
 
@@ -71,17 +71,29 @@ def _discover_action_manifests(repository_root: Path) -> dict[str, tuple[Path, .
     return action_manifests
 
 
-def _discover_top_level_scripts(repository_root: Path) -> dict[str, Path]:
-    """Return supported regular files directly inside ``scripts/``."""
+def _discover_scripts(repository_root: Path) -> dict[str, Path]:
+    """Return supported regular script files at any depth under ``scripts/``."""
     scripts_root = repository_root / "scripts"
-    return {
-        path.relative_to(repository_root).as_posix(): path
-        for path in _inventory_directory_entries(scripts_root)
-        if path.suffix in SCRIPT_SUFFIXES
-        and path.name != "__init__.py"
-        and path.is_file()
-        and not path.is_symlink()
-    }
+    directories = [scripts_root]
+    scripts: dict[str, Path] = {}
+    while directories:
+        directory = directories.pop()
+        for path in _inventory_directory_entries(directory):
+            if path.is_symlink():
+                continue
+            if path.is_dir():
+                if path.name != "__pycache__":
+                    directories.append(path)
+            elif _is_supported_script(path):
+                scripts[path.relative_to(repository_root).as_posix()] = path
+    return dict(sorted(scripts.items()))
+
+
+def _is_supported_script(path: Path) -> bool:
+    """Check whether a path names a supported regular script file."""
+    if path.name == "__init__.py" or path.suffix not in SCRIPT_SUFFIXES:
+        return False
+    return path.is_file() and not path.is_symlink()
 
 
 def _inventory_directory_entries(directory: Path) -> tuple[Path, ...]:
