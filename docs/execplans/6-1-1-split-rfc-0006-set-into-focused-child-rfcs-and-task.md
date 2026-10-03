@@ -5154,6 +5154,11 @@ after the run. One scrutineer ran the gates sequentially, with logs under
 `/tmp`, against the CI-pinned `mdtablefix` 0.6.0 and with the harness's
 `GIT_CONFIG_*` URL rewrites stripped from the environment.
 
+**The revision of record for this branch is now `28e7fde8`**, the post-rebase
+head. The table below is retained because it records the reconciliation at
+`EP-M11` on the pre-rebase series; the rebase re-ran the set and the results
+follow the table.
+
 | Command                                              | Log                                | Result                                                                           |
 | ---------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------- |
 | `make fmt`                                           | `/tmp/EPM11-fmt.out`               | Passed; modified nothing.                                                        |
@@ -5179,6 +5184,24 @@ against seven of the eight children). Neither blocks this milestone: the child
 count is fixed at eight by four contract tests, all eight are written, and the
 only remaining remedy would move a control that has already been moved once. See
 `D12`'s amendment, and the Tolerances section, for the measurements.
+
+#### Post-rebase verification, 2026-10-03, at `28e7fde8`
+
+Every gate was re-run after the replay, sequentially, from a clean tree and
+with the harness's `GIT_CONFIG_*` rewrites stripped. No gate result changed,
+and the test count rose from 3911 to 3917 because `main`'s nine commits added
+cases.
+
+| Command                               | Log                                  | Result                                                                                 |
+| ------------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------- |
+| `make check-fmt`                      | `/tmp/rebase-…-check-fmt.out`        | 197 Python files formatted; 179 Markdown files unchanged.                              |
+| `make check-fmt` (`MDTABLEFIX` 0.6.0) | `/tmp/rebase-…-check-fmt-PINNED.out` | 179 Markdown files unchanged; identical verdict to the host's 0.6.1.                   |
+| `make test`                           | `/tmp/rebase-…-test.out`             | 3917 nextest run, 3917 passed, 6 skipped; 39 + 6 ignored doctests passed.              |
+| `make typecheck`                      | `/tmp/rebase-…-typecheck.out`        | `ty` "All checks passed!"; `cargo check --all-targets --all-features` clean.           |
+| `make lint`                           | `/tmp/rebase-…-lint.out`             | Pylint 10.00/10 on both passes; `ambrleaks`, `interrogate` 100%, yamllint, actionlint. |
+| `make markdownlint`                   | `/tmp/rebase-…-markdownlint.out`     | 179 files, 0 issues; `typos-config-builder` `v0.1.3` gate clean.                       |
+| `make spelling`                       | `/tmp/rebase-…-spelling.out`         | Passed under `v0.1.3`; `typos.toml` current.                                           |
+| `make nixie`                          | `/tmp/rebase-…-nixie.out`            | All diagrams validated successfully.                                                   |
 
 ### Axioms
 
@@ -5924,3 +5947,45 @@ previously been written down. Neither is waived; the reasoning is in the
 Tolerances section, and the mid-flight correction to `D12`'s projection is
 recorded there as the ordinary error it was — extrapolating from the five
 shortest children.
+
+Rebased onto `main` on 2026-10-03, moving the branch from `148e3535` to
+`28e7fde8` over a new target of `b6e7cf50`. The replay boundary is the squash
+landing of #697, `6be4a65f`, which is inherited on both sides: it is a
+single-parent commit reachable from the target, an ancestor of the old head,
+and the merge base, so the 34 replayed commits are exclusively this branch's
+own and none of #697's branch commits fall inside the range. All 34 replayed
+with no conflicts and recreated identically — `range-diff` marks every one `=`,
+which is expected because the nine commits `main` added touch `src/`,
+`scripts/`, and workflow files while this branch touches twelve Markdown files.
+
+Only `docs/contents.md` and `docs/roadmap.md` overlap, and their hunks are
+disjoint: `main` edits the index head and the ADR block while this branch
+appends child-RFC entries below RFC 0013, and `main` corrects module paths at
+roadmap lines 352 and 1967 while this branch rewrites steps 6.2 to 6.9
+elsewhere. Both files' branch changes survive byte-for-byte. A read-only
+`git merge-tree` predicted exactly this, and the replay confirmed it rather
+than discovering it.
+
+Two consequences of the rebase are worth recording because they are decisions
+rather than mechanics. First, the `typos-config-builder` skew this plan carried
+as an open risk is **resolved by the rebase itself**: `main`'s adoption of
+`v0.1.3` (#843) is now the base, `Makefile:127` reads `v0.1.3`, and the
+stricter dictionary passes `make spelling` and `make markdownlint` over 179
+files with no changes. The branch no longer pins anything older than its base.
+Second, `main` introduced a genuine documentation obligation in #811, which
+grouped prefix-named modules under directory modules — 264 renames including
+`src/ir/graph.rs` to `src/ir/graph/mod.rs`. The branch's own documents cite no
+renamed path: every `src/…rs` path in the child RFCs resolves on the new tree,
+and the branch never mentions any of the old forms. `main`'s own #811 commit
+missed one citation on the line it was editing, leaving `src/ninja_gen.rs` in
+`docs/roadmap.md` where `src/ninja_gen` is now a directory, and roughly twenty
+historical execplans and archive files retain old paths. That residue is
+`main`'s and is left alone: it is outside this branch's scope, no contract
+enforces citation freshness, and correcting it here would widen a documentation
+branch into an unrelated sweep. It is recorded so the next reader does not
+mistake it for this branch's debt.
+
+The rebase also clears the mdtablefix exposure the plan noted. The host binary
+is 0.6.1 while CI pins 0.6.0, and both were run: `make check-fmt` reports 179
+Markdown files unchanged under each, so the two versions agree on this tree and
+the divergence cannot decide this branch's verdict.
