@@ -294,18 +294,18 @@ and `..` cancellation is a stack rather than a nested call.
 
 The two composing helpers are bounded too, but by a **multiple** of their
 operands rather than by the operands themselves. `path_join` inserts a
-separator between every adjacent pair, so *n* components totaling *L* bytes
+separator between every adjacent pair, so *n* components totalling *L* bytes
 yield at most *L* + *n* − 1 bytes. `relpath`'s ascent contributes one `../`
 segment per component it climbs, and its descent is the remainder of the
-target, so a start of depth *d* and a target of *L* bytes yield at most
-*L* + 3*d* bytes. Both multipliers are bounded by the operand count, which is
-itself bounded by the input-length row's 8 MiB, so neither can amplify an input
-into an unbounded allocation: the ceiling on the result is at most a small
-multiple of the ceiling on the input, not a function of the input's *content*.
-This is the distinction the clause's materialization test turns on — a helper
-that multiplied by the value of a component, or by a count the manifest
-supplied separately, would reach an output the input length does not bound, and
-an output ceiling would then be owed.
+target, so a start of depth *d* and a target of *L* bytes yield at most *L* +
+3*d* bytes. Both multipliers are bounded by the operand count, which is itself
+bounded by the input-length row's 8 MiB, so neither can amplify an input into
+an unbounded allocation: the ceiling on the result is at most a small multiple
+of the ceiling on the input, not a function of the input's *content*. This is
+the distinction the clause's materialization test turns on — a helper that
+multiplied by the value of a component, or by a count the manifest supplied
+separately, would reach an output the input length does not bound, and an
+output ceiling would then be owed.
 
 The one bound the clause does impose is the input-length row's *spirit* rather
 than its letter — a manifest supplying a pathologically long path is bounded by

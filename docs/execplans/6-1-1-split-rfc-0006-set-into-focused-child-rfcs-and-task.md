@@ -146,9 +146,9 @@ Hard invariants. Violating one requires escalation, not a workaround.
   than waived**; see the Progress entry dated 2026-10-01 that begins "Two
   preamble findings recorded before `EP-M4` begins". **Breached again by RFC
   0015 at 465 lines, rising to **498** after review repairs across two review
-  rounds, and this time the waiver is decided rather than merely recorded**: the
-  per-helper density shows the tolerance's stated failure mode is absent, and
-  the escalation is answered in the `EP-M5` Progress entry. **The intent to
+  rounds, and this time the waiver is decided rather than merely recorded**:
+  the per-helper density shows the tolerance's stated failure mode is absent,
+  and the escalation is answered in the `EP-M5` Progress entry. **The intent to
   write the remaining children to a tighter shape did not hold, and the
   tolerance was breached with them rather than narrowly avoided** — five
   children now total **2418** against the 2400 budget at `3c337c89`, as the
@@ -158,25 +158,25 @@ Hard invariants. Violating one requires escalation, not a workaround.
   written at 2374 lines against the 2400 budget, leaving 26 for three children
   whose measured floor is ~183 each. **The figures in this paragraph are
   superseded by the 2026-10-03 correction below**, which re-derives them from
-  the files. The `EP-M7` Progress entry carries the
-  figures and the escalation, and its correction records that a
-  nine-or-ten-child re-partition **raises** the aggregate rather than relieving
-  it. The remedies that address this control are to raise the budget or to
-  record a decided waiver; the plan stops for that decision before RFC 0018 is
-  written. **Correction, added 2026-10-03: the budget is now exceeded by the
-  five written children alone.** The 2374 figure was measured at `5895fc4c` and
-  was true there; the round-2 review repairs then grew RFC 0016 by 27 lines and
-  RFC 0017 by 3, taking the five to **2404 against 2400 — 4 lines over, with
-  RFCs 0018, 0019, and 0020 still unwritten.** Three children at the measured
-  honest-child floor of roughly 183 lines each project the complete set to
-  about **2950**, a shortfall near **550 lines**. The figure is re-derived from
-  the files rather than carried forward, because the repair that fixed the
-  wrestling match also moved the number the escalation is about. **Second
-  correction, same day: the round-3 repairs moved it again, to 2418 at
-  `3c337c89`** — 0016 is **538** and 0017 is **515** — which is 14 lines further
-  over and projects the set to about **2960**. Each figure is now cited with
-  the revision it was measured at, so a later repair cannot silently make it
-  false: the number is a property of a revision, not of the branch.
+  the files. The `EP-M7` Progress entry carries the figures and the escalation,
+  and its correction records that a nine-or-ten-child re-partition **raises**
+  the aggregate rather than relieving it. The remedies that address this
+  control are to raise the budget or to record a decided waiver; the plan stops
+  for that decision before RFC 0018 is written. **Correction, added 2026-10-03:
+  the budget is now exceeded by the five written children alone.** The 2374
+  figure was measured at `5895fc4c` and was true there; the round-2 review
+  repairs then grew RFC 0016 by 27 lines and RFC 0017 by 3, taking the five to
+  **2404 against 2400 — 4 lines over, with RFCs 0018, 0019, and 0020 still
+  unwritten.** Three children at the measured honest-child floor of roughly 183
+  lines each project the complete set to about **2950**, a shortfall near **550
+  lines**. The figure is re-derived from the files rather than carried forward,
+  because the repair that fixed the wrestling match also moved the number the
+  escalation is about. **Second correction, same day: the round-3 repairs moved
+  it again, to 2418 at `3c337c89`** — 0016 is **538** and 0017 is **515** —
+  which is 14 lines further over and projects the set to about **2960**. Each
+  figure is now cited with the revision it was measured at, so a later repair
+  cannot silently make it false: the number is a property of a revision, not of
+  the branch.
 - **Vacuity.** If any section 5 subsection cannot state a group-specific
   consequence — a bound, a registry row, a diagnostic code, a purity
   assignment, a named error condition — and cannot honestly say "no additional
@@ -1709,7 +1709,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   recommendation pending that answer", which CodeRabbit correctly identified as
   contradicting the stop-and-escalate rule the same paragraph invokes. The
   behaviour was already a stop — `EP-M8` has not begun and RFC 0018 is
-  unwritten — but the text said otherwise, and text that authorises a breach it
+  unwritten — but the text said otherwise, and text that authorizes a breach it
   is simultaneously escalating is worse than either stopping or deciding.* Work
   on the children resumes when a remedy is chosen or a waiver recorded; work
   that does not depend on the choice — gates, reviews, and corrections to the
@@ -1982,20 +1982,20 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - [x] (2026-10-03) **CodeRabbit's round-3 pass raised seven findings — one
   major, six minor — and the four gates were green at `69069f04` behind them.**
   The confirming run was executed by the `scrutineer` sub-agent: `check-fmt`,
-  `markdownlint` (spelling included), `nixie`, and
-  `test-rfc-stdlib-coverage` all exited 0, the suite reporting 272 of 272 with
-  0 skipped. The spelling half of `markdownlint` was proven **live** rather
-  than assumed: the same target was re-run at `48fc95e5` in a scratch detached
-  worktree and failed with exactly the predicted `hand-written -> handwritten`,
-  exit 2 — so the green verdict at the tip is a verdict, not a no-op. Findings
-  were adjudicated against the current tree rather than the finding text,
-  because one of them was already stale when it was written.
+  `markdownlint` (spelling included), `nixie`, and `test-rfc-stdlib-coverage`
+  all exited 0, the suite reporting 272 of 272 with 0 skipped. The spelling
+  half of `markdownlint` was proven **live** rather than assumed: the same
+  target was re-run at `48fc95e5` in a scratch detached worktree and failed
+  with exactly the predicted `hand-written -> handwritten`, exit 2 — so the
+  green verdict at the tip is a verdict, not a no-op. Findings were adjudicated
+  against the current tree rather than the finding text, because one of them
+  was already stale when it was written.
 
   - **Major, RFC 0015/EP-M5 `Work continues under the recommendation pending
     that answer` — upheld.** A recommendation is not an approval, and carrying
     on under one is the self-issued waiver the same paragraph refuses. The
     behaviour was already a stop — `EP-M8` has not begun and RFC 0018 is
-    unwritten — but the text authorised what it was escalating. Both sites now
+    unwritten — but the text authorized what it was escalating. Both sites now
     say child work stops until the answer is recorded, and the amendment records
     that the behaviour preceded the correction.
   - **Minor, RFC 0016 §5.8: a 1,048,576-match example exceeds the 100000-match
@@ -2035,32 +2035,33 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
   **A third class of defect this pass found, which the earlier two did not: a
   measurement that was true when taken and became false when the thing it
-  measured changed.** The round-2 repairs grew RFC 0016 by 27 lines and RFC 0017
-  by 3, which falsified the 2374 aggregate, the 510 and 499 child counts, and
-  the 487 attributed to RFC 0015 — all correctly measured at the time. Every
-  superseded figure is now marked as historical with a pointer to the
+  measured changed.** The round-2 repairs grew RFC 0016 by 27 lines and RFC
+  0017 by 3, which falsified the 2374 aggregate, the 510 and 499 child counts,
+  and the 487 attributed to RFC 0015 — all correctly measured at the time.
+  Every superseded figure is now marked as historical with a pointer to the
   re-derivation rather than deleted, because the escalation's reasoning depends
   on what was known when. The lesson matches the one this plan already drew
-  about counts: **re-derive a figure from its source at the moment you cite
-  it, and when a repair changes a document's size, re-measure the documents
-  the size claim is about.**
+  about counts: **re-derive a figure from its source at the moment you cite it,
+  and when a repair changes a document's size, re-measure the documents the
+  size claim is about.**
 
 - [x] (2026-10-03) **The aggregate-volume escalation was put to the user with
   corrected figures, because the recorded ones had gone stale.** The tolerance
-  reads "if the eight child RFCs together exceed 2400 lines, stop and escalate",
-  and re-deriving the count from the files rather than carrying the entry
-  forward showed the budget is now exceeded by the **five children written
-  alone**: 0013 **470**, 0014 **397**, 0015 **498**, 0016 **537**, 0017 **502**
-  — **2404 against 2400**, measured at `e359cd66`. The earlier figure of 2374 was true at `5895fc4c`;
-  the round-2 review repairs then grew RFC 0016 by **27** lines (the
-  `regex_replace` output ceiling: a bounds row, a fourth consequence, a
-  diagnostic row, and their discharge prose) and RFC 0017 by **3**, crossing
-  the budget before any of the three remaining children was begun. Three
-  children at the measured floor of roughly 183 lines each project the complete
-  set to about **2950**. The escalation offers the remedies the corrected
-  arithmetic leaves — raise the budget from the measured floor, or keep 2400
-  and record a decided waiver — and explicitly does not offer a re-partition,
-  which raises the aggregate. `EP-M8` does not begin until the decision lands.
+  reads "if the eight child RFCs together exceed 2400 lines, stop and
+  escalate", and re-deriving the count from the files rather than carrying the
+  entry forward showed the budget is now exceeded by the **five children
+  written alone**: 0013 **470**, 0014 **397**, 0015 **498**, 0016 **537**, 0017
+  **502** — **2404 against 2400**, measured at `e359cd66`. The earlier figure
+  of 2374 was true at `5895fc4c`; the round-2 review repairs then grew RFC 0016
+  by **27** lines (the `regex_replace` output ceiling: a bounds row, a fourth
+  consequence, a diagnostic row, and their discharge prose) and RFC 0017 by
+  **3**, crossing the budget before any of the three remaining children was
+  begun. Three children at the measured floor of roughly 183 lines each project
+  the complete set to about **2950**. The escalation offers the remedies the
+  corrected arithmetic leaves — raise the budget from the measured floor, or
+  keep 2400 and record a decided waiver — and explicitly does not offer a
+  re-partition, which raises the aggregate. `EP-M8` does not begin until the
+  decision lands.
 
 - [x] (2026-10-03) **The branch was pushed and PR #860 opened as a draft, and a
   gate-version skew between the branch and `main` was found while preparing
@@ -2118,9 +2119,8 @@ Hard invariants. Violating one requires escalation, not a workaround.
   the round-2 repairs took 0016 to **537** and 0017 to **502**, so the five
   written children total **2404 against 2400** at `e359cd66` with three still
   to write; the round-3 repairs then took them to **538** and **515**, for
-  **2418** at `3c337c89`. The
-  re-derived figures are in the tolerance clause and in the 2026-10-03 Progress
-  entry, and those are the figures to quote. No
+  **2418** at `3c337c89`. The re-derived figures are in the tolerance clause
+  and in the 2026-10-03 Progress entry, and those are the figures to quote. No
   remedy is available to the implementation agent — the tolerance says so
   explicitly — so the plan **stops and escalates**: RFC 0018 is not written and
   child work does not resume until the user's decision is recorded, as `EP-M5`
@@ -2132,8 +2132,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   offered as an aggregate remedy and cannot be one, because the aggregate
   counts total lines and every extra child adds a full child's cost:
   re-partitioning the four remaining groups into five or six *raises* the total
-  by
-  roughly 366 lines (see `Surprises & discoveries`, "re-partitioning a fixed
+  by roughly 366 lines (see `Surprises & discoveries`, "re-partitioning a fixed
   set into more children raises the aggregate"). It is a remedy for the
   per-file tolerance, which is a separate control and already carries a
   reasoned waiver. The aggregate remedies are therefore: raise the budget with
@@ -2511,21 +2510,20 @@ Hard invariants. Violating one requires escalation, not a workaround.
   remaining groups as five children instead of three adds two extra children at
   183 lines each, so 3 × 183 ≈ **549** versus 5 × 183 ≈ **915** — a rise from
   ≈2923 to ≈3289, an increase of roughly **366 lines**. Impact: the third
-  remedy was stated for a purpose it cannot
-  achieve, and had a reviewer accepted it on that basis the aggregate would
-  have grown by more than the shortfall it was meant to close. Lesson: **before
-  offering a remedy for a budget, check the arithmetic against the budget's own
-  unit.** An aggregate control counts total lines, so any remedy that adds
-  structural units works against it; only raising the limit or recording a
-  decided waiver addresses it. Re-partitioning is a remedy for a *per-file*
-  limit, which is a different control with a different unit, and it was the
-  per-file tolerance that already carried a reasoned waiver. The corrected
-  remedy space is: raise the aggregate budget with the figure set from the
-  measured floor (≈2900–3000 for eight children); or keep 2400 and record a
-  decided waiver as the per-file tolerance has; or re-partition if smaller
-  *files* are the objective, accepting the larger total and the
-  `names.len() == 8` edit in `tests/rfc_stdlib_coverage/roadmap.rs` that it
-  requires.
+  remedy was stated for a purpose it cannot achieve, and had a reviewer
+  accepted it on that basis the aggregate would have grown by more than the
+  shortfall it was meant to close. Lesson: **before offering a remedy for a
+  budget, check the arithmetic against the budget's own unit.** An aggregate
+  control counts total lines, so any remedy that adds structural units works
+  against it; only raising the limit or recording a decided waiver addresses
+  it. Re-partitioning is a remedy for a *per-file* limit, which is a different
+  control with a different unit, and it was the per-file tolerance that already
+  carried a reasoned waiver. The corrected remedy space is: raise the aggregate
+  budget with the figure set from the measured floor (≈2900–3000 for eight
+  children); or keep 2400 and record a decided waiver as the per-file tolerance
+  has; or re-partition if smaller *files* are the objective, accepting the
+  larger total and the `names.len() == 8` edit in
+  `tests/rfc_stdlib_coverage/roadmap.rs` that it requires.
 
 - Observation: **a branch's recorded gate verdict stops covering the gate once
   the base branch moves the gate's own pin.** Every spelling verdict in this
@@ -2534,9 +2532,9 @@ Hard invariants. Violating one requires escalation, not a workaround.
   **v0.1.3** (#843), which bumps the spell checker underneath from `typos`
   **1.48.0 to 1.50.1**. Continuous integration does not check out the branch
   head — it checks out the *merge commit*, so it resolves the pin from merged
-  `main` and will run v0.1.3 against this branch's prose. Evidence: the pin is
-  a `?=` variable in the `Makefile`, so a rebase or merge silently upgrades
-  it, and the version bump includes a spell-checker major-adjacent change whose
+  `main` and will run v0.1.3 against this branch's prose. Evidence: the pin is a
+  `?=` variable in the `Makefile`, so a rebase or merge silently upgrades it,
+  and the version bump includes a spell-checker major-adjacent change whose
   word list is not identical. Impact: the branch's spelling verdict is **stale
   by construction**, not merely old — it is a true statement about a gate that
   will not be the one to decide, and any word newly rejected in 1.50.1 would

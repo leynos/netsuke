@@ -307,10 +307,10 @@ Four consequences this group decides:
   decides the second independently of the first. A subject holding eight
   thousand one-kilobyte records gives a record-matching pattern 8,192 matches —
   more than an order of magnitude under the ceiling — and a replacement naming
-  `$0` twice emits 16 MiB from a template shorter than this paragraph: the count
-  is under the ceiling while the output is arbitrary, because the replacement's
-  length is the author's to choose and multiplies the match count. Matching that
-  subject still costs time linear in its length, so
+  `$0` twice emits 16 MiB from a template shorter than this paragraph: the
+  count is under the ceiling while the output is arbitrary, because the
+  replacement's length is the author's to choose and multiplies the match
+  count. Matching that subject still costs time linear in its length, so
   section 8.4's guarantee holds unchanged; what the guarantee does not cover is
   the materialization the *replacement* asks for. Clause 6.8 names
   "materialized output" for exactly this case and requires the rejection before
