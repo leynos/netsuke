@@ -86,7 +86,16 @@ pub fn register(env: &mut Environment<'_>) -> anyhow::Result<StdlibState> {
 }
 
 /// Keep the bounded registration emitters below the module line cap.
-#[path = "register_emitters.rs"]
+///
+/// The `#[path]` attribute is required rather than incidental: a plain
+/// `mod emitters;` would need `register/mod.rs`, which denies
+/// `clippy::self_named_module_files` beside this non-`mod.rs` parent, while
+/// naming the file `register_emitters.rs` beside this one forms a shared
+/// `register` prefix that the module-layout contract rejects. Pointing
+/// `#[path]` into the existing `register/` directory satisfies both, and
+/// leaves the module's path — and so every `super::` reference — unchanged.
+/// `query_helpers` above reaches the same directory the same way.
+#[path = "register/emitters.rs"]
 mod emitters;
 
 use emitters::{

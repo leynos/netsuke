@@ -8,6 +8,8 @@
 //! complexity threshold belongs in an emitter like these.
 //!
 //! The split also keeps `register.rs` within the module line cap.
+//!
+//! Declared into `register/` by `#[path]`; see `docs/repository-layout.md`.
 
 /// Note the clock source backing the registered stdlib time helpers.
 pub(super) fn debug_time_helpers_registered_from_fields(clock_source: &str) {

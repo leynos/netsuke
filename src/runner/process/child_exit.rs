@@ -17,7 +17,15 @@ use super::{
 };
 
 /// Keep the bounded child-shutdown emitters below the module line cap.
-#[path = "child_exit_emitters.rs"]
+///
+/// The `#[path]` attribute is required rather than incidental: a plain
+/// `mod emitters;` would need `child_exit/mod.rs`, which denies
+/// `clippy::self_named_module_files` beside this non-`mod.rs` parent, while
+/// naming the file `child_exit_emitters.rs` beside this one forms a shared
+/// `child_` prefix that the module-layout contract rejects. Pointing `#[path]`
+/// into a same-stem directory satisfies both, and leaves the module's path —
+/// and so every `super::` reference — unchanged.
+#[path = "child_exit/emitters.rs"]
 mod emitters;
 
 use emitters::{
