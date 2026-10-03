@@ -43,11 +43,22 @@ once the shell scripts are deleted.
 - [x] Clear the Python gates. `make lint-python` passes all five stages:
       Ruff 0.16.4, Pylint 4.0.9 at 10.00/10, the df12 house lints, ambrleaks,
       and interrogate at 100%.
+- [x] Repoint the runtime tests at the Python gate. The 33-case frozen oracle
+      passes against `.github/scripts/release_admission.py`, including the
+      PR #770 newline-revision cases in both modes.
 - [ ] Replace the executable fakes with cmd-mox and port the case matrix.
 - [ ] Switch `release.yml` to the Python entry point and delete the shell.
 - [ ] Update the workflow contract, ADR-020, and the developers' guide.
 
 ## Decisions and findings
+
+- Cyclopts' default result action, `print_non_int_return_int_as_exit_code`,
+  returns an integer command result unchanged. The first version of the entry
+  point called `app()` and then returned a literal `0`, which discarded the
+  gate's own status and made every enforced failure exit successfully. The
+  fix is to return `app()`'s value; the alternative considered was an explicit
+  `sys.exit(admission.finish())` inside `main`, which would move the process
+  boundary into the command and make the function untestable in process.
 
 - Bounding is native. The shell wrapped each command in GNU `timeout`;
   `commands.run_bounded` reproduces both the one-second grace and the `124`
