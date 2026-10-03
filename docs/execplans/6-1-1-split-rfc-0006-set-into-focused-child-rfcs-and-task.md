@@ -145,15 +145,20 @@ Hard invariants. Violating one requires escalation, not a workaround.
   become restatement. **Breached by RFC 0013 at 470 lines, and recorded rather
   than waived**; see the Progress entry dated 2026-10-01 that begins "Two
   preamble findings recorded before `EP-M4` begins". **Breached again by RFC
-  0015 at 465 lines, rising to 487 after review repairs, and this time the
-  waiver is decided rather than merely recorded**: the per-helper density shows
-  the tolerance's stated failure mode is absent, and the escalation is answered
-  in the `EP-M5` Progress entry. The remaining children are written to a
-  tighter shape so the aggregate tolerance is not breached with them, and each
-  child's line count is recorded at its own commit. **The aggregate is the
+  0015 at 465 lines, rising to **498** after review repairs across two review
+  rounds, and this time the waiver is decided rather than merely recorded**: the
+  per-helper density shows the tolerance's stated failure mode is absent, and
+  the escalation is answered in the `EP-M5` Progress entry. **The intent to
+  write the remaining children to a tighter shape did not hold, and the
+  tolerance was breached with them rather than narrowly avoided** — five
+  children now total 2404 against the 2400 budget, as the 2026-10-03 correction
+  below records. Each child's line count is recorded at its own commit, which is
+  how the drift was caught. **The aggregate is the
   binding control and it is now breached, not approached**: five children are
   written at 2374 lines against the 2400 budget, leaving 26 for three children
-  whose measured floor is ~183 each. The `EP-M7` Progress entry carries the
+  whose measured floor is ~183 each. **The figures in this paragraph are
+  superseded by the 2026-10-03 correction below**, which re-derives them from
+  the files. The `EP-M7` Progress entry carries the
   figures and the escalation, and its correction records that a
   nine-or-ten-child re-partition **raises** the aggregate rather than relieving
   it. The remedies that address this control are to raise the budget or to
@@ -1690,9 +1695,20 @@ Hard invariants. Violating one requires escalation, not a workaround.
   cannot grant it: a waiver it issues to itself is the silent rationale the
   finding rejects. So the breach is escalated rather than excused, the two
   admissible remedies are set out with their costs, and the recommendation is
-  recorded for the user to accept or overrule. Work continues under the
-  recommendation pending that answer, which is this plan's normal posture for a
-  living document rather than a decision taken.
+  recorded for the user to accept or overrule.
+
+  **Dependent child work stops until the user's answer is recorded.** A
+  recommendation is not an approval, and proceeding on the strength of one
+  would be the very self-issued waiver this entry refuses. *Amendment, added
+  2026-10-03: the sentence here previously read "Work continues under the
+  recommendation pending that answer", which CodeRabbit correctly identified as
+  contradicting the stop-and-escalate rule the same paragraph invokes. The
+  behaviour was already a stop — `EP-M8` has not begun and RFC 0018 is
+  unwritten — but the text said otherwise, and text that authorises a breach it
+  is simultaneously escalating is worse than either stopping or deciding.* Work
+  on the children resumes when a remedy is chosen or a waiver recorded; work
+  that does not depend on the choice — gates, reviews, and corrections to the
+  children already written — is not held up by it.
 
   - **Remedy 1, recommended: keep RFC 0015 whole and let the aggregate
     tolerance bind instead.** Ground: the per-helper density measured below,
@@ -1845,8 +1861,12 @@ Hard invariants. Violating one requires escalation, not a workaround.
     and cites `shell`, `which`, and `register` as the existing singular forms.
     Both are recorded so the next child resolves the choice deliberately.
   - **The aggregate volume tolerance is now arithmetically unreachable, and
-    this is an escalation rather than a note.** Measured after `make fmt`:
-    0013 **470**, 0014 **397**, 0015 **495**, 0016 **487** — **1849** against
+    this is an escalation rather than a note.** *Historical measurement: the
+    figures below were true at this milestone and are superseded by the
+    2026-10-03 re-derivation in the tolerance clause; they are kept because the
+    escalation's reasoning depends on what was known here.* Measured after
+    `make fmt`: 0013 **470**, 0014 **397**, 0015 **495**, 0016 **487** — **1849**
+    against
     the 2400-line aggregate budget, leaving **551 for the four children still to
     write, a mean of 138**. The observed per-child fixed overhead (everything
     outside section 5) across the four is 169, 143, 161, and 179; the minimum,
@@ -1862,7 +1882,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
     the vacuity tolerance forbids leaving empty. Raised to the user; the
     remedies are to raise the 2400-line budget, or to accept that this plan's
     eight-child split is a **nine-or-ten-child** shape and re-partition the
-    remaining three groups (0017–0020) into four or five.
+    remaining **four** groups (0017–0020) into five or six.
 
     *Amendment, added 2026-10-03: the second remedy does not serve this
     control.* The aggregate counts total lines, and a re-partition adds a whole
@@ -1954,6 +1974,72 @@ Hard invariants. Violating one requires escalation, not a workaround.
   to re-derive every count in a child's prose from the table it describes at
   the moment the table changes.
 
+- [x] (2026-10-03) **CodeRabbit's round-3 pass raised seven findings — one
+  major, six minor — and the four gates were green at `69069f04` behind them.**
+  The confirming run was executed by the `scrutineer` sub-agent: `check-fmt`,
+  `markdownlint` (spelling included), `nixie`, and
+  `test-rfc-stdlib-coverage` all exited 0, the suite reporting 272 of 272 with
+  0 skipped. The spelling half of `markdownlint` was proven **live** rather
+  than assumed: the same target was re-run at `48fc95e5` in a scratch detached
+  worktree and failed with exactly the predicted `hand-written -> handwritten`,
+  exit 2 — so the green verdict at the tip is a verdict, not a no-op. Findings
+  were adjudicated against the current tree rather than the finding text,
+  because one of them was already stale when it was written.
+
+  - **Major, RFC 0015/EP-M5 `Work continues under the recommendation pending
+    that answer` — upheld.** A recommendation is not an approval, and carrying
+    on under one is the self-issued waiver the same paragraph refuses. The
+    behaviour was already a stop — `EP-M8` has not begun and RFC 0018 is
+    unwritten — but the text authorised what it was escalating. Both sites now
+    say child work stops until the answer is recorded, and the amendment records
+    that the behaviour preceded the correction.
+  - **Minor, RFC 0016 §5.8: a 1,048,576-match example exceeds the 100000-match
+    ceiling the same table states — upheld, and it was a genuine defect.** The
+    paragraph's whole point is that the output is unbounded while the *count* is
+    under the ceiling; an example whose count is ten times over the ceiling
+    proved the opposite. Replaced with 8,192 matches over an 8 MiB subject: an
+    order of magnitude *under* the ceiling, and 16 MiB of output above it, which
+    is the incoherence the reviewer asked for.
+  - **Minor, RFC 0017 §5.8: `path_join` and `relpath` outputs are not bounded
+    by operand length alone — upheld.** The paragraph said "bounded by the sum
+    of its operands" and left the separators and `../` segments uncounted. A
+    new paragraph derives both multipliers (*L* + *n* − 1 and *L* + 3*d*),
+    shows each is bounded by the operand count and so by the same 8 MiB, and
+    names the distinction that matters: a multiple of the input is not a
+    function of its content.
+  - **Minor, RFC 0017 `relpath` should reject `parent_component` — rejected,
+    and the clause is why.** RFC 0006 §8.6 says `relpath` "returns a general
+    lexical relative path from `start` to `path`, **which may contain `..`**",
+    and rejects only mixed absoluteness and differing drives. `commonpath` gets
+    `parent_component` because a purely lexical *common prefix* is meaningless
+    once a path ascends; `relpath` is the helper that exists to ascend. Adding
+    the code would contradict the clause the row discharges. Recorded here so
+    the next reviewer does not re-raise it.
+  - **Minor, ExecPlan: the 143-line floor is used to derive a 183-line
+    multiplication — upheld.** 143 is a child's *fixed overhead*; 183 is a whole
+    honest child. The sentence substituted one for the other. Both are now
+    defined where they are used, and the multiplication is stated in whole
+    children.
+  - **Minor, ExecPlan: "the remaining three groups (0017–0020)" — upheld.** The
+    range spans four identifiers and the same entry says "four children still to
+    write". Corrected to four groups re-partitioned into five or six, in both
+    places it appeared.
+  - **Minor, ExecPlan: the EP-M5 entry's wait-for-approval phrasing — the same
+    defect as the major finding, at a different site.** Both are repaired
+    together above.
+
+  **A third class of defect this pass found, which the earlier two did not: a
+  measurement that was true when taken and became false when the thing it
+  measured changed.** The round-2 repairs grew RFC 0016 by 27 lines and RFC 0017
+  by 3, which falsified the 2374 aggregate, the 510 and 499 child counts, and
+  the 487 attributed to RFC 0015 — all correctly measured at the time. Every
+  superseded figure is now marked as historical with a pointer to the
+  re-derivation rather than deleted, because the escalation's reasoning depends
+  on what was known when. The lesson matches the one this plan already drew
+  about counts: **re-derive a figure from its source at the moment you cite
+  it, and when a repair changes a document's size, re-measure the documents
+  the size claim is about.**
+
 - [x] (2026-10-03) **The aggregate-volume escalation was put to the user with
   corrected figures, because the recorded ones had gone stale.** The tolerance
   reads "if the eight child RFCs together exceed 2400 lines, stop and escalate",
@@ -2009,9 +2095,10 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `dialect`). Nine registry rows, taking the five written child registries to
   **41 of the 52** pure helpers: 0013 five, 0014 six, 0015 fifteen, 0016 eight,
   0017 seven. The three still to write — 0018, 0019, and 0020 — account for the
-  remaining eleven. Measured at commit time: **499 lines**, section 5 spanning
-  307 of them, density **34.1** section-5 lines per helper against 0016's 41.4
-  and 0015's 22.5.
+  remaining eleven. Measured at commit time: **499 lines**, rising to **502**
+  after the round-2 review repairs, section 5 spanning 307 of the original 499,
+  density **34.1** section-5 lines per helper against 0016's 41.4 and 0015's
+  22.5.
 
   **The aggregate budget is now breached, not merely approached.** The EP-M6
   entry escalated a projection of ~183 lines per honest child against the 551
@@ -2021,17 +2108,24 @@ Hard invariants. Violating one requires escalation, not a workaround.
   children** against a measured honest-child floor of ~183–192. The shortfall
   is now **~550 lines**, and the binding control the tolerance names is
   exceeded rather than threatened: writing 0018 alone would pass the budget.
-  This entry supersedes the EP-M6 projection and is the figure to quote. No
+  This entry supersedes the EP-M6 projection. **Correction, added 2026-10-03:
+  the 0016 and 0017 figures and the 2374 total are themselves superseded** —
+  the round-2 repairs took 0016 to **537** and 0017 to **502**, so the five
+  written children total **2404 against 2400** with three still to write. The
+  re-derived figures are in the tolerance clause and in the 2026-10-03 Progress
+  entry, and those are the figures to quote. No
   remedy is available to the implementation agent — the tolerance says so
-  explicitly — so the work continues under an open escalation and the plan
-  stops for the user's decision before 0018 is written.
+  explicitly — so the plan **stops and escalates**: RFC 0018 is not written and
+  child work does not resume until the user's decision is recorded, as `EP-M5`
+  states in full.
 
   **Correction, added 2026-10-03: one of the two remedies this entry carried
   does not serve this control.** The remedies as first written were "raise the
   2400-line budget, or accept a nine-or-ten-child re-partition". The second was
   offered as an aggregate remedy and cannot be one, because the aggregate
   counts total lines and every extra child adds a full child's cost:
-  re-partitioning the three remaining groups into five *raises* the total by
+  re-partitioning the four remaining groups into five or six *raises* the total
+  by
   roughly 366 lines (see `Surprises & discoveries`, "re-partitioning a fixed
   set into more children raises the aggregate"). It is a remedy for the
   per-file tolerance, which is a separate control and already carries a
@@ -2400,11 +2494,17 @@ Hard invariants. Violating one requires escalation, not a workaround.
   **169**, 0014 **143**, 0015 **161**, 0016 **179**, 0017 **192**. A
   re-partition adds whole children, each carrying a full section 5 *and* a full
   overhead; the only saving is that a smaller group's section 5 is somewhat
-  shorter, which is a partial offset rather than a net reduction. Writing the
-  three remaining groups as five children instead of three adds two extra
-  children at the 143-line floor each: 3 × 183 ≈ **549** versus 5 × 183 ≈
-  **915**, so the aggregate rises from ≈2923 to ≈3289 — an increase of roughly
-  **366 lines**. Impact: the third remedy was stated for a purpose it cannot
+  shorter, which is a partial offset rather than a net reduction. **The 143 and
+  183 figures measure different things and must not be substituted for one
+  another.** 143 is the smallest observed *fixed overhead* — a child's sections
+  1–4 and 6–9 with no section 5 at all; 183 is the smallest honest *whole
+  child*, that overhead plus section 5's structural floor (two headings, eleven
+  subsection headings, eleven non-empty bodies, the discharge table). Adding a
+  child costs the whole-child figure, not the overhead: writing the three
+  remaining groups as five children instead of three adds two extra children at
+  183 lines each, so 3 × 183 ≈ **549** versus 5 × 183 ≈ **915** — a rise from
+  ≈2923 to ≈3289, an increase of roughly **366 lines**. Impact: the third
+  remedy was stated for a purpose it cannot
   achieve, and had a reviewer accepted it on that basis the aggregate would
   have grown by more than the shortfall it was meant to close. Lesson: **before
   offering a remedy for a budget, check the arithmetic against the budget's own

@@ -288,11 +288,24 @@ one, a match count and a compiled-pattern size for the pattern family. This
 group allocates nothing that grows with anything but its own input's length,
 and its output is bounded by its input by construction: `normpath` is length-
 decreasing or length-preserving, `commonpath` is a prefix of an input,
-`splitext` and `splitdrive` partition an input rather than extending it,
-`relpath` is bounded by the sum of its operands, and `path_join`'s output is
-bounded by the sum of its components. There is no recursion, because lexical
-normalization is a single left-to-right pass and `..` cancellation is a stack
-rather than a nested call.
+`splitext` and `splitdrive` partition an input rather than extending it. There
+is no recursion, because lexical normalization is a single left-to-right pass
+and `..` cancellation is a stack rather than a nested call.
+
+The two composing helpers are bounded too, but by a **multiple** of their
+operands rather than by the operands themselves. `path_join` inserts a
+separator between every adjacent pair, so *n* components totaling *L* bytes
+yield at most *L* + *n* − 1 bytes. `relpath`'s ascent contributes one `../`
+segment per component it climbs, and its descent is the remainder of the
+target, so a start of depth *d* and a target of *L* bytes yield at most
+*L* + 3*d* bytes. Both multipliers are bounded by the operand count, which is
+itself bounded by the input-length row's 8 MiB, so neither can amplify an input
+into an unbounded allocation: the ceiling on the result is at most a small
+multiple of the ceiling on the input, not a function of the input's *content*.
+This is the distinction the clause's materialization test turns on — a helper
+that multiplied by the value of a component, or by a count the manifest
+supplied separately, would reach an output the input length does not bound, and
+an output ceiling would then be owed.
 
 The one bound the clause does impose is the input-length row's *spirit* rather
 than its letter — a manifest supplying a pathologically long path is bounded by
