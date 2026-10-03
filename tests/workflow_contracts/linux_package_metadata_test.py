@@ -76,6 +76,32 @@ def test_release_reader_follows_manifest_resolution_and_exposes_outputs() -> Non
         )
 
 
+def test_release_manifest_resolution_uses_literal_cargo_toml() -> None:
+    """Use the root Cargo manifest instead of an unset override fallback."""
+    steps = job_steps(load_workflow(RELEASE_WORKFLOW_PATH), "metadata")
+    manifest_step = named_step(steps, "Resolve Cargo manifest path")
+    match manifest_step.get("run"):
+        case str() as command:
+            pass
+        case _:
+            pytest.fail("manifest path command must be a string")
+
+    assert "manifest_path='Cargo.toml'" in command, (
+        "manifest path must use Cargo.toml directly"
+    )
+
+
+def test_export_cargo_metadata_uses_literal_cargo_toml() -> None:
+    """Pass the root Cargo manifest directly to the metadata action."""
+    steps = job_steps(load_workflow(RELEASE_WORKFLOW_PATH), "metadata")
+    bin_name = named_step(steps, "Extract binary name from Cargo.toml")
+    inputs = require_mapping(bin_name.get("with"), "Cargo metadata action inputs")
+
+    assert inputs.get("manifest-path") == "Cargo.toml", (
+        "Cargo metadata action must receive the literal manifest path"
+    )
+
+
 def test_release_metadata_reader_uses_the_pinned_python_baseline() -> None:
     """Run the metadata script under the pinned Python 3.14 interpreter."""
     steps = job_steps(load_workflow(RELEASE_WORKFLOW_PATH), "metadata")

@@ -1,9 +1,9 @@
 //! Contract tests for the project website URL across publishable surfaces.
 //!
-//! The README, the crate metadata, and the packaging metadata must all point
-//! at the same website, and the documentation link must remain a superset of
-//! the homepage URL so the two cannot drift apart. The tests assert
-//! consistency between the files rather than pinning any particular URL.
+//! The README and crate metadata must point at the same website, and the
+//! documentation link must remain a superset of the homepage URL so the two
+//! cannot drift apart. The tests assert consistency between the files rather
+//! than pinning any particular URL.
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
@@ -44,38 +44,6 @@ fn cargo_package_field(field: &str) -> Result<String> {
         .with_context(|| format!("Cargo.toml `package.{field}` should be a string"))
 }
 
-/// The nfpm package homepage declared in `.goreleaser.yaml`.
-fn goreleaser_nfpm_homepage() -> Result<String> {
-    let goreleaser = repo_file(".goreleaser.yaml")?;
-    let root: serde_json::Value =
-        serde_saphyr::from_str(&goreleaser).context("parse .goreleaser.yaml")?;
-    root.get("nfpms")
-        .and_then(|nfpms| nfpms.get(0))
-        .and_then(|nfpm| nfpm.get("homepage"))
-        .and_then(serde_json::Value::as_str)
-        .map(ToOwned::to_owned)
-        .context("`.goreleaser.yaml` nfpm homepage should be a string")
-}
-
-/// The FreeBSD package website, embedded in the post-hook manifest.
-///
-/// The hook writes `www: "..."` inside a heredoc, so the value is not
-/// reachable through the parsed YAML structure; extract it from the source.
-fn goreleaser_freebsd_www() -> Result<String> {
-    let goreleaser = repo_file(".goreleaser.yaml")?;
-    let marker = "www: \"";
-    let after_marker = goreleaser
-        .split_once(marker)
-        .map(|(_, after)| after)
-        .context("`.goreleaser.yaml` FreeBSD manifest should declare `www:`")?;
-    let url = after_marker
-        .split_once('"')
-        .map(|(url, _)| url)
-        .context("FreeBSD `www` URL should be quoted")?;
-    ensure!(!url.is_empty(), "FreeBSD `www` URL should not be empty");
-    Ok(url.to_owned())
-}
-
 #[test]
 fn website_url_is_consistent_across_publishable_surfaces() -> Result<()> {
     let website = readme_website_url()?;
@@ -83,16 +51,6 @@ fn website_url_is_consistent_across_publishable_surfaces() -> Result<()> {
     ensure!(
         cargo_homepage == website,
         "Cargo.toml homepage {cargo_homepage} should match the README website {website}"
-    );
-    let nfpm_homepage = goreleaser_nfpm_homepage()?;
-    ensure!(
-        nfpm_homepage == website,
-        "GoReleaser nfpm homepage {nfpm_homepage} should match the README website {website}"
-    );
-    let freebsd_www = goreleaser_freebsd_www()?;
-    ensure!(
-        freebsd_www == website,
-        "GoReleaser FreeBSD `www` {freebsd_www} should match the README website {website}"
     );
     Ok(())
 }

@@ -3765,9 +3765,9 @@ Release engineering is delegated to GitHub Actions workflows built on the
 SHAs so release automation remains reproducible. The tagging workflow first
 verifies that the Git ref matches `Cargo.toml` and records the crate's binary
 name once so all subsequent jobs operate on consistent metadata. Each build job
-installs `cargo-orthohelp = 0.9.0`, invokes the `rust-build-release` composite
+installs `cargo-orthohelp = 0.9.1`, invokes the `rust-build-release` composite
 action, and then runs `scripts/generate-release-help.sh` before staging or
-packaging. The pinned v0.9.0 executable is invoked by the helper as
+packaging. The pinned v0.9.1 executable is invoked by the helper as
 `cargo-orthohelp orthohelp`.
 
 Linux builds cross-compile for `x86_64` and `aarch64`, stage the binary and
@@ -3884,7 +3884,7 @@ Each job uploads its products as workflow artefacts, and the final release job
 downloads every file, filters out unrelated downloads, and prefixes asset names
 with their staging directories to avoid collisions before attaching them to the
 GitHub release draft. This automated pipeline guarantees parity across Windows,
-Linux, and macOS without custom GoReleaser logic.
+Linux, and macOS through the shared actions.
 
 ### 8.7 Release Notes
 
