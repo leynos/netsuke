@@ -1946,6 +1946,35 @@ Hard invariants. Violating one requires escalation, not a workaround.
   to re-derive every count in a child's prose from the table it describes at
   the moment the table changes.
 
+- [x] (2026-10-03) **The branch was pushed and PR #860 opened as a draft, and a
+  gate-version skew between the branch and `main` was found while preparing
+  it.** Branch `6-1-1-split-rfc-0006-set-into-focused-child-rfcs-and-task` had
+  no remote counterpart: #697 delivered RFC 0013, merged on 2026-10-01 as
+  `6be4a65f`, and the remote branch was deleted at merge. The merge base is
+  therefore `6be4a65f`, and a trial merge against current `main` showed **no
+  conflicts** — the branch's only overlapping files with `main` are
+  `docs/contents.md` and `docs/roadmap.md`. The branch was pushed fresh over
+  SSH and **PR [#860](https://github.com/leynos/netsuke/pull/860)** created
+  with the `pr-creation` skill as a **draft**, base `main`, head `69069f04`.
+
+  **The draft state is deliberate.** The aggregate-volume escalation below is
+  still open with the user and three children remain, so the branch is not
+  ready for review; a draft keeps the escalation and the PR in step rather than
+  inviting review of a set the plan has stopped short of finishing. The Lody
+  session was renamed to "Write RFC 0006 child RFCs 0014 to 0017" — the PR
+  title minus its `(6.1.1)` prefix — with `lody session rename`, and the PR
+  body's `## References` section links the session.
+
+  **The gate-version skew is a live risk, not a note.** `main` adopted
+  `typos-config-builder` **v0.1.3** while this branch pins **v0.1.1**, and the
+  difference includes a `typos` bump from **1.48.0 to 1.50.1** (#843).
+  Continuous integration checks out the *merge commit*, so it will run the
+  newer, stricter spelling gate against this branch's new prose — while every
+  verdict recorded in this plan came from v0.1.1. The skew is not a defect in
+  the branch: `main` moved and the branch did not. But it means the recorded
+  spelling verdict **does not cover the gate that will decide**, and the
+  consequence is recorded under `Surprises & discoveries`.
+
 - [x] (2026-10-01) `EP-M7` **RFC 0017 written, and the aggregate-volume
   escalation it was written under is now measured rather than projected.** The
   RFC owns RFC 0006 §8.6 except `expandvars`, plus §8.7's `abs` alone — the
@@ -2365,6 +2394,26 @@ Hard invariants. Violating one requires escalation, not a workaround.
   *files* are the objective, accepting the larger total and the
   `names.len() == 8` edit in `tests/rfc_stdlib_coverage/roadmap.rs` that it
   requires.
+
+- Observation: **a branch's recorded gate verdict stops covering the gate once
+  the base branch moves the gate's own pin.** Every spelling verdict in this
+  plan was produced by `typos-config-builder` **v0.1.1**, the version the
+  branch's `Makefile` pins. While the branch sat unrebased, `main` adopted
+  **v0.1.3** (#843), which bumps the spell checker underneath from `typos`
+  **1.48.0 to 1.50.1**. Continuous integration does not check out the branch
+  head — it checks out the *merge commit*, so it resolves the pin from merged
+  `main` and will run v0.1.3 against this branch's prose. Evidence: the pin is
+  a `?=` variable in the `Makefile`, so a rebase or merge silently upgrades
+  it, and the version bump includes a spell-checker major-adjacent change whose
+  word list is not identical. Impact: the branch's spelling verdict is **stale
+  by construction**, not merely old — it is a true statement about a gate that
+  will not be the one to decide, and any word newly rejected in 1.50.1 would
+  appear only in CI. Lesson: **when a repository pins a tool in a file the base
+  branch also edits, a green verdict is scoped to the pin, and the pin moves
+  under the branch.** Rebase (or merge `main`) and re-run the gate before
+  treating any verdict as covering the merge commit, and prefer re-running over
+  reasoning about whether the bump *could* matter — the word list is a data
+  file, not a semver contract.
 
 - Observation: **two independent safety nets can both report success while
   neither is watching.** Evidence: `EP-M3`'s acceptance criterion is "every
