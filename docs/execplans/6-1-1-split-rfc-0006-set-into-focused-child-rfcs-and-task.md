@@ -1979,6 +1979,34 @@ Hard invariants. Violating one requires escalation, not a workaround.
   to re-derive every count in a child's prose from the table it describes at
   the moment the table changes.
 
+- [x] (2026-10-03) **Four confirming gate runs were needed to get back to green,
+  and the last one gave `markdownlint-cli2` its first verdict at this tip.**
+  Green at `15ae9e51`: `check-fmt` exit 0 under **both** mdtablefix 0.6.1
+  (host) and 0.6.0 (CI pin), `markdownlint` exit 0 with
+  `markdownlint-cli2 v0.23.2` reporting **175 files, 0 issues**, `nixie` exit
+  0, and `test-rfc-stdlib-coverage` 272 of 272 with 0 skipped. The tree did not
+  move — `HEAD` and the whole-tree content hash were identical before and
+  after, and `typos.toml` was not rewritten.
+
+  **`markdownlint-cli2` had never run on this branch's recent prose**, because
+  every prior attempt died in the `spelling` prerequisite at `Makefile:385`
+  before reaching it — once on the infrastructure abort, then on the three
+  `-ise`-family spellings, then on two more that the skew repair itself
+  reintroduced. So the linter's clean sweep is a *new* verdict, not a repeated
+  one, and the stage is proven live rather than vacuous: the identical
+  prerequisite emitted real diagnostics at `9844c335` and none at `15ae9e51`.
+
+  **Four defects were found and fixed across those runs, and three of them were
+  self-inflicted by the repair for the previous one.** The sequence is worth
+  recording as a shape: the round-3 repairs passed a vacuous canonicalization
+  check and shipped three spelling errors; fixing those with the host's
+  mdtablefix produced prose the CI-pinned version rejects; fixing the skew
+  wrote two more `-ise` spellings into the sentence describing the spelling
+  problem. Each fix was verified before the next gate run, so no defect reached
+  a reviewer or CI, but the pattern is the point — **a repair is new prose, and
+  new prose needs the same gate as the change it repairs.** The plan's earlier
+  practice of gating only the *original* change would have missed all four.
+
 - [x] (2026-10-03) **CodeRabbit's round-3 pass raised seven findings — one
   major, six minor — and the four gates were green at `69069f04` behind them.**
   The confirming run was executed by the `scrutineer` sub-agent: `check-fmt`,
@@ -2571,6 +2599,34 @@ Hard invariants. Violating one requires escalation, not a workaround.
   treating any verdict as covering the merge commit, and prefer re-running over
   reasoning about whether the bump *could* matter — the word list is a data
   file, not a semver contract.
+
+- Observation: **the same skew exists on the writing side, and there the base
+  branch is not involved at all — the host is.** This plan had recorded the
+  hazard for the spell checker and still walked into it for `mdtablefix`. The
+  host binary is **0.6.1**; CI pins **MDTABLEFIX_VERSION 0.6.0** and installs
+  it by pinned release. `make fmt` resolves `MDTABLEFIX` from the recipe shell's
+  `PATH`, so it wrote the tree with 0.6.1, and 0.6.0 then rejected the result
+  with `+11 -11` on the ExecPlan — a Format-step failure that would have
+  skipped Lint, Typecheck, Doc coverage, Spelling, Mermaid, Workflow contracts,
+  and Test behind it. Evidence: installing the pinned 0.6.0 to a scratch path
+  and running its `--check` reproduced the rejection on an otherwise green
+  tree; its `--in-place` pass made both versions report
+  `175 files left unchanged`. The developers' guide warned of exactly this ("a
+  different `mdtablefix` version may reflow prose differently, which would make
+  `make check-fmt` fail on an otherwise clean tree") — the warning was read,
+  and the hazard still materialized, because the warning names the
+  *consequence* and not the check. Impact: a local `make fmt` followed by a
+  local `make check-fmt` is self-consistent under any single version and will
+  agree with itself while disagreeing with CI; the defect is invisible to every
+  local gate. Lesson: **a formatter that writes and a gate that reads must
+  resolve the same binary, and "pinned in CI" is not the same as "present
+  locally."** Before treating a formatting verdict as merge-covering, compare
+  every pinned tool's version against the host's — and when they differ, run
+  the gate under the pin (`make MDTABLEFIX=/path/to/pinned check-fmt`) rather
+  than trusting the host's agreement with itself. The two other entries in this
+  list are the read-side and self-consistency faces of the same structural
+  hazard: **a gate's verdict belongs to the bytes *and the tooling* it actually
+  read.**
 
 - Observation: **two independent safety nets can both report success while
   neither is watching.** Evidence: `EP-M3`'s acceptance criterion is "every
