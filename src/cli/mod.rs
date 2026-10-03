@@ -32,6 +32,10 @@ mod validation;
 mod value_parser;
 
 pub use command::{BuildArgs, Cli, Commands, GraphArgs};
+#[cfg(feature = "lint")]
+pub use command::{CheckArgs, DEFAULT_FAIL_ON, DEFAULT_FINDING_LIMIT};
+#[cfg(feature = "lint")]
+pub use config::CheckConfig;
 pub use config::{AccessibilityPolicy, CliConfig, ColourPolicy, EmojiPolicy, ProgressPolicy};
 pub use diag::{
     resolve_json_and_layers_outcome_with_env, resolve_merged_json, resolve_merged_json_with_env,

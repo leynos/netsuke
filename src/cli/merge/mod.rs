@@ -37,7 +37,7 @@ use ortho_config::figment::Figment;
 use ortho_config::{OrthoError, OrthoMergeExt, OrthoResult, sanitize_value};
 use serde::Serialize;
 
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use self::apply::apply_config;
 use self::input::MergeComposition;
@@ -57,6 +57,8 @@ use super::validation::validation_error;
 mod command_overrides;
 mod manifest_budget_overrides;
 use command_overrides::build_cli_overrides;
+#[cfg(feature = "lint")]
+use command_overrides::insert_check_overrides;
 use manifest_budget_overrides::insert_manifest_budget_cli_overrides;
 
 /// Merge discovered configuration layers over parsed CLI input.
@@ -316,11 +318,14 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Va
         }
     }
 
+    let mut cmds: Map<String, Value> = Map::new();
     if !cmds_build.is_empty() {
-        root.insert(
-            "cmds".to_owned(),
-            json!({ "build": Value::Object(cmds_build) }),
-        );
+        cmds.insert("build".to_owned(), Value::Object(cmds_build));
+    }
+    #[cfg(feature = "lint")]
+    insert_check_overrides(cli, matches, &mut cmds)?;
+    if !cmds.is_empty() {
+        root.insert("cmds".to_owned(), Value::Object(cmds));
     }
 
     Ok(Value::Object(root))

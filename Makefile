@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest test-documentation-contracts doctest test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -229,6 +229,19 @@ test-documentation-contracts: check-build-tools ## Validate marked documentation
 
 doctest: check-build-tools ## Run doctests, which cargo-nextest cannot execute
 	$(GATE_RUSTFLAGS) $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
+
+# The default-feature lane. Release binaries build the default feature set,
+# which excludes `lint` (`netsuke check`) until v0.2.0, so these targets lint
+# and test exactly that set; `lint-clippy` and `test` above cover
+# `--all-features`. See ADR-042 and "Feature-gated code" in the developers'
+# guide.
+test-default-features: check-build-tools ## Run every Rust test with only the default features, as release binaries build
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --workspace --all-targets $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+	$(GATE_RUSTFLAGS) $(CARGO) test --workspace --doc $(BUILD_JOBS)
+
+lint-default-features: check-build-tools ## Run rustdoc and Clippy with only the default features and warnings denied
+	$(GATE_RUSTFLAGS) $(CARGO) doc --workspace --no-deps
+	$(GATE_RUSTFLAGS) $(CARGO) clippy --workspace --all-targets -- -D warnings
 
 test-kani-mutations: check-build-tools ## Compile each mutation patch's patched tree under the Kani configuration
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test kani_mutation_evidence_tests --all-features --run-ignored ignored-only $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)

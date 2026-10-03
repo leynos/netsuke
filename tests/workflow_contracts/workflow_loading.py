@@ -21,19 +21,18 @@ import yaml
 from yaml.constructor import ConstructorError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
+CI_WORKFLOW_PATH = WORKFLOW_DIR / "ci.yml"
 #: The Windows halves of the merge gate live in a reusable workflow so
 #: `ci.yml` stays inside the repository's 400-line file limit.
-CI_WINDOWS_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci-windows.yml"
-COVERAGE_MAIN_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "coverage-main.yml"
-COVERAGE_PR_WORKFLOW_PATH = (
-    REPO_ROOT / ".github" / "workflows" / "coverage-pr-submit.yml"
-)
-MUTATION_TESTING_WORKFLOW_PATH = (
-    REPO_ROOT / ".github" / "workflows" / "mutation-testing.yml"
-)
-PACKAGE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "build-and-package.yml"
-RELEASE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "release.yml"
+CI_WINDOWS_WORKFLOW_PATH = WORKFLOW_DIR / "ci-windows.yml"
+#: The default-feature lane: lints and tests the release feature set.
+CI_DEFAULT_FEATURES_WORKFLOW_PATH = WORKFLOW_DIR / "ci-default-features.yml"
+COVERAGE_MAIN_WORKFLOW_PATH = WORKFLOW_DIR / "coverage-main.yml"
+COVERAGE_PR_WORKFLOW_PATH = WORKFLOW_DIR / "coverage-pr-submit.yml"
+MUTATION_TESTING_WORKFLOW_PATH = WORKFLOW_DIR / "mutation-testing.yml"
+PACKAGE_WORKFLOW_PATH = WORKFLOW_DIR / "build-and-package.yml"
+RELEASE_WORKFLOW_PATH = WORKFLOW_DIR / "release.yml"
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
 #: The composite action the Windows MSI merge gate delegates to. Its steps are
 #: parsed as YAML by `windows_msi_gate_test.py`, so the path is shared here
@@ -50,6 +49,7 @@ SETUP_RUST_JOBS = (
     (CI_WORKFLOW_PATH, "build-test"),
     (CI_WINDOWS_WORKFLOW_PATH, "lint-windows"),
     (CI_WINDOWS_WORKFLOW_PATH, "build-test-windows"),
+    (CI_DEFAULT_FEATURES_WORKFLOW_PATH, "default-features"),
 )
 
 #: The jobs that run tests and therefore install cargo-nextest. Windows needs
@@ -58,6 +58,7 @@ NEXTEST_JOBS = (
     (CI_WORKFLOW_PATH, "build-test"),
     (CI_WINDOWS_WORKFLOW_PATH, "build-test-windows"),
     (CI_WORKFLOW_PATH, "kani-smoke"),
+    (CI_DEFAULT_FEATURES_WORKFLOW_PATH, "default-features"),
 )
 
 #: The jobs that run the Markdown formatter check and therefore install

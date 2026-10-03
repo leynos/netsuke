@@ -48,7 +48,8 @@ use toml::Value;
 /// [`behavioural_nextest_targets_forward_both_worker_bounds`] discovers the
 /// targets that actually invoke the runner and fails when the two disagree, so
 /// a new recipe joins the contract or breaks the build.
-const NEXTEST_TARGETS: [&str; 5] = [
+const NEXTEST_TARGETS: [&str; 6] = [
+    "test-default-features",
     "test-documentation-contracts",
     "test-kani-mutations",
     "test-kani-scope-wrapper",

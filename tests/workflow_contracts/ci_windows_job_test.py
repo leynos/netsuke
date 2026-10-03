@@ -41,6 +41,7 @@ WINDOWS_JOBS = (*RUST_WINDOWS_JOBS, MSI_JOB)
 EXPECTED_GATE_OWNERS = {
     "make SHELL=bash check-fmt": LINT_JOB,
     "make SHELL=bash lint-clippy": LINT_JOB,
+    "make SHELL=bash lint-default-features": LINT_JOB,
     "make SHELL=bash test": WINDOWS_JOB,
 }
 
@@ -49,6 +50,7 @@ EXPECTED_GATE_OWNERS = {
 EXPECTED_WINDOWS_BASH_MAKEFILE_GATES = (
     "make SHELL=bash check-fmt",
     "make SHELL=bash lint-clippy",
+    "make SHELL=bash lint-default-features",
     "make SHELL=bash test",
 )
 

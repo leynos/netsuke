@@ -32,6 +32,12 @@ mod ninja_status_tests;
 /// Cover the bounded manifest environment-lookup counter series separately.
 mod env_lookup_tests;
 
+/// Cover the bounded `netsuke check` series, which exist only with `lint`.
+#[cfg(feature = "lint")]
+mod check_tests;
+
+/// Cover bounded CLI path-validation metric registrations separately.
+mod path_validation_tests;
 /// Cover the bounded `which` resolver counter series separately.
 mod which_tests;
 
@@ -91,18 +97,25 @@ fn record_mixed_metric_series(recorder: &ConfigMetricsRecorder) {
     });
 }
 
+/// Report whether `entry` is one retained counter with the expected outcome.
+fn is_retained_outcome_counter(entry: &SnapshotEntry, metric_name: &str, outcome: &str) -> bool {
+    entry.0.kind() == MetricKind::Counter
+        && entry.0.key().name() == metric_name
+        && matches!(
+            entry.0.key().labels().collect::<Vec<_>>().as_slice(),
+            [label] if label.key() == "outcome" && label.value() == outcome
+        )
+        && matches!(entry.3, DebugValue::Counter(1))
+}
+
 /// Assert the retained startup counter has its sole bounded failure label.
 fn assert_retained_startup_counter(snapshot: &[SnapshotEntry]) {
     assert!(
-        snapshot.iter().any(|entry| {
-            entry.0.kind() == MetricKind::Counter
-                && entry.0.key().name() == STARTUP_CONFIG_LOAD_COUNTER
-                && matches!(
-                    entry.0.key().labels().collect::<Vec<_>>().as_slice(),
-                    [label] if label.key() == "outcome" && label.value() == "failure"
-                )
-                && matches!(entry.3, DebugValue::Counter(1))
-        }),
+        snapshot.iter().any(|entry| is_retained_outcome_counter(
+            entry,
+            STARTUP_CONFIG_LOAD_COUNTER,
+            "failure"
+        )),
         "snapshot should retain the bounded startup counter: {snapshot:?}"
     );
 }
@@ -220,55 +233,6 @@ fn recorder_retains_unlabelled_manifest_filtering_counters() {
     }
 }
 
-/// Retain only the fixed source and reason labels for CLI path-validation counters.
-#[test]
-fn recorder_retains_bounded_cli_path_validation_series() {
-    let recorder = ConfigMetricsRecorder::new();
-    let snapshotter = recorder.snapshotter();
-
-    metrics::with_local_recorder(&recorder, || {
-        counter!(PATH_VALIDATION_TOTAL, "source" => "file", "reason" => "non_utf8").increment(1);
-        counter!(PATH_VALIDATION_TOTAL, "source" => "directory", "reason" => "non_utf8")
-            .increment(1);
-        counter!(PATH_VALIDATION_TOTAL, "source" => "unbounded", "reason" => "non_utf8")
-            .increment(1);
-        counter!(PATH_VALIDATION_TOTAL, "source" => "file", "reason" => "unbounded").increment(1);
-        counter!(PATH_VALIDATION_TOTAL, "source" => "file").increment(1);
-    });
-
-    let snapshot = snapshotter.snapshot().into_vec();
-    assert_eq!(
-        snapshot.len(),
-        2,
-        "only the two bounded CLI path-validation series are retained"
-    );
-    for source in ["file", "directory"] {
-        assert_path_validation_counter(&snapshot, source);
-    }
-}
-
-/// Verify one retained CLI path-validation counter with the specified source and the `non_utf8` reason.
-fn assert_path_validation_counter(snapshot: &[SnapshotEntry], source: &str) {
-    assert!(
-        snapshot.iter().any(|entry| {
-            entry.0.kind() == MetricKind::Counter
-                && entry.0.key().name() == PATH_VALIDATION_TOTAL
-                && entry.0.key().labels().count() == 2
-                && entry
-                    .0
-                    .key()
-                    .labels()
-                    .any(|label| label.key() == "source" && label.value() == source)
-                && entry
-                    .0
-                    .key()
-                    .labels()
-                    .any(|label| label.key() == "reason" && label.value() == "non_utf8")
-                && matches!(entry.3, DebugValue::Counter(1))
-        }),
-        "recorder should retain the {source:?} path-validation series: {snapshot:?}"
-    );
-}
 /// Record the two valid counter series emitted for recipe-shell operations.
 fn record_valid_recipe_shell_series() {
     counter!(

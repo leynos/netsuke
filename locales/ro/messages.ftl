@@ -459,3 +459,26 @@ manifest.budget.exceeded = Bugetul de resurse al manifestului s-a epuizat în ti
 
 cli.flag.env_allow_var.help = Variabilă de mediu permisă pentru ajutorul env() al manifestului.
 cli.flag.env_block_var.help = Variabilă de mediu blocată pentru ajutorul env() al manifestului.
+
+# Analiza manifestului (`netsuke check`).
+cli.subcommand.check.about = Analizează manifestul fără a genera sau rula o compilare.
+cli.subcommand.check.long_about = Examinează manifestul selectat pentru construcții care se analizează corect, dar sunt probabil eronate, nesigure, neportabile sau ostile memoriei cache.
+cli.subcommand.check.flag.rule.help = Stabilește severitatea unei reguli sau categorii, scrisă ca NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Severitatea de la care constatările fac comanda să eșueze.
+cli.subcommand.check.flag.limit.help = Numărul maxim de constatări raportate; 0 le raportează pe toate.
+cli.subcommand.check.flag.explain.help = Afișează referința regulilor în loc să analizeze un manifest.
+check.threshold_exceeded = Constatările au atins pragul { $severity }: { $failing } din { $reported } raportate.
+check.threshold_exceeded.help = Remediați constatările raportate, ajustați --rule sau relaxați --fail-on.
+check.summary.counts = Rezultatele analizei — erori: { $errors }, avertismente: { $warnings }, sfaturi: { $advice }, suprimate: { $suppressed }.
+check.summary.clean = Nicio constatare.
+check.summary.truncated = { $shown ->
+    [one] Se afișează { $shown } constatare; --limit a omis încă { $omitted }.
+    [few] Se afișează { $shown } constatări; --limit a omis încă { $omitted }.
+   *[other] Se afișează { $shown } de constatări; --limit a omis încă { $omitted }.
+}
+check.rule.malformed = Selectorul { $selector } nu este scris ca NAME=SEVERITY.
+check.rule.unknown = Selectorul indică { $name }, care nu este nici regulă, nici categorie.
+check.rule.severity = Selectorul { $name } indică severitatea { $severity }; se aștepta una dintre { $values }.
+check.fail_on.invalid = Prag de eșec necunoscut { $value }; se aștepta unul dintre { $values }.
+check.source_index = Nu s-a putut indexa { $path } pentru diagnostice la linia { $line }: { $reason }.
+status.tool.check = Verificare
