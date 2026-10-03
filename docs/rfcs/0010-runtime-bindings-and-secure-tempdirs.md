@@ -588,30 +588,30 @@ stage that needs a destination to outlive the temporary directory therefore
 names an absolute path, or takes a path from a runtime binding whose value is
 absolute.
 
-A capture does not normalize the text it produces. Template insertion is
-textual: a captured value is neither made absolute nor resolved against the
-temporary directory before it reaches the manifest. The value is inserted
-verbatim, and whatever resolves it afterwards does so under its own rules.
-Those rules differ by position.
+A runtime binding cannot be a stream path. RFC 0001 section 12.1 renders every
+stream path at manifest compilation time, and a named capture does not exist
+until an execution unit has run and its binding has committed. A stream path
+position therefore admits a literal, a `cwd`-relative string, or a compile-time
+environment value; it does not admit a runtime binding, and the attempt is a
+phase error rather than a path-resolution question. Section 13 records the
+rejection.
 
-A captured value used as a `cwd` resolves against the effective `-C` directory
-when it is relative, exactly as section 9.1 states for `cwd: { env: NAME }`,
-and remains subject to the workspace-confinement check.
-
-A captured value used as a `stdin`, `stdout`, `stderr`, or `tee` path is a
-stream path, so it resolves against the consuming stage's resolved `cwd` — the
-base this section opened with — and not against the effective `-C` directory.
-
-Neither resolution uses the temporary directory the capture came from, and
-neither uses the capturing stage's `cwd`. Because both happen after capture, a
-stage cannot use a captured relative path to reach the secure temporary
-directory that another stage created; section 11.4 rejects an out-of-workspace
-value, and section 13 records the runtime forms of that rejection.
+A captured value reaches a child as environment text, not as a stream path.
+That text is inserted verbatim: capture neither makes it absolute nor resolves
+it against the temporary directory it came from, and whatever consumes it
+afterwards applies its own rules. A captured value used as a `cwd` resolves
+against the effective `-C` directory when it is relative, exactly as section
+9.1 states for `cwd: { env: NAME }`, and remains subject to the
+workspace-confinement check. Neither resolution consults the temporary
+directory that produced the capture or the capturing stage's `cwd`, so a
+captured relative path cannot reach the secure temporary directory that another
+stage created; section 11.4 rejects an out-of-workspace value.
 
 A destination that must outlive the temporary directory is named on its own
-terms. The manifest either names an absolute path directly, as the paragraph
-above states, or uses a path from a runtime binding whose producer emits the
-final absolute path.
+terms. The manifest names an absolute path directly, as the paragraph above
+states, or a producer emits the final absolute path as captured text and the
+consumer uses it where absolute text is meaningful — an argv element or an
+environment value, not a stream path.
 
 This RFC introduces no `relative_to` selector on stream paths. RFC 0009 section
 20.3 considered a stream-path base independent of `cwd` and was rejected by
@@ -944,7 +944,10 @@ Manifest compilation rejects:
 - a pipeline crossing a rule, script, or legacy boundary;
 - a tempdir mapping containing fields other than optional `env`;
 - an absolute `cwd` in any form, including a rendered absolute literal and an
-  environment-selected text value; and
+  environment-selected text value;
+- a runtime binding referenced from a stream path position, whether by a
+  producer in the same sequence or by a later execution unit, because stream
+  paths render before any binding commits; and
 - an action plan whose runner schema cannot represent the required variants,
   including the process-group or job-object termination mode.
 
@@ -1198,6 +1201,13 @@ makes cleanup non-deterministic. Rejected from the initial surface.
   element without routing through the child environment?
 - Should environment overlays later accept a typed reference to an existing
   runtime binding rather than only compile-time strings?
+- Should a later version admit a runtime binding in a stream-path position?
+  Doing so would require an explicit two-phase model, because RFC 0001 section
+  12.1 renders stream paths at manifest compilation time and the destination
+  set is opened and identity-checked before the child runs. A design must say
+  when a binding resolves relative to provisional open, whether an uncommitted
+  producer is a validation error or a spawn failure, and how a resolved
+  relative path then behaves under the base in section 9.5.
 - Should secure tempdirs support an explicit capability-scoped root selected by
   repository policy?
 - Should a future debug mode retain a failed tempdir after an explicit consent
