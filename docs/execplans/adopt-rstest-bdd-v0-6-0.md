@@ -1804,9 +1804,12 @@ boundary moved twice while the previous delivery was being validated. The
 second rebase had recorded `origin/main` as `84447f0e` and concluded no replay
 was warranted; that conclusion was sound when it was reached and stale by the
 time the push landed, because the target then advanced to `6b01bb65` and again
-to `fce1a746` (*Group prefix-named modules under directory modules*, #811/#813
-— 408 files, 4147 insertions, 264 renames). The signal that the earlier
-conclusion had expired was the pull request itself: #805 reported
+to `fce1a746` (*Group prefix-named modules under directory modules*,
+#811/#813). That one commit is 393 files changed, 1804 insertions and 1459
+deletions, with 264 renames; measured as the distance from the old merge base
+it is 408 files and 4147 insertions, and it is the range figure the earlier
+reading of this boundary had recorded. The signal that the earlier conclusion
+had expired was the pull request itself: #805 reported
 `"mergeable":"CONFLICTING"` and `"mergeStateStatus":"DIRTY"`, and a conflicted
 pull request dispatches no workflows at all, which is why `8bcba867` sat with a
 skipped `dependabot-automerge` run and no CI. Had the boundary been trusted
@@ -1818,12 +1821,19 @@ indistinguishable from a current one by inspection — the local `origin/main`
 read `48d4a596` throughout while the remote read `6b01bb65`, and the worktree
 shares its bare repository with roughly two dozen sibling worktrees, so a
 conclusion about the boundary is only ever as fresh as the fetch behind it.
-`git merge-tree --write-tree` against the stale ref reported a clean merge;
-against the fetched ref it reported exit 1 with conflicts in two files, and the
-pull request's own `baseRefOid` corroborated the second reading. The boundary
-was confirmed from three independent sources before the rebase began: the
-fetched ref, `git ls-remote` over SSH, and the `baseRefOid` field of the pull
-request. Both conflicting files, `src/manifest/env/reader.rs` and
+`git merge-tree --write-tree` against the stale ref reported a clean merge, and
+against the fetched ref it reported exit 1 with conflicts in two files.
+
+The third source needs a caution attached, because a first reading of it got
+this wrong. The pull request's `baseRefOid` field was beside the point rather
+than corroborating: it reads `84447f0e`, the base the pull request was opened
+against, and GitHub had not refreshed it after the branch rebased onto the new
+tip. It is cached drift, not the live target, and reading it as a third witness
+to `fce1a746` was a mistake this entry made and has corrected. The two sources
+that do establish the boundary are the fetched remote-tracking ref and
+`git ls-remote` over SSH, both of which read `fce1a746` — for the live target,
+`git ls-remote` is the authority, and the mergeability state is what the pull
+request contributes. Both conflicting files, `src/manifest/env/reader.rs` and
 `src/runner/process/ninja/program.rs`, were files this branch had edited and
 `fce1a746` had renamed, so neither conflict came from a competing change of
 intent.
