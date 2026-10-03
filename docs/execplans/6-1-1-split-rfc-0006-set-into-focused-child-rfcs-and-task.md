@@ -2684,6 +2684,64 @@ Hard invariants. Violating one requires escalation, not a workaround.
   caught: it checks that the row partitions the set and that the registry is
   well-formed, but nothing in it reads the implementation the row describes.
 
+- **2026-10-03: `EP-M9` lands RFC 0019 at `44da0202`, and the contract passes
+  on the first run at 272/272.** The child owns roadmap step 6.8 and all nine
+  of RFC 0006 section 8.9: `b64encode`, `b64decode`, `urldecode`, `to_uuid`,
+  `shell_quote`, `comment`, `human_readable`, `human_to_bytes`, and
+  `text_hash`. Table 16's 0019 row flips to `written`, `docs/contents.md` gains
+  its entry, and roadmap step 6.8's six tasks are retargeted. The coverage
+  contract reports **7 of 8 capability groups written; 1 remaining**, and the
+  purity arithmetic now closes to 50 of 52 with RFC 0020's two outstanding.
+
+  **The registry row the contract forces is not the row the code suggests, and
+  reconciling the two is the whole difficulty of this child.** `shell_quote`
+  ships today — roadmap task 3.14.8 delivered the canonical name, the `dialect`
+  argument, and the single implementation in `src/shell_word.rs`, and
+  `src/stdlib/recipe_text/mod.rs` registers it under `stdlib.shell.*`. But it
+  must be marked **`New`**, not `Option added`, and the reason is structural
+  rather than editorial: `accepted` in `section7.rs` has `RENAMES` applied to
+  it, and `apply_renames` asserts `already == (rename.surveyed == "hash")` for
+  the three section 7.8 exceptions. That assertion requires `shell_quote` to be
+  *absent* from `accepted` before the rename inserts it, so the row cannot
+  claim an existing helper gaining an option. The contract derives its
+  expectation from the document and the document says the capability is a
+  renamed one. RFC 0019 states this explicitly in section 5.1 rather than
+  leaving the reader to reconcile a `New` row against shipped code, because the
+  reconciliation is the interesting part and the roadmap task's scope depends
+  on it.
+
+  **Nine helpers in one child is 36.5 lines of section 5 per helper against the
+  tolerance's ceiling, and the group was kept whole anyway.** Section 8.9
+  divides into encoders, an identifier, a quoter, a commenter, three size
+  formatters, and a digest — but the three checks that would justify a seam are
+  all absent: every member is pure, none takes a capability handle, and none
+  composes with a sibling. A finer cut would produce a child of two helpers
+  carrying full overhead, which the `Tolerances` section already measured as
+  the move that *raises* the aggregate. Section 9 records the reasoning so a
+  future reader does not re-open it on the size alone.
+
+  **`shell_quote` extends the shipped `STDLIB_SHELL_*` family rather than
+  forking into this child's new namespace, and clause 6.9 requires exactly
+  that.** The tempting move — group all nine helpers under one `text` module
+  for uniformity — would either rename a key `3.14.8` already ships or leave
+  one helper keyed in two namespaces. This RFC's new codes are the other
+  sixteen under `netsuke::jinja::text::*`; `shell_quote` contributes none,
+  because `STDLIB_SHELL_DIALECT_NOT_STRING` and `STDLIB_SHELL_DIALECT_INVALID`
+  already exist from `3.14.8`. The module segment is `text` rather than
+  `encoding` for a related reason: one enum serves a decoder, a parser, a
+  formatter, a quoter, and a digest, and only two of those are encoding, so
+  `encoding` would describe 22% of the enum and misname the rest.
+
+  **A negative cross-child relationship was recorded because a reader will
+  expect a dependency where there is none.** RFC 0017's `dialect` selects a
+  path dialect (`posix`/`windows`) and RFC 0019's selects a shell dialect (`sh`/
+  `powershell`); the names collide in English and nowhere else, and the two
+  accepted sets share no member. Section 6 records that no shared `dialect`
+  type is extracted, because an abstraction over disjoint sets is a name
+  pretending to be a concept. Section 16's **question 6** (`text_digest`) is
+  carried unresolved with three options and their costs, following the pattern
+  the three preceding children established.
+
 ## Surprises & discoveries
 
 - Observation: **in a child RFC, every numbered section 5 subsection is a claim
