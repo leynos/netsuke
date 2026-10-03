@@ -156,26 +156,27 @@ of decisions that need the user's confirmation.
   neither is the one the ticket named. The `--kill-after=` grace window is
   added to the deadline rather than nested inside it, so a workload that
   ignores the first signal is bounded by the sum of the two rather than by the
-  nominal figure. And a descendant that leaves the process group, by `setsid`
-  or a double fork, is beyond any process-group signal at all. Both were probed
-  on the reference host: a `setsid` descendant of the payload survived a plain
-  `timeout` prefix and was stopped by `RuntimeMaxSec`, whose cgroup stop does
-  not depend on signal propagation. The wrapper has two systemd floors, and the
-  higher one binds. `RuntimeMaxSec` for scope units requires systemd 244 or
-  later, which `systemd.scope` records as the version that added it for scopes
-  rather than the 229 that `systemd.service` records for services.
-  `--expand-environment=no` requires systemd 254 or later, so that is the
-  wrapper's effective minimum. `systemd-run --version` on the reference host
-  reports 257. A host below the floor fails loudly rather than silently running
-  uncapped: an unsupported transient assignment is rejected with
-  `Unknown assignment`, and an unrecognized option with `unrecognized option`,
-  in both cases exiting non-zero without starting the payload. That is generic
-  command-line behaviour for `systemd-run`, so no explicit version check is
-  needed in the wrapper. The wrapper additionally needs a running per-user
-  systemd manager with delegated cgroup support for user scopes, which a
-  `--user` login session provides on the reference host. Without one the
-  command fails before any unit is created, reporting
-  `Failed to connect to user scope bus via local transport`.
+  nominal figure. And a descendant that changes its process-group membership, by
+  `setsid()` or `setpgid()`, is beyond any process-group signal at all,
+  whereas a double fork alone is not, since the descendant keeps the group it
+  inherited. Both were probed on the reference host: a `setsid` descendant of
+  the payload survived a plain `timeout` prefix and was stopped by
+  `RuntimeMaxSec`, whose cgroup stop does not depend on signal propagation. The
+  wrapper has two systemd floors, and the higher one binds. `RuntimeMaxSec` for
+  scope units requires systemd 244 or later, which `systemd.scope` records as
+  the version that added it for scopes rather than the 229 that
+  `systemd.service` records for services. `--expand-environment=no` requires
+  systemd 254 or later, so that is the wrapper's effective minimum.
+  `systemd-run --version` on the reference host reports 257. A host below the
+  floor fails loudly rather than silently running uncapped: an unsupported
+  transient assignment is rejected with `Unknown assignment`, and an
+  unrecognized option with `unrecognized option`, in both cases exiting
+  non-zero without starting the payload. That is generic command-line behaviour
+  for `systemd-run`, so no explicit version check is needed in the wrapper. The
+  wrapper additionally needs a running per-user systemd manager with delegated
+  cgroup support for user scopes, which a `--user` login session provides on
+  the reference host. Without one the command fails before any unit is created,
+  reporting `Failed to connect to user scope bus via local transport`.
 
   `TimeoutStopSec=20s` preserves the bounded forceful-termination grace period
   that the removed `--kill-after=20s` used to provide: systemd sends `SIGTERM`,
@@ -810,28 +811,30 @@ of decisions that need the user's confirmation.
   was reproduced directly — `timeout --kill-after=20s 3s` against a payload
   ignoring `SIGTERM` was killed at 23 seconds, while plain `timeout 3s` left
   the same payload running to completion. A second and narrower limit is that
-  `timeout` signals the supervised process group, so a descendant that leaves
-  that group by `setsid` or a double fork escapes it entirely; a `setsid`
-  descendant of the payload survived a plain prefix in probing and was stopped
-  by `RuntimeMaxSec`. The production datum is consistent with the same class of
-  leak but does not pin the mechanism: the scope for the 2026-09-20 roadmap
-  4.2.3 run logged a 303-second lifetime under a nominally 300-second cap, on a
-  suite that had legitimately completed. That overshoot fits neither `5m` nor
-  `5m + 20s`, so it is recorded as evidence that the old form did not hold its
-  nominal bound, not as proof of which additive term produced the extra seconds.
-  `RuntimeMaxSec` is enforced by systemd against the scope's control group, so
-  it stops the whole process tree without depending on a process-group signal
-  reaching every descendant. The grace arithmetic does not disappear, it is
-  merely carried by systemd rather than by `timeout`, so it must be pinned
-  explicitly: the effective bound is `RuntimeMaxSec` plus `TimeoutStopSec`, and
-  leaving the latter at its 90-second host default reproduced a 93-second
-  overshoot on a 3-second cap. The paired `-p TimeoutStopSec=20s` therefore
-  preserves the bounded forceful-termination grace the removed
-  `--kill-after=20s` provided, so the total bound stays close to the nominal
-  one. The pipeline is also documented with `set -o pipefail` because a
-  pipeline's status is otherwise `tee`'s, and a failing `make` would be masked
-  by a successful capture. Date/Author: 2026-09-22 / implementation agent for
-  issue #765, raised from the roadmap 4.2.3 reconciliation (#738).
+  `timeout` signals the supervised process group, so a descendant that changes
+  its group membership by `setsid()` or `setpgid()` escapes it entirely, while
+  one that merely double forks does not: it keeps the group it inherited, so
+  the signal still reaches it. A `setsid` descendant of the payload survived a
+  plain prefix in probing and was stopped by `RuntimeMaxSec`. The production
+  datum is consistent with the same class of leak but does not pin the
+  mechanism: the scope for the 2026-09-20 roadmap 4.2.3 run logged a 303-second
+  lifetime under a nominally 300-second cap, on a suite that had legitimately
+  completed. That overshoot fits neither `5m` nor `5m + 20s`, so it is recorded
+  as evidence that the old form did not hold its nominal bound, not as proof of
+  which additive term produced the extra seconds. `RuntimeMaxSec` is enforced
+  by systemd against the scope's control group, so it stops the whole process
+  tree without depending on a process-group signal reaching every descendant.
+  The grace arithmetic does not disappear, it is merely carried by systemd
+  rather than by `timeout`, so it must be pinned explicitly: the effective
+  bound is `RuntimeMaxSec` plus `TimeoutStopSec`, and leaving the latter at its
+  90-second host default reproduced a 93-second overshoot on a 3-second cap.
+  The paired `-p TimeoutStopSec=20s` therefore preserves the bounded
+  forceful-termination grace the removed `--kill-after=20s` provided, so the
+  total bound stays close to the nominal one. The pipeline is also documented
+  with `set -o pipefail` because a pipeline's status is otherwise `tee`'s, and
+  a failing `make` would be masked by a successful capture. Date/Author:
+  2026-09-22 / implementation agent for issue #765, raised from the roadmap
+  4.2.3 reconciliation (#738).
 
 - Decision: record honestly that the reported mechanism for #765 did not
   reproduce locally, and that the correction stands on the reasons above.
@@ -1395,19 +1398,21 @@ No new external dependency is introduced.
   `timeout --kill-after=20s 5m`. That prefix does not bound the workload by its
   nominal figure: the `--kill-after=` grace window is added to the deadline
   rather than nested inside it, so a signal-ignoring workload is bounded by
-  `5m + 20s`, and a descendant that leaves the supervised process group by
-  `setsid` or a double fork escapes the prefix's signal entirely while the
-  control group still catches it. The bound is now the scope property
-  `-p RuntimeMaxSec=8m`, which systemd enforces against the control group,
-  paired with `-p TimeoutStopSec=20s` to keep the forceful-termination grace
-  bounded, and the pipeline is documented with `set -o pipefail` so a failing
-  `make` is not masked by `tee`. Every narrative reference — the Progress log,
-  Surprises & Discoveries, the Decision Log, and the `Concrete steps` caveat —
-  was reconciled to the new form, and one fully composed example command with
-  `tee` inside the scope was added to `Concrete steps`, so the capture matches
-  exactly what the cap governs. Two entries were added to the Decision Log: the
-  wrapper decision restated in `RuntimeMaxSec` terms, and a record that the
-  mechanism reported by #765 did not reproduce on the reference host (systemd
+  `5m + 20s`, and a descendant that changes its membership of the supervised
+  process group by `setsid()` or `setpgid()` escapes the prefix's signal
+  entirely while the control group still catches it, whereas a descendant that
+  merely double forks keeps the inherited group and is still reached. The bound
+  is now the scope property `-p RuntimeMaxSec=8m`, which systemd enforces
+  against the control group, paired with `-p TimeoutStopSec=20s` to keep the
+  forceful-termination grace bounded, and the pipeline is documented with
+  `set -o pipefail` so a failing `make` is not masked by `tee`. Every narrative
+  reference — the Progress log, Surprises & Discoveries, the Decision Log, and
+  the `Concrete steps` caveat — was reconciled to the new form, and one fully
+  composed example command with `tee` inside the scope was added to
+  `Concrete steps`, so the capture matches exactly what the cap governs. Two
+  entries were added to the Decision Log: the wrapper decision restated in
+  `RuntimeMaxSec` terms, and a record that the mechanism reported by #765 did
+  not reproduce on the reference host (systemd
   257) while the defects the correction removes are both reproducible. The
   grace arithmetic migrates with the bound rather than vanishing: because the
   effective bound is `RuntimeMaxSec` plus `TimeoutStopSec`, an unpinned stop
@@ -1452,3 +1457,32 @@ now agree. Revision 2.31 of that document records the reconciliation and
 corrects the mechanism its own Revision 2.30 had given for the 2026-09-20
 overrun. Nothing in this plan's scope, obligations, or completion state is
 affected: status remains `COMPLETE`.
+
+**Revision note (2026-09-27, issue #769).** The escape clause that PR #768
+imported into this plan was wrong, and this revision corrects it in the three
+places this plan states it: the `Constraints` passage, the `Decision Log` entry
+that carries the runtime bound with `-p RuntimeMaxSec=`, and the 2026-09-22
+entry in this revision note. The clause read that a descendant "leaves the
+process group by `setsid` or a double fork" and so escapes a process-group
+signal. Only the first half is true. A double fork does not escape it, because
+the descendant keeps the process group it inherited, so the signal still
+arrives. Five cases were probed on the reference host against a `timeout`
+prefix firing `SIGTERM` to its group at 3 seconds: an unsignalled control
+survived, a descendant in the inherited group died, one that called `setsid()`
+survived, one that called `setpgid()` survived, and one created by a double
+fork alone died. Getting to that reading took five probe generations, and the
+reasons were independent. The payload's `trap '' TERM` is inherited across
+`fork` and `exec` and a non-interactive shell cannot reset an inherited
+disposition, so in generations 1–3 every descendant was immune and a surviving
+case proved nothing about the group it was in, masking the mechanism under
+test. Generation 1's two runs of the same script disagreed with each other,
+which is what an unstable probe looks like. Separately, a generation without a
+surviving positive control cannot tell a DEAD verdict from a broken probe, and
+the readings from those runs were void for that reason. The fifth generation
+removed the mask — each descendant resets its disposition to `SIG_DFL` from
+Python, which can — and kept a control that survived, so group membership
+became the single variable deciding survival. The wording now names the group
+change rather than the extra fork. The same correction is made to the two other
+documents that restate the claim, `docs/developers-guide.md` and roadmap 4.2.3,
+whose Revision 2.32 records it. Nothing in this plan's scope, obligations, or
+completion state is affected: status remains `COMPLETE`.
