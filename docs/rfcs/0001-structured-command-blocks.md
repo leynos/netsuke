@@ -1407,10 +1407,7 @@ state boundaries are therefore not a compatibility change.
 Implementation should allocate an additive manifest-format minor version,
 provisionally `1.1.0`, so older Netsuke versions reject the new mapping syntax
 cleanly rather than misinterpret it. Named shell selection ships within that
-not-yet-implemented mapping schema and does not require a second increment. If
-structured mappings ship first, named selection must use the next additive
-minor version. The implementation pull request may select a different minor
-version if intervening schema work consumes the provisional number.
+mapping schema and does not require a second increment.
 
 Version allocation is shared across the structured-command amendments.
 [ADR-043](../adr-043-consolidated-structured-command-execution-contract.md)

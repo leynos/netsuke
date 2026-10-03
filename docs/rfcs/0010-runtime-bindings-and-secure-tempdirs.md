@@ -584,21 +584,18 @@ Two consequences follow from the lifetime rules above:
   same reason.
 
 Absolute paths are unaffected, because they do not resolve against the base. A
-stage that needs a destination to outlive the temporary directory therefore has
-two options: name an absolute path, or take the path from a runtime binding.
-Binding values are inserted as template data, and the path produced that way is
-absolute, so it also does not resolve against the base:
+stage that needs a destination to outlive the temporary directory therefore
+names an absolute path, or takes a path from a runtime binding whose value is
+absolute.
 
-```yaml
-command:
-  - invoke: scratch-tool prepare
-    cwd:
-      tempdir:
-        env: SCRATCH_DIR
-  - invoke: scratch-tool emit --target "{{ env('ARTEFACT_PATH') }}"
-    cwd:
-      env: SCRATCH_DIR
-```
+A capture does not normalize the text it produces. Template insertion is
+textual: a captured value is neither made absolute nor resolved against the
+temporary directory before it reaches the manifest. If a manifest places a
+captured value in a path position, the value must already be absolute, and the
+producer that supplies it must emit the final path. A relative capture used as a
+`cwd` is rejected before spawn, because it escapes the workspace or arrives
+without the directory capability the binding would have carried; section 11.4
+covers that rejection, and section 13 records the validation and runtime forms.
 
 This RFC introduces no `relative_to` selector on stream paths. RFC 0009 section
 20.3 considered a stream-path base independent of `cwd` and was rejected by
@@ -931,7 +928,9 @@ Manifest compilation rejects:
 - a pipeline crossing a rule, script, or legacy boundary;
 - a tempdir mapping containing fields other than optional `env`;
 - an absolute `cwd` in any form, including a rendered absolute literal and an
-  environment-selected text value; and
+  environment-selected text value;
+- a captured text value used in a path position that is not absolute, because
+  capture inserts text verbatim rather than normalizing it; and
 - an action plan whose runner schema cannot represent the required variants,
   including the process-group or job-object termination mode.
 
