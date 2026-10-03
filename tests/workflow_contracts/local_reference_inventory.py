@@ -11,7 +11,6 @@ import typing as typ
 from cargo_test_targets import RepositoryFileError
 
 if typ.TYPE_CHECKING:
-    import collections.abc as cabc
     from pathlib import Path
 
 ACTION_DIRECTORY = ".github/actions"
@@ -91,7 +90,9 @@ def _discover_scripts(repository_root: Path) -> dict[str, Path]:
     return dict(sorted(scripts.items()))
 
 
-def _iter_script_files(scripts_root: Path) -> cabc.Iterator[Path]:
+def _iter_script_files(
+    scripts_root: Path,
+) -> typ.Iterator[Path]:  # ruff: ignore[banned-api] - match requested spelling.
     """Yield supported scripts without following links or entering caches."""
     directories = [scripts_root]
     while directories:
