@@ -424,7 +424,7 @@ async def check_with_timeout():
         result = await asyncio.wait_for(
             cargo("build", "--release").run(), timeout=120.0
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         # Handle or re-raise; do not swallow CancelledError
         raise
     return result

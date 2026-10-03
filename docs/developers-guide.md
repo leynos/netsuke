@@ -2996,9 +2996,9 @@ on a miss, runs `cargo binstall` with `--disable-strategies compile`; the
 workflow does not fall back to compiling the tool from source. The cache entry
 owns `~/.cargo/bin`, and its key includes the tool version and pinned
 `rust-build-release` revision because that action provisions `cargo-binstall`
-there. Only cargo-orthohelp 0.9.1 and later publish the required assets
-([leynos/ortho-config#479][ortho-config-479],
-[leynos/ortho-config#480][ortho-config-480]).
+there. Only cargo-orthohelp 0.9.1 and later publish the required assets; see
+[leynos/ortho-config#479][ortho-config-479],
+[leynos/ortho-config#480][ortho-config-480].
 
 Three contracts hold this: `workflow_orthohelp_install.rs` requires the
 disabling flag and rejects any `cargo install` naming the tool,
