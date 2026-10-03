@@ -590,12 +590,25 @@ absolute.
 
 A capture does not normalize the text it produces. Template insertion is
 textual: a captured value is neither made absolute nor resolved against the
-temporary directory before it reaches the manifest. If a manifest places a
-captured value in a path position, the value must already be absolute, and the
-producer that supplies it must emit the final path. A relative capture used as a
-`cwd` is rejected before spawn, because it escapes the workspace or arrives
-without the directory capability the binding would have carried; section 11.4
-covers that rejection, and section 13 records the validation and runtime forms.
+temporary directory before it reaches the manifest. The value is inserted
+verbatim, and whatever resolves it afterwards does so under its own rules.
+Those rules differ by position.
+
+A captured value used as a path in a `cwd`, `stdin`, `stdout`, `stderr`, or
+`tee` position is resolved by the ordinary path rules for that position. A
+relative value resolves against the effective `-C` directory, as section 9.1
+already states for `cwd: { env: NAME }`, and remains subject to the
+workspace-confinement check, not to the temporary directory the capture came
+from and not automatically to the capturing stage's `cwd`. Because the
+resolution happens after capture, a stage cannot use a captured relative path
+to reach the secure temporary directory that another stage created; section
+11.4 rejects an out-of-workspace value, and section 13 records the runtime
+forms of that rejection.
+
+A destination that must outlive the temporary directory is named on its own
+terms. The manifest either names an absolute path directly, as the paragraph
+above states, or uses a path from a runtime binding whose producer emits the
+final absolute path.
 
 This RFC introduces no `relative_to` selector on stream paths. RFC 0009 section
 20.3 considered a stream-path base independent of `cwd` and was rejected by
@@ -928,9 +941,7 @@ Manifest compilation rejects:
 - a pipeline crossing a rule, script, or legacy boundary;
 - a tempdir mapping containing fields other than optional `env`;
 - an absolute `cwd` in any form, including a rendered absolute literal and an
-  environment-selected text value;
-- a captured text value used in a path position that is not absolute, because
-  capture inserts text verbatim rather than normalizing it; and
+  environment-selected text value; and
 - an action plan whose runner schema cannot represent the required variants,
   including the process-group or job-object termination mode.
 
