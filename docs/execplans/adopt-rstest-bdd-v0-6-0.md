@@ -1566,6 +1566,108 @@ reads. Either the record must precede the run, as here, or the gated documents
 must be excluded — and this repository deliberately does not exclude them,
 since the `Status:` contract exists to keep plans honest.
 
+#### Post-rebase sweep on the relocated revision
+
+The rebase onto `fce1a746` changed the revision but not the gate set, and the
+relocation described above was the only source change it produced. Nine targets
+were run on the frozen revision `021e0524`, chosen because the moved files are
+Rust sources: a Markdown-only confirmation would not have read them. Each
+target wrote `/tmp/<target>-gate-rebase4-adopt-rstest-bdd-v0-6-0.out` with a
+matching `.exit` sidecar holding its `PIPESTATUS[0]`; all nine sidecars contain
+`0`. This differs from the earlier sweeps in one useful way: each log brackets
+itself with `HEAD_AT_START` and `HEAD_AT_END`, both reading
+`021e05245b9cfb88f5bd977769ba8d19be5bea20`, followed by a
+`---TREE-STATUS-AFTER-GATE---` block that is empty and a `STATE=frozen` line.
+The revision is therefore pinned by the log rather than inferred from its name,
+which is the distinction the section above draws.
+
+`make check-fmt` passed in 1s over 186 Python files formatted, 174 Markdown
+files unchanged, and a clean `cargo fmt`. `make spelling` passed in 7s, which
+matters beyond its own verdict: `markdownlint` declares `spelling` as a
+prerequisite, so a red spelling gate would have meant the linter never ran. It
+ran, in 14s, over 175 files with zero issues — the first sweep on this branch
+in which `markdownlint-cli2` genuinely executed and reported. `make typecheck`
+passed in 10s with `ty` reporting `All checks passed!`. `make nixie` passed in
+1s and `make doc-coverage` in 9s, measuring 98.88% (5044/5101) against the
+80.00% threshold.
+
+`make lint` passed in 39s with every stage reached: `cargo doc`,
+`cargo clippy`, Whitaker for both crates, `lint-workflow-scripts`, all five
+stages of `lint-python` — Ruff, Pylint, the df12 house lints, `ambrleaks`, and
+`interrogate` at 100.0% — plus `yamllint` and `actionlint`. The log contains
+the word `warning` exactly four times, and all four are the literal
+`-D warnings` flag echoed back inside a command line, not a finding; the count
+is reported here rather than left implicit, because a bare claim of "no
+warnings" is the kind of assertion this plan's own notes warn against.
+
+`make test` passed in 238s: 3919 tests run, 3919 passed, 6 skipped, 1 slow.
+That slow test is
+`netsuke-build::packaging_smoke_tests::packaged_manifest_retains_build_script_sources`,
+which PASSED at 144.107s after crossing nextest's 60s and 120s `SLOW`
+thresholds. It is recorded as a pass because that is what the log says; the
+thresholds are advisory and the run was not terminated. The doctest pass
+reported 88 passed with 26 ignored in `Doc-tests netsuke`, 2 compile-fail cases
+in the same binary, and 39 passed with 6 ignored in `Doc-tests test_support` —
+two `Doc-tests` headers, as the earlier note in this plan requires.
+`make test-workflow-contracts` passed in 76s with 1107 passed and 3 skipped.
+
+Two figures moved against the `-gate9` sweep, and neither is a regression. The
+nextest total rose from 3912 to 3919 because `fce1a746` brought 7 new tests in,
+and the contract total rose from 1082 to 1107 for the same reason. The
+doc-coverage numerator rose from 4942/4999 to 5044/5101, which is the same
+in-Markdown evidence-of-import effect the `-gate9` note records: the relocation
+added the three same-stem directories' modules to the counted set alongside the
+7 tests. The percentage is 98.88%, up from 98.86%.
+
+**Log set.** `-rebase4` covers `check-fmt`, `spelling`, `markdownlint`,
+`typecheck`, `lint`, `test`, `nixie`, `doc-coverage`, and
+`test-workflow-contracts`. The superseded `-gate9` sweep covered eight targets
+and never ran `spelling` as a first-class entry.
+
+**The staleness caveat applies here too, and it is not a formality.** The sweep
+above was commissioned on `021e0524` *before* this section existed, so it read
+a revision that did not contain it. The bytes that carried the sweep's verdict
+are therefore not the bytes carrying this sentence, exactly as in the `-gate7`
+note. What closes that gap is narrower this time. This plan is a gated input
+only through `tests/execplan_status_contract_tests.rs`, which parses the header
+above the first section — `header_lines` stops at the first level-two heading —
+so a record appended at line 1569 cannot reach it. Nothing else reads
+`docs/execplans/`: `tests/documentation_examples/mod.rs` loads fenced examples
+from four named documents, and the plan is not among them; no contract under
+`tests/workflow_contracts/`, `scripts/`, or `.github/scripts/` references the
+directory; and every `include_str!` in the tree was checked and none resolves
+to a plan. The edit is Markdown in `docs/`, so the gates that can read it are
+`check-fmt`, `markdownlint`, `spelling` and `nixie` — and `make test`,
+`typecheck`, `lint`, `doc-coverage` and `test-workflow-contracts` are
+unaffected by construction, since none of them reads that path.
+
+That reduction was checked against the pinned tooling rather than assumed. Local
+`mdtablefix` is 0.6.1 while CI pins 0.6.0, the mismatch that previously
+shipped a red `Format` step to CI, so 0.6.0 was installed into an isolated root
+and run over the committed plan before this section was written:
+`mdtablefix --check --git --include-untracked --wrap --renumber --breaks
+--ellipsis --fences`
+reported `174 files left unchanged` and exited 0.
+
+What the pinned check confirms is the arithmetic of the baseline, not the
+result of an edit: it was run on the committed revision before this section
+existed. The four Markdown-reading targets are therefore re-run on the amended
+bytes, and the log set is named here *before* that run, following the
+order-inverting rule recorded above. The paths carry a `-confirm` suffix so
+they cannot be confused with the `-rebase4` sweep: `check-fmt`, `spelling`,
+`markdownlint` and `nixie` under
+`/tmp/<target>-confirm-adopt-rstest-bdd-v0-6-0.out`, each with a matching
+`.exit` sidecar. `spelling` precedes `markdownlint` in that list because
+`markdownlint` depends on it, so a red spelling gate would leave the linter
+unexecuted and its silence meaningless.
+
+This closing step cannot be self-contained in the way the sweep was. The
+`-confirm` run reads the bytes that carry this sentence only if the sentence is
+committed first, and every further edit to this section would invalidate it
+again. The run therefore executes after the commit that adds this section, and
+its verdict is reported in the pull request rather than folded back into this
+plan — folding it back would reopen the same loop a third time.
+
 ### Session provenance
 
 The work session that produced this migration is recorded at
