@@ -2840,6 +2840,50 @@ Hard invariants. Violating one requires escalation, not a workaround.
   the manifest-query registration, while these two convert values and register
   normally, which is clause 6.2's first fully-exercised contrast in the set.
 
+- **2026-10-03: `EP-M11` reconciles the set and finds the citation work already
+  done, so the milestone's scope is a verification rather than an edit.**
+  `COV-4` prints `coverage map: 8 of 8 capability groups written; 0 remaining`,
+  the target the milestone was written against, and the coverage contract
+  passes 272 of 272 over the reconciled documents.
+
+  **The roadmap half was checked by measurement rather than by the
+  reconnaissance's line numbers, and the reconnaissance's own numbers had
+  expired as its rule required.** Phase 6 contains 67 `RFC 0006` references, 39
+  of them to a section 8 subsection; 36 are `See RFC 0006 §8.N` sites inside
+  steps 6.1 to 6.9 and 29 of those are task bullets. The section-8 citations
+  falling inside the retargeted steps were re-read against table 16's ownership
+  map, and each resolves to the child that owns its section. Those steps — 6.2
+  to 6.9, exclusive of 6.10 and 6.11, which a different RFC owns — hold 35
+  tasks, and all 35 link their child RFC. Thirty-two of the thirty-five also
+  carry a `See RFC 0006 §8.N` citation naming their own section. The other
+  three — `6.3.5`, `6.4.5`, and `6.6.5` — cite only the child, and that is
+  pre-existing rather than a gap this branch opened:
+  `git show 6be4a65f:docs/roadmap.md` shows the same three with no section 8
+  citation either, and each is an end-to-end or property suite rather than a
+  helper, so there is no section 8 helper contract for it to cite. Each links
+  its child RFC's sections 5.11 and 7 instead.
+
+  **Two near-misses were checked rather than assumed, and both were correct.**
+  Task `6.7.4` cites section 8.6 while belonging to step 6.7, whose child is
+  RFC 0018 rather than RFC 0017 — but `expandvars` is specified inside section
+  8.6's own subsection list, under the heading
+  ``#### `text | expandvars(dialect='host', missing='error')` ``, and table 16
+  assigns it to 0018 as "`8.6` only `expandvars`", so the citation and the
+  ownership agree. The forward-reference check is the second: task `6.2.3` sits
+  under step 6.2, whose child is RFC 0013, and its `See` bullet cites §8.1 with
+  §6.3 — while step 6.3's own prose cites §8.2. Read as one block that looks
+  like a citation to the wrong section, but the §8.2 mention is step-level
+  prose introducing the *next* step, not part of task 6.2.3's bullet.
+
+  **The two RFC 0006 defects the acceptance criterion names are both present,
+  and both are in the parent.** They are the slice-graph corrections: figure 1
+  and its screen-reader sentence now draw slice 0 as a prerequisite for all
+  eight remaining slices rather than for four, and section 14.1's prose reads
+  "every one of the eight" rather than "seven of the eight". The repair went
+  into the parent because the children and roadmap task 6.5.1 were right and
+  the parent's figure was wrong — four children asserted slice 0 as a
+  prerequisite while figure 1 showed only slice 5 as having one.
+
 ## Surprises & discoveries
 
 - Observation: **in a child RFC, every numbered section 5 subsection is a claim
@@ -3300,7 +3344,13 @@ Hard invariants. Violating one requires escalation, not a workaround.
   `new_with_purity` carries the registration filter in its contract, so a
   future caller cannot get the wrong answer by forgetting it. Also raised by
   CodeRabbit and also latent: the check is guarded by `written == rows.len()`,
-  so it cannot fire before every child exists.
+  so it cannot fire before every child exists. **Resolved at `EP-M11`:** the
+  guard is now open, because all eight children are written and `coverage map`
+  reports 0 remaining, and `totals_and_purity_aggregate_agree` passes on its
+  strict branch. The prediction is therefore confirmed rather than left
+  standing: the aggregate now ranges over the 57 proposed helpers and reads
+  52/4/1, matching section 6.1, where the unfiltered accessor would read 54/5/1
+  against it.
 
 - Observation: Whitaker's `conditional_max_n_branches` counts a match **guard**
   as branches, and the limit is 2. Evidence: the first `Fences` implementation
