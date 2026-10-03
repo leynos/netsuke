@@ -218,8 +218,8 @@ fn behavioural_build_and_package_wiring_matches_shared_actions() {
         "windows-package should consume the staged license-path output directly"
     );
     assert!(
-        contents.contains("upload-artefact: ${{ inputs['should-upload-workflow-artifacts'] }}"),
-        "windows-package should use the upload-artefact input spelling"
+        contents.contains("upload-artefact: 'false'"),
+        "the caller should upload the MSI with its architecture-specific artefacts"
     );
     assert!(
         contents.contains("binary: ${{ steps.stage.outputs['binary-path'] }}"),
@@ -353,6 +353,10 @@ fn windows_upload_includes_staged_artefact_dir() {
     assert!(
         step_body.contains("${{ steps.stage.outputs['artifact-dir'] }}"),
         "Windows upload should include staged sidecar artefacts"
+    );
+    assert!(
+        step_body.contains("${{ steps.package_windows.outputs['msi-path'] }}"),
+        "Windows upload should include the MSI while preserving its unique artifact name"
     );
 }
 

@@ -1713,14 +1713,21 @@ this smoke job and the platform package jobs in its `needs` list. Consequently,
 release publication cannot proceed unless the native Windows smoke test passes.
 
 The pull-request dry run (`release-dry-run.yml`, which calls `release.yml` with
-`dry-run: true`) skips this job, and only this job. The same pull request's
-`ci.yml` already runs the identical build and smoke in `build-test-windows`.
-The rerun bought no evidence and cost no money, since GitHub-hosted runners are
-free here. What it did cost was a slot in the account's pool of concurrent
-GitHub-hosted runners. The gating `build-test-windows` queues for that pool
-alongside the dry run's own Windows and macOS builds, and Ubicloud has no
-Windows runners to move either to. Every other dry-run job builds or packages
-release artefacts, which no pull-request lane does.
+`dry-run: true`) skips this smoke job for events that `ci.yml` also answers.
+The same pull request's `ci.yml` already runs the identical build and smoke in
+`build-test-windows`. The rerun bought no evidence and cost no money, since
+GitHub-hosted runners are free here. What it did cost was a slot in the
+account's pool of concurrent GitHub-hosted runners. The gating
+`build-test-windows` queues for that pool alongside the dry run's own Windows
+and macOS builds, and Ubicloud has no Windows runners to move either to.
+
+The dry run still enters the `release` job to rehearse staging. The package
+jobs upload their packages as workflow artefacts under
+`should_upload_package_artifacts`; the release job downloads them, hoists and
+validates the cargo-binstall archive pairs, then asks `upload-release-assets`
+to validate the upload plan. Its `dry-run` input prevents any release upload,
+and the draft-creation step is publish-only. Diagnostic artefacts remain behind
+`should_upload_workflow_artifacts`, which stays false during dry runs.
 
 The skip applies only to events that `ci.yml` also answers. The dry run answers
 `ready_for_review` and `ci.yml` does not, so a draft marked ready after its
@@ -2122,6 +2129,11 @@ validation remain consistent across the workflows under test. Scans that must
 see every string in a parsed workflow, mapping keys included, share
 `iter_strings` in `tests/workflow_contracts/yaml_strings.py` rather than
 walking the value themselves.
+
+`tests/workflow_contracts/release_publish_path_contract.py` is a test-only,
+pure checker shared by the release staging and mutation contracts. Keep
+workflow-specific parsing and assertions in each suite; production code must
+not import this checker.
 
 ### Coverage ratchet and CodeScene publication
 

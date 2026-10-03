@@ -17,8 +17,9 @@ name: Release Binary
         default: false
       dry-run:
         description: >-
-          When `true`, build artefacts without uploading them to GitHub
-          releases or workflow artefacts.
+          When `true`, upload package workflow artefacts for staging rehearsal,
+          do not upload diagnostics artefacts, and never create or upload to a
+          GitHub release.
         required: false
         type: boolean
         default: false
@@ -82,6 +83,9 @@ jobs:
       should_publish: ${{ steps.release_modes.outputs['should-publish'] }}
       dry_run: ${{ steps.release_modes.outputs['dry-run'] }}
       should_upload_workflow_artifacts: ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] }}
+      should_upload_package_artifacts: >-
+        ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] == 'true' ||
+            steps.release_modes.outputs['dry-run'] == 'true' }}
       wix_extension_version: ${{ steps.wix_extension_version.outputs.value }}
       repo_name: ${{ steps.repo_name.outputs.value }}
     steps:
@@ -177,7 +181,7 @@ jobs:
       package-license: ${{ needs.metadata.outputs.package_license }}
       package-description: ${{ needs.metadata.outputs.package_description }}
       artifact-name: ${{ needs.metadata.outputs.repo_name }}-${{ matrix.artefact }}
-      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
+      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_package_artifacts) }}
       package-arch: ${{ matrix.package_arch }}
       stage-target: ${{ matrix.target_key }}
 
@@ -208,7 +212,7 @@ jobs:
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
       artifact-name: ${{ needs.metadata.outputs.repo_name }}-windows-${{ matrix.package_arch }}
-      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
+      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_package_artifacts) }}
       stage-target: ${{ matrix.target_key }}
       msi-arch: ${{ matrix.msi_arch }}
       wix-extension-version: ${{ needs.metadata.outputs.wix_extension_version }}
@@ -239,7 +243,7 @@ jobs:
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
       artifact-name: ${{ needs.metadata.outputs.repo_name }}-${{ matrix.artefact_suffix }}
-      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
+      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_package_artifacts) }}
       stage-target: ${{ matrix.target_key }}
       artifact-suffix: ${{ matrix.artefact_suffix }}
 
@@ -394,7 +398,92 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: needs.metadata.outputs.should_publish == 'true'
+    if: >-
+      !cancelled() &&
+      needs.metadata.result == 'success' &&
+      needs.build-linux.result == 'success' &&
+      needs.build-windows.result == 'success' &&
+      needs.build-macos.result == 'success' &&
+      (needs.windows-native-recipe-smoke.result == 'success' ||
+       needs.windows-native-recipe-smoke.result == 'skipped') &&
+      needs.metadata.outputs.dry_run == 'true'
+    permissions:
+      contents: read
+    needs:
+      - metadata
+      - build-linux
+      - build-windows
+      - build-macos
+      - windows-native-recipe-smoke
+    # Staging downloads artefacts and validates the upload plan, so a
+    # GitHub-hosted runner is the right placement.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: >-
+          actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        # v8.0.1
+        with:
+          path: dist
+          pattern: ${{ needs.metadata.outputs.repo_name }}-*
+      - name: Install uv
+        # Pins the interpreter the hoist script runs under to the Python 3.14
+        # baseline the repository's Python tooling targets, rather than
+        # whichever `python3` the runner image happens to ship.
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          python-version: '3.14'
+          # The hoist script is stdlib-only and runs with --no-project, so a
+          # restored cache buys nothing and adds an unnecessary supply-chain
+          # input to the staging rehearsal.
+          enable-cache: false
+      - name: Hoist cargo-binstall archives to the release root
+        shell: bash
+        # Validates that every target listed in release-staging.toml staged
+        # its archive and checksum sidecar, then moves the pairs to dist/ so
+        # they upload under the plain names the binstall metadata resolves.
+        # A missing target or sidecar fails the release with the names listed.
+        run: |
+          set -euo pipefail
+          uv run --no-project --python 3.14 scripts/hoist_binstall_archives.py
+        env:
+          INPUT_VERSION: ${{ needs.metadata.outputs.version }}
+      - id: upload_assets
+        name: Upload artefacts to release
+        uses: >-
+          leynos/shared-actions/.github/actions/upload-release-assets@a5765019912a8ab6882b12db049c7cde635f3a85
+        with:
+          release-tag: ${{ github.ref_name }}
+          bin-name: ${{ needs.metadata.outputs.bin_name }}
+          dist-dir: dist
+          dry-run: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check asset upload errors
+        if: steps.upload_assets.outputs.upload-error == 'true'
+        env:
+          ERROR_MESSAGE: ${{ steps.upload_assets.outputs.error-message }}
+        run: |
+          echo "Error uploading release assets:"
+          printf '%s\n' "$ERROR_MESSAGE"
+          exit 1
+
+  publish-release:
+    if: >-
+      !cancelled() &&
+      needs.metadata.result == 'success' &&
+      needs.build-linux.result == 'success' &&
+      needs.build-windows.result == 'success' &&
+      needs.build-macos.result == 'success' &&
+      needs.windows-native-recipe-smoke.result == 'success' &&
+      needs.metadata.outputs.should_publish == 'true'
+    # Only publication needs contents: write access to the release API.
     permissions:
       contents: write
     needs:
@@ -403,22 +492,27 @@ jobs:
       - build-windows
       - build-macos
       - windows-native-recipe-smoke
-    # Publication is API-bound: it downloads artefacts and calls the releases
-    # API, so a GitHub-hosted runner is the right placement.
+    # Only publication needs contents: write access to the release API.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install uv
-        # The privileged job runs inline-metadata Python scripts without a
-        # shared dependency cache.
+        # Pins the interpreter the release helper scripts run under to the
+        # Python 3.14 baseline the repository's Python tooling targets.
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
         with:
           python-version: '3.14'
+          # These helpers are stdlib-only, so restoring a dependency cache
+          # adds an unnecessary supply-chain input.
           enable-cache: false
       - name: Ensure release exists (draft)
+        # Retain this step guard as defence in depth after the job-level check.
+        if: needs.metadata.outputs.should_publish == 'true'
         shell: bash
         env:
           INPUT_TAG: ${{ github.ref_name }}
@@ -450,6 +544,7 @@ jobs:
           release-tag: ${{ github.ref_name }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
           dist-dir: dist
+          dry-run: ${{ needs.metadata.outputs.should_publish != 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
