@@ -2309,10 +2309,9 @@ cgroup stop is the better bound, so it carried weight it could not support. The
 conclusion is unaffected: the additive `--kill-after=` grace and the `setsid()`/
 `setpgid()` escape both still make the prefix the worse bound, and the cgroup
 stop still catches a descendant whose group changed. The corrected wording is
-carried to the two other files that restate the claim —
+also carried to the two other files that restate the claim —
 `docs/developers-guide.md`, which cites these plans as its probe evidence, and
-the 4.2.2 plan, which states it in three places — in the commit that follows
-this one.
+the 4.2.2 plan, which states it in three places.
 
 No obligation, criterion, or completion state changes: header `COMPLETE`,
 roadmap `[x]`.
