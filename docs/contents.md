@@ -271,6 +271,11 @@ operator, user, and contributor references are easier to find.
   and a host-dependent default.
 - [ADR-042](adr-042-run-the-shared-cv005-contract-checker.md): Running the
   pinned shared CV-005 contract checker beside the local workflow contracts.
+- [ADR-043](adr-043-consolidated-structured-command-execution-contract.md):
+  One structured-command execution contract across RFC 0001, RFC 0009, RFC
+  0010, RFC 0011, and ADR-019: the `cwd` stream-path base, absolute-`cwd`
+  rejection, the two capture forms, the two temporary-directory spellings, and
+  the reserved `1.1.0` manifest minor version.
 
 ## Proposals
 
