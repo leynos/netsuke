@@ -122,9 +122,10 @@ def test_inventory_includes_supported_scripts_recursively(
             "scripts/entry.bash": "",
             "scripts/entry.py": "",
             "scripts/entry.ps1": "",
-            "scripts/__init__.py": "",
+            "scripts/__init__.py": "#!/usr/bin/env python3\n",
             "scripts/readme.json": "",
             "scripts/helpers/nested/launch.sh": "",
+            "scripts/helpers/nested/directory.sh/child.txt": "",
             "scripts/tests/test_nested_script.py": "",
             "scripts/helpers/__init__.py": "",
             "scripts/tests/data/fixture.json": "",
@@ -147,6 +148,26 @@ def test_inventory_includes_supported_scripts_recursively(
         "scripts/helpers/nested/launch.sh",
         "scripts/tests/test_nested_script.py",
     }, "inventory must include nested scripts and exclude non-script files"
+
+
+def test_script_inventory_keys_are_sorted(tmp_path: Path) -> None:
+    """Keep recursive script inventory ordering deterministic."""
+    _create_workspace(
+        tmp_path,
+        "",
+        "all:\n\t@true\n",
+        {
+            "scripts/z-last.sh": "",
+            "scripts/nested/middle.sh": "",
+            "scripts/a-first.sh": "",
+        },
+    )
+
+    inventory = discover_local_items(tmp_path)
+
+    assert list(inventory.scripts) == sorted(inventory.scripts), (
+        "script keys must remain sorted independently of traversal order"
+    )
 
 
 def test_covered_action_and_script_references_reach_a_fixed_point(
@@ -253,6 +274,33 @@ runs: {using: composite, steps: []}
         "scripts/make-comment-only.sh",
         "scripts/yaml-comment-only.sh",
     }), "items mentioned only in comments must remain uncovered"
+
+
+def test_root_test_comments_do_not_hide_orphans_or_mask_strings(
+    tmp_path: Path,
+) -> None:
+    """Ignore Rust comments while preserving script paths inside strings."""
+    _create_workspace(
+        tmp_path,
+        "name: Synthetic\njobs: {}\n",
+        "all:\n\t@true\n",
+        {"scripts/string-reference.sh": "", "scripts/comment-only.sh": ""},
+    )
+    _write(
+        tmp_path,
+        "tests/comment-sources.rs",
+        '// scripts/comment-only.sh\nlet example = "scripts/string-reference.sh";\n',
+    )
+    inventory = discover_local_items(tmp_path)
+
+    covered = covered_items(inventory, root_source_texts(tmp_path))
+
+    assert covered == {"scripts/string-reference.sh"}, (
+        "Rust comments must be ignored while string contents remain references"
+    )
+    assert "scripts/comment-only.sh" in uncovered_items(inventory, covered, {}), (
+        "a path mentioned only in a root test comment must remain uncovered"
+    )
 
 
 def test_test_tree_files_are_root_reference_sources(tmp_path: Path) -> None:

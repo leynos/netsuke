@@ -4,6 +4,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import shutil
+import typing as typ
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,9 @@ from local_references import (
     root_source_texts,
     uncovered_items,
 )
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
 
 
 def test_filename_near_matches_do_not_cover_scripts(tmp_path: Path) -> None:
@@ -59,6 +63,75 @@ def test_missing_local_inventory_root_reports_its_path(
     )
 
 
+def test_script_discovery_prunes_caches_and_symbolic_links(
+    tmp_path: Path,
+) -> None:
+    """Exclude cache files, package markers, unsupported files and links."""
+    scripts_root = tmp_path / "scripts"
+    external_directory = tmp_path / "external"
+    create_synthetic_workspace(
+        tmp_path,
+        "",
+        "all:\n\t@true\n",
+        {
+            "scripts/nested/visible.sh": "",
+            "scripts/nested/__pycache__/cached.sh": "",
+            "scripts/nested/__init__.py": "#!/usr/bin/env python3\n",
+            "scripts/nested/readme.txt": "",
+        },
+    )
+    external_directory.mkdir()
+    (external_directory / "external.sh").write_text("", encoding="utf-8")
+    (scripts_root / "nested" / "linked-file.sh").symlink_to(
+        scripts_root / "nested" / "visible.sh"
+    )
+    (scripts_root / "nested" / "linked-directory").symlink_to(
+        external_directory,
+        target_is_directory=True,
+    )
+
+    inventory = discover_local_items(tmp_path)
+
+    assert set(inventory.scripts) == {"scripts/nested/visible.sh"}, (
+        "script discovery must prune cache directories and exclude unsupported "
+        "files, package markers, and file or directory symlinks"
+    )
+
+
+def test_nested_directory_listing_failure_preserves_its_cause(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Name a failed nested listing and chain its original operating error."""
+    failing_directory = tmp_path / "scripts" / "nested"
+    create_synthetic_workspace(
+        tmp_path,
+        "",
+        "all:\n\t@true\n",
+        {"scripts/nested/visible.sh": ""},
+    )
+    listing_error = OSError("synthetic nested listing failure")
+    original_iterdir = Path.iterdir
+
+    def fail_for_nested_directory(directory: Path) -> cabc.Iterator[Path]:
+        """Raise the synthetic error only for the selected directory."""
+        if directory == failing_directory:
+            raise listing_error
+        return original_iterdir(directory)
+
+    monkeypatch.setattr(Path, "iterdir", fail_for_nested_directory)
+
+    with pytest.raises(RepositoryFileError) as error:
+        discover_local_items(tmp_path)
+
+    assert str(failing_directory) in str(error.value), (
+        "the inventory error must identify the nested directory"
+    )
+    assert error.value.__cause__ is listing_error, (
+        "the inventory error must preserve the original listing failure"
+    )
+
+
 def test_action_child_path_does_not_cover_action(tmp_path: Path) -> None:
     """Require the action directory path without a child-file suffix."""
     action_path = ".github/actions/deploy"
@@ -77,19 +150,33 @@ def test_action_child_path_does_not_cover_action(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("working_directory", "expected_uncovered"),
+    ("working_directory", "run_command", "expected_uncovered"),
     [
-        ("scripts", frozenset()),
-        ("vendor", frozenset({"scripts/helper.sh"})),
+        ("scripts", "./helper.sh", frozenset()),
+        ("scripts", "helper.sh", frozenset()),
+        (".", "scripts/helper.sh", frozenset()),
+        ("vendor", "./helper.sh", frozenset({"scripts/helper.sh"})),
+        ("vendor", "scripts/helper.sh", frozenset({"scripts/helper.sh"})),
+        ("vendor", "../scripts/helper.sh", frozenset()),
+        ("scripts", "scripts/helper.sh", frozenset({"scripts/helper.sh"})),
     ],
-    ids=["script-directory", "different-directory"],
+    ids=[
+        "dot-current-directory",
+        "bare-current-directory",
+        "repo-relative-from-root",
+        "dot-from-different-directory",
+        "repo-relative-from-different-directory",
+        "parent-relative-from-different-directory",
+        "repo-relative-from-scripts-directory",
+    ],
 )
 def test_script_current_directory_invocation_respects_working_directory(
     tmp_path: Path,
     working_directory: str,
+    run_command: str,
     expected_uncovered: frozenset[str],
 ) -> None:
-    """Resolve a relative workflow command from its declared directory."""
+    """Resolve a bare or path-qualified command from its declared directory."""
     create_synthetic_workspace(
         tmp_path,
         (
@@ -97,7 +184,7 @@ def test_script_current_directory_invocation_respects_working_directory(
             "jobs:\n"
             "  test:\n"
             "    steps:\n"
-            "      - run: ./helper.sh\n"
+            f"      - run: {run_command}\n"
             f"        working-directory: {working_directory}\n"
         ),
         "all:\n\t@true\n",
@@ -107,7 +194,7 @@ def test_script_current_directory_invocation_respects_working_directory(
     covered = covered_items(inventory, root_source_texts(tmp_path))
 
     assert uncovered_items(inventory, covered, {}) == expected_uncovered, (
-        "a ./filename invocation must be resolved against its working directory"
+        "static relative invocations must resolve against working-directory"
     )
 
 

@@ -6,10 +6,8 @@ their contents can establish indirect references.
 """
 
 import dataclasses
-import io
 import posixpath
 import re
-import tokenize
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -55,36 +53,11 @@ def workflow_reference_sources(document: object) -> tuple[ReferenceSource, ...]:
     return tuple(sources)
 
 
-def strip_script_comments(source: ReferenceSource) -> ReferenceSource:
-    """Remove comments from reached script text while preserving its context.
-
-    Parameters
-    ----------
-    source : ReferenceSource
-        Text loaded from a directly inventoried script.
-
-    Returns
-    -------
-    ReferenceSource
-        The same source context with language comments replaced by spaces.
-    """
-    match source.script_suffix:
-        case ".py":
-            text = _strip_python_comments(source.text)
-        case ".bash" | ".sh":
-            text = _strip_hash_comments(source.text, powershell=False)
-        case ".ps1":
-            text = _strip_hash_comments(source.text, powershell=True)
-        case _:
-            text = source.text
-    return dataclasses.replace(source, text=text)
-
-
 def relative_script_is_referenced(
     source: ReferenceSource,
     script_path: str,
 ) -> bool:
-    """Match an explicit ``./`` script path against the run directory.
+    """Resolve any static relative script path against the run directory.
 
     Parameters
     ----------
@@ -104,28 +77,8 @@ def relative_script_is_referenced(
 
     relative_path = posixpath.relpath(script_path, working_directory)
     escaped_path = re.escape(relative_path).replace(r"/", r"[/\\]")
-    pattern = rf"(?<![\w./\\-])\.[/\\]{escaped_path}(?![\w.\\-])"
+    pattern = rf"(?<![\w./\\-])(?:\.[/\\])?{escaped_path}(?![\w.\\-])"
     return re.search(pattern, source.text) is not None
-
-
-def without_dot_relative_paths(source: ReferenceSource) -> str:
-    """Remove explicit relative paths after contextual matching has failed.
-
-    Parameters
-    ----------
-    source : ReferenceSource
-        A workflow run command whose relative paths were checked.
-
-    Returns
-    -------
-    str
-        Source text without unresolvable dot-relative paths.
-    """
-    return re.sub(
-        r"(?<![\w./\\-])\.[/\\][^\s\"'`$;|&<>]+",
-        " ",
-        source.text,
-    )
 
 
 def scripts_package_imports_module(text: str, module_name: str) -> bool:
@@ -210,132 +163,3 @@ def _normalise_working_directory(value: str | None) -> str | None:
     if directory.startswith("/"):
         return None
     return directory
-
-
-def _strip_python_comments(text: str) -> str:
-    """Mask Python comment tokens without changing strings or line numbers."""
-    lines = text.splitlines(keepends=True)
-    try:
-        tokens = tokenize.generate_tokens(io.StringIO(text).readline)
-        for token_info in tokens:
-            if token_info.type != tokenize.COMMENT:
-                continue
-            (row, start), (_, end) = token_info.start, token_info.end
-            line = lines[row - 1]
-            lines[row - 1] = line[:start] + " " * (end - start) + line[end:]
-    except IndentationError, tokenize.TokenError:
-        pass
-    return "".join(lines)
-
-
-def _strip_hash_comments(text: str, *, powershell: bool) -> str:
-    """Mask shell or PowerShell comments outside quoted strings."""
-    if powershell:
-        return _strip_powershell_comments(text)
-    return _strip_shell_comments(text)
-
-
-def _strip_shell_comments(text: str) -> str:
-    """Mask Bash comments outside single- and double-quoted strings."""
-    characters = list(text)
-    quote: str | None = None
-    escaped = False
-    index = 0
-    while index < len(text):
-        current = text[index]
-        if escaped:
-            escaped = False
-        elif quote is not None:
-            quote, escaped = _advance_shell_quote(quote, current)
-        elif current in {"'", '"'}:
-            quote = current
-        elif current == "\\":
-            escaped = True
-        elif current == "#" and _starts_shell_comment(text, index):
-            comment_end = _line_end(text, index)
-            _mask_comment(characters, index, comment_end)
-            index = comment_end - 1
-        index += 1
-    return "".join(characters)
-
-
-def _advance_shell_quote(quote: str, current: str) -> tuple[str | None, bool]:
-    """Advance over one Bash character inside a quoted string."""
-    if quote == '"' and current == "\\":
-        return quote, True
-    if current == quote:
-        return None, False
-    return quote, False
-
-
-def _strip_powershell_comments(text: str) -> str:
-    """Mask PowerShell line and block comments outside quoted strings."""
-    characters = list(text)
-    quote: str | None = None
-    escaped = False
-    index = 0
-    while index < len(text):
-        current = text[index]
-        if escaped:
-            escaped = False
-        elif quote is not None:
-            quote, escaped, index = _advance_powershell_quote(
-                text, index, quote, current
-            )
-        elif text.startswith("<#", index):
-            comment_end = _block_comment_end(text, index)
-            _mask_comment(characters, index, comment_end)
-            index = comment_end - 1
-        elif current in {"'", '"'}:
-            quote = current
-        elif current == "`":
-            escaped = True
-        elif current == "#":
-            comment_end = _line_end(text, index)
-            _mask_comment(characters, index, comment_end)
-            index = comment_end - 1
-        index += 1
-    return "".join(characters)
-
-
-def _advance_powershell_quote(
-    text: str,
-    index: int,
-    quote: str,
-    current: str,
-) -> tuple[str | None, bool, int]:
-    """Advance over one quoted PowerShell character and its escapes."""
-    if quote == "'" and text[index : index + 2] == "''":
-        return quote, False, index + 1
-    if current == "`":
-        return quote, True, index
-    if current == quote:
-        return None, False, index
-    return quote, False, index
-
-
-def _starts_shell_comment(text: str, index: int) -> bool:
-    """Recognise Bash's comment marker at the start of an unquoted word."""
-    if index == 0:
-        return True
-    previous = text[index - 1]
-    return previous.isspace() or previous in ";|&()<>"
-
-
-def _line_end(text: str, index: int) -> int:
-    """Find the next line ending or the end of a source string."""
-    end = text.find("\n", index)
-    return len(text) if end < 0 else end
-
-
-def _block_comment_end(text: str, index: int) -> int:
-    """Find the end of a PowerShell block comment or the end of its source."""
-    end = text.find("#>", index + 2)
-    return len(text) if end < 0 else end + 2
-
-
-def _mask_comment(characters: list[str], start: int, end: int) -> None:
-    """Replace non-newline comment characters with spaces in place."""
-    for index in range(start, end):
-        if characters[index] != "\n":
-            characters[index] = " "
