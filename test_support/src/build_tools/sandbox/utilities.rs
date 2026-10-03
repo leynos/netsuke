@@ -121,17 +121,32 @@ pub(super) fn which(env: &impl Env, current_dir: &Utf8Path, utility: &str) -> Re
             Ok(false) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => {
-                tracing::debug!(
-                    failure_kind = "candidate_metadata",
-                    "sandbox utility candidate inspection failed"
-                );
+                debug_candidate_inspection_failed_from_fields();
                 return Err(error)
                     .with_context(|| format!("inspect utility candidate `{candidate}`"));
             }
         }
     }
-    tracing::debug!(outcome = "not_found", "sandbox utility lookup failed");
+    debug_utility_not_found_from_fields();
     bail!("`{utility}` not found on PATH")
+}
+
+/// Note that inspecting one utility candidate's metadata failed.
+///
+/// Only the bounded reason is emitted; the utility name, `PATH`, and candidate
+/// paths are high-cardinality and disclose the host layout. The returned error
+/// still carries the candidate, because a developer reading a failed run needs
+/// to know which one broke.
+fn debug_candidate_inspection_failed_from_fields() {
+    tracing::debug!(
+        failure_kind = "candidate_metadata",
+        "sandbox utility candidate inspection failed"
+    );
+}
+
+/// Note that no candidate on `PATH` resolved the requested utility.
+fn debug_utility_not_found_from_fields() {
+    tracing::debug!(outcome = "not_found", "sandbox utility lookup failed");
 }
 
 #[cfg(all(test, unix))]

@@ -123,74 +123,117 @@ fn record_fetch_policy_event(event: &MergeEvent) {
     }
 }
 
+/// Emit one bounded defaults-layer event from a retained message.
+///
+/// The macro is the sole statement so the expansion is charged here rather than
+/// added to the caller's cognitive complexity.
+fn debug_defaults_layer_from_fields(message: &'static str) {
+    tracing::debug!(layer = "defaults", message);
+}
+
 /// Record a bounded defaults-layer event when `event` represents one.
 fn record_default_event(event: &MergeEvent) {
     match event {
         MergeEvent::DefaultsApplied => {
-            tracing::debug!(layer = "defaults", "applied default configuration layer");
+            debug_defaults_layer_from_fields("applied default configuration layer");
         }
         MergeEvent::DefaultsFailed => {
-            tracing::debug!(layer = "defaults", "default configuration layer failed");
+            debug_defaults_layer_from_fields("default configuration layer failed");
         }
         _ => {}
     }
+}
+
+/// Emit the collected file-layer event with its retained layer count.
+fn debug_file_layers_collected_from_fields(layer_count: usize) {
+    tracing::debug!(
+        layer = "file",
+        layer_count,
+        "collected configuration file layers"
+    );
+}
+
+/// Emit the file-layer collection failure with its retained error count.
+fn debug_file_layer_collection_failed_from_fields(error_count: usize) {
+    tracing::debug!(
+        layer = "file",
+        error_count,
+        "configuration file layer collection failed"
+    );
+}
+
+/// Emit the applied file-layer event with its bounded path hash.
+fn debug_file_layer_applied_from_fields(path_hash: Option<&String>) {
+    tracing::debug!(layer = "file", path_hash = ?path_hash, "applied configuration file layer");
 }
 
 /// Record a bounded file-layer event when `event` represents one.
 fn record_file_event(event: &MergeEvent) {
     match event {
         MergeEvent::FileLayersCollected { layer_count } => {
-            tracing::debug!(
-                layer = "file",
-                layer_count,
-                "collected configuration file layers"
-            );
+            debug_file_layers_collected_from_fields(*layer_count);
         }
         MergeEvent::FileLayerCollectionFailed { error_count } => {
-            tracing::debug!(
-                layer = "file",
-                error_count,
-                "configuration file layer collection failed"
-            );
+            debug_file_layer_collection_failed_from_fields(*error_count);
         }
         MergeEvent::FileLayerApplied { path_hash } => {
-            tracing::debug!(layer = "file", path_hash = ?path_hash, "applied configuration file layer");
+            debug_file_layer_applied_from_fields(path_hash.as_ref());
         }
         _ => {}
     }
+}
+
+/// Emit the merged environment-layer event with its retained emptiness flag.
+fn debug_environment_applied_from_fields(is_empty: bool) {
+    tracing::debug!(
+        layer = "environment",
+        is_empty,
+        "merged environment configuration layer"
+    );
+}
+
+/// Emit the environment-layer failure event.
+fn debug_environment_failed_from_fields() {
+    tracing::debug!(
+        layer = "environment",
+        "environment configuration layer failed"
+    );
 }
 
 /// Record a bounded environment-layer event when `event` represents one.
 fn record_environment_event(event: &MergeEvent) {
     match event {
         MergeEvent::EnvironmentApplied { is_empty } => {
-            tracing::debug!(
-                layer = "environment",
-                is_empty,
-                "merged environment configuration layer"
-            );
+            debug_environment_applied_from_fields(*is_empty);
         }
         MergeEvent::EnvironmentFailed => {
-            tracing::debug!(
-                layer = "environment",
-                "environment configuration layer failed"
-            );
+            debug_environment_failed_from_fields();
         }
         _ => {}
     }
+}
+
+/// Emit the applied CLI-override event with its bounded override keys.
+fn debug_cli_overrides_applied_from_fields(override_keys: &[String]) {
+    tracing::debug!(layer = "cli", override_keys = ?override_keys, "applied CLI override layer");
+}
+
+/// Emit one bounded CLI-layer event from a retained message.
+fn debug_cli_layer_from_fields(message: &'static str) {
+    tracing::debug!(layer = "cli", message);
 }
 
 /// Record a bounded CLI-layer event when `event` represents one.
 fn record_cli_event(event: &MergeEvent) {
     match event {
         MergeEvent::CliOverridesApplied { override_keys } => {
-            tracing::debug!(layer = "cli", override_keys = ?override_keys, "applied CLI override layer");
+            debug_cli_overrides_applied_from_fields(override_keys);
         }
         MergeEvent::CliOverridesAbsent => {
-            tracing::debug!(layer = "cli", "no explicit CLI overrides supplied");
+            debug_cli_layer_from_fields("no explicit CLI overrides supplied");
         }
         MergeEvent::CliOverridesFailed => {
-            tracing::debug!(layer = "cli", "CLI override layer failed");
+            debug_cli_layer_from_fields("CLI override layer failed");
         }
         _ => {}
     }

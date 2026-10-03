@@ -302,9 +302,15 @@ operator, user, and contributor references are easier to find.
 - [reliable-testing-in-rust-via-dependency-injection.md](reliable-testing-in-rust-via-dependency-injection.md):
   Dependency-injection testing patterns used by the project.
 - [rstest-bdd-users-guide.md](rstest-bdd-users-guide.md): Current behavioural
-  testing framework reference.
+  testing framework reference. Imported byte-for-byte from `leynos/rstest-bdd`
+  tag `v0.6.0` at commit `72fb2263`; see
+  [adopt-rstest-bdd-v0-6-0.md](execplans/adopt-rstest-bdd-v0-6-0.md) for the
+  recorded checksums.
 - [rstest-bdd-v0-5-0-migration-guide.md](rstest-bdd-v0-5-0-migration-guide.md):
-  Migration notes for the current `rstest-bdd` release.
+  Migration notes for the previous `rstest-bdd` release.
+- [rstest-bdd-v0-6-0-migration-guide.md](rstest-bdd-v0-6-0-migration-guide.md):
+  Migration notes for the current `rstest-bdd` release. Imported byte-for-byte
+  from `leynos/rstest-bdd` tag `v0.6.0` at commit `72fb2263`.
 - [rust-doctest-dry-guide.md](rust-doctest-dry-guide.md): Doctest workflow and
   dry-run guidance.
 - [rust-testing-with-rstest-fixtures.md](rust-testing-with-rstest-fixtures.md):

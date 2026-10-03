@@ -82,6 +82,22 @@ pub(crate) fn record_budget_exhaustion(stage: &'static str, budget: &'static str
     counter!(BUDGET_EXHAUSTED_TOTAL, "stage" => stage, "budget" => budget).increment(1);
 }
 
+/// Emit the bounded category for a failed manifest macro invocation.
+fn debug_macro_invocation_failed_from_fields(error_category: minijinja::ErrorKind) {
+    tracing::debug!(
+        error_category = ?error_category,
+        "manifest macro invocation failed"
+    );
+}
+
+/// Emit the bounded category for a failed manifest template render.
+fn debug_template_render_failed_from_fields(error_category: minijinja::ErrorKind) {
+    tracing::debug!(
+        error_category = ?error_category,
+        "manifest template render failed"
+    );
+}
+
 /// Evaluate `invoke` inside a macro-invocation span, recording its outcome.
 ///
 /// The span and metrics carry only the outcome and, on failure, the `MiniJinja`
@@ -101,7 +117,7 @@ pub(super) fn instrument_macro_invocation<T>(
     span.record("outcome", outcome);
     if let Err(error) = &result {
         span.record("error_category", format_args!("{:?}", error.kind()));
-        tracing::debug!(error_category = ?error.kind(), "manifest macro invocation failed");
+        debug_macro_invocation_failed_from_fields(error.kind());
     }
     counter!(MACRO_INVOCATIONS_TOTAL, "outcome" => outcome).increment(1);
     histogram!(MACRO_INVOCATION_DURATION).record(started.elapsed());
@@ -131,7 +147,7 @@ pub(super) fn instrument_template_render<T>(
     span.record("outcome", outcome);
     if let Err(error) = &result {
         span.record("error_category", format_args!("{:?}", error.kind()));
-        tracing::debug!(error_category = ?error.kind(), "manifest template render failed");
+        debug_template_render_failed_from_fields(error.kind());
     }
     counter!(
         TEMPLATE_RENDERS_TOTAL,

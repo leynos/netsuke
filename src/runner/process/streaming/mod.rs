@@ -196,6 +196,18 @@ fn clamp_u64_to_usize(value: u64) -> usize {
     usize::try_from(value).unwrap_or(usize::MAX)
 }
 
+/// Note that a child output stream could not be forwarded to the parent.
+fn debug_child_output_write_failed(stream_name: &str, error: &io::Error) {
+    tracing::debug!(
+        "Failed to write child {stream_name} output to parent: {error}; discarding remaining bytes"
+    );
+}
+
+/// Note that a child output stream could not be drained after the writer closed.
+fn debug_child_output_drain_failed(stream_name: &str, error: &io::Error) {
+    tracing::debug!("Failed to drain child {stream_name} output after writer closed: {error}");
+}
+
 /// Copy `reader` to `writer`, tracking statistics and draining on failure.
 fn copy_with_stats<R, W>(reader: &mut R, writer: &mut W, stream_name: &'static str) -> ForwardStats
 where
@@ -221,13 +233,9 @@ where
             stats.write_failed = true;
             stats.bytes_read = clamp_u64_to_usize(counting_reader.read);
             stats.bytes_written = clamp_u64_to_usize(counting_writer.written);
-            tracing::debug!(
-                "Failed to write child {stream_name} output to parent: {err}; discarding remaining bytes"
-            );
+            debug_child_output_write_failed(stream_name, &err);
             if let Err(drain_err) = io::copy(&mut counting_reader, &mut io::sink()) {
-                tracing::debug!(
-                    "Failed to drain child {stream_name} output after writer closed: {drain_err}"
-                );
+                debug_child_output_drain_failed(stream_name, &drain_err);
             } else {
                 stats.bytes_read = clamp_u64_to_usize(counting_reader.read);
             }
