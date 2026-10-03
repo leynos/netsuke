@@ -145,7 +145,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
   become restatement. **Breached by RFC 0013 at 470 lines, and recorded rather
   than waived**; see the Progress entry dated 2026-10-01 that begins "Two
   preamble findings recorded before `EP-M4` begins". **Breached again by RFC
-  0015 at 465 lines, rising to **498** after review repairs across two review
+  0015 at 465 lines, rising to 498 after review repairs across two review
   rounds, and this time the waiver is decided rather than merely recorded**:
   the per-helper density shows the tolerance's stated failure mode is absent,
   and the escalation is answered in the `EP-M5` Progress entry. **The intent to
@@ -154,23 +154,26 @@ Hard invariants. Violating one requires escalation, not a workaround.
   children now total **2418** against the 2400 budget at `3c337c89`, as the
   2026-10-03 corrections below record. Each child's line count is recorded at
   its own commit, which is how the drift was caught. **The aggregate is the
-  binding control and it is now breached, not approached**: five children are
-  written at 2374 lines against the 2400 budget, leaving 26 for three children
-  whose measured floor is ~183 each. **The figures in this paragraph are
-  superseded by the 2026-10-03 correction below**, which re-derives them from
-  the files. The `EP-M7` Progress entry carries the figures and the escalation,
-  and its correction records that a nine-or-ten-child re-partition **raises**
-  the aggregate rather than relieving it. The remedies that address this
-  control are to raise the budget or to record a decided waiver; the plan stops
-  for that decision before RFC 0018 is written. **Correction, added 2026-10-03:
-  the budget is now exceeded by the five written children alone.** The 2374
-  figure was measured at `5895fc4c` and was true there; the round-2 review
-  repairs then grew RFC 0016 by 27 lines and RFC 0017 by 3, taking the five to
-  **2404 against 2400 — 4 lines over, with RFCs 0018, 0019, and 0020 still
-  unwritten.** Three children at the measured honest-child floor of roughly 183
-  lines each project the complete set to about **2950**, a shortfall near **550
-  lines**. The figure is re-derived from the files rather than carried forward,
-  because the repair that fixed the wrestling match also moved the number the
+  binding control and it is now breached, not approached**; the sentence that
+  previously stood here read "five children are written at 2374 lines against
+  the 2400 budget, leaving 26 for three children whose measured floor is ~183
+  each", and every figure in it is superseded — that total was true at
+  `5895fc4c` only, and the "26 lines remaining" it implies was already false by
+  `e359cd66`. **The figures in this paragraph are superseded by the 2026-10-03
+  correction below**, which re-derives them from the files. The `EP-M7`
+  Progress entry carries the figures and the escalation, and its correction
+  records that a nine-or-ten-child re-partition **raises** the aggregate rather
+  than relieving it. The remedies that address this control are to raise the
+  budget or to record a decided waiver; the plan stops for that decision before
+  RFC 0018 is written. **Correction, added 2026-10-03: the budget is now
+  exceeded by the five written children alone.** The 2374 figure was measured at
+  `5895fc4c` and was true there; the round-2 review repairs then grew RFC 0016
+  by 27 lines and RFC 0017 by 3, taking the five to **2404 against 2400 at
+  `e359cd66` — 4 lines over, with RFCs 0018, 0019, and 0020 still unwritten.**
+  Three children at the measured honest-child floor of roughly 183 lines each
+  project the complete set to about **2950**, a shortfall near **550 lines**.
+  The figure is re-derived from the files rather than carried forward, because
+  the repair that fixed the wrestling match also moved the number the
   escalation is about. **Second correction, same day: the round-3 repairs moved
   it again, to 2418 at `3c337c89`** — 0016 is **538** and 0017 is **515** —
   which is 14 lines further over and projects the set to about **2960**. Each
