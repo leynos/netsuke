@@ -304,21 +304,21 @@ Four consequences this group decides:
   size.** The first row above bounds how many matches `regex_findall` may
   return, and it is scoped to that helper: it says nothing about how much text
   `regex_replace` may emit. Those are different quantities, and a pattern
-  decides the second independently of the first. A subject holding eight
-  thousand one-kilobyte records gives a record-matching pattern 8,192 matches —
-  more than an order of magnitude under the ceiling — and a replacement naming
-  `$0` twice emits 16 MiB from a template shorter than this paragraph: the
-  count is under the ceiling while the output is arbitrary, because the
-  replacement's length is the author's to choose and multiplies the match
-  count. Matching that subject still costs time linear in its length, so
-  section 8.4's guarantee holds unchanged; what the guarantee does not cover is
-  the materialization the *replacement* asks for. Clause 6.8 names
-  "materialized output" for exactly this case and requires the rejection before
-  allocating, so `regex_replace` counts its output with checked arithmetic as
-  the matches are walked, abandoning the walk the moment the running total
-  passes 8 MiB, and fails with `output_too_large` at the ceiling RFC 0013's
-  serializers and RFC 0014's amplifying transforms already apply. The count is
-  taken before the result string is built rather than measured after.
+  decides the second independently of the first. A subject holding 8,192
+  one-kilobyte records gives a record-matching pattern 8,192 matches — more
+  than an order of magnitude under the ceiling — and a replacement naming `$0`
+  twice emits 16 MiB from a template shorter than this paragraph: the count is
+  under the ceiling while the output is arbitrary, because the replacement's
+  length is the author's to choose and multiplies the match count. Matching
+  that subject still costs time linear in its length, so section 8.4's
+  guarantee holds unchanged; what the guarantee does not cover is the
+  materialization the *replacement* asks for. Clause 6.8 names "materialized
+  output" for exactly this case and requires the rejection before allocating, so
+  `regex_replace` counts its output with checked arithmetic as the matches are
+  walked, abandoning the walk the moment the running total passes 8 MiB, and
+  fails with `output_too_large` at the ceiling RFC 0013's serializers and RFC
+  0014's amplifying transforms already apply. The count is taken before the
+  result string is built rather than measured after.
 
 The group enforces no other bound, and the absent subject ceiling is a
 consequence of the dialect rather than an omission. Section 8.4 names the
