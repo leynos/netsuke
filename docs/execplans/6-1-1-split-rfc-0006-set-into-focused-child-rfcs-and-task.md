@@ -2234,6 +2234,122 @@ Hard invariants. Violating one requires escalation, not a workaround.
   spelling verdict **does not cover the gate that will decide**, and the
   consequence is recorded under `Surprises & discoveries`.
 
+- [x] (2026-10-03) **CodeRabbit's round-4 pass on `d3f35fb1` raised four
+  findings, all four upheld, and the RFC 0015 one reframed a bound the parent
+  itself states incompletely.** The review was run by `scrutineer` with
+  `coderabbit review --agent`; the quota decremented 10 → 9 and the local
+  checkpoint pinned the reviewed revision to `d3f35fb1`. The agent ended
+  without emitting a completion notification, so the findings were recovered
+  from its JSONL transcript and the local store at
+  `$HOME/.coderabbit/reviews/8fe25f62/9a7949a8/reviews/1791024144942`, then
+  each was verified by measurement rather than accepted from its summary.
+
+  **Finding 2, the substantive one, was reported as a `product`-only width gap
+  and is in fact a missing bound in all three combinatorial helpers.** As
+  reported: `product([x], repeat=r)` has cardinality one for every positive
+  `r`, so the 100000-tuple ceiling cannot limit tuple *width*, and a large valid
+  `repeat` can demand an enormous tuple while the cardinality check passes.
+  That is correct, and measuring it widened it. The general rule is that
+  cardinality, tuple width, and output size are three independent quantities
+  and **none of the three ceilings bounds another**. `product` reaches the
+  width gap through `repeat`; `combinations` reaches it without `repeat` at
+  all, because `C(100000, 99999)` is exactly **100000** — *on* the ceiling
+  rather than over it, so a 100000-element input is admitted and yields 100000
+  tuples of width 99999, nine billion elements; `permutations` is the nearest
+  to safe at 35,280 elements under its lower 10000-tuple ceiling, but that is a
+  count of elements rather than of content, and seven 8 MiB elements become 282
+  GB through 5,040 tuples of them.
+
+  **The remedy was not invented: three sibling children already carry it and
+  one already recorded the rule.** RFC 0013's serializers, RFC 0014's
+  amplifying transforms, and RFC 0016's `regex_replace` each apply an **8 MiB
+  output ceiling** with an `output_too_large` code, and RFC 0016 §5.8 states
+  the principle this case is an instance of — "a match count is not an output
+  size". The plan's own adopted lesson from that round is the general form: *a
+  bounds subsection must be written from what the helper materializes, not from
+  what it consumes*. RFC 0015 §5.8 opened by claiming the bounds "are RFC 0006
+  table 3's" outright and argued that `product`'s "ceiling is on tuples, not on
+  methods of reaching them" — which is true of `repeat` and silently false of
+  width. It now carries the added output row, an `output_too_large` code, the
+  counting-before-building mechanism, the delivery-task mention, and two named
+  acceptance inputs (`[[0]] | product(repeat=1000000)` and
+  `range(100000) | combinations(99999)`).
+
+  **Five consequential edits the finding did not mention, all caught by
+  re-deriving from the tables rather than by the reviewer.** §5.9's `6.9`
+  discharge row read "ten codes" and now reads **eleven**; §5.6 gained a third
+  rejection-reason decision distinguishing this bound from
+  `cardinality_exceeded`, since it can reject a request that code has already
+  passed; the §5.8 table gained three rows; §7's acceptance sentence gained the
+  named inputs; and §8's "it decides no value" became false — the output
+  ceiling *is* the group's own rather than a table 3 row, so it now says so and
+  inherits the 8 MiB the three siblings use rather than choosing a number. This
+  is the third round in a row where the defect class was **a stated quantity
+  the document's own tables contradict**, and the fifth time the remedy has
+  been to re-derive every count in a child's prose from the table it describes.
+
+  **Findings 1, 3, and 4 were confirmed and repaired.** Finding 1 (execplan,
+  "recalculate the section 5 mean") was worse than reported: the plan claimed
+  "the mean *excluding* the registry tables is 380 section-5 lines per child",
+  but the eight section 5s total only **2883** lines, so 380 × 8 exceeds the
+  whole — the figure is now measured (2883 total, 382 table lines, ~13%, 2501
+  remaining, mean **313**). Finding 3 (RFC 0018 §5.3) was an omission: the
+  `Rejects` table for `expandvars` and `glob` lacked the two codes the RFC's
+  own diagnostic table defines, so `output_too_large` and `match_limit` were
+  added — RFC 0016's `regex_findall` row already lists `match_limit`, which is
+  the precedent. Finding 4 (RFC 0018 §1 and §4) was a genuine contradiction: §1
+  asserted `true` was the settled `glob` default while §4 wrote
+  `files_only=false`. Investigation showed the RFC's §8 already records the
+  conflict thoroughly and deliberately as roadmap task 6.7.3's decision, and
+  RFC 0006 §8.7 itself spells the signature `files_only=false`, so the repair
+  was to stop asserting a settled default and point at §8 — not to delete the
+  analysis.
+
+  **Gates at the repair revision: all green, run sequentially.** `make fmt`
+  (changed nothing), `make check-fmt`, `make markdownlint` (0 issues in 178
+  files), `make nixie`, `make spelling`, `make lint` (Pylint 10.00/10, no
+  errors), the RFC coverage contract (272 of 272), and the execplan status
+  contract (9 of 9). `make fmt` was confirmed idempotent on the edited RFC by
+  re-running it and diffing.
+
+- [x] (2026-10-03) **`scrutineer` independently re-ran the full nine-gate set
+  and returned green for `7b0794af`, and its change-surface probe corrected a
+  claim this plan's delegation prompt had made.** The report's verdict is
+  scoped exactly as it should be: valid for that revision with a clean tree
+  "and for no other revision", with the working tree confirmed empty at three
+  sampled points during the run. All nine steps exited 0 — `fmt` (changed
+  nothing), `check-fmt` (`170 files already formatted`,
+  `178 files left unchanged`), `lint` (every stage to completion, zero error or
+  warning lines), `doc-coverage` (65 script tests, aggregate 4870/4927 =
+  **98.84%** against the 80% bar), `test` (nextest `3911 passed, 6 skipped`;
+  doctests `88 / 2 / 39`), `markdownlint` (`0 issues in 0 files` across 178
+  files), `nixie` (179 diagrams), `spelling`, and the coverage contract
+  (`272 passed, 0 skipped`). This is an independent reproduction of the figures
+  the plan records for `EP-M11`, arrived at without the plan's own log files.
+
+  **The correction is to the prompt rather than to the branch, and it is worth
+  recording because the same error was nearly made twice.** The delegation
+  described the branch as adding "a Rust test binary
+  `tests/rfc_stdlib_coverage_tests/`". No such path exists: the artefacts are
+  `tests/rfc_stdlib_coverage_tests.rs` and the module directory
+  `tests/rfc_stdlib_coverage/`, and **both already exist on `origin/main`** —
+  they landed with merged PR #697. The branch's diff against `origin/main` is
+  twelve Markdown files and nothing else, so the coverage contract is a
+  pre-existing gate this branch must satisfy rather than one it introduces. The
+  plan's own Outcomes section already stated this provenance correctly; the
+  prompt did not, which is the reason a second reader is worth summoning even
+  when the first has already concluded.
+
+  **The report also supplied the provenance caveat the plan had not yet
+  recorded: `13c3b54a` was ungated at the time of writing.** The peer session
+  committed it at 13:12:04, after the last gate finished at 13:02:55, so no
+  gate ever saw a modified tree and all nine results bind cleanly to
+  `7b0794af`. It correctly refuses to extend that verdict to the later commit
+  and notes that because `13c3b54a` is Markdown-only it can move only
+  `check-fmt`, `markdownlint`, `nixie`, and `spelling` — inference, as it says,
+  rather than evidence. That gap is closed by this round's gate run, which
+  covered the commit plus the round-4 repairs in one pass.
+
 - [x] (2026-10-01) `EP-M7` **RFC 0017 written, and the aggregate-volume
   escalation it was written under is now measured rather than projected.** The
   RFC owns RFC 0006 §8.6 except `expandvars`, plus §8.7's `abs` alone — the
@@ -4119,12 +4235,18 @@ tracked; the derivation it performs is reimplemented in the coverage test at
   contract, and RFC 0020's **two** rows are the smallest in the set, so a
   per-row ratio is at its most volatile there — one row of ordinary length
   moves it by tens of points, and 200.0 is an artefact of the denominator
-  rather than evidence of restatement. Second, the mean *excluding* the
-  registry tables is 380 section-5 lines per child, so the growth is in the
-  per-helper prose the clauses require rather than in the tables that could be
-  generated. The control still identifies what it was built to identify — a
-  child whose section 5 has become restatement — and on this set it identifies
-  RFC 0018, which is the finding a reviewer would want from it. The breach is
+  rather than evidence of restatement. Second, the registry tables are a small
+  part of the whole: the eight sections 5 hold **2883** lines, of which the
+  tables take **382**, so the registry accounts for about **13%** and the
+  remaining **2501** — a mean of **313** lines per child — is per-helper prose
+  the clauses require rather than tables that could be generated. **Corrected at
+  `EP-M11` by CodeRabbit:** this sentence read "the mean *excluding* the
+  registry tables is 380 section-5 lines per child", which is impossible on its
+  own figures — 380 × 8 exceeds the 2883 total — and the review was right to
+  reject it. The claim it was making survives the correction; the number did
+  not. The control still identifies what it was built to identify — a child
+  whose section 5 has become restatement — and on this set it identifies RFC
+  0018, which is the finding a reviewer would want from it. The breach is
   accepted rather than waived: the eight are written, the count is fixed at
   eight by four contract tests, and the only remaining remedy would be to move
   the number a third time.

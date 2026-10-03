@@ -209,9 +209,9 @@ carrying a code from section 5.9.
 | `intersect`            | two sequences                           | as `union`                                                                                                                              |
 | `difference`           | two sequences                           | as `union`                                                                                                                              |
 | `symmetric_difference` | two sequences                           | as `union`                                                                                                                              |
-| `product`              | sequences, plus `repeat` and `*others`  | `wrong_kind`; `repeat_range`; `cardinality_exceeded`; `overflow`                                                                        |
-| `combinations`         | a sequence, plus `r`                    | `wrong_kind`; `r_kind` for a negative or non-integer `r`; `cardinality_exceeded`; `overflow`                                            |
-| `permutations`         | a sequence, plus `r` or `none`          | `wrong_kind`; `r_kind`; `cardinality_exceeded` naming the lower ceiling; `overflow`                                                     |
+| `product`              | sequences, plus `repeat` and `*others`  | `wrong_kind`; `repeat_range`; `cardinality_exceeded`; `output_too_large`; `overflow`                                                    |
+| `combinations`         | a sequence, plus `r`                    | `wrong_kind`; `r_kind` for a negative or non-integer `r`; `cardinality_exceeded`; `output_too_large`; `overflow`                        |
+| `permutations`         | a sequence, plus `r` or `none`          | `wrong_kind`; `r_kind`; `cardinality_exceeded` naming the lower ceiling; `output_too_large`; `overflow`                                 |
 | `zip_longest`          | sequences, plus a required `fill_value` | `wrong_kind`; `fill_value_required` when it is omitted                                                                                  |
 | `any`                  | a sequence                              | `wrong_kind`; `undefined_input` naming the index                                                                                        |
 | `all`                  | a sequence                              | as `any`                                                                                                                                |
@@ -243,6 +243,14 @@ Three decisions this group adds:
   three helpers can reach `overflow` — a falling factorial of a long sequence
   outgrows the type for the same reason a `product` of long operands does — and
   the ceiling comparison decides only once the count is in hand.
+- **`output_too_large` is a third bound rather than a fourth cardinality code.**
+  It bounds a different quantity — what the admitted tuples hold — so it can
+  reject a request `cardinality_exceeded` has already passed and must not be
+  folded into it. An author fixes this one by shortening the values in the
+  input, which is neither of section 5.8's other two remedies: the counts are
+  already legal and the arithmetic has already succeeded. Precedence follows
+  the same rule as the other two, and the order is cardinality first because a
+  tuple that will never be built need not be measured.
 - **`fill_value_required` names the omission rather than the type.** A missing
   `fill_value` is the error an author will actually hit, so it must not be
   reported as "wrong kind of none". Section 8.3 makes the argument required
@@ -290,12 +298,19 @@ relation that is deterministic and does not force values through a hash set."
 ### 5.8. Resource bounds
 
 The bounds are RFC 0006 table 3's, applied through checked comparison before
-allocation. This group reaches three of them, more than any other child:
-`product` and `combinations` share the 100000-tuple ceiling, and `permutations`
-takes the lower 10000-tuple one. The other twelve enforce none beyond the input
-already materialized.
+allocation, plus one output ceiling this group applies. This group reaches
+three of table 3's rows, more than any other child: `product` and
+`combinations` share the 100000-tuple ceiling, and `permutations` takes the
+lower 10000-tuple one. The other twelve enforce none beyond the input already
+materialized.
 
-Three consequences this group decides:
+| Bound         | Value  | Where it applies                              |
+| ------------- | ------ | --------------------------------------------- |
+| Output tuples | 100000 | `product`, `combinations`                     |
+| Output tuples | 10000  | `permutations`                                |
+| Output length | 8 MiB  | the three combinatorial helpers in this group |
+
+Four consequences this group decides:
 
 - **Every cardinality is computed exactly, never estimated, and reported.**
   RFC 0006 section 6.8 requires that "the diagnostic reports both the computed
@@ -312,6 +327,29 @@ Three consequences this group decides:
   bound applies to the result's length, so `repeat` multiplies into the same
   ceiling rather than getting one of its own, and an empty operand yields an
   empty result without a check at all, per section 8.3.
+- **A tuple ceiling is not an output ceiling, and this group needs both.** The
+  two quantities are independent, and neither bounds the other. Cardinality is
+  the number of tuples; output is what those tuples hold, and a tuple's width
+  is the *third* quantity again — the number of elements in each. A count
+  ceiling cannot bound width, because `product` reaches cardinality one for
+  every `repeat` when every operand is a singleton: one operand of one element
+  repeated a million times is a single tuple, so the check passes, while the
+  tuple itself carries two million elements. The `combinations` tail makes the
+  same gap without `repeat` at all: `C(100000, 99999)` is exactly 100000, which
+  sits *on* the ceiling rather than over it, so a 100000-element input yields a
+  result of 100000 tuples each 99999 wide — nine billion elements, from a
+  request the cardinality check is obliged to admit. `permutations` is the
+  nearest to safe, since its lower 10000-tuple ceiling caps it at 35,280
+  elements, but that figure is a count of elements rather than of content, and
+  each element is a value the author supplies: seven elements of 8 MiB each
+  become 282 GB of materialized tuples through 5,040 of them. So all three
+  count *content* rather than tuples or elements, with checked arithmetic,
+  abandoning the walk the moment the running total passes 8 MiB, and fail with
+  `output_too_large` at the ceiling RFC 0013's serializers, RFC 0014's
+  amplifying transforms, and RFC 0016's `regex_replace` already apply. The
+  count is taken before any tuple is built, per clause 6.8, which is what makes
+  the guarantee hold for the inputs the cardinality check admits rather than
+  only for the ones it refuses.
 - **An over-large request fails without allocating, which is a testable
   claim.** RFC 0006 section 6.8 opens with "rejects unreasonable expansion
   **before** allocating", and roadmap task 6.4.2's success criterion restates
@@ -347,6 +385,7 @@ are enumerated rather than described.
 | `contains` value of the wrong kind   | `netsuke::jinja::collections::value_kind`           |
 | unrecognized boolean spelling        | `netsuke::jinja::collections::spelling_unknown`     |
 | exact cardinality over ceiling       | `netsuke::jinja::collections::cardinality_exceeded` |
+| materialized content over 8 MiB      | `netsuke::jinja::collections::output_too_large`     |
 | checked arithmetic overflowed        | `netsuke::jinja::collections::overflow`             |
 
 Each code's Fluent key is its reason in upper snake case under
@@ -424,19 +463,19 @@ contradict the contract".
 
 ### Clause discharge
 
-| Clause | Discharge                                                                                                                     |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| `6.1`  | Fifteen pure `New` helpers; the fifteen section 5.1 rows are 15 of 52.                                                        |
-| `6.2`  | All fifteen pure, so all register in `register_query_helpers`, none stubbed.                                                  |
-| `6.3`  | Order defined from input order by all eight filters; the seven predicates reorder nothing.                                    |
-| `6.4`  | No filesystem, environment, or subprocess access; no handle taken.                                                            |
-| `6.5`  | No `dialect` argument; the helpers are platform-invariant.                                                                    |
-| `6.6`  | Undefined rejected; three enumerated option sets; overflow separate from the cardinality comparison.                          |
-| `6.7`  | Deduplication, subset, superset, and contains all keyed on the canonical key, never a hash set.                               |
-| `6.8`  | Table 3's 100000-tuple ceiling for `product` and `combinations`, 10000 for `permutations`, counted exactly before allocation. |
-| `6.9`  | One enum, one `From` impl, ten `netsuke::jinja::collections::*` codes.                                                        |
-| `6.10` | Fifteen new names, two alias families resolved in section 5.10.                                                               |
-| `6.11` | The clause's seven obligations, with the algebra and complement properties the parent states.                                 |
+| Clause | Discharge                                                                                                                                               |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `6.1`  | Fifteen pure `New` helpers; the fifteen section 5.1 rows are 15 of 52.                                                                                  |
+| `6.2`  | All fifteen pure, so all register in `register_query_helpers`, none stubbed.                                                                            |
+| `6.3`  | Order defined from input order by all eight filters; the seven predicates reorder nothing.                                                              |
+| `6.4`  | No filesystem, environment, or subprocess access; no handle taken.                                                                                      |
+| `6.5`  | No `dialect` argument; the helpers are platform-invariant.                                                                                              |
+| `6.6`  | Undefined rejected; three enumerated option sets; overflow separate from the cardinality comparison.                                                    |
+| `6.7`  | Deduplication, subset, superset, and contains all keyed on the canonical key, never a hash set.                                                         |
+| `6.8`  | Table 3's 100000-tuple ceiling for `product` and `combinations`, 10000 for `permutations`, plus an 8 MiB output ceiling, all counted before allocation. |
+| `6.9`  | One enum, one `From` impl, eleven `netsuke::jinja::collections::*` codes.                                                                               |
+| `6.10` | Fifteen new names, two alias families resolved in section 5.10.                                                                                         |
+| `6.11` | The clause's seven obligations, with the algebra and complement properties the parent states.                                                           |
 
 ## 6. Dependencies
 
@@ -462,7 +501,7 @@ Roadmap step 6.4, which implements this RFC in five tasks:
 - 6.4.1. `union`, `intersect`, `difference`, and `symmetric_difference`, with
   first-appearance ordering and canonical-key deduplication.
 - 6.4.2. `product`, `combinations`, and `permutations`, with checked
-  cardinality and the lower ceiling for `permutations`.
+  cardinality, checked output content, and the lower ceiling for `permutations`.
 - 6.4.3. `zip_longest`, with a required fill value.
 - 6.4.4. The seven predicates, with `convert_bool` restricted to the closed
   eight-spelling vocabulary.
@@ -475,6 +514,18 @@ over-large request failing without allocating, `truthy` and `falsy` as exact
 complements, and two compilations of the same matrix emitting byte-identical
 Ninja with the hash-state property holding them there.
 
+Two of those criteria are the ones that check section 5.8, and both name their
+input, because an over-large request is only decisive when the ceiling it
+crosses is stated. Task 6.4.2 succeeds on cardinality when
+`[[]] | product(repeat=100001)` fails naming the computed cardinality and the
+ceiling, and on output when a request the cardinality check admits does not:
+`[[0]] | product(repeat=1000000)` is a single tuple of two million elements, so
+it fails `output_too_large` rather than returning, and
+`range(100000) | combinations(99999)` fails the same way instead of
+materializing 100000 tuples of width 99999. Both are checked *before* the first
+tuple is built, which is what distinguishes the bound from a post-hoc
+measurement.
+
 ## 8. Open questions
 
 RFC 0006 section 16 assigns no question to this group, and that is a
@@ -484,9 +535,15 @@ question 5 concerns the shared bounds of roadmap step 6.1, and question 7 is
 resolved by roadmap task 7.1.1.
 
 The one a reader might expect here is question 5, because section 5.8 reaches
-table 3 three times. It decides no value: `product`, `combinations`, and
+table 3 three times. It chooses no table 3 value: `product`, `combinations`, and
 `permutations` enforce the ceilings table 3 already states, and the group
-inherits the numbers rather than choosing them.
+inherits those numbers rather than deciding them. The output ceiling is a
+different case and is stated as such — it is the group's own rather than a
+table 3 row, applied at the 8 MiB RFC 0013's serializers, RFC 0014's amplifying
+transforms, and RFC 0016's `regex_replace` already use, so it too is inherited
+rather than chosen. Making any of the four configurable would change the
+parent's table rather than this RFC, which states that defaults are constants
+in the first slice.
 
 ## 9. Recommendation
 

@@ -79,8 +79,13 @@ the roadmap step's own summary names as the thing to avoid.
     guess when the platform cannot decide.
   - Add `files_only` to the existing `glob` **additively**, leaving its
     capability scoping, ordering, and observability contracts unchanged. The
-    current filter becomes `files_only=true`, which is therefore the default
-    and preserves every shipped manifest; `false` is the newly reachable path.
+    current filter is `files_only=true`, so the shipped behaviour is preserved
+    under that setting. **The default is not settled here:** RFC 0006 section
+    8.7's signature reads `files_only=false` while its section 12 promises
+    behaviour-preserving defaults, and the shipped `glob` filters directories
+    unconditionally, so the two cannot both hold. Section 8 records the conflict
+    and roadmap task 6.7.3 decides it. What this RFC fixes is that the question
+    is manifest-visible rather than discovered by a user.
   - Expand `$NAME` and `${NAME}` through the injected environment reader, with
     strict-by-default handling of unset variables.
 - Non-goals:
@@ -105,7 +110,10 @@ helper whose registration is unchanged.
 - `same_file` — true when both paths denote the same filesystem object.
 - `mount` — true when the path is a mount point.
 - `expandvars` — expand `$NAME` and `${NAME}` through the injected reader.
-- `glob(pattern, files_only=false)` — an option on the existing function.
+- `glob(pattern, files_only=...)` — an option on the existing function. RFC
+  0006 section 8.7 spells the default `false`; the shipped filter corresponds to
+  `true`, and the two disagree. The default is decided by roadmap task 6.7.3,
+  not here; see section 8.
 
 This section does not restate any contract. Each helper's argument shape,
 options, rejection conditions, and edge cases are specified in
@@ -266,14 +274,14 @@ acceptable because the Windows path is exercised or explicitly refused.
 RFC 0006 sections 8.6 and 8.7 specify the argument shapes. What follows is when
 a subject or an option value is rejected, each carrying a code from section 5.9.
 
-| Helper        | Accepted subject | Rejects                                                                                           |
-| ------------- | ---------------- | ------------------------------------------------------------------------------------------------- |
-| `exists`      | a string         | `wrong_kind`; `outside_capability`                                                                |
-| `link_exists` | a string         | `wrong_kind`; `outside_capability`                                                                |
-| `same_file`   | two strings      | `wrong_kind`; `outside_capability`; `missing_operand`; `identity_unavailable`                     |
-| `mount`       | a string         | `wrong_kind`; `outside_capability`; `unsupported_platform`                                        |
-| `expandvars`  | a string         | `wrong_kind`; `malformed_reference`; `non_utf8_value`; `unknown_missing_value`; `unknown_dialect` |
-| `glob`        | a string         | `wrong_kind`; `outside_capability`                                                                |
+| Helper        | Accepted subject | Rejects                                                                                                               |
+| ------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `exists`      | a string         | `wrong_kind`; `outside_capability`                                                                                    |
+| `link_exists` | a string         | `wrong_kind`; `outside_capability`                                                                                    |
+| `same_file`   | two strings      | `wrong_kind`; `outside_capability`; `missing_operand`; `identity_unavailable`                                         |
+| `mount`       | a string         | `wrong_kind`; `outside_capability`; `unsupported_platform`                                                            |
+| `expandvars`  | a string         | `wrong_kind`; `malformed_reference`; `non_utf8_value`; `unknown_missing_value`; `unknown_dialect`; `output_too_large` |
+| `glob`        | a string         | `wrong_kind`; `outside_capability`; `match_limit`                                                                     |
 
 Four decisions this group adds:
 
