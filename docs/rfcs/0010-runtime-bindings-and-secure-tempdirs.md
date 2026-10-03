@@ -817,6 +817,22 @@ command:
 The compiler's standard error feeds the normalizer. Its standard output is
 captured separately and commits only if the complete pipeline succeeds.
 
+### 11.4 Reject an untrusted absolute path
+
+```yaml
+command:
+  - invoke: untrusted-tool print-directory
+    stdout:
+      env: DIRECTORY
+  - invoke: inspect
+    cwd:
+      env: DIRECTORY
+```
+
+If `DIRECTORY` contains `/tmp/outside` or an absolute Windows path, the second
+command fails before spawn because the text binding carries no external
+directory capability.
+
 ### 11.5 Distinguish ephemeral and named standard-output capture
 
 RFC 0001 section 12.3 defines `capture_stdout: LIMIT` as a bounded ephemeral
@@ -848,22 +864,6 @@ protocol.
 [ADR-043](../adr-043-consolidated-structured-command-execution-contract.md)
 records the distinction and roadmap task 13.1.5 implements the ephemeral form
 while 14.1.2 implements the named one.
-
-### 11.4 Reject an untrusted absolute path
-
-```yaml
-command:
-  - invoke: untrusted-tool print-directory
-    stdout:
-      env: DIRECTORY
-  - invoke: inspect
-    cwd:
-      env: DIRECTORY
-```
-
-If `DIRECTORY` contains `/tmp/outside` or an absolute Windows path, the second
-command fails before spawn because the text binding carries no external
-directory capability.
 
 ## 12. Execution IR amendment
 
