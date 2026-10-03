@@ -353,10 +353,8 @@ The change is additive:
 
 RFC 0001 already reserves an additive manifest-format minor version,
 provisionally `1.1.0`, for structured command mappings. Named shell selection
-ships as part of that not-yet-implemented mapping schema and does not require a
-second version increment. If structured command mappings ship before this
-amendment, the implementation must allocate the next additive minor version
-instead.
+ships as part of that mapping schema, not as a separate syntax generation, and
+does not require a second version increment.
 
 [ADR-043](../adr-043-consolidated-structured-command-execution-contract.md)
 consolidates that allocation: `1.1.0` is reserved for the next mapping schema,
