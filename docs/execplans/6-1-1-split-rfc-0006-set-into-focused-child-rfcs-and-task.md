@@ -1764,7 +1764,34 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - [ ] `EP-M9` RFC 0019, encoding, identity, and formatting (step 6.8).
 - [ ] `EP-M10` RFC 0020, date and time conversion (step 6.9).
 - [ ] `EP-M11` Reconcile, retarget roadmap citations, run all gates, mark
-  roadmap 6.1.1 done.
+  roadmap 6.1.1 done. **Reconnaissance recorded 2026-10-03 while blocked on the
+  escalation, so the milestone starts from a scoped list rather than a
+  search.** The acceptance criterion is machine-checkable and currently reads
+  `coverage map: 5 of 8 capability groups written; 3 remaining` — the target is
+  `0 remaining`, printed by the same suite, so `EP-M11` has a pass/fail signal
+  rather than a judgement call. The three unwritten children's scopes are
+  already fixed in table 16 and need no re-derivation: 0018 owns `8.7` except
+  `abs` plus `8.6` only `expandvars`, with `glob` optioned; 0019 owns `8.9`;
+  0020 owns `8.10`.
+
+  **The roadmap retargeting is mostly done, and the residue is precisely the
+  three unwritten children.** Sweeping `docs/roadmap.md` for `§8.N` citations
+  and keeping only those with no child RFC reference within the following three
+  lines leaves 20 hits, but 17 of them are false positives of the sweep or
+  belong to other documents' sections: 16 are the steps 6.7, 6.8, and 6.9 that
+  the unwritten children own (`8.7` at lines 1190, 1193, 1208; `8.6` at 1214;
+  `8.9` at 1229, 1233, 1241, 1249, 1261, 1267, 1274; `8.10` at 1284, 1288,
+  1297), and three are `RFC 0010`/`RFC 0029` **section 8**, which is a
+  different document's section 8 and not this survey's. The remaining three are
+  in-step prose rather than `See` citations — line 977 (an in-line example of
+  `8.2`'s semantics), line 1079 (a `8.3` ordering rule stated as a constraint),
+  and line 1190's lead sentence (the 6.7 step summary). So retargeting is
+  **not** a 43-site mechanical edit: every delivered step already carries its
+  child reference, and the work is the three unwritten children's steps, which
+  `EP-M8`–`EP-M10` produce. The `§6.N` citations stay untouched throughout —
+  the split moves *section 8* ownership, not section 6. Line numbers are as at
+  `9ed280e9` and must be re-derived before use, since the plan's own rule is
+  that a figure belongs to a revision.
 
 - [x] (2026-10-01) **CodeRabbit reviewed `bc80f294` and raised six findings; all
   six were upheld, one carried a wrong remedy, and one further defect was found
