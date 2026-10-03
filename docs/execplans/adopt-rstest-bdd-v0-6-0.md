@@ -223,6 +223,20 @@ the conflict in `Decision log` before proceeding.
   seconds before that file's last write. Re-running `check-fmt` there failed
   for real (`+7 -7`, exit 2), which `make fmt` then fixed as a pure wrapping
   artefact. Recorded under `#### Final sweep on the delivered revision`.
+- [x] (2026-10-03) Re-read the rebase boundary after #805 reported
+  `CONFLICTING`/`DIRTY`, which suppresses every workflow and explained the
+  absent CI on `8bcba867`. The local `origin/main` was stale at `48d4a596`
+  while the remote read `6b01bb65`, which is why an earlier `merge-tree` check
+  had reported the merge clean; the fetched ref, `git ls-remote`, and the pull
+  request's `baseRefOid` then agreed on `fce1a746`.
+- [x] (2026-10-03) Rebase onto `fce1a746` and resolve the two conflicts that
+  the module reorganisation created, keeping this branch's hoisted emitters and
+  taking main's relocated module paths. Replay touched 26 commits; the
+  range-diff maps 25 with `=` and exactly one — the hoisting commit — with `!`.
+- [x] (2026-10-03) Confirm no dependency manifest moved on the target side
+  between the old merge base and the new one, so no lock-file rebuild was
+  needed, and check the lock file against the manifests with
+  `cargo metadata --locked --offline` rather than assuming agreement.
 
 ## Surprises & discoveries
 
@@ -1784,3 +1798,65 @@ on the same line) before restoring it. The lesson matches the one already
 recorded for `Format`: an instruction that names a gate subset describes a
 floor, not a ceiling, and the subset's complement has to be run deliberately or
 named as uncovered.
+
+2026-10-03 — third rebase, and the first that had anything to replay. The
+boundary moved twice while the previous delivery was being validated. The
+second rebase had recorded `origin/main` as `84447f0e` and concluded no replay
+was warranted; that conclusion was sound when it was reached and stale by the
+time the push landed, because the target then advanced to `6b01bb65` and again
+to `fce1a746` (*Group prefix-named modules under directory modules*, #811/#813
+— 408 files, 4147 insertions, 264 renames). The signal that the earlier
+conclusion had expired was the pull request itself: #805 reported
+`"mergeable":"CONFLICTING"` and `"mergeStateStatus":"DIRTY"`, and a conflicted
+pull request dispatches no workflows at all, which is why `8bcba867` sat with a
+skipped `dependabot-automerge` run and no CI. Had the boundary been trusted
+rather than re-read, the branch would have waited indefinitely for checks that
+GitHub never intended to run.
+
+Re-reading it was the whole lesson. A stale remote-tracking ref is
+indistinguishable from a current one by inspection — the local `origin/main`
+read `48d4a596` throughout while the remote read `6b01bb65`, and the worktree
+shares its bare repository with roughly two dozen sibling worktrees, so a
+conclusion about the boundary is only ever as fresh as the fetch behind it.
+`git merge-tree --write-tree` against the stale ref reported a clean merge;
+against the fetched ref it reported exit 1 with conflicts in two files, and the
+pull request's own `baseRefOid` corroborated the second reading. The boundary
+was confirmed from three independent sources before the rebase began: the
+fetched ref, `git ls-remote` over SSH, and the `baseRefOid` field of the pull
+request. Both conflicting files, `src/manifest/env/reader.rs` and
+`src/runner/process/ninja/program.rs`, were files this branch had edited and
+`fce1a746` had renamed, so neither conflict came from a competing change of
+intent.
+
+Both were resolved the same way, and the resolution follows the instruction to
+preserve this branch's purpose while taking main's improvement. Each conflict
+was a pure three-way collision between a rename and an edit inside the renamed
+file. In `src/manifest/env/reader.rs` the branch had replaced two inline
+`tracing::debug!` lines with a call to the hoisted
+`debug_env_lookup_fallback_used()`; main had moved `env_reader.rs` to
+`env/reader.rs` and renamed the `env_telemetry` module to `telemetry`. The
+resolution keeps the hoisted call and takes main's path, and the result is
+corroborated by the file itself: the merged text already imports
+`use super::telemetry::{self, record_env_lookup};` and the five other outcome
+constants in the file already read `telemetry::OUTCOME_*`, so the two
+`env_telemetry::` tokens inside the conflict block were the last surviving
+spelling of the old module name anywhere in the tree. In
+`src/runner/process/ninja/program.rs`, main moved the file a directory deeper
+and adjusted the import depth to `super::super::super::`; the branch had added
+`Utf8Path` to the `camino` import for its debug helper. The resolution takes
+main's depth and the branch's wider import, both of which are required: the
+merged file already uses `Utf8Path` at the helper's signature, and the
+constants live in `src/runner/mod.rs` three levels up.
+
+The replay touched 26 commits and the range-diff is the evidence that nothing
+else moved: 25 map with `=`, and exactly one — the hoisting commit — shows `!`,
+precisely the commit whose edits had to land inside main's renamed files.
+`git rev-list --left-right --count origin/main...HEAD` reads `0 26`, so the
+branch now contains the whole target, and the diff against the new base is 52
+files. Neither side had touched a dependency manifest between the old merge
+base and `fce1a746`: `Cargo.lock` and `Cargo.toml` show `main-changed=0`,
+`branch-changed=1`, so no lock-file rebuild was needed and none was performed —
+the rebase's `--autostash` was disabled and the tree was confirmed empty before
+and after. The lock file's consistency with the manifests was then checked
+rather than assumed, with `cargo metadata --locked --offline`, which fails if
+the two disagree; it exited 0.
