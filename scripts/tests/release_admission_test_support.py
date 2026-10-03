@@ -155,9 +155,9 @@ trace, and output sinks configured:
 import dataclasses
 
 from release_admission_test_harness import (
-    BASH_PATH,
     GITHUB_REPOSITORY,
     METRICS_VALIDATOR,
+    PYTHON_PATH,
     REVISION,
     SCRIPT_PATH,
     _run_gate,
@@ -171,10 +171,10 @@ from release_admission_test_records import (
 )
 
 __all__ = (
-    "BASH_PATH",
     "CANARY_BY_OPERATION",
     "GITHUB_REPOSITORY",
     "METRICS_VALIDATOR",
+    "PYTHON_PATH",
     "REVISION",
     "SCRIPT_PATH",
     "FailureCase",

@@ -260,6 +260,7 @@ test-windows-msi-release-rank: ## Validate Windows MSI release-rank parsing
 test-release-admission: ## Validate the release-admission runtime contract
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with pytest==9.0.2 --with hypothesis==6.151.9 \
+		--with 'cmd-mox==0.2.0' --with 'cuprum==0.1.0' --with 'cyclopts==4.25.3' \
 		python -m pytest scripts/tests/test_release_admission_metrics.py \
 		scripts/tests/test_release_admission_metric_failures.py \
 		scripts/tests/test_release_admission_metric_boundedness.py -c /dev/null \

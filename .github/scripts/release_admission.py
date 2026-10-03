@@ -129,8 +129,11 @@ def run() -> int:
             admission.run_operations()
         return admission.finish()
 
-    app()
-    return 0
+    # Cyclopts' default result action is ``print_non_int_return_int_as_exit_code``,
+    # which returns an integer result unchanged. Dropping it here would make
+    # every enforced failure exit ``0``, which is the one thing the shell's
+    # ``set -e`` semantics must survive the port intact.
+    return typ.cast("int", app())
 
 
 if __name__ == "__main__":

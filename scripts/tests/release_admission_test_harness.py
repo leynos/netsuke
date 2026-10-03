@@ -18,19 +18,18 @@ import importlib.util
 import json
 import os
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script boundary is under test.
+import sys
 import typing as typ
 from pathlib import Path
 
 from release_admission_test_fakes import write_fake_commands
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT_PATH = (
-    REPO_ROOT / ".github" / "scripts" / "require-release-admission-canaries.sh"
-)
+SCRIPT_PATH = REPO_ROOT / ".github" / "scripts" / "release_admission.py"
+PYTHON_PATH = Path(sys.executable)
 METRICS_VALIDATOR_PATH = (
     REPO_ROOT / "tests" / "workflow_contracts" / "release_admission_metrics.py"
 )
-BASH_PATH = Path("/usr/bin/bash")
 REVISION = "a" * 40
 GITHUB_REPOSITORY = "leynos/netsuke"
 
@@ -64,11 +63,6 @@ class MetricsValidator(typ.Protocol):
         ----------
         records
             Decoded metric records to validate.
-
-        Returns
-        -------
-        None
-            The method returns after all records satisfy the contract.
         """
 
     def parse_traces(self, lines: list[str]) -> list[dict[str, object]]:
@@ -92,11 +86,6 @@ class MetricsValidator(typ.Protocol):
         ----------
         records
             Decoded trace records to validate.
-
-        Returns
-        -------
-        None
-            The method returns after all records satisfy the contract.
         """
 
 
@@ -115,7 +104,9 @@ def load_metrics_validator() -> MetricsValidator:
 
     Notes
     -----
-    File loading preserves one validator contract without package installation.
+    File loading preserves one validator contract without package installation,
+    and keeps the record schema shared with the workflow-contract tests rather
+    than restated here.
     """
     specification = importlib.util.spec_from_file_location(
         "release_admission_metrics_contract", METRICS_VALIDATOR_PATH
@@ -168,7 +159,7 @@ def _run_gate(
     paths = _gate_paths(tmp_path)
     environment = _gate_environment(tmp_path, evidence_state, extra_environment, paths)
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed test target.
-        [str(BASH_PATH), str(SCRIPT_PATH)],
+        [str(PYTHON_PATH), str(SCRIPT_PATH)],
         capture_output=True,
         check=False,
         env=environment,
@@ -202,15 +193,12 @@ def _gate_paths(tmp_path: Path) -> dict[str, Path]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir(parents=True)
     call_log = write_fake_commands(fake_bin)
-    bash_environment = tmp_path / "bash-environment"
-    bash_environment.touch()
     return {
         "fake_bin": fake_bin,
         "call_log": call_log,
         "metrics": tmp_path / "release-admission-metrics.jsonl",
         "trace": tmp_path / "release-admission-traces.jsonl",
         "output": tmp_path / "github-output",
-        "bash_environment": bash_environment,
     }
 
 
@@ -220,7 +208,7 @@ def _gate_environment(
     extra_environment: dict[str, str] | None,
     paths: dict[str, Path],
 ) -> dict[str, str]:
-    """Build an isolated environment for one real shell gate invocation.
+    """Build an isolated environment for one real gate invocation.
 
     Parameters
     ----------
@@ -248,7 +236,6 @@ def _gate_environment(
         "GITHUB_OUTPUT": str(paths["output"]),
         "GITHUB_REPOSITORY": GITHUB_REPOSITORY,
         "GITHUB_SHA": REVISION,
-        "BASH_ENV": str(paths["bash_environment"]),
         "NETSUKE_ADMISSION_CALL_LOG": str(paths["call_log"]),
         "NETSUKE_RELEASE_ADMISSION_EVIDENCE_STATE": evidence_state,
         "NETSUKE_RELEASE_ADMISSION_METRICS_FILE": str(paths["metrics"]),
