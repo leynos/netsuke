@@ -1586,8 +1586,10 @@ set is empty, so reinstating an exception is a deliberate policy change rather
 than an edit; it lists both retired tools in `FORBIDDEN_SOURCE_BUILDS`, checked
 by name because a count of permitted builds is satisfied by adding a tool back
 as a newly permitted entry; and it rejects `cargo install` anywhere in any
-workflow or composite action. `tests/workflow_orthohelp_install.rs` requires
-the release lane to disable binstall's compile strategy, and
+workflow or composite action. `tests/workflow_orthohelp_install.rs` verifies
+release-lane delegation and workflow-level source-install prevention.
+`scripts/tests/test_install_orthohelp.py` asserts that the installer passes
+`--disable-strategies compile` to `cargo binstall`, and
 `tests/workflow_contracts/ci_mdtablefix_installer_test.py` requires both
 formatter lanes to use the shared action at a version no earlier than 0.6.0
 (the first with the `--check --git` modes `make check-fmt` runs), and the
@@ -3000,13 +3002,17 @@ there. Only cargo-orthohelp 0.9.1 and later publish the required assets; see
 [leynos/ortho-config#479][ortho-config-479],
 [leynos/ortho-config#480][ortho-config-480].
 
-Three contracts hold this: `workflow_orthohelp_install.rs` requires the
-disabling flag and rejects any `cargo install` naming the tool,
-`cache_ownership_test.py` lists `cargo-orthohelp` in `FORBIDDEN_SOURCE_BUILDS`
-so a retired exception cannot return as a new one, and
-`sccache_contract_test.py` verifies that the workflow delegates installation to
-`scripts/install_orthohelp.py`. `scripts/tests/test_install_orthohelp.py`
-covers the cache probe before `cargo binstall`.
+Three workflow and cache contracts hold this boundary. The Rust
+`workflow_orthohelp_install.rs` contract verifies the thin script invocation,
+pinned `INPUT_VERSION` and scoped token, ordering after tool provisioning,
+source-install ban, and release-help argument wiring. The
+`sccache_contract_test.py` contract separately requires delegation to the
+tested script and rejects inline `cargo binstall`; `cache_ownership_test.py`
+lists `cargo-orthohelp` in `FORBIDDEN_SOURCE_BUILDS` so a retired exception
+cannot return as a new one. Installer behaviour belongs to
+`scripts/tests/test_install_orthohelp.py`, which covers cache hits, cache
+misses, a missing probe executable, the `cargo binstall` flags, and its exit
+status.
 
 The version is then validated unconditionally, so a stale binary restored from
 the cache cannot pass as the pinned one. The cache key carries both the tool

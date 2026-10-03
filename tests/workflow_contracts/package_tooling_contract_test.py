@@ -38,7 +38,12 @@ def test_build_job_installs_uv_for_all_platforms() -> None:
 
 def test_build_job_does_not_reintroduce_capture_staged_paths() -> None:
     """Keep staged outputs available directly to later workflow steps."""
-    names = [step.get("name") for step in _build_steps()]
+    steps = _build_steps()
+    names = [step.get("name") for step in steps]
+    identifiers = [step.get("id") for step in steps]
     assert "Capture staged paths" not in names, (
         "later steps must consume staged outputs directly"
+    )
+    assert "stage_paths" not in identifiers, (
+        "the removed staged-output copy must not return under a different name"
     )
