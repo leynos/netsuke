@@ -164,7 +164,8 @@ jobs:
           # otherwise archive `target/${BUILD_PROFILE}`. No lane in this
           # repository archives a build tree; sccache owns compiler output.
           cache-provider: external
-          # Off on every platform; see the RUSTC_WRAPPER note above.
+          # Off on every platform; see the job-level "No compiler cache on
+          # any release lane" note above.
           use-sccache: 'false'
 
       - name: Report the glibc floor
