@@ -881,8 +881,8 @@ rather than reusing command escaping.
 
 ## Adding a lint rule
 
-`netsuke check` is driven by a static registry in `src/lint/registry.rs`. The
-[manifest linter design](netsuke-linter-design.md) specifies the model and
+`netsuke check` is driven by a static registry in `src/lint/registry/mod.rs`.
+The [manifest linter design](netsuke-linter-design.md) specifies the model and
 [ADR-042](adr-042-manifest-linting-under-netsuke-check.md) records the
 decisions behind it; this section is the mechanics.
 
@@ -919,12 +919,13 @@ rule set cheap to grow.
    checks the two against each other in both directions and will fail until
    they agree.
 
-Every rule ships three tests at minimum, beside its module: a positive case
-that must fire, a negative case that must not, and a suppression case proving a
-directive silences it. Add the near-miss cases that separate the rule from a
-false positive — a substring that must not match, a construct inside a shell
-quote, a legitimate use of the same syntax — because those are what stop the
-rule being switched off wholesale later.
+Every rule ships three tests at minimum, in its category module's `tests.rs`
+(for example `src/lint/rules/hygiene/tests.rs`): a positive case that must
+fire, a negative case that must not, and a suppression case proving a directive
+silences it. Add the near-miss cases that separate the rule from a false
+positive — a substring that must not match, a construct inside a shell quote, a
+legitimate use of the same syntax — because those are what stop the rule being
+switched off wholesale later.
 
 Rule names are permanent. A retired rule keeps its name reserved and a rule
 whose meaning changes materially takes a new name, because the name is
@@ -959,7 +960,7 @@ rules and policy must remain independent of those concerns.
 
 ### Check-command telemetry
 
-`src/runner/check_telemetry.rs` instruments the complete `netsuke check`
+`src/runner/check/telemetry/mod.rs` instruments the complete `netsuke check`
 command at the runner boundary. `instrument_check` records one
 `netsuke_runner_check_total` counter and one
 `netsuke_runner_check_duration_seconds` histogram for every invocation. Both

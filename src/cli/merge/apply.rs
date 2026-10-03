@@ -108,11 +108,11 @@ fn resolve_check_args(args: &CheckArgs, config: &CheckConfig) -> CheckArgs {
         fail_on: config
             .fail_on
             .clone()
-            .filter(|_| args.fail_on == super::DEFAULT_FAIL_ON)
+            .filter(|_| args.fail_on == super::super::DEFAULT_FAIL_ON)
             .unwrap_or_else(|| args.fail_on.clone()),
         limit: config
             .limit
-            .filter(|_| args.limit == super::DEFAULT_FINDING_LIMIT)
+            .filter(|_| args.limit == super::super::DEFAULT_FINDING_LIMIT)
             .unwrap_or(args.limit),
         explain: args.explain.clone(),
     }

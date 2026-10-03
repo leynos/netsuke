@@ -190,34 +190,36 @@ earlier stages have better provenance.
 ```plaintext
 src/lint/
 ├── mod.rs          public entry point and orchestration
-├── engine.rs       stage execution, ordering, suppression application
+├── engine/         stage execution, ordering, suppression application
 ├── rule.rs         RuleMeta, Category, Stage, the four stage traits, FindingSink
-├── registry.rs     the static rule table and lookup by identifier or category
-├── finding.rs      framework-neutral Finding and presentation data
-├── severity.rs     Severity, FailOn, and their parsing
-├── policy.rs       resolved per-rule severity from selectors
-├── document.rs     the spanned authored document
-├── document_build.rs  saphyr event stream to spanned tree
-├── scalar_span.rs  narrowing scanner-reported scalar spans
-├── resolve.rs      best-effort span resolution for stages 2 and 3
-├── suppress.rs     directive scanning and block scoping
-├── report.rs       bounding, counting, and threshold summaries
+├── registry/       the static rule table and lookup by identifier or category
+├── finding/        framework-neutral Finding and presentation data
+├── severity/       Severity, FailOn, and their parsing
+├── policy/         resolved per-rule severity from selectors
+├── document/       the spanned authored document
+│   └── build/      saphyr event stream to spanned tree
+├── scalar_span/    narrowing scanner-reported scalar spans
+├── resolve/        best-effort span resolution for stages 2 and 3
+├── suppress/       directive scanning and block scoping
+├── report/         bounding, counting, and threshold summaries
 └── rules/          one module per category, rules colocated with their tests
 ```
+
+Each directory module keeps its tests in a `tests.rs` beside its `mod.rs`.
 
 Rules live in per-category modules rather than one file per rule so that a
 category's shared helpers — shell tokenization, path-word matching — stay
 adjacent to the rules that use them, following the repository's
 group-by-feature convention.
 
-`src/lint/finding.rs` is framework-neutral: it owns the linter's finding,
+`src/lint/finding/mod.rs` is framework-neutral: it owns the linter's finding,
 location, and presentation data without depending on a diagnostic or
-publication framework. `src/runner/check_diagnostics.rs` is the runner-owned
+publication framework. `src/runner/check/diagnostics/mod.rs` is the runner-owned
 `miette` adapter that combines those findings with the manifest source for
-human diagnostics. `src/runner/check_documentation.rs` alone owns the published
-rule-reference URL and derives section links from the stable rule names
-retained by the lint domain. Runner output adapters may use this helper; the
-lint domain exposes no public URL API or publication details.
+human diagnostics. `src/runner/check/documentation/mod.rs` alone owns the
+published rule-reference URL and derives section links from the stable rule
+names retained by the lint domain. Runner output adapters may use this helper;
+the lint domain exposes no public URL API or publication details.
 
 ## 4. Source provenance
 
@@ -227,30 +229,31 @@ deserialization discards everything but the values. Positions survive only
 inside `serde_saphyr`'s parse error, and only for the first stage.
 
 The linter therefore reads the source a second time, but not to reinterpret it.
-`document_build.rs` streams the source through `granit_parser::Parser`, the
-parser `serde_saphyr` itself uses and resolved to the same version, which yields
-`(Event, Span)` pairs, and assembles a spanned tree: every scalar, sequence,
-and mapping node carries the byte range it occupies. This is a position index
-over the same bytes `serde_saphyr` consumed, read by the same grammar, not a
-second opinion about their meaning. If the two disagree the manifest did not
-parse, and `netsuke check` reports the parse error instead of running any rule.
+`src/lint/document/build/mod.rs` streams the source through
+`granit_parser::Parser`, the parser `serde_saphyr` itself uses and resolved to
+the same version, which yields `(Event, Span)` pairs, and assembles a spanned
+tree: every scalar, sequence, and mapping node carries the byte range it
+occupies. This is a position index over the same bytes `serde_saphyr` consumed,
+read by the same grammar, not a second opinion about their meaning. If the two
+disagree the manifest did not parse, and `netsuke check` reports the parse
+error instead of running any rule.
 
 Span availability by stage:
 
 - **Stage 1** always has an exact span, because every value a rule inspects is a
   node in the spanned tree.
-- **Stages 2 and 3** resolve spans through `resolve.rs`, which maps a manifest
-  item back to its authored node in two steps. Positional correspondence is
-  used only when a section declares no `foreach` and its expanded length equals
-  its authored length; equal lengths alone are not enough, because a `foreach`
-  over one element keeps the count while changing which item is which.
-  Otherwise the resolver matches on the authored `name` scalar when that scalar
-  is literal. When neither succeeds, the finding is emitted without a span and
-  names the target, rule, or action instead.
+- **Stages 2 and 3** resolve spans through `resolve/mod.rs`, which maps a
+  manifest item back to its authored node in two steps. Positional
+  correspondence is used only when a section declares no `foreach` and its
+  expanded length equals its authored length; equal lengths alone are not
+  enough, because a `foreach` over one element keeps the count while changing
+  which item is which. Otherwise the resolver matches on the authored `name`
+  scalar when that scalar is literal. When neither succeeds, the finding is
+  emitted without a span and names the target, rule, or action instead.
 
 This is deliberately conservative. A wrong span is worse than no span: it sends
 a reader to the wrong line and, because suppression is span-scoped, it would
-let a directive on one target silence a finding about another. `resolve.rs`
+let a directive on one target silence a finding about another. `resolve/mod.rs`
 returns `None` rather than guessing.
 
 ## 5. Rule model
