@@ -4289,11 +4289,13 @@ enforced by an executable contract rather than by reading.
 `tests/rfc_stdlib_coverage_tests`, whose 272 cases derive the accepted and
 forbidden sets from RFC 0006's own section 7 disposition tables and assert that
 each accepted name appears in exactly one child registry and no rejected or
-deferred name appears in any. RFC 0006 section 14.13 prints
-`coverage map: 8 of 8 capability groups written; 0 remaining` — the target the
-milestone was written against, and a decrement from the `5 of 8 … 3 remaining`
-the `EP-M11` reconnaissance recorded. The contract never reads `src/`, so the
-split is verified as a property of the documents, not of an implementation.
+deferred name appears in any. The obligation `COV-4` prints
+`coverage map: 8 of 8 capability groups written; 0 remaining` on a green run —
+the target the milestone was written against, and a decrement from the
+`5 of 8 … 3 remaining` the `EP-M11` reconnaissance recorded. The count comes
+from the map's own `Status` column, which has since moved to eight `written`
+rows. The contract never reads `src/`, so the split is verified as a property
+of the documents, not of an implementation.
 
 **What was built.**
 
