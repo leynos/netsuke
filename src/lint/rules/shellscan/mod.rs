@@ -284,4 +284,6 @@ pub fn leading_word(segment: &str) -> Option<(usize, &str)> {
 }
 
 #[cfg(test)]
+mod proptests;
+#[cfg(test)]
 mod tests;
