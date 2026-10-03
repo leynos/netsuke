@@ -79,6 +79,28 @@ operator, user, and contributor references are easier to find.
 - [rfcs/0013-structured-data-interchange-helpers.md](rfcs/0013-structured-data-interchange-helpers.md):
   First focused child of RFC 0006: the JSON and YAML interchange helpers and
   the cross-cutting contract discharged for them.
+- [rfcs/0014-mapping-and-sequence-transform-helpers.md](rfcs/0014-mapping-and-sequence-transform-helpers.md):
+  Second focused child of RFC 0006: the mapping and sequence transform helpers
+  and the cross-cutting contract discharged for them.
+- [rfcs/0015-ordered-collection-algebra-and-truth-predicates.md](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md):
+  Third focused child of RFC 0006: the ordered set algebra, the bounded
+  combinatorial filters, and the collection and truth predicates.
+- [rfcs/0016-pattern-and-version-predicates.md](rfcs/0016-pattern-and-version-predicates.md):
+  Fourth focused child of RFC 0006: the `netsuke-regex-v1` pattern family, the
+  bounded pattern cache, and the strict version predicate.
+- [rfcs/0017-lexical-path-composition.md](rfcs/0017-lexical-path-composition.md):
+  Fifth focused child of RFC 0006: the `dialect` path parsers, the lexical
+  composition filters, and the pure `abs` test.
+- [rfcs/0018-host-state-predicates-and-environment-expansion.md](rfcs/0018-host-state-predicates-and-environment-expansion.md):
+  Sixth focused child of RFC 0006: the filesystem predicates, the `files_only`
+  option on `glob`, and the environment-expanding filter.
+- [rfcs/0019-encoding-identity-and-formatting-helpers.md](rfcs/0019-encoding-identity-and-formatting-helpers.md):
+  Seventh focused child of RFC 0006: the Base64 and URL codecs, the
+  deterministic UUID derivation, the shell quoter, the comment decorator, the
+  size formatters, and the text digest.
+- [rfcs/0020-date-and-time-conversion-helpers.md](rfcs/0020-date-and-time-conversion-helpers.md):
+  Eighth and final focused child of RFC 0006: the shared conversion-specifier
+  set, the timestamp parser, and the locale-pinned formatter.
 - [rfcs/0007-netsukefile-testing-framework.md](rfcs/0007-netsukefile-testing-framework.md):
   Proposed Netsukefile testing framework: the `netsuke test` command, the YAML
   test dialect, and its mocking model.

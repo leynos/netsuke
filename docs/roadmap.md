@@ -835,7 +835,7 @@ boundary, can carry every later helper, or whether each capability group needs
 its own. Its outcome decides whether steps 6.2 to 6.9 can be reviewed as
 ordinary additions or need individual design passes. See RFC 0006 §§6 and 14.1.
 
-- [ ] 6.1.1. Split the RFC 0006 accepted set into focused child RFCs and
+- [x] 6.1.1. Split the RFC 0006 accepted set into focused child RFCs and
   accompanying roadmap tasks.
   - See RFC 0006 §14 and
     [the execplan](execplans/6-1-1-split-rfc-0006-set-into-focused-child-rfcs-and-task.md).
@@ -962,11 +962,14 @@ See RFC 0006 §8.1, delivered by
 This step answers whether the mapping transforms remove the merge and re-index
 loops that `vars`, `foreach`, and per-entry overrides currently force manifest
 authors to write by hand. Its outcome informs how much of the platform and
-toolchain configuration problem the template layer can own. See RFC 0006 §8.2.
+toolchain configuration problem the template layer can own. See RFC 0006 §8.2,
+delivered by [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md).
 
 - [ ] 6.3.1. Add `combine` with explicit recursion and list policies. Requires
   6.1.2 and 6.1.4.
-  - See RFC 0006 §8.2.
+  - See RFC 0006 §8.2 and
+    [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md) §§5.3,
+    5.8, and 7.
   - Support `recursive` and the `replace`, `keep`, `append`, and `prepend`
     list policies, enumerating them on an unknown one.
   - Preserve first-appearance key order, updating an overridden key in place.
@@ -983,27 +986,35 @@ toolchain configuration problem the template layer can own. See RFC 0006 §8.2.
     `append` and `prepend` policies.
 - [ ] 6.3.2. Add `dict2items` and `items2dict` with an explicit duplicate
   policy. Requires 6.3.1.
-  - See RFC 0006 §8.2.
+  - See RFC 0006 §8.2 and
+    [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md) §§5.7 and
+    5.10.
   - Reject equal `key_name` and `value_name`, and reject missing fields naming
     the element index.
   - Success: `dict2items` followed by `items2dict` is the identity, and a
     duplicate derived key fails by default rather than silently collapsing.
 - [ ] 6.3.3. Add `extract` with explicit missing-value behaviour. Requires
   6.3.2.
-  - See RFC 0006 §8.2.
+  - See RFC 0006 §8.2 and
+    [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md) §5.6.
   - Keep the key as the filter subject so the filter composes with `map`.
   - Reject negative sequence indices, and treat traversal into a
     non-container as an error even when `default` is given.
   - Success: a missing key errors naming the failing step of the path unless
     `default` is given; the filter never yields undefined.
 - [ ] 6.3.4. Add `subelements` and `rekey_on_member`. Requires 6.3.3.
-  - See RFC 0006 §8.2.
+  - See RFC 0006 §8.2 and
+    [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md) §§5.5
+    and 5.6.
   - Keep `skip_missing` scoped to absence only; a value present at the path
     but not a sequence is always an error.
   - Accept sequences only for `rekey_on_member`, rejecting the
     mapping-of-mappings form that silently discards keys.
 - [ ] 6.3.5. Add an end-to-end layered-configuration manifest example.
   Requires 6.3.4.
+  - See
+    [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md) §§5.11
+    and 7.
   - Cover defaults, a platform overlay, and a per-target overlay composed with
     `combine`, `dict2items`, and `extract`.
   - Add the example to
@@ -1017,26 +1028,37 @@ toolchain configuration problem the template layer can own. See RFC 0006 §8.2.
 This step answers whether ordered collection algebra can replace both
 hand-expanded target matrices and Ansible's set-backed filters without
 introducing a single unstable ordering. Its outcome is the strongest test of
-the determinism claim in RFC 0006 §6.3. See RFC 0006 §§8.3 and 8.8.
+the determinism claim in RFC 0006 §6.3. See RFC 0006 §§8.3 and 8.8, delivered by
+[RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md).
 
 - [ ] 6.4.1. Add the ordered set algebra. Requires 6.1.2.
-  - See RFC 0006 §8.3.
+  - See RFC 0006 §8.3 and
+    [RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md)
+    §§5.3, 5.7, and 7.
   - Implement `union`, `intersect`, `difference`, and `symmetric_difference`
     with first-appearance ordering and canonical-key deduplication.
   - Success: property tests show idempotence, the documented ordering, and
     that reordering an input's duplicate positions does not change the result.
 - [ ] 6.4.2. Add the bounded combinatorial filters. Requires 6.1.3.
-  - See RFC 0006 §§6.8 and 8.3.
+  - See RFC 0006 §§6.8 and 8.3 and
+    [RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md)
+    §§5.6 and 5.8.
   - Implement `product`, `combinations`, and `permutations` with checked
     cardinality and the lower ceiling for `permutations`.
+  - Report the computed cardinality and the ceiling as two distinct codes, so
+    an overflowing count does not read as an over-large one.
   - Success: an over-large request fails naming the computed cardinality and
     the ceiling, without allocating the result.
 - [ ] 6.4.3. Add `zip_longest` with a required fill value. Requires 6.4.1.
-  - See RFC 0006 §8.3.
+  - See RFC 0006 §8.3 and
+    [RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md)
+    §§5.6 and 5.9.
   - Omitting `fill_value` is an error, so a silent `none` cannot enter a build
     graph.
 - [ ] 6.4.4. Add the collection and truth predicates. Requires 6.1.2.
-  - See RFC 0006 §8.8.
+  - See RFC 0006 §8.8 and
+    [RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md)
+    §§5.7, 5.8, and 5.10.
   - Implement `any`, `all`, `subset`, `superset`, `contains`, `truthy`, and
     `falsy`.
   - Restrict `convert_bool` to the closed eight-spelling vocabulary, erroring
@@ -1045,6 +1067,9 @@ the determinism claim in RFC 0006 §6.3. See RFC 0006 §§8.3 and 8.8.
     and `contains` is documented against MiniJinja's `in` at both entries.
 - [ ] 6.4.5. Add the matrix-determinism end-to-end suite. Requires 6.4.2 and
   6.4.4.
+  - See
+    [RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md)
+    §§5.3, 5.11, and 7.
   - Compile a representative target matrix built from `product`, the set
     algebra, and `selectattr` with `contains`, twice from the same inputs.
   - Add a property test that holds the logical input order fixed while varying
@@ -1063,11 +1088,13 @@ This step answers whether a coherent, bounded Netsuke regular-expression
 dialect and a strict version predicate can replace the `shell()` calls that
 manifests currently use to inspect `--version` output and filter path lists.
 Its outcome determines whether conditional flag selection can be expressed at
-manifest time. See RFC 0006 §§8.4 and 8.5.
+manifest time. See RFC 0006 §§8.4 and 8.5, delivered by
+[RFC 0016](rfcs/0016-pattern-and-version-predicates.md).
 
 - [ ] 6.5.1. Establish the `netsuke-regex-v1` dialect and the bounded pattern
   cache. Requires 6.1.3 and 6.1.4.
-  - See RFC 0006 §8.4.
+  - See RFC 0006 §8.4 and
+    [RFC 0016](rfcs/0016-pattern-and-version-predicates.md) §§5.3 and 5.8.
   - Add the `regex` dependency, name the supported and unsupported constructs
     in the standard-library guide, and enforce the compiled-pattern size limit
     and least-recently-used cache from RFC 0006 table 3.
@@ -1076,26 +1103,31 @@ manifest time. See RFC 0006 §§8.4 and 8.5.
     failure.
 - [ ] 6.5.2. Add `regex_replace` with dollar-form replacements. Requires
   6.5.1.
-  - See RFC 0006 §8.4.
+  - See RFC 0006 §8.4 and
+    [RFC 0016](rfcs/0016-pattern-and-version-predicates.md) §§5.6 and 5.9.
   - Support `count` and `mandatory_count`, and reject a Python-style `\1` or
     `\g<name>` replacement with a diagnostic pointing at the `$1` form.
   - Success: a replacement pasted from an Ansible playbook fails loudly rather
     than emitting the literal text `\1`.
 - [ ] 6.5.3. Add `regex_search`, `regex_findall`, and `regex_escape`. Requires
   6.5.2.
-  - See RFC 0006 §8.4.
+  - See RFC 0006 §8.4 and
+    [RFC 0016](rfcs/0016-pattern-and-version-predicates.md) §§5.6, 5.7, 5.8,
+    and 5.9.
   - Return `none` for a non-match, keep the `regex_findall` return shape
     dependent only on the arguments, and accept only the `netsuke` escape
     dialect.
   - Success: `regex_findall` returns a sequence of strings whether the pattern
     has zero, one, or several capture groups.
 - [ ] 6.5.4. Add the `match`, `search`, and `regex` tests. Requires 6.5.1.
-  - See RFC 0006 §8.4.
+  - See RFC 0006 §8.4 and
+    [RFC 0016](rfcs/0016-pattern-and-version-predicates.md) §§5.6 and 5.9.
   - Support `match_type` values `search`, `match`, and `fullmatch`,
     enumerating them on an unknown value.
 - [ ] 6.5.5. Add the `version` test over the existing `semver` dependency.
   Requires 6.1.4.
-  - See RFC 0006 §8.5.
+  - See RFC 0006 §8.5 and
+    [RFC 0016](rfcs/0016-pattern-and-version-predicates.md) §§5.9 and 8.
   - Make `operator` required, accept the six symbolic and six mnemonic forms,
     and accept only `semver` for `scheme`.
   - Resolve RFC 0006 §16 question 3 on whether a `v` prefix is tolerated
@@ -1109,17 +1141,20 @@ This step answers whether one uniform `dialect` mechanism can serve
 cross-compilation better than a family of Windows-specific filter names, and
 whether lexical normalization can be offered without weakening the capability
 boundary. Its outcome informs how Netsuke describes any future cross-platform
-surface. See RFC 0006 §8.6.
+surface. See RFC 0006 §8.6, delivered by
+[RFC 0017](rfcs/0017-lexical-path-composition.md).
 
 - [ ] 6.6.1. Add the `dialect` argument and its `host`, `posix`, and `windows`
   path parsers. Requires 6.1.4.
-  - See RFC 0006 §8.6.
+  - See RFC 0006 §8.6 and
+    [RFC 0017](rfcs/0017-lexical-path-composition.md) §§5.2 and 5.5.
   - Extend the existing `basename` and `dirname` filters additively, so
     omitting `dialect` preserves current behaviour.
   - Success: a Unix host parses a Windows path identically to a Windows host,
     with no host-native fallback.
 - [ ] 6.6.2. Add `path_join`, `normpath`, and `splitext`. Requires 6.6.1.
-  - See RFC 0006 §8.6.
+  - See RFC 0006 §8.6 and
+    [RFC 0017](rfcs/0017-lexical-path-composition.md) §§5.6 and 5.9.
   - Reject an absolute component after the first position in `path_join`, and
     reject empty components.
   - Document the single-suffix `splitext` rule against the existing
@@ -1127,17 +1162,20 @@ surface. See RFC 0006 §8.6.
   - Success: `['/safe/root', '/etc/passwd'] | path_join` fails naming the
     index rather than yielding `/etc/passwd`.
 - [ ] 6.6.3. Add `commonpath`, `relpath`, and `splitdrive`. Requires 6.6.2.
-  - See RFC 0006 §8.6.
+  - See RFC 0006 §8.6 and
+    [RFC 0017](rfcs/0017-lexical-path-composition.md) §§5.5 and 5.6.
   - Compare component-wise, reject mixed absolute and relative inputs, and
     reject differing drives or UNC roots under the `windows` dialect.
   - Contrast `relpath` with the stricter existing `relative_to` in the guide.
 - [ ] 6.6.4. Add the `abs` test as a pure lexical predicate. Requires 6.6.1.
-  - See RFC 0006 §8.7.
+  - See RFC 0006 §8.7 and
+    [RFC 0017](rfcs/0017-lexical-path-composition.md) §§5.2 and 8.
   - Resolve RFC 0006 §16 question 2 on the name before registering.
   - Success: `abs` is registered in the read-only manifest-query environment,
     unlike the filesystem predicates in step 6.7.
 - [ ] 6.6.5. Add the combinatorial path-dialect suite. Requires 6.6.3 and
   6.6.4.
+  - See [RFC 0017](rfcs/0017-lexical-path-composition.md) §§5.5 and 5.11.
   - Cross every lexical path helper with all three dialects and both host
     platforms, including drive-relative paths, UNC roots, trailing
     separators, and leading `..` components.
@@ -1149,16 +1187,21 @@ surface. See RFC 0006 §8.6.
 This step answers whether existence probing and environment expansion can be
 added without a second ambient-authority path and without any helper silently
 disappearing from a manifest query. Its outcome is the practical test of the
-capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7.
+capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7, delivered by
+[RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md).
 
 - [ ] 6.7.1. Add the `exists` and `link_exists` tests. Requires 6.1.6.
-  - See RFC 0006 §8.7.
+  - See RFC 0006 §8.7 and
+    [RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md)
+    §§5.4 and 5.11.
   - Route both through the injected `cap_std` workspace handle, and treat a
     path outside the capability boundary as an error rather than `false`.
   - Success: a dangling symbolic link is `false` for `exists` and `true` for
     `link_exists`.
 - [ ] 6.7.2. Add the `same_file` and `mount` tests. Requires 6.7.1.
-  - See RFC 0006 §§6.5 and 8.7.
+  - See RFC 0006 §§6.5 and 8.7 and
+    [RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md)
+    §§5.5 and 5.6.
   - Compare file identity rather than path spelling, and error on a missing
     operand rather than reporting `false`.
   - Qualify `mount` explicitly per platform; an unsupported platform errors
@@ -1167,13 +1210,20 @@ capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7.
     exercised on Unix and Windows continuous integration.
 - [ ] 6.7.3. Add the `files_only` option to the existing `glob` function.
   Requires 6.7.1.
-  - See RFC 0006 §8.7 and
+  - See RFC 0006 §8.7,
+    [RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md)
+    §§5.3, 5.8, and 8, and
     [adr-010-scope-glob-capability-to-literal-prefix.md](adr-010-scope-glob-capability-to-literal-prefix.md).
   - Leave the existing capability scoping, ordering, and observability
     contracts unchanged, and do not introduce a second glob implementation.
+  - Settle RFC 0018 §8's `files_only` default conflict before the option
+    registers, and enforce the 100000-match ceiling section 5.8 assigns to
+    `files_only=false`.
 - [ ] 6.7.4. Add `expandvars` through an injected environment reader. Requires
   6.1.5 and 6.6.1.
-  - See RFC 0006 §8.6 and
+  - See RFC 0006 §8.6,
+    [RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md)
+    §§5.2 and 5.9, and
     [adr-008-environment-seam-taxonomy.md](adr-008-environment-seam-taxonomy.md).
   - Support `missing` values `error`, `empty`, and `preserve`, defaulting to
     `error`, and reject malformed references rather than passing them through.
@@ -1188,11 +1238,14 @@ capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7.
 This step answers whether Netsuke can produce comment banners, encoded
 payloads, quoted shell words, human-readable sizes, and content-derived
 identifiers without either a subprocess or a second quoting implementation. See
-RFC 0006 §8.9.
+RFC 0006 §8.9, delivered by
+[RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md).
 
 - [ ] 6.8.1. Add `b64encode`, `b64decode`, and `urldecode`. Requires 6.1.3 and
   6.1.4.
-  - See RFC 0006 §8.9.
+  - See RFC 0006 §8.9 and
+    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.6,
+    5.9, and 5.11.
   - Add the Base64 dependency, support both alphabets and configurable
     padding, and default `urldecode` to `plus=false` so it round-trips with
     MiniJinja's `urlencode`.
@@ -1200,7 +1253,9 @@ RFC 0006 §8.9.
     round-trip, and invalid input errors naming the offset.
 - [ ] 6.8.2. Add `to_uuid` over a documented Netsuke namespace. Requires
   6.1.4.
-  - See RFC 0006 §8.9.
+  - See RFC 0006 §8.9 and
+    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.3
+    and 5.6.
   - Use the frozen namespace recorded in the RFC, accept an explicit
     `namespace`, and record why UUID version 5 does not fall under the
     `legacy-digests` policy.
@@ -1208,7 +1263,9 @@ RFC 0006 §8.9.
     records both its derivation and its literal value.
 - [ ] 6.8.3. Add `shell_quote` over the existing quoting machinery. Requires
   3.14.8 and 6.1.4.
-  - See RFC 0006 §§8.9 and 13.3.
+  - See RFC 0006 §8.9 and
+    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.5
+    and 5.10.
   - Adopt `shell_quote` as the canonical name that resolves the documented but
     unimplemented `shell_escape` helper, and add the `dialect` argument with
     an enumerated value set.
@@ -1216,24 +1273,33 @@ RFC 0006 §8.9.
     single implementation in `src/shell_word.rs`, so what remains here is the
     wider RFC 0006 dialect set beyond `sh` and `powershell` — `bash` in
     particular, which 3.14.8 deliberately refuses. See
-    [ADR-041](adr-041-canonical-recipe-shell-quoting-surface.md).
+    [ADR-041](adr-041-canonical-recipe-shell-quoting-surface.md). The
+    registry row in RFC 0019 §5.1 records the capability as `New` because the
+    coverage contract classifies a renamed capability as new, not because the
+    implementation is absent.
   - Success: the user guide and the registered surface agree, and no second
     quoting implementation is introduced.
 - [ ] 6.8.4. Add `comment` with a closing-marker guard. Requires 6.1.4.
-  - See RFC 0006 §8.9.
+  - See RFC 0006 §8.9 and
+    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.4
+    and 5.9.
   - Support the three line styles, the two block styles, and an explicit
     `prefix`, emitting no trailing whitespace.
   - Success: a block style whose input already contains the closing marker
     fails, so comment text cannot escape into a generated file as live syntax.
 - [ ] 6.8.5. Add `human_readable` and `human_to_bytes`. Requires 6.1.3.
-  - See RFC 0006 §8.9.
+  - See RFC 0006 §8.9 and
+    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.3
+    and 5.8.
   - Pin locale-independent output, parse case-insensitively, select bits by
     keyword rather than by letter case, and use checked integer arithmetic.
   - Success: overflow and non-integral results error rather than truncating,
     and unknown units are rejected with the valid set enumerated.
 - [ ] 6.8.6. Add `text_hash` without disturbing the existing `hash` contract.
   Requires 6.1.4.
-  - See RFC 0006 §§8.9 and 11.1.
+  - See RFC 0006 §§8.9 and 11.1 and
+    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.6
+    and 5.10.
   - Reuse the existing `legacy-digests` gating for `sha1` and `md5`, and
     register neither `hash_text` nor `checksum`.
   - Success: `hash` continues to hash the file at the supplied path, and the
@@ -1243,11 +1309,13 @@ RFC 0006 §8.9.
 
 This step answers whether timestamp parsing and formatting can be added as pure
 helpers over the existing `now()` value, leaving clock access as the only
-host-observing time operation. See RFC 0006 §8.10.
+host-observing time operation. See RFC 0006 §8.10, delivered by
+[RFC 0020](rfcs/0020-date-and-time-conversion-helpers.md).
 
 - [ ] 6.9.1. Add the shared conversion-specifier set and `strftime`. Requires
   6.1.4.
-  - See RFC 0006 §8.10 and table 12.
+  - See RFC 0006 §8.10 and table 12 and
+    [RFC 0020](rfcs/0020-date-and-time-conversion-helpers.md) §§5.3 and 5.9.
   - Pin the invariant C locale for the name-producing specifiers, and reject
     every specifier outside the accepted set with the supported set
     enumerated.
@@ -1256,11 +1324,18 @@ host-observing time operation. See RFC 0006 §8.10.
   - Success: identical manifests produce identical text on machines with
     different locales.
 - [ ] 6.9.2. Add `to_datetime`. Requires 6.9.1.
-  - See RFC 0006 §8.10.
+  - See RFC 0006 §8.10 and
+    [RFC 0020](rfcs/0020-date-and-time-conversion-helpers.md) §§5.6 and 5.11.
   - Accept `UTC` and fixed offsets for `timezone`, rejecting IANA zone names
     so no time-zone database is required.
   - Success: a property test shows that `to_datetime` followed by `strftime`
     round-trips for every lossless format.
+
+Both filters extend the existing `stdlib.time.*` family rather than founding a
+namespace, and neither observes the clock: only `now` keeps a refusing stub in
+the manifest-query registration. See
+[RFC 0020](rfcs/0020-date-and-time-conversion-helpers.md) §§5.2 and 5.9 and
+[adr-008-environment-seam-taxonomy.md](adr-008-environment-seam-taxonomy.md).
 
 ### 6.10. Decide the deferred candidates on evidence rather than parity
 

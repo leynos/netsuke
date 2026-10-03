@@ -408,8 +408,8 @@ uses `serde_json` with `preserve_order` for the JSON half and the existing
 plus `serde_json_canonicalizer` for `sort_keys=true`'s canonical key. Adding no
 dependency is one reason the group can lead the wave.
 
-Within the RFC set it requires the shared contract RFC 0006 section 14.1's
-"slice 0" describes, which roadmap steps 6.1.3 and 6.1.4 deliver: the
+Within the RFC set, it requires the shared contract that RFC 0006 section
+14.1's "slice 0" describes, which roadmap steps 6.1.3 and 6.1.4 deliver: the
 bounded-parser helper the two parsers share. Sections 14.2, 14.3, 14.4 and 14.9
 are the four that state a slice 0 requirement; sections 14.5 to 14.8 and 14.10
 state none. It requires no other child RFC, and no other child RFC requires it.
