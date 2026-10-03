@@ -476,7 +476,10 @@ check.threshold_exceeded.help = أصلح النتائج المُبلَّغ عن�
 check.summary.counts = نتائج الفحص — أخطاء: { $errors }، تحذيرات: { $warnings }، إرشادات: { $advice }، مكبوتة: { $suppressed }.
 check.summary.clean = لا توجد نتائج.
 check.summary.truncated = { $shown ->
+    [one] يجري عرض نتيجة واحدة؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+    [two] يجري عرض نتيجتين؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
     [few] يجري عرض { $shown } نتائج؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+    [many] يجري عرض { $shown } نتيجةً؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
    *[other] يجري عرض { $shown } نتيجة؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
 }
 check.rule.malformed = المُحدِّد { $selector } غير مكتوب بالصيغة NAME=SEVERITY.

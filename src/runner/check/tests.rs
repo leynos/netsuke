@@ -117,12 +117,15 @@ fn the_truncation_line_states_both_counts() -> Result<()> {
 ///
 /// Polish is included because its `few` category (2-4) is what a
 /// string-typed argument could never reach; English alone would only tell
-/// `one` from `other`.
+/// `one` from `other`. Arabic adds a `two` category, and both of its first two
+/// forms express the count in the noun rather than as a numeral.
 #[rstest]
 #[case::english_one("en-US", 1, "Showing 1 finding;")]
 #[case::english_other("en-US", 2, "Showing 2 findings;")]
 #[case::polish_one("pl", 1, "Pokazano 1 ustalenie;")]
 #[case::polish_few("pl", 2, "Pokazano 2 ustalenia;")]
+#[case::arabic_one("ar", 1, "يجري عرض نتيجة واحدة؛")]
+#[case::arabic_two("ar", 2, "يجري عرض نتيجتين؛")]
 fn the_truncation_line_agrees_with_the_shown_count(
     #[case] locale: &str,
     #[case] limit: usize,
