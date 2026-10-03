@@ -18,6 +18,7 @@ macro_rules! define_keys {
     };
 }
 
+mod check_keys;
 pub mod keys;
 
 /// The locale registry, which lives at the crate root so that it depends on
@@ -38,6 +39,7 @@ static LOCALIZER: OnceLock<RwLock<Arc<dyn Localizer>>> = OnceLock::new();
 fn localizer_storage() -> &'static RwLock<Arc<dyn Localizer>> {
     // Keep the key registry referenced so dead-code lints do not discard it.
     let _ = keys::ALL_KEYS;
+    let _ = check_keys::ALL_KEYS;
     LOCALIZER.get_or_init(|| {
         let default = crate::cli_localization::build_localizer(None);
         RwLock::new(Arc::from(default))
