@@ -1058,9 +1058,12 @@ either side.
   `INPUT_BIN_NAME` select the binary, and `GITHUB_STEP_SUMMARY` identifies the
   summary file. It depends on Cyclopts `>=4.25.3,<5` and Cuprum
   `>=0.1.0,<0.2.0`; see `scripts/tests/test_report_glibc_floor.py`.
-- `release.yml` owns `resolve_wix_extension_version.py`. `INPUT_EVENT_NAME`
-  and `INPUT_EVENT_PATH` describe the GitHub event, and `GITHUB_OUTPUT`
-  identifies the output file. Its only dependency is Cyclopts `>=4.25.3,<5`; see
+- `release.yml` owns `resolve_wix_extension_version.py`.
+  `INPUT_WIX_EXTENSION_VERSION` carries the requested version, and
+  `GITHUB_OUTPUT` identifies the output file. The workflow supplies `7` for an
+  omitted or blank value. The Python resolver rejects an unexpectedly blank
+  input and rejects carriage returns or line feeds before writing the resolved
+  version. Its only dependency is Cyclopts `>=4.25.3,<5`; see
   `scripts/tests/test_resolve_wix_extension_version.py`.
 
 ### Linux glibc floor
@@ -1118,12 +1121,11 @@ the shared action passes it to the pinned WiX compiler unchanged.
 
 Callers of `.github/workflows/release.yml` may set the `wix-extension-version`
 `workflow_call` input to select the `WixToolset.UI.wixext` version. The input
-defaults to `7`, and omitted or empty values resolve to `7` before the value
-reaches the shell step. The metadata job exposes the resolved value as
-`wix_extension_version`; `build-windows` passes that output to
-`build-and-package.yml` as `wix-extension-version`. The shell step rejects an
-unexpectedly empty resolved environment value. It also rejects values
-containing carriage returns or line feeds before writing the output.
+defaults to `7`, and the workflow expression supplies `7` when the value is
+omitted or empty. The Python resolver rejects an unexpectedly empty value and
+values containing carriage returns or line feeds. The metadata job exposes the
+resolved value as `wix_extension_version`; `build-windows` passes that output to
+`build-and-package.yml` as `wix-extension-version`.
 
 The merge gate's dedicated `windows-msi-upgrade` job runs on `windows-latest`.
 It uses the local `.github/actions/windows-msi-upgrade-validation` adapter for
@@ -2994,15 +2996,17 @@ on a miss, runs `cargo binstall` with `--disable-strategies compile`; the
 workflow does not fall back to compiling the tool from source. The cache entry
 owns `~/.cargo/bin`, and its key includes the tool version and pinned
 `rust-build-release` revision because that action provisions `cargo-binstall`
-there. Only cargo-orthohelp 0.9.1 and later publish the required assets (
-[leynos/ortho-config#479][ortho-config-479],
+there. Only cargo-orthohelp 0.9.1 and later publish the required assets
+([leynos/ortho-config#479][ortho-config-479],
 [leynos/ortho-config#480][ortho-config-480]).
 
 Three contracts hold this: `workflow_orthohelp_install.rs` requires the
 disabling flag and rejects any `cargo install` naming the tool,
 `cache_ownership_test.py` lists `cargo-orthohelp` in `FORBIDDEN_SOURCE_BUILDS`
 so a retired exception cannot return as a new one, and
-`sccache_contract_test.py` holds the probe before the installer.
+`sccache_contract_test.py` verifies that the workflow delegates installation to
+`scripts/install_orthohelp.py`. `scripts/tests/test_install_orthohelp.py`
+covers the cache probe before `cargo binstall`.
 
 The version is then validated unconditionally, so a stale binary restored from
 the cache cannot pass as the pinned one. The cache key carries both the tool

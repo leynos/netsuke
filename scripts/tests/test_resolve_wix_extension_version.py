@@ -1,6 +1,5 @@
-"""Test WiX version resolution and GitHub output export."""
+"""Test WiX version validation and GitHub output export."""
 
-import json
 import typing as typ
 
 import pytest
@@ -9,163 +8,68 @@ import resolve_wix_extension_version as resolver
 if typ.TYPE_CHECKING:
     from pathlib import Path
 
+INVALID_VERSION_CASES = (
+    pytest.param(("", "WIX_EXTENSION_VERSION must be set"), id="empty"),
+    pytest.param(
+        ("7\nvalue=8", "WIX_EXTENSION_VERSION must not contain line breaks"),
+        id="line-feed",
+    ),
+    pytest.param(
+        ("7\rvalue=8", "WIX_EXTENSION_VERSION must not contain line breaks"),
+        id="carriage-return",
+    ),
+)
 
-def test_push_uses_the_default_extension_version(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+
+@pytest.mark.parametrize("version", ["7", "8.1.2"])
+def test_exports_version_and_reports_it(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    version: str,
 ) -> None:
-    """A push uses the same fallback as an empty reusable-workflow input."""
-    event_path = tmp_path / "event.json"
-    event_path.write_text("{}", encoding="utf-8")
+    """Append the supplied version and report the value to the workflow log."""
     output_path = tmp_path / "github-output"
     output_path.write_text("existing=value\n", encoding="utf-8")
-    monkeypatch.setenv("INPUT_EVENT_NAME", "push")
-    monkeypatch.setenv("INPUT_EVENT_PATH", str(event_path))
+    monkeypatch.setenv("INPUT_WIX_EXTENSION_VERSION", version)
     monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
 
     resolver.app([], result_action="return_value")
 
-    assert output_path.read_text(encoding="utf-8") == "existing=value\nvalue=7\n", (
-        "the default must append without replacing prior workflow output"
-    )
+    assert output_path.read_text(encoding="utf-8") == (
+        f"existing=value\nvalue={version}\n"
+    ), "the workflow output must append without replacing existing values"
+    assert capsys.readouterr().out == (
+        f"Resolved WiX extension version: {version}\n"
+    ), "the workflow log must report the resolved version"
 
 
-def test_workflow_call_exports_the_requested_extension_version(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """A configured reusable-workflow input reaches the output file."""
-    event_path = tmp_path / "event.json"
-    event_path.write_text(
-        json.dumps({"inputs": {"wix-extension-version": "8.1.2"}}),
-        encoding="utf-8",
-    )
-    output_path = tmp_path / "github-output"
-    monkeypatch.setenv("INPUT_EVENT_NAME", "workflow_call")
-    monkeypatch.setenv("INPUT_EVENT_PATH", str(event_path))
-    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
-
-    resolver.app([], result_action="return_value")
-
-    assert output_path.read_text(encoding="utf-8") == "value=8.1.2\n", (
-        "the configured extension version must be exported"
-    )
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {},
-        {"inputs": None},
-        {"inputs": {}},
-        {"inputs": {"wix-extension-version": "null"}},
-    ],
-    ids=["missing-inputs", "null-inputs", "missing-version", "null-sentinel"],
-)
-def test_workflow_call_without_a_version_uses_the_default(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, payload: dict[str, object]
-) -> None:
-    """Missing inputs, keys, or the null sentinel use the default version."""
-    event_path = tmp_path / "event.json"
-    event_path.write_text(json.dumps(payload), encoding="utf-8")
-    output_path = tmp_path / "github-output"
-    monkeypatch.setenv("INPUT_EVENT_NAME", "workflow_call")
-    monkeypatch.setenv("INPUT_EVENT_PATH", str(event_path))
-    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
-
-    resolver.app([], result_action="return_value")
-
-    assert output_path.read_text(encoding="utf-8") == "value=7\n", (
-        "missing inputs or the null sentinel must use the default version"
-    )
-
-
-@pytest.mark.parametrize(
-    ("payload", "expected_error", "message"),
-    [
-        pytest.param(
-            {"inputs": {"wix-extension-version": []}},
-            resolver.ExtensionVersionShapeError,
-            "wix-extension-version must be a JSON string",
-            id="version-list",
-        ),
-        pytest.param(
-            {"inputs": {"wix-extension-version": {}}},
-            resolver.ExtensionVersionShapeError,
-            "wix-extension-version must be a JSON string",
-            id="version-object",
-        ),
-        pytest.param(
-            {"inputs": {"wix-extension-version": 42}},
-            resolver.ExtensionVersionShapeError,
-            "wix-extension-version must be a JSON string",
-            id="version-number",
-        ),
-        pytest.param(
-            {"inputs": {"wix-extension-version": False}},
-            resolver.ExtensionVersionShapeError,
-            "wix-extension-version must be a JSON string",
-            id="version-boolean",
-        ),
-        pytest.param(
-            {"inputs": []},
-            resolver.WorkflowInputsShapeError,
-            "workflow inputs must be a JSON object",
-            id="inputs-list",
-        ),
-        pytest.param(
-            {"inputs": "not-a-mapping"},
-            resolver.WorkflowInputsShapeError,
-            "workflow inputs must be a JSON object",
-            id="inputs-string",
-        ),
-        pytest.param(
-            {"inputs": 42},
-            resolver.WorkflowInputsShapeError,
-            "workflow inputs must be a JSON object",
-            id="inputs-number",
-        ),
-        pytest.param(
-            [],
-            resolver.WorkflowEventShapeError,
-            "GitHub event payload must be a JSON object",
-            id="event-list",
-        ),
-        pytest.param(
-            "not-an-object",
-            resolver.WorkflowEventShapeError,
-            "GitHub event payload must be a JSON object",
-            id="event-string",
-        ),
-        pytest.param(
-            42,
-            resolver.WorkflowEventShapeError,
-            "GitHub event payload must be a JSON object",
-            id="event-number",
-        ),
-    ],
-)
-def test_workflow_call_rejects_invalid_payload_shapes(
+@pytest.mark.parametrize("case", INVALID_VERSION_CASES)
+def test_rejects_values_that_cannot_be_written_safely(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
     tmp_path: Path,
-    payload: object,
-    expected_error: type[ValueError],
-    message: str,
+    case: tuple[str, str],
 ) -> None:
-    """Reject malformed event and input values with a clear diagnostic."""
-    event_path = tmp_path / "event.json"
-    event_path.write_text(json.dumps(payload), encoding="utf-8")
+    """Reject empty and multiline values before writing workflow output."""
+    version, message = case
+    output_path = tmp_path / "github-output"
+    monkeypatch.setenv("INPUT_WIX_EXTENSION_VERSION", version)
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
 
-    with pytest.raises(expected_error, match=message):
-        resolver.resolve_extension_version("workflow_call", str(event_path))
-
-
-def test_workflow_call_rejects_an_invalid_event_file(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Malformed runner event JSON fails rather than silently using a default."""
-    event_path = tmp_path / "event.json"
-    event_path.write_text("{", encoding="utf-8")
-    monkeypatch.setenv("INPUT_EVENT_NAME", "workflow_call")
-    monkeypatch.setenv("INPUT_EVENT_PATH", str(event_path))
-    monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "github-output"))
-
-    with pytest.raises(json.JSONDecodeError):
+    with pytest.raises(SystemExit) as error:
         resolver.app([], result_action="return_value")
+
+    assert error.value.code == 1, "an invalid version must fail the workflow step"
+    assert capsys.readouterr().err == f"{message}\n", (
+        "the resolver must report the validation failure"
+    )
+    assert not output_path.exists(), "invalid input must not create workflow output"
+
+
+@pytest.mark.parametrize("case", INVALID_VERSION_CASES)
+def test_version_validation_reports_specific_errors(case: tuple[str, str]) -> None:
+    """Expose distinct diagnostics for empty and multiline values."""
+    version, message = case
+    with pytest.raises(resolver.ExtensionVersionError, match=message):
+        resolver.resolve_extension_version(version)

@@ -414,6 +414,9 @@ tasks. Callers must inspect each result individually.
 is cancelled, for example by a timeout or external signal, the coroutine raises
 `CancelledError` as normal. Authors must not catch `CancelledError` silently.
 
+This example reuses `asyncio`, `Program`, `sh`, and `CATALOGUE` from the
+preceding async example.
+
 ```python
 async def check_with_timeout():
     cargo = sh.make(Program("cargo"), catalogue=CATALOGUE)

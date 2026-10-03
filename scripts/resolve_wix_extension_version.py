@@ -3,123 +3,79 @@
 # requires-python = ">=3.14"
 # dependencies = ["cyclopts>=4.25.3,<5"]
 # ///
-"""Resolve and export the WiX extension version for a release workflow."""
+"""Resolve and export the WiX extension version supplied by the workflow."""
 
-import json
 import pathlib
+import sys
 import typing as typ
 
 import cyclopts
 from cyclopts import App, Parameter
 
-
-class WorkflowEventShapeError(ValueError):
-    """Report a GitHub event payload that is not a JSON object."""
-
-    def __init__(self) -> None:
-        """Initialize the error for a non-object event payload."""
-        super().__init__("GitHub event payload must be a JSON object")
-
-
-class WorkflowInputsShapeError(ValueError):
-    """Report workflow-call inputs that are not JSON objects."""
-
-    def __init__(self) -> None:
-        """Initialize the error for non-object workflow inputs."""
-        super().__init__("workflow inputs must be a JSON object")
-
-
-class ExtensionVersionShapeError(ValueError):
-    """Report a WiX extension version that is not a JSON string."""
-
-    def __init__(self) -> None:
-        """Initialize the error for a non-string extension version."""
-        super().__init__("wix-extension-version must be a JSON string")
-
-
-DEFAULT_EXTENSION_VERSION = "7"
 app = App(config=cyclopts.config.Env("INPUT_", command=False))
 
 
-def load_workflow_call_inputs(event_path: str) -> dict[str, object]:
-    """Return workflow-call inputs from the event file.
-
-    Keep this parser in the release script because it owns this event shape.
-
-    Returns
-    -------
-    dict[str, object]
-        The workflow inputs, or an empty mapping when they are absent.
-
-    Raises
-    ------
-    WorkflowEventShapeError
-        If the event payload is not a JSON object.
-    WorkflowInputsShapeError
-        If workflow-call inputs are not a JSON object.
-    """
-    payload = json.loads(pathlib.Path(event_path).read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise WorkflowEventShapeError
-
-    inputs = payload.get("inputs")
-    if inputs is None:
-        return {}
-    if not isinstance(inputs, dict):
-        raise WorkflowInputsShapeError
-    return inputs
+class ExtensionVersionError(ValueError):
+    """Represent an invalid WiX extension version supplied by a workflow."""
 
 
-def resolve_extension_version(event_name: str, event_path: str) -> str:
-    """Resolve the requested extension version, falling back to version 7.
+class EmptyExtensionVersionError(ExtensionVersionError):
+    """Report a WiX extension version that is empty."""
+
+    def __init__(self) -> None:
+        """Initialize the error with the empty-version diagnostic."""
+        super().__init__("WIX_EXTENSION_VERSION must be set")
+
+
+class LineBreakExtensionVersionError(ExtensionVersionError):
+    """Report a WiX extension version that contains a line break."""
+
+    def __init__(self) -> None:
+        """Initialize the error with the line-break diagnostic."""
+        super().__init__("WIX_EXTENSION_VERSION must not contain line breaks")
+
+
+def resolve_extension_version(wix_extension_version: str) -> str:
+    """Validate and return the requested extension version.
+
+    >>> resolve_extension_version("8.1.2")
+    '8.1.2'
 
     Returns
     -------
     str
-        The configured extension version or the default.
+        The unchanged requested extension version.
 
     Raises
     ------
-    ExtensionVersionShapeError
-        If the configured extension version is not a JSON string.
-
-    Examples
-    --------
-    >>> resolve_extension_version("push", "unused")
-    '7'
+    EmptyExtensionVersionError
+        If the version is empty.
+    LineBreakExtensionVersionError
+        If the version contains a carriage return or line feed.
     """
-    if event_name != "workflow_call":
-        return DEFAULT_EXTENSION_VERSION
-
-    inputs = load_workflow_call_inputs(event_path)
-    configured_version = inputs.get("wix-extension-version")
-    if configured_version is None:
-        version = ""
-    elif isinstance(configured_version, str):
-        version = configured_version
-    else:
-        raise ExtensionVersionShapeError
-
-    return DEFAULT_EXTENSION_VERSION if version in {"", "null"} else version
+    if not wix_extension_version:
+        raise EmptyExtensionVersionError
+    if "\n" in wix_extension_version or "\r" in wix_extension_version:
+        raise LineBreakExtensionVersionError
+    return wix_extension_version
 
 
 @app.default
 def export_extension_version(
     *,
-    event_name: typ.Annotated[str, Parameter(required=True)],
-    event_path: typ.Annotated[str, Parameter(required=True)],
+    wix_extension_version: typ.Annotated[str, Parameter(required=True)],
     output_path: typ.Annotated[str, Parameter(env_var="GITHUB_OUTPUT", required=True)],
 ) -> None:
-    """Write the resolved WiX extension version to the workflow output file.
+    """Validate the version, append it to the workflow output, and report it."""
+    try:
+        version = resolve_extension_version(wix_extension_version)
+    except ExtensionVersionError as error:
+        print(error, file=sys.stderr)
+        raise SystemExit(1) from error
 
-    Examples
-    --------
-    With ``INPUT_EVENT_NAME=push`` and ``GITHUB_OUTPUT=/tmp/output``, append
-    ``value=7`` to that output file.
-    """
-    version = resolve_extension_version(event_name, event_path)
     with pathlib.Path(output_path).open("a", encoding="utf-8") as output:
         output.write(f"value={version}\n")
+    print(f"Resolved WiX extension version: {version}")
 
 
 if __name__ == "__main__":

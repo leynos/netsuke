@@ -233,6 +233,7 @@ doctest: check-build-tools ## Run doctests, which cargo-nextest cannot execute
 test-kani-mutations: check-build-tools ## Compile each mutation patch's patched tree under the Kani configuration
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test kani_mutation_evidence_tests --all-features --run-ignored ignored-only $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
+# Keep the exact Cuprum/Cyclopts pins aligned with scripts/kani_proof_scope.py's PEP 723 pins.
 test-workflow-contracts: ## Validate GitHub Actions workflow contracts
 	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' \

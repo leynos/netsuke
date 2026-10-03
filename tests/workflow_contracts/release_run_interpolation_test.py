@@ -275,7 +275,7 @@ def test_baseline_workflows_have_no_expression_source_in_run_blocks() -> None:
 
 
 def test_wix_and_draft_release_inputs_use_environment_variables() -> None:
-    """Keep the release tag and event data out of Python source text."""
+    """Keep the WiX input and release tag out of Python source text."""
     workflows = _workflow_sources()
     wix = _find_step(
         workflows["release.yml"], "metadata", "Resolve WiX extension version"
@@ -285,9 +285,8 @@ def test_wix_and_draft_release_inputs_use_environment_variables() -> None:
         "uv run --no-project --python 3.14 scripts/resolve_wix_extension_version.py"
     ), "the WiX step must delegate its logic to the tested Python script"
     assert wix_env == {
-        "INPUT_EVENT_NAME": "${{ github.event_name }}",
-        "INPUT_EVENT_PATH": "${{ github.event_path }}",
-    }, "the WiX script inputs must be passed through the environment"
+        "INPUT_WIX_EXTENSION_VERSION": "${{ inputs.wix-extension-version || '7' }}"
+    }, "the WiX version must be passed through the environment"
 
     draft = _find_step(
         workflows["release.yml"], "release", "Ensure release exists (draft)"

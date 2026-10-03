@@ -87,9 +87,9 @@ with:
   wix-extension-version: '7'
 ```
 
-An omitted or empty value resolves to `7`. The resolved version is used for
-Windows WiX packaging. Any non-empty supplied version must be a single-line
-string; the workflow rejects values containing carriage returns or line feeds.
+The workflow supplies `7` when the value is omitted or empty. The resolved
+version is used for Windows WiX packaging. The Python resolver rejects an
+unexpectedly empty value and values containing carriage returns or line feeds.
 
 SHA-256 checksum files accompany standalone binaries and staged help,
 completion, and licence files. Installer packages do not have checksum sidecars
