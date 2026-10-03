@@ -2631,7 +2631,94 @@ Hard invariants. Violating one requires escalation, not a workaround.
   no decision, while one measurement of the files produced one that is
   falsifiable by anyone who re-runs the counts.
 
+- **2026-10-03: `EP-M8` lands RFC 0018 at `d8d52a25`. Section 5 has exactly
+  eleven numbered subsections, and the contract says so.** The child owns
+  roadmap step 6.7: `exists`, `link_exists`, `same_file`, `mount`,
+  `expandvars`, and the `files_only` option on the existing `glob`. Table 16's
+  0018 row flips to `written`, `docs/contents.md` gains its entry, and roadmap
+  step 6.7's four tasks are retargeted to RFC 0018. The coverage contract
+  reports **6 of 8 capability groups written; 2 remaining**.
+
+  Four claims in the first draft were false and each was caught by reading a
+  primary source rather than by recall. The draft cited **question 3** for this
+  group; question 3 is `version` and belongs to RFC 0016, and RFC 0006 section
+  16 allocates **no question to this group at all** — the absence is a
+  consequence of the partition, since questions attach to helpers and none of
+  the seven is here. It called `expandvars` "the observing half of slice 5";
+  `expandvars` is section 14.7's **slice 6**, alone. It invented a `host_state`
+  module; the seven existing `is <kind>` file tests already live in
+  `src/stdlib/path/` and key `stdlib.path.*` under `keys::STDLIB_PATH_*`, so
+  the nine new codes extend that family, and `file_type_matches`'s existing
+  `io_to_error` path would otherwise have acquired a second spelling for the
+  same failures. And it had `expandvars` reuse `manifest.env.*`, which **clause
+  6.9 forbids**: a stdlib helper must key under `stdlib.<module>.<condition>`,
+  so the helper matches `env` in behaviour but not in key. Only
+  `unknown_dialect`, which RFC 0017 defines, is genuinely shared.
+
+  **A twelfth numbered subsection in section 5 fails the contract by
+  construction, and the failure is not about the subsection's content.** A
+  `### 5.12. …` heading resolves through `clause_id_of` to the clause id
+  `6.12`, and `every_child_discharges_every_clause` requires the subsection id
+  set and the discharge-table id set to be *equal*. So the section-5 heading
+  space is not roomy: every numbered subsection is a claim to discharge a
+  clause, and RFC 0006 section 6 states eleven. The material that does not
+  discharge a clause therefore belongs outside section 5 — here, in section 8,
+  where this RFC already hosts its non-section-16 `mount` fallback, under a
+  bold lead-in rather than a heading, which is how all five earlier children
+  write their section 8 body. The gate went from `272 passed` to
+  `101 run: 100 passed, 1 failed` on exactly the edit batch that added the
+  heading, which is what identified it.
+
+  **RFC 0006 section 8.7 conflicts with the shipped `glob`, and the conflict is
+  now recorded rather than silently resolved.** Section 8.7 spells the default
+  `files_only=false` and section 12 calls the three optioned defaults
+  "behaviour-preserving"; `basename` and `dirname` bear that out, but
+  `glob_paths` in `src/manifest/glob/mod.rs` filters directories out
+  *unconditionally* — `walk.rs`'s `names_a_file` classifies each candidate and
+  `mod.rs:358-362` pushes only `GlobEntry::Path`, recording `NotAFile` as
+  skipped. No directory has ever reached a template, so `false` is not the
+  shipped behaviour and shipping it as the default would add directories to
+  every existing `glob()` result. Three readings are recorded with their costs,
+  and roadmap task 6.7.3 — which can test it — decides before the option
+  registers. This is precisely the input the coverage contract could not have
+  caught: it checks that the row partitions the set and that the registry is
+  well-formed, but nothing in it reads the implementation the row describes.
+
 ## Surprises & discoveries
+
+- Observation: **in a child RFC, every numbered section 5 subsection is a claim
+  to discharge a clause, so section 5 has no room for noted-but-undischarged
+  material.** `check_subsections` resolves each subsection heading through
+  `clause_id_of`, which reads the leading `N.M` token and rewrites it as clause
+  id `6.M`; `every_child_discharges_every_clause` then requires that id set to
+  *equal* the discharge table's. A `### 5.12. …` heading therefore asserts a
+  clause `6.12` that RFC 0006 section 6 does not state, and the child fails —
+  whatever the subsection actually says. An *unnumbered* subsection under
+  section 5 resolves no id and is skipped, so it is safe, but the five earlier
+  children use unnumbered headings nowhere and the discharge table closes
+  section 5 by name. Evidence: the gate passed 272/272, then the single edit
+  batch adding the 5.12 heading took it to `101 run: 100 passed, 1 failed`.
+  **Consequence for the remaining children: record a conflict or a
+  non-allocation decision in section 8, under a bold lead-in, not as a numbered
+  subsection of section 5.** Section 8 is where the earlier children put their
+  section-16 questions and where RFC 0018 puts its section 8.7 `mount` fallback.
+
+- Observation: **the coverage contract cannot detect a child RFC that
+  contradicts the implementation it describes.** The contract reads two
+  documents and compares them: RFC 0006's tables and each child's registry,
+  clauses, and discharge. Nothing in it reads `src/`. So a registry row that
+  faithfully transcribes a section 8.7 signature can still describe behaviour
+  no code has, and every deterministic gate stays green. Evidence: RFC 0006
+  section 8.7 spells `glob(pattern, files_only=false)` and section 12 calls
+  that default behaviour-preserving, while `src/manifest/glob/mod.rs` has
+  filtered directories unconditionally since before this branch — `walk.rs`'s
+  `names_a_file` classifies each candidate and `mod.rs:358-362` returns only
+  `GlobEntry::Path`, recording `NotAFile` as skipped. RFC 0018 records the
+  conflict in section 8 rather than resolving it silently. **Consequence: a
+  child RFC that adds an *option* to an *existing* helper owes a reading of
+  that helper's implementation, not only of the clause that specifies it.** RFC
+  0019's `to_yaml`/`to_json` and RFC 0020's date helpers are new registrations
+  and do not carry this debt; any future child adding an option does.
 
 - Observation: **re-partitioning a fixed set into more children raises the
   aggregate, so it cannot serve an aggregate budget.** The EP-M6 and EP-M7
