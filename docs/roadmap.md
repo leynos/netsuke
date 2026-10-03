@@ -3464,7 +3464,7 @@ the freeze.
     commands.
   - Record a bounded invocation counter and a duration histogram labelled by
     outcome and a finite error category, following the pattern in
-    `src/runner/help_telemetry.rs`.
+    `src/runner/help/telemetry/mod.rs`.
   - Keep labels low-cardinality: no rule names, manifest paths, or finding
     text.
   - Success: a check run emits one counter and one histogram observation, and
