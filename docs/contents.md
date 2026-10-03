@@ -318,3 +318,34 @@ operator, user, and contributor references are easier to find.
   isolation strategy for Ninja process interactions.
 - [security-network-command-audit.md](security-network-command-audit.md):
   Security review of network and command-execution surfaces.
+
+## Crate decomposition programme (proposed)
+
+- [GIST roadmap](roadmap-crate-decomposition.md): Goals, hypotheses, dependency
+  gates, bounded tasks, and evidence-led decisions for phases 30 to 34.
+- [RFC 0030](rfcs/0030-build-performance-benchmark-extension.md): Representative
+  edit/check/test benchmarks, cache isolation, resource budgets, and evidence.
+- [RFC 0031](rfcs/0031-staged-crate-decomposition.md): Initial component ownership,
+  staged extraction, compatibility, and package/test dependency obligations.
+- [RFC 0032](rfcs/0032-localisation-crate-boundary.md): `netsuke-l10n`, upstream
+  `ortho_l10n`, compatibility re-exports, and documentation IR coordination.
+- [RFC 0033](rfcs/0033-component-test-support.md): General, component, and
+  application fixture ownership with executable test-graph isolation checks.
+- [RFC 0034](rfcs/0034-forthcoming-component-ownership.md): Compiler, linting,
+  testing, parameters, execution, policy, resources, states, and artefacts.
+- [RFC 0035](rfcs/0035-lading-backed-workspace-publication.md): Existing Lading
+  extension, rstest-bdd prior art, shared CI adapters, and trusted publication.
+- [ADR-048](adr-048-defer-core-microcrate-decomposition.md): Defer further core
+  microcrates without deferring semantic hardening or the initial shared core.
+- [ADR-049](adr-049-gate-command-schema-extraction.md): Consumer/evidence gates
+  for command-schema extraction and host/target build-context obligations.
+- [ADR-050](adr-050-shared-resource-identities-and-leases.md): Shared
+  `netsuke-resource` identities and leases, independent of feature engines.
+- [ADR-051](adr-051-keep-runner-as-application-orchestration.md): Initial runner
+  placement, application requests, and the distinct structured executor.
+- [ADR-052](adr-052-lockstep-component-release-and-api-policy.md): One component
+  release train, public API obligations, and private fixture exclusions.
+- [ADR-053](adr-053-separate-policy-findings-from-runtime-authority.md): Separate
+  suppressible quality findings from mandatory runtime authority decisions.
+- [ADR-054](adr-054-preserve-validated-operation-construction.md): Checked
+  construction, private invariants, and persisted-plan authority revalidation.
