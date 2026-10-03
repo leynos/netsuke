@@ -8,8 +8,12 @@
 //! vocabularies prevent manifest- or process-controlled data from entering the
 //! retained snapshot.
 
+mod check;
 mod labels;
 
+#[cfg(feature = "lint")]
+use check::CHECK_OUTCOMES;
+use check::is_check_metric;
 use labels::{any_exact_labels, exact_labels};
 
 use super::{
@@ -69,27 +73,6 @@ const BASH_PREFLIGHT_OUTCOMES: [&str; 2] = ["success", "error"];
 /// Bounded probe results emitted by Bash compatibility preflight.
 const BASH_PREFLIGHT_PROBE_OUTCOMES: [&str; 4] =
     ["success", "not_found", "launch_failed", "non_zero_exit"];
-/// Report whether `name` is one of `netsuke check`'s metrics.
-#[cfg(feature = "lint")]
-fn is_check_metric(name: &str) -> bool {
-    matches!(name, CHECK_TOTAL | CHECK_DURATION)
-}
-
-/// Report no `netsuke check` metrics: the command is not compiled in.
-#[cfg(not(feature = "lint"))]
-const fn is_check_metric(_name: &str) -> bool {
-    false
-}
-
-/// Bounded command outcomes emitted by `netsuke check`.
-#[cfg(feature = "lint")]
-const CHECK_OUTCOMES: [&str; 5] = [
-    "success",
-    "threshold_failure",
-    "policy_failure",
-    "analysis_failure",
-    "output_failure",
-];
 
 /// Label key naming the `which` search domain on every resolver series.
 const CWD_MODE_LABEL: &str = "cwd_mode";
