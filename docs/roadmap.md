@@ -835,7 +835,7 @@ boundary, can carry every later helper, or whether each capability group needs
 its own. Its outcome decides whether steps 6.2 to 6.9 can be reviewed as
 ordinary additions or need individual design passes. See RFC 0006 §§6 and 14.1.
 
-- [ ] 6.1.1. Split the RFC 0006 accepted set into focused child RFCs and
+- [x] 6.1.1. Split the RFC 0006 accepted set into focused child RFCs and
   accompanying roadmap tasks.
   - See RFC 0006 §14 and
     [the execplan](execplans/6-1-1-split-rfc-0006-set-into-focused-child-rfcs-and-task.md).

@@ -1805,7 +1805,7 @@ Hard invariants. Violating one requires escalation, not a workaround.
 - [x] `EP-M8` RFC 0018, host-state predicates and environment expansion (6.7).
 - [x] `EP-M9` RFC 0019, encoding, identity, and formatting (step 6.8).
 - [x] `EP-M10` RFC 0020, date and time conversion (step 6.9).
-- [ ] `EP-M11` Reconcile, retarget roadmap citations, run all gates, mark
+- [x] `EP-M11` Reconcile, retarget roadmap citations, run all gates, mark
   roadmap 6.1.1 done. **Reconnaissance recorded 2026-10-03 while blocked on the
   escalation, so the milestone starts from a scoped list rather than a
   search.** The acceptance criterion is machine-checkable and now reads
