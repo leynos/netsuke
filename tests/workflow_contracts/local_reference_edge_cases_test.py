@@ -3,6 +3,7 @@
 Run via ``make test-workflow-contracts``.
 """
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -35,6 +36,27 @@ def test_filename_near_matches_do_not_cover_scripts(tmp_path: Path) -> None:
         "scripts/orphan.sh",
         "scripts/other_tool.py",
     }), "near-match filenames and other directory paths must not count"
+
+
+@pytest.mark.parametrize(
+    "relative_directory",
+    [".github/actions", "scripts"],
+    ids=["actions", "scripts"],
+)
+def test_missing_local_inventory_root_reports_its_path(
+    tmp_path: Path,
+    relative_directory: str,
+) -> None:
+    """Fail closed with a path-aware error when an inventory root is missing."""
+    create_synthetic_workspace(tmp_path, "", "all:\n\t@true\n", {})
+    shutil.rmtree(tmp_path / relative_directory)
+
+    with pytest.raises(RepositoryFileError, match=relative_directory) as error:
+        discover_local_items(tmp_path)
+
+    assert isinstance(error.value.__cause__, FileNotFoundError), (
+        "the inventory error must preserve the missing-directory cause"
+    )
 
 
 def test_action_child_path_does_not_cover_action(tmp_path: Path) -> None:

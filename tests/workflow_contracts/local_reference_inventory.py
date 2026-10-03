@@ -7,6 +7,8 @@ reachability contract can work with a small, explicit inventory.
 import dataclasses
 import typing as typ
 
+from cargo_test_targets import RepositoryFileError
+
 if typ.TYPE_CHECKING:
     from pathlib import Path
 
@@ -55,7 +57,7 @@ def _discover_action_manifests(repository_root: Path) -> dict[str, tuple[Path, .
     """Return manifests grouped by their local action directory."""
     action_root = repository_root / ACTION_DIRECTORY
     action_manifests: dict[str, tuple[Path, ...]] = {}
-    for directory in sorted(action_root.iterdir()):
+    for directory in _inventory_directory_entries(action_root):
         if not directory.is_dir() or directory.is_symlink():
             continue
         manifests = tuple(
@@ -74,9 +76,18 @@ def _discover_top_level_scripts(repository_root: Path) -> dict[str, Path]:
     scripts_root = repository_root / "scripts"
     return {
         path.relative_to(repository_root).as_posix(): path
-        for path in sorted(scripts_root.iterdir())
+        for path in _inventory_directory_entries(scripts_root)
         if path.suffix in SCRIPT_SUFFIXES
         and path.name != "__init__.py"
         and path.is_file()
         and not path.is_symlink()
     }
+
+
+def _inventory_directory_entries(directory: Path) -> tuple[Path, ...]:
+    """List one required inventory root, naming and chaining listing errors."""
+    try:
+        return tuple(sorted(directory.iterdir()))
+    except OSError as error:
+        message = f"cannot list local inventory directory {directory}: {error}"
+        raise RepositoryFileError(message) from error
