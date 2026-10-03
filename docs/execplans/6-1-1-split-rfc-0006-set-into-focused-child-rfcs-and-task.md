@@ -158,7 +158,15 @@ Hard invariants. Violating one requires escalation, not a workaround.
   nine-or-ten-child re-partition **raises** the aggregate rather than relieving
   it. The remedies that address this control are to raise the budget or to
   record a decided waiver; the plan stops for that decision before RFC 0018 is
-  written.
+  written. **Correction, added 2026-10-03: the budget is now exceeded by the
+  five written children alone.** The 2374 figure was measured at `5895fc4c` and
+  was true there; the round-2 review repairs then grew RFC 0016 by 27 lines and
+  RFC 0017 by 3, taking the five to **2404 against 2400 — 4 lines over, with
+  RFCs 0018, 0019, and 0020 still unwritten.** Three children at the measured
+  honest-child floor of roughly 183 lines each project the complete set to
+  about **2950**, a shortfall near **550 lines**. The figure is re-derived from
+  the files rather than carried forward, because the repair that fixed the
+  wrestling match also moved the number the escalation is about.
 - **Vacuity.** If any section 5 subsection cannot state a group-specific
   consequence — a bound, a registry row, a diagnostic code, a purity
   assignment, a named error condition — and cannot honestly say "no additional
@@ -1945,6 +1953,23 @@ Hard invariants. Violating one requires escalation, not a workaround.
   table cells, so no gate can catch them. The practice the plan now adopts is
   to re-derive every count in a child's prose from the table it describes at
   the moment the table changes.
+
+- [x] (2026-10-03) **The aggregate-volume escalation was put to the user with
+  corrected figures, because the recorded ones had gone stale.** The tolerance
+  reads "if the eight child RFCs together exceed 2400 lines, stop and escalate",
+  and re-deriving the count from the files rather than carrying the entry
+  forward showed the budget is now exceeded by the **five children written
+  alone**: 0013 **470**, 0014 **397**, 0015 **498**, 0016 **537**, 0017 **502**
+  — **2404 against 2400**. The earlier figure of 2374 was true at `5895fc4c`;
+  the round-2 review repairs then grew RFC 0016 by **27** lines (the
+  `regex_replace` output ceiling: a bounds row, a fourth consequence, a
+  diagnostic row, and their discharge prose) and RFC 0017 by **3**, crossing
+  the budget before any of the three remaining children was begun. Three
+  children at the measured floor of roughly 183 lines each project the complete
+  set to about **2950**. The escalation offers the remedies the corrected
+  arithmetic leaves — raise the budget from the measured floor, or keep 2400
+  and record a decided waiver — and explicitly does not offer a re-partition,
+  which raises the aggregate. `EP-M8` does not begin until the decision lands.
 
 - [x] (2026-10-03) **The branch was pushed and PR #860 opened as a draft, and a
   gate-version skew between the branch and `main` was found while preparing
