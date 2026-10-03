@@ -1847,10 +1847,10 @@ file. In `src/manifest/env/reader.rs` the branch had replaced two inline
 `env/reader.rs` and renamed the `env_telemetry` module to `telemetry`. The
 resolution keeps the hoisted call and takes main's path, and the result is
 corroborated by the file itself: the merged text already imports
-`use super::telemetry::{self, record_env_lookup};` and the five other outcome
-constants in the file already read `telemetry::OUTCOME_*`, so the two
-`env_telemetry::` tokens inside the conflict block were the last surviving
-spelling of the old module name anywhere in the tree. In
+`use super::telemetry::{self, record_env_lookup};`, and of the file's five
+`telemetry::OUTCOME_*` references the four outside the conflict block all read
+`telemetry::`, so the two `env_telemetry::` tokens inside the conflict block
+were the last surviving spelling of the old module name anywhere in the tree. In
 `src/runner/process/ninja/program.rs`, main moved the file a directory deeper
 and adjusted the import depth to `super::super::super::`; the branch had added
 `Utf8Path` to the `camino` import for its debug helper. The resolution takes
