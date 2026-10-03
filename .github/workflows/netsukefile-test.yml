@@ -108,7 +108,7 @@ jobs:
       - name: Setup Rust
         id: setup-rust
         # Pinned to the shared-actions revision that adds `cache-provider`.
-        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           cache-provider: external
@@ -201,7 +201,7 @@ jobs:
           NINJA_MANIFEST: action.ninja
         run: scripts/assert-file-absent.sh unused.txt
       - name: Show sccache statistics
-        if: always()
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
           SCCACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: |

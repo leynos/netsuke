@@ -138,7 +138,7 @@ jobs:
           awk --version
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
@@ -319,7 +319,9 @@ jobs:
         # this repository's Python project or write to its lockfile.
         run: uv run --no-project --python 3.14 .github/scripts/verify_nextest_anchored_filters.py
       - name: Show sccache statistics
-        if: always()
+        # A server that fell back (setup-rust's sccache-status) never started and
+        # has no statistics; asking would start it again and fail the job.
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
           SCCACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         run: |
@@ -489,7 +491,7 @@ jobs:
           runner-image: ${{ env.NETSUKE_RUNNER_IMAGE }}
       - name: Setup Rust
         if: steps.scope.outputs.run-proofs == 'true'
-        uses: leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           # Resolved from the job's own `env`, which declares the pinned
           # nightly. This input does double duty: a non-empty value selects

@@ -301,7 +301,7 @@ jobs:
           fallback: none
       - name: Setup Rust
         uses: >-
-          leynos/shared-actions/.github/actions/setup-rust@4fb8eb7ad52454678a0662865d81d3cd17aa6e0e
+          leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           rustflags: -D warnings
