@@ -2093,8 +2093,9 @@ see every string in a parsed workflow, mapping keys included, share
 `iter_strings` in `tests/workflow_contracts/yaml_strings.py` rather than
 walking the value themselves.
 
-`local_reference_inventory.py` inventories local composite actions and directly
-contained `.sh`, `.bash`, `.py`, and `.ps1` scripts under `scripts/`.
+`local_reference_inventory.py` inventories local composite actions and regular
+`.sh`, `.bash`, `.py`, and `.ps1` scripts recursively under `scripts/`. It
+excludes Python package markers, bytecode caches, data files, and symlinks.
 `local_references.py` resolves their references from workflow, Makefile, test,
 action, and script sources. It uses `local_reference_sources.py` to retain each
 workflow run command's effective working directory and to remove comments from

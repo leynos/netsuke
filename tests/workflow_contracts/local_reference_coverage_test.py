@@ -40,7 +40,7 @@ def repository_coverage() -> tuple[LocalItemInventory, frozenset[str]]:
 def test_every_local_item_is_referenced_or_exempt(
     repository_coverage: tuple[LocalItemInventory, frozenset[str]],
 ) -> None:
-    """Require every action and top-level script to have an owner."""
+    """Require every action and supported script to have an owner."""
     inventory, covered = repository_coverage
     missing = sorted(uncovered_items(inventory, covered, EXEMPTIONS))
     assert not missing, (
@@ -93,19 +93,24 @@ def test_expected_indirect_repository_items_are_covered(
 
 
 def test_unreferenced_script_is_reported(tmp_path: Path) -> None:
-    """Report a top-level script with no workflow, Makefile or test reference."""
-    _create_workspace(tmp_path, "", "all:\n\t@true\n", {"scripts/orphan.sh": ""})
+    """Report a nested script without a workflow, Makefile or test reference."""
+    _create_workspace(
+        tmp_path,
+        "",
+        "all:\n\t@true\n",
+        {"scripts/helpers/orphan.sh": ""},
+    )
     inventory = discover_local_items(tmp_path)
     covered = covered_items(inventory, root_source_texts(tmp_path))
     assert uncovered_items(inventory, covered, {}) == frozenset({
-        "scripts/orphan.sh"
-    }), "an unreferenced script must be reported"
+        "scripts/helpers/orphan.sh"
+    }), "an unreferenced nested script must be reported"
 
 
-def test_inventory_limits_items_to_action_manifests_and_top_level_scripts(
+def test_inventory_includes_supported_scripts_recursively(
     tmp_path: Path,
 ) -> None:
-    """Include both action manifest extensions and supported direct scripts."""
+    """Include supported scripts at every depth and exclude non-scripts."""
     _create_workspace(
         tmp_path,
         "name: Synthetic\njobs: {}\n",
@@ -119,14 +124,14 @@ def test_inventory_limits_items_to_action_manifests_and_top_level_scripts(
             "scripts/entry.ps1": "",
             "scripts/__init__.py": "",
             "scripts/readme.json": "",
+            "scripts/helpers/nested/launch.sh": "",
+            "scripts/tests/test_nested_script.py": "",
+            "scripts/helpers/__init__.py": "",
+            "scripts/tests/data/fixture.json": "",
+            "scripts/__pycache__/ignored.pyc": "",
+            "scripts/__pycache__/ignored.py": "",
         },
     )
-    nested_script = tmp_path / "scripts" / "nested" / "ignored.sh"
-    nested_script.parent.mkdir()
-    nested_script.write_text("", encoding="utf-8")
-    cached_script = tmp_path / "scripts" / "__pycache__" / "ignored.py"
-    cached_script.parent.mkdir()
-    cached_script.write_text("", encoding="utf-8")
 
     inventory = discover_local_items(tmp_path)
 
@@ -139,7 +144,9 @@ def test_inventory_limits_items_to_action_manifests_and_top_level_scripts(
         "scripts/entry.bash",
         "scripts/entry.py",
         "scripts/entry.ps1",
-    }, "inventory must include supported top-level scripts and exclude other files"
+        "scripts/helpers/nested/launch.sh",
+        "scripts/tests/test_nested_script.py",
+    }, "inventory must include nested scripts and exclude non-script files"
 
 
 def test_covered_action_and_script_references_reach_a_fixed_point(
@@ -253,7 +260,7 @@ def test_test_tree_files_are_root_reference_sources(tmp_path: Path) -> None:
     _create_workspace(
         tmp_path,
         "name: Synthetic\njobs: {}\n",
-        "all:\n\t@true\n",
+        "all:\n\t./scripts/tests/test_nested_script.py\n",
         {"scripts/workflow_test.py": "", "scripts/script-test.sh": ""},
     )
     _write(tmp_path, "tests/test_local_script.py", "import workflow_test\n")
