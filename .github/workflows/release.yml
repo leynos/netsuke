@@ -88,6 +88,11 @@ jobs:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          python-version: '3.14'
+          enable-cache: false
       - id: repo_name
         name: Determine repository name
         run: echo "value=${GITHUB_REPOSITORY#*/}" >>"$GITHUB_OUTPUT"
@@ -105,20 +110,8 @@ jobs:
         name: Resolve WiX extension version
         shell: bash
         env:
-          WIX_EXTENSION_VERSION: ${{ inputs.wix-extension-version || '7' }}
-        run: |
-          set -euo pipefail
-          if [ -z "${WIX_EXTENSION_VERSION:-}" ]; then
-            echo "WIX_EXTENSION_VERSION must be set" >&2
-            exit 1
-          fi
-          # Keep caller input from creating extra GITHUB_OUTPUT records.
-          if [[ "$WIX_EXTENSION_VERSION" == *$'\n'* || "$WIX_EXTENSION_VERSION" == *$'\r'* ]]; then
-            echo "WIX_EXTENSION_VERSION must not contain line breaks" >&2
-            exit 1
-          fi
-          printf 'value=%s\n' "$WIX_EXTENSION_VERSION" >>"$GITHUB_OUTPUT"
-          echo "Resolved WiX extension version: $WIX_EXTENSION_VERSION"
+          INPUT_WIX_EXTENSION_VERSION: ${{ inputs.wix-extension-version || '7' }}
+        run: uv run --no-project --python 3.14 scripts/resolve_wix_extension_version.py
       - id: manifest_path
         name: Resolve Cargo manifest path
         shell: bash
@@ -345,7 +338,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install Python for admission timings
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
         with:
           python-version: '3.14'
           enable-cache: false
@@ -363,12 +356,15 @@ jobs:
       - name: Summarise release-admission metrics
         if: always()
         shell: bash
+        env:
+          RELEASE_ADMISSION_GATE_OUTCOME: ${{ steps.release_admission.outputs.gate-outcome }}
+          RELEASE_ADMISSION_ERROR_CATEGORY: ${{ steps.release_admission.outputs.gate-error-category }}
         run: |
           {
             echo '## Release-admission gate'
             echo
-            echo "- Outcome: \`${{ steps.release_admission.outputs.gate-outcome }}\`"
-            echo "- Error category: \`${{ steps.release_admission.outputs.gate-error-category }}\`"
+            echo "- Outcome: \`$RELEASE_ADMISSION_GATE_OUTCOME\`"
+            echo "- Error category: \`$RELEASE_ADMISSION_ERROR_CATEGORY\`"
           } >>"$GITHUB_STEP_SUMMARY"
       - name: Upload release-admission metrics
         if: >-
@@ -415,35 +411,26 @@ jobs:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
+      - name: Install uv
+        # The privileged job runs inline-metadata Python scripts without a
+        # shared dependency cache.
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          python-version: '3.14'
+          enable-cache: false
       - name: Ensure release exists (draft)
         shell: bash
-        run: |
-          set -euo pipefail
-          gh release view "${{ github.ref_name }}" >/dev/null 2>&1 || \
-            gh release create "${{ github.ref_name }}" \
-              --draft \
-              --verify-tag \
-              --notes "Automated release for ${{ github.ref_name }}"
         env:
+          INPUT_TAG: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run --no-project --python 3.14 scripts/ensure_draft_release.py
       - uses: >-
           actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         # v8.0.1
         with:
           path: dist
           pattern: ${{ needs.metadata.outputs.repo_name }}-*
-      - name: Install uv
-        # Pins the interpreter the hoist script runs under to the Python 3.14
-        # baseline the repository's Python tooling targets, rather than
-        # whichever `python3` the runner image happens to ship.
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
-        with:
-          python-version: '3.14'
-          # The hoist script is stdlib-only and runs with --no-project, so a
-          # restored cache buys nothing while feeding a supply-chain input to
-          # a job holding contents: write.
-          enable-cache: false
       - name: Hoist cargo-binstall archives to the release root
         shell: bash
         # Validates that every target listed in release-staging.toml staged
@@ -452,9 +439,9 @@ jobs:
         # A missing target or sidecar fails the release with the names listed.
         run: |
           set -euo pipefail
-          uv run --no-project --python 3.14 \
-            scripts/hoist_binstall_archives.py \
-            --version '${{ needs.metadata.outputs.version }}'
+          uv run --no-project --python 3.14 scripts/hoist_binstall_archives.py
+        env:
+          INPUT_VERSION: ${{ needs.metadata.outputs.version }}
       - id: upload_assets
         name: Upload artefacts to release
         uses: >-
@@ -468,7 +455,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Check asset upload errors
         if: steps.upload_assets.outputs.upload-error == 'true'
+        env:
+          ERROR_MESSAGE: ${{ steps.upload_assets.outputs.error-message }}
         run: |
           echo "Error uploading release assets:"
-          printf '%s\n' "${{ steps.upload_assets.outputs.error-message }}"
+          printf '%s\n' "$ERROR_MESSAGE"
           exit 1

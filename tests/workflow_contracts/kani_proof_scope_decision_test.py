@@ -261,13 +261,21 @@ def test_script_fails_on_a_damaged_scope(tmp_path: Path) -> None:
 
 
 def test_dependency_pins_match_the_makefile() -> None:
-    """Hold the script's inline pins equal to the test and typecheck recipes."""
+    """Keep the Kani test pin aligned with typecheck's supported versions."""
     header = SCRIPT.read_text(encoding="utf-8").split("# ///", 2)[1]
     pins = [line.strip().strip('#", ') for line in header.splitlines() if "==" in line]
     makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
     assert len(pins) == 2, f"expected the cuprum and cyclopts pins, found {pins}"
+    workflow_recipes = makefile.split("test-workflow-contracts:", 1)[1].split(
+        "test-windows-msi-release-rank:", 1
+    )[0]
+    workflow_contracts = workflow_recipes.split("\n\tPYTHONPATH=scripts", 1)[0]
+    typecheck = makefile.split("typecheck-python:", 1)[1].split("\nmarkdownlint:", 1)[0]
     for pin in pins:
-        assert makefile.count(f"--with '{pin}'") == 2, (
-            f"`make test-workflow-contracts` and `make typecheck-python` must "
-            f"both install {pin}, the version the script declares"
+        package, version = pin.split("==", 1)
+        assert workflow_contracts.count(f"--with '{pin}'") == 1, (
+            f"the workflow contracts must run Kani with its declared pin {pin}"
+        )
+        assert f"--with '{package}>={version}," in typecheck, (
+            f"`make typecheck-python` must support Kani's declared pin {pin}"
         )

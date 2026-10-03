@@ -148,8 +148,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        if: inputs.platform != 'linux'
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
         with:
           python-version: ${{ inputs['python-version'] }}
 
@@ -180,16 +179,10 @@ jobs:
         # definition sections, and a GLIBC_* the binary defines is no floor.
         if: inputs.platform == 'linux'
         shell: bash
-        run: |
-          set -euo pipefail
-          binary="target/${{ inputs.target }}/release/${BIN_NAME}"
-          floor="$(
-            readelf --version-info "${binary}" |
-              awk '/^Version needs section/ { needs = 1; next } /^Version [a-z]+ section/ { needs = 0 } needs' |
-              grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1
-          )"
-          echo "glibc floor for ${{ inputs.target }}: ${floor}"
-          echo "- glibc floor for \`${{ inputs.target }}\`: \`${floor}\`" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          INPUT_TARGET: ${{ inputs.target }}
+          INPUT_BIN_NAME: ${{ env.BIN_NAME }}
+        run: uv run --no-project --python "$UV_PYTHON" scripts/report_glibc_floor.py
 
       - name: Restore cargo-orthohelp
         id: orthohelp_cache
@@ -235,7 +228,6 @@ jobs:
         # preferred and fell through to a compile when they missed; this one
         # cannot compile at all, so a release that stops publishing assets
         # fails the lane instead of quietly building the tool from source.
-        shell: bash
         env:
           # Resolving the release asset costs one `api.github.com` call, and
           # unauthenticated calls are rate-limited per source address. The
@@ -245,17 +237,9 @@ jobs:
           # per-repository budget. `contents: read` is all it carries, which
           # is what reading a public release needs and nothing more.
           GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # Probe first, as every other installer here does. The cache restores
-          # `~/.cargo/bin`, and an install refuses to overwrite a binary that
-          # is already there, so a warm run must not reach the install at all.
-          if cargo-orthohelp --version 2>/dev/null | grep -Eq '(^|[[:space:]])0\.9\.1([[:space:]]|$)'; then
-            echo "cargo-orthohelp 0.9.1 restored from the cache"
-            exit 0
-          fi
-          cargo binstall --no-confirm --locked \
-            --disable-strategies compile cargo-orthohelp@0.9.1
+          INPUT_VERSION: '0.9.1'
+        shell: bash
+        run: uv run --no-project --python "$UV_PYTHON" scripts/install_orthohelp.py
 
       - name: Validate cargo-orthohelp version
         shell: bash
@@ -284,13 +268,17 @@ jobs:
 
       - name: Generate release help
         shell: bash
+        env:
+          TARGET: ${{ inputs.target }}
+          BIN_NAME: ${{ env.BIN_NAME }}
+          HELP_MODULE_NAME: ${{ inputs.platform == 'windows' && 'Netsuke' || env.BIN_NAME }}
         run: |
           set -euo pipefail
           bash scripts/generate-release-help.sh \
-            "${{ inputs.target }}" \
-            "${{ env.BIN_NAME }}" \
-            "target/orthohelp/${{ inputs.target }}/release" \
-            "${{ inputs.platform == 'windows' && 'Netsuke' || env.BIN_NAME }}"
+            "$TARGET" \
+            "$BIN_NAME" \
+            "target/orthohelp/$TARGET/release" \
+            "$HELP_MODULE_NAME"
 
       - name: Stage artefacts
         id: stage
@@ -300,19 +288,6 @@ jobs:
           target: ${{ inputs['stage-target'] }}
           ps-module-name: ${{ inputs.platform == 'windows' && 'Netsuke' || '' }}
           normalize-windows-paths: ${{ inputs.platform == 'windows' }}
-
-      - name: Capture staged paths
-        id: stage_paths
-        shell: bash
-        run: |
-          set -euo pipefail
-          {
-            echo "binary_path=${{ steps.stage.outputs['binary-path'] }}"
-            echo "man_path=${{ steps.stage.outputs['man-path'] }}"
-            echo "license_path=${{ steps.stage.outputs['license-path'] }}"
-            echo "artefact_dir=${{ steps.stage.outputs['artifact-dir'] }}"
-            echo "powershell_help_dir=${{ steps.stage.outputs.powershell_help_dir }}"
-          } >>"$GITHUB_OUTPUT"
 
       - name: Expose Windows global tool path
         if: inputs.platform == 'windows'
@@ -344,7 +319,7 @@ jobs:
           target: ${{ inputs.target }}
           version: ${{ inputs.version }}
           formats: deb,rpm
-          man-paths: ${{ steps.stage_paths.outputs.man_path }}
+          man-paths: ${{ steps.stage.outputs['man-path'] }}
           outdir: dist
           deb-depends: ninja-build
           rpm-depends: ninja-build
@@ -401,8 +376,8 @@ jobs:
           product-name: ${{ inputs['bin-name'] }}
           manufacturer: Leynos
           install-dir-name: ${{ inputs['bin-name'] }}
-          application-path: ${{ steps.stage_paths.outputs.binary_path }}
-          license-rtf-path: ${{ steps.stage_paths.outputs.license_path }}
+          application-path: ${{ steps.stage.outputs['binary-path'] }}
+          license-rtf-path: ${{ steps.stage.outputs['license-path'] }}
           architecture: ${{ inputs['msi-arch'] }}
           version: ${{ inputs.version }}
           output-basename: ${{ inputs['bin-name'] }}
@@ -418,8 +393,8 @@ jobs:
         with:
           name: ${{ inputs['bin-name'] }}
           identifier: com.leynos.${{ inputs['bin-name'] }}
-          binary: ${{ steps.stage_paths.outputs.binary_path }}
-          manpage: ${{ steps.stage_paths.outputs.man_path }}
+          binary: ${{ steps.stage.outputs['binary-path'] }}
+          manpage: ${{ steps.stage.outputs['man-path'] }}
           license-file: LICENSE
           version: ${{ inputs.version }}
 
@@ -451,7 +426,7 @@ jobs:
         with:
           name: ${{ inputs['artifact-name'] }}
           path: |
-            ${{ steps.stage_paths.outputs.artefact_dir }}
+            ${{ steps.stage.outputs['artifact-dir'] }}
             ${{ steps.package_windows.outputs['msi-path'] }}
 
       - name: Upload macOS artefacts
@@ -461,5 +436,5 @@ jobs:
         with:
           name: ${{ inputs['artifact-name'] }}
           path: |
-            ${{ steps.stage_paths.outputs.artefact_dir }}
+            ${{ steps.stage.outputs['artifact-dir'] }}
             dist/${{ inputs['bin-name'] }}-${{ inputs.version }}-${{ inputs['artifact-suffix'] }}.pkg

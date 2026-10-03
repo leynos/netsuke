@@ -162,8 +162,8 @@ fn release_workflow_builds_and_hoists_every_staged_target() -> Result<()> {
          binstall archives so the pkg-url template in {CARGO_MANIFEST} resolves them"
     );
     ensure!(
-        workflow.contains("--version '${{ needs.metadata.outputs.version }}'"),
-        "{RELEASE_WORKFLOW} should pass the resolved release version to {HOIST_SCRIPT}"
+        workflow.contains("INPUT_VERSION: ${{ needs.metadata.outputs.version }}"),
+        "{RELEASE_WORKFLOW} should pass the resolved release version through the environment to {HOIST_SCRIPT}"
     );
     Ok(())
 }

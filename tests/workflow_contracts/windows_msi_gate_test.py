@@ -162,6 +162,37 @@ def test_msi_fixtures_preserve_the_release_authoring_contract() -> None:
         )
 
 
+def test_msi_scripts_receive_paths_through_quoted_environment_values() -> None:
+    """Keep generated MSI paths out of PowerShell source text."""
+    document = require_mapping(
+        read_workflow_document(MSI_VALIDATION_ACTION_PATH),
+        "the MSI upgrade validation action",
+    )
+    runs = require_mapping(document.get("runs"), "the action's runs block")
+    steps = [
+        require_mapping(step, f"action step {index}")
+        for index, step in enumerate(require_list(runs.get("steps"), "the steps"))
+    ]
+    expected_env = {
+        "BETA1_MSI": "${{ steps.package_beta1.outputs.msi-path }}",
+        "BETA2_MSI": "${{ steps.package_beta2.outputs.msi-path }}",
+        "FINAL_MSI": "${{ steps.package_final.outputs.msi-path }}",
+    }
+    for step_name in [
+        "Exercise MSI upgrade and downgrade paths",
+        "Remove MSI upgrade validation installations",
+    ]:
+        step = named_step(steps, step_name)
+        assert step.get("env") == expected_env, (
+            f"{step_name} must pass MSI paths through its environment"
+        )
+        run = str(step.get("run", ""))
+        for variable in expected_env:
+            assert f'"$env:{variable}"' in run, (
+                f"{step_name} must quote the {variable} environment value"
+            )
+
+
 @pytest.mark.parametrize("script", MSI_VALIDATION_SCRIPTS)
 def test_msi_gate_invokes_its_repository_owned_scripts(script: str) -> None:
     """The gate must install, upgrade, and clean up through its own scripts.
