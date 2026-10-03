@@ -585,8 +585,7 @@ Two consequences follow from the lifetime rules above:
 
 Absolute paths are unaffected, because they do not resolve against the base. A
 stage that needs a destination to outlive the temporary directory therefore
-names an absolute path, or takes a path from a runtime binding whose value is
-absolute.
+names an absolute stream path directly.
 
 A runtime binding cannot be a stream path. RFC 0001 section 12.1 renders every
 stream path at manifest compilation time, and a named capture does not exist
@@ -607,11 +606,9 @@ directory that produced the capture or the capturing stage's `cwd`, so a
 captured relative path cannot reach the secure temporary directory that another
 stage created; section 11.4 rejects an out-of-workspace value.
 
-A destination that must outlive the temporary directory is named on its own
-terms. The manifest names an absolute path directly, as the paragraph above
-states, or a producer emits the final absolute path as captured text and the
-consumer uses it where absolute text is meaningful — an argv element or an
-environment value, not a stream path.
+A producer may instead emit the final absolute path as captured text. The
+consumer then uses it where absolute text is meaningful — an argv element or an
+environment value — and not as a stream path.
 
 This RFC introduces no `relative_to` selector on stream paths. RFC 0009 section
 20.3 considered a stream-path base independent of `cwd` and was rejected by
@@ -943,8 +940,11 @@ Manifest compilation rejects:
 - two predecessor streams targeting one standard input;
 - a pipeline crossing a rule, script, or legacy boundary;
 - a tempdir mapping containing fields other than optional `env`;
-- an absolute `cwd` in any form, including a rendered absolute literal and an
-  environment-selected text value;
+- an absolute `cwd` expressed as text, including a rendered absolute literal
+  and an environment-selected text value. This rejection is confined to text
+  paths: the typed `cwd: { tempdir: ... }` capability in section 9.3 and
+  section 10.4 deliberately selects a directory outside the workspace, and
+  remains valid;
 - a runtime binding referenced from a stream path position, whether by a
   producer in the same sequence or by a later execution unit, because stream
   paths render before any binding commits; and
