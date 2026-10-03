@@ -5,6 +5,8 @@ import copy
 import pytest
 from actions_expression_evaluator import ExpressionIssue
 from actions_expressions import UnsupportedExpressionError
+from hypothesis import given
+from hypothesis import strategies as st
 from release_publish_path_artifacts import _render_template, check_artifact_names
 from workflow_loading import (
     PACKAGE_WORKFLOW_PATH,
@@ -53,6 +55,52 @@ def test_render_template_formats_boolean_values(value: object, expected: str) ->
         _render_template("${{ inputs.enabled }}", {"inputs": {"enabled": value}})
         == expected
     ), "boolean artifact values should use lowercase workflow literals"
+
+
+@st.composite
+def _renderable_templates(
+    draw: st.DrawFn,
+) -> tuple[str, dict[str, object], str]:
+    """Generate literal fragments interleaved with scalar input expressions."""
+    scalar = st.one_of(
+        st.text(max_size=8),
+        st.booleans(),
+        st.integers(min_value=-1000, max_value=1000),
+        st.floats(allow_nan=False, allow_infinity=False),
+    )
+    values = draw(st.lists(scalar, min_size=1, max_size=5))
+    fragments = draw(
+        st.lists(
+            st.text(alphabet="abcXYZ- _", max_size=8),
+            min_size=len(values) + 1,
+            max_size=len(values) + 1,
+        )
+    )
+    inputs: dict[str, object] = {}
+    template_parts: list[str] = []
+    expected_parts: list[str] = []
+    for index, value in enumerate(values):
+        key = f"artifact-{index}"
+        inputs[key] = value
+        expression = chr(36) + "{{ inputs['" + key + "'] }}"
+        template_parts.extend((fragments[index], expression))
+        expected_value = str(value).lower() if isinstance(value, bool) else str(value)
+        expected_parts.extend((fragments[index], expected_value))
+    template_parts.append(fragments[-1])
+    expected_parts.append(fragments[-1])
+    return "".join(template_parts), {"inputs": inputs}, "".join(expected_parts)
+
+
+@given(case=_renderable_templates())
+def test_generated_templates_match_independent_scalar_concatenation(
+    case: tuple[str, dict[str, object], str],
+) -> None:
+    """Render bounded expression lists as literal-plus-scalar concatenation."""
+    template, contexts, expected = case
+
+    assert _render_template(template, contexts) == expected, (
+        "template rendering should preserve fragment order and scalar values"
+    )
 
 
 def test_render_template_rejects_a_non_string_template() -> None:

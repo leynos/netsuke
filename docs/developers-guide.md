@@ -2147,6 +2147,11 @@ see every string in a parsed workflow, mapping keys included, share
 `iter_strings` in `tests/workflow_contracts/yaml_strings.py` rather than
 walking the value themselves.
 
+`tests/workflow_contracts/release_publish_path_contract.py` is a test-only,
+pure checker shared by the release staging and mutation contracts. Keep
+workflow-specific parsing and assertions in each suite; production code must
+not import this checker.
+
 ### Coverage ratchet and CodeScene publication
 
 The accepted architecture is recorded in

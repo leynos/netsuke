@@ -1,13 +1,16 @@
 """Prove the release-path contract rejects each named regression."""
 
 import pytest
+from release_publish_path_contract import (
+    CALLER_WORKFLOW_PATH,
+    check_release_publish_path,
+)
 from release_publish_path_mutations import (
     MUTATION_LABELS,
     MutationError,
     MutationIssue,
     mutate_workflows,
 )
-from release_publish_path_test import CALLER_WORKFLOW_PATH, check_release_publish_path
 from workflow_loading import (
     PACKAGE_WORKFLOW_PATH,
     RELEASE_WORKFLOW_PATH,

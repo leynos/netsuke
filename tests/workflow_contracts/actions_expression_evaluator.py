@@ -105,7 +105,7 @@ class _ExpressionParser:
         *,
         job_level: bool,
     ) -> None:
-        """Initialise parser state for one workflow expression."""
+        """Initialize parser state for one workflow expression."""
         self.tokens = _tokenize(_strip_expression_wrapper(expression))
         self.contexts = contexts
         self.job_level = job_level
@@ -133,7 +133,7 @@ class _ExpressionParser:
         value = self._parse_and()
         while self._accept("||"):
             right = self._parse_and()
-            value = _truthy(value) or _truthy(right)
+            value = value if _truthy(value) else right
         return value
 
     def _parse_and(self) -> object:
@@ -141,7 +141,7 @@ class _ExpressionParser:
         value = self._parse_comparison()
         while self._accept("&&"):
             right = self._parse_comparison()
-            value = _truthy(value) and _truthy(right)
+            value = right if _truthy(value) else value
         return value
 
     def _parse_comparison(self) -> object:
