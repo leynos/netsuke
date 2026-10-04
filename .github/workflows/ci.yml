@@ -318,7 +318,9 @@ jobs:
         run: uv run --no-project --python 3.14 .github/scripts/verify_nextest_anchored_filters.py
       - name: Show sccache statistics
         # A server that fell back (setup-rust's sccache-status) never started and
-        # has no statistics; asking would start it again and fail the job.
+        # has no statistics: with no server the pinned sccache returns mostly
+        # empty statistics, so the guard keeps an uncached build from producing
+        # a misleading report.
         if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
           SCCACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
