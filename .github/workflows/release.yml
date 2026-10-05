@@ -89,7 +89,7 @@ jobs:
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
       - name: Install uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           python-version: '3.14'
           enable-cache: false
@@ -295,7 +295,7 @@ jobs:
           profile: smoke
       - name: Install sccache
         uses: >-
-          taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172
+          taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29
         with:
           tool: sccache@0.16.0
           fallback: none
@@ -338,7 +338,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install Python for admission timings
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           python-version: '3.14'
           enable-cache: false
@@ -414,7 +414,7 @@ jobs:
       - name: Install uv
         # The privileged job runs inline-metadata Python scripts without a
         # shared dependency cache.
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           python-version: '3.14'
           enable-cache: false
