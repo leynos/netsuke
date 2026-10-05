@@ -445,7 +445,7 @@ jobs:
       - id: upload_assets
         name: Upload artefacts to release
         uses: >-
-          leynos/shared-actions/.github/actions/upload-release-assets@a5765019912a8ab6882b12db049c7cde635f3a85
+          leynos/shared-actions/.github/actions/upload-release-assets@7d751eded578e48dacf43ab173d5820e6437c474
         with:
           release-tag: ${{ github.ref_name }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
