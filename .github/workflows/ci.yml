@@ -150,7 +150,7 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29  # v2.87.21
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0  # v2.87.22
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Install the build standard
@@ -586,7 +586,7 @@ jobs:
         # standard runner, and this job installs none of the test tooling the
         # `build-test` lane does. Pinned to the same action revision and the
         # same workflow-scoped version as that lane, so the two cannot drift.
-        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29  # v2.87.21
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0  # v2.87.22
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Verify the scope wrapper end to end
