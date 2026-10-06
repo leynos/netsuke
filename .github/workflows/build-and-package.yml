@@ -311,7 +311,7 @@ jobs:
 
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
-        uses: leynos/shared-actions/.github/actions/linux-packages@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/linux-packages@7d751eded578e48dacf43ab173d5820e6437c474
         with:
           project-dir: .
           package-name: ${{ inputs['bin-name'] }}
