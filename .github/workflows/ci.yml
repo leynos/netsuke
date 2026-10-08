@@ -32,7 +32,7 @@ env:
   PYTHON_BASELINE: '3.14'
   # `make check-fmt` runs `mdtablefix --check --git`; pinned once so both
   # lanes agree. 0.6.0 is the first release with `--check` and `--git`.
-  MDTABLEFIX_VERSION: '0.6.0'
+  MDTABLEFIX_VERSION: '0.6.1'
   NETSUKE_RUNNER_IMAGE: ubuntu2404  # carried in every compiled-tool cache key
 
 # A newer push to a pull request cancels the run it supersedes. Other events
@@ -371,7 +371,7 @@ jobs:
     # tests/workflow_contracts/ci_windows_job_test.py holds them equal.
     with:
       nextest-version: '0.9.133'
-      mdtablefix-version: '0.6.0'
+      mdtablefix-version: '0.6.1'
       python-baseline: '3.14'
 
   kani-smoke:
