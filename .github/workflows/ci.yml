@@ -281,7 +281,7 @@ jobs:
           # from `setup-rust`, so the exclusion is visible at the step it
           # applies to and a contract has something to read.
           RUSTFLAGS: -D warnings
-        uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/generate-coverage@7d751eded578e48dacf43ab173d5820e6437c474
         with:
           language: rust
           output-path: lcov.info
