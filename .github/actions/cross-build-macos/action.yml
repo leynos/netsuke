@@ -21,7 +21,7 @@ runs:
   steps:
     - name: Setup osxcross
       id: osxcross
-      uses: mbround18/setup-osxcross@b26146d499c54979ed3d023266865dc188881911  # v2
+      uses: mbround18/setup-osxcross@8d91ad5a7ea8d0a4e47e1ff06f60f6889a9d2a1c  # v3
       with:
         osx-version: ${{ inputs.osx-version }}
     - name: Verify osxcross toolchain
