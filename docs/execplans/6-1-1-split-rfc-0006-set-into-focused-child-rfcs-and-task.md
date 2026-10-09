@@ -8,12 +8,15 @@ proceeds.
 
 Status: COMPLETE
 
-The eight child RFCs and the coverage contract are delivered and the full
-deterministic gate set is green at `7b0794af`. Two volume tolerances are
-breached and recorded rather than waived — the aggregate budget and the
-per-file 400-line limit — and neither blocks the milestone, for the reasons the
-Tolerances section and `D12`'s amendment give. The branch remains open for
-review.
+The eight child RFCs and the coverage contract are delivered. Two volume
+tolerances are breached and recorded rather than waived — the aggregate budget,
+now **4792** against 4000, and the per-file 400-line limit, now breached by
+**all eight** children rather than the seven recorded at `7b0794af`, because
+the PR #860 repair round corrected seven findings by adding text. Neither
+blocks the milestone, for the reasons the Tolerances section and `D12`'s
+amendment give, but neither is waived either: acceptance is the user's
+decision, and this plan records the question rather than answering it. The
+branch remains open for review.
 
 ## Purpose / big picture
 
