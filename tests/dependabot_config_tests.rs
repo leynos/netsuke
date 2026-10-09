@@ -36,6 +36,13 @@ struct DependabotUpdate {
 struct DependabotSchedule {
     interval: String,
 }
+/// GitHub Actions groups that precede the catch-all. A bump of a
+/// `leynos/shared-actions` pin moves one commit SHA to another and has no
+/// semver level, so the typed catch-all never takes it; this group does.
+const GITHUB_ACTIONS_LOCKSTEP_GROUPS: &[LockstepGroup<'static>] = &[LockstepGroup {
+    name: "shared-actions",
+    patterns: &["leynos/shared-actions*"],
+}];
 /// Cargo families whose members share breaking changes, so their majors move
 /// as one pull request. Patterns mirror `.github/dependabot.yml` exactly.
 const CARGO_LOCKSTEP_GROUPS: &[LockstepGroup<'static>] = &[
@@ -346,7 +353,11 @@ fn dependabot_updates_have_expected_policy() -> Result<()> {
         &["dependencies", "github-actions"],
         5,
     );
-    assert_group_policy("github-actions", &github_actions_update.groups, &[])?;
+    assert_group_policy(
+        "github-actions",
+        &github_actions_update.groups,
+        GITHUB_ACTIONS_LOCKSTEP_GROUPS,
+    )?;
     let cargo_update = update_for(&config, "cargo")?;
     assert_update_policy(cargo_update, "daily", &["dependencies", "cargo"], 5);
     assert_group_policy("cargo", &cargo_update.groups, CARGO_LOCKSTEP_GROUPS)?;
