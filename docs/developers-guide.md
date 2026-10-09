@@ -2140,6 +2140,35 @@ see every string in a parsed workflow, mapping keys included, share
 `iter_strings` in `tests/workflow_contracts/yaml_strings.py` rather than
 walking the value themselves.
 
+`local_reference_inventory.py` inventories local composite actions and regular
+`.sh`, `.bash`, `.py`, and `.ps1` scripts recursively under `scripts/`, as well
+as regular files identified as scripts by executable bits or a shebang. It
+excludes Python package markers, bytecode caches, data files, and symlinks;
+unclassified top-level entries fail closed unless they have a non-blank,
+reasoned exemption. `local_references.py` resolves references from workflow,
+Makefile, test, action, and script sources. It uses
+`local_reference_sources.py` to retain each workflow run command's effective
+working directory, resolve static relative script paths against it, and strip
+comments from reached scripts and root test sources according to their source
+language before matching references. `local_reference_test_trees.py` reads test
+sources while retaining their suffix for Python-import matching. The contract
+also strips full-line Makefile comments. Covered action manifests and scripts
+extend reachability to a fixed point; an item cannot establish its own
+reference. A Hypothesis property test compares this closure with an independent
+reachability walk over generated script graphs, including cycles, reordered
+references, and disconnected scripts. Keep these helpers private to the
+workflow-contract suite, and add synthetic regression cases when changing their
+source boundaries or matching rules. Both test source roots must exist; binary
+or undecodable test fixtures are skipped, while unreadable Makefiles, selected
+test sources, and reached scripts report `RepositoryFileError` with the failing
+path. Inventory classification and fail-closed exemption checks live in
+`local_reference_inventory_test.py`; coverage assertions live in
+`local_reference_coverage_test.py`, and adversarial matching cases live in
+`local_reference_edge_cases_test.py`. These suites use the private workspace
+writer in `local_reference_test_support.py`. The path-to-reason `EXEMPTIONS`
+map in `local_reference_coverage_test.py` must stay limited to inventory items
+with a documented reason; exemptions for covered or removed paths are rejected.
+
 ### Coverage ratchet and CodeScene publication
 
 The accepted architecture is recorded in
