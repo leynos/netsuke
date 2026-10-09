@@ -529,14 +529,19 @@ is adopt the C library's `strftime`, and section 5.3 records why: delegation is
 what reintroduces locale variation.
 
 Within the RFC set, the group requires the shared contract that RFC 0006
-section 14.1's "slice 0" describes, which roadmap steps 6.1.2 and 6.1.3
-deliver. It requires **no other child RFC**, making it the third independent
-leaf after RFC 0013 and RFC 0019: nothing in date and time conversion composes
-with a path, a collection, an encoding, or a digest, so no sibling's mechanism
-has to land first. It is in turn required by nothing, so the group is terminal,
-and with it the whole child set is terminal — every one of the eight is a leaf
-or a near-leaf, which is a property of ADR-040's partition rather than of this
-RFC.
+section 14.1's "slice 0" describes, delivered by roadmap task 6.1.4: the
+domain-error and diagnostic scaffolding both helpers raise through, per RFC
+0006 section 14.10, which names that scaffolding and nothing else. It needs
+neither task 6.1.2 nor task 6.1.3 — section 5.7 records that no value is keyed
+or deduplicated, and section 5.8 that `to_datetime` is bounded by table 3's
+input row and `strftime` by its own format, with the existing overflow key
+reused rather than a new bound introduced. It requires **no other child RFC**,
+making it the third independent leaf after RFC 0013 and RFC 0019: nothing in
+date and time conversion composes with a path, a collection, an encoding, or a
+digest, so no sibling's mechanism has to land first. It is in turn required by
+nothing, so the group is terminal, and with it the whole child set is terminal
+— every one of the eight is a leaf or a near-leaf, which is a property of
+ADR-040's partition rather than of this RFC.
 
 The one dependency worth stating is a **negative** one, and RFC 0006 section 16
 states it in question 7: "RFC 0020 — which owns `to_datetime` and `strftime` —

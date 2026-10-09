@@ -273,10 +273,17 @@ The group defines one private domain error enum, `TextError`, and exactly one
 RFC 0013's `InterchangeError` because this group has the same shape of problem
 — one enum serving several related parsers — and the argument that justified it
 there applies here unchanged: a group with more than a dozen conditions should
-not construct its errors ad hoc at each site.
+not construct its errors ad hoc at each site. The enum is scoped to the codes
+the group adds; the conditions it reuses from the shipped `stdlib.shell.*` and
+`stdlib.path.hash.*` families keep their existing keys, for the reason section
+5.9 gives, and do not become `TextError` variants merely to make the enum
+comprehensive.
 
 The conditions divide into five families, and naming them is what shows the
-enum is a specification rather than a bag.
+enum is a specification rather than a bag. Two of the five are reached through
+reused keys rather than through the enum, and are marked as such: the enum is
+scoped to the codes this group adds, and a reused condition does not become a
+`TextError` variant just to make the enum look complete.
 
 - **Encoding conditions**, from the two decoders. `b64decode` and `urldecode`
   each decode text to bytes and must then admit that Netsuke has no byte-string
@@ -287,9 +294,11 @@ enum is a specification rather than a bag.
 - **Format conditions**, from `human_readable`. The subject must be an integer
   or a finite float; a non-finite float has no display form.
 - **Dialect conditions**, from `shell_quote`. The dialect is a closed set and
-  an unknown value enumerates the accepted names.
+  an unknown value enumerates the accepted names. Reused, not added: the
+  `STDLIB_SHELL_*` family shipped in 3.14.8, which is where the subject-kind
+  and control-byte rejections live too.
 - **Digest conditions**, from `text_hash`, which are the two the existing
-  `hash` already emits.
+  `hash` already emits. Reused, not added: the `STDLIB_PATH_HASH_*` family.
 
 Two decisions in the enum are substantive and are recorded here rather than in
 the code.
@@ -314,6 +323,28 @@ for the policy to drift. The clause 6.9 obligation this creates is that
 `text_hash`'s digest conditions must route through the *same* key family the
 existing helper uses, not a parallel one, so the diagnostic a manifest author
 sees does not depend on which of the two helpers they happened to call.
+
+**That reuse means two of the group's conditions are not new codes, and this
+has a consequence the discharge table has to carry.** `hash` lives in
+`src/stdlib/path/hash_utils.rs` and its two conditions are keyed
+`stdlib.path.hash.unsupported_algorithm` and
+`stdlib.path.hash.unsupported_algorithm_legacy`, under the
+`keys::STDLIB_PATH_HASH_*` constants. `text_hash` reuses both rather than
+forking them, so `unknown_algorithm` and `digest_feature_gated` are **not**
+`netsuke::jinja::text::*` codes. They are the existing `stdlib.path.hash.*`
+conditions, and `text_hash` raises them unchanged — the same two Fluent keys,
+with `algorithm` and `feature` supplied as the arguments `hash` already passes.
+An earlier draft of section 5.9's table listed them under `text`, which would
+have forked exactly the family this section requires be shared.
+
+`shell_quote` is the same situation with a larger surface, and it is the reason
+section 5.9's self-contained count is smaller than the group's condition count.
+The filter shipped in 3.14.8 keyed `stdlib.shell.*` under `STDLIB_SHELL_*`, and
+this group adds no code to that family either: the subject-kind, control-byte,
+dialect, and dialect-kind conditions it raises are the ones
+`src/stdlib/recipe_text/mod.rs` already emits. So the group introduces no code
+for the four conditions `shell_quote` owns, and the reused set is six
+conditions across two shipped families rather than two across one.
 
 The `to_uuid` SHA-1 question is adjacent but distinct, and gets its own
 paragraph because a reader will look for it. UUID version 5 is defined over
@@ -356,10 +387,32 @@ several that do not.
 
 `comment` is the member. Its output is the input plus a marker per line, so for
 an input of `n` lines and `m` bytes the output is bounded by `m + n * k` where
-`k` is the longest marker. That is linear in the input with a small constant,
-and it is the same shape as the bounds RFC 0017's string helpers carry. It adds
-no traversal and reads no file, so there is no amplification beyond the
-per-line marker and no second bound to state.
+`k` is the longest marker. It adds no traversal and reads no file.
+
+**`k` is not a small constant, and an earlier draft of this section wrongly
+assumed it was.** RFC 0006 section 8.9 gives `comment` an explicit `prefix`
+argument that "overrides `style` with an explicit line prefix", so the marker
+length is author-controlled rather than drawn from the five presets. A 1 MiB
+prefix applied to 1,000 short lines produces roughly 1 GiB of output, and both
+arguments sit well below table 3's 8 MiB input row — the amplification is in
+the argument, not in the subject, so the input bound cannot catch it. Nothing
+in section 8.9 caps `prefix`'s length, and it does not need to: the output
+ceiling is the control, exactly as it is for RFC 0014's amplifying transforms
+and RFC 0015's combinatorial helpers.
+
+So `comment` is the group's second bounded member and takes the same 8 MiB
+ceiling RFC 0013's serializers and RFC 0015's combinatorial helpers use,
+computed as a checked `m + n * checked_mul(k)` **before** the result is built,
+failing with `output_too_large` when the total crosses the ceiling and
+reporting the computed length, the line count, and the ceiling. The count is a
+single multiplication rather than a walk, and it is taken whichever marker is
+in play: a preset style passes the preset's constant as `k`, and an explicit
+`prefix` passes its own byte length. Sizing the check on "the preset's marker"
+alone would leave the case that motivates it unbounded.
+
+The guide entry and the both-platform suite carry the explicit-prefix case
+alongside the five presets, because a bound that only the preset path exercises
+is a bound the accepted interface can walk around.
 
 The remaining eight are bounded by their input or output rather than by a
 materialized expansion, and each is stated because the reasoning is not uniform:
@@ -396,30 +449,61 @@ pair only over the values section 8.9 names.
 
 The group defines one private domain error enum, `TextError`, and exactly one
 `impl From<TextError> for minijinja::Error`, per clause 6.9. Every message is a
-Fluent key and every error carries a machine code. The codes are this group's
-contribution to clause 6.9's policy, so they are enumerated rather than
-described.
+Fluent key and every error carries a machine code. The enumeration below is
+therefore in two parts: the codes this group adds, which are the enum's own
+inventory, and the shipped codes its helpers reuse, which are not. Splitting
+them is what keeps "how many codes does this group introduce" answerable
+without re-deriving it from the helpers.
 
-| Condition             | Code                                         |
-| --------------------- | -------------------------------------------- |
-| not a string          | `netsuke::jinja::text::wrong_kind`           |
-| Base64 alphabet       | `netsuke::jinja::text::bad_alphabet`         |
-| Base64 character      | `netsuke::jinja::text::invalid_base64`       |
-| Base64 padding        | `netsuke::jinja::text::bad_padding`          |
-| UTF-8                 | `netsuke::jinja::text::invalid_utf8`         |
-| percent escape        | `netsuke::jinja::text::invalid_escape`       |
-| namespace parse       | `netsuke::jinja::text::invalid_namespace`    |
-| size parse            | `netsuke::jinja::text::invalid_size`         |
-| unknown size unit     | `netsuke::jinja::text::unknown_unit`         |
-| non-finite number     | `netsuke::jinja::text::not_finite`           |
-| precision range       | `netsuke::jinja::text::precision_range`      |
-| unknown unit system   | `netsuke::jinja::text::unknown_unit_system`  |
-| unknown comment style | `netsuke::jinja::text::unknown_style`        |
-| closing marker        | `netsuke::jinja::text::closing_marker`       |
-| unknown dialect       | `netsuke::jinja::text::unknown_dialect`      |
-| embedded NUL          | `netsuke::jinja::text::embedded_nul`         |
-| unknown algorithm     | `netsuke::jinja::text::unknown_algorithm`    |
-| digest gated          | `netsuke::jinja::text::digest_feature_gated` |
+| Condition             | Code                                        |
+| --------------------- | ------------------------------------------- |
+| not a string          | `netsuke::jinja::text::wrong_kind`          |
+| Base64 alphabet       | `netsuke::jinja::text::bad_alphabet`        |
+| Base64 character      | `netsuke::jinja::text::invalid_base64`      |
+| Base64 padding        | `netsuke::jinja::text::bad_padding`         |
+| UTF-8                 | `netsuke::jinja::text::invalid_utf8`        |
+| percent escape        | `netsuke::jinja::text::invalid_escape`      |
+| namespace parse       | `netsuke::jinja::text::invalid_namespace`   |
+| size parse            | `netsuke::jinja::text::invalid_size`        |
+| unknown size unit     | `netsuke::jinja::text::unknown_unit`        |
+| non-finite number     | `netsuke::jinja::text::not_finite`          |
+| precision range       | `netsuke::jinja::text::precision_range`     |
+| unknown unit system   | `netsuke::jinja::text::unknown_unit_system` |
+| unknown comment style | `netsuke::jinja::text::unknown_style`       |
+| closing marker        | `netsuke::jinja::text::closing_marker`      |
+| output too large      | `netsuke::jinja::text::output_too_large`    |
+
+Fifteen conditions, so the enum's own inventory is fifteen
+`netsuke::jinja::text::*` codes. Not every condition the group raises is the
+group's to code, and the exceptions are listed separately rather than quietly
+dropped, because the count reconciles only if a reader can see why it is
+fifteen and not eighteen:
+
+| Condition                          | Code, reused from the shipped helper                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `shell_quote` subject not a string | `STDLIB_SHELL_QUOTE_NOT_STRING` (`stdlib.shell.quote.not_string`)                                 |
+| `shell_quote` subject control byte | `STDLIB_SHELL_QUOTE_CONTROL_CHARACTER` (`stdlib.shell.quote.control_character`)                   |
+| `shell_quote` unknown dialect      | `STDLIB_SHELL_DIALECT_INVALID` (`stdlib.shell.dialect_invalid`)                                   |
+| `shell_quote` dialect not a string | `STDLIB_SHELL_DIALECT_NOT_STRING` (`stdlib.shell.dialect_not_string`)                             |
+| `text_hash` unknown algorithm      | `STDLIB_PATH_HASH_UNSUPPORTED_ALGORITHM` (`stdlib.path.hash.unsupported_algorithm`)               |
+| `text_hash` legacy algorithm gated | `STDLIB_PATH_HASH_UNSUPPORTED_ALGORITHM_LEGACY` (`stdlib.path.hash.unsupported_algorithm_legacy`) |
+
+Six conditions over two shipped families, so the group accounts for twenty-one
+in all. The first table's `not a string` and this table's first row are not in
+conflict: they are different helpers' rejections of different subjects, and the
+helper column is what separates them. `shell_quote`'s control-byte row is the
+shipped condition that discharges RFC 0006 section 8.9's embedded-NUL
+requirement; the message names the null byte, carriage return, and line feed
+together, and the group adds no second key for the same rejection.
+
+The table names constants and Fluent keys rather than `netsuke::jinja::*` codes
+because that is the form a reader greps for in `src/localization/keys.rs` and
+`locales/en-US/messages.ftl`, and because only two of the six carry a bracketed
+code in their message text.
+
+`output_too_large` is new here and is not optional: section 5.8's checked
+`comment` ceiling has to fail with a code, and the group's enum is the only
+place it can live.
 
 Each code's Fluent key is the code's reason in upper snake case under
 `STDLIB_TEXT_`, so `invalid_base64` pairs with `STDLIB_TEXT_INVALID_BASE64` and
@@ -427,14 +511,19 @@ Each code's Fluent key is the code's reason in upper snake case under
 `keys::STDLIB_<MODULE>_<CONDITION>` form.
 
 The module segment is `text` rather than `encoding`, for the reason section 5.6
-gives: one enum serves a decoder, a parser, a formatter, a quoter, and a
-digest, and only two of those are encoding. `text` matches the names the
+gives: the group's nine helpers are a decoder, a parser, a formatter, a quoter,
+and a digest, and only two of those are encoding. `text` matches the names the
 group's own members carry and the section 8.9 title, so a reader who sees
 `STDLIB_TEXT_INVALID_SIZE` can find the ring the key belongs to without
-consulting the registry. All nine helpers reach their errors through this enum:
-every `Error::new` call in the group's leaf functions is replaced by a variant
-of it, so a caller can tell a text failure from a manifest diagnostic by the
-code alone.
+consulting the registry. Seven of the nine helpers reach their errors through
+this enum — the two decoders, the two size formatters, `to_uuid`, and
+`comment` — so every `Error::new` call in their leaf functions is replaced by a
+variant of it, and a caller can tell a text failure from a manifest diagnostic
+by the code alone. The other two are the exceptions, for the reasons already
+given: `shell_quote` keeps the shipped `stdlib.shell.*` keys, and `text_hash`
+raises `hash`'s own `stdlib.path.hash.*` pair, so neither routes through
+`TextError`. Renaming a key a manifest author already reads is a worse outcome
+than one group whose helpers span three key families.
 
 Three further decisions belong here rather than in the code.
 
@@ -446,10 +535,10 @@ it lives. Clause 6.9 requires a stdlib helper to key under
 `stdlib.<module>.<condition>`, which `shell` already satisfies; moving the
 filter to `text` to match this RFC's new enum would either rename a shipped key
 or leave two namespaces for one helper. This RFC therefore **extends the
-existing family rather than forking it**, and the dialect conditions it adds are
+existing family rather than forking it**, and the dialect conditions it uses are
 `STDLIB_SHELL_DIALECT_NOT_STRING` and `STDLIB_SHELL_DIALECT_INVALID`, which
-already exist. The group's new codes are the other sixteen; `shell_quote`
-contributes none, because 3.14.8 wrote them.
+already exist. `shell_quote` contributes none of the group's fifteen new `text`
+codes, because 3.14.8 wrote its four conditions.
 
 **The two payload-carrying encoders name the offset.** Section 8.9 requires
 `b64decode`'s invalid-UTF-8 error to name the byte offset and `urldecode`'s
@@ -569,19 +658,19 @@ disagreeing rather than by a manifest failing at runtime.
 
 ### Clause discharge
 
-| Clause | Discharge                                                                                                                                                               |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `6.1`  | Nine `New` pure filters; the group contributes 9 of 52 and the six written children reach 50 of 52, leaving 2 for RFC 0020.                                             |
-| `6.2`  | All nine register in `register_query_helpers`; `shell_quote` is already registered there and its registration is unchanged.                                             |
-| `6.3`  | Every helper is pure; `human_readable` is locale-independent, `to_uuid` is deterministic, `text_hash` is lowercase, and `shell_quote`'s default is disclosed.           |
-| `6.4`  | No capability handle: nothing opens, resolves, or reads; `comment` guards its input text rather than the target file.                                                   |
-| `6.5`  | Eight helpers are platform-uniform; `shell_quote` diverges only in its default dialect, with each named dialect's output uniform.                                       |
-| `6.6`  | Eighteen conditions with their own codes; the decoders name the offset, the dialect and algorithm conditions enumerate the accepted set.                                |
-| `6.7`  | No value is keyed or deduplicated; `text_hash` and `to_uuid` are explicitly not identity relations.                                                                     |
-| `6.8`  | Table 3's input row bounds the decoders; `comment` adds one marker per line; the rest are constant- or input-bounded, and `human_to_bytes` uses checked arithmetic.     |
-| `6.9`  | One enum, one `From` impl, sixteen new `netsuke::jinja::text::*` codes, with `shell_quote` extending the shipped `STDLIB_SHELL_*` family rather than forking it.        |
-| `6.10` | Nine new names, none an alias; `text_hash` is a section 7.8 rename, `shell_quote`'s name is 3.14.8's, and `comment`'s styles name the syntax family.                    |
-| `6.11` | Nine guide entries, nine `tested-example` fences, the Base64 and percent round trips, the size inverse, the UUID and comment laws, and the both-platform quoting suite. |
+| Clause | Discharge                                                                                                                                                                                                                                    |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `6.1`  | Nine `New` pure filters; the group contributes 9 of 52 and the six written children reach 50 of 52, leaving 2 for RFC 0020.                                                                                                                  |
+| `6.2`  | All nine register in `register_query_helpers`; `shell_quote` is already registered there and its registration is unchanged.                                                                                                                  |
+| `6.3`  | Every helper is pure; `human_readable` is locale-independent, `to_uuid` is deterministic, `text_hash` is lowercase, and `shell_quote`'s default is disclosed.                                                                                |
+| `6.4`  | No capability handle: nothing opens, resolves, or reads; `comment` guards its input text rather than the target file.                                                                                                                        |
+| `6.5`  | Eight helpers are platform-uniform; `shell_quote` diverges only in its default dialect, with each named dialect's output uniform.                                                                                                            |
+| `6.6`  | Twenty-one conditions: fifteen coded by this group's enum and six reusing the shipped `STDLIB_SHELL_*` and `STDLIB_PATH_HASH_*` families; the decoders name the offset, and the dialect and algorithm conditions enumerate the accepted set. |
+| `6.7`  | No value is keyed or deduplicated; `text_hash` and `to_uuid` are explicitly not identity relations.                                                                                                                                          |
+| `6.8`  | Table 3's input row bounds the decoders; `comment` checks `m + n * checked_mul(k)` against the 8 MiB output ceiling before building; the rest are constant- or input-bounded, and `human_to_bytes` uses checked arithmetic.                  |
+| `6.9`  | One enum, one `From` impl, fifteen new `netsuke::jinja::text::*` codes, with `shell_quote` and `text_hash` extending the shipped `STDLIB_SHELL_*` and `STDLIB_PATH_HASH_*` families rather than forking them.                                |
+| `6.10` | Nine new names, none an alias; `text_hash` is a section 7.8 rename, `shell_quote`'s name is 3.14.8's, and `comment`'s styles name the syntax family.                                                                                         |
+| `6.11` | Nine guide entries, nine `tested-example` fences, the Base64 and percent round trips, the size inverse, the UUID and comment laws, and the both-platform quoting suite.                                                                      |
 
 ## 6. Dependencies
 
@@ -599,12 +688,22 @@ whatever the existing `hash` filter already uses, including its
 `legacy-digests` gate.
 
 Within the RFC set, the group requires the shared contract that RFC 0006
-section 14.1's "slice 0" describes, which roadmap steps 6.1.2 and 6.1.3
-deliver. It requires **no other child RFC**, which makes it the second
-independent leaf after RFC 0013: nothing in encoding, identity, or formatting
-composes with a path, a collection, or a date, so no sibling's mechanism has to
-land first. It is in turn required by nothing — RFC 0020's date filters do not
-consume a digest or a quoted word — so the group is genuinely terminal.
+section 14.1's "slice 0" describes, delivered by roadmap task 6.1.4: the
+domain-error and diagnostic scaffolding the group's `TextError` enum is built
+on, per clause 6.9. It needs neither task 6.1.2 nor task 6.1.3 — section 5.7
+records that no value is keyed or deduplicated, and section 5.8 that only
+`comment` materializes anything larger than its input, under the checked output
+ceiling section 5.8 states rather than through the shared combinatorial helper.
+RFC 0006 section 14.8 states no slice 0 requirement of its own, so task 6.1.4
+is the only slice 0 prerequisite the parent names for this group; the edge
+Figure 1 draws to slice 7 is the scaffolding, which the parent's own sentence
+in 14.1 ("a slice that adds no helper still uses the domain-error scaffolding
+for the helpers it does add") covers. It requires **no other child RFC**, which
+makes it the second independent leaf after RFC 0013: nothing in encoding,
+identity, or formatting composes with a path, a collection, or a date, so no
+sibling's mechanism has to land first. It is in turn required by nothing — RFC
+0020's date filters do not consume a digest or a quoted word — so the group is
+genuinely terminal.
 
 The one cross-child relationship worth stating is a **negative** one, because a
 reader who expects a dependency will look for it. `shell_quote` and RFC 0017's

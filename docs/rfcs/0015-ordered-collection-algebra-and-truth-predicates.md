@@ -280,20 +280,31 @@ relation that is deterministic and does not force values through a hash set."
 - **`contains` reads membership the same way `in` does.** For a sequence it is
   canonical equality against an element; for a mapping it is membership over
   **keys**, matching Jinja's `in`; for a string it is a substring test, and a
-  non-string `value` is an error rather than `false`. Because a mapping is
-  queried by key, an integer key is outside the canonical domain just as an
-  integer element is, and raises `uncanonical_value` naming the key's kind
-  rather than reporting `false`.
-- **The canonical-JSON domain is narrower than the accepted kinds.** Clause 6.7
-  defines it as "string keys at every mapping level", so a mapping with an
-  integer key cannot participate in any relation here. The limit is deliberate
-  rather than a defect of this group. RFC 0014's section 5.7 separates an
-  integer key `1` from a string key `"1"` when it detects a derived-key
+  non-string `value` is an error rather than `false`. The two container kinds
+  therefore fail for different reasons, and the difference is worth stating
+  because the symmetry is tempting and wrong. A mapping queried by a key the
+  canonical domain excludes raises `uncanonical_value` naming the key's kind
+  rather than reporting `false`. A sequence has no such exclusion: an integer
+  element is an ordinary JSON scalar with a canonical form, so
+  `[1, 2] is contains(1)` is `true`, and a `value` that is itself uncanonical —
+  undefined, a callable, the `now()` timestamp — is what raises the diagnostic.
+- **The canonical-JSON domain excludes integer *keys*, not integer *scalars*.**
+  Clause 6.7 requires "string keys at every mapping level", and JSON objects
+  take string keys, so a mapping with an integer key cannot participate in any
+  relation here. That restriction is about the *key position* and reaches no
+  further: RFC 8785 admits integers, booleans, strings, nulls, sequences, and
+  string-keyed mappings, and an integer used as a sequence element or as a
+  `value` argument is inside the domain. The two cases are separate, and
+  deriving the scalar rule from the key rule — as an earlier draft of this
+  section did, reading "an integer key is outside the canonical domain just as
+  an integer element is" — would contradict this section's own set-operation
+  examples, which operate on integer elements. RFC 0014's section 5.7 separates
+  an integer key `1` from a string key `"1"` when it detects a derived-key
   collision, but that is a rule about *which derived keys collide*, not an
   admission of integer keys to the canonical-JSON domain; the two documents
   agree rather than conflict, and section 5.7 says so in its own third bullet.
-  The diagnostic names the kind, per the clause's "typed error naming the value
-  kind".
+  The key diagnostic names the kind, per the clause's "typed error naming the
+  value kind".
 
 ### 5.8. Resource bounds
 
@@ -330,26 +341,31 @@ Four consequences this group decides:
 - **A tuple ceiling is not an output ceiling, and this group needs both.** The
   two quantities are independent, and neither bounds the other. Cardinality is
   the number of tuples; output is what those tuples hold, and a tuple's width
-  is the *third* quantity again — the number of elements in each. A count
-  ceiling cannot bound width, because `product` reaches cardinality one for
-  every `repeat` when every operand is a singleton: one operand of one element
-  repeated a million times is a single tuple, so the check passes, while the
-  tuple itself carries two million elements. The `combinations` tail makes the
-  same gap without `repeat` at all: `C(100000, 99999)` is exactly 100000, which
-  sits *on* the ceiling rather than over it, so a 100000-element input yields a
-  result of 100000 tuples each 99999 wide — nine billion elements, from a
-  request the cardinality check is obliged to admit. `permutations` is the
-  nearest to safe, since its lower 10000-tuple ceiling caps it at 35,280
-  elements, but that figure is a count of elements rather than of content, and
-  each element is a value the author supplies: seven elements of 8 MiB each
-  become 282 GB of materialized tuples through 5,040 of them. So all three
-  count *content* rather than tuples or elements, with checked arithmetic,
-  abandoning the walk the moment the running total passes 8 MiB, and fail with
-  `output_too_large` at the ceiling RFC 0013's serializers, RFC 0014's
-  amplifying transforms, and RFC 0016's `regex_replace` already apply. The
-  count is taken before any tuple is built, per clause 6.8, which is what makes
-  the guarantee hold for the inputs the cardinality check admits rather than
-  only for the ones it refuses.
+  is the *third* quantity again — the number of elements in each. Section 8.3
+  defines that width for `product` as `(1 + others | length) * repeat`, so
+  width is a function of the operand *count* and `repeat` and never of the
+  operand *lengths*. A count ceiling cannot bound it, because cardinality and
+  width move independently: `[[0]] | product(repeat=1000000)` is a single
+  operand of one element, so its cardinality is one and the check passes, while
+  its one tuple is 1 000 000 elements wide — one million, not two, because the
+  operand count is one and `1 * 1000000` is the clause's own figure. A hundred
+  such operands would be 100 000 000 wide at the same cardinality of one, and
+  it is `repeat` alone that makes the gap reachable without a large input. The
+  `combinations` tail makes the same gap without `repeat` at all:
+  `C(100000, 99999)` is exactly 100000, which sits *on* the ceiling rather than
+  over it, so a 100000-element input yields a result of 100000 tuples each
+  99999 wide — nine billion elements, from a request the cardinality check is
+  obliged to admit. `permutations` is the nearest to safe, since its lower
+  10000-tuple ceiling caps it at 35,280 elements, but that figure is a count of
+  elements rather than of content, and each element is a value the author
+  supplies: seven elements of 8 MiB each become 282 GB of materialized tuples
+  through 5,040 of them. So all three count *content* rather than tuples or
+  elements, with checked arithmetic, abandoning the walk the moment the running
+  total passes 8 MiB, and fail with `output_too_large` at the ceiling RFC
+  0013's serializers, RFC 0014's amplifying transforms, and RFC 0016's
+  `regex_replace` already apply. The count is taken before any tuple is built,
+  per clause 6.8, which is what makes the guarantee hold for the inputs the
+  cardinality check admits rather than only for the ones it refuses.
 - **An over-large request fails without allocating, which is a testable
   claim.** RFC 0006 section 6.8 opens with "rejects unreasonable expansion
   **before** allocating", and roadmap task 6.4.2's success criterion restates
@@ -489,10 +505,17 @@ lazily yielding adapter would either move the count somewhere the clause does
 not put it or leave the count to be inferred from a partially consumed iterator.
 
 Within the RFC set, it requires the shared contract that RFC 0006 section
-14.1's "slice 0" describes, which roadmap steps 6.1.2 and 6.1.3 deliver: the
-canonical value key, needed by every relation in section 5.7, and the
-bounded-materialization helper, needed by the three cardinality checks in
-section 5.8. It requires no other child RFC, and none requires it.
+14.1's "slice 0" describes, which roadmap steps 6.1.2, 6.1.3, and 6.1.4
+deliver: the canonical value key (roadmap task 6.1.2), needed by every relation
+in section 5.7; the bounded-materialization helper (roadmap task 6.1.3, which
+requires 6.1.2), needed by the three cardinality checks in section 5.8; and the
+domain-error and diagnostic scaffolding (roadmap task 6.1.4) that section 5.9's
+`CollectionError` enum is built on, per clause 6.9. It requires no other child
+RFC, and none requires it. RFC 0006 section 14.4 names canonical equality and
+the cardinality bound as this slice's slice 0 requirement; the scaffolding
+reaches it through section 14.1's own sentence that "a slice that adds no
+helper still uses the domain-error scaffolding for the helpers it does add",
+which section 6.9 makes a contract for every group that registers a code.
 
 ## 7. Delivery
 
@@ -516,12 +539,21 @@ Ninja with the hash-state property holding them there.
 
 Two of those criteria are the ones that check section 5.8, and both name their
 input, because an over-large request is only decisive when the ceiling it
-crosses is stated. Task 6.4.2 succeeds on cardinality when
-`[[]] | product(repeat=100001)` fails naming the computed cardinality and the
-ceiling, and on output when a request the cardinality check admits does not:
-`[[0]] | product(repeat=1000000)` is a single tuple of two million elements, so
-it fails `output_too_large` rather than returning, and
-`range(100000) | combinations(99999)` fails the same way instead of
+crosses is stated. The two ceilings need two *different* inputs, and an earlier
+draft of this section used one input for both by mistake:
+`[[]] | product( repeat=100001)` has a single operand containing one empty
+sequence, so its cardinality is one and section 8.3 makes it an empty result —
+it crosses neither ceiling and demonstrates nothing.
+
+Task 6.4.2 therefore succeeds on **cardinality** when `range(100001) | product`
+fails naming the computed cardinality (100001), the operand lengths, and the
+ceiling — and it should be read alongside the empty-operand case, which must
+return an empty result rather than an error, because the two together are what
+show the check is a comparison rather than a blanket refusal of large `repeat`
+values. It succeeds on **output** when a request the cardinality check is
+obliged to admit does not: `[[0]] | product(repeat= 1000000)` is a single tuple
+of one million elements, so it fails `output_too_large` rather than returning,
+and `range(100000) | combinations(99999)` fails the same way instead of
 materializing 100000 tuples of width 99999. Both are checked *before* the first
 tuple is built, which is what distinguishes the bound from a post-hoc
 measurement.

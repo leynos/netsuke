@@ -441,11 +441,19 @@ of rules RFC 0006 section 8.6 already states, and the dialect would then be
 documented in two places.
 
 Within the RFC set, the group requires the shared contract that RFC 0006
-section 14.1's "slice 0" describes, which roadmap steps 6.1.2 and 6.1.3
-deliver. It requires no other child RFC. RFC 0018 requires **this** RFC, because
-`expandvars`'s roadmap task 6.7.4 lists step 6.6.1 as a prerequisite and
-because the environment-observing group's helper takes the same `dialect`
-argument this group defines — so the mechanism lands here and is consumed there.
+section 14.1's "slice 0" describes, delivered by roadmap task 6.1.4: the
+domain-error and diagnostic scaffolding that the group's `PathError` enum
+extends, per RFC 0006 section 14.6. It needs neither task 6.1.2 nor task 6.1.3
+— section 5.7 records that no value is keyed or deduplicated, and section 5.8
+that the group reaches no table 3 bound because every output is bounded by its
+input. The scaffolding is nonetheless a real prerequisite rather than a formal
+one: the seven codes of section 5.9 are registered through it, and registering
+them ad hoc at each leaf is the `ResolveError` divergence RFC 0006 clause 6.9
+exists to prevent. It requires no other child RFC. RFC 0018 requires **this**
+RFC, because `expandvars`'s roadmap task 6.7.4 lists step 6.6.1 as a
+prerequisite and because the environment-observing group's helper takes the same
+`dialect` argument this group defines — so the mechanism lands here and is
+consumed there.
 
 ## 7. Delivery
 

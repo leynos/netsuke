@@ -263,7 +263,10 @@ are enumerated rather than described.
 | key not found on the path   | `netsuke::jinja::transform::missing_key`        |
 | traversal into a non-value  | `netsuke::jinja::transform::not_a_container`    |
 | derived key of wrong kind   | `netsuke::jinja::transform::key_kind`           |
+| index of wrong kind         | `netsuke::jinja::transform::index_kind`         |
+| path step of wrong kind     | `netsuke::jinja::transform::path_kind`          |
 | absent path on a parent     | `netsuke::jinja::transform::missing_path`       |
+| element missing a member    | `netsuke::jinja::transform::missing_member`     |
 | value present but not a seq | `netsuke::jinja::transform::not_a_sequence`     |
 | repeated derived key        | `netsuke::jinja::transform::duplicate_key`      |
 | nesting too deep            | `netsuke::jinja::transform::depth_exceeded`     |
@@ -323,19 +326,19 @@ layers, the acceptance case for the group rather than for any one helper.
 
 ### Clause discharge
 
-| Clause | Discharge                                                                                                               |
-| ------ | ----------------------------------------------------------------------------------------------------------------------- |
-| `6.1`  | Six pure `New` helpers; the six section 5.1 rows are 6 of 52.                                                           |
-| `6.2`  | All six pure, so all register in `register_query_helpers`, none stubbed.                                                |
-| `6.3`  | Merge keeps first-appearance position; pair, converter, and re-index orders all defined from input order.               |
-| `6.4`  | No filesystem, environment, or subprocess access; no handle taken.                                                      |
-| `6.5`  | No `dialect` argument; `subelements`' key path is not a filesystem path.                                                |
-| `6.6`  | Undefined rejected, `none` accepted; absence and shape mismatch separated; three enumerated option sets.                |
-| `6.7`  | Duplicate detection keyed on the canonical key; round trip stated over the canonical-JSON domain and tested outside it. |
-| `6.8`  | Table 3's nesting depth in `combine`'s descent, plus an 8 MiB content ceiling on `subelements` and `combine`.           |
-| `6.9`  | One enum, one `From` impl, fifteen `netsuke::jinja::transform::*` codes.                                                |
-| `6.10` | Six new names, no alias family, and the `items` collision resolved in section 5.10.                                     |
-| `6.11` | The clause's seven obligations, plus `combine`'s merge laws at the scope section 8.2 fixes.                             |
+| Clause | Discharge                                                                                                                                |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `6.1`  | Six pure `New` helpers; the six section 5.1 rows are 6 of 52.                                                                            |
+| `6.2`  | All six pure, so all register in `register_query_helpers`, none stubbed.                                                                 |
+| `6.3`  | Merge keeps first-appearance position; pair, converter, and re-index orders all defined from input order.                                |
+| `6.4`  | No filesystem, environment, or subprocess access; no handle taken.                                                                       |
+| `6.5`  | No `dialect` argument; `subelements`' key path is not a filesystem path.                                                                 |
+| `6.6`  | Undefined rejected, `none` accepted; absence and shape mismatch separated; three enumerated option sets.                                 |
+| `6.7`  | Duplicate detection keyed on the canonical key; round trip stated over the canonical-JSON domain and tested outside it.                  |
+| `6.8`  | Table 3's nesting depth in `combine`'s descent, plus an 8 MiB content ceiling on `subelements` and `combine`.                            |
+| `6.9`  | One enum, one `From` impl, eighteen `netsuke::jinja::transform::*` codes, which is exactly the set section 5.6's rejection column names. |
+| `6.10` | Six new names, no alias family, and the `items` collision resolved in section 5.10.                                                      |
+| `6.11` | The clause's seven obligations, plus `combine`'s merge laws at the scope section 8.2 fixes.                                              |
 
 ## 6. Dependencies
 
@@ -346,11 +349,18 @@ Netsuke already carries. Adding no dependency is one reason it can lead the
 second wave.
 
 Within the RFC set, it requires the shared contract that RFC 0006 section
-14.1's "slice 0" describes, which roadmap steps 6.1.2 and 6.1.3 deliver: the
-canonical value key, needed by section 5.7's duplicate detection and by
-`combine`'s merge laws, and the bounded-materialization helper, needed by
-section 5.8's depth and output checks. It requires no other child RFC, and none
-requires it. RFC 0006 section 14.3 states the same two prerequisites as slice 0.
+14.1's "slice 0" describes, which roadmap steps 6.1.2, 6.1.3, and 6.1.4
+deliver: the canonical value key (roadmap task 6.1.2), needed by section 5.7's
+duplicate detection and by `combine`'s merge laws; the bounded-materialization
+helper (roadmap task 6.1.3, which requires 6.1.2), needed by section 5.8's
+depth and output checks; and the domain-error and diagnostic scaffolding
+(roadmap task 6.1.4) that section 5.9's `TransformError` enum is built on, per
+clause 6.9. It requires no other child RFC, and none requires it. RFC 0006
+section 14.3 names canonical equality and duplicate detection as this slice's
+slice 0 requirement; the scaffolding reaches it through section 14.1's own
+sentence that "a slice that adds no helper still uses the domain-error
+scaffolding for the helpers it does add", which section 6.9 makes a contract
+for every group that registers a code.
 
 ## 7. Delivery
 

@@ -471,12 +471,16 @@ normal dependency at `1` with the `serde` feature, so `version` adds nothing.
 section 5.8 specify the pattern cache without a new crate.
 
 Within the RFC set, it requires the shared contract that RFC 0006 section
-14.1's "slice 0" describes, which roadmap steps 6.1.2 and 6.1.3 deliver: the
-bounded-materialization helper, needed by `regex_findall`'s match ceiling and by
-`regex_replace`'s output ceiling. It requires no other child RFC, and none
-requires it — section 14.5 notes that the version predicate has no dependency
-on the regular-expression work, and this RFC keeps both in one document without
-making either depend on the other.
+14.1's "slice 0" describes, delivered by roadmap tasks 6.1.3 and 6.1.4: the
+bounded-materialization helper (task 6.1.3, which requires 6.1.2), needed by
+`regex_findall`'s match ceiling and by `regex_replace`'s output ceiling, and
+the domain-error and diagnostic scaffolding (task 6.1.4) that the group's
+`PatternError` enum extends. It needs no canonical value key: section 5.7
+records that nothing in the group keys or deduplicates a value, so task 6.1.2
+reaches it only as 6.1.3's prerequisite. It requires no other child RFC, and
+none requires it — section 14.5 notes that the version predicate has no
+dependency on the regular-expression work, and this RFC keeps both in one
+document without making either depend on the other.
 
 ## 7. Delivery
 

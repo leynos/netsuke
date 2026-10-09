@@ -219,7 +219,26 @@ Hard invariants. Violating one requires escalation, not a workaround.
   same reason: the eight are written, the per-file limit cannot be met without
   cutting per-helper prose the clauses require, and the density control — not
   the raw limit — is what distinguishes a padded child from a dense one.
-  Recorded here so the breach count is complete rather than partial.
+  Recorded here so the breach count is complete rather than partial. **Third
+  correction, 2026-10-09: the figures above are superseded by the review-repair
+  round on `dafd90fe`, and the breach is now measured at the working tree.**
+  The children run 0013 **483**, 0014 **407**, 0015 **591**, 0016 **542**, 0017
+  **529**, 0018 **739**, 0019 **832**, and 0020 **669** — **4792** together,
+  against the 4000-line aggregate budget. The aggregate breach is **+792**
+  rather than the 4533/+533 recorded at `7b0794af`, because the repairs that
+  corrected seven findings added text rather than removing it: 0018 and 0019
+  grew most, since F4's two-table inventory and the `match_limit` correction
+  are both additions. **The per-file breach set has widened from seven to all
+  eight.** RFC 0014 was the one child under the 400-line limit at `7b0794af`,
+  at 397; F3's three inserted diagnostic rows took it over, and F6's second
+  pass took it to **407**, so no child meets the limit. That is worth stating
+  plainly rather than folding into the aggregate, because the previous round's
+  record named 0014 as the exception and a reader comparing the two would
+  otherwise read a silently changed set. **These figures are the working
+  tree's, not a committed revision's**, and they are superseded by the commit
+  that follows this repair round; the measurement is recorded here because the
+  tolerance requires the breach to be measured rather than projected, and the
+  tree is what the next reader will gate.
 - **Vacuity.** If any section 5 subsection cannot state a group-specific
   consequence — a bound, a registry row, a diagnostic code, a purity
   assignment, a named error condition — and cannot honestly say "no additional
@@ -2312,6 +2331,113 @@ Hard invariants. Violating one requires escalation, not a workaround.
   contract (9 of 9). `make fmt` was confirmed idempotent on the edited RFC by
   re-running it and diffing.
 
+- [x] (2026-10-09) **CodeRabbit's review of `dafd90fe` raised six findings on
+  the child RFCs, and all six were verified against the source and repaired.**
+  Each was re-derived rather than taken on the reviewer's word, and one of the
+  reviewer's own figures was wrong in the direction that made its finding look
+  worse than the defect it described.
+
+  - **F6, the section 6 dependency paragraphs named the wrong roadmap tasks in
+    every child.** Re-derived from each child's own discharge rows rather than
+    copied from one to the next: the slice-0 inventory is RFC 0006 §14.1's five
+    bullets, roadmap 6.1.2 delivers the canonical value key, 6.1.3 the
+    bounded-materialization helper, and 6.1.4 the domain-error scaffolding.
+    Every child said "6.1.2 and 6.1.3" at `dafd90fe`, and the repair re-derived
+    each from its own discharge rows: 0017, 0018, 0019, and 0020 need 6.1.4
+    alone, because neither the key nor the bound applies to them; 0016 needs
+    6.1.3 and 6.1.4; and 0013 needed a corrected per-slice enumeration rather
+    than a different task list, because §14.1's picture is not uniform across
+    its ten slices.
+
+    **The first pass at this finding missed 0014 and 0015, and that is the
+    substantive correction rather than an editorial one.** Both were left
+    naming only 6.1.2 and 6.1.3, on the reasoning that each needs the key and
+    the bound and nothing else. Each also defines a domain error enum with a
+    single `impl From<…Error> for minijinja::Error` per clause 6.9 — that is
+    the 6.1.4 scaffolding, and clause 6.9 makes it a contract rather than an
+    option for every group that registers a code. The reviewer's finding said
+    "several new children", and taking it as "several" rather than checking
+    all eight is what produced the omission: the check that settles it is
+    mechanical — grep each child for `impl From<…Error> for minijinja::Error`
+    and require the task that delivers it to appear in that child's §6. All
+    eight children define one, so all eight depend on 6.1.4; 0014 and 0015 now
+    name it. The failure mode is worth recording because it is the one this
+    repair round keeps meeting: a claim about a set, checked against part of
+    the set.
+  - **F1, RFC 0015's `contains` bullet was wrong about the canonical domain.**
+    The bullet claimed an excluded key makes `[1, 2] is contains(1)` an error.
+    Section 6.7 excludes non-string *keys*, and an integer sequence element is
+    an ordinary JSON scalar with a canonical form, so the predicate is simply
+    `true`. The bullet and its successor are rewritten to separate keys from
+    scalars and to name the earlier draft's error.
+  - **F5, RFC 0015's `product` width was stated twice and differently.** The
+    singleton illustration disagreed with §8.3's formula, and the reviewer's
+    own correction ("two million") was also wrong: §8.3 gives
+    `(1 + others | length) * repeat`, which is `1 * 1000000` — one million — for
+    one operand. The derivation now cites the clause it comes from, and §7's
+    acceptance criteria were rewritten to demonstrate cardinality with
+    `range(100001) | product` (100001 > the ceiling) and output with
+    `[[0]] | product(repeat=1000000)`, with the empty-operand case required to
+    return empty rather than error.
+  - **F3, RFC 0014's §5.9 diagnostic table was missing three codes** that its
+    own §5.6 rejection column names (`index_kind`, `path_kind`,
+    `missing_member`). Added in position, and the clause-discharge row
+    corrected from fifteen to eighteen. The repair was verified by set
+    difference rather than by reading: the rejection column's backticked names
+    minus the table's code set is now empty of real codes.
+  - **F2, RFC 0019's `comment` bound assumed its marker was a small constant.**
+    Section 8.9 gives `comment` an explicit `prefix` argument, so the marker
+    length is author-controlled: a 1 MiB prefix over 1,000 short lines is
+    ~1 GiB of output with neither argument near table 3's input row. §5.8 now
+    requires a checked `m + n * checked_mul(k)` against the shared 8 MiB output
+    ceiling before construction, failing with `output_too_large` and reporting
+    the computed length, line count, and ceiling — and requires the count for
+    *both* the preset path and an explicit prefix, since sizing on the preset
+    alone leaves the motivating case unbounded.
+  - **F4, RFC 0019's error inventory contradicted its own §5.6 and did not
+    reconcile with any count.** Read against the shipped source
+    (`src/localization/keys.rs`, `locales/en-US/messages.ftl`,
+    `src/stdlib/path/hash_utils.rs`, `src/stdlib/recipe_text/mod.rs`) rather
+    than against the RFCs: the table listed `unknown_algorithm`,
+    `digest_feature_gated`, `unknown_dialect`, and `embedded_nul` as
+    `netsuke::jinja::text::*` codes, but `text_hash` reuses `hash`'s
+    `stdlib.path.hash.*` pair and `shell_quote` keeps its shipped
+    `stdlib.shell.*` family. §5.9 is now two tables — the fifteen codes the
+    enum adds, and the six shipped conditions its helpers reuse — and the
+    discharge rows for `6.6` (now twenty-one conditions), `6.8`, and `6.9`
+    (fifteen new codes) are reconciled to it. The NUL condition is
+    `shell_quote`'s alone per §8.9, so the invented `text::embedded_nul` was
+    removed rather than kept.
+
+  **Two further defects were found by the same reading and are not the
+  reviewer's findings.** `match_limit` was described in RFC 0018's discharge
+  row and dependencies paragraph as "shared with RFC 0016"; it cannot be.
+  Clause 6.9 fixes the code shape as `netsuke::jinja::<module>::<reason>`, and
+  `glob` lives in the `path` module while `regex_findall` lives in `pattern`,
+  so one condition requires two codes. What *is* shared is the bound and its
+  check-before-materialize discipline. RFC 0018 now separates the two, and
+  `unknown_dialect` — genuinely one code across RFCs 0017 and 0018, because
+  both reach it through one parser — is recorded as the contrasting case that
+  makes the distinction checkable.
+
+  **A1: this plan's `EP-M4` to `EP-M10` milestone section carried a superseded
+  delivery split.** It said to ship `EP-M4`–`EP-M7` as one pull request and
+  `EP-M8`–`EP-M11` as another; PR #860 carries the whole remainder in one
+  branch, because `EP-M3` landed with PR #697 and `EP-M11` reconciles citations
+  every child introduces. The section now records what shipped and why, and
+  names the commit boundaries — one adding commit per child, repairs in their
+  own commits — as how the no-reviewer-reads-everything intent is met instead.
+
+  **A2 remains open and is not the agent's to close.** The aggregate breach
+  (4792 lines against the 4000 budget in this repair round's tree) and the
+  per-file breach (now all eight children, 0014 at 407 having lost its
+  previously sole exemption) require the user's explicit acceptance. The plan's
+  own record says the escalation "was raised but the user has still not been
+  asked and has not approved", and the two 2026-10-03 remedies were retired by
+  derivation rather than by an answer. This entry records the reopened
+  question; it does not answer it, because a waiver the agent issues to itself
+  is the defect the original finding names.
+
 - [x] (2026-10-03) **`scrutineer` independently re-ran the full nine-gate set
   and returned green for `7b0794af`, and its change-surface probe corrected a
   claim this plan's delegation prompt had made.** The report's verdict is
@@ -4251,6 +4377,48 @@ tracked; the derivation it performs is reimplemented in the coverage test at
   eight by four contract tests, and the only remaining remedy would be to move
   the number a third time.
 
+**Repair round after the PR #860 review, 2026-10-09.** Six CodeRabbit findings
+were repaired, plus a second half of the §6-dependency finding the reviewer did
+not separate out: 0014 and 0015 named only 6.1.2 and 6.1.3 while each defines a
+clause-6.9 `impl From<…Error> for minijinja::Error` — the 6.1.4 scaffolding —
+so all eight children now name 6.1.4. The check that settles it is mechanical
+rather than editorial: grep each child for that `impl` and require 6.1.4 in its
+§6. Two of the reviewer's own figures did not survive verification and are
+recorded as such: §8.3 gives one million elements for a single `product`
+operand rather than two million, and the correct check on the dependency
+finding is all eight children rather than "several".
+
+The gate outcome for the repaired tree is a fixpoint under both mdtablefix pins.
+`mdtablefix --check` reports **179 files left unchanged** under the staged
+0.6.0 binary (`/tmp/mdtablefix-pin`, sha256 `b78b2ac9`, the copy commit
+`768db621` describes) *and* under the host's 0.6.1, so the skew cannot decide
+this round's verdict — which matters because `main` has since moved the CI pin
+to 0.6.1 in `5cb9de6d`. `make markdownlint` reports **0 issues in 180 files**
+and `make nixie` validates all diagrams. The repair pass replaced the earlier
+run's 13 MD060 table-column-style errors and its eight-file `check-fmt`
+failure; the sole survivor was one paragraph in RFC 0014 that
+`mdtablefix --wrap` re-wrapped by ten lines, which is now the canonical form.
+RFC 0014 stays at **407** lines, so the figures recorded above are unaffected.
+
+`make test-documentation-contracts` could not run: the compile-admission
+supervisor refused with `build-limits: the supervisor refused: unhealthy`
+(capacity 2, held 4, stale `server-drain` groups), which is an environment
+block rather than a code failure and must be reported rather than worked
+around. The staged hunks touch no fence line and no `tested-example` marker —
+the two grep hits are table-cell prose about such fences, changed only in
+column padding — so the documentation contracts are unaffected by content even
+though the gate itself is unrun. `make test-workflow-contracts` passed on the
+pre-repair tree (1119 passed, 3 skipped; 27 passed) and is superseded by this
+round rather than carried forward.
+
+**A2 remains open and is not the agent's to close.** Both volume tolerances are
+still breached at this revision: the aggregate at **4792** against the 4000
+budget, and the per-file limit against **all eight** children, RFC 0014 having
+lost its previously sole exemption at 407. The repair round widened rather than
+narrowed the breach, because the diagnosis that corrected seven findings added
+text. This entry records the question; it does not answer it, because a waiver
+the agent issues to itself is the defect the original finding names.
+
 ## Alternatives considered
 
 The first draft had no such section. Two alternatives are live at the approval
@@ -5349,9 +5517,24 @@ Identical in shape, so stated once. For child `00NN` owning the groups in
 Order: `EP-M4` RFC 0014, `EP-M5` RFC 0015, `EP-M6` RFC 0016, `EP-M7` RFC 0017,
 `EP-M8` RFC 0018, `EP-M9` RFC 0019, `EP-M10` RFC 0020. RFC 0017 precedes RFC
 0018 because `expandvars` and `abs` both depend on the dialect mechanism that
-section 8.6 defines and RFC 0017 discharges. Ship `EP-M4` to `EP-M7` as one
-pull request and `EP-M8` to `EP-M11` as another, so no reviewer faces the whole
-set at once.
+section 8.6 defines and RFC 0017 discharges.
+
+Ship `EP-M4` to `EP-M7` as one pull request and `EP-M8` to `EP-M11` as another,
+so no reviewer faces the whole set at once.
+
+**That two-pull-request split is the milestone plan's intent and not what
+shipped.** `EP-M3`'s RFC 0013 landed with PR #697, so the remainder is `EP-M4`
+through `EP-M11`, and PR [#860](https://github.com/leynos/netsuke/pull/860)
+carries that whole remainder in one branch. `EP-M11` reconciles citations that
+every child introduces, so separating the two groups would have meant two
+review rounds over one continuous diff, with the second PR carrying the first's
+children as a rebase rather than as its own work. The delivery intent — that no
+reviewer should face seven children plus the reconciliation at once — is met by
+the branch's commit boundaries instead: each `EP-M4` to `EP-M10` child has its
+own adding commit, and each round of review repairs is its own commit, so a
+reviewer reads one child or one repair round in isolation rather than the
+branch as a whole. This paragraph was corrected when the PR was published; an
+earlier revision of the plan stated the split as what happened.
 
 ### `EP-M11` — reconcile and close
 

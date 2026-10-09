@@ -468,6 +468,23 @@ Three decisions this group adds:
   than duplicating it. This is the reuse section 5.10's naming clause permits —
   it is one capability with one name, not an alias — and it is why the two
   children can share a key without either owning the other.
+- **`match_limit` is the opposite case, and an earlier draft of the discharge
+  table wrongly called it a share.** It *is* shared as a bound: section 5.8
+  applies the same 100000-match ceiling RFC 0016's section 5.8 puts on
+  `regex_findall`, for the same reason, with the same check-before-materialize
+  discipline. It is **not** shared as a code, and cannot be. Clause 6.9 fixes
+  the shape as `netsuke::jinja::<module>::<reason>`, where the module segment
+  names the module the helper lives in; `glob` lives in `src/stdlib/path/`, so
+  its rejection must read `netsuke::jinja::path::match_limit` and under
+  `STDLIB_PATH_MATCH_LIMIT`. RFC 0016's `regex_findall` is in the `pattern`
+  module and keeps `netsuke::jinja::pattern::match_limit` under
+  `STDLIB_PATTERN_MATCH_LIMIT`. One condition, two modules, two codes — which
+  is what the clause's shape *requires* rather than what it overlooks. The
+  reason this is not the `manifest.env.invalid_utf8` duplicate the second
+  bullet refuses is the caller's perspective: an author who wrote one `stdlib`
+  filter sees one `stdlib` key, and the shared *reason* is what makes the two
+  diagnoses agree. The bound is what is common; the code is per-module and must
+  be.
 - **Both platform-naming codes carry the platform as payload.** Section 8.7
   requires `identity_unavailable`'s message to name the platform and
   `unsupported_platform`'s to name "the platform and the capability", so both
@@ -539,19 +556,19 @@ removed without the inventory disagreeing.
 
 ### Clause discharge
 
-| Clause | Discharge                                                                                                                                                                                       |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `6.1`  | Five `New` helpers and one `Option added`; none is pure, so the group contributes 0 of 52 and the six written children remain at 41.                                                            |
-| `6.2`  | All six register stubs in `register_disabled_query_helpers`; `expandvars` is excluded exactly as `env` is, and `glob`'s registration is unchanged.                                              |
-| `6.3`  | Four tests return booleans; `expandvars` substitutes in one left-to-right pass; `files_only` filters the existing result rather than reordering it.                                             |
-| `6.4`  | Every path resolves through the injected `cap_std` handle; a path outside it errors; `expandvars` reads the injected environment reader.                                                        |
-| `6.5`  | Platform is uniform for four helpers, identity-based for `same_file`, divergent only in `mount`, and dialect-sensitive in `expandvars`'s input.                                                 |
-| `6.6`  | Eleven rejected conditions with their own codes; `outside_capability` is distinct from not-found; both platform codes name the platform.                                                        |
-| `6.7`  | No value is keyed or deduplicated; `same_file`'s identity relation is a filesystem fact, not the canonical key.                                                                                 |
-| `6.8`  | Table 3's input row bounds every path; `files_only=false` adds a 100000-match ceiling checked before materialization; `expandvars` adds an 8 MiB output ceiling checked before materialization. |
-| `6.9`  | One enum, one `From` impl, eleven `netsuke::jinja::path::*` codes extending the existing module namespace, with `unknown_dialect` shared with RFC 0017 and `match_limit` shared with RFC 0016.  |
-| `6.10` | Five new names, none an alias; `mount` keeps the noun spelling the test namespace supplies the "is" for; `fileglob` stays rejected.                                                             |
-| `6.11` | Five guide entries, five `tested-example` fences, the dangling-link and subsequence laws, the two-platform suite, and the all-stubs disposition suite.                                          |
+| Clause | Discharge                                                                                                                                                                                                                                                                     |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `6.1`  | Five `New` helpers and one `Option added`; none is pure, so the group contributes 0 of 52 and the six written children remain at 41.                                                                                                                                          |
+| `6.2`  | All six register stubs in `register_disabled_query_helpers`; `expandvars` is excluded exactly as `env` is, and `glob`'s registration is unchanged.                                                                                                                            |
+| `6.3`  | Four tests return booleans; `expandvars` substitutes in one left-to-right pass; `files_only` filters the existing result rather than reordering it.                                                                                                                           |
+| `6.4`  | Every path resolves through the injected `cap_std` handle; a path outside it errors; `expandvars` reads the injected environment reader.                                                                                                                                      |
+| `6.5`  | Platform is uniform for four helpers, identity-based for `same_file`, divergent only in `mount`, and dialect-sensitive in `expandvars`'s input.                                                                                                                               |
+| `6.6`  | Eleven rejected conditions with their own codes, one of which (`unknown_dialect`) is RFC 0017's code reused rather than a twelfth; `outside_capability` is distinct from not-found; both platform codes name the platform.                                                    |
+| `6.7`  | No value is keyed or deduplicated; `same_file`'s identity relation is a filesystem fact, not the canonical key.                                                                                                                                                               |
+| `6.8`  | Table 3's input row bounds every path; `files_only=false` adds a 100000-match ceiling checked before materialization; `expandvars` adds an 8 MiB output ceiling checked before materialization.                                                                               |
+| `6.9`  | One enum, one `From` impl, eleven `netsuke::jinja::path::*` codes extending the existing module namespace; `unknown_dialect` is one code shared with RFC 0017, and `match_limit` shares RFC 0016's bound and discipline but is this module's own code per clause 6.9's shape. |
+| `6.10` | Five new names, none an alias; `mount` keeps the noun spelling the test namespace supplies the "is" for; `fileglob` stays rejected.                                                                                                                                           |
+| `6.11` | Five guide entries, five `tested-example` fences, the dangling-link and subsequence laws, the two-platform suite, and the all-stubs disposition suite.                                                                                                                        |
 
 ## 6. Dependencies
 
@@ -566,14 +583,20 @@ section 8.7 already states, and it would have to be trusted on two platforms
 where the RFC specifies both.
 
 Within the RFC set, the group requires the shared contract that RFC 0006
-section 14.1's "slice 0" describes, which roadmap steps 6.1.2 and 6.1.3
-deliver. It requires no other child RFC for the filesystem tests, and it
-requires [RFC 0017](0017-lexical-path-composition.md) for `expandvars`, because
-the environment-observing helper takes the same `dialect` argument that RFC
-defines — so the mechanism lands there and is consumed here. Roadmap task 6.7.4
-lists step 6.6.1 as a prerequisite for exactly this reason. The group is
-otherwise the terminal child of the pure/observing seam: nothing requires it,
-because it is where the observing half ends.
+section 14.1's "slice 0" describes, delivered by roadmap task 6.1.4: the
+domain-error and diagnostic scaffolding the group's `PathError` extension and
+its `unknown_dialect` and `match_limit` codes register through, per RFC 0006
+sections 14.6 and 14.7. It needs neither task 6.1.2 nor task 6.1.3 — section
+5.7 records that no value is keyed or deduplicated, and section 5.8's match and
+output ceilings are counted with the same table 3 arithmetic RFC 0016 and RFC
+0017 already carry rather than through the shared helper's combinatorial path.
+It requires no other child RFC for the filesystem tests, and it requires
+[RFC 0017](0017-lexical-path-composition.md) for `expandvars`, because the
+environment-observing helper takes the same `dialect` argument that RFC defines
+— so the mechanism lands there and is consumed here. Roadmap task 6.7.4 lists
+step 6.6.1 as a prerequisite for exactly this reason. The group is otherwise
+the terminal child of the pure/observing seam: nothing requires it, because it
+is where the observing half ends.
 
 ## 7. Delivery
 
