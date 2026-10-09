@@ -541,7 +541,7 @@ Two of those criteria are the ones that check section 5.8, and both name their
 input, because an over-large request is only decisive when the ceiling it
 crosses is stated. The two ceilings need two *different* inputs, and an earlier
 draft of this section used one input for both by mistake:
-`[[]] | product( repeat=100001)` has a single operand containing one empty
+`[[]] | product(repeat=100001)` has a single operand containing one empty
 sequence, so its cardinality is one and section 8.3 makes it an empty result —
 it crosses neither ceiling and demonstrates nothing.
 
@@ -551,7 +551,7 @@ ceiling — and it should be read alongside the empty-operand case, which must
 return an empty result rather than an error, because the two together are what
 show the check is a comparison rather than a blanket refusal of large `repeat`
 values. It succeeds on **output** when a request the cardinality check is
-obliged to admit does not: `[[0]] | product(repeat= 1000000)` is a single tuple
+obliged to admit does not: `[[0]] | product(repeat=1000000)` is a single tuple
 of one million elements, so it fails `output_too_large` rather than returning,
 and `range(100000) | combinations(99999)` fails the same way instead of
 materializing 100000 tuples of width 99999. Both are checked *before* the first
