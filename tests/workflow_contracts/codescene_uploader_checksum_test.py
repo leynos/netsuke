@@ -34,7 +34,7 @@ WORKFLOW_DIRECTORY: typ.Final[Path] = REPOSITORY_ROOT / ".github" / "workflows"
 #: rather than as a floor: ordering two commit SHAs cannot be computed from a
 #: checkout, so naming the approved revision is what keeps this hermetic. It
 #: fails closed on any other value, including a tag or a branch name.
-APPROVED_PIN: typ.Final[str] = "a5765019912a8ab6882b12db049c7cde635f3a85"
+APPROVED_PIN: typ.Final[str] = "7d751eded578e48dacf43ab173d5820e6437c474"
 
 #: Matches the revision of each uploader reference. The ``@`` separator is
 #: part of the pattern so a differently owned action whose name merely starts
