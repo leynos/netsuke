@@ -367,9 +367,15 @@ question.
    `proptest 1.11.0`, `rstest`, `googletest`, `pretty_assertions`, `insta`, and
    `assert_cmd` are present and sufficient. Do not add `proptest-derive` or
    `test-strategy`.
-4. No file may exceed 400 lines. `src/ninja_gen/mod.rs` is **at** 400 and
+4. No file may exceed 400 lines. `src/ninja_gen/mod.rs` measures **394** raw
+   lines at this plan's revision, not the 400 that earlier drafts stated, and
    `tests/kani_mutation_evidence_tests.rs` is at 383; both are split in `EP-M2`
-   before anything is added to them.
+   before anything is added to them. The split buys headroom rather than
+   repairing an existing breach. Extracted modules go **inside** the parent's
+   existing directory (`src/ninja_gen/named_action.rs`), never as a
+   `<parent>_<role>.rs` sibling — the latter violates the module-layout contract
+   `main` already carries, and was measured to do so. See
+   `Surprises & discoveries` for the probe and its four candidate layouts.
 5. No in-process environment mutation in tests, and no direct `std::env::var`
    or `var_os` — both are in `clippy.toml`'s `disallowed-methods` and
    `make lint` runs with `-D warnings`. Use an injected `Env`, as
@@ -1201,8 +1207,15 @@ are derivation-driven. All four are mechanism corrections; no obligation's
 
 Three preparatory pieces, none of which changes behaviour:
 
-- Split `src/ninja_gen/mod.rs`, which is exactly at the 400-line ceiling. The
-  `NamedAction` impl block (lines ~256–391) is the obvious seam.
+- Split `src/ninja_gen/mod.rs`, which measures 394 raw lines here — inside the
+  400-line cap, with no headroom for the additions later milestones make. The
+  `NamedAction` struct and its impl block (lines ~251–385) are the obvious
+  seam. The extracted module goes in `src/ninja_gen/named_action.rs` and is
+  declared from `mod.rs` with a plain `mod named_action;`, **not** as a
+  `src/ninja_gen_named_action.rs` sibling; the sibling form was measured to
+  violate the module-layout contract `main` carries, and is the one shape to
+  avoid. Re-derive the seam at implementation time, because `main` has already
+  moved this file's neighbours and may move this one.
 - Split `tests/kani_mutation_evidence_tests.rs` (383 lines) and generalize
   `supplemental_property_location`, which currently hard-codes
   `ensure!(*root == "ir", …)` and derives `src/ir/<segments joined by _>.rs`.
@@ -1931,6 +1944,42 @@ leaks now live there rather than here.
   to an earlier note in this session:** the `[^9]` path was believed broken
   too. It is not. Probe the path before recording a documentation defect, and
   re-probe at the tree you are correcting.
+- (2026-10-10) `EP-M2`'s two splits are governed by a module-layout contract
+  this branch does not yet carry, and the shape this plan implied is rejected
+  by it. `fce1a746` ("Group prefix-named modules under directory modules",
+  #811/#813) added `tests/workflow_contracts/rust_module_layout_test.py`, wired
+  into CI at `.github/workflows/ci.yml:271`. It rejects two shapes: a group of
+  siblings sharing a first `_`-prefix unless recorded in an exact-match
+  exception, and any file named `<dir>_*.rs` sitting beside a directory module
+  of that name. The commit is **not** an ancestor of this branch's base
+  `96b89ca9` — `main` is 44 commits ahead — so the contract is absent here. The
+  natural conclusion, that the shape is therefore free until the rebase, is
+  wrong, and a direct probe settled it. The upstream contract was run against
+  the live tree and against four candidate layouts. Its findings:
+
+  - `src/ninja_gen_named_action.rs`, the `<parent>_<role>.rs` sibling that this
+    plan's own wording implied, is a **violation on both grounds**: it is a
+    prefixed file beside the `ninja_gen/` directory module, and it joins the
+    already-oversized `('.', 'ninja')` prefix group.
+  - `src/ninja_gen/named_action.rs`, an ordinary child *inside* the existing
+    directory, is **clean** and needs no `#[path]` attribute at all. This is
+    the shape `EP-M2` must use.
+  - **27 files** under `src/` already violate the contract, eleven of them in
+    `src/ninja_gen/` (`ninja_gen_escape.rs`, `ninja_gen_validation.rs`,
+    `ninja_gen_error.rs`, `ninja_gen_command_list.rs` plus its scanner and test
+    siblings). This is pre-existing debt a rebase onto `main` must clear; it is
+    not something the split introduces, and it is not this plan's to fix.
+
+  The upstream commit also renames files this plan cites
+  (`ninja_gen_command_list.rs` → `command_list/mod.rs`, `ninja_gen_error.rs` →
+  `error.rs`, `ninja_gen_escape.rs` → `escape.rs`), and `mod.rs` is 386 lines
+  there with `NamedAction` still in it. So every `EP-M2` path and seam must be
+  re-derived at implementation time rather than carried from here. **Lesson:**
+  a file split is a *structural* change, governed by whatever structure
+  contracts are in flight rather than by this plan alone. Reading a rule tells
+  you what it forbids; only running it against the tree tells you which of the
+  remaining shapes is clean. Do the probe before choosing the shape, not after
+  lint rejects it.
 - (2026-10-10) Prose written *for* a gate can still fail a gate, and the two
   gates here disagree about what is legal. Three defects introduced by the
   review-round corrections, all caught by `make check-fmt` and
@@ -2224,6 +2273,18 @@ leaks now live there rather than here.
   which is cheap and cannot drift. The same rule already governs gate
   provenance, where a log belongs to a revision rather than a branch.
   Date/Author: 2026-10-10 / implementation agent.
+
+- Decision: place `EP-M2`'s extracted module **inside** `src/ninja_gen/` as
+  `named_action.rs`, rather than as the `src/ninja_gen_named_action.rs` sibling
+  this plan's earlier wording implied. Rationale: the sibling form violates
+  `main`'s module-layout contract on both counts it checks — a prefixed file
+  beside a directory module, and membership of the already-oversized
+  `('.', 'ninja')` prefix group. The contract is absent from this branch's base
+  but is 44 commits ahead, wired into CI, and a rebase is already pending, so
+  choosing the shape that survives it costs nothing now and avoids a structural
+  rework later. Measured, not inferred: the upstream contract was executed
+  against the live tree over four candidate layouts, which is also how the
+  clean shape was identified. Date/Author: 2026-10-10 / implementation agent.
 
 ## Design review findings
 
