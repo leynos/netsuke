@@ -75,13 +75,12 @@ def diagnostic(message: str) -> None:
 
 
 class Refusal(enum.IntEnum):
-    """Carry the status of a refused metric write to the gate's exit.
+    """Name the two statuses this module's own refusals take.
 
-    Every non-zero value is a status ``set -e`` promoted to the gate's own: the
-    sink's, when the adapter failed, or ``VOCABULARY`` when this module refused
-    a record whose labels, name, or value fell outside the fixed vocabulary.
-    The shell returned ``1`` from both of its refusal paths, so a refusal is
-    indistinguishable from a plain command failure at the gate's exit.
+    ``VOCABULARY`` is the ``1`` the shell returned from each of its own refusal
+    arms, so a refusal is indistinguishable from a plain command failure at the
+    gate's exit. A *sink's* status is not one of these members: an adapter may
+    exit with any status, and the gate adopts it verbatim.
     """
 
     WRITTEN = 0
@@ -105,35 +104,43 @@ class Sinks:
     trace_sink: str
 
 
-def emit_metric(sinks: Sinks, name: str, fields: MetricFields) -> Refusal:
+def emit_metric(sinks: Sinks, name: str, fields: MetricFields) -> int:
     """Write one metric record, returning the status on which the gate stops.
 
-    Every refusal is ``Refusal.VOCABULARY``, the ``1`` the shell returned from
-    each of its own refusal arms, and the caller stops the gate on any non-zero
-    value. That is deliberate: the shell's ``record_operation`` suspended
-    abort-on-failure around its own calls with ``|| :``, so an operation's
-    records could all be lost without changing its result, while
-    ``record_gate_result`` let a refusal abort the gate record outright.
+    A refusal this module detects is ``Refusal.VOCABULARY``, the ``1`` the
+    shell returned from each of its own refusal arms, and the caller stops the
+    gate on any non-zero value. That is deliberate: the shell's
+    ``record_operation`` suspended abort-on-failure around its own calls with
+    ``|| :``, so an operation's records could all be lost without changing its
+    result, while ``record_gate_result`` let a refusal abort the gate record
+    outright.
+
+    A sink's own status is returned verbatim rather than narrowed to
+    ``Refusal``. ``set -e`` adopted whatever status the write produced, so a
+    sink exiting ``2`` left the gate exiting ``2``; converting that to
+    ``Refusal`` would raise ``ValueError`` instead, turning a lost record into
+    an uncaught traceback. ``Refusal`` names this module's own two verdicts,
+    not the range of statuses an operator's adapter may choose.
 
     Returns
     -------
-    Refusal
+    int
         ``0`` when the record was written, otherwise the status the gate must
-        stop with.
+        stop with: ``Refusal.VOCABULARY`` for a refused record, or the sink's
+        own status.
     """
     if not fields.is_valid():
         diagnostic(VOCABULARY_DIAGNOSTIC)
-        return Refusal.VOCABULARY
+        return int(Refusal.VOCABULARY)
     labels = _metric_labels(name, fields)
     if labels is None:
         diagnostic(NAME_DIAGNOSTIC)
-        return Refusal.VOCABULARY
+        return int(Refusal.VOCABULARY)
     record = render_metric(name, labels, fields.value)
     if record is None:
         diagnostic(NAME_DIAGNOSTIC)
-        return Refusal.VOCABULARY
-    status = delivery.append_record(sinks.metrics_sink, sinks.metrics_file, record)
-    return Refusal(status) if status else Refusal.WRITTEN
+        return int(Refusal.VOCABULARY)
+    return delivery.append_record(sinks.metrics_sink, sinks.metrics_file, record)
 
 
 def _metric_labels(name: str, fields: MetricFields) -> dict[str, str] | None:

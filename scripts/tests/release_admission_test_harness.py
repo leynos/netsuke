@@ -172,11 +172,40 @@ def run_gate(
         text=True,
     )
     metrics, traces = _read_gate_records(paths)
-    outputs = dict(
-        line.split("=", maxsplit=1)
-        for line in paths["output"].read_text(encoding="utf-8").splitlines()
-    )
+    outputs = _read_workflow_outputs(paths)
     return GateRun(result, metrics, traces, outputs, paths)
+
+
+def _read_workflow_outputs(paths: dict[str, Path]) -> dict[str, str]:
+    """Decode the workflow outputs one run wrote, empty when it wrote none.
+
+    Parameters
+    ----------
+    paths
+        Named output paths returned by :func:`_gate_paths`.
+
+    Returns
+    -------
+    dict[str, str]
+        The ``key=value`` lines in the order the gate wrote them.
+
+    Notes
+    -----
+    An absent file is a meaningful state, not a fault: the runner creates
+    ``GITHUB_OUTPUT`` before the step, so the gate's first write is an append
+    and a run that stops earlier leaves the file exactly as it found it. In
+    this harness nothing pre-creates it, so such a run leaves nothing to read.
+    The shell behaved the same way -- the gate record and the four output lines
+    sit behind the same ``set -e`` -- and a case that asserts no outputs were
+    written is asserting on this empty mapping.
+    """
+    path = paths["output"]
+    if not path.exists():
+        return {}
+    return dict(
+        line.split("=", maxsplit=1)
+        for line in path.read_text(encoding="utf-8").splitlines()
+    )
 
 
 def _gate_paths(tmp_path: Path) -> dict[str, Path]:
