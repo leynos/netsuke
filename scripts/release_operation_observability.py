@@ -47,8 +47,8 @@ class OperationObservation:
     job_status: str
     started_ns: int | None
     ended_ns: int
-    # Runner Python 3.12 evaluates annotations eagerly.
-    steps: "cabc.Mapping[str, StepState]"  # ruff: ignore[quoted-annotation]
+    # ruff: ignore[quoted-annotation] - Python 3.12 evaluates annotations eagerly.
+    steps: "cabc.Mapping[str, StepState]"
     upload_error_present: bool
 
 
@@ -262,7 +262,8 @@ def _optional_timestamp(value: str) -> int | None:
 
 
 def observation_from_environment(
-    environment: cabc.Mapping[str, str],
+    # ruff: ignore[quoted-annotation] - Python 3.12 evaluates annotations eagerly.
+    environment: "cabc.Mapping[str, str]",
 ) -> OperationObservation:
     """Create a bounded observation from the workflow's fixed environment."""
     operation = environment["RELEASE_OPERATION"]
@@ -298,8 +299,8 @@ def observation_from_environment(
 
 
 def main(
-    # Runner Python 3.12 evaluates annotations eagerly.
-    environment: "cabc.Mapping[str, str] | None" = None,  # ruff: ignore[quoted-annotation]
+    # ruff: ignore[quoted-annotation] - Python 3.12 evaluates annotations eagerly.
+    environment: "cabc.Mapping[str, str] | None" = None,
 ) -> None:
     """Write a summary and local JSONL; publication retains the JSONL artifact."""
     values = os.environ if environment is None else environment
