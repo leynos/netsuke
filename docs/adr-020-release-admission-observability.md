@@ -18,10 +18,10 @@ evidence producer is connected. Operators need to distinguish the failed
 operation and its latency without turning revisions, run IDs, paths, URLs, or
 workflow content into metric dimensions.
 
-The gate is a short-lived shell process rather than a service with a scrape
-endpoint. Its observability therefore needs a durable hand-off to the workflow
-run, with a small and reviewable contract that tests can validate independently
-of a metrics backend.
+The gate is a short-lived process rather than a service with a scrape endpoint.
+Its observability therefore needs a durable hand-off to the workflow run, with
+a small and reviewable contract that tests can validate independently of a
+metrics backend.
 
 ## Decision
 
@@ -73,7 +73,7 @@ or repository artefact-retention policy governs how long the JSONL artefact is
 available. This contract does not define or imply a Prometheus, OTLP, or statsd
 endpoint.
 
-The script keeps its fallible boundaries behind explicit Bash adapters:
+The gate keeps its fallible boundaries behind explicit adapters:
 `NETSUKE_RELEASE_ADMISSION_GH_ADAPTER` for GitHub API requests,
 `NETSUKE_RELEASE_ADMISSION_GIT_ADAPTER` for Git fetches,
 `NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER` for monotonic clock readings,
@@ -165,8 +165,10 @@ safe and diagnosable.
 
 ## Implementation references
 
-- Admission script:
-  [`require-release-admission-canaries.sh`](../.github/scripts/require-release-admission-canaries.sh)
+- Admission gate:
+  [`release_admission.py`](../.github/scripts/release_admission.py) and its
+  implementation package under
+  [`_release_admission/`](../.github/scripts/_release_admission/)
 - Release workflow and artefact export:
   [`release.yml`](../.github/workflows/release.yml)
 - Metric allowlist and JSONL validation:

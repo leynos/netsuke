@@ -352,7 +352,7 @@ jobs:
             ${{ runner.temp }}/release-admission-metrics.jsonl
           NETSUKE_RELEASE_ADMISSION_TRACE_FILE: >-
             ${{ runner.temp }}/release-admission-traces.jsonl
-        run: bash .github/scripts/require-release-admission-canaries.sh
+        run: uv run --script .github/scripts/release_admission.py
       - name: Summarise release-admission metrics
         if: always()
         shell: bash

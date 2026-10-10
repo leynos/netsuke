@@ -1787,7 +1787,21 @@ result. An environment value such as `fresh` is not evidence and must never
 substitute for a real evidence producer. Any other mode value is an invalid
 configuration and fails closed as an unknown gate result.
 
-The script keeps fallible boundaries behind explicit Bash adapters. Set
+The gate logic is Python, per the estate rule in
+[scripting standards](scripting-standards.md), not shell.
+`.github/scripts/release_admission.py` is the PEP 723 entry point the workflow
+runs with `uv run --script`, which resolves its declared dependencies at
+invocation. Its implementation is split across
+`.github/scripts/_release_admission/`: `policy` owns the pure bounded
+classifications, `records` owns the metric and trace shapes, `delivery` owns
+the metric, output, and trace sinks, `commands` owns the bounded external
+command runner, `telemetry` owns the emitted records, `configuration` resolves
+the environment the gate is told, and `gate` composes the operations and
+reporting. The workflow's `astral-sh/setup-uv` step provisions the interpreter;
+`uv` reads the entry point's own `requires-python` and dependency pins rather
+than the workflow restating them.
+
+The gate keeps fallible boundaries behind explicit adapters. Set
 `NETSUKE_RELEASE_ADMISSION_GH_ADAPTER` for GitHub API requests,
 `NETSUKE_RELEASE_ADMISSION_GIT_ADAPTER` for Git fetches,
 `NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER` for monotonic clock readings,
@@ -1797,12 +1811,29 @@ The script keeps fallible boundaries behind explicit Bash adapters. Set
 `git`, `python3`, and direct file or output appends. Adapters must retain the
 fixed, bounded contracts; they must not add identifiers or raw data.
 
-The internal script boundaries are deliberately narrow:
-`require-release-admission-canaries.sh` is the composition and reporting entry
-point, `release-admission-adapters.sh` owns external-effect adapters, and
-`release-admission-policy.sh` owns pure bounded classifications. These scripts
-are internal implementation details and are sourced only by the gate entry
-point.
+The internal module boundaries are deliberately narrow: `gate` is the
+composition and reporting entry point, `delivery` and `commands` own the
+external-effect adapters, and `policy` owns the pure bounded classifications.
+These modules are internal implementation details, imported only by the gate
+entry point and its tests.
+
+Two conventions inside those modules are worth stating, because both exist to
+keep an answer in one place:
+
+- Each fixed vocabulary is a `policy.Vocabulary` subclass, and membership is
+  asked through `Vocabulary.contains` rather than through a per-vocabulary
+  `is_*` predicate. The five predicates that used to answer the same question
+  five times were flagged as duplication by CodeScene; `contains` is a provided
+  class method on the base, so a new vocabulary inherits the answer and cannot
+  bring its own copy. `is_metric_value` stays a function, because a rendered
+  number is a regex rather than an enumeration member.
+- Bash's two default forms have one helper each, and the choice between them is
+  never incidental. `configuration._optional` is `${VAR:-default}` and
+  substitutes for an unset *or empty* value;
+  `configuration._defaulted_only_when_unset` is `${VAR-default}` and
+  substitutes only when the variable is unset. The enforcement mode uses the
+  latter, so an exported empty value reaches the gate's own mode check and is
+  refused there rather than silently becoming observation mode.
 
 The metric contract is deliberately closed. The only label names are `canary`,
 `operation`, `outcome`, and `error_category`, and the only values are:
@@ -2727,19 +2758,40 @@ leave Ruff's real-implementation docstring rule enabled.
 ### Release-admission runtime tests
 
 `make test-release-admission` is the runtime gate for the release-admission
-shell script. It uses the repository's Python 3.14 baseline and provisions
-`pytest==9.0.2` and `hypothesis==6.151.9` explicitly. The target runs the three
-runtime modules with `python -m pytest`, `-c /dev/null`, `--rootdir=.`, and
-`-p no:cacheprovider`, so the test run is isolated from repository-local pytest
-configuration and cache state:
+Python gate. It uses the repository's Python 3.14 baseline and provisions
+`pytest==9.0.2` and `hypothesis==6.151.9` explicitly, alongside
+`cmd-mox==0.2.0` for the command doubles and `cuprum==0.1.0` and
+`cyclopts==4.25.3` for the entry point the tests import. The target runs the
+four runtime modules with `python -m pytest`, `-c /dev/null`, `--rootdir=.`, and
+`-p no:cacheprovider`, so the test run is isolated from repository-local
+pytest configuration and cache state:
 
 - `scripts/tests/test_release_admission_metrics.py`
 - `scripts/tests/test_release_admission_metric_failures.py`
 - `scripts/tests/test_release_admission_metric_boundedness.py`
+- `scripts/tests/test_release_admission_metric_degradation.py`
+
+The runtime modules drive the gate as a real process and intercept its external
+commands with cmd-mox doubles registered under the gate's own adapter names.
+Two conventions follow from that, and a new test must respect both. `python3`
+is never registered as a double: a cmd-mox shim is a symlink to
+`cmd_mox/shim.py` whose shebang resolves `python3` through the child's `PATH`,
+so a shim named `python3` would resolve its own interpreter back to itself. The
+clock therefore runs as the real interpreter unless a case points
+`NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER` at a shim named something else. The
+doubles are spies, and every count or ordering assertion is a direct comparison
+against the recorded calls: cmd-mox verifies count expectations for mocks only,
+so a spy's own `times_called` sets an expectation nothing reads, and
+`in_order()` on a spy makes `verify()` fail unless every ordered expectation is
+consumed.
 
 The test-only `release_admission_test_support.py` module is the support and
-export facade for these runtime modules. `release_admission_test_records.py`
-owns their fixed-record assertions. Its
+export facade for these runtime modules, `release_admission_test_harness.py`
+owns the subprocess boundary, `release_admission_test_doubles.py` owns the
+cmd-mox registration and inspection surface,
+`release_admission_test_scenarios.py` owns the wrappers each case composes, and
+`release_admission_test_cases.py` owns the case table and its RFC 0005 mapping.
+`release_admission_test_records.py` owns their fixed-record assertions. Its
 `assert_identifiers_excluded_from_values` helper ignores non-string values and
 checks for each identifier as a substring of every string, reporting matching
 identifier/value pairs on failure. The shared
@@ -2751,14 +2803,14 @@ release-admission runtime suite rather than treating them as general test
 utilities.
 
 The isolated subprocess uses `GITHUB_REPOSITORY` as the fixed repository value
-at its fake GitHub boundary. The boundedness property generates canonical
+at its doubled GitHub boundary. The boundedness property generates canonical
 lowercase hexadecimal Git object IDs of 40 or 64 characters so execution
 reaches the commit and workflow-run requests. Arbitrary Unicode values remain
 probes for telemetry-only identifiers, which do not construct requests;
 malformed newline revisions are covered by deterministic failure tests.
 
 Pull-request CI invokes this target separately from the workflow-contract
-tests. Keep both gates: the runtime suite exercises the Bash boundary, while
+tests. Keep both gates: the runtime suite exercises the process boundary, while
 the workflow suite validates YAML and delivery structure.
 
 Lint and typecheck suppressions are a last resort, tightly scoped, and every

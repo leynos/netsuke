@@ -3,6 +3,7 @@
 from action_references import require_external_action_sha
 from workflow_loading import (
     RELEASE_WORKFLOW_PATH,
+    REPO_ROOT,
     job_steps,
     load_workflow,
     require_mapping,
@@ -58,6 +59,18 @@ SUMMARY_REQUIRED_FRAGMENTS = frozenset({
     "\\`$RELEASE_ADMISSION_GATE_OUTCOME\\`",
     "\\`$RELEASE_ADMISSION_ERROR_CATEGORY\\`",
 })
+#: The estate rule is that gate logic is Python: the admission step runs the
+#: PEP 723 entry point through ``uv``, which is what resolves its dependencies,
+#: rather than executing a shell script from the repository.
+ADMISSION_ENTRY_POINT = ".github/scripts/release_admission.py"
+ADMISSION_COMMAND = f"uv run --script {ADMISSION_ENTRY_POINT}"
+#: The shell gate this entry point replaced. A residual copy would be dead
+#: code, and a residual reference would mean the workflow still ran it.
+RETIRED_ADMISSION_SCRIPTS = (
+    "require-release-admission-canaries.sh",
+    "release-admission-adapters.sh",
+    "release-admission-policy.sh",
+)
 
 
 def test_release_admission_metrics_retain_read_only_delivery() -> None:
@@ -187,9 +200,42 @@ def _assert_admission_job_contract(
         require_mapping(admission_step.get("env"), "release admission step environment")
         == ADMISSION_ENVIRONMENT
     ), "admission must scope its GitHub token and runner-local metrics file"
-    assert "require-release-admission-canaries.sh" in str(admission_step.get("run")), (
-        "admission must execute the instrumented gate"
+    assert admission_step.get("run") == ADMISSION_COMMAND, (
+        "admission must run the Python entry point, whose PEP 723 block uv resolves"
     )
+
+
+def test_admission_gate_is_python_and_its_shell_predecessors_are_gone() -> None:
+    """Require the gate to be Python, with no shell predecessor left behind.
+
+    Notes
+    -----
+    The estate rule under ``docs/scripting-standards.md`` puts gate logic in a
+    ``uv``-run Python script, so this asserts both halves: the Python entry
+    point the workflow runs exists, and none of the three shell scripts it
+    replaced survives anywhere the workflow could still reach.
+    """
+    admission = REPO_ROOT / ADMISSION_ENTRY_POINT
+    assert admission.is_file(), (
+        f"the admission step must have {ADMISSION_ENTRY_POINT} to run"
+    )
+    scripts = REPO_ROOT / ".github" / "scripts"
+    survivors = [
+        name for name in RETIRED_ADMISSION_SCRIPTS if (scripts / name).exists()
+    ]
+    assert not survivors, (
+        f"the retired admission shell scripts must be deleted: {survivors}"
+    )
+    for workflow in sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml")):
+        referenced = [
+            name
+            for name in RETIRED_ADMISSION_SCRIPTS
+            if name in workflow.read_text("utf-8")
+        ]
+        assert not referenced, (
+            f"{workflow.name} must not reference the retired admission scripts "
+            f"{referenced}; admission is the Python entry point now"
+        )
 
 
 def _assert_metrics_delivery_contract(
