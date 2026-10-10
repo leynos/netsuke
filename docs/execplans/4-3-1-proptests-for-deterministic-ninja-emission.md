@@ -882,7 +882,14 @@ processes, produces byte-identical `build.ninja`.
   publishes a guarantee it does not verify.
 - **Domain:** two or three existing fixture manifests, run twice each, plus one
   run under a different `TMPDIR` and locale set with `Command::env` so
-  `Constraint 5` holds.
+  `Constraint 5` holds. The fixture set **must include one manifest with at
+  least five distinct actions**, and that requirement is load-bearing rather
+  than incidental. The eight existing `tests/snapshots/ninja/*.snap` fixtures
+  carry only one to three distinct actions each; at that size `EP-M0` question
+  1 measured that a map frequently has *no* alternative iteration order to
+  reach, so deleting `actions.sort_by_key` would leave the two runs agreeing
+  and the validation would pass without having tested anything. Do not satisfy
+  this obligation with the snapshot fixtures alone.
 - **Oracle:** byte equality between runs.
 - **Artefact:** `tests/ninja_determinism_process_tests.rs`.
 - **Non-vacuity:** the mutation is `MUT-ACTIONSORT`, **not** `MUT-DEFSORT`.
@@ -900,6 +907,14 @@ processes, produces byte-identical `build.ninja`.
   by sorting. Deleting that sort restores per-process iteration order, and a
   second process emits the action-rule blocks in a different order — a genuine
   cross-process divergence.
+
+  This validator carries a precondition of its own, and it is the same trap one
+  level down: an action map small enough to have only one iteration order makes
+  the mutation unobservable. `EP-M0` question 1 measured that maps below
+  roughly five keys frequently have no alternative order to reach, and the
+  existing snapshot fixtures carry one to three distinct actions each. The
+  obligation's domain therefore requires a fixture with **at least five
+  distinct actions**; see the domain note above.
 
   An earlier revision of this obligation named `MUT-HASHMETA` here, on the
   theory that a hasher deriving an `Action`'s identity from a per-process
@@ -1886,6 +1901,19 @@ leaks now live there rather than here.
   this on first writing is cheap — grep the field the mutation perturbs, and
   confirm it is ever populated. Two `grep`s (`pool: Some`, `RandomState`) took
   under a second and falsify the whole argument.
+
+  **Corollary, found immediately after:** the *replacement* validator needed
+  the same scrutiny one level down. `MUT-ACTIONSORT` is sound in mechanism but
+  carries a precondition — it is only observable when the action map is large
+  enough to iterate in more than one order. The existing snapshot fixtures hold
+  one to three distinct actions, and `EP-M0` question 1 already measured that
+  maps below roughly five keys usually have no alternative order at all.
+  Validating with those fixtures alone would have reproduced the exact vacuity
+  the obligation was written to avoid, in a form that still *looks* validated.
+  The obligation's domain now requires a fixture with at least five distinct
+  actions. **Lesson:** changing a validator means re-asking every question the
+  old validator was asked, including its preconditions — a correct mechanism
+  with an unreachable input is the same failure as a wrong mechanism.
 - (2026-10-10) The sweep for that fourth defect found it in the fourth place it
   was written, not the first: the plan's non-vacuity note, its mutation table
   row, and the `EP-M6` acceptance criterion all propagated the unsound remedy
