@@ -1,11 +1,12 @@
 # Issue 800: Rewrite release admission as a Python gate script
 
-Status: IN PROGRESS
+Status: COMPLETE
 
-Delivered and validated; the status stays `IN PROGRESS` because the change is
-still open for review. The style guide reserves `COMPLETE` for a plan whose
-work is delivered *and* whose review has concluded, and this one has not
-concluded yet.
+Delivered, validated, and reviewed. Two CodeRabbit passes have concluded: the
+first raised three findings, all triaged; the second read the revision that
+answered them and returned none. The pull request remains open for the
+repository's own review and merge, which is a separate concern from this
+plan's completion.
 
 ## Purpose
 
@@ -188,6 +189,19 @@ seven modules, its behaviour held to a frozen oracle, and its tests running
 through cmd-mox doubles. `release.yml` invokes the Python entry point; the
 three shell scripts are deleted.
 
+Two review passes have run over it. The first, at `30b961d8`, raised three
+findings: two were accepted and fixed, and one was rejected against a
+measurement of the Bash gate — see the revision note for the account. The
+second, at `c6a9d023`, read the revision that answered the first and returned
+no findings across all thirty changed files. Both revisions were gated in full
+before their pass was requested; the second revision's gates are
+`make check-fmt`, `make lint-python`, `make typecheck-python`, `make lint` (all
+twelve sub-suites, with Clippy clean so Whitaker genuinely ran),
+`make doc-coverage` (98.87%), `make test` (3917 passed, 6 skipped, 129
+doctests), `make test-release-admission` (38 passed),
+`make test-workflow-contracts` (1150 passed, 3 skipped), `make markdownlint`,
+and `make github-actions-lint`.
+
 ### Behaviour preserved
 
 - The five operations, their order, argument vectors, classification, records,
@@ -344,3 +358,11 @@ change admission semantics beyond the scope of a form change.
   the first read only, on the finish reads only, and a non-zero exit) confirms
   the shell writes one counter per operation and the port matches it
   byte-for-byte on the records.
+- 2026-10-10 — The second CodeRabbit pass, over the revision that answered the
+  first. It returned **no findings** across all thirty changed files. The
+  interesting part is what that silence cost to earn: the port was re-gated in
+  full on the exact bytes committed, and the three defects the first pass found
+  were each either fixed or falsified before the pass was requested. A clean
+  review is evidence about a revision, not about a change, so the revision it
+  read is named here — `c6a9d023` — and the gates that ran against it are
+  recorded under *Outcomes and retrospective*.
