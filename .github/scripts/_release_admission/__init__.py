@@ -1,6 +1,6 @@
 """Implement the RFC 0005 release-admission gate as importable Python.
 
-The package mirrors the boundary the Bash gate drew for itself, and each module
+The package mirrors the boundary the gate draws for itself, and each module
 owns exactly one of them:
 
 - ``policy`` owns the pure bounded classifications and the fixed vocabularies.
@@ -12,7 +12,7 @@ owns exactly one of them:
 - ``gate`` owns orchestration and configuration, and is the composition root.
 
 Splitting them keeps each module small enough to read and lets the runtime
-tests mock a single boundary at a time.
+tests double a single boundary at a time.
 
 The entry point is the ``release_admission`` module beside this package; it
 owns the Cyclopts surface and the process exit status.

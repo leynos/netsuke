@@ -46,8 +46,10 @@ once the shell scripts are deleted.
 - [x] Repoint the runtime tests at the Python gate. The 33-case frozen oracle
       passes against `.github/scripts/release_admission.py`, including the
       PR #770 newline-revision cases in both modes.
-- [ ] Replace the executable fakes with cmd-mox and port the case matrix.
-      Design settled:
+- [x] Replace the executable fakes with cmd-mox and port the case matrix.
+      `release_admission_test_fakes.py` is deleted, the four runtime modules
+      run through registered doubles, and the modules pass with 35 cases in
+      under 90 seconds. The design the port settled on, and the reasons:
       - The subprocess boundary stays. The gate is still invoked as a real
         process, because only that exercises its shebang, its exit status, its
         artefact files, and its redirections. cmd-mox replaces the *fake
@@ -71,8 +73,20 @@ once the shell scripts are deleted.
       - `NETSUKE_FAKE_*` variables disappear. Behaviour is configured by
         registering doubles, which is cmd-mox's own idiom, and the assertions
         move onto the doubles' recorded invocations.
-- [ ] Switch `release.yml` to the Python entry point and delete the shell.
-- [ ] Update the workflow contract, ADR-020, and the developers' guide.
+      - The doubles are spies, and every count assertion is a direct
+        comparison against the recorded calls. cmd-mox verifies expectations
+        for mocks only, so a spy's `times_called` would set an expectation
+        nothing reads; `in_order()` on a spy is worse, because an ordered
+        expectation nothing consumes makes `verify()` raise. Ordering is
+        therefore asserted on the recorded calls, where it is data.
+- [x] Switch `release.yml` to the Python entry point and delete the shell. The
+      admission step now runs `uv run --script .github/scripts/release_admission.py`;
+      the three shell scripts are deleted; `release-dry-run.yml` is unchanged.
+- [x] Update the workflow contract, ADR-020, and the developers' guide. The
+      contract asserts the Python invocation, the `astral-sh/setup-uv`
+      provisioning, observation mode, publication independence, and the
+      absence of any `*release-admission*.sh` reference. The developers' guide
+      describes the entry point, the module split, and the cmd-mox conventions.
 
 ## Decisions and findings
 
@@ -128,4 +142,66 @@ deferred in the test module rather than simulated.
 
 ## Outcomes and retrospective
 
-Not yet complete.
+Complete. The Bash gate is now a Cyclopts `uv run --script` entry point with
+its implementation split across six modules, its behaviour held to a frozen
+oracle, and its tests running through cmd-mox doubles. `release.yml` invokes
+the Python entry point; the three shell scripts are deleted.
+
+### Behaviour preserved
+
+- The five operations, their order, argument vectors, classification, records,
+  sink rules, and exit statuses are unchanged, and the frozen oracle in
+  `scripts/tests/release_admission_test_support.py` remains the evidence.
+- Every refusal keeps its wording. The seven stderr diagnostics operators may
+  key on are byte-identical.
+- Observation mode and publication independence are unchanged; the contract
+  still asserts that no publication job depends on the canary job.
+- Bounding is native: `commands.run_bounded` reproduces GNU `timeout`'s
+  one-second grace and its `124`/`137` classification without an external
+  binary.
+
+### Stated differences
+
+Two differences exist, both deliberate and both recorded in the entry point's
+module docstring:
+
+1. An adapter the operating system refuses to launch is reported as
+   `release-admission adapter could not be run: <program>: <reason>` where the
+   shell's GNU `timeout` printed its own sentence. Same position, same exit
+   status, same classification; only the sentence differs.
+2. A refused configuration and a refused metric write have no other stderr at
+   all, exactly as before, so a refused observation mode still fails the step.
+
+A third difference was expected and does not exist. The port renders a duration
+with `str(float)` where the shell interpolated its value with `printf %s`,
+which looked like it would diverge on float formatting. It does not: the shell
+computed every duration by piping both readings through a `python3` helper that
+ended in `print(...)`, so both sides are `str(float)` of the same value. A
+nine-case probe over sub-second, large, exponent, `nan`, and integer readings
+produced byte-identical output on both sides, and the records are
+byte-identical with it.
+
+One behaviour is deliberately preserved although it reads as a contradiction:
+`check_scan_freshness` admits `fresh`, but `verify_evidence` refuses it unless
+the state is *not* fresh and a workflow run identifier is present. The port
+preserves this exactly rather than repairing it, because repairing it would
+change admission semantics beyond the scope of a form change.
+
+### Lessons
+
+- Cyclopts' default result action returns an integer command result unchanged.
+  Returning a literal `0` after `app()` silently discards every enforced
+  failure's status; return `app()` itself.
+- The 400-line module ceiling is enforced for Python too (Pylint `C0302`), so
+  the runtime-test support had to be split into a facade and four modules
+  before the port was possible.
+- `os.environ.get(VAR, default)` is not Bash's `${VAR-default}`: the dash
+  substitutes only when the variable is unset. An exported empty
+  `NETSUKE_RELEASE_ADMISSION_ENFORCE` must reach the mode check, not be
+  replaced by the observation default, so `gate.load_configuration` tests
+  membership rather than truthiness.
+- `make spelling` regenerates `typos.toml` from the shared dictionary on every
+  run. The dictionary's colour-flag rule had changed since the committed copy,
+  leaving a clean checkout dirty after a spelling run. That one-line
+  regeneration is committed separately at the head of this branch so a reviewer
+  can split it without touching the port's commits.
