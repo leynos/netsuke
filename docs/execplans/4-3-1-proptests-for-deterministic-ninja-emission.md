@@ -1415,16 +1415,40 @@ Three preparatory pieces, none of which changes behaviour:
   `rstest`-parameterized, so the case-suffix hazard is live for them; it does
   not arise for plain `proptest!` blocks, but one spelling should cover both.
 
-  The remaining, genuinely open part is therefore only *which mechanism* the
-  `Makefile` `proptest` target uses, not whether a selector can be trusted. No
-  contract reads a `Makefile` `-E` argument — `.github/scripts/` and
-  `tests/workflow_contracts/` police `filter` lines in `.config/nextest.toml`
-  only — so a selector written into the `Makefile` is unverified by
-  construction, while one written into the configuration inherits the runtime
-  check and its `tests/` restriction. Settle it empirically rather than by
-  reading: with the property suites in place, run
+  **The anchor question is now settled by measurement, not by argument.** The
+  open part was whether a `^`-anchored selector can name a `src/`-side test at
+  all, given that such names might carry a crate segment before the module
+  path. CI run `38055325773` at `20e5f480` carries the answer in two places.
+  The runtime verifier's own output reads:
+
+  ```plaintext
+  replayed 18 filter alternative(s); each selects at least one test
+  ok: test(/^text_domains_cannot_be_swapped($|::)/) matches
+      ['text_domains_cannot_be_swapped::case_1_needle_as_document',
+       'text_domains_cannot_be_swapped::case_2_document_as_needle'];
+      test(=text_domains_cannot_be_swapped) matches nothing
+  verified 1 anchored selector(s) over 1 test(s)
+  ```
+
+  and the same run's test log lists library-side instances by their **module
+  path with no crate segment**: `ninja_gen::property_tests::dependency_only`,
+  `cmd_interpolate::property_tests::scanner_agrees_with_independent_specification`,
+  `cycle::property_tests::all_rotations_canonicalize_identically`, and 54 such
+  names in all. A `^`-anchored selector therefore matches from the first module
+  segment, and `test(/^ninja_gen::property_tests::…($|::)/)` is a workable
+  spelling for the `src/`-side suites. The earlier worry that `^property_tests`
+  "would match nothing" is also confirmed — it is a module *segment*, not the
+  leading one — but that is a warning about writing the selector, not an
+  obstacle to the target.
+
+  The only genuinely open part is therefore *which mechanism* the `Makefile`
+  `proptest` target uses. No contract reads a `Makefile` `-E` argument —
+  `.github/scripts/` and `tests/workflow_contracts/` police `filter` lines in
+  `.config/nextest.toml` only — so a selector written into the `Makefile` is
+  unverified by construction, while one written into the configuration inherits
+  the runtime check. The discharge procedure is unchanged: run
   `cargo nextest list --all-features --all-targets --message-format json` under
-  the candidate selectors and read each testcase's `filter-match.status`, which
+  the candidate selector and read each testcase's `filter-match.status`, which
   is how the verifier itself reads selection — nextest reports selection
   through that field, not by omitting unselected tests, and its exit code is 0
   even when a selector matches nothing. Record the outcome in `Decision log`.
@@ -2224,6 +2248,41 @@ Replicating the contract's own `header_lines`/`header_status` logic over all
 **50** plans under `docs/execplans/` now reports every one in vocabulary, so
 this failure is discharged at the tree level and not only for this file.
 
+**Discharged in CI.** The fix was pushed as a fast-forward from `faef4e13` to
+`20e5f480` (verified through the Git refs API afterwards, because the local
+tracking ref goes stale after an SSH push). CI run `38055325773` then ran on
+`20e5f480`, and the same job that had failed reports success:
+
+```plaintext
+build-test job 114222509702
+  STEP 29: Test and Measure Coverage -> success
+  failing steps: NONE
+```
+
+Step 29 is the step that failed at `1401d0da`; the change is one revision wide,
+so the step-level A/B is direct. Job-level verdicts came from the Actions API
+rather than the log, which is not downloadable until the whole run completes.
+
+The run then finished **fully green** (watch exit 0, every job `success`), and
+the log proves the specific test rather than leaving the step verdict to stand
+for it:
+
+```plaintext
+PASS [0.007s] (2434/3917) netsuke-build::execplan_status_contract_tests
+     every_execplan_header_status_is_within_the_closed_set
+PASS [0.004s] (2442/3917) netsuke-build::execplan_status_contract_tests
+     the_style_guide_defines_every_accepted_status_value
+```
+
+**This run also settled the anchor question** the plan had carried open since
+its first draft. Two independent readings in the same log agree: the verifier
+replays 18 filter alternatives with none dead and verifies 1 anchored selector
+over 1 test, and the test log names 54 library-side instances by module path
+with no crate segment (`ninja_gen::property_tests::dependency_only`,
+`cmd_interpolate::property_tests::…`, `cycle::property_tests::…`). A
+`^`-anchored selector therefore matches from the first module segment, which is
+what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
+
 - [ ] `EP-M2`: file splits, mutation-evidence contract, ordering helpers,
       `make proptest`.
 - [ ] `EP-M3`: shared strategy and compact `Debug`.
@@ -2235,6 +2294,18 @@ this failure is discharged at the tree level and not only for this file.
 
 ## Surprises & discoveries
 
+- (2026-10-10) The plan's longest-standing open question — what a nextest
+  `test(...)` selector is anchored against for a library-side suite — was not
+  answered by reasoning but fell out of a CI log as a side effect of fixing
+  something else. The question had been carried, argued, and deferred across
+  several revisions. The resolving evidence is two lines the pipeline already
+  prints: the verifier's `replayed 18 filter alternative(s)` /
+  `ok: … matches […]` output, and 54 `src/`-side instance names listed by
+  module path with no crate segment. **The lesson is procedural rather than
+  technical**: an open question about tool behaviour is usually cheaper to
+  close by reading a log of the tool running than by reasoning about its
+  documentation, and a plan that carries such a question for several revisions
+  is a plan that has not looked for the log yet.
 - (2026-10-10) A **contract test in this repository reads this plan**. The
   `Status:` header field is not decorative:
   `tests/execplan_status_contract_tests.rs` parses the header of every file
