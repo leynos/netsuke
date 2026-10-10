@@ -56,18 +56,20 @@ class MetricFields:
 
         Examples
         --------
-        >>> MetricFields("none", "verify_evidence", "success", "none", "1")
-        ...     .is_valid()
+        >>> MetricFields(
+        ...     "none", "verify_evidence", "success", "none", "1"
+        ... ).is_valid()
         True
-        >>> MetricFields("none", "verify_evidence", "success", "none", "1e-05")
-        ...     .is_valid()
+        >>> MetricFields(
+        ...     "none", "verify_evidence", "success", "none", "1e-05"
+        ... ).is_valid()
         False
         """
         return (
-            policy.is_canary(self.canary)
-            and policy.is_operation(self.operation)
-            and policy.is_outcome(self.outcome)
-            and policy.is_error_category(self.error_category)
+            policy.Canary.contains(self.canary)
+            and policy.Operation.contains(self.operation)
+            and policy.Outcome.contains(self.outcome)
+            and policy.ErrorCategory.contains(self.error_category)
             and policy.is_metric_value(self.value)
         )
 
@@ -103,10 +105,10 @@ class TraceFields:
         True
         """
         return (
-            policy.is_trace_event(self.event)
-            and policy.is_operation(self.operation)
-            and policy.is_outcome(self.outcome)
-            and policy.is_error_category(self.error_category)
+            policy.TraceEvent.contains(self.event)
+            and policy.Operation.contains(self.operation)
+            and policy.Outcome.contains(self.outcome)
+            and policy.ErrorCategory.contains(self.error_category)
             and policy.is_metric_value(self.duration)
         )
 

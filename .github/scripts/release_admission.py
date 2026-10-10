@@ -80,6 +80,7 @@ def run() -> int:
         enforced failure, and otherwise the failing sink's own status.
     """
     from _release_admission import (
+        configuration,
         gate,
     )
 
@@ -94,10 +95,14 @@ def run() -> int:
     def main(
         *,
         repository: typ.Annotated[
-            str, Parameter(env_var=gate.REPOSITORY_VARIABLE)
+            str, Parameter(env_var=configuration.REPOSITORY_VARIABLE)
         ] = "",
-        revision: typ.Annotated[str, Parameter(env_var=gate.REVISION_VARIABLE)] = "",
-        output: typ.Annotated[str, Parameter(env_var=gate.OUTPUT_VARIABLE)] = "",
+        revision: typ.Annotated[
+            str, Parameter(env_var=configuration.REVISION_VARIABLE)
+        ] = "",
+        output: typ.Annotated[
+            str, Parameter(env_var=configuration.OUTPUT_VARIABLE)
+        ] = "",
     ) -> int:
         """Run the admission gate and return the status it exits with.
 
@@ -114,11 +119,11 @@ def run() -> int:
         """
         del repository, revision, output
         try:
-            configuration = gate.load_configuration()
-        except gate.ConfigurationError as error:
+            settings = configuration.load_configuration()
+        except configuration.ConfigurationError as error:
             print(error, file=sys.stderr)
             return CONFIGURATION_FAILURE
-        admission = gate.Gate(configuration)
+        admission = gate.Gate(settings)
         if not admission.should_stop():
             admission.run_operations()
         return admission.finish()

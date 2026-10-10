@@ -1,10 +1,12 @@
-"""Orchestrate the RFC 0005 release-admission gate and its configuration.
+"""Orchestrate the RFC 0005 release-admission gate.
 
-This module is the composition root. It reads the gate's configuration from
-the environment, runs the five admission operations in their fixed order,
-classifies each from the policy module, and writes the three artefacts through
-the telemetry module. Nothing here decides policy and nothing here runs a
-command directly, so both layers stay separately testable.
+This module is the composition root's behaviour half. It runs the five
+admission operations in their fixed order, classifies each from the policy
+module, and writes the three artefacts through the telemetry module. Nothing
+here decides policy and nothing here runs a command directly, so both layers
+stay separately testable. What the gate was *told* -- the environment variables,
+their defaults, and the artefact paths -- is :mod:`configuration`; this module
+asks what it then *does*.
 
 Two behaviours are reproduced rather than improved, because the runtime tests
 freeze them:
@@ -24,36 +26,13 @@ reproduces both the grace and the classification.
 """
 
 import dataclasses
-import os
 import typing as typ
 from pathlib import Path
 
 from . import commands, policy, records, telemetry
 
-#: Environment variables the gate requires, and the diagnostic each produces.
-REPOSITORY_VARIABLE = "GITHUB_REPOSITORY"
-REPOSITORY_DIAGNOSTIC = "GITHUB_REPOSITORY must identify the release repository"
-REVISION_VARIABLE = "GITHUB_SHA"
-REVISION_DIAGNOSTIC = "GITHUB_SHA must identify the release candidate revision"
-OUTPUT_VARIABLE = "GITHUB_OUTPUT"
-OUTPUT_DIAGNOSTIC = "GITHUB_OUTPUT must identify the workflow output file"
-
-#: Environment variables the gate reads with a documented default.
-TIMEOUT_VARIABLE = "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS"
-ENFORCE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_ENFORCE"
-EVIDENCE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_EVIDENCE_STATE"
-METRICS_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_METRICS_FILE"
-TRACE_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TRACE_FILE"
-
-#: The default artefact paths, relative to ``RUNNER_TEMP`` or the fallback.
-METRICS_FILE_NAME = "netsuke-release-admission-metrics.jsonl"
-TRACE_FILE_NAME = "netsuke-release-admission-traces.jsonl"
-# The shell used ``${RUNNER_TEMP:-/tmp}``, so the fallback directory is part of
-# the gate's contract rather than a temporary file this module invents.
-DEFAULT_TEMPORARY_DIRECTORY = "/tmp"  # ruff: ignore[hardcoded-temp-file] - the documented fallback, never a temporary file.
-
-#: The variable that selected a file on standard error before this port did.
-DIAGNOSTIC_PREFIX = "release-admission"
+if typ.TYPE_CHECKING:
+    from .configuration import Configuration
 
 #: The five operations, in order, with the canary each belongs to.
 OPERATIONS: typ.Final[tuple[tuple[policy.Canary, policy.Operation], ...]] = (
@@ -63,108 +42,6 @@ OPERATIONS: typ.Final[tuple[tuple[policy.Canary, policy.Operation], ...]] = (
     (policy.Canary.HISTORY_SCAN, policy.Operation.CHECK_SCAN_FRESHNESS),
     (policy.Canary.HISTORY_SCAN, policy.Operation.VERIFY_EVIDENCE),
 )
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class Configuration:
-    """Hold the gate's resolved environment, with the shell's own defaults."""
-
-    repository: str
-    revision: str
-    output: str
-    evidence_state: str
-    timeout_seconds: str
-    enforcement: str
-    metrics_file: Path
-    trace_file: Path
-    programs: commands.Programs
-    sinks: telemetry.Sinks
-
-
-class ConfigurationError(Exception):
-    """Report a required variable that is unset or empty.
-
-    The message is the diagnostic itself, so the caller prints exactly the
-    sentence the shell's ``:?`` form produced and nothing derived from the
-    environment.
-    """
-
-
-def load_configuration() -> Configuration:
-    """Read the gate's configuration, creating the two artefact files.
-
-    Returns
-    -------
-    Configuration
-        The resolved environment.
-
-    Notes
-    -----
-    A required variable that is unset or empty is refused by :func:`_required`,
-    whose :class:`ConfigurationError` carries the diagnostic itself so the
-    caller prints exactly the sentence the shell's ``:?`` form produced.
-    """
-    repository = _required(REPOSITORY_VARIABLE, REPOSITORY_DIAGNOSTIC)
-    revision = _required(REVISION_VARIABLE, REVISION_DIAGNOSTIC)
-    temporary = Path(os.environ.get("RUNNER_TEMP") or DEFAULT_TEMPORARY_DIRECTORY)
-    metrics_file = Path(
-        os.environ.get(METRICS_FILE_VARIABLE) or temporary / METRICS_FILE_NAME
-    )
-    trace_file = Path(
-        os.environ.get(TRACE_FILE_VARIABLE) or temporary / TRACE_FILE_NAME
-    )
-    _create_artefacts(metrics_file, trace_file)
-    output = _required(OUTPUT_VARIABLE, OUTPUT_DIAGNOSTIC)
-    programs = commands.Programs.from_environment()
-    return Configuration(
-        repository=repository,
-        revision=revision,
-        output=output,
-        evidence_state=(
-            os.environ.get(EVIDENCE_VARIABLE) or policy.DEFAULT_EVIDENCE_STATE
-        ),
-        timeout_seconds=(
-            os.environ.get(TIMEOUT_VARIABLE)
-            or str(policy.DEFAULT_OPERATION_TIMEOUT_SECONDS)
-        ),
-        # The shell wrote ``${NETSUKE_RELEASE_ADMISSION_ENFORCE-$default}``,
-        # whose dash substitutes only when the variable is *unset*: an exported
-        # empty value was kept and refused by the gate's own mode check rather
-        # than replaced here. The membership test below is therefore
-        # load-bearing. ``os.environ.get(ENFORCE_VARIABLE, default)`` would
-        # substitute an empty value and let a refused configuration run as
-        # observation mode, so the apparent simplification is not one.
-        enforcement=(
-            os.environ[ENFORCE_VARIABLE]  # ruff: ignore[if-else-block-instead-of-dict-get] - see above; a dict-get default is not equivalent to Bash's ``-``.
-            if ENFORCE_VARIABLE in os.environ
-            else policy.ADMISSION_OBSERVATION_MODE
-        ),
-        metrics_file=metrics_file,
-        trace_file=trace_file,
-        programs=programs,
-        sinks=telemetry.Sinks(
-            metrics_file=metrics_file,
-            trace_file=trace_file,
-            metrics_sink=os.environ.get(commands.METRICS_SINK_VARIABLE) or "",
-            output_sink=os.environ.get(commands.OUTPUT_SINK_VARIABLE) or "",
-            trace_sink=os.environ.get(commands.TRACE_SINK_VARIABLE) or "",
-        ),
-    )
-
-
-def _required(variable: str, diagnostic: str) -> str:
-    """Return a required variable, refusing an unset or empty value."""
-    value = os.environ.get(variable)
-    if not value:
-        raise ConfigurationError(diagnostic)
-    return value
-
-
-def _create_artefacts(*paths: Path) -> None:
-    """Create the artefact files empty, as the shell truncated them."""
-    for path in paths:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"")
 
 
 @dataclasses.dataclass(slots=True)

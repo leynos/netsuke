@@ -43,8 +43,10 @@ once the shell scripts are deleted.
       exit statuses, stderr, JSONL key order and types, default paths, and
       environment variables.
 - [x] Implement the Python gate. `.github/scripts/release_admission.py` is the
-      entry point; `.github/scripts/_release_admission/` holds six modules
-      (`policy`, `records`, `delivery`, `commands`, `telemetry`, `gate`). The
+      entry point; `.github/scripts/_release_admission/` holds seven modules
+      (`policy`, `records`, `delivery`, `commands`, `telemetry`,
+      `configuration`, `gate`); the last of those was split out of `gate` when
+      the CodeScene refactor pushed it over the module ceiling. The
       runtime-test support in `scripts/tests/` is a facade and five modules,
       after the two-stage split recorded under *Decisions and findings*.
 - [x] Clear the Python gates. `make lint-python` passes all five stages:
@@ -94,6 +96,15 @@ once the shell scripts are deleted.
       provisioning, observation mode, publication independence, and the
       absence of any `*release-admission*.sh` reference. The developers' guide
       describes the entry point, the module split, and the cmd-mox conventions.
+- [x] Clear the CodeRabbit findings and the CodeScene advisory findings. The
+      six review findings are one commit; the advisory findings on code this
+      change introduces are a second, atomic refactor commit, together with the
+      module split that refactor forced. The split could not be a third commit:
+      the refactor left `gate.py` at 442 lines, so the state between them fails
+      Pylint's `C0302` and no commit may be red. Everything is measured locally
+      with `cs check` against the file rather than the commit, because
+      `cs check HEAD:./file` reads the committed blob and reports the previous
+      revision's issues.
 
 ## Decisions and findings
 
@@ -121,8 +132,8 @@ once the shell scripts are deleted.
   The dash substitutes only when the variable is *unset*, so an exported empty
   `NETSUKE_RELEASE_ADMISSION_ENFORCE` was kept and refused by the gate's own
   mode check rather than replaced with the observation default. The membership
-  test in `gate.load_configuration` is therefore load-bearing and carries a
-  comment saying so.
+  test in `configuration.load_configuration` is therefore load-bearing and
+  carries a comment saying so.
 - The 400-line module ceiling applies to Python as well as Rust (Pylint
   `C0302`, `max-module-lines = 400`). `release_admission_test_support.py` was
   exactly 400 lines at HEAD, so the runtime-test support was split into a facade
@@ -137,6 +148,18 @@ once the shell scripts are deleted.
   parameters into meaningfully named structs, so `records.py` gained the
   `MetricFields`, `TraceFields`, `OperationRecord`, and `GateRecord` value
   objects rather than argument-count suppressions.
+- `configuration` is a module of its own because the split that cleared the
+  CodeScene complexity finding left `gate` at 442 lines. The division is by
+  question asked, not by line count: `configuration` owns everything the gate
+  is *told* -- the required variables, their diagnostics, Bash's two default
+  forms, and the artefact paths -- and `gate` owns everything it then *does*.
+  `gate` therefore imports one name, `Configuration`, and the entry point
+  reaches `configuration` directly for the three variable names Cyclopts binds
+  and for `load_configuration`/`ConfigurationError`. The alternative, having
+  `gate` re-bind every moved name, was rejected: it would have made `gate` an
+  indirection no reader needed, and one of the names it would have carried,
+  `DIAGNOSTIC_PREFIX`, turned out to be referenced nowhere at all and was
+  deleted instead of moved.
 - `from __future__ import annotations` is redundant on the 3.14 baseline and
   the df12 house lints reject it (`C9112`). PEP 649 defers annotation
   evaluation, so a `TYPE_CHECKING`-only `Path` in a dataclass annotation is
@@ -154,10 +177,10 @@ deferred in the test module rather than simulated.
 ## Outcomes and retrospective
 
 The port is complete, validated, and open for review. The Bash gate is now a
-Cyclopts `uv run --script` entry point with its implementation split across six
-modules, its behaviour held to a frozen oracle, and its tests running through
-cmd-mox doubles. `release.yml` invokes the Python entry point; the three shell
-scripts are deleted.
+Cyclopts `uv run --script` entry point with its implementation split across
+seven modules, its behaviour held to a frozen oracle, and its tests running
+through cmd-mox doubles. `release.yml` invokes the Python entry point; the
+three shell scripts are deleted.
 
 ### Behaviour preserved
 
@@ -201,6 +224,10 @@ change admission semantics beyond the scope of a form change.
 
 ### Lessons
 
+- `cs check HEAD:./file` reads the committed blob, not the working tree, so a
+  refactor that has not been committed yet is scored against the previous
+  revision and reports the very issues it just fixed. Measure with
+  `cs check ./file` until the refactor is committed.
 - Cyclopts' default result action returns an integer command result unchanged.
   Returning a literal `0` after `app()` silently discards every enforced
   failure's status; return `app()` itself.
@@ -208,11 +235,25 @@ change admission semantics beyond the scope of a form change.
   the runtime-test support had to be split twice: into a facade and three
   modules before the port, then into a facade and five once cmd-mox replaced
   the executable fakes.
+- A refactor that clears a complexity finding lengthens the code it clarifies,
+  and the ceiling applies to the result. Extracting `_OutputPaths`,
+  `_optional`, and `_defaulted_only_when_unset` from `load_configuration` took
+  `gate.py` from well inside the ceiling to 442 lines, so the refactor could
+  not be committed on its own: it had to carry the split that made the module
+  fit. "Separate atomic refactors" is a rule about intent, not a licence to
+  commit a red tree.
+- No gate in this repository collects doctests from `.github/scripts/`.
+  `make test` runs the Rust suites, and `make test-workflow-contracts` passes
+  `--doctest-modules` to `scripts/*.py` rather than to the implementation
+  package. Two examples in `records.py` had therefore been raising
+  `SyntaxError` since they were written, with every gate green over them. Run a
+  new `Examples` block rather than reading it: a docstring containing `>>>` is
+  not evidence that the block executes.
 - `os.environ.get(VAR, default)` is not Bash's `${VAR-default}`: the dash
   substitutes only when the variable is unset. An exported empty
   `NETSUKE_RELEASE_ADMISSION_ENFORCE` must reach the mode check, not be
-  replaced by the observation default, so `gate.load_configuration` tests
-  membership rather than truthiness.
+  replaced by the observation default, so `configuration.load_configuration`
+  tests membership rather than truthiness.
 - `make spelling` regenerates `typos.toml` from the shared dictionary on every
   run. The dictionary's colour-flag rule had changed since the committed copy,
   leaving a clean checkout dirty after a spelling run. That one-line
@@ -220,6 +261,39 @@ change admission semantics beyond the scope of a form change.
   can split it without touching the port's commits.
 
 ## Revision note
+
+- 2026-10-10 — CodeScene pass and the module split it forced. The advisory
+  review named three issues on code this change introduces, and a fourth
+  surfaced from a test this pass had already lengthened. The refactor: `policy`
+  gained a `Vocabulary` base whose `contains` class method replaced five
+  same-shaped predicates; `load_configuration` was split so each Bash default
+  form has one named helper (`_optional` for `${VAR:-default}`,
+  `_defaulted_only_when_unset` for `${VAR-default}`) and the artefact paths
+  travel as an `_OutputPaths` value; and the two oversized tests were reduced
+  by reusing `assert_failure_trace_sequence` and by extracting
+  `_run_under_generated_identifiers`. That work took `gate.py` to 442 lines, so
+  the same commit moves the configuration half into the new `configuration`
+  module. The entry point and the developers' guide now name `configuration`
+  where they named `gate`; `DIAGNOSTIC_PREFIX`, a constant the port introduced
+  but nothing ever read, is deleted rather than moved. CodeScene scores every
+  touched file at 10.00, and the 37-case runtime suite is unchanged, which is
+  the evidence that the refactor preserved behaviour. The developers' guide
+  records both conventions, as the house abstraction policy requires. One
+  instrument detail is worth keeping: `cs check HEAD:./file` scores the
+  *committed* blob, so a working-tree refactor must be measured with
+  `cs check ./file`.
+- 2026-10-10 — Doctest repair. Checking the moved examples by hand turned up a
+  defect no gate had run: `MetricFields.is_valid`'s two examples wrapped as
+  ``MetricFields(...)`` then ``.is_valid()``. The first line is a complete
+  statement, so the second was a second statement and doctest compiled the pair
+  as one — every run raised ``SyntaxError``. Nothing collected these doctests:
+  `make test` runs the Rust suites, `make test-workflow-contracts` runs
+  `--doctest-modules` over `scripts/*.py` rather than the package, and the
+  runtime suite invokes the gate as a subprocess. The examples now break inside
+  the call, which is the shape `TraceFields.is_valid` already used, and all 24
+  examples in the package pass. Recorded because the same wrap is easy to
+  reintroduce, and because "a docstring with an `Examples` block" is not
+  evidence that the block runs.
 
 - 2026-10-10 — Initial ExecPlan for `#800`: freeze the Bash gate's behaviour,
   port it to a Cyclopts `uv run --script` entry point, port the runtime cases
