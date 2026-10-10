@@ -101,6 +101,17 @@ impl BuildGraph {
         }
     }
 
+    /// Emit the bounded implicit-dependency count for one target.
+    ///
+    /// Only the count is emitted; the dependency paths themselves are
+    /// manifest-controlled and never reach a subscriber.
+    fn debug_implicit_dependencies_from_fields(count: usize) {
+        tracing::debug!(
+            implicit_deps_count = count,
+            "populating implicit dependencies for target",
+        );
+    }
+
     /// Build an action and edge for every manifest target.
     ///
     /// Rule-backed targets resolve a single template first; command and script
@@ -123,10 +134,7 @@ impl BuildGraph {
             let outputs = to_paths(&target.name);
             let inputs = to_paths(&target.sources);
             let implicit_deps = to_paths(&target.deps);
-            tracing::debug!(
-                implicit_deps_count = implicit_deps.len(),
-                "populating implicit dependencies for target",
-            );
+            Self::debug_implicit_dependencies_from_fields(implicit_deps.len());
             if let Some(error) = duplicate_output_error(&outputs, graph) {
                 return Err(error);
             }

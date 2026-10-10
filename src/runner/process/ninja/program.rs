@@ -10,9 +10,9 @@
 //! `mockable::MockEnv` so every branch runs without process mutation.
 
 use super::super::super::{NINJA_ENV, NINJA_PROGRAM};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use mockable::Env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::debug;
 
 /// Resolves Ninja with an injectable environment for testability.
@@ -24,45 +24,65 @@ use tracing::debug;
 pub(super) fn resolve_ninja_program_utf8_with(env: &impl Env) -> Utf8PathBuf {
     env.os_string(NINJA_ENV).map_or_else(
         || {
-            debug!(
-                ninja_program = NINJA_PROGRAM,
-                source = "fallback",
-                "Resolved Ninja executable from default program",
-            );
+            debug_ninja_program_default();
             Utf8PathBuf::from(NINJA_PROGRAM)
         },
         |value| {
             let path = PathBuf::from(value);
             if path.as_os_str().is_empty() {
-                debug!(
-                    ninja_program = NINJA_PROGRAM,
-                    source = "fallback",
-                    "Ignoring empty Ninja executable override",
-                );
+                debug_ninja_program_empty_override();
                 Utf8PathBuf::from(NINJA_PROGRAM)
             } else {
                 match Utf8PathBuf::from_path_buf(path) {
                     Ok(program) => {
-                        debug!(
-                            ninja_program = %program,
-                            source = NINJA_ENV,
-                            "Resolved Ninja executable from environment override",
-                        );
+                        debug_ninja_program_from_override(&program);
                         program
                     }
                     Err(non_utf8_path) => {
-                        debug!(
-                            configured_ninja = %non_utf8_path.to_string_lossy(),
-                            ninja_program = NINJA_PROGRAM,
-                            source = "fallback",
-                            "Ignoring non-UTF-8 Ninja executable override",
-                        );
+                        debug_ninja_program_non_utf8_override(&non_utf8_path);
                         Utf8PathBuf::from(NINJA_PROGRAM)
                     }
                 }
             }
         },
     )
+}
+
+/// Note that Ninja resolution fell back to the default program.
+fn debug_ninja_program_default() {
+    debug!(
+        ninja_program = NINJA_PROGRAM,
+        source = "fallback",
+        "Resolved Ninja executable from default program",
+    );
+}
+
+/// Note that an empty Ninja executable override was ignored.
+fn debug_ninja_program_empty_override() {
+    debug!(
+        ninja_program = NINJA_PROGRAM,
+        source = "fallback",
+        "Ignoring empty Ninja executable override",
+    );
+}
+
+/// Note the Ninja executable resolved from the environment override.
+fn debug_ninja_program_from_override(program: &Utf8Path) {
+    debug!(
+        ninja_program = %program,
+        source = NINJA_ENV,
+        "Resolved Ninja executable from environment override",
+    );
+}
+
+/// Note that a non-UTF-8 Ninja executable override was ignored.
+fn debug_ninja_program_non_utf8_override(configured: &Path) {
+    debug!(
+        configured_ninja = %configured.to_string_lossy(),
+        ninja_program = NINJA_PROGRAM,
+        source = "fallback",
+        "Ignoring non-UTF-8 Ninja executable override",
+    );
 }
 
 /// Resolve the configured Ninja executable as a UTF-8 path.

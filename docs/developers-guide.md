@@ -5133,24 +5133,36 @@ recreate state per test is enforced by the runner as well as by convention.
 `rstest-bdd-macros` is configured with `strict-compile-time-validation`, so
 missing or ambiguous step bindings should be treated as compile-time failures.
 
-## rstest-bdd v0.5.0 usage
+## rstest-bdd v0.6.0 usage
 
 The migration plan and implementation record are tracked in
+`docs/execplans/adopt-rstest-bdd-v0-6-0.md`. The preceding release's plan is
 `docs/execplans/rstest-bdd-v0-5-0-behavioural-suite-migration.md`.
 
 Current usage in this repository is:
 
-- `rstest-bdd` and `rstest-bdd-macros` pinned to `0.5.0`.
+- `rstest-bdd` and `rstest-bdd-macros` pinned to `0.6.0`.
 - Step parameters favour typed wrappers from `tests/bdd/types.rs`; wrappers
   implement `FromStr` so step signatures can use domain types directly.
 - Prefer inferred step patterns for simple, no-argument steps when this
   reduces duplication and keeps feature wording clear.
 - Use `rstest_bdd::async_step::sync_to_async` for manual sync-to-async wrappers
   and the concise wrapper aliases (`StepCtx`, `StepTextRef`, `StepDoc`,
-  `StepTable`) where required.
+  `StepTable`) where required. All six names still exist in 0.6.0; nothing in
+  `tests/` or `src/` uses them today, so this is guidance for new work rather
+  than a description of the current suite.
 - Introduce async step definitions only where asynchronous behaviour is natural
   and improves coverage.
-- Keep async execution on Tokio current-thread runtime for behavioural tests.
+- Select async execution with
+  `harness = rstest_bdd_harness_tokio::TokioHarness`, **not** the legacy
+  `runtime = "tokio-current-thread"` syntax. 0.6.0 keeps the legacy syntax only
+  as a deprecated compatibility alias: `emit_runtime_deprecation_warning` in
+  the macros crate turns it into a warning, and that warning reaches the
+  compiler because this repository builds on a nightly channel
+  (`nightly-2026-08-23`), which is the condition `rstest_bdd_nightly` selects. A
+  `-D warnings` build would therefore escalate it to an error. Nothing here
+  selects a harness yet; ordinary synchronous scenarios stay ordinary and need
+  no harness at all.
 - Restrict `#[once]` fixtures to expensive, effectively read-only
   infrastructure.
 

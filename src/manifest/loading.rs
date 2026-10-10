@@ -1,6 +1,9 @@
 //! Contains loading-orchestrator notifications outside pure manifest transforms.
 
-use super::{ManifestLoadStage, expand::ExpansionReport};
+use super::{
+    ManifestLoadStage,
+    expand::{ExpansionReport, FilteredEntry},
+};
 use metrics::{counter, describe_counter};
 use std::sync::Once;
 
@@ -45,15 +48,25 @@ pub(super) fn trace_expansion_report(report: &ExpansionReport) {
     counter!(OMITTED_FILTERED_ENTRIES_TOTAL)
         .increment(u64::try_from(report.omitted_filtered_entries).unwrap_or(u64::MAX));
     for entry in &report.filtered_entries {
-        tracing::debug!(
-            section = entry.section.as_str(),
-            entry_name_hash = entry.entry_name_hash.as_str(),
-            iteration_index = entry.iteration_index,
-            when_expression_len = entry.when_expression_len,
-            when_result = false,
-            "filtered manifest entry by when expression"
-        );
+        debug_filtered_entry_from_fields(entry);
     }
+    debug_expansion_summary_from_fields(report);
+}
+
+/// Emit one filtered manifest entry, described by bounded metadata only.
+fn debug_filtered_entry_from_fields(entry: &FilteredEntry) {
+    tracing::debug!(
+        section = entry.section.as_str(),
+        entry_name_hash = entry.entry_name_hash.as_str(),
+        iteration_index = entry.iteration_index,
+        when_expression_len = entry.when_expression_len,
+        when_result = false,
+        "filtered manifest entry by when expression"
+    );
+}
+
+/// Emit the bounded totals for one completed manifest expansion.
+fn debug_expansion_summary_from_fields(report: &ExpansionReport) {
     tracing::debug!(
         filtered_targets = report.stats.filtered_targets,
         filtered_actions = report.stats.filtered_actions,

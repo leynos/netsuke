@@ -207,6 +207,16 @@ impl<W: Write + Send> VerboseTimingReporter<W> {
     }
 }
 
+/// Emit the fixed-field diagnostic for a failed timing-summary sink write.
+fn debug_timing_summary_sink_failed_from_fields() {
+    tracing::debug!(
+        operation = TIMING_SUMMARY_SINK_WRITE_OPERATION,
+        outcome = TIMING_SUMMARY_SINK_WRITE_ERROR,
+        error_category = TIMING_SUMMARY_SINK_WRITE_ERROR_CATEGORY,
+        "timing summary sink write failed"
+    );
+}
+
 /// Record one completed timing-summary sink delivery attempt.
 ///
 /// The duration covers only the synchronous loop that calls [`Write::write`]
@@ -223,12 +233,7 @@ fn record_timing_summary_sink_write(elapsed: Duration, succeeded: bool) {
     counter!(TIMING_SUMMARY_SINK_WRITES_TOTAL, "outcome" => outcome).increment(1);
     histogram!(TIMING_SUMMARY_SINK_WRITE_DURATION).record(elapsed);
     if !succeeded {
-        tracing::debug!(
-            operation = TIMING_SUMMARY_SINK_WRITE_OPERATION,
-            outcome = TIMING_SUMMARY_SINK_WRITE_ERROR,
-            error_category = TIMING_SUMMARY_SINK_WRITE_ERROR_CATEGORY,
-            "timing summary sink write failed"
-        );
+        debug_timing_summary_sink_failed_from_fields();
     }
 }
 

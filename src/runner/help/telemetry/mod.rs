@@ -15,6 +15,11 @@ pub(super) const HELP_TARGETS_TOTAL: &str = "netsuke_runner_help_targets_total";
 /// Metric name measuring complete catalogue query duration in seconds.
 pub(super) const HELP_TARGETS_DURATION: &str = "netsuke_runner_help_targets_duration_seconds";
 
+/// Emit the bounded result of one help-targets catalogue query.
+fn info_help_targets_completed_from_fields(outcome: &'static str, error_category: &'static str) {
+    info!(outcome, error_category, "Completed help targets query");
+}
+
 /// Record bounded telemetry around the complete `help targets` query.
 pub(super) fn instrument_help_targets<T>(query: impl FnOnce() -> Result<T>) -> Result<T> {
     describe_help_targets_metrics();
@@ -32,7 +37,7 @@ pub(super) fn instrument_help_targets<T>(query: impl FnOnce() -> Result<T>) -> R
     };
     span.record("outcome", outcome);
     span.record("error_category", error_category);
-    info!(outcome, error_category, "Completed help targets query");
+    info_help_targets_completed_from_fields(outcome, error_category);
     counter!(
         HELP_TARGETS_TOTAL,
         "outcome" => outcome,
