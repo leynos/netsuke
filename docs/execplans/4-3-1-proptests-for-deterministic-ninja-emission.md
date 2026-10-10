@@ -6,7 +6,10 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: DRAFT — AWAITING APPROVAL (revised after design review)
+Status: DRAFT
+
+Awaiting approval. This revision follows a design review and a rebase onto
+`origin/main`.
 
 ## Purpose / big picture
 
@@ -1364,21 +1367,53 @@ Three preparatory pieces, none of which changes behaviour:
   - `parameterized_tests()` scans only `TEST_SOURCE_ROOT =
     Path(__file__).resolve().parents[3] / "tests"`, and `main()` **fails**
     with *"no anchored filter names a parameterized test"* unless at least one
-    configured anchored selector names a test found **under `tests/`**. A
-    selector naming only `src/`-side tests therefore satisfies the first check
-    and then **aborts the lane** on the second, because the `src/`-side name is
-    absent from a corpus drawn from `tests/` alone. The restriction is thus not
-    "the verifier is blind to `src/`" but "the verifier refuses a configuration
-    whose anchored selectors name no `tests/`-rooted parameterized test".
+    configured anchored selector names a test found **under `tests/`**. The
+    restriction is thus not "the verifier is blind to `src/`" but "the verifier
+    refuses a configuration whose anchored selectors name no `tests/`-rooted
+    parameterized test".
 
-  Consequently `make proptest` **must not** be spelled as a
-  `.config/nextest.toml` `filter = '…'` covering only `src/`-side property
-  suites: that spelling fails the CI step outright, and it fails on `main`
-  today, not only after this plan lands. Note also that the two nextest
-  spellings `property_tests` and `proptests` both occur in this repository, and
-  several of the target suites are `rstest`-parameterized, so the case-suffix
-  hazard is live for them; it does not arise for plain `proptest!` blocks, but
-  one spelling should cover both.
+  **The consequence drawn here previously was wrong, and the error is worth
+  recording because it is a quantification slip rather than a misreading.**
+  `main()` builds `wanted` as
+  `[(name, selector) for selector, name in
+  anchored_selectors() if name in parameterized]` —
+  a comprehension over the **union** of anchored selectors, not a per-selector
+  admission test. The precondition is therefore a property of the *whole set*:
+  it is satisfied when **any one** anchored selector names a `tests/`-rooted
+  parameterized test. An earlier revision of this plan reasoned from "a
+  selector naming only `src/`-side tests aborts the lane" to "adding
+  `src/`-side selectors is forbidden", which does not follow: extending the set
+  cannot remove the member that satisfies the precondition. That claim was
+  committed in `3180ccd2` and is **retracted here**.
+
+  The correct constraint is narrower and directional: `make proptest` **may**
+  add `src/`-side anchored selectors to `.config/nextest.toml`, but the
+  configuration must not be left with **no** `tests/`-rooted parameterized
+  selector, and removing the last one aborts the coverage lane. The tree
+  currently satisfies the precondition with exactly one member. Running the
+  verifier's own extractors on this revision gives:
+
+  ```plaintext
+  parameterized tests under tests/ : 258
+  anchored selector entries        :  18   (distinct names: 18)
+  legacy test(=NAME) names         :   0
+  wanted (anchored AND parameterized):  1
+      text_domains_cannot_be_swapped
+  legacy names that are parameterized (MUST be empty): []
+  ```
+
+  `wanted` is non-empty, so `main()` does not abort. The single qualifying
+  member is `tests/ninja_semantics_ui_tests.rs:45`, declared under `tests/` and
+  reached through one arm of the six-selector union at
+  `.config/nextest.toml:66`. All 18 anchored selectors in the configuration
+  currently name `tests/`-rooted tests, which is why the `src/`-side question
+  is not exercised by the tree today: it is a design question for the new
+  target, not an existing failure.
+
+  Note also that the two nextest spellings `property_tests` and `proptests`
+  both occur in this repository, and several of the target suites are
+  `rstest`-parameterized, so the case-suffix hazard is live for them; it does
+  not arise for plain `proptest!` blocks, but one spelling should cover both.
 
   The remaining, genuinely open part is therefore only *which mechanism* the
   `Makefile` `proptest` target uses, not whether a selector can be trusted. No
@@ -1965,12 +2000,23 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       a dead selector *is* caught. The `tests/` restriction belongs to the other
       half: `parameterized_tests()` scans only `TEST_SOURCE_ROOT = …
       / "tests"`, and `main()` **aborts the lane** unless at least one anchored
-      selector names a test drawn from that corpus. The consequence is a hard
-      design constraint recorded in `EP-M2`: `make proptest` **must not** be a
+      selector names a test drawn from that corpus.
+      **The consequence first drawn from this was wrong and is retracted.** The
+      original entry concluded that `make proptest` **must not** be a
       `.config/nextest.toml` `filter` covering only `src/`-side property suites,
-      because that spelling fails the CI step on the current tree. The narrower
-      open part — `Makefile` `-E` versus a configuration test-group — remains
-      open, and the `filter-match.status` discharge procedure is unchanged.
+      "because that spelling fails the CI step on the current tree". That is a
+      quantification slip. `main()` builds `wanted` over the **union** of
+      anchored selectors, so the precondition is satisfied when **any one**
+      member names a `tests/`-rooted parameterized test; adding `src/`-side
+      selectors cannot remove that member. Running the verifier's own
+      extractors on this tree returns `wanted` with exactly one entry
+      (`text_domains_cannot_be_swapped`, from `tests/ninja_semantics_ui_tests.rs`),
+      so `main()` does not abort and the original claim is falsified by direct
+      measurement. The accurate constraint, recorded in `EP-M2`, is that the
+      configuration must not be left with **no** `tests/`-rooted parameterized
+      anchored selector. The narrower open part — `Makefile` `-E` versus a
+      configuration test-group — remains open, and the `filter-match.status`
+      discharge procedure is unchanged.
 - [x] (2026-10-10T00:00:00Z) Rebased the real branch onto `origin/main`. The
       rollback ref `refs/backup/4-3-1-prerebase` was pinned to `b7c498ef`
       before the rebase started, so the pre-rebase tip survives locally even
@@ -2107,6 +2153,77 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       open reachability question into a measured result, and corrected an
       overclaim written into the same edit. Recorded in the sixth `Revision note`
       entry.
+- [x] (2026-10-10T00:00:00Z) Found and fixed a **live** contract failure by
+      reading CI rather than re-running gates. The local compile-admission pool
+      is still wedged, so no Rust gate could run here and the Python-only
+      `make test-workflow-contracts` does not cover this class. The detail, and
+      four findings that fall out of it, are recorded immediately below this
+      item.
+- [x] (2026-10-10T00:00:00Z) Resolved the CodeRabbit ADR-Status finding on
+      evidence, and the resolution is narrower than the finding. The finding
+      was that `docs/adr-030-ninja-emission-determinism-contract.md` should
+      write `Accepted.` rather than `Accepted`. Reading
+      `docs/documentation-style-guide.md` verbatim shows the rule is split: the
+      prose says only "**Status:** One of `Proposed`, `Accepted`, `Superseded`,
+      or `Deprecated`. For `Accepted` status, include the date and a brief
+      summary" — no full stop on the bare value — while the ADR **template** in
+      the same file shows
+      `<Proposed | Accepted | Superseded | Deprecated>.` **with** one. The
+      house practice matches the template: of 42 ADRs carrying a status word,
+      **40 have the full stop immediately after the word**, and the only two
+      exceptions continue with a qualifier phrase (`Accepted – plan recorded on
+      18 November 2025 …`, `Superseded by [ADR-025]…`) rather than a bare value.
+      So the finding is correct in effect and its authority is the template
+      plus 40 files of practice, not the prose sentence. The change stands; the
+      rationale is recorded because the prose alone does not compel it.
+- [x] (2026-10-10T00:00:00Z) Retracted a claim this plan had committed to
+      `3180ccd2`. See the `EP-M2` correction above and the amended Progress
+      entry for the `make proptest` open question: the assertion that
+      `make proptest` "**must not** be a `.config/nextest.toml` `filter`
+      covering only `src/`-side property suites" is falsified by running the
+      verifier's own extractors, which return a one-entry `wanted` set and so
+      do not abort the lane. The accurate constraint is narrower and recorded
+      where it is used.
+**The live contract failure, in full.** The revision that settles it is CI run
+`38051221830` at `1401d0da` — the revision a CodeRabbit checkpoint pinned —
+which **failed**. Its `build-test` job failed at step 29,
+`Test and Measure Coverage`, and the failing test is
+`netsuke-build::execplan_status_contract_tests
+every_execplan_header_status_is_within_the_closed_set`.
+The message:
+
+```plaintext
+Error: every ExecPlan status must be one of ["DRAFT", "APPROVED",
+"IN PROGRESS", "BLOCKED", "COMPLETE"]; off-vocabulary or qualified
+values found: 4-3-1-proptests-for-deterministic-ninja-emission.md:
+"DRAFT — AWAITING APPROVAL (revised after design review)"
+```
+
+The defect is in this plan's own header, not in infrastructure: line 9 read
+`Status: DRAFT — AWAITING APPROVAL (revised after design review)`, and
+`tests/execplan_status_contract_tests.rs` requires the value after `Status:` to
+be **exactly** one member of the closed set. The qualifier is now a sentence
+beneath the field, per AGENTS.md. Four further findings from the same reading,
+each verified against the artefact rather than inferred:
+
+1. The `build-test` job runs **only on pull-request runs**. In the successful
+   `main` run `38046182468` (`e1df2ead`, 10:48 today) jobs `build-test` and
+   `Windows` are both `skipped`; only `kani-smoke` runs. So a green push on
+   `main` is *not* evidence for the seven-gate union — the PR run is.
+2. Every run on this branch between `37929646063` and `38051221830` is
+   `cancelled`; only the `1401d0da` run reached a verdict, and the verdict was
+   failure. A cancelled run is not a pass.
+3. The two CodeRabbit findings already applied are unaffected: this failure is
+   a third, independent defect that neither the review nor the local Markdown
+   gates could reach, because it is a Rust contract test.
+4. The contract also cross-checks the style guide
+   (`the_style_guide_defines_every_accepted_status_value`), so the closed set
+   and the guide cannot drift silently.
+
+Replicating the contract's own `header_lines`/`header_status` logic over all
+**50** plans under `docs/execplans/` now reports every one in vocabulary, so
+this failure is discharged at the tree level and not only for this file.
+
 - [ ] `EP-M2`: file splits, mutation-evidence contract, ordering helpers,
       `make proptest`.
 - [ ] `EP-M3`: shared strategy and compact `Debug`.
@@ -2118,6 +2235,32 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Surprises & discoveries
 
+- (2026-10-10) A **contract test in this repository reads this plan**. The
+  `Status:` header field is not decorative:
+  `tests/execplan_status_contract_tests.rs` parses the header of every file
+  under `docs/execplans/` and fails the whole test run when the value after
+  `Status:` is not exactly one of
+  `DRAFT | APPROVED | IN PROGRESS | BLOCKED | COMPLETE`. It caught this plan's
+  qualified header (`DRAFT — AWAITING APPROVAL (revised after design review)`)
+  in CI run `38051221830` at `1401d0da`, on the coverage lane, as a hard
+  failure that cancels the run. Two consequences worth carrying: the plan's
+  prose is itself gated code, and a compiler-free local gate set does **not**
+  cover it, because the check is a Rust test — `make test-workflow-contracts`
+  runs the Python contracts only. An agent working around a wedged compile pool
+  is therefore exposed to this class of defect until CI runs.
+- (2026-10-10) A green `main` CI run is **not** evidence for the `build-test`
+  union. In run `38046182468` at `e1df2ead`, jobs `build-test` and `Windows` are
+  `skipped` and only `kani-smoke` executes; the union runs on pull-request
+  events. Reading the green `main` run as "all gates pass" would be a false
+  inference, and it is the exact inference available to a reader who cannot run
+  the Rust gates locally. The PR run is the only run that carries the
+  seven-target union.
+- (2026-10-10) Nine consecutive runs on this branch are `cancelled`. Between
+  `37929646063` and `38051221830` every run on branch
+  `4-3-1-proptests-for-deterministic-ninja-emission` shows `cancelled`; only the
+  `1401d0da` run reached a verdict, and it failed. A cancelled run carries no
+  information about the tree, and a run list that looks busy may contain no
+  evidence at all.
 - (2026-10-10) `origin/main` has eliminated the flat/directory module
   ambiguity this plan's `supplemental_property_location` design was built on.
   The sixth revision preferred existential resolution because
