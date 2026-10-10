@@ -1789,6 +1789,29 @@ leaks now live there rather than here.
       `mdtablefix` change was proven to be a whitespace-only rewrap (identical
       word sequence, unchanged ordered-list marker count) before it was
       applied.
+- [x] (2026-10-10T00:00:00Z) `EP-M1` review round 2: `coderabbit review --agent`
+      returned nine findings against `74cff9ce` — six major, three minor. All
+      nine were verified against the tree before any change; eight accepted, one
+      accepted in substance while its cited mechanism was a partial misread.
+      Three corrections change what an obligation actually tests: `OBL-PROCESS`
+      now compares whole bundles, `OBL-CYCLE`'s cyclic arm constructs its cycle,
+      and acceptance item 6 names `MUT-ACTIONSORT` rather than the impossible
+      `MUT-DEFSORT`. Two replace mutations that could not falsify their
+      property (`OBL-NOLOSS`, `OBL-NOHASH`). One reclassifies a
+      `prop_shuffle` assertion. Three are documentation corrections. All are
+      recorded in the fifth `Revision note` entry and the `Decision log`.
+- [x] (2026-10-10T00:00:00Z) The three Markdown gates passed on the frozen
+      correction, at `HEAD`
+      `c91e96c22481569c2dd34891a666762a75ee21a8`. `make check-fmt` exit 0,
+      "167 files left unchanged"; `make markdownlint` exit 0, spelling
+      prerequisite executed and "0 issues in 0 files"; `make nixie` exit 0,
+      "All diagrams validated successfully!". Logs:
+      `/tmp/check-fmt-netsuke-4-3-1-proptests-for-deterministic-ninja-emission.out`,
+      `/tmp/markdownlint-netsuke-4-3-1-proptests-for-deterministic-ninja-emission.out`,
+      `/tmp/nixie-netsuke-4-3-1-proptests-for-deterministic-ninja-emission.out`.
+      One `make fmt` cycle was needed before the first `check-fmt`; it wrapped
+      the new revision-note paragraphs and re-applied the intended second-person
+      and `prop_shuffle` edits.
 - [ ] `EP-M2`: file splits, mutation-evidence contract, ordering helpers,
       `make proptest`.
 - [ ] `EP-M3`: shared strategy and compact `Debug`.
