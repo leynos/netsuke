@@ -119,7 +119,7 @@ jobs:
           tool: sccache@0.16.0
           fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@3754876bc4e94dc65c83af3def37828934f8f65e
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
@@ -140,7 +140,7 @@ jobs:
         # other. It compiled the tool from source until then, which was this
         # repository's last source-build exception.
         uses: >-
-          leynos/shared-actions/.github/actions/install-mdtablefix@0606ca899ce2995a0c4bc78e660e80832e6e8855
+          leynos/shared-actions/.github/actions/install-mdtablefix@3754876bc4e94dc65c83af3def37828934f8f65e
         with:
           version: ${{ env.MDTABLEFIX_VERSION }}
       - name: Setup uv
@@ -158,7 +158,7 @@ jobs:
         run: make SHELL=bash lint-clippy
       - name: Install Whitaker
         uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@6dea5677a84fec60ca51b07202570e3af12ffdb4
+          leynos/shared-actions/.github/actions/install-whitaker@3754876bc4e94dc65c83af3def37828934f8f65e
         with:
           installer-version: '0.2.9'
           # The tool and Whitaker cache steps own `~/.cargo/bin` and the
@@ -284,7 +284,7 @@ jobs:
           tool: sccache@0.16.0
           fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@3754876bc4e94dc65c83af3def37828934f8f65e
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
