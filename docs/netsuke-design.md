@@ -3884,11 +3884,17 @@ dependencies on demand. Python linting still lives in the top-level
 `ruff.toml`, so the dedicated staging scripts remain self-contained whilst the
 broader helper suite stays consistently linted.
 
-Each job uploads its products as workflow artefacts, and the final release job
-downloads every file, filters out unrelated downloads, and prefixes asset names
-with their staging directories to avoid collisions before attaching them to the
-GitHub release draft. This automated pipeline guarantees parity across Windows,
-Linux, and macOS without custom GoReleaser logic.
+Each build job uploads its products as workflow artefacts. In dry-run mode, the
+`release` job downloads those artefacts, hoists the cargo-binstall archives,
+and validates the upload plan without creating a draft or uploading assets to a
+GitHub release. For tag publication, `publish-release` downloads the same build
+artefacts and attaches the assets to the draft, prefixing names with their
+staging directories to avoid collisions. Dry-run staging writes its operation
+summary but does not upload diagnostic artefacts; publication telemetry and the
+full observability policy are documented in
+[ADR-020](adr-020-release-admission-observability.md). This automated pipeline
+guarantees parity across Windows, Linux, and macOS without custom GoReleaser
+logic.
 
 ### 8.7 Release Notes
 

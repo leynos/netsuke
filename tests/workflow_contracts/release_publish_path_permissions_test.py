@@ -10,6 +10,20 @@ from workflow_loading import (
 )
 
 
+def test_release_workflow_denies_default_token_permissions() -> None:
+    """Jobs must opt in to token scopes instead of inheriting GitHub defaults."""
+    release = load_workflow(RELEASE_WORKFLOW_PATH)
+    assert release.get("permissions") == {}, (
+        "release.yml must deny default token scopes at workflow level"
+    )
+    jobs = require_mapping(release.get("jobs"), "release workflow jobs")
+    for job_name, raw_job in jobs.items():
+        job = require_mapping(raw_job, f"release job {job_name}")
+        assert "permissions" in job, (
+            f"{job_name} must declare the token scopes it requires"
+        )
+
+
 def test_staging_is_read_only_and_only_publication_can_write() -> None:
     """Keep the rehearsal job read-only and scope writes to publication."""
     release = load_workflow(RELEASE_WORKFLOW_PATH)

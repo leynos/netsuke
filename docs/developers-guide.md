@@ -4,7 +4,8 @@ This guide describes the day-to-day engineering workflow for Netsuke, with a
 focus on writing and maintaining tests. It is the source of truth for how the
 test suite is expected to be used by contributors. The normative architecture
 reference for bounded release-admission observability is
-[ADR-020](adr-020-release-admission-observability.md).
+[ADR-020](adr-020-release-admission-observability.md). It also records the
+release-operation observability decision.
 
 ## Command-line interface architecture
 
@@ -1743,8 +1744,20 @@ jobs upload their packages as workflow artefacts under
 `should_upload_package_artifacts`; the release job downloads them, hoists and
 validates the cargo-binstall archive pairs, then asks `upload-release-assets`
 to validate the upload plan. Its `dry-run` input prevents any release upload,
-and the draft-creation step is publish-only. Diagnostic artefacts remain behind
-`should_upload_workflow_artifacts`, which stays false during dry runs.
+and the draft-creation step is publish-only. Build diagnostic artefacts remain
+behind `should_upload_workflow_artifacts`, which stays false during dry runs.
+
+Both staging and publication write an always-run outcome to
+`GITHUB_STEP_SUMMARY`. The staging job does not upload diagnostic artefacts;
+its JSONL telemetry file remains on the runner. Publication uploads a per-job
+artefact named `release-operation-observability-${{ github.job }}`. It contains
+`release-operation-observability.jsonl` with bounded operation and phase
+counters, duration samples, and phase start/completion events. If cancellation
+interrupts a phase before its end marker, it records a phase interruption event
+named `release_phase_interrupted`. The summary records job and phase outcomes
+with a fixed error category. The publication artefact uses the repository's
+default GitHub Actions retention policy. These records omit release tags,
+filenames, raw error text, and secrets.
 
 The skip applies only to events that `ci.yml` also answers. The dry run answers
 `ready_for_review` and `ci.yml` does not, so a draft marked ready after its
