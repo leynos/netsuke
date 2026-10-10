@@ -57,8 +57,21 @@ def test_release_jobs_emit_always_run_bounded_observability(
 ) -> None:
     """Both release paths must retain fixed-label outcomes and durations."""
     steps = job_steps(release_workflow, job_name)
-    named_step(steps, "Start release operation timing")
+    _assert_operation_steps_expose_outcomes(steps)
+    env = _assert_summary_environment(steps, operation, dry_run)
+    _assert_summary_phase_timings(env)
 
+    if job_name == "release":
+        _assert_staging_telemetry_policy(steps, env)
+    else:
+        _assert_publication_telemetry_policy(steps, env)
+
+    _assert_timing_markers_run_after_failures(steps)
+
+
+def _assert_operation_steps_expose_outcomes(steps: list[dict[str, object]]) -> None:
+    """Require timing anchors and staged phases to expose their outcomes."""
+    named_step(steps, "Start release operation timing")
     download = steps[step_index_by_key(steps, "id", "download_artifacts")]
     hoist = steps[step_index_by_key(steps, "id", "archive_hoist")]
     upload = steps[step_index_by_key(steps, "id", "upload_assets")]
@@ -69,6 +82,11 @@ def test_release_jobs_emit_always_run_bounded_observability(
     ):
         assert step.get("id"), f"{label} must expose a step outcome"
 
+
+def _assert_summary_environment(
+    steps: list[dict[str, object]], operation: str, dry_run: str
+) -> dict[str, object]:
+    """Check fixed summary labels and reject raw upload error data."""
     summary = named_step(steps, OBSERVABILITY_SUMMARY_STEP)
     assert summary.get("if") == "always()", (
         "release observability must run after a failed operation"
@@ -88,6 +106,11 @@ def test_release_jobs_emit_always_run_bounded_observability(
     assert "python3 scripts/release_operation_observability.py" in str(
         summary.get("run", "")
     ), "the summary helper must run without depending on a prior setup step"
+    return env
+
+
+def _assert_summary_phase_timings(env: dict[str, object]) -> None:
+    """Require outcomes and start/end times for every staged phase."""
     for phase in ("artifact_download", "archive_hoist", "upload_plan_validation"):
         assert env.get(f"{phase.upper()}_OUTCOME"), (
             f"the summary must record the {phase} outcome"
@@ -99,42 +122,56 @@ def test_release_jobs_emit_always_run_bounded_observability(
             f"the summary must record the {phase} end time"
         )
 
-    if job_name == "release":
-        assert "DRAFT_RELEASE_OUTCOME" not in env, (
-            "staging telemetry must not model draft creation"
-        )
-        assert not any(
-            step.get("name") == OBSERVABILITY_ARTIFACT_STEP for step in steps
-        ), "dry-run staging must not upload a diagnostic telemetry artifact"
-    else:
-        assert (
-            env.get("DRAFT_RELEASE_OUTCOME") == "${{ steps.draft_release.outcome }}"
-        ), "publication telemetry must record draft creation"
-        artifact = named_step(steps, OBSERVABILITY_ARTIFACT_STEP)
-        assert artifact.get("if") == "always()", (
-            "publication telemetry upload must run after failures"
-        )
-        assert str(artifact.get("uses", "")).startswith("actions/upload-artifact@"), (
-            "publication telemetry must be retained as an Actions artifact"
-        )
-        artifact_with = require_mapping(
-            artifact.get("with"), "observability artifact inputs"
-        )
-        assert artifact_with.get("name") == (
-            "release-operation-observability-${{ github.job }}"
-        ), "publication telemetry must use a job-specific artifact name"
-        assert artifact_with.get("path") == (
-            "${{ runner.temp }}/release-operation-observability.jsonl"
-        ), "the uploaded artifact must contain the bounded JSONL records"
-        assert "retention-days" not in artifact_with, (
-            "telemetry must use the repository's default artifact retention"
-        )
-        assert step_index_by_key(
-            steps, "name", OBSERVABILITY_SUMMARY_STEP
-        ) < step_index_by_key(steps, "name", OBSERVABILITY_ARTIFACT_STEP), (
-            "the summary file must be written before publication telemetry is uploaded"
-        )
 
+def _assert_staging_telemetry_policy(
+    steps: list[dict[str, object]], env: dict[str, object]
+) -> None:
+    """Keep draft data and diagnostic artifact uploads out of dry-run staging."""
+    assert "DRAFT_RELEASE_OUTCOME" not in env, (
+        "staging telemetry must not model draft creation"
+    )
+    assert not any(step.get("name") == OBSERVABILITY_ARTIFACT_STEP for step in steps), (
+        "dry-run staging must not upload a diagnostic telemetry artifact"
+    )
+
+
+def _assert_publication_telemetry_policy(
+    steps: list[dict[str, object]], env: dict[str, object]
+) -> None:
+    """Retain publication telemetry after recording the draft outcome."""
+    assert env.get("DRAFT_RELEASE_OUTCOME") == "${{ steps.draft_release.outcome }}", (
+        "publication telemetry must record draft creation"
+    )
+    artifact = named_step(steps, OBSERVABILITY_ARTIFACT_STEP)
+    assert artifact.get("if") == "always()", (
+        "publication telemetry upload must run after failures"
+    )
+    assert str(artifact.get("uses", "")).startswith("actions/upload-artifact@"), (
+        "publication telemetry must be retained as an Actions artifact"
+    )
+    artifact_with = require_mapping(
+        artifact.get("with"), "observability artifact inputs"
+    )
+    assert artifact_with.get("name") == (
+        "release-operation-observability-${{ github.job }}"
+    ), "publication telemetry must use a job-specific artifact name"
+    assert artifact_with.get("path") == (
+        "${{ runner.temp }}/release-operation-observability.jsonl"
+    ), "the uploaded artifact must contain the bounded JSONL records"
+    assert "retention-days" not in artifact_with, (
+        "telemetry must use the repository's default artifact retention"
+    )
+    assert step_index_by_key(
+        steps, "name", OBSERVABILITY_SUMMARY_STEP
+    ) < step_index_by_key(steps, "name", OBSERVABILITY_ARTIFACT_STEP), (
+        "the summary file must be written before publication telemetry is uploaded"
+    )
+
+
+def _assert_timing_markers_run_after_failures(
+    steps: list[dict[str, object]],
+) -> None:
+    """Require timing markers to run after a failure in the preceding phase."""
     for marker_id in (
         "artifact_download_start",
         "artifact_download_end",

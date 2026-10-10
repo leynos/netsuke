@@ -141,6 +141,55 @@ def _metric_records(
     return records
 
 
+def _phase_started_event(
+    observation: OperationObservation, phase: str, step: StepState
+) -> dict[str, object] | None:
+    """Build a phase-start event when the workflow supplied its timestamp."""
+    if step.started_ns is None:
+        return None
+    return {
+        "record_type": "trace_event",
+        "event": "release_phase_started",
+        "operation": observation.operation,
+        "phase": phase,
+        "timestamp_ns": step.started_ns,
+        "dry_run": observation.dry_run,
+    }
+
+
+def _phase_terminal_event(
+    observation: OperationObservation, phase: str, step: StepState
+) -> dict[str, object] | None:
+    """Build a phase completion or interruption event when its outcome allows."""
+    if step.ended_ns is not None:
+        record: dict[str, object] = {
+            "record_type": "trace_event",
+            "event": "release_phase_completed",
+            "operation": observation.operation,
+            "phase": phase,
+            "timestamp_ns": step.ended_ns,
+            "outcome": step.outcome,
+            "error_category": _phase_error_category(phase, step.outcome),
+            "dry_run": observation.dry_run,
+        }
+        duration = _duration_seconds(step.started_ns, step.ended_ns)
+        if duration is not None:
+            record["duration_seconds"] = duration
+        return record
+    if step.outcome == "cancelled":
+        return {
+            "record_type": "trace_event",
+            "event": "release_phase_interrupted",
+            "operation": observation.operation,
+            "phase": phase,
+            "timestamp_ns": observation.ended_ns,
+            "outcome": step.outcome,
+            "error_category": "cancelled",
+            "dry_run": observation.dry_run,
+        }
+    return None
+
+
 def _trace_records(observation: OperationObservation) -> list[dict[str, object]]:
     """Build bounded start and completion events for executed phases."""
     records: list[dict[str, object]] = []
@@ -148,41 +197,14 @@ def _trace_records(observation: OperationObservation) -> list[dict[str, object]]
         step = observation.steps[phase]
         if step.outcome not in PHASE_OUTCOMES:
             continue
-        duration = _duration_seconds(step.started_ns, step.ended_ns)
-        if step.started_ns is not None:
-            records.append({
-                "record_type": "trace_event",
-                "event": "release_phase_started",
-                "operation": observation.operation,
-                "phase": phase,
-                "timestamp_ns": step.started_ns,
-                "dry_run": observation.dry_run,
-            })
-        if step.ended_ns is not None:
-            record: dict[str, object] = {
-                "record_type": "trace_event",
-                "event": "release_phase_completed",
-                "operation": observation.operation,
-                "phase": phase,
-                "timestamp_ns": step.ended_ns,
-                "outcome": step.outcome,
-                "error_category": _phase_error_category(phase, step.outcome),
-                "dry_run": observation.dry_run,
-            }
-            if duration is not None:
-                record["duration_seconds"] = duration
-            records.append(record)
-        elif step.outcome == "cancelled":
-            records.append({
-                "record_type": "trace_event",
-                "event": "release_phase_interrupted",
-                "operation": observation.operation,
-                "phase": phase,
-                "timestamp_ns": observation.ended_ns,
-                "outcome": step.outcome,
-                "error_category": "cancelled",
-                "dry_run": observation.dry_run,
-            })
+        records.extend(
+            event
+            for event in (
+                _phase_started_event(observation, phase, step),
+                _phase_terminal_event(observation, phase, step),
+            )
+            if event is not None
+        )
     return records
 
 
