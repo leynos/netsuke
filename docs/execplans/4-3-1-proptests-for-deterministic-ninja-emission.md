@@ -1222,6 +1222,25 @@ Three preparatory pieces, none of which changes behaviour:
   It must accept a `ninja_gen` root and directory-style module paths. Update
   the developers'-guide section describing it. This is the single largest piece
   of unbudgeted work the design review found.
+
+  The generalization is **not** a third hard-coded branch.
+  `module_path_for_source` already implements the forward direction and is
+  lossy in a way that makes the inverse ambiguous:
+  `src/ir/cycle_verification.rs` and `src/ir/cycle/verification.rs` both map to
+  `ir::cycle::verification`, and the repository uses **both** forms today —
+  `src/ir/cycle_verification.rs` flat, `src/ir/cmd_interpolate/verification.rs`
+  directory. Per root, the flat and directory expansions are provably disjoint,
+  because the flat form's stem ends in the final segment and a directory
+  expansion has at least two components, so resolution can simply try both and
+  the invariant is worth a comment. Prefer existential resolution — find the
+  source under `src/<root>/` that actually declares the named property — over
+  deriving a path and asserting it, and report the searched candidates when
+  nothing matches, so a future move fails with a message naming what was tried
+  rather than an opaque read error. The `<root>` list must itself be derived
+  from what the patches name, not hard-coded to `ir` and `ninja_gen`, or the
+  same class of defect recurs at `EP-M4`. Note also that
+  `patch_stem_for_harness` and `module_path_for_source` already round-trip, so
+  no Kani-side change is needed: only the supplemental path is.
 - Extract `ordered_edges` and `ordered_actions` as pure helpers, used by both
   emission paths. Behaviour-preserving; enables `OBL-ORDER`'s
   seed-deterministic core.
