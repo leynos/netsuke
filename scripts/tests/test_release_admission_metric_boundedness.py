@@ -32,6 +32,8 @@ from release_admission_test_support import (
     CANARY_BY_OPERATION,
     GITHUB_REPOSITORY,
     METRICS_VALIDATOR,
+    Boundaries,
+    GateRun,
     assert_failure_trace_sequence,
     assert_identifiers_excluded_from_records,
     expected_gate_labels,
@@ -147,6 +149,49 @@ def test_gate_emits_fixed_categories_for_failure_paths(
         )
 
 
+def _run_under_generated_identifiers(
+    revision: str, path: str, url: str
+) -> tuple[GateRun, Boundaries]:
+    """Run the gate once with the given identifiers in its environment.
+
+    A controller is built per example rather than taken from the fixture: the
+    doubles must be registered before replay, and Hypothesis runs every example
+    inside one test function, so one fixture instance cannot serve them all.
+
+    Parameters
+    ----------
+    revision
+        The canonical object ID the workflow exports and the queries must carry.
+    path, url
+        Generated identifiers carried in the child's environment only.
+
+    Returns
+    -------
+    tuple[GateRun, Boundaries]
+        The completed run and the doubles whose recorded calls answer whether
+        the identifiers crossed any boundary they should not have.
+    """
+    with (
+        tempfile.TemporaryDirectory() as directory_name,
+        CmdMox(verify_on_exit=False) as cmd_mox,
+    ):
+        boundaries = install_boundaries(cmd_mox)
+        cmd_mox.replay()
+        run = run_gate(
+            cmd_mox,
+            pathlib.Path(directory_name),
+            evidence_state="fresh",
+            extra_environment={
+                "GITHUB_SHA": revision,
+                "NETSUKE_RELEASE_ADMISSION_ENFORCE": "false",
+                IDENTIFIER_PATH_VARIABLE: f"path-{path}",
+                IDENTIFIER_URL_VARIABLE: f"url-{url}",
+            },
+        )
+        cmd_mox.verify()
+    return run, boundaries
+
+
 @given(
     revision=GIT_OBJECT_ID,
     run_id=IDENTIFIER_TEXT,
@@ -177,31 +222,10 @@ def test_identifiers_never_become_metric_labels(
     covered by the failure suite: the gate strips trailing newlines from the
     resolved SHA before the equality check, so a newline revision mismatches the
     raw ``GITHUB_SHA`` it was given.
-
-    A controller is built per example rather than taken from the fixture: the
-    doubles must be registered before replay, and Hypothesis runs every example
-    inside one test function, so one fixture instance cannot serve them all.
     """
     del run_id
     identifiers = {revision, f"path-{path}", f"url-{url}"}
-    with (
-        tempfile.TemporaryDirectory() as directory_name,
-        CmdMox(verify_on_exit=False) as cmd_mox,
-    ):
-        boundaries = install_boundaries(cmd_mox)
-        cmd_mox.replay()
-        run = run_gate(
-            cmd_mox,
-            pathlib.Path(directory_name),
-            evidence_state="fresh",
-            extra_environment={
-                "GITHUB_SHA": revision,
-                "NETSUKE_RELEASE_ADMISSION_ENFORCE": "false",
-                IDENTIFIER_PATH_VARIABLE: f"path-{path}",
-                IDENTIFIER_URL_VARIABLE: f"url-{url}",
-            },
-        )
-        cmd_mox.verify()
+    run, boundaries = _run_under_generated_identifiers(revision, path, url)
 
     assert run.result.returncode == 0, run.result.stderr
     METRICS_VALIDATOR.validate_metrics(run.metrics)

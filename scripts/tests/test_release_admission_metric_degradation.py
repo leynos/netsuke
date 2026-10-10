@@ -28,6 +28,7 @@ from release_admission_test_scenarios import fail_first_calls, fail_nth_call
 from release_admission_test_support import (
     CANARY_BY_OPERATION,
     METRICS_VALIDATOR,
+    assert_failure_trace_sequence,
     expected_gate_labels,
     expected_operation_labels,
     install_adapted,
@@ -109,18 +110,9 @@ def test_operation_metric_writes_lose_only_their_records(
     assert run.metrics[0]["labels"] == expected_gate_labels(
         "failure", "missing_evidence"
     ), "the gate record must still report the observed admission"
-    assert run.traces[-1]["event"] == "trace_delivery", (
-        "the gate must still reach its final delivery record"
+    assert_failure_trace_sequence(
+        run.traces, "check_scan_freshness", "missing_evidence"
     )
-    assert [trace["event"] for trace in run.traces] == [
-        "operation_complete",
-        "operation_complete",
-        "operation_complete",
-        "operation_complete",
-        "gate_complete",
-        "workflow_output_delivery",
-        "trace_delivery",
-    ], "the gate must still write its own completion records"
     assert tuple(run.outputs) == (
         "gate-outcome",
         "gate-error-category",

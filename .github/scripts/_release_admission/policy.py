@@ -46,7 +46,39 @@ TRACE_DELIVERY = "trace_delivery"
 DEFAULT_EVIDENCE_STATE = "missing"
 
 
-class Canary(enum.StrEnum):
+class Vocabulary(enum.StrEnum):
+    """Give each fixed vocabulary the one membership question the gate asks.
+
+    The gate validates every value before it records it, and the value is
+    always checked against one of these enumerations. Asking that question via
+    a provided class method rather than through a per-vocabulary predicate
+    keeps the answer in one place: a new vocabulary inherits it, and cannot
+    bring a copy of its own.
+
+    The one membership test that is *not* an enumeration member,
+    :func:`is_admission_enforcement`, stays a function on purpose. A
+    two-member set is not worth an enumeration, and that helper answers about
+    the admission mode rather than about a record's vocabulary.
+    """
+
+    @classmethod
+    def contains(cls, value: str) -> bool:
+        """Return whether *value* is a member of this vocabulary.
+
+        Returns
+        -------
+        bool
+            Whether the value names a member of this enumeration.
+
+        Examples
+        --------
+        >>> Outcome.contains("success"), Outcome.contains("")
+        (True, False)
+        """
+        return value in cls
+
+
+class Canary(Vocabulary):
     """Name the canary an operation belongs to, for metric labelling."""
 
     HISTORY_SCAN = "history_scan"
@@ -54,7 +86,7 @@ class Canary(enum.StrEnum):
     NONE = "none"
 
 
-class Operation(enum.StrEnum):
+class Operation(Vocabulary):
     """Name one of the five fixed admission operations."""
 
     RESOLVE_TAG_COMMIT = "resolve_tag_commit"
@@ -64,7 +96,7 @@ class Operation(enum.StrEnum):
     VERIFY_EVIDENCE = "verify_evidence"
 
 
-class Outcome(enum.StrEnum):
+class Outcome(Vocabulary):
     """Record whether an operation or the gate succeeded."""
 
     SUCCESS = "success"
@@ -72,7 +104,7 @@ class Outcome(enum.StrEnum):
     UNKNOWN = "unknown"
 
 
-class ErrorCategory(enum.StrEnum):
+class ErrorCategory(Vocabulary):
     """Record why an operation or the gate did not succeed.
 
     The categories are deliberately coarse: they say which decision failed, so
@@ -90,7 +122,7 @@ class ErrorCategory(enum.StrEnum):
     UNKNOWN = "unknown"
 
 
-class TraceEvent(enum.StrEnum):
+class TraceEvent(Vocabulary):
     """Name the four bounded trace boundaries the gate emits."""
 
     OPERATION_COMPLETE = "operation_complete"
@@ -275,86 +307,6 @@ def is_admission_enforcement(value: str) -> bool:
     (True, False)
     """
     return value in {ADMISSION_OBSERVATION_MODE, ADMISSION_ENFORCEMENT_MODE}
-
-
-def is_canary(value: str) -> bool:
-    """Return whether a value names one of the three canaries.
-
-    Returns
-    -------
-    bool
-        Whether the value names a canary.
-
-    Examples
-    --------
-    >>> is_canary("history_scan"), is_canary("nope")
-    (True, False)
-    """
-    return value in Canary
-
-
-def is_operation(value: str) -> bool:
-    """Return whether a value names one of the five admission operations.
-
-    Returns
-    -------
-    bool
-        Whether the value names an operation.
-
-    Examples
-    --------
-    >>> is_operation("verify_evidence"), is_operation("nope")
-    (True, False)
-    """
-    return value in Operation
-
-
-def is_outcome(value: str) -> bool:
-    """Return whether a value is one of the three operation outcomes.
-
-    Returns
-    -------
-    bool
-        Whether the value names an outcome.
-
-    Examples
-    --------
-    >>> is_outcome("success"), is_outcome("")
-    (True, False)
-    """
-    return value in Outcome
-
-
-def is_error_category(value: str) -> bool:
-    """Return whether a value is one of the eight error categories.
-
-    Returns
-    -------
-    bool
-        Whether the value names an error category.
-
-    Examples
-    --------
-    >>> is_error_category("missing_evidence"), is_error_category("nope")
-    (True, False)
-    """
-    return value in ErrorCategory
-
-
-def is_trace_event(value: str) -> bool:
-    """Return whether a value names one of the four trace boundaries.
-
-    Returns
-    -------
-    bool
-        Whether the value names a trace event.
-
-    Examples
-    --------
-    >>> is_trace_event("trace_delivery"), is_trace_event("nope")
-    (True, False)
-    """
-    return value in TraceEvent
 
 
 def is_metric_value(value: str) -> bool:

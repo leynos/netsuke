@@ -1795,10 +1795,11 @@ invocation. Its implementation is split across
 `.github/scripts/_release_admission/`: `policy` owns the pure bounded
 classifications, `records` owns the metric and trace shapes, `delivery` owns
 the metric, output, and trace sinks, `commands` owns the bounded external
-command runner, `telemetry` owns the emitted records, and `gate` composes the
-operations and reporting. The workflow's `astral-sh/setup-uv` step provisions
-the interpreter; `uv` reads the entry point's own `requires-python` and
-dependency pins rather than the workflow restating them.
+command runner, `telemetry` owns the emitted records, `configuration` resolves
+the environment the gate is told, and `gate` composes the operations and
+reporting. The workflow's `astral-sh/setup-uv` step provisions the interpreter;
+`uv` reads the entry point's own `requires-python` and dependency pins rather
+than the workflow restating them.
 
 The gate keeps fallible boundaries behind explicit adapters. Set
 `NETSUKE_RELEASE_ADMISSION_GH_ADAPTER` for GitHub API requests,
@@ -1815,6 +1816,24 @@ composition and reporting entry point, `delivery` and `commands` own the
 external-effect adapters, and `policy` owns the pure bounded classifications.
 These modules are internal implementation details, imported only by the gate
 entry point and its tests.
+
+Two conventions inside those modules are worth stating, because both exist to
+keep an answer in one place:
+
+- Each fixed vocabulary is a `policy.Vocabulary` subclass, and membership is
+  asked through `Vocabulary.contains` rather than through a per-vocabulary
+  `is_*` predicate. The five predicates that used to answer the same question
+  five times were flagged as duplication by CodeScene; `contains` is a provided
+  class method on the base, so a new vocabulary inherits the answer and cannot
+  bring its own copy. `is_metric_value` stays a function, because a rendered
+  number is a regex rather than an enumeration member.
+- Bash's two default forms have one helper each, and the choice between them is
+  never incidental. `configuration._optional` is `${VAR:-default}` and
+  substitutes for an unset *or empty* value;
+  `configuration._defaulted_only_when_unset` is `${VAR-default}` and
+  substitutes only when the variable is unset. The enforcement mode uses the
+  latter, so an exported empty value reaches the gate's own mode check and is
+  refused there rather than silently becoming observation mode.
 
 The metric contract is deliberately closed. The only label names are `canary`,
 `operation`, `outcome`, and `error_category`, and the only values are:
