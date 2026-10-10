@@ -2214,6 +2214,16 @@ leaks now live there rather than here.
   plans cite — so instances are symptoms, not the defect. Fixing only reported
   instances would leave the next reader trusting five more stale numbers.
   Date/Author: 2026-10-10 / implementation agent.
+- Decision: treat a delegated head-drift verdict as unverified until it quotes
+  the text it claims to have found, and re-check every finding by hand. A
+  delegated analysis of the second review round reported two findings as
+  "demonstrably addressed" at `b68b8289`; both were live, and the agent had
+  matched line *numbers* against a revision whose content at those positions
+  differed. Rationale: a line number is not evidence that a specific sentence
+  was fixed. The check that works is to quote the anchor text and grep for it,
+  which is cheap and cannot drift. The same rule already governs gate
+  provenance, where a log belongs to a revision rather than a branch.
+  Date/Author: 2026-10-10 / implementation agent.
 
 ## Design review findings
 
