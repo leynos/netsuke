@@ -1240,15 +1240,34 @@ are derivation-driven. All four are mechanism corrections; no obligation's
 
 Three preparatory pieces, none of which changes behaviour:
 
-- Split `src/ninja_gen/mod.rs`, which measures 394 raw lines here — inside the
-  400-line cap, with no headroom for the additions later milestones make. The
-  `NamedAction` struct and its impl block (lines ~251–385) are the obvious
-  seam. The extracted module goes in `src/ninja_gen/named_action.rs` and is
-  declared from `mod.rs` with a plain `mod named_action;`, **not** as a
-  `src/ninja_gen_named_action.rs` sibling; the sibling form was measured to
-  violate the module-layout contract `main` carries, and is the one shape to
-  avoid. Re-derive the seam at implementation time, because `main` has already
-  moved this file's neighbours and may move this one.
+- Split `src/ninja_gen/mod.rs` after rebasing onto `origin/main`, which measures
+  386 raw lines there — inside the 400-line cap, with no headroom for the
+  additions later milestones make. The `NamedAction` struct and its impl block
+  remain the obvious seam. The extracted module goes in
+  `src/ninja_gen/named_action.rs` and is declared from `mod.rs` with a plain
+  `mod named_action;`, **not** as a `src/ninja_gen_named_action.rs` sibling;
+  the sibling form was measured to violate the module-layout contract `main`
+  carries, and is the one shape to avoid.
+
+  This base reconciliation was performed on 2026-10-10 rather than deferred to
+  implementation time, because the sixth revision's premise no longer held.
+  `origin/main` has migrated the whole `src/ninja_gen*` family into directory
+  modules — `ninja_gen_command_list.rs` to `ninja_gen/command_list/mod.rs`,
+  `ninja_gen_error.rs` to `ninja_gen/error.rs`, `ninja_gen_escape.rs` to
+  `ninja_gen/escape.rs`, `ninja_gen_property_tests.rs` to
+  `ninja_gen/property_tests/mod.rs`, `ninja_gen_recipe_shell.rs` to
+  `ninja_gen/recipe_shell.rs`, `ninja_gen_test_support.rs` to
+  `ninja_gen/test_support.rs`, `ninja_gen_validation.rs` to
+  `ninja_gen/validation.rs`, `ninja_gen_tests.rs` to `ninja_gen/tests/mod.rs`,
+  and `ninja_gen/dyndep.rs` to `ninja_gen/dyndep/mod.rs` — and it dropped the
+  parent prefix from every child filename. Against this branch's pre-rebase
+  tree the layout contract reports 66 unrecorded prefix groups and 27
+  prefixed-beside-directory violations; against `origin/main` it reports 0 and
+  0. Implementing the split before rebasing would therefore have built on a
+  seam upstream has already removed. `docs/repository-layout.md` under
+  *Placement conventions* now states the rule: a shared name prefix represents
+  a module hierarchy, children go under a directory module with `mod.rs`, and
+  `#[path]` is not to be used to reach a sibling or parent file.
 - Split `tests/kani_mutation_evidence_tests.rs` (383 lines) and generalize
   `supplemental_property_location`, which currently hard-codes
   `ensure!(*root == "ir", …)` and derives `src/ir/<segments joined by _>.rs`.
@@ -1256,22 +1275,30 @@ Three preparatory pieces, none of which changes behaviour:
   the developers'-guide section describing it. This is the single largest piece
   of unbudgeted work the design review found.
 
-  The generalization is **not** a third hard-coded branch.
-  `module_path_for_source` already implements the forward direction and is
-  lossy in a way that makes the inverse ambiguous:
-  `src/ir/cycle_verification.rs` and `src/ir/cycle/verification.rs` both map to
-  `ir::cycle::verification`, and the repository uses **both** forms today —
-  `src/ir/cycle_verification.rs` flat, `src/ir/cmd_interpolate/verification.rs`
-  directory. Per root, the flat and directory expansions are provably disjoint,
-  because the flat form's stem ends in the final segment and a directory
-  expansion has at least two components, so resolution can simply try both and
-  the invariant is worth a comment. Prefer existential resolution — find the
-  source under `src/<root>/` that actually declares the named property — over
-  deriving a path and asserting it, and report the searched candidates when
-  nothing matches, so a future move fails with a message naming what was tried
-  rather than an opaque read error. The `<root>` list must itself be derived
-  from what the patches name, not hard-coded to `ir` and `ninja_gen`, or the
-  same class of defect recurs at `EP-M4`. Note also that
+  The generalization is **not** a third hard-coded branch. Be aware that the
+  sixth revision's stated reason for preferring existential resolution was
+  **falsified on 2026-10-10** and is withdrawn. It argued that
+  `module_path_for_source` is lossy because `src/ir/cycle_verification.rs` and
+  `src/ir/cycle/verification.rs` both map to `ir::cycle::verification`, and
+  that the repository used both forms. `origin/main` has since migrated every
+  flat module to the directory form — `cycle_verification.rs` is now
+  `cycle/verification.rs`, and a sweep for flat-and-directory pairs that
+  resolve to the same module path finds **zero** across `src/`, and zero on
+  `origin/main`. The ambiguity that justified existential resolution therefore
+  no longer exists, and a collision-witness argument cannot be carried forward
+  as though it did.
+
+  The generalization is still required, and for a simpler reason: `origin/main`
+  derives `src/<root>/<segments>/mod.rs` but still hard-codes
+  `ensure!(*root == "ir", …)`, so a `ninja_gen`-rooted patch is rejected
+  outright. Remove that assertion and derive `<root>` from what the patches
+  actually name rather than from a fixed list, or the same class of defect
+  recurs at `EP-M4`. Resolving existentially — finding the source under
+  `src/<root>/` that declares the named property — remains the preferred
+  implementation even though the collision that motivated it is gone, because
+  it fails with a message naming the searched candidates rather than an opaque
+  read error when a module moves again, and this plan's own subject matter is
+  about to add modules under `src/ninja_gen/`. Note also that
   `patch_stem_for_harness` and `module_path_for_source` already round-trip, so
   no Kani-side change is needed: only the supplemental path is.
 - Extract `ordered_edges` and `ordered_actions` as pure helpers, used by both
@@ -1283,15 +1310,78 @@ Three preparatory pieces, none of which changes behaviour:
   branches that would never be taken. A standalone CI job would additionally be
   ~98% compile — roughly 275 s of build to run 10 s of tests. `make proptest`
   is therefore a convenience selector over the same tests `make test` runs.
-  Select the suites with a nextest filter that actually matches all of them
-  (the first draft's `-E 'test(determinism_property_tests)'` missed its own
-  `action_hash_property_tests` and `graph_property_tests`), or add a nextest
-  test-group in `.config/nextest.toml`.
 
-*Acceptance:* `make test` passes with no file over 400 lines; `make proptest`
-runs and reports the existing property tests; a scratch `ninja_gen`-rooted
-patch is accepted by the generalized contract test. *Recovery:* the splits and
-the extraction are pure refactors, revertible independently.
+  Select the suites with a nextest filter that actually matches all of them, or
+  add a nextest test-group in `.config/nextest.toml`. The enumeration was
+  performed statically against `origin/main` on 2026-10-10, and it exposes a
+  trap that a single substring cannot solve: **the repository uses two
+  different suffixes**, `proptests` and `property_tests`, and `propert` is a
+  prefix of only the second — `property` and `proptest` diverge at index four
+  (`prop` then `e` against `prop` then `t`). Existing suites named `proptests`
+  include `cli/discovery/helper_proptests.rs`, `cli/merge/logging_proptests.rs`,
+  `cli/discovery/layers/property_tests.rs` (this one is `property_tests`), and
+  `hex/property_tests.rs`; the planned `src/ir/action_hash_property_tests.rs`
+  and `src/ir/graph_property_tests/` use `property_tests`. The selector must
+  therefore carry **both** suffixes, each in its own anchored alternation.
+
+  Use an anchored form, not a bare one. The first draft's
+  `test(determinism_property_tests)` missed its own
+  `action_hash_property_tests` and `graph_property_tests`; but the obvious
+  repair, widening to a bare `test(property_tests)`, is the form
+  `tests/workflow_contracts/nextest_child_cargo_group_invariants.py` explicitly
+  rejects as unanchored and over-matching, and `test(=NAME)` is rejected as the
+  exact form that silently selects no instance of a parameterized `#[rstest]`
+  because such a test is listed as `NAME::case_1_…`.
+
+  **Open question, to settle at implementation time before writing the
+  selector: what a `test(...)` selector is anchored against, and therefore
+  whether a module-path selector can work at all.** The accepted spellings in
+  `nextest_child_cargo_group_invariants.py` are `test(/^NAME($|::)/)`, the
+  transposed `test(/^NAME(::|$)/)`, and nextest's own `test(=^NAME(::|$)/)` —
+  every one of them anchored with `^`. The suites this target must select are
+  library-side, under `src/`, and nextest lists such a test under a name rooted
+  at its module path, as in
+  `ninja_gen::property_tests::command_lists_preserve_order_boundaries_and_fail_fast_joins`
+  or `ir::cycle::property_tests::…`. A `^`-anchored selector naming a *module
+  segment* rather than the leading segment — `^property_tests`, say — would
+  match nothing at all, and nextest exits 0 while selecting nothing, so the
+  target would look green while running no property test. That is exactly the
+  silent-zero-match defect the anchored form exists to prevent, re-entering
+  through the anchor. The runtime verifier does not currently catch it either:
+  `.github/scripts/verify_nextest_anchored_filters.py` scans only
+  `REPO_ROOT / "tests"` for parameterized tests, so the assertion is exposed to
+  `tests/`-rooted names and never to a `src/`-side one. Do not assume the
+  selector is right because it parses and the gate is green.
+
+  Settle it empirically rather than by reading: with the property suites in
+  place, run
+  `cargo nextest list --all-features --all-targets --message-format json` under
+  the candidate selectors and read each testcase's `filter-match.status`, which
+  is how the verifier itself reads selection — nextest reports selection
+  through that field, not by omitting unselected tests, and its exit code is 0
+  even when a selector matches nothing. If a module-path anchor cannot select
+  `src/`-side tests, prefer a nextest test-group in `.config/nextest.toml` over
+  a `Makefile` `-E` selector, since the group is the mechanism the contracts
+  already know how to police, and record the outcome in `Decision log`. Note
+  that several of the target suites are `rstest`-parameterized, so the
+  case-suffix hazard is live; for plain `proptest!` blocks it does not arise,
+  but one spelling should cover both.
+
+  `Makefile:228` on `origin/main` uses the bare `test(NAME)` form for a
+  different target. That is pre-existing, outside this plan's scope, and not a
+  precedent to copy here. The contracts police `filter` lines in
+  `.config/nextest.toml` only; no contract reads a `Makefile` `-E` argument, so
+  a selector written there is unverified by construction — one more reason to
+  prefer the test-group.
+
+*Acceptance:* `make test` passes with no file over 400 lines; the layout
+contract reports zero violations on the rebased tree; `make proptest` runs and
+its selector is **proved** to select the intended suites — evidenced by reading
+`filter-match.status` from `cargo nextest list --message-format json`, not by
+the target exiting 0, since a selector matching nothing still exits 0; a scratch
+`ninja_gen`-rooted patch is accepted by the generalized contract test.
+*Recovery:* the splits and the extraction are pure refactors, revertible
+independently.
 
 ### EP-M3 — the shared bounded graph strategy
 
@@ -1777,6 +1867,15 @@ leaks now live there rather than here.
 
 ## Progress
 
+- [x] (2026-10-10T00:00:00Z) Re-derived the `EP-M2` base against `origin/main`
+      before implementing, and found the branch 44 commits behind. Recorded the
+      `ninja_gen` directory-module migration, the layout-contract violation
+      counts (66 and 27 here, 0 and 0 upstream), the two-suffix `make proptest`
+      selector problem, the open question on selector anchoring, and the
+      falsified collision premise behind the `supplemental_property_location`
+      generalization. No milestone or obligation changed. A `git merge-tree`
+      rehearsal of `HEAD` against `origin/main` reports zero conflicts, so the
+      rebase is the next step.
 - [x] (2026-09-09T00:00:00Z) Renamed the branch and pushed it with upstream
       tracking.
 - [x] (2026-09-09T00:00:00Z) Loaded the `codegraph-mcp`, `rust-router`,
@@ -1900,6 +1999,32 @@ leaks now live there rather than here.
 - [ ] `EP-M8`: `OBL-NINJA`, documentation, evidence sweep, roadmap.
 
 ## Surprises & discoveries
+
+- (2026-10-10) `origin/main` has eliminated the flat/directory module
+  ambiguity this plan's `supplemental_property_location` design was built on.
+  The sixth revision preferred existential resolution because
+  `src/ir/cycle_verification.rs` and `src/ir/cycle/verification.rs` "both map to
+  `ir::cycle::verification`, and the repository uses **both** forms today". A
+  sweep for flat-and-directory pairs resolving to the same module path now
+  finds **zero** across `src/`, and zero on `origin/main`;
+  `cycle_verification.rs` has become `cycle/verification.rs`. The premise is
+  falsified, so the collision-witness argument cannot be carried forward. The
+  generalization is still required, for a weakened reason: `origin/main` derives
+  `src/<root>/<segments>/mod.rs` but still hard-codes
+  `ensure!(*root == "ir")`, so a `ninja_gen`-rooted patch is rejected. This is
+  the second time a premise in this plan has been invalidated by upstream
+  motion, and it is the second time the check that found it was a direct read
+  of the live tree rather than a re-reading of the plan.
+
+- (2026-10-10) The layout contract's violation counts are a property of the
+  **tree**, not of the diff. Applying
+  `tests/workflow_contracts/rust_module_layout_test.py`'s own logic to this
+  branch's `src/` reports 66 unrecorded prefix groups and 27
+  prefixed-beside-directory violations; `origin/main` reports 0 and 0 on both
+  checks. Nothing this branch changed produced them — the branch touches four
+  Markdown files and no Rust — so a branch can be entirely innocent of a
+  contract it violates, purely by falling behind the migration that satisfied
+  it. "My diff is clean" and "the tree passes" are different claims.
 
 - (2026-09-09) The emitter's edge sort is *stable* and its key is unique only
   because `from_manifest` rejects duplicate outputs. Weaken that and ties fall
@@ -2112,6 +2237,40 @@ leaks now live there rather than here.
   entry may cite a gate outcome that is not already in a log file.
 
 ## Decision log
+
+- Decision: reconcile the base **before** implementing `EP-M2`, rather than
+  implementing against this branch's tree. Rationale: the sixth revision's
+  `EP-M2` seam described `src/ninja_gen/mod.rs` with `src/ninja_gen/` already
+  present, but `origin/main` has moved nine of that family's files into
+  directory modules and dropped parent prefixes from child filenames. The
+  layout contract reports 66 prefix groups and 27 prefixed-beside-directory
+  violations on this branch's tree against 0 and 0 on `origin/main`, so the
+  pre-rebase tree is not a base the contract accepts and implementing there
+  would build on a removed seam. Options considered: (a) implement now and
+  rebase later, rejecting conflicts as they appear; (b) rebase first, then
+  re-derive the seam. (b) was chosen because the rehearsal is free and proves
+  zero conflicts, so (a) buys nothing but rework. Affected identifiers: `EP-M2`
+  only; no obligation, tolerance, or acceptance clause changed. Date/Author:
+  2026-10-10 / implementing agent.
+
+- Decision: record the `make proptest` selector as an **open question with a
+  stated empirical discharge**, rather than asserting the anchored form as
+  settled. Rationale: the first attempt at this entry claimed
+  `test(/^NAME($|::)/)` was "the accepted spelling" and would match the
+  property suites. That was wrong as written. Every accepted selector in
+  `nextest_child_cargo_group_invariants.py` is anchored with `^`, while the
+  target suites are `src/`-side and nextest lists them under names rooted at
+  their module path (`ninja_gen::property_tests::…`), so a `^`-anchored
+  module-segment selector may select nothing while exiting 0. The runtime
+  verifier cannot be relied on to catch it: it scans only
+  `REPO_ROOT / "tests"`, so it never applies its assertion to a `src/`-side
+  test name. Discharging this by reading documentation would repeat the
+  mistake, so it is discharged by reading `filter-match.status` from
+  `cargo nextest list --message-format json` once the suites exist. Preferred
+  alternative if a `Makefile` selector cannot work: a nextest test-group in
+  `.config/nextest.toml`, which is the mechanism the contracts already police —
+  no contract reads a `Makefile` `-E` argument at all. Date/Author: 2026-10-10
+  / implementing agent.
 
 - Decision: keep this ExecPlan pre-implementation and approval-gated.
   Rationale: the user stated the plan must be approved before implementation.
@@ -2427,6 +2586,26 @@ whether the `graph_view` strategy was successfully absorbed; and whether the
 generalized mutation-evidence contract held up.
 
 ## Revision note
+
+- 2026-10-10 (seventh revision, pre-`EP-M2` base reconciliation): no milestone
+  or obligation changed. Three planning inputs were re-derived against the live
+  repository, and one falsified premise is corrected. The branch was 44 commits
+  behind `origin/main`, which has restructured `src/ninja_gen*` into directory
+  modules and added `tests/workflow_contracts/rust_module_layout_test.py`.
+  Applying that contract's logic gives 66 prefix-group violations and 27
+  prefixed-beside-directory violations on this branch's tree, and 0 and 0 on
+  `origin/main`; so `EP-M2`'s seam is re-derived against `origin/main`, not
+  against the tree the sixth revision described. The `make proptest` selector
+  is corrected: the two suffixes in use are `proptests` and `property_tests`,
+  and `propert` is a prefix of only the second (`property` and `proptest`
+  diverge at index four), so a single substring cannot match both and the
+  selector carries both anchored forms. The third finding falsifies a premise:
+  `supplemental_property_location`'s existential-resolution design was
+  justified by flat and directory module forms coexisting, and `origin/main`
+  has eliminated that coexistence, leaving zero collisions. The generalization
+  is still required — `origin/main` still hard-codes an `ir` root — but it
+  becomes a single-form rewrite, and the collision-witness rationale is
+  withdrawn rather than carried forward.
 
 - 2026-10-10 (sixth revision, `EP-M1` review round 3): a confirming CodeRabbit
   pass returned six findings — one major, five minor. All six were verified
