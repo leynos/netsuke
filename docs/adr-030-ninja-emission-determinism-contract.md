@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted, with two amendments recorded on 2026-10-10 under _Amendments_.
+Accepted
+
+Four amendments, all dated 2026-10-10, are recorded under _Amendments_. They
+correct mechanism claims this record inherited from the ExecPlan.
 
 ## Date
 
@@ -166,8 +169,17 @@ they are the mechanism G-1 rests on and each carries its own preconditions.
   no alternative iteration order to reach at all. The verification plan's
   answer is to assert the invariant at the extracted collection helpers
   (`ordered_edges`, `ordered_actions`) over an explicitly shuffled `Vec`, where
-  perturbation is by construction, and separately to compare whole bundles only
-  on a well-separated key-set pair.
+  perturbation is by construction. A whole-bundle comparison is retained only
+  as a secondary arm that **holds the graph value fixed**, materializing one
+  `GraphSpec` twice so that both `BuildGraph` values have identical key sets
+  and identical values, and it grades itself _inconclusive_ (rather than
+  passing) when no case's iteration orders actually diverged.
+
+  The earlier formulation compared whole bundles on a pair whose _key sets_
+  differed. That was wrong and is recorded in `Amendment 4`: a differing key
+  set is a differing graph, so a bundle difference is legitimate and a bundle
+  agreement is uninformative — the comparison could not have established I-1 in
+  either outcome.
 
 - **I-2, declaration-order invariance.** Permuting target or action
   declarations within `manifest.targets` or `manifest.actions` does not change
@@ -290,10 +302,13 @@ only element of this work that constrains code not yet written.
 ## Known risks and limitations
 
 - **The order-invariance obligation is only as strong as its perturbation.**
-  Where the key set offers no second iteration order, a bundle-comparison case
-  passes without testing anything. This is why the helper-level property is the
-  primary evidence and the bundle comparison is secondary, and why the number
-  of skipped cases is counted rather than swallowed.
+  The whole-bundle arm holds the graph value fixed, so it has no perturbation
+  guarantee: two materializations of one `GraphSpec` may iterate identically by
+  chance, and a case where they do tests nothing. This is why the
+  collector-level property over an explicitly shuffled `Vec` is the primary
+  evidence and the bundle comparison is secondary, and why the arm grades
+  itself _inconclusive_ — counted and reported, not silently passed — whenever
+  no case's iteration orders actually diverged.
 - **Shrinking does not converge on this domain.** `EP-M0` measured a
   fifty-edge counter-example failing to minimize in thirty seconds, with four
   runs of one seed producing 39, 90, 43, and 73 edges. The mitigation is a
@@ -308,7 +323,7 @@ only element of this work that constrains code not yet written.
   sampling can support (`a == b` implies equal hashes) and never
   collision-freedom.
 - **A verification cfg selects the domain's collection type.** `IrHashMap`'s
-  definition is chosen by `#[cfg(kani)]` (`src/ir/graph.rs:22`–`:28`). The
+  definition is chosen by `#[cfg(kani)]` (`src/ir/graph.rs:23`–`:28`). The
   domain model does not fully own its own representation. Recorded, not fixed.
 - **`default_targets` may repeat.** `process_defaults`
   (`src/ir/from_manifest.rs:186`) extends without deduplication and `Vec::sort`
@@ -318,8 +333,8 @@ only element of this work that constrains code not yet written.
 
 ## Amendments
 
-Two facts changed after the obligations were drafted. Both are corrections to
-prior claims rather than changes of decision, and both are recorded here
+Four facts changed after the obligations were drafted. All four are corrections
+to prior claims rather than changes of decision, and each is recorded here
 because the ExecPlan's obligations cite this document.
 
 ### Amendment 1: the 200-output bound is a cost budget, not a correctness bound
@@ -358,6 +373,45 @@ lowering-side, so it is not established that a manifest reaching the loader can
 produce one. This ADR does not settle it. The obligation stands, its domain
 note must not assert the silent drop as fact, and establishing the reachability
 is `EP-M4`'s business.
+
+### Amendment 3: `OBL-NOHASH` exempts one set, not two
+
+`OBL-NOHASH` says membership-only `HashSet` use is exempt "with the two existing
+`seen` sets named as the documented exemptions". There is exactly one
+unordered collection in `src/ninja_gen/`, and it is not called `seen`:
+`SerialStages::staged_sidecars` (`src/ninja_gen/dyndep.rs:246`), a
+`HashSet<Utf8PathBuf>` used solely through `insert` at `:286` and never
+iterated. An earlier revision of the emitter held a `seen` set in the
+per-output storage path that `2c030fd1` removed, and the obligation's wording
+did not follow the refactor.
+
+The requirement is unaffected and arguably simplified: the exemption list is
+asserted to be exactly one set, and adding a second requires a deliberate edit.
+The count in the obligation's prose is corrected to match the tree.
+
+### Amendment 4: insertion-order invariance is not established by a differing key set
+
+`I-1` originally directed the whole-bundle arm of the order-invariance
+obligation to "compare whole bundles only on a well-separated key-set pair",
+where the two graphs' _key sets_ differed in at least five positions. That
+formulation cannot discharge `I-1` in either outcome, because `I-1` is stated
+over "two `BuildGraph` values **equal as values**" and a differing key set
+means the two values are not equal.
+
+The mechanism the earlier wording reached for is real: `HashMap` iteration
+order is a function of the key set, so perturbing the key set is a reliable way
+to make two maps iterate differently. But it buys that reliability by comparing
+two different graphs. A bundle difference between them is then perfectly
+legitimate — the inputs differ — and a bundle agreement says nothing about
+order independence. The arm was unfalsifiable.
+
+The corrected arm holds the graph value fixed: one `GraphSpec` is materialized
+twice, both `BuildGraph` values have identical key sets and identical values,
+and the property asserts the two emissions agree. This arm has no perturbation
+guarantee of its own — two materializations may iterate identically by chance —
+so it reports _inconclusive_ when no case's iteration orders diverged and the
+guaranteed perturbation lives in the collector-level arm over an explicitly
+shuffled `Vec`. `EP-M5` carries the corrected formulation.
 
 ## Architectural Rationale
 
