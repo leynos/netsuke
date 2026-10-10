@@ -44,7 +44,7 @@ owns: which determinism statement is a public guarantee. Verifying an unstated
 property is verification without a specification, so the contract is written
 **first**, in `EP-M1`, before any property is authored.
 
-You can observe success without reading code. Run `make proptest` and see the
+Success is observable without reading code. Run `make proptest` and see the
 suite pass. Apply a recorded mutation patch, re-run, and see one named property
 fail with a minimal counter-example. Revert. Run `netsuke generate` twice on a
 fixture and diff the bytes. Read `docs/users-guide.md` and find a stated
@@ -576,9 +576,10 @@ draft stated injectivity without it and was simply wrong.
   computed in the test — structurally different from join-with-NUL.
 - **Artefact:** `src/ninja_gen/determinism/path_key.rs`.
 - **Non-vacuity:**
-  - *Covers.* Per-case `prop_assert!` that the shuffle actually reordered
-    (skipping length < 2). Classes: empty list, singleton, already-sorted,
-    reverse-sorted, repeated elements. Counts recorded.
+  - *Covers.* Per-case *classification* (never an assertion) of whether the
+    shuffle actually reordered, recorded for length ≥ 2. Classes: empty list,
+    singleton, already-sorted, reverse-sorted, repeated elements. Counts
+    recorded.
   - *Witnesses.* Two directed tests. `path_key(["a","b"]) == path_key(["a\0b"])`
     shows the NUL precondition is load-bearing;
     `path_key([]) == path_key([""])` shows the non-emptiness precondition is.
@@ -587,6 +588,13 @@ draft stated injectivity without it and was simply wrong.
     encoding is injective without it. A future length-prefixed encoding would
     be a strict improvement and must not be blocked by these tests.
   - *Mutation.* `MUT-PATHKEY` deletes `parts.sort_unstable()`.
+  - *Note on `prop_shuffle`.* The per-case reorder assertion must be guarded,
+    not assumed: `prop_shuffle` may return the input order, and a list of
+    repeated identical values or a singleton cannot reorder whatever the
+    shuffle does. "The shuffle reordered" is therefore a *classification* the
+    run records and counts, never a `prop_assert!` — asserting it would fail on
+    perfectly valid generated cases. The manually-constructed `reverse` and
+    `sorted` cases carry the guaranteed perturbation here.
 
 ______________________________________________________________________
 
@@ -632,11 +640,18 @@ amendment 2.
     multi-output edge. Directed cases pin the two bypasses, but only after
     `EP-M4` has established what each actually does; until then the
     output-less case is a reachability question, not a known bypass.
-  - *Mutation.* `MUT-GUARD` moves `reject_unsupported_path_characters` after
-    the edge sort. The intended failure is that a path carrying an unsupported
-    character is sorted on and then rejected, so the run reports an error rather
-    than a dropped line. If `EP-M4` finds no reachable collapsing input, replace
-    the patch rather than keeping a mutation that demonstrates nothing.
+  - *Mutation.* `MUT-EDGEDROP` makes `render_edges` skip an arena entry when
+    `explicit_outputs` is empty, so an output-less edge vanishes from the text.
+    This is the mutation this obligation actually needs, and it replaces
+    `MUT-GUARD`, which could not serve. `MUT-GUARD` moved
+    `reject_unsupported_path_characters` after the sort; re-reading
+    `src/ninja_gen/path_syntax.rs:24` shows that function *returns*
+    `Result<(), NinjaGenError>` and validates without dropping or merging
+    anything, so reordering it changes *when* an error is raised, never
+    *whether* an edge is emitted. It cannot fail a no-loss property. If
+    `EP-M4` finds the output-less case unreachable through the loader, the
+    patch targets the directly-constructed graph instead, and the obligation
+    says so rather than keeping a mutation that demonstrates nothing.
 
 ______________________________________________________________________
 
@@ -735,10 +750,22 @@ ______________________________________________________________________
 
 **OBL-NOHASH** — *no unordered collection is iterated inside the emitter.*
 
-Statement: no source file under `src/ninja_gen/` iterates a
-`std::collections::HashMap` or `HashSet` (`.iter()`, `.keys()`, `.values()`,
-`.drain()`, or a `for` loop over the collection). Membership-only `HashSet` use
-is exempt, with the one existing set named as the documented exemption.
+Statement: no source file under `src/ninja_gen/` lets an **unordered**
+collection's iteration order reach the output. Concretely, every iteration of a
+`std::collections::HashMap`/`HashSet` is either membership-only, or is
+immediately followed by a total order being imposed before the values are
+consumed.
+
+The obligation is stated over *sorted* iteration rather than over iteration
+outright, because iteration outright is already false of the code it protects.
+`write_action_rules` (`src/ninja_gen/mod.rs:215`) collects `graph.actions` — an
+ordinary-build `std::collections::HashMap` — into a `Vec` and then sorts it by
+action ID at `:216`. That is the correct pattern: the collect-then-sort pair is
+exactly what `MUT-ACTIONSORT` deletes to produce a real defect. A rule banning
+all map iteration would reject this path, and a rule scanning for a literal
+`HashMap` while ignoring the sort would miss the hazard it exists to catch.
+Membership-only `HashSet` use is exempt, with the one existing set named as the
+documented exemption.
 
 - **Method:** a source-shape contract test, following
   `tests/whitaker_boundary_contract.rs` and
@@ -871,7 +898,13 @@ ______________________________________________________________________
 **OBL-PROCESS** — *running Netsuke twice on one manifest emits identical bytes.*
 
 Statement: invoking the built binary twice over a fixture manifest, in separate
-processes, produces byte-identical `build.ninja`.
+processes, produces a byte-identical **bundle** — the main build file text,
+every dyndep sidecar's relative path, and every sidecar's content. Comparing
+only `build.ninja` would be weaker than `G-1`, which is stated over the
+complete artefact, and a process-dependent sidecar path or body would pass an
+`build.ninja`-only comparison while violating the published guarantee. The two
+runs write to separate output directories so neither can satisfy the other's
+sidecar reference.
 
 - **Method:** a directed `assert_cmd` integration test, not a property.
 - **Rationale:** this is the statement `EP-M1`'s ADR publishes and the one users
@@ -976,9 +1009,15 @@ cycle, interior multiset, stable start node — is 4.2.2's, proved by Kani over
 
 - **Method:** Proptest over three generator arms.
 - **Domain:** 2 to 30 nodes. The acyclic arm draws dependencies only from
-  strictly lower indices, so acyclicity is structural. The cyclic arm adds
-  exactly one back edge with generated endpoints. The third arm adds
-  dependencies outside the namespace.
+  strictly lower indices, so acyclicity is structural. The cyclic arm must
+  **construct** its cycle, not merely add a back edge: with dependencies drawn
+  only from lower indices, a single added edge `u -> v` closes a path only when
+  a path `v -> … -> u` already exists, so a generator that adds one back edge
+  with arbitrary endpoints produces acyclic graphs in most cases and the
+  obligation passes without testing anything. The arm therefore builds a known
+  path first — pick a chain `v -> … -> u` and then add `u -> v` — or injects a
+  self-edge, which is a cycle unconditionally. The third arm adds dependencies
+  outside the namespace.
 - **Oracle:** cyclicity known from the generator's index discipline, not from
   the production detector.
 - **Artefact:** `src/ir/graph_property_tests/cycles.rs`.
@@ -1218,7 +1257,7 @@ assertion prints a counter-example that fits on a screen.
 *Assigned:* `RM-4.3.1.c`, `OBL-PATHKEY`, `OBL-NOLOSS`.
 
 *Acceptance:* `make proptest` passes; `MUT-PATHKEY` fails
-`path_key_is_permutation_invariant`; `MUT-GUARD` fails
+`path_key_is_permutation_invariant`; `MUT-EDGEDROP` fails
 `every_distinct_edge_is_emitted_once`; both revert cleanly. The two directed
 witness tests are present and phrased as disjunctions.
 
@@ -1348,7 +1387,7 @@ with `__` for the module separator:
 | Handle           | Falsifies                  | Mutation                                                 |
 | ---------------- | -------------------------- | -------------------------------------------------------- |
 | `MUT-PATHKEY`    | `OBL-PATHKEY`              | Delete `parts.sort_unstable()` in `path_key`.            |
-| `MUT-GUARD`      | `OBL-NOLOSS`               | Move the path-character validator after the edge sort.   |
+| `MUT-EDGEDROP`   | `OBL-NOLOSS`               | Skip an arena entry whose `explicit_outputs` is empty.   |
 | `MUT-EDGESORT`   | `OBL-ORDER`                | Delete `edges.sort_by_key` in both paths.                |
 | `MUT-ACTIONSORT` | `OBL-ORDER`, `OBL-PROCESS` | Delete `actions.sort_by_key`.                            |
 | `MUT-DEFSORT`    | `OBL-DEFAULT`, `OBL-E2E`   | Delete `defs.sort()`.                                    |
@@ -1361,8 +1400,8 @@ Nine, not the first draft's eleven. Two were cut because the existing nightly
 `cargo-mutants` job (`.github/workflows/mutation-testing.yml`, 03:05 UTC over
 `src/` with `--all-features`) already generates sort-deletion mutants
 automatically. Handwritten patches earn their keep on faults `cargo-mutants`
-cannot generate — the *reordering* ones, `MUT-GUARD` and `MUT-DEFPOS`. `EP-M8`
-additionally records a scoped
+cannot generate — the *reordering* one, `MUT-DEFPOS`, and the *dropping* one,
+`MUT-EDGEDROP`. `EP-M8` additionally records a scoped
 `cargo mutants -f src/ninja_gen/mod.rs -f src/ninja_gen/dyndep.rs` run with
 survivors tabulated.
 
@@ -1494,8 +1533,12 @@ is stronger and matches the discipline `ADR-004` established:
    the figure recorded in `EP-M2` (expected: a few seconds).
 5. With Ninja installed, the oracle property reports a non-zero case count;
    without it, a skip. Under `NETSUKE_REQUIRE_NINJA=1` an absent Ninja panics.
-6. Running the built binary twice over a fixture yields identical bytes, and
-   `MUT-DEFSORT` breaks that.
+6. Running the built binary twice over a fixture yields an identical bundle,
+   and `MUT-ACTIONSORT` breaks that. `MUT-DEFSORT` does **not**, and must not
+   be required to: for a fixed manifest the unsorted `default_targets` order is
+   fixed too, so the fault is deterministic across processes and both runs
+   agree. `MUT-DEFSORT` belongs to `OBL-E2E`, which compares emissions within
+   one process.
 7. `docs/users-guide.md` states a guarantee, and `ADR-NNN` explains which
    statements are public, under which parameter tuple, and that cross-version
    stability is not promised.
@@ -1819,9 +1862,11 @@ leaks now live there rather than here.
   line with an empty left-hand side. Whether a manifest can produce one at all
   is unresolved: `Target::name` accepts `StringOrList::Empty`, which `map_each`
   maps to an empty vector, and `get_target_display_name` explicitly tolerates
-  it, but nothing tests that path. `OBL-NOLOSS`'s justification and
-  `MUT-GUARD`'s mechanism are both corrected pending `EP-M4`'s reachability
-  finding.
+  it, but nothing tests that path. `OBL-NOLOSS`'s justification is corrected
+  pending `EP-M4`'s reachability finding, and its validator is replaced: the
+  original `MUT-GUARD` reordered a *validator* that returns an error rather
+  than dropping an edge, so it could not falsify a no-loss property at all.
+  `MUT-EDGEDROP` targets the drop directly.
 - (2026-09-09) `make fmt`'s `mdtablefix --renumber` converted a wrapped line
   beginning "72." into an ordered-list item, truncating the sentence before it.
   No gate caught it; it was found by a reviewer reading the prose.
@@ -2059,7 +2104,7 @@ leaks now live there rather than here.
   specification gives `ADR-004`'s hand-off something to hand off to.
   Date/Author: 2026-10-10 / implementation agent.
 - Decision: state **not** promised, as loudly as the promise, that byte
-  stability holds across Netsuke versions neither. Rationale: `PARENT_SCHEMA`
+  stability is not promised across Netsuke versions. Rationale: `PARENT_SCHEMA`
   and `DYNDEP_SCHEMA` embed a format tag into every content-addressed dyndep
   identity precisely so the staging format can change without colliding with an
   older namespace; a cross-version promise would make those tags pointless.
@@ -2188,6 +2233,53 @@ generalized mutation-evidence contract held up.
 
 ## Revision note
 
+- 2026-10-10 (fifth revision, `EP-M1` review round 2): a second CodeRabbit pass,
+  over `74cff9ce`, returned nine findings — six major, three minor. Every
+  finding was checked against the tree by hand before anything was changed.
+  Dispositions were **accept** (eight) and **accept in substance, misread in
+  part** (one).
+
+  Accepted — finding 1 (major, `OBL-PROCESS`): the two-run comparison covered
+  `build.ninja` alone, while `G-1` is stated over the complete artefact, so a
+  process-dependent sidecar path or body would pass it. The statement now
+  compares whole bundles, and the two runs write to separate output directories
+  so neither can satisfy the other's sidecar reference.
+
+  Accepted — findings 2 and 8 (major, acceptance item 6 and `OBL-CYCLE`). The
+  `MUT-DEFSORT` acceptance criterion was impossible — for a fixed manifest the
+  unsorted default order is fixed too — and is replaced by `MUT-ACTIONSORT`.
+  The cyclic generator arm draws dependencies from strictly lower indices, so a
+  single added back edge closes a path only when one already exists; the arm
+  now builds a known path before adding its closing edge, or injects a
+  self-edge.
+
+  Accepted — findings 3, 4, and 6 (major, `OBL-NOLOSS`, `OBL-NOHASH`, and the
+  cross-version decision statement). `MUT-GUARD` is replaced by `MUT-EDGEDROP`
+  across five sites, because reordering a validator that returns `Err` changes
+  *when* it fires and never *whether* an edge is emitted. `OBL-NOHASH` is
+  restated over *sorted* iteration, with its `ADR-030` twin corrected in the
+  same change. The cross-version sentence now reads that byte stability is not
+  promised across Netsuke versions.
+
+  Accepted — findings 7 and 9 (minor). `G-1` now names the `netsuke generate`
+  entry point and distinguishes its scope from the library entry points `P-2`
+  qualifies. "You can observe success" becomes "Success is observable", per the
+  second-person ban at `docs/documentation-style-guide.md:39`.
+
+  Accepted in substance, misread in part — finding 5 (major, the `OBL-PATHKEY`
+  reorder check). The warning that `prop_shuffle` may return the input order,
+  and that repeated or singleton values cannot reorder at all, is correct of
+  the arm that draws a list and shuffles it; the check there is now a recorded
+  classification rather than a `prop_assert!`. It is not correct of the
+  collector arm the finding cited, which shuffles an explicitly constructed
+  `Vec` whose permutation the test controls, so that arm's perturbation is
+  guaranteed. The note now says which arm carries it.
+
+  *Process note:* a delegated head-drift analysis reported that findings 2 and
+  8 were already addressed at `b68b8289`. It had matched line *numbers* rather
+  than content, and both were live — the acceptance criterion still read
+  `MUT-DEFSORT` and the cyclic arm still lacked its cycle construction. Do not
+  accept a drift verdict that cites positions; require the quoted text.
 - 2026-10-10 (fourth revision, `EP-M1` review round): a CodeRabbit pass over
   the `EP-M1` commit returned four findings. Dispositions were **accept,
   accept, already fixed, decline**. A fifth defect the review did not raise was

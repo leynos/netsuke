@@ -154,6 +154,12 @@ observable by running the binary twice, and it applies to the complete
 artefact: the main build file text, every dyndep sidecar's relative path, and
 every sidecar's content.
 
+The entry point it covers is the `netsuke generate` invocation that writes the
+bundle — the subcommand a user runs to produce `build.ninja` and its sidecars.
+A caller holding the library directly is not covered by `G-1`; the statement is
+about the binary's process-level behaviour, and the internal invariants below
+are what the library-level guarantees rest on.
+
 **Internal invariants (I-1 … I-3).** These are not published as promises, but
 they are the mechanism G-1 rests on and each carries its own preconditions.
 
@@ -280,10 +286,21 @@ ordered-map port would have provided structural immunity, at the cost recorded
 under Option C.
 
 A source-shape contract provides the same immunity more cheaply: a test that
-reads every file under `src/ninja_gen/` and fails when a `std::collections`
-hash map or set is iterated (with two named membership-only exemptions, both
-pre-existing `seen` sets). It is the `OBL-NOHASH` obligation, and it is the
-only element of this work that constrains code not yet written.
+reads every file under `src/ninja_gen/` and fails when an **unordered**
+collection's iteration order is allowed to reach the output — with
+membership-only use exempt, and with one named exemption,
+`SerialStages::staged_sidecars` (`src/ninja_gen/dyndep.rs:246`). It is the
+`OBL-NOHASH` obligation, and it is the only element of this work that
+constrains code not yet written.
+
+The obligation is stated over _sorted_ iteration rather than over iteration
+outright, because iteration outright is already false of the code it protects.
+`write_action_rules` (`src/ninja_gen/mod.rs:215`) collects `graph.actions` — an
+ordinary-build `std::collections::HashMap` — into a `Vec` and sorts it by
+action ID at `:216`. That collect-then-sort pair is the correct pattern, and
+`MUT-ACTIONSORT` deletes the sort to produce a real cross-process defect. A
+rule banning all map iteration would reject the correct path; a rule scanning
+for a literal hash map while ignoring the sort would miss the hazard.
 
 ## Goals and non-goals
 
