@@ -105,6 +105,12 @@ once the shell scripts are deleted.
       with `cs check` against the file rather than the commit, because
       `cs check HEAD:./file` reads the committed blob and reports the previous
       revision's issues.
+- [x] Clear the first review pass over the delivered port. Three findings: a
+      dead `or 0` and this plan's revision-note ordering were accepted, and a
+      proposed counter suppression on an unusable clock reading was rejected
+      against measurement. The rejection also corrected a false sentence in the
+      frozen oracle's docstring, which was the finding's premise, and added the
+      regression case that pins the measured behaviour.
 
 ## Decisions and findings
 
@@ -254,6 +260,20 @@ change admission semantics beyond the scope of a form change.
   `NETSUKE_RELEASE_ADMISSION_ENFORCE` must reach the mode check, not be
   replaced by the observation default, so `configuration.load_configuration`
   tests membership rather than truthiness.
+- A review finding can cite this repository's own prose as its authority. The
+  counter-suppression finding quoted a sentence from the frozen oracle's
+  docstring that asserted the shell dropped an operation's counter with its
+  duration. The sentence was false, and the shell's `emit_metric` validates the
+  counter's literal `1` separately from the duration, so adopting the fix would
+  have *introduced* the divergence it claimed to prevent. Measure the claim
+  against the shell before acting on it, even when the claim appears to quote
+  the oracle; a false sentence in a document is not evidence about behaviour.
+- The frozen oracle's docstring is prose, not a test. Nothing collects it —
+  no test module reads it, and no gate runs it — so a wrong sentence there
+  survives every gate and then misleads a reviewer. When a measurement
+  contradicts the docstring, correcting the docstring is part of the fix rather
+  than an afterthought; the missing regression case for the garbage clock was
+  the second half of the same gap.
 - `make spelling` regenerates `typos.toml` from the shared dictionary on every
   run. The dictionary's colour-flag rule had changed since the committed copy,
   leaving a clean checkout dirty after a spelling run. That one-line
@@ -262,6 +282,19 @@ change admission semantics beyond the scope of a form change.
 
 ## Revision note
 
+- 2026-10-10 — Initial ExecPlan for `#800`: freeze the Bash gate's behaviour,
+  port it to a Cyclopts `uv run --script` entry point, port the runtime cases
+  to cmd-mox, switch `release.yml` over, and delete the shell.
+- 2026-10-10 — Review pass. Two contradictions in this plan were corrected
+  rather than papered over. The ExecPlan claimed a *facade and four modules*
+  while its own account of the first split named two, and the case count had
+  gone stale at 35; both counts are now stated per stage, because the support
+  was split twice — into a facade and three modules before the port, and into a
+  facade and five once cmd-mox replaced the executable fakes. The status stays
+  `IN PROGRESS` with a review caveat beneath the header, since the style guide
+  reserves `COMPLETE` for a plan whose review has concluded. The port is
+  unaffected: no source file, gate, workflow, or test case changed with this
+  note.
 - 2026-10-10 — CodeScene pass and the module split it forced. The advisory
   review named three issues on code this change introduces, and a fourth
   surfaced from a test this pass had already lengthened. The refactor: `policy`
@@ -294,17 +327,20 @@ change admission semantics beyond the scope of a form change.
   examples in the package pass. Recorded because the same wrap is easy to
   reintroduce, and because "a docstring with an `Examples` block" is not
   evidence that the block runs.
-
-- 2026-10-10 — Initial ExecPlan for `#800`: freeze the Bash gate's behaviour,
-  port it to a Cyclopts `uv run --script` entry point, port the runtime cases
-  to cmd-mox, switch `release.yml` over, and delete the shell.
-- 2026-10-10 — Review pass. Two contradictions in this plan were corrected
-  rather than papered over. The ExecPlan claimed a *facade and four modules*
-  while its own account of the first split named two, and the case count had
-  gone stale at 35; both counts are now stated per stage, because the support
-  was split twice — into a facade and three modules before the port, and into a
-  facade and five once cmd-mox replaced the executable fakes. The status stays
-  `IN PROGRESS` with a review caveat beneath the header, since the style guide
-  reserves `COMPLETE` for a plan whose review has concluded. The port is
-  unaffected: no source file, gate, workflow, or test case changed with this
-  note.
+- 2026-10-10 — The first CodeRabbit pass over the delivered port. Three
+  findings. Two were accepted: a dead `or 0` in `telemetry.write_output`, whose
+  expression could never differ from its operand, and this revision note's own
+  ordering (the initial entry sat below two later ones, with a blank line
+  splitting the list). The third proposed suppressing an operation's counter
+  together with its duration when the clock returns garbage. That was
+  **rejected, and the rejection is the interesting part**: it would have
+  introduced the divergence it claimed to prevent. The shell validates the
+  counter's literal `1` separately from the duration, so a garbage reading
+  drops the duration and the operation trace and still writes the counter. The
+  finding's premise was a sentence in this branch's own oracle docstring
+  asserting the opposite, which measurement disproved; that sentence is now
+  corrected, and the reviewer's confidence in it was the reason to measure
+  rather than to patch. A nine-shape clock matrix (garbage on every read, on
+  the first read only, on the finish reads only, and a non-zero exit) confirms
+  the shell writes one counter per operation and the port matches it
+  byte-for-byte on the records.

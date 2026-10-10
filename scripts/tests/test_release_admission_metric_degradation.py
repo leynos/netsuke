@@ -12,6 +12,13 @@ sink that refused exactly one write, and a clock that refused exactly one read
 -- because a boundary that fails for every call stops the chain before the
 recovery the recorded flag is about. Those become state, not just a status.
 
+It also pins one asymmetry that is easy to misread as its opposite: a clock
+that *succeeds* while printing a non-number. The status is zero, so the
+operation keeps its own result and its counter; only the derived duration and
+the operation's completion trace are dropped. Read as a single unit, the
+counter and duration look as though they must fail together, and the shell's
+own behaviour says otherwise.
+
 Example (run from the repository root)::
 
     PYTHONPATH=scripts uv run --no-project --python 3.14 \
@@ -21,6 +28,7 @@ Example (run from the repository root)::
         -c /dev/null --rootdir=. -p no:cacheprovider
 """
 
+import itertools
 import typing as typ
 
 import pytest
@@ -41,6 +49,8 @@ if typ.TYPE_CHECKING:
     import pathlib
 
     from cmd_mox import CmdMox
+    from cmd_mox.ipc import Invocation
+    from release_admission_test_doubles import Handler, Wrapper
 
 pytest_plugins = ("cmd_mox.pytest_plugin",)
 
@@ -56,6 +66,43 @@ TRACE_DELIVERY_FAILURE = {
 }
 #: The operation both clock-read cases fail, and its labels under that failure.
 CLOCK_OPERATION = "resolve_tag_commit"
+#: The clock read the garbage case spoils. Both reads of the first operation
+#: decide one duration, so spoiling either is the same observation.
+GARBAGE_CLOCK_READ = 1
+
+
+def answer_garbage_on_nth_call(number: int) -> Wrapper:
+    """Return a wrapper that answers one numbered invocation with garbage.
+
+    A clock that *succeeds* while printing a non-number is a different failure
+    from one that exits non-zero: the status is zero, so the gate keeps the
+    operation's own result, and only the derived duration is unusable. The
+    shell validated the counter's literal ``1`` separately from the duration, so
+    a garbage reading drops the duration and the operation trace and still
+    writes the counter. This wrapper exists to pin that, because the shape reads
+    as though the whole operation's records were lost.
+
+    It lives here rather than in :mod:`release_admission_test_scenarios`
+    because only this module's one case uses it, and that module is at its own
+    line ceiling.
+
+    Returns
+    -------
+    Wrapper
+        A wrapper that prints garbage for one numbered invocation and delegates
+        the rest.
+    """
+    remaining = itertools.count(1)
+
+    def wrapper(invocation: Invocation, handler: Handler) -> tuple[str, str, int]:
+        """Answer the selected invocation with a non-number, others normally."""
+        if next(remaining) == number:
+            return "not-a-number\n", "", 0
+        return handler(invocation)
+
+    return wrapper
+
+
 #: The status a sink may choose, which is neither success nor this module's own
 #: refusal. It exists to be adopted verbatim, so it must not be ``0`` or ``1``.
 SINK_STATUS = 2
@@ -264,4 +311,52 @@ def test_clock_failure_retains_bounded_operation_result(
     )
     assert run.outputs["gate-error-category"] == "unknown", (
         "clock failure must retain the bounded unknown category"
+    )
+
+
+def test_garbage_clock_reading_keeps_the_operation_counter(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify a non-numeric clock reading costs the duration, not the counter.
+
+    Notes
+    -----
+    Contract invariants: a clock that answers with a status of ``0`` and a
+    non-number is a *successful* read whose derived duration is unusable. The
+    shell validated the counter's literal ``1`` separately from the duration,
+    so the operation's counter survives and only its duration and its
+    ``operation_complete`` trace are dropped. The gate therefore still reports a
+    correctly classified operation, which is the record an operator alerts on.
+
+    Measured against the Bash gate rather than inferred from the port: a garbage
+    reading on both of an operation's reads writes that operation's counter, no
+    duration, and no operation trace. Reading the counter as part of the same
+    unit as the duration would silently lose an operation's classification
+    whenever the clock misbehaved, which is why this case is pinned.
+    """
+    adapted = install_adapted(cmd_mox)
+    adapted.clock.wraps(answer_garbage_on_nth_call(GARBAGE_CLOCK_READ))
+    run = run_gate(
+        cmd_mox,
+        tmp_path,
+        evidence_state="missing",
+        extra_environment=adapted.variables(cmd_mox),
+    )
+
+    assert run.result.returncode == 0, run.result.stderr
+    METRICS_VALIDATOR.validate_metrics(run.metrics)
+    METRICS_VALIDATOR.validate_traces(run.traces)
+    assert operation_records(run.metrics, CLOCK_OPERATION), (
+        "a garbage clock reading must not cost the operation its counter"
+    )
+    durations = [
+        record
+        for record in run.metrics
+        if record["name"] == "netsuke_release_admission_operation_duration_seconds"
+        and record["labels"] == {"operation": CLOCK_OPERATION}
+    ]
+    assert durations == [], "an unusable duration must be dropped, not defaulted"
+    assert all(record["operation"] != CLOCK_OPERATION for record in run.traces), (
+        "an unusable duration must cost the operation its completion trace"
     )

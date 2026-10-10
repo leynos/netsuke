@@ -107,17 +107,21 @@ reproduce:
   is ``failure``/``unknown``, and the workflow outputs carry that category. The
   same is true of either clock read, so a failure at the start and a failure at
   the finish are indistinguishable in the records.
-- A clock adapter that prints a non-number: the count is unaffected -- the
-  printed value only ever reaches a formatter -- and the artefact set depends
-  only on *which* reads return garbage, not on whether the garbage is on a
-  start read or a finish read. Garbage on any single read of an operation
-  drops that operation's counter and duration together, and the float
-  ``0.0`` reached every later operation and the gate, because the failing
-  substitution leaves the shared variable holding the previous read's text.
-  Garbage on every read of every operation writes five counters, no durations,
-  and no ``operation_complete`` traces at all, with one Python ``ValueError``
-  traceback and one ``metric labels are outside the fixed vocabulary`` pair per
-  operation. Both shapes leave all later records intact, ``trace_delivery``
+- A clock adapter that prints a non-number: the operation's **counter is still
+  written**, and only its duration and ``operation_complete`` trace are
+  dropped. The counter's value is the literal ``1``, which the vocabulary check
+  accepts independently of the duration, so a garbage reading costs two records
+  and never the counter. Measured, not inferred: a garbage reading on both
+  reads of one operation writes that operation's counter, no duration, and no
+  operation trace, with one Python ``ValueError`` traceback and one ``metric
+  labels are outside the fixed vocabulary`` pair from the duration attempt. A
+  garbage reading on *every* read of every operation therefore writes one
+  counter per operation and no durations, and the count still matches the run:
+  five counters under ``fresh`` evidence, four under ``missing`` or ``stale``,
+  where the freshness failure stops the chain before ``verify_evidence``. The
+  failing substitution leaves the shared duration variable holding the previous
+  read's text, so a later operation can still publish a stale value rather than
+  an empty one. Every shape leaves all later records intact, ``trace_delivery``
   ``failure``/``unknown``, and the exit status unchanged: the vocabulary
   rejection sets the same flag a sink failure does.
 - Bash's required-input diagnostics name their own line, as

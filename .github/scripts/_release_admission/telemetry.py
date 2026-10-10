@@ -270,5 +270,4 @@ def write_output(sinks: Sinks, output: Path | None, record: str) -> int:
     """
     if output is None:
         return int(Refusal.VOCABULARY)
-    status = delivery.append_record(sinks.output_sink, output, record)
-    return status or 0
+    return delivery.append_record(sinks.output_sink, output, record)
