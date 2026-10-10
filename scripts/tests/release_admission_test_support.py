@@ -61,8 +61,12 @@ line would be a genuine fault rather than an accepted shape.
 
 Frozen behaviour
 ----------------
-Measured on the shell gate, with the fake adapters installed and the metrics,
-trace, and output sinks configured:
+Measured on the shell gate with controlled adapters and the metrics, trace, and
+output sinks configured. Those adapters were executable fakes reading
+``NETSUKE_FAKE_*`` variables; :mod:`release_admission_test_scenarios` is their
+port, deciding the same substitutions in the test process as cmd-mox wrappers,
+so every measurement below still names the observation the Python gate must
+reproduce:
 
 - Missing evidence, observation mode: exit ``0``. Four operation counters and
   durations -- ``resolve_tag_commit``, ``fetch_candidate_revision``,
@@ -152,15 +156,27 @@ trace, and output sinks configured:
   fails on ``GITHUB_REPOSITORY`` is byte-identical on stdout as well.
 """
 
-import dataclasses
-
-from release_admission_test_harness import (
+from release_admission_test_doubles import (
+    CLOCK_ARGUMENTS,
     GITHUB_REPOSITORY,
+    REVISION,
+    AdaptedBoundaries,
+    Boundaries,
+    GateRun,
+    Subprocess,
+    Wrapper,
+    install_adapted,
+    install_boundaries,
+    reply_to_clock,
+    reply_to_github,
+    reply_to_sink,
+    shim,
+)
+from release_admission_test_harness import (
     METRICS_VALIDATOR,
     PYTHON_PATH,
-    REVISION,
     SCRIPT_PATH,
-    _run_gate,
+    run_gate,
 )
 from release_admission_test_records import (
     assert_failure_trace_sequence,
@@ -172,20 +188,31 @@ from release_admission_test_records import (
 
 __all__ = (
     "CANARY_BY_OPERATION",
+    "CLOCK_ARGUMENTS",
     "GITHUB_REPOSITORY",
     "METRICS_VALIDATOR",
     "PYTHON_PATH",
     "REVISION",
     "SCRIPT_PATH",
-    "FailureCase",
-    "_run_gate",
+    "AdaptedBoundaries",
+    "Boundaries",
+    "GateRun",
+    "Subprocess",
+    "Wrapper",
     "assert_failure_trace_sequence",
     "assert_identifiers_excluded_from_records",
     "assert_identifiers_excluded_from_values",
     "expected_gate_labels",
     "expected_operation_labels",
+    "install_adapted",
+    "install_boundaries",
     "operation_duration",
     "operation_records",
+    "reply_to_clock",
+    "reply_to_github",
+    "reply_to_sink",
+    "run_gate",
+    "shim",
 )
 
 CANARY_BY_OPERATION = {
@@ -195,36 +222,6 @@ CANARY_BY_OPERATION = {
     "check_scan_freshness": "history_scan",
     "verify_evidence": "history_scan",
 }
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class FailureCase:
-    """Describe one fixed release-admission failure classification.
-
-    Attributes
-    ----------
-    evidence_state
-        Evidence state supplied to the admission subprocess.
-    extra_environment
-        Additional environment values used to configure a fake boundary.
-    operation
-        Operation expected to classify the failure.
-    error_category
-        Bounded category expected for the failure.
-    enforce
-        Whether the subprocess runs in enforcement mode.
-
-    Notes
-    -----
-    Contract invariants: operation and error category are fixed vocabulary
-    members; ``extra_environment`` applies only to the child process.
-    """
-
-    evidence_state: str
-    extra_environment: dict[str, str]
-    operation: str
-    error_category: str
-    enforce: bool = True
 
 
 def expected_operation_labels(

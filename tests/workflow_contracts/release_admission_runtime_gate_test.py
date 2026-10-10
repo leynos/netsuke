@@ -23,12 +23,25 @@ RUNTIME_MODULES = (
     "scripts/tests/test_release_admission_metrics.py",
     "scripts/tests/test_release_admission_metric_failures.py",
     "scripts/tests/test_release_admission_metric_boundedness.py",
+    "scripts/tests/test_release_admission_metric_degradation.py",
+)
+#: The pinned dependencies the runtime modules import: pytest drives the suite,
+#: Hypothesis generates the identifier property, cmd-mox supplies every command
+#: double, and cuprum and Cyclopts are the entry point's own production
+#: dependencies, imported by the bounded-run escalation test. The last three are
+#: quoted in the Makefile, as every pin of theirs is wherever this repository
+#: names one, so the fragment carries the quotes.
+REQUIRED_TEST_DEPENDENCIES = (
+    "--with pytest==9.0.2",
+    "--with hypothesis==6.151.9",
+    "--with 'cmd-mox==0.2.0'",
+    "--with 'cuprum==0.1.0'",
+    "--with 'cyclopts==4.25.3'",
 )
 REQUIRED_RECIPE_FRAGMENTS = (
     "PYTHONPATH=scripts",
     "--python $(PYTHON_BASELINE)",
-    "--with pytest==9.0.2",
-    "--with hypothesis==6.151.9",
+    *REQUIRED_TEST_DEPENDENCIES,
     "python -m pytest",
     "-c /dev/null",
     "--rootdir=.",
@@ -37,8 +50,7 @@ REQUIRED_RECIPE_FRAGMENTS = (
 REQUIRED_EXPANDED_COMMAND_FRAGMENTS = (
     "PYTHONPATH=scripts",
     "--python 3.14",
-    "--with pytest==9.0.2",
-    "--with hypothesis==6.151.9",
+    *REQUIRED_TEST_DEPENDENCIES,
     "python -m pytest",
     "-c /dev/null",
     "--rootdir=.",
@@ -90,7 +102,9 @@ def test_make_target_runs_only_the_release_admission_runtime_modules() -> None:
     Notes
     -----
     The target must use the repository Python baseline, explicit test
-    dependencies, isolated pytest configuration, and exactly three modules.
+    dependencies, isolated pytest configuration, and exactly the four
+    release-admission modules -- no more, because a stray path would make this
+    target responsible for a suite that has its own gate.
     """
     recipe = _target_recipe()
     for fragment in (*REQUIRED_RECIPE_FRAGMENTS, *RUNTIME_MODULES):
@@ -101,7 +115,7 @@ def test_make_target_runs_only_the_release_admission_runtime_modules() -> None:
         token for token in recipe.split() if token.startswith("scripts/tests/test_")
     ]
     assert runtime_paths == list(RUNTIME_MODULES), (
-        f"{TARGET} must execute exactly the three release-admission modules, "
+        f"{TARGET} must execute exactly the four release-admission modules, "
         f"got {runtime_paths!r}"
     )
 
