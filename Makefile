@@ -133,7 +133,7 @@ UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 # commit, so a fix is a pin bump. `.github/cv005.toml` holds this repository's
 # parameters and lane pairing.
 CV005_CONTRACTS_REF ?= 3754876bc4e94dc65c83af3def37828934f8f65e
-CV005_CONTRACTS = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
+CV005_CONTRACTS = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 	--from 'git+https://github.com/leynos/shared-actions@$(CV005_CONTRACTS_REF)\#subdirectory=packages/cv005-contracts' \
 	cv005-contracts
 # Public GitHub tool sources must not inherit workspace-specific URL rewrites.
