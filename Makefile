@@ -128,6 +128,14 @@ TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.3
 YAMLLINT_VERSION ?= 1.38.0
 UV ?= uv
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
+
+# The CV-005 CodeScene contracts live in shared-actions and run from a full
+# commit, so a fix is a pin bump. `.github/cv005.toml` holds this repository's
+# parameters and lane pairing.
+CV005_CONTRACTS_REF ?= 3754876bc4e94dc65c83af3def37828934f8f65e
+CV005_CONTRACTS = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
+	--from 'git+https://github.com/leynos/shared-actions@$(CV005_CONTRACTS_REF)\#subdirectory=packages/cv005-contracts' \
+	cv005-contracts
 # Public GitHub tool sources must not inherit workspace-specific URL rewrites.
 PUBLIC_GIT_SOURCE_ENV = GIT_CONFIG_COUNT=0
 # The Python baseline every uv-driven helper pins. Bump this alongside the
@@ -236,7 +244,8 @@ test-kani-mutations: check-build-tools ## Compile each mutation patch's patched 
 # The first uv run mirrors the exact Cuprum/Cyclopts pins in
 # scripts/kani_proof_scope.py's PEP 723 metadata. The second uses compatible
 # bounded ranges for those tools.
-test-workflow-contracts: ## Validate GitHub Actions workflow contracts
+test-workflow-contracts: ## Validate the CV-005 contracts and the GitHub Actions workflow contracts
+	$(CV005_CONTRACTS) check --repository .
 	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' \
 		--with 'cmd-mox==0.2.0' --with 'cuprum==0.1.0' \

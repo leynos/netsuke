@@ -2232,6 +2232,16 @@ the lane runs it through, and
 `tests/workflow_contracts/codescene_upload_contract_test.py` covers the lane
 that step sits in.
 
+`make test-workflow-contracts` also runs `cv005-contracts check`, the shared
+CV-005 contract library in `leynos/shared-actions`, from the full commit named
+by `CV005_CONTRACTS_REF` in the Makefile, before the local contracts. A fix to
+a rule reaches this repository as a pin bump. `.github/cv005.toml` holds the
+repository's parameters and the pull-request lane's pairing with the publisher,
+including the three environment keys the two legs legitimately differ on.
+`tests/workflow_contracts/cv005_wiring_test.py` holds the local wiring, and
+[ADR-042](adr-042-run-the-shared-cv005-contract-checker.md) records the
+decision.
+
 Workflow contract tests keep the boundary explicit: the pull-request coverage
 step must retain ratchet mode and pass the publication opt-out, the artefact
 upload and privileged submission workflow must remain absent, and the main
