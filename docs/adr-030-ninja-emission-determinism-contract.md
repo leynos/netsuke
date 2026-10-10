@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted.
 
 Four amendments, all dated 2026-10-10, are recorded under _Amendments_. They
 correct mechanism claims this record inherited from the ExecPlan.
