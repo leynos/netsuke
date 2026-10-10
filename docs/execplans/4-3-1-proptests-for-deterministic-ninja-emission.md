@@ -1865,6 +1865,13 @@ written in `EP-M1`. Every numbered precondition an obligation cites (`P-1` …
 `N-4`), the parameter tuple, the Kani argument, and the two domain purity
 leaks now live there rather than here.
 
+Where this document still writes `ADR-NNN` — in the trace links, and in the
+obligation and milestone text that cites them — the placeholder is **retained
+deliberately** as the stable trace identifier for `ADR-030`, not left
+unresolved. The number it denotes is settled and recorded under *Signposts*
+above; the placeholder survives only so that trace links written before
+allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
+
 ## Progress
 
 - [x] (2026-10-10T00:00:00Z) Re-derived the `EP-M2` base against `origin/main`
@@ -1884,11 +1891,29 @@ leaks now live there rather than here.
       `src/ninja_gen`, and the layout contract reports **0 prefix groups and
       0 prefixed-beside-directory** violations, against 66 and 27 pre-rebase.
       The clone was deleted; this worktree was never touched.
-- [ ] Perform the rebase on the real branch. Execute after the in-flight
-      CodeRabbit pass reports, and re-run the Markdown gates afterwards: the
-      rebase is the first change since `2e97da1d` that can alter what the
-      spelling gate and `mdtablefix` see, because it brings 44 commits of
-      upstream Markdown into the tree.
+- [x] (2026-10-10T00:00:00Z) Received the confirming CodeRabbit pass. It
+      reported **two** findings, both `trivial` and both `[type:docstyle]`, and
+      both were verified against the tree and accepted: `ADR-030`'s Status
+      value lacked the trailing full stop the style guide's ADR template
+      requires (precedents ADR-008 and ADR-029 both write `Accepted.`), and the
+      plan's surviving `ADR-NNN` uses were not marked as deliberately retained.
+      Neither is a correctness finding, and neither changes a milestone,
+      obligation, or acceptance clause.
+      *Provenance caveat:* this pass is **not** a clean confirmation of
+      `1401d0da`. The tree moved during it — `1401d0da` → `2e97da1d` →
+      `e1a3a16c`, all three commits from this session — so the pass's
+      `head_at_start` and `head_at_end` differ, and its findings are anchored
+      by quoted content rather than by line number for that reason. The two
+      findings above were re-located by quotation. The writer was this session
+      between agent invocations, **not** a peer: every commit carries the same
+      author and committer identity. Recorded because a review verdict's value
+      is its provenance, and this one's is qualified.
+
+- [ ] Perform the rebase on the real branch. Execute after any further review
+      settles, and re-run the Markdown gates afterwards: the rebase is the
+      first change since `2e97da1d` that can alter what the spelling gate and
+      `mdtablefix` see, because it brings 44 commits of upstream Markdown into
+      the tree.
 - [x] (2026-09-09T00:00:00Z) Renamed the branch and pushed it with upstream
       tracking.
 - [x] (2026-09-09T00:00:00Z) Loaded the `codegraph-mcp`, `rust-router`,
