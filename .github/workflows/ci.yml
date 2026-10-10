@@ -374,6 +374,18 @@ jobs:
       mdtablefix-version: '0.6.1'
       python-baseline: '3.14'
 
+  default-features:
+    # Lint and test the default feature set, which is what release binaries
+    # build and which excludes `lint` until v0.2.0. It is a reusable workflow
+    # for the same line-budget reason as `windows`, and repeats the nextest pin
+    # as a literal for the same reason; see ci-default-features.yml.
+    name: Default features
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci-default-features.yml
+    with:
+      nextest-version: '0.9.133'
+
   kani-smoke:
     # A required check, so it runs and reports on every trigger; it is never
     # skipped by a `paths` filter or a job-level `if:`, since a required check

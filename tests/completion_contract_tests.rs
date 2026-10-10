@@ -65,3 +65,19 @@ fn generated_completion_exposes_the_clap_command_tree(#[case] file_name: &str) -
     }
     Ok(())
 }
+
+/// Completions generated with the `lint` feature live apart from the default
+/// set, so neither build can overwrite the files the other's tests read, and a
+/// lint-enabled build never replaces the completions release staging ships.
+#[test]
+fn completions_are_separated_by_feature_set() -> Result<()> {
+    let last = Path::new(GENERATED_COMPLETIONS_DIR)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .context("the completion directory should have a final component")?;
+    ensure!(
+        (last == "lint") == cfg!(feature = "lint"),
+        "completions for this feature set should not share {GENERATED_COMPLETIONS_DIR}"
+    );
+    Ok(())
+}

@@ -39,11 +39,20 @@ STATIC_LANE_STEP = "Workflow contract tests"
 #: Linux jobs allowed to execute Rust tests outside the instrumented run.
 #: `netsukefile` builds a manifest and drives Ninja on Ubuntu 22.04, and
 #: `kani-smoke` runs verification harnesses; neither is a unit-test lane.
+#: `default-features` is the one deliberate unit-test lane: coverage measures
+#: the all-features build, and release binaries build the default feature set,
+#: which only this lane compiles and tests.
 LINUX_TEST_EXEMPTIONS = {
     ("ci.yml", "kani-smoke"),
     ("netsukefile-test.yml", "netsukefile"),
+    ("ci-default-features.yml", "default-features"),
 }
-LINUX_WORKFLOWS = ("ci.yml", "coverage-main.yml", "netsukefile-test.yml")
+LINUX_WORKFLOWS = (
+    "ci.yml",
+    "coverage-main.yml",
+    "netsukefile-test.yml",
+    "ci-default-features.yml",
+)
 #: Patterns for a Rust suite execution. `make test` is matched only as a whole
 #: target name, so the unrelated `make test-workflow-contracts` gate and its
 #: siblings are not mistaken for one.

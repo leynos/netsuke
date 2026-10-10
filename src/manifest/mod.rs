@@ -51,7 +51,7 @@ pub use env::{EnvReadError, EnvReader, ManifestEnvironment, process_env_reader};
 pub(crate) use expand::expand_foreach_with_budget;
 pub use glob::glob_paths;
 pub use load_stage::ManifestLoadStage;
-use loading::{notify_stage, trace_expansion_report};
+use loading::{ExpansionReportObserver, notify_stage, trace_expansion_report};
 pub use parse_with_config::{from_str_with_env_and_config, from_str_with_env_and_policy};
 pub use path_loaders::{
     from_path, from_path_with_policy, from_path_with_policy_and_env,
@@ -61,6 +61,8 @@ pub use path_loaders::{
 #[cfg(test)]
 pub(crate) use query::from_path_for_manifest_query;
 pub(crate) use query::from_path_for_manifest_query_with_limits;
+#[cfg(feature = "lint")]
+pub(crate) use query::{LoadedManifest, from_path_for_manifest_query_with_source};
 #[cfg(test)]
 use registration::RESERVED_VAR_NAMES;
 use registration::{
@@ -69,9 +71,6 @@ use registration::{
 pub use render::render_manifest;
 #[cfg(test)]
 use workspace::open_manifest_workspace;
-/// Receives normal-loader reports; manifest queries supply `None` to stay
-/// telemetry-free.
-type ExpansionReportObserver = fn(&expand::ExpansionReport);
 
 /// Inputs to a manifest parse, bundled to keep the parameter list bounded.
 struct ManifestParse<'a> {

@@ -156,6 +156,11 @@ jobs:
         # Clippy and `cargo doc` over the whole workspace under `-D warnings`,
         # including the `#[cfg(windows)]` arms.
         run: make SHELL=bash lint-clippy
+      - name: Lint (Clippy, default features)
+        # The same checks over the default feature set, which is what release
+        # binaries build and which excludes `lint` until v0.2.0. The Linux
+        # counterpart is `ci-default-features.yml`.
+        run: make SHELL=bash lint-default-features
       - name: Install Whitaker
         uses: >-
           leynos/shared-actions/.github/actions/install-whitaker@6dea5677a84fec60ca51b07202570e3af12ffdb4

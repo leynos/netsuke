@@ -5,6 +5,10 @@
 //!   packaging.
 //! - Generate Bash, Elvish, Fish, PowerShell, and Zsh completion files into
 //!   `target/generated-completions/<target>/<profile>` from the same Clap command tree.
+//!
+//!   A build with the `lint` feature writes both into a `lint/` subdirectory
+//!   instead, because its command tree has a `check` subcommand the release
+//!   artefacts must not carry.
 //! - Audit localization keys declared in `src/localization/keys.rs` against the Fluent bundles
 //!   in `locales/*/messages.ftl`, failing the build if any declared key is missing from a
 //!   locale.
@@ -124,10 +128,25 @@ fn manual_date() -> String {
     })
 }
 
+/// Subdirectory separating artefacts generated with a non-default feature set.
+///
+/// The `lint` feature adds the `check` subcommand, so the man page and
+/// completions differ by feature set. Sharing one directory let whichever
+/// build ran the script last decide what a test read: a default-feature build
+/// overwrote the files an all-features test, whose cached build script did not
+/// rerun, then checked for `check`. The default set keeps the bare path that
+/// release staging reads.
+const FEATURE_VARIANT: Option<&str> = if cfg!(feature = "lint") {
+    Some("lint")
+} else {
+    None
+};
+
 /// Return the generated-artefact directory for this build's target triple and profile.
 ///
 /// Uses the `target/{artefact}/{target}/{profile}` layout so man pages and
-/// completions never mix between artefacts, host builds, and cross builds.
+/// completions never mix between artefacts, host builds, and cross builds, and
+/// appends [`FEATURE_VARIANT`] so they never mix between feature sets either.
 #[expect(
     clippy::disallowed_methods,
     reason = "TARGET and PROFILE are set by Cargo for the build script alone; nothing else knows the triple and profile being built, so they cannot be passed in"
@@ -135,7 +154,11 @@ fn manual_date() -> String {
 fn out_dir_for_target_profile(artefact: &str) -> PathBuf {
     let target = env::var("TARGET").unwrap_or_else(|_| "unknown-target".into());
     let profile = env::var("PROFILE").unwrap_or_else(|_| "unknown-profile".into());
-    PathBuf::from(format!("target/{artefact}/{target}/{profile}"))
+    let directory = PathBuf::from(format!("target/{artefact}/{target}/{profile}"));
+    match FEATURE_VARIANT {
+        Some(variant) => directory.join(variant),
+        None => directory,
+    }
 }
 
 /// Write one man page into `dir` atomically and return its path.
@@ -185,6 +208,7 @@ fn emit_rerun_directives() {
     println!("cargo:rerun-if-env-changed=TARGET");
     println!("cargo:rerun-if-env-changed=PROFILE");
     println!("cargo:rerun-if-changed=src/localization/keys.rs");
+    println!("cargo:rerun-if-changed=src/localization/check_keys.rs");
     println!("cargo:rerun-if-changed=src/locale/catalogues.rs");
     println!("cargo:rerun-if-changed=Cargo.toml");
     // The locale registry owns the catalogue list, so the rerun directives are

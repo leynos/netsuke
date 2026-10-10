@@ -636,7 +636,9 @@ Every user-facing string is a Fluent message keyed from
 `src/localization/keys.rs`. Adding one means adding the constant, adding the
 message to all 35 catalogues, and keeping its `{ $variables }` identical across
 them: the build audit rejects a missing key, an orphaned key, or a variable set
-that differs from `en-US`.
+that differs from `en-US`. The `netsuke check` keys live in
+`src/localization/check_keys.rs`, which `keys.rs` re-exports; the audit reads
+both files as one key set and rejects a key declared in both.
 
 A *diagnostic* message whose text carries a bracketed code such as
 `[netsuke::jinja::shell::args]` must have that code copied **verbatim** into
@@ -879,6 +881,155 @@ are doubled and newline, carriage-return, and NUL characters are rejected. Add
 a separate, explicitly documented conversion for any new Ninja grammar position
 rather than reusing command escaping.
 
+## Adding a lint rule
+
+`netsuke check` is driven by a static registry in `src/lint/registry/mod.rs`.
+The [manifest linter design](netsuke-linter-design.md) specifies the model and
+[ADR-042](adr-042-manifest-linting-under-netsuke-check.md) records the
+decisions behind it; this section is the mechanics.
+
+A new rule touches four implementation places, the rule reference, and the
+tests described at the end of this section. It does not touch the command-line
+interface, the output schema, or the localization catalogues, which keeps the
+rule set cheap to grow.
+
+1. **Pick the stage.** A rule binds to exactly one of four: `Document` sees the
+   authored source with exact spans and unexpanded templates, `Manifest` sees
+   the expanded and rendered manifest, `Graph` sees the lowered `BuildGraph`,
+   and `Directive` sees the suppression comments. Bind to the earliest stage
+   that can decide the question, because earlier stages have better provenance.
+   Anything about authored text — a stale escape, a bashism, a literal path —
+   belongs at `Document`; anything needing template references to still exist,
+   such as unused-variable analysis, must be there.
+2. **Write it in the category module.** Rules live under `src/lint/rules/`,
+   grouped by category so a category's shared helpers stay next to the rules
+   that use them. Reuse `rules::recipes` to walk authored shell fragments and
+   `rules::shellscan` to scan them; neither a rule nor a helper should
+   re-implement quote tracking.
+3. **Declare its metadata.** A `RuleMeta` carries the stable kebab-case name,
+   the category, the stage, the default severity, and the summary, rationale,
+   and remediation text. Those three strings are the rule's documentation: they
+   are what `--explain` prints and what the rule reference must restate.
+   Default to `DefaultSeverity::Off` when the rule encodes a project convention
+   rather than a defect.
+4. **Register and document it.** Add it to the category module's `rules()`
+   function, then add a section to
+   [the rule reference](netsuke-linter-rules.md) with a reported and a fixed
+   manifest. The summary, rationale, and remediation stay in `RuleMeta` for the
+   prototype period; moving that prose into the Fluent catalogues, keyed by the
+   rule's name, is roadmap step 31.2 work. `tests/lint_rule_reference_tests.rs`
+   checks the two against each other in both directions and will fail until
+   they agree.
+
+Every rule ships three tests at minimum, in its category module's `tests.rs`
+(for example `src/lint/rules/hygiene/tests.rs`): a positive case that must
+fire, a negative case that must not, and a suppression case proving a directive
+silences it. Add the near-miss cases that separate the rule from a false
+positive — a substring that must not match, a construct inside a shell quote, a
+legitimate use of the same syntax — because those are what stop the rule being
+switched off wholesale later.
+
+Rule names are permanent. A retired rule keeps its name reserved and a rule
+whose meaning changes materially takes a new name, because the name is
+simultaneously a configuration key, a suppression token, a documentation
+anchor, and a field in machine output.
+
+### Linter pipeline interfaces
+
+The lint domain exposes a small pipeline rather than a command-specific
+implementation. `lint::Request` borrows the expanded `NetsukeManifest` and
+lowered `BuildGraph`, while owning the source text that the document stage
+indexes. `lint::analyse` builds that source index and returns an `Outcome` with
+deterministically ordered findings and the count of findings suppressed by
+directives. A source-indexing failure is returned as a `ParseFailure`; rules
+are not run when the compiler artefacts and source cannot be reconciled.
+
+`Policy` resolves ordered `--rule` selectors against the registry defaults. The
+engine applies that policy and stamps the resolved severity onto each finding;
+rules do not choose a severity at check time. `registry::catalogue` is the
+stable metadata view used by `--explain`, while `registry::all` is the
+stage-tagged execution view.
+
+The runner combines a neutral `lint::Report` with the manifest source in its
+runner-owned `CheckReport` diagnostic adapter. `Report` owns the output limit,
+threshold verdict, whole-run severity totals, and suppression count. It bounds
+only the findings stored for output: `is_failure`, `failing_count`, and
+`count_at` are computed before the limit is applied. `CheckReport` projects the
+bounded findings into source-backed diagnostics, while the JSON adapter uses
+the same per-finding data in both result and failure documents. Keep command
+parsing, output streams, and reporter construction at the runner boundary;
+rules and policy must remain independent of those concerns.
+
+### Check-command telemetry
+
+`src/runner/check/telemetry/mod.rs` instruments the complete `netsuke check`
+command at the runner boundary. `instrument_check` records one
+`netsuke_runner_check_total` counter and one
+`netsuke_runner_check_duration_seconds` histogram for every invocation. Both
+metrics use only the bounded `outcome` label, and the corresponding
+`runner.check` span records the same value.
+
+The outcome vocabulary is fixed: `success`, `threshold_failure`,
+`policy_failure`, `analysis_failure`, and `output_failure`. Do not add rule
+names, manifest paths, finding text, or other caller-controlled values to
+metric labels or span fields. The telemetry adapter owns this instrumentation;
+the lint domain remains free of metrics and tracing concerns.
+
+### Feature-gated code
+
+`netsuke check` and the whole `crate::lint` module compile only under the
+`lint` Cargo feature (`lint = ["dep:granit-parser"]`), which is off by default.
+The "Release gating" section of
+[ADR-042](adr-042-manifest-linting-under-netsuke-check.md) records why: release
+binaries build the default feature set, so v0.1.0 ships without the linter, and
+removing the gate is planned for v0.2.0. Treat it as temporary scaffolding, not
+a permanent configuration knob.
+
+Run the usual gates against `--all-features` as before. When a change touches
+gated code, also run `make lint-default-features` and
+`make test-default-features` locally before pushing; both build and test the
+default feature set, matching the `default-features` CI lane that verifies the
+release shape.
+
+**Cfg placement.** Place `#[cfg(feature = "lint")]` after an item's doc comment
+and above its other attributes.
+
+**No-op twins.** Where both configurations need a definition — for example
+`apply_check_defaults` in `src/cli/merge/apply.rs` and `is_check_metric` in the
+observability recorder — provide two definitions: one under
+`#[cfg(feature = "lint")]` and a `#[cfg(not(feature = "lint"))]` no-op twin.
+
+**Fluent keys stay ungated.** The Fluent message keys in
+`src/localization/keys.rs` and `src/localization/check_keys.rs`, their
+catalogue entries, and the subcommand-to-key routing in `src/cli/l10n/mod.rs`
+are deliberately not gated. The build-time localization audit is bidirectional
+across all 35 catalogues, and gating the constants would make every locale look
+orphaned; the routing only maps command names and carries no linting logic.
+
+**Test gating.** Check-only integration tests gate the whole test binary with
+an inner `#![cfg(feature = "lint")]` (`tests/check_command_tests.rs`,
+`tests/lint_rule_reference_tests.rs`); individual tests use
+`#[cfg(feature = "lint")]` where only part of a file needs the feature.
+`tests/check_command_absent_tests.rs` compiles only without the feature
+(`#![cfg(not(feature = "lint"))]`) and asserts that `check` and `help check`
+are unknown subcommands and that `--help` does not list `check`; this is the
+test that makes "absent from the release build" a checked property rather than
+an assumption.
+
+**Split help snapshots.** `--help` snapshots are split by feature:
+`src/snapshots/cli/netsuke__cli__parser__tests__help_en_us.snap` (and `_es_es`)
+cover the default feature set, and the `..._with_lint.snap` files carry the
+extra `check` line. The test selects the snapshot name with
+`HELP_SNAPSHOT_SUFFIX`. Regenerate both sets by running the help snapshot test
+under each feature configuration in turn and reviewing the resulting
+`.snap.new` file before accepting it.
+
+**`GATE_FEATURE_ARGUMENTS`.** `tests/support/cargo_features.rs` defines
+`GATE_FEATURE_ARGUMENTS` twice — `["--all-features"]` when `lint` is enabled,
+`[]` otherwise — so that nested Cargo builds spawned by the user-interface test
+harness match whichever lane compiled them instead of recompiling the whole
+dependency graph.
+
 ## Package and target naming
 
 The crates.io package is `netsuke-build`; the library target, the binary
@@ -898,7 +1049,9 @@ from the `bin-name` field that
   path it wrote through `cargo:rustc-env=NETSUKE_GENERATED_MAN_PAGE`, and
   `tests/man_page_contract_tests.rs` asserts the file is `netsuke.1`, is staged
   under `target/generated-man/<target>/<profile>/`, and carries a title that
-  never mentions `netsuke-build`.
+  never mentions `netsuke-build`. A build with the `lint` feature stages its
+  page and completions in a `lint/` subdirectory instead, so they never
+  overwrite the default-feature artefacts that release packaging ships.
 - Release packaging takes `bin-name` from the `metadata` job in
   `.github/workflows/release.yml`, so `.github/release-staging.toml`, the
   Debian and RPM payloads, the Windows Installer product, and the macOS
@@ -7476,7 +7629,7 @@ clocks from `monotony::test_util`, such as `FixedMonotonicClock` and
 `SystemConfigurationLoadClock`, or call `Instant::now` directly at these
 boundaries. Whenever a mockable monotonic clock is introduced, use `monotony`
 as the repository-approved mechanism. The dependency choice is
-`monotony = "0.1.0"`; its public contract keeps the production clock
+`monotony = "1.0.0"`; its public contract keeps the production clock
 abstraction dependency-free while its `test-util` feature provides
 deterministic test clocks.
 

@@ -1688,6 +1688,7 @@ dependencies = [
  "fs4",
  "glob",
  "googletest",
+ "granit-parser",
  "hashbrown 0.17.1",
  "indexmap",
  "indicatif",

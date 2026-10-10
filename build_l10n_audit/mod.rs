@@ -20,11 +20,13 @@ use cap_std::{ambient_authority, fs::Dir};
 use compare::{audit_catalogue, build_error_message};
 use ftl::MessageVariables;
 use metadata::parse_metadata_locales;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::{error::Error, io};
 
-/// Repository-relative path of the source file that defines the localization keys.
-const KEYS_PATH: &str = "src/localization/keys.rs";
+/// Repository-relative paths of the source files that define the localization
+/// keys. `keys.rs` re-exports `check_keys.rs`, so together they are one key set.
+const KEY_SOURCES: [&str; 2] = ["src/localization/keys.rs", "src/localization/check_keys.rs"];
 /// Repository-relative path of the manifest whose locale metadata is audited.
 const CARGO_MANIFEST: &str = "Cargo.toml";
 
@@ -127,6 +129,30 @@ pub(super) fn audit_localization_keys() -> Result<(), Box<dyn Error>> {
     audit_localization_keys_in(Path::new(""))
 }
 
+/// Read every key table under `root` into one set.
+///
+/// A key declared in two tables would be two constants with one Fluent
+/// identifier, and the re-export in `keys.rs` would silently shadow one of
+/// them, so a duplicate is rejected rather than merged.
+///
+/// # Errors
+///
+/// Returns an error when a table cannot be read or parsed, or when two tables
+/// declare the same key.
+fn declared_keys(root: &Path) -> Result<BTreeSet<String>, Box<dyn Error>> {
+    let mut declared = BTreeSet::new();
+    for relative in KEY_SOURCES {
+        let path = root.join(relative);
+        let keys = keys::extract_key_constants(&read_source(&path)?)
+            .map_err(|err| format!("{}: {err}", path.display()))?;
+        if let Some(duplicate) = keys.iter().find(|key| declared.contains(*key)) {
+            return Err(format!("{}: key {duplicate} is already declared", path.display()).into());
+        }
+        declared.extend(keys);
+    }
+    Ok(declared)
+}
+
 /// Audit the tree rooted at `root`.
 ///
 /// Split from [`audit_localization_keys`] so tests can run the whole
@@ -140,9 +166,7 @@ pub(super) fn audit_localization_keys() -> Result<(), Box<dyn Error>> {
 /// As [`audit_localization_keys`].
 pub(crate) fn audit_localization_keys_in(root: &Path) -> Result<(), Box<dyn Error>> {
     audit_cargo_metadata(root)?;
-    let keys_path = root.join(KEYS_PATH);
-    let declared = keys::extract_key_constants(&read_source(&keys_path)?)
-        .map_err(|err| format!("{}: {err}", keys_path.display()))?;
+    let declared = declared_keys(root)?;
     let source = source_catalogue_variables(root)?;
 
     let mut findings = Vec::new();
