@@ -47,7 +47,8 @@ class OperationObservation:
     job_status: str
     started_ns: int | None
     ended_ns: int
-    steps: cabc.Mapping[str, StepState]
+    # Runner Python 3.12 evaluates annotations eagerly.
+    steps: "cabc.Mapping[str, StepState]"  # ruff: ignore[quoted-annotation]
     upload_error_present: bool
 
 
@@ -296,12 +297,16 @@ def observation_from_environment(
     )
 
 
-def main() -> None:
+def main(
+    # Runner Python 3.12 evaluates annotations eagerly.
+    environment: "cabc.Mapping[str, str] | None" = None,  # ruff: ignore[quoted-annotation]
+) -> None:
     """Write a summary and local JSONL; publication retains the JSONL artifact."""
-    observation = observation_from_environment(os.environ)
+    values = os.environ if environment is None else environment
+    observation = observation_from_environment(values)
     summary, jsonl = render_observation(observation)
-    summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
-    telemetry_path = Path(os.environ["OBSERVABILITY_PATH"])
+    summary_path = Path(values["GITHUB_STEP_SUMMARY"])
+    telemetry_path = Path(values["OBSERVABILITY_PATH"])
     with summary_path.open("a", encoding="utf-8") as stream:
         stream.write(summary)
     telemetry_path.write_text(jsonl, encoding="utf-8")
