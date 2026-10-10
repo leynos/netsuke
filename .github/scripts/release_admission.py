@@ -8,23 +8,17 @@
 # ///
 """Emit bounded release-admission observations while checking RFC 0005 inputs.
 
-This is the Python form of the Bash gate that used to live in
-``require-release-admission-canaries.sh``. It runs five operations in a fixed
-order, classifies each without letting a failure message, a path, or an
-identifier reach the published records, and writes a metric file, a trace file,
-and four workflow outputs. In observation mode -- the default -- a failed
-admission is reported and the step still succeeds; in enforcement mode it fails
-the step.
+The gate runs five operations in a fixed order, classifies each without letting
+a failure message, a path, or an identifier reach the published records, and
+writes a metric file, a trace file, and four workflow outputs. In observation
+mode -- the default -- a failed admission is reported and the step still
+succeeds; in enforcement mode it fails the step.
 
-The environment is the whole interface. ``GITHUB_REPOSITORY``, ``GITHUB_SHA``,
-and ``GITHUB_OUTPUT`` are required; the operator may redirect every external
-effect through the adapter variables described under *Environment* in
-``docs/adr-020-release-admission-observability.md``. Every refusal keeps the
-wording the Bash gate used, so an operator's alerting survives the rewrite
-unchanged.
-
-Two differences from the Bash gate are intentional, and both are observable
-only on stderr:
+This replaced a Bash gate of three sourced scripts. The refusal wording, the
+operation order, the argument vectors, the records, and the exit statuses are
+unchanged, so an operator's alerting survives the rewrite; the measurements the
+port was held to live in ``scripts/tests/release_admission_test_support.py``.
+Two differences are intentional, and both are observable only on stderr:
 
 - An adapter the operating system refuses to launch is reported as
   ``release-admission adapter could not be run: <program>: <reason>``. The
