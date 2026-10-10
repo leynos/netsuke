@@ -1909,11 +1909,29 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       author and committer identity. Recorded because a review verdict's value
       is its provenance, and this one's is qualified.
 
-- [ ] Perform the rebase on the real branch. Execute after any further review
-      settles, and re-run the Markdown gates afterwards: the rebase is the
-      first change since `2e97da1d` that can alter what the spelling gate and
-      `mdtablefix` see, because it brings 44 commits of upstream Markdown into
-      the tree.
+- [x] (2026-10-10T00:00:00Z) Rebased the real branch onto `origin/main`. The
+      rollback ref `refs/backup/4-3-1-prerebase` was pinned to `b7c498ef`
+      before the rebase started, so the pre-rebase tip survives locally even
+      after the branch is force-pushed. All 18 commits replayed with **zero
+      conflicts** onto `e1df2ead`; `HEAD` is now `597ac3f5` and the branch is
+      **0 behind**. A count check confirms the replay dropped nothing: the
+      pre-rebase tip sat 18 ahead of the old merge base and the rebase replayed
+      18. A content check confirms the two files this branch actually authors —
+      `docs/adr-030-ninja-emission-determinism-contract.md` and this execplan —
+      are **byte-identical** before and after (same blob SHAs), against the
+      earlier draft's claim that the rebase "brings 44 commits of upstream
+      Markdown into the tree": it brings 44 upstream commits, whose Markdown
+      changes belong to those commits, and the only files where the rebase had
+      to merge rather than replay are the two upstream also touched.
+      `docs/contents.md` and `typos.toml` both merged cleanly and both keep
+      both sides: the ADR-030 entry still resolves at `docs/contents.md:222`
+      beside upstream's ADR-032 and ADR-033 entries. The `typos.toml`
+      difference is **not** upstream's — it comes from this branch's own
+      `8da0bb93` (*Regenerate typos.toml from the estate dictionary*) and
+      predates the rebase. `make spelling` and `mdtablefix` must be re-run
+      against the rebased tree, because the rebase rewrote every commit's
+      parentage and `make spelling` regenerates `typos.toml` from the live
+      shared dictionary.
 - [x] (2026-09-09T00:00:00Z) Renamed the branch and pushed it with upstream
       tracking.
 - [x] (2026-09-09T00:00:00Z) Loaded the `codegraph-mcp`, `rust-router`,
