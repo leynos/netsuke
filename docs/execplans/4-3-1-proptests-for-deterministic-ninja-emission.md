@@ -1347,32 +1347,56 @@ Three preparatory pieces, none of which changes behaviour:
   match nothing at all, and nextest exits 0 while selecting nothing, so the
   target would look green while running no property test. That is exactly the
   silent-zero-match defect the anchored form exists to prevent, re-entering
-  through the anchor. The runtime verifier does not currently catch it either:
-  `.github/scripts/verify_nextest_anchored_filters.py` scans only
-  `REPO_ROOT / "tests"` for parameterized tests, so the assertion is exposed to
-  `tests/`-rooted names and never to a `src/`-side one. Do not assume the
-  selector is right because it parses and the gate is green.
+  through the anchor. **This was partially resolved on 2026-10-10, and the
+  resolution is narrower than it first appears** — the two halves of the
+  runtime verifier must not be conflated (`_nextest_oracle/listing.py`):
 
-  Settle it empirically rather than by reading: with the property suites in
-  place, run
+  - `_check_every_filter_selects_something` **does** ask real nextest, for
+    *every* `filter = '…'` line in `.config/nextest.toml`, via
+    `selected(env, alternative)`, which reads each testcase's
+    `filter-match.status` and reports a selector that matches nothing as a
+    hard failure. It has **no `tests/`-root restriction** — it replays whatever
+    the configuration declares, wherever the selected test lives. So a dead
+    selector in the configuration is **caught**, and the earlier claim that
+    "the runtime verifier does not currently catch it either" is **false as
+    stated** and is hereby corrected. What is true is the narrower statement
+    below.
+  - `parameterized_tests()` scans only `TEST_SOURCE_ROOT =
+    Path(__file__).resolve().parents[3] / "tests"`, and `main()` **fails**
+    with *"no anchored filter names a parameterized test"* unless at least one
+    configured anchored selector names a test found **under `tests/`**. A
+    selector naming only `src/`-side tests therefore satisfies the first check
+    and then **aborts the lane** on the second, because the `src/`-side name is
+    absent from a corpus drawn from `tests/` alone. The restriction is thus not
+    "the verifier is blind to `src/`" but "the verifier refuses a configuration
+    whose anchored selectors name no `tests/`-rooted parameterized test".
+
+  Consequently `make proptest` **must not** be spelled as a
+  `.config/nextest.toml` `filter = '…'` covering only `src/`-side property
+  suites: that spelling fails the CI step outright, and it fails on `main`
+  today, not only after this plan lands. Note also that the two nextest
+  spellings `property_tests` and `proptests` both occur in this repository, and
+  several of the target suites are `rstest`-parameterized, so the case-suffix
+  hazard is live for them; it does not arise for plain `proptest!` blocks, but
+  one spelling should cover both.
+
+  The remaining, genuinely open part is therefore only *which mechanism* the
+  `Makefile` `proptest` target uses, not whether a selector can be trusted. No
+  contract reads a `Makefile` `-E` argument — `.github/scripts/` and
+  `tests/workflow_contracts/` police `filter` lines in `.config/nextest.toml`
+  only — so a selector written into the `Makefile` is unverified by
+  construction, while one written into the configuration inherits the runtime
+  check and its `tests/` restriction. Settle it empirically rather than by
+  reading: with the property suites in place, run
   `cargo nextest list --all-features --all-targets --message-format json` under
   the candidate selectors and read each testcase's `filter-match.status`, which
   is how the verifier itself reads selection — nextest reports selection
   through that field, not by omitting unselected tests, and its exit code is 0
-  even when a selector matches nothing. If a module-path anchor cannot select
-  `src/`-side tests, prefer a nextest test-group in `.config/nextest.toml` over
-  a `Makefile` `-E` selector, since the group is the mechanism the contracts
-  already know how to police, and record the outcome in `Decision log`. Note
-  that several of the target suites are `rstest`-parameterized, so the
-  case-suffix hazard is live; for plain `proptest!` blocks it does not arise,
-  but one spelling should cover both.
+  even when a selector matches nothing. Record the outcome in `Decision log`.
 
   `Makefile:228` on `origin/main` uses the bare `test(NAME)` form for a
   different target. That is pre-existing, outside this plan's scope, and not a
-  precedent to copy here. The contracts police `filter` lines in
-  `.config/nextest.toml` only; no contract reads a `Makefile` `-E` argument, so
-  a selector written there is unverified by construction — one more reason to
-  prefer the test-group.
+  precedent to copy here.
 
 *Acceptance:* `make test` passes with no file over 400 lines; the layout
 contract reports zero violations on the rebased tree; `make proptest` runs and
@@ -1909,6 +1933,44 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       author and committer identity. Recorded because a review verdict's value
       is its provenance, and this one's is qualified.
 
+- [x] (2026-10-10T00:00:00Z) Ran the compiler-free gates on the rebased tree.
+      This was necessary rather than optional: the **compile-admission pool was
+      wedged machine-wide** for the whole session — `build-limits-status`
+      reported `capacity 4, held 4` with `drain check failed; tokens retained …
+      visible compiler roots=0; operator accounting required`, while `pgrep -c
+      rustc` was **0** and 23 cargo processes from nine other agent sessions sat
+      queued for up to 3160 s. Nothing on this host could compile, so `make
+      lint`, `make typecheck`, `make test`, `make doc-coverage`, and `make
+      proptest` were all unrunnable locally. The compiler-free gates all pass:
+      `make fmt`, `make check-fmt`, `make markdownlint`, `make nixie`, and
+      **`make test-workflow-contracts` (1149 passed, 3 skipped)**. That last one
+      is the milestone's own acceptance evidence: it is the target that runs
+      `tests/workflow_contracts/rust_module_layout_test.py`, whose self-tests
+      `test_added_prefix_pair_fails_contract`,
+      `test_added_prefix_directory_pair_fails_contract`, and
+      `test_prefixed_file_beside_directory_fails_contract` are present and
+      passing, so the contract is live and green on the rebased tree — the
+      66 + 27 violations it reported pre-rebase are gone. It needs no compiler,
+      which is why the wedged pool does not block it.
+- [x] (2026-10-10T00:00:00Z) Corrected the `make proptest` open question's
+      first half after reading `.github/scripts/verify_nextest_anchored_filters.py`
+      and `.github/scripts/_nextest_oracle/listing.py` in full. The plan had
+      asserted the runtime verifier "does not currently catch" a dead selector
+      because it "scans only `REPO_ROOT / "tests"`". That is **half wrong** and
+      is corrected in place: the verifier has **two** independent halves.
+      `_check_every_filter_selects_something` replays *every* `filter = '…'`
+      line in `.config/nextest.toml` against real nextest via `selected()`,
+      which reads each testcase's `filter-match.status`, and **fails hard** on
+      any selector matching nothing — with **no `tests/`-root restriction**. So
+      a dead selector *is* caught. The `tests/` restriction belongs to the other
+      half: `parameterized_tests()` scans only `TEST_SOURCE_ROOT = …
+      / "tests"`, and `main()` **aborts the lane** unless at least one anchored
+      selector names a test drawn from that corpus. The consequence is a hard
+      design constraint recorded in `EP-M2`: `make proptest` **must not** be a
+      `.config/nextest.toml` `filter` covering only `src/`-side property suites,
+      because that spelling fails the CI step on the current tree. The narrower
+      open part — `Makefile` `-E` versus a configuration test-group — remains
+      open, and the `filter-match.status` discharge procedure is unchanged.
 - [x] (2026-10-10T00:00:00Z) Rebased the real branch onto `origin/main`. The
       rollback ref `refs/backup/4-3-1-prerebase` was pinned to `b7c498ef`
       before the rebase started, so the pre-rebase tip survives locally even
