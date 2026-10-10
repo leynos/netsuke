@@ -1873,9 +1873,22 @@ leaks now live there rather than here.
       counts (66 and 27 here, 0 and 0 upstream), the two-suffix `make proptest`
       selector problem, the open question on selector anchoring, and the
       falsified collision premise behind the `supplemental_property_location`
-      generalization. No milestone or obligation changed. A `git merge-tree`
-      rehearsal of `HEAD` against `origin/main` reports zero conflicts, so the
-      rebase is the next step.
+      generalization. No milestone or obligation changed.
+- [x] (2026-10-10T00:00:00Z) Rehearsed the rebase in a throwaway clone rather
+      than in this worktree. All 16 commits replay onto `e1df2ead` (the true
+      remote `main`, resolved from the API — the bare repository's cached
+      `main` is a stale `1e60fb18`) with **zero conflicts**. On the rebased
+      tree: `docs/adr-030-ninja-emission-determinism-contract.md` and this
+      execplan both survive, the adr-030 link still resolves at
+      `docs/contents.md:222`, `src/ninja_gen*` collapses to just
+      `src/ninja_gen`, and the layout contract reports **0 prefix groups and
+      0 prefixed-beside-directory** violations, against 66 and 27 pre-rebase.
+      The clone was deleted; this worktree was never touched.
+- [ ] Perform the rebase on the real branch. Execute after the in-flight
+      CodeRabbit pass reports, and re-run the Markdown gates afterwards: the
+      rebase is the first change since `2e97da1d` that can alter what the
+      spelling gate and `mdtablefix` see, because it brings 44 commits of
+      upstream Markdown into the tree.
 - [x] (2026-09-09T00:00:00Z) Renamed the branch and pushed it with upstream
       tracking.
 - [x] (2026-09-09T00:00:00Z) Loaded the `codegraph-mcp`, `rust-router`,
