@@ -270,8 +270,18 @@ without consulting configuration or ambient process state again.
 Named-shell blocks use the same `env`, `cwd`, `stdin`, `stdout`, `stderr`,
 `tee`, `capture_stdout`, `temp_dir`, and `pipe` semantics as every other
 structured block. Relative stream paths resolve against that stage's working
-directory. Pipeline construction, relay ownership, teeing, capture bounds, and
-failure collection remain Netsuke-managed.
+directory, including when the directory comes from an environment binding or a
+secure temporary directory. Pipeline construction, relay ownership, teeing,
+capture bounds, and failure collection remain Netsuke-managed.
+
+Selecting a named shell changes only how `invoke` is interpreted. It does not
+introduce a second path contract, a second capture contract, or a second
+temporary-directory contract, and it does not change the exclusivity rules
+between standard-output sinks.
+[ADR-043](../adr-043-consolidated-structured-command-execution-contract.md)
+records the consolidated contract, and roadmap task 12.1.1 requires this
+section to agree with RFC 0001 sections 9 and 12.1, RFC 0009 sections 5 and 11,
+and [ADR-019](../adr-019-structured-command-shell-selection.md).
 
 The shell receives only the rendered `invoke` source. An inner pipe or
 redirection written in that source belongs to the selected shell. An outer
@@ -343,10 +353,13 @@ The change is additive:
 
 RFC 0001 already reserves an additive manifest-format minor version,
 provisionally `1.1.0`, for structured command mappings. Named shell selection
-ships as part of that not-yet-implemented mapping schema and does not require a
-second version increment. If structured command mappings ship before this
-amendment, the implementation must allocate the next additive minor version
-instead.
+ships as part of that mapping schema, not as a separate syntax generation, and
+does not require a second version increment.
+
+[ADR-043](../adr-043-consolidated-structured-command-execution-contract.md)
+consolidates that allocation: `1.1.0` is reserved for the next mapping schema,
+RFC 0009, RFC 0010, and this amendment all land inside it, and a later
+unrelated schema takes the next number rather than claiming `1.1.0`.
 
 Persisted action plans must version the resolved-shell representation and
 reject unknown variants rather than falling back to the host default.
