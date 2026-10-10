@@ -3846,19 +3846,23 @@ The staged artefacts feed a Windows Installer XML (WiX) v4 authoring template
 stored in `installer/Package.wxs`; the workflow invokes the shared
 `windows-package` composite to convert the repository licence into Rich Text
 Format (RTF), embed the binary, and output a signed Microsoft Installer (MSI)
-installer alongside the staged directory. The packaging step gates the action's
-internal artefact uploader behind the `should_publish` flag exported by the
-metadata job so that dry runs do not leak MSI artefacts. The composite pins the
-`WixToolset.UI.wixext` extension to v6 to match the WiX v6 CLI and avoid the
-`WIX6101` incompatibility seen with the legacy v4 bundle. The installer uses
-WiX v4 syntax, installs per-machine, and presents the minimal UI appropriate
-for a CLI tool. Windows does not modify the PATH, so users must add the
-installation directory manually if they want global command resolution. The
-Unix manual page remains in the staged artefacts for parity with the other
-platforms but is not bundled into the installer to avoid shipping an
-inaccessible help format. Windows PowerShell help is staged as sidecar release
-artefacts in the `Netsuke` module layout so users can inspect it with
-`Get-Help Netsuke -Full`.
+installer alongside the staged directory. The release workflow's separate
+`should_upload_package_artifacts` metadata output feeds the build workflow's
+upload input in publishing and dry-run modes. The nested `windows-package`
+action's MSI upload remains disabled; the caller includes
+`steps.package_windows.outputs['msi-path']` in its repository-prefixed,
+architecture-specific artefact for release staging. Dry runs keep diagnostic
+uploads disabled through the separate `should_upload_workflow_artifacts`
+output. The composite pins the `WixToolset.UI.wixext` extension to v6 to match
+the WiX v6 CLI and avoid the `WIX6101` incompatibility seen with the legacy v4
+bundle. The installer uses WiX v4 syntax, installs per-machine, and presents
+the minimal UI appropriate for a CLI tool. Windows does not modify the PATH, so
+users must add the installation directory manually if they want global command
+resolution. The Unix manual page remains in the staged artefacts for parity
+with the other platforms but is not bundled into the installer to avoid
+shipping an inaccessible help format. Windows PowerShell help is staged as
+sidecar release artefacts in the `Netsuke` module layout so users can inspect
+it with `Get-Help Netsuke -Full`.
 
 The MSI keeps a stable WiX `UpgradeCode` for the release family while WiX
 generates a fresh `ProductCode` for each package. Since Windows Installer
@@ -3880,11 +3884,17 @@ dependencies on demand. Python linting still lives in the top-level
 `ruff.toml`, so the dedicated staging scripts remain self-contained whilst the
 broader helper suite stays consistently linted.
 
-Each job uploads its products as workflow artefacts, and the final release job
-downloads every file, filters out unrelated downloads, and prefixes asset names
-with their staging directories to avoid collisions before attaching them to the
-GitHub release draft. This automated pipeline guarantees parity across Windows,
-Linux, and macOS without custom GoReleaser logic.
+Each build job uploads its products as workflow artefacts. In dry-run mode, the
+`release` job downloads those artefacts, hoists the cargo-binstall archives,
+and validates the upload plan without creating a draft or uploading assets to a
+GitHub release. For tag publication, `publish-release` downloads the same build
+artefacts and attaches the assets to the draft, prefixing names with their
+staging directories to avoid collisions. Dry-run staging writes its operation
+summary but does not upload diagnostic artefacts; publication telemetry and the
+full observability policy are documented in
+[ADR-020](adr-020-release-admission-observability.md). This automated pipeline
+guarantees parity across Windows, Linux, and macOS without custom GoReleaser
+logic.
 
 ### 8.7 Release Notes
 

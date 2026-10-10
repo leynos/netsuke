@@ -17,8 +17,9 @@ name: Release Binary
         default: false
       dry-run:
         description: >-
-          When `true`, build artefacts without uploading them to GitHub
-          releases or workflow artefacts.
+          When `true`, upload package workflow artefacts for staging rehearsal,
+          do not upload diagnostics artefacts, and never create or upload to a
+          GitHub release.
         required: false
         type: boolean
         default: false
@@ -51,6 +52,9 @@ name: Release Binary
           WiX CLI toolchain
         value: ${{ jobs.metadata.outputs.wix_extension_version }}
 
+# Every job declares its own required token scopes; deny the default grant.
+permissions: {}
+
 # A release never cancels a run in progress: a second push of the same tag
 # would otherwise abandon a half-published release. It queues instead. The
 # queue holds one pending run (GitHub's default `queue: single`), so a third
@@ -82,6 +86,9 @@ jobs:
       should_publish: ${{ steps.release_modes.outputs['should-publish'] }}
       dry_run: ${{ steps.release_modes.outputs['dry-run'] }}
       should_upload_workflow_artifacts: ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] }}
+      should_upload_package_artifacts: >-
+        ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] == 'true' ||
+            steps.release_modes.outputs['dry-run'] == 'true' }}
       wix_extension_version: ${{ steps.wix_extension_version.outputs.value }}
       repo_name: ${{ steps.repo_name.outputs.value }}
     steps:
@@ -177,7 +184,7 @@ jobs:
       package-license: ${{ needs.metadata.outputs.package_license }}
       package-description: ${{ needs.metadata.outputs.package_description }}
       artifact-name: ${{ needs.metadata.outputs.repo_name }}-${{ matrix.artefact }}
-      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
+      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_package_artifacts) }}
       package-arch: ${{ matrix.package_arch }}
       stage-target: ${{ matrix.target_key }}
 
@@ -208,7 +215,7 @@ jobs:
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
       artifact-name: ${{ needs.metadata.outputs.repo_name }}-windows-${{ matrix.package_arch }}
-      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
+      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_package_artifacts) }}
       stage-target: ${{ matrix.target_key }}
       msi-arch: ${{ matrix.msi_arch }}
       wix-extension-version: ${{ needs.metadata.outputs.wix_extension_version }}
@@ -239,7 +246,7 @@ jobs:
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
       artifact-name: ${{ needs.metadata.outputs.repo_name }}-${{ matrix.artefact_suffix }}
-      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
+      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_package_artifacts) }}
       stage-target: ${{ matrix.target_key }}
       artifact-suffix: ${{ matrix.artefact_suffix }}
 
@@ -394,44 +401,72 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: needs.metadata.outputs.should_publish == 'true'
+    if: >-
+      !cancelled() &&
+      needs.metadata.result == 'success' &&
+      needs.build-linux.result == 'success' &&
+      needs.build-windows.result == 'success' &&
+      needs.build-macos.result == 'success' &&
+      (needs.windows-native-recipe-smoke.result == 'success' ||
+       needs.windows-native-recipe-smoke.result == 'skipped') &&
+      needs.metadata.outputs.dry_run == 'true'
     permissions:
-      contents: write
+      contents: read
     needs:
       - metadata
       - build-linux
       - build-windows
       - build-macos
       - windows-native-recipe-smoke
-    # Publication is API-bound: it downloads artefacts and calls the releases
-    # API, so a GitHub-hosted runner is the right placement.
+    # Staging downloads artefacts and validates the upload plan, so a
+    # GitHub-hosted runner is the right placement.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
-      - name: Install uv
-        # The privileged job runs inline-metadata Python scripts without a
-        # shared dependency cache.
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
-          python-version: '3.14'
-          enable-cache: false
-      - name: Ensure release exists (draft)
+          persist-credentials: false
+      - id: release_operation_start
+        name: Start release operation timing
         shell: bash
-        env:
-          INPUT_TAG: ${{ github.ref_name }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uv run --no-project --python 3.14 scripts/ensure_draft_release.py
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - id: artifact_download_start
+        name: Start artefact download timing
+        if: always()
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
       - uses: >-
           actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         # v8.0.1
+        id: download_artifacts
         with:
           path: dist
           pattern: ${{ needs.metadata.outputs.repo_name }}-*
+      - id: artifact_download_end
+        name: Finish artefact download timing
+        if: always()
+        shell: bash
+        run: printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - name: Install uv
+        # Pins the interpreter the hoist script runs under to the Python 3.14
+        # baseline the repository's Python tooling targets, rather than
+        # whichever `python3` the runner image happens to ship.
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          python-version: '3.14'
+          # The hoist script is stdlib-only and runs with --no-project, so a
+          # restored cache buys nothing and adds an unnecessary supply-chain
+          # input to the staging rehearsal.
+          enable-cache: false
+      - id: archive_hoist_start
+        name: Start archive hoist timing
+        if: always()
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
       - name: Hoist cargo-binstall archives to the release root
+        id: archive_hoist
         shell: bash
         # Validates that every target listed in release-staging.toml staged
         # its archive and checksum sidecar, then moves the pairs to dist/ so
@@ -442,17 +477,33 @@ jobs:
           uv run --no-project --python 3.14 scripts/hoist_binstall_archives.py
         env:
           INPUT_VERSION: ${{ needs.metadata.outputs.version }}
+      - id: archive_hoist_end
+        name: Finish archive hoist timing
+        if: always()
+        shell: bash
+        run: printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - id: upload_plan_start
+        name: Start upload plan timing
+        if: always()
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
       - id: upload_assets
         name: Upload artefacts to release
         uses: >-
-          leynos/shared-actions/.github/actions/upload-release-assets@0606ca899ce2995a0c4bc78e660e80832e6e8855
+          leynos/shared-actions/.github/actions/upload-release-assets@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           release-tag: ${{ github.ref_name }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
           dist-dir: dist
+          dry-run: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - id: upload_plan_end
+        name: Finish upload plan timing
+        if: always()
+        shell: bash
+        run: printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
       - name: Check asset upload errors
         if: steps.upload_assets.outputs.upload-error == 'true'
         env:
@@ -461,3 +512,174 @@ jobs:
           echo "Error uploading release assets:"
           printf '%s\n' "$ERROR_MESSAGE"
           exit 1
+      - name: Record release operation observability
+        if: always()
+        env:
+          RELEASE_OPERATION: release_staging
+          RELEASE_DRY_RUN: 'true'
+          JOB_STATUS: ${{ job.status }}
+          OPERATION_STARTED_NS: ${{ steps.release_operation_start.outputs.started_ns }}
+          ARTIFACT_DOWNLOAD_OUTCOME: ${{ steps.download_artifacts.outcome }}
+          ARTIFACT_DOWNLOAD_STARTED_NS: ${{ steps.artifact_download_start.outputs.started_ns }}
+          ARTIFACT_DOWNLOAD_ENDED_NS: ${{ steps.artifact_download_end.outputs.ended_ns }}
+          ARCHIVE_HOIST_OUTCOME: ${{ steps.archive_hoist.outcome }}
+          ARCHIVE_HOIST_STARTED_NS: ${{ steps.archive_hoist_start.outputs.started_ns }}
+          ARCHIVE_HOIST_ENDED_NS: ${{ steps.archive_hoist_end.outputs.ended_ns }}
+          UPLOAD_PLAN_VALIDATION_OUTCOME: ${{ steps.upload_assets.outcome }}
+          UPLOAD_PLAN_VALIDATION_STARTED_NS: ${{ steps.upload_plan_start.outputs.started_ns }}
+          UPLOAD_PLAN_VALIDATION_ENDED_NS: ${{ steps.upload_plan_end.outputs.ended_ns }}
+          UPLOAD_ERROR_PRESENT: ${{ steps.upload_assets.outputs.upload-error == 'true' }}
+          OBSERVABILITY_PATH: ${{ runner.temp }}/release-operation-observability.jsonl
+        run: |
+          set -euo pipefail
+          python3 scripts/release_operation_observability.py
+
+  publish-release:
+    if: >-
+      !cancelled() &&
+      needs.metadata.result == 'success' &&
+      needs.build-linux.result == 'success' &&
+      needs.build-windows.result == 'success' &&
+      needs.build-macos.result == 'success' &&
+      needs.windows-native-recipe-smoke.result == 'success' &&
+      needs.metadata.outputs.should_publish == 'true'
+    # Only publication needs contents: write access to the release API.
+    permissions:
+      contents: write
+    needs:
+      - metadata
+      - build-linux
+      - build-windows
+      - build-macos
+      - windows-native-recipe-smoke
+    # Only publication needs contents: write access to the release API.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        # Pins the interpreter the release helper scripts run under to the
+        # Python 3.14 baseline the repository's Python tooling targets.
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          python-version: '3.14'
+          # These helpers are stdlib-only, so restoring a dependency cache
+          # adds an unnecessary supply-chain input.
+          enable-cache: false
+      - id: release_operation_start
+        name: Start release operation timing
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - name: Ensure release exists (draft)
+        id: draft_release
+        # Retain this step guard as defence in depth after the job-level check.
+        if: needs.metadata.outputs.should_publish == 'true'
+        shell: bash
+        env:
+          INPUT_TAG: ${{ github.ref_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run --no-project --python 3.14 scripts/ensure_draft_release.py
+      - id: artifact_download_start
+        name: Start artefact download timing
+        if: always()
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - uses: >-
+          actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        # v8.0.1
+        id: download_artifacts
+        with:
+          path: dist
+          pattern: ${{ needs.metadata.outputs.repo_name }}-*
+      - id: artifact_download_end
+        name: Finish artefact download timing
+        if: always()
+        shell: bash
+        run: printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - id: archive_hoist_start
+        name: Start archive hoist timing
+        if: always()
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - name: Hoist cargo-binstall archives to the release root
+        id: archive_hoist
+        shell: bash
+        # Validates that every target listed in release-staging.toml staged
+        # its archive and checksum sidecar, then moves the pairs to dist/ so
+        # they upload under the plain names the binstall metadata resolves.
+        # A missing target or sidecar fails the release with the names listed.
+        run: |
+          set -euo pipefail
+          uv run --no-project --python 3.14 scripts/hoist_binstall_archives.py
+        env:
+          INPUT_VERSION: ${{ needs.metadata.outputs.version }}
+      - id: archive_hoist_end
+        name: Finish archive hoist timing
+        if: always()
+        shell: bash
+        run: printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - id: upload_plan_start
+        name: Start upload plan timing
+        if: always()
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - id: upload_assets
+        name: Upload artefacts to release
+        uses: >-
+          leynos/shared-actions/.github/actions/upload-release-assets@0606ca899ce2995a0c4bc78e660e80832e6e8855
+        with:
+          release-tag: ${{ github.ref_name }}
+          bin-name: ${{ needs.metadata.outputs.bin_name }}
+          dist-dir: dist
+          dry-run: ${{ needs.metadata.outputs.should_publish != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - id: upload_plan_end
+        name: Finish upload plan timing
+        if: always()
+        shell: bash
+        run: printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - name: Check asset upload errors
+        if: steps.upload_assets.outputs.upload-error == 'true'
+        env:
+          ERROR_MESSAGE: ${{ steps.upload_assets.outputs.error-message }}
+        run: |
+          echo "Error uploading release assets:"
+          printf '%s\n' "$ERROR_MESSAGE"
+          exit 1
+      - name: Record release operation observability
+        if: always()
+        env:
+          RELEASE_OPERATION: release_publication
+          RELEASE_DRY_RUN: ${{ needs.metadata.outputs.should_publish != 'true' }}
+          JOB_STATUS: ${{ job.status }}
+          OPERATION_STARTED_NS: ${{ steps.release_operation_start.outputs.started_ns }}
+          DRAFT_RELEASE_OUTCOME: ${{ steps.draft_release.outcome }}
+          ARTIFACT_DOWNLOAD_OUTCOME: ${{ steps.download_artifacts.outcome }}
+          ARTIFACT_DOWNLOAD_STARTED_NS: ${{ steps.artifact_download_start.outputs.started_ns }}
+          ARTIFACT_DOWNLOAD_ENDED_NS: ${{ steps.artifact_download_end.outputs.ended_ns }}
+          ARCHIVE_HOIST_OUTCOME: ${{ steps.archive_hoist.outcome }}
+          ARCHIVE_HOIST_STARTED_NS: ${{ steps.archive_hoist_start.outputs.started_ns }}
+          ARCHIVE_HOIST_ENDED_NS: ${{ steps.archive_hoist_end.outputs.ended_ns }}
+          UPLOAD_PLAN_VALIDATION_OUTCOME: ${{ steps.upload_assets.outcome }}
+          UPLOAD_PLAN_VALIDATION_STARTED_NS: ${{ steps.upload_plan_start.outputs.started_ns }}
+          UPLOAD_PLAN_VALIDATION_ENDED_NS: ${{ steps.upload_plan_end.outputs.ended_ns }}
+          UPLOAD_ERROR_PRESENT: ${{ steps.upload_assets.outputs.upload-error == 'true' }}
+          OBSERVABILITY_PATH: ${{ runner.temp }}/release-operation-observability.jsonl
+        run: |
+          set -euo pipefail
+          python3 scripts/release_operation_observability.py
+      - name: Upload release operation observability
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        # v7.0.1
+        with:
+          name: release-operation-observability-${{ github.job }}
+          path: ${{ runner.temp }}/release-operation-observability.jsonl
+          if-no-files-found: ignore

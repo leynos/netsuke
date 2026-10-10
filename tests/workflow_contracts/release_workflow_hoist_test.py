@@ -78,11 +78,11 @@ def test_release_workflow_pins_the_hoist_interpreter() -> None:
 
 
 def test_release_workflow_disables_the_uv_cache() -> None:
-    """The privileged release job must not restore a uv cache.
+    """The staging job must not restore a uv cache.
 
     The hoist script is stdlib-only and runs with ``--no-project``, so a
-    restored cache buys nothing while adding a supply-chain input to a job
-    holding ``contents: write``.
+    restored cache buys nothing while adding an unnecessary supply-chain
+    input to staging.
     """
     steps = job_steps(load_workflow(RELEASE_WORKFLOW_PATH), "release")
     setup = steps[step_index_by_key(steps, "uses", "setup-uv")]

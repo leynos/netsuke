@@ -4,7 +4,8 @@ This guide describes the day-to-day engineering workflow for Netsuke, with a
 focus on writing and maintaining tests. It is the source of truth for how the
 test suite is expected to be used by contributors. The normative architecture
 reference for bounded release-admission observability is
-[ADR-020](adr-020-release-admission-observability.md).
+[ADR-020](adr-020-release-admission-observability.md). It also records the
+release-operation observability decision.
 
 ## Command-line interface architecture
 
@@ -1730,14 +1731,33 @@ this smoke job and the platform package jobs in its `needs` list. Consequently,
 release publication cannot proceed unless the native Windows smoke test passes.
 
 The pull-request dry run (`release-dry-run.yml`, which calls `release.yml` with
-`dry-run: true`) skips this job, and only this job. The same pull request's
-`ci.yml` already runs the identical build and smoke in `build-test-windows`.
-The rerun bought no evidence and cost no money, since GitHub-hosted runners are
-free here. What it did cost was a slot in the account's pool of concurrent
-GitHub-hosted runners. The gating `build-test-windows` queues for that pool
-alongside the dry run's own Windows and macOS builds, and Ubicloud has no
-Windows runners to move either to. Every other dry-run job builds or packages
-release artefacts, which no pull-request lane does.
+`dry-run: true`) skips this smoke job for events that `ci.yml` also answers.
+The same pull request's `ci.yml` already runs the identical build and smoke in
+`build-test-windows`. The rerun bought no evidence and cost no money, since
+GitHub-hosted runners are free here. What it did cost was a slot in the
+account's pool of concurrent GitHub-hosted runners. The gating
+`build-test-windows` queues for that pool alongside the dry run's own Windows
+and macOS builds, and Ubicloud has no Windows runners to move either to.
+
+The dry run still enters the `release` job to rehearse staging. The package
+jobs upload their packages as workflow artefacts under
+`should_upload_package_artifacts`; the release job downloads them, hoists and
+validates the cargo-binstall archive pairs, then asks `upload-release-assets`
+to validate the upload plan. Its `dry-run` input prevents any release upload,
+and the draft-creation step is publish-only. Build diagnostic artefacts remain
+behind `should_upload_workflow_artifacts`, which stays false during dry runs.
+
+Both staging and publication write an always-run outcome to
+`GITHUB_STEP_SUMMARY`. The staging job does not upload diagnostic artefacts;
+its JSONL telemetry file remains on the runner. Publication uploads a per-job
+artefact named `release-operation-observability-${{ github.job }}`. It contains
+`release-operation-observability.jsonl` with bounded operation and phase
+counters, duration samples, and phase start/completion events. If cancellation
+interrupts a phase before its end marker, it records a phase interruption event
+named `release_phase_interrupted`. The summary records job and phase outcomes
+with a fixed error category. The publication artefact uses the repository's
+default GitHub Actions retention policy. These records omit release tags,
+filenames, raw error text, and secrets.
 
 The skip applies only to events that `ci.yml` also answers. The dry run answers
 `ready_for_review` and `ci.yml` does not, so a draft marked ready after its
@@ -2139,6 +2159,11 @@ validation remain consistent across the workflows under test. Scans that must
 see every string in a parsed workflow, mapping keys included, share
 `iter_strings` in `tests/workflow_contracts/yaml_strings.py` rather than
 walking the value themselves.
+
+`tests/workflow_contracts/release_publish_path_contract.py` is a test-only,
+pure checker shared by the release staging and mutation contracts. Keep
+workflow-specific parsing and assertions in each suite; production code must
+not import this checker.
 
 ### Coverage ratchet and CodeScene publication
 

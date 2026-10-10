@@ -383,7 +383,8 @@ jobs:
           output-basename: ${{ inputs['bin-name'] }}
           output-directory: dist
           license-plaintext-path: LICENSE
-          upload-artefact: ${{ inputs['should-upload-workflow-artifacts'] }}
+          # The caller uploads the MSI with the architecture-specific bundle.
+          upload-artefact: 'false'
           wix-extension-version: ${{ inputs['wix-extension-version'] }}
 
       - name: Build macOS installer package

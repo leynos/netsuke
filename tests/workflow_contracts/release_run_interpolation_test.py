@@ -61,7 +61,7 @@ echo "value=$version" >>"$GITHUB_OUTPUT"
     ),
     pytest.param(
         "release.yml",
-        "release",
+        "publish-release",
         "Ensure release exists (draft)",
         r"""set -euo pipefail
 gh release view "${{ github.ref_name }}" >/dev/null 2>&1 || \\
@@ -289,7 +289,9 @@ def test_wix_and_draft_release_inputs_use_environment_variables() -> None:
     }, "the WiX version must be passed through the environment"
 
     draft = _find_step(
-        workflows["release.yml"], "release", "Ensure release exists (draft)"
+        workflows["release.yml"],
+        "publish-release",
+        "Ensure release exists (draft)",
     )
     draft_env = require_mapping(draft.get("env"), "draft-release environment")
     assert draft_env.get("INPUT_TAG") == "${{ github.ref_name }}", (

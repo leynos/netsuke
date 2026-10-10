@@ -192,7 +192,8 @@ operator, user, and contributor references are easier to find.
   structured-command shell selection, trusted configuration authority,
   resolution, lowering, diagnostics, and safety boundaries.
 - [ADR-020](adr-020-release-admission-observability.md):
-  Bounded metrics and operator-facing export for the release-admission gate.
+  Bounded metrics and operator-facing export for release admission and
+  staging/publication operations.
 - [ADR-021](adr-021-trust-aware-fetch-policy-merge.md):
   Trust-aware merging of project fetch-policy requests with operator-enforced
   network policy.
