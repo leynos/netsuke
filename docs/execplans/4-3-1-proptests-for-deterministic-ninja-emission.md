@@ -109,25 +109,29 @@ statement.
 `src/ir/from_manifest.rs` builds the graph. Four facts are load-bearing:
 
 1. Actions are interned by content hash. `register_action`
-   (`src/ir/from_manifest_support.rs:46`) hashes the `Action` with
+   (`src/ir/from_manifest_support.rs:48`) hashes the `Action` with
    `crate::hasher::ActionHasher::hash` and uses the hexadecimal digest as the
    map key.
 2. Duplicate outputs are rejected. `find_duplicates`
-   (`src/ir/from_manifest_support.rs:291`) fails the lowering if any output
+   (`src/ir/from_manifest_support.rs:306`) fails the lowering if any output
    path is claimed twice, across targets or within one target. So no two
    distinct edges in a graph built this way share an output path.
-3. A multi-output edge is stored once per output.
-   `insert_edge_for_outputs` (`src/ir/from_manifest_support.rs:129`) clones the
-   edge under each explicit output. An edge with no explicit outputs is
-   silently not inserted — but `register_action` has already run, so its rule
-   block is still emitted with no `build` statement referencing it.
+3. A multi-output edge is stored **once**, not once per output.
+   `insert_edge_for_outputs` (`src/ir/from_manifest_support.rs:142`) is a thin
+   wrapper over `graph.insert_edge`, which validates the output aliases and
+   calls `insert_canonical_edge` to push a single arena entry
+   (`src/ir/graph.rs:82`). An output-less edge is pushed the same way and is
+   therefore *not* dropped: `render_edges` emits a `build` line for it with an
+   empty left-hand side. Whether a manifest can construct one is unresolved and
+   is `EP-M4`'s question, not an established drop. See `ADR-030` amendments 1
+   and 2.
 4. `register_action` hard-codes
    `depfile: None, deps_format: None, pool: None, restat: false`. No manifest
    can currently populate those fields.
 
-`src/ninja_gen/` emits the text. `generate` (`src/ninja_gen/mod.rs:106`) is the
+`src/ninja_gen/` emits the text. `generate` (`src/ninja_gen/mod.rs:105`) is the
 simple path and rejects graphs needing staged serial lowering. `generate_bundle`
-(`src/ninja_gen/dyndep.rs:91`) is what production uses and returns
+(`src/ninja_gen/dyndep.rs:88`) is what production uses and returns
 `GeneratedNinja { build_file, dyndep_files }`. Both:
 
 1. `reject_unsupported_path_characters` — rejects `$`, `:`, `|`, and any
@@ -176,7 +180,7 @@ The **platform-and-shell parameter**, which the first draft wrongly omitted.
 `PowerShell` on Windows and `Posix` elsewhere, overridable at runtime by
 `NETSUKE_WINDOWS_SHELL` whose `Bash` route additionally depends on a filesystem
 probe. PowerShell takes an `rspfile` branch that POSIX does not
-(`src/ninja_gen/mod.rs:385`). Emitted bytes are therefore a function of
+(`src/ninja_gen/mod.rs:379`). Emitted bytes are therefore a function of
 (manifest, environment, platform, shell selection, Netsuke version). The design
 document's unqualified claim is false across platforms as written, and the
 contract must name the parameter tuple.
@@ -474,7 +478,8 @@ question.
 - **Shrinking is unsound because the predicate is not seed-determined.**
   *Severity: high. Likelihood: was certain in the first draft.* *Mitigation:*
   `OBL-ORDER` is restructured so its core is a pure function of the seed, and
-  the end-to-end variant draws a well-separated pair of key sets rather than
+  the end-to-end variant holds the graph value fixed and grades itself
+  inconclusive when no case's iteration orders diverged, rather than
   re-materializing and hoping. The original bounded-retry mitigation was
   **falsified by `EP-M0` question 1** — see `OBL-ORDER` — so this risk is
   partially realized and now closed by construction rather than by retry.
@@ -671,14 +676,27 @@ two orders drawn independently:
 
 A single-key map has exactly one insertion order, so its iteration order can
 *never* differ and the loop was guaranteed to fail every `EP-M3` minimal case.
-The bound is therefore replaced by a **well-separated pair**: draw one order,
-draw a second, and redraw the second (`prop_assume!`-free, by construction)
-until its *key set* differs from the first in at least `ORDER_MIN_DIVERGENCE`
-positions. Drawing two permutations of a ≥ 5-key domain makes the orders differ
-with probability ≥ 0.99 per draw; at 1–4 keys the property skips the end-to-end
-arm and records the class, because there the arm is unreachable in principle
-rather than by bad luck. The generated domain's lower bound is raised from 1 to
-5 actions and edges for the same reason, and the skip is *counted*, not silent.
+The end-to-end arm therefore holds the **graph value fixed** and varies only
+insertion order: a single `GraphSpec` is materialized twice, so both
+`BuildGraph` values have identical key sets and identical values, and the
+property asserts the two emissions agree. A whole-bundle comparison over graphs
+with *differing* key sets does **not** establish I-1: a differing key set is a
+differing graph, so any divergence is legitimate, and any agreement says
+nothing about order independence. Varying the key set would have made the arm
+unfalsifiable rather than merely imprecise.
+
+Divergence in iteration order is therefore *not* required for the end-to-end
+arm, which is sound but may be vacuous on a given case. Two guards keep it
+honest. The collector-level arm perturbs an explicitly shuffled `Vec`, where
+divergence is by construction and is asserted. The end-to-end arm records, per
+case, whether the two iteration orders actually differed, and the end-to-end
+assertion is graded inconclusive — not passed — when they did not, so a run in
+which no case diverged cannot be reported as evidence for I-1. Drawing two
+permutations of a ≥ 5-key domain makes the orders differ with probability ≥
+0.99 per draw; at 1–4 keys the end-to-end arm is unreachable in principle
+rather than by bad luck, and the case is counted, not silently skipped. The
+generated domain's lower bound is raised from 1 to 5 actions and edges for the
+same reason.
 
 - **Method:** Proptest, metamorphic.
 - **Rationale:** `RM-4.3.1.a`.
@@ -686,8 +704,8 @@ rather than by bad luck. The generated domain's lower bound is raised from 1 to
   most 200 explicit outputs in total. Both `DependencyOrder` variants; serial
   edges get 0 to 4 implicit dependencies so dyndep staging is genuinely
   exercised. The end-to-end arm requires at least `ORDER_MIN_DIVERGENCE` (5)
-  distinct keys in each collection and skips the case below that, recording the
-  skip.
+  distinct keys per collection before it treats a case as informative, and
+  otherwise records the case without asserting on it.
 - **Oracle:** the second emission — metamorphic. Additionally, a *differential*
   arm asserts that whenever
   `GraphView::from_build_graph(g_u) == GraphView::from_build_graph(g_v)`, the
@@ -697,15 +715,21 @@ rather than by bad luck. The generated domain's lower bound is raised from 1 to
   cannot catch two emissions being wrong in the same way; this arm can.
 - **Artefact:** `src/ninja_gen/determinism/order.rs`.
 - **Non-vacuity:**
-  - *Covers.* Per-case: the shuffle reordered; the two iteration orders
-    differed. Recorded classes must include the *intersection* multi-output ∧
-    phony ∧ dyndep-staged ∧ non-empty defaults, not only the marginals, and all
-    four combinations of `BuildEdge::always` and `Action::restat` — `DisplayEdge`
-    emits `restat` only when `edge.always && !action_restat`
-    (`src/ninja_gen/display_edge.rs:37`).
+  - *Covers.* Per-case: the shuffle reordered; and, separately, whether the two
+    iteration orders differed. Recorded classes must include the *intersection*
+    multi-output ∧ phony ∧ dyndep-staged ∧ non-empty defaults, not only the
+    marginals, and all four combinations of `BuildEdge::always` and
+    `Action::restat` — `DisplayEdge` emits `restat` only when
+    `edge.always && !action_restat` (`src/ninja_gen/display_edge.rs:37`).
   - *Mutation.* `MUT-EDGESORT` deletes `edges.sort_by_key` in both paths;
     `MUT-ACTIONSORT` deletes `actions.sort_by_key`. Each must fail the core
     property, which pinpoints the helper rather than the whole emission.
+  - *Honesty of the end-to-end arm.* The arm asserts emission equality over one
+    fixed graph value, so it is sound but can be vacuous for a case whose two
+    iteration orders coincide. It is graded inconclusive — not passed — when no
+    case in the run produced divergent iteration orders, and the run reports
+    that count. This is the trap `EP-M0` question 1 found at 1 key; the grading
+    is what stops the arm quietly degenerating into a no-op.
 
 ______________________________________________________________________
 
@@ -714,7 +738,7 @@ ______________________________________________________________________
 Statement: no source file under `src/ninja_gen/` iterates a
 `std::collections::HashMap` or `HashSet` (`.iter()`, `.keys()`, `.values()`,
 `.drain()`, or a `for` loop over the collection). Membership-only `HashSet` use
-is exempt, with the two existing `seen` sets named as the documented exemptions.
+is exempt, with the one existing set named as the documented exemption.
 
 - **Method:** a source-shape contract test, following
   `tests/whitaker_boundary_contract.rs` and
@@ -728,8 +752,11 @@ is exempt, with the two existing `seen` sets named as the documented exemptions.
 - **Artefact:** `tests/ninja_gen_hashmap_boundary.rs`.
 - **Non-vacuity:** the test is validated by temporarily adding an iterating
   `HashMap` to a scratch copy of `src/ninja_gen/mod.rs` and observing the
-  failure; the exemption list is asserted to be exactly the two known sets, so
-  adding a third requires a deliberate edit.
+  failure; the exemption list is asserted to be exactly the one known set
+  (`staged_sidecars`, `src/ninja_gen/dyndep.rs:246`), so adding a second
+  requires a deliberate edit. An earlier revision also held a `seen` set in the
+  deleted per-output storage path; `2c030fd1` removed it, and the obligation's
+  wording did not follow. See `ADR-030` amendment 3.
 
 ______________________________________________________________________
 
@@ -858,8 +885,37 @@ processes, produces byte-identical `build.ninja`.
   `Constraint 5` holds.
 - **Oracle:** byte equality between runs.
 - **Artefact:** `tests/ninja_determinism_process_tests.rs`.
-- **Non-vacuity:** the test is validated by `MUT-DEFSORT`, which makes two runs
-  diverge whenever the fixture declares more than one default.
+- **Non-vacuity:** the mutation is `MUT-ACTIONSORT`, **not** `MUT-DEFSORT`.
+  This distinction is the whole point of the obligation. `MUT-DEFSORT` deletes
+  `defs.sort()`, but for a *fixed* manifest the unsorted `default_targets`
+  order is fixed too, so both process runs emit the same unsorted line and
+  agree. A single-run snapshot with multi-default fixtures catches
+  `MUT-DEFSORT`; a two-run comparison cannot, because the fault is
+  deterministic across processes. What `OBL-PROCESS` exists to detect is a
+  fault whose value differs *between* processes — the `HashMap` `RandomState`
+  that is reseeded per process. `MUT-ACTIONSORT` deletes the sort that is the
+  *only* guard over the *only* unordered collection the emitter iterates:
+  `graph.actions` is an `IrHashMap`, so `write_action_rules`
+  (`src/ninja_gen/mod.rs:216`) reads it at risk and re-establishes determinism
+  by sorting. Deleting that sort restores per-process iteration order, and a
+  second process emits the action-rule blocks in a different order — a genuine
+  cross-process divergence.
+
+  An earlier revision of this obligation named `MUT-HASHMETA` here, on the
+  theory that a hasher deriving an `Action`'s identity from a per-process
+  `RandomState` would be caught. That theory is wrong. `MUT-HASHMETA` is a
+  sound validator for `OBL-ACTION`, which generates `Action` values directly,
+  sets `pool` to `Some`, and asserts that unequal actions do not collide — so
+  skipping `pool` merges two distinct generated actions and fails it. It is
+  *not* a sound validator here, because `OBL-PROCESS` never sees a generated
+  `Action`: `pool` is never `Some` in any construction site in `src/`, and the
+  hash `register_action` computes is recomputed identically in both processes
+  for a fixed manifest. Perturbing the hash *values* changes both runs alike,
+  so the two-run comparison cannot notice. Validate the test with
+  `MUT-ACTIONSORT`, and state in the test's own documentation which class of
+  fault it can and cannot see: it detects cross-process divergence, and it is
+  not a substitute for the single-run properties. `OBL-E2E` remains the place
+  where `MUT-DEFSORT` must fail.
 
 ______________________________________________________________________
 
@@ -1042,8 +1098,10 @@ statements in `Context and orientation`. It must state:
   precisely so the staging format can change;
 - a numbered precondition list each property can cite: well-formedness as a
   stated precondition of `generate`/`generate_bundle`; duplicate
-  `default_targets` emitted twice; output-less edges dropped while their rule
-  block is still emitted; duplicate rule names last-writer-wins;
+  `default_targets` emitted twice; output-less edges retained and emitted with
+  an empty left-hand side, their *constructibility* being an open reachability
+  question rather than an established drop; duplicate rule names
+  last-writer-wins;
 - which entry point the guarantee covers, and that sidecars are part of the
   artefact;
 - that error-path diagnostic selection and ordering are excluded;
@@ -1075,6 +1133,13 @@ Deriving the contract from the code at *this* revision, rather than from the
 plan, falsified two of the plan's own mechanism claims — both recorded as
 amendments in the ADR and corrected above. Neither changes what any obligation
 asserts; both change why. This is the whole reason `EP-M1` precedes the work.
+
+The review round that followed added two more amendments rather than more
+milestones: one corrected the same unsound `OBL-ORDER` mechanism in the ADR
+that the review had found in this plan, and one corrected the `OBL-NOHASH`
+exemption count. Amendments 3 and 4 are therefore review-driven where 1 and 2
+are derivation-driven. All four are mechanism corrections; no obligation's
+*assertion* changed at any point in `EP-M1`.
 
 ### EP-M2 — make room, and make the patch contract usable
 
@@ -1158,10 +1223,15 @@ edges, and 200 total outputs.
 *Assigned:* `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
 
 *Acceptance:* `make proptest` passes; `MUT-HASHMETA` fails `OBL-ACTION`;
-`MUT-DEFSORT` fails `OBL-E2E` and `OBL-PROCESS`. The directed duplicate-rule
-test demonstrates the excluded class genuinely diverges. *Conformance check:* if
-`EP-M0` question 2 answered "no", `ADR-NNN` must already have been amended in
-`EP-M1`; this milestone does not start otherwise.
+`MUT-ACTIONSORT` fails `OBL-PROCESS` — it also belongs to `EP-M5`, which owns
+its first falsification, and the two milestones share the mutation rather than
+duplicating it; `MUT-DEFSORT` fails `OBL-E2E` only. `MUT-DEFSORT` must *not* be
+required to fail `OBL-PROCESS`: a fixed manifest's `defs.sort()` deletion is
+deterministic across processes, so it cannot fail a two-run comparison. The
+directed duplicate-rule test demonstrates the excluded class genuinely
+diverges. *Conformance check:* if `EP-M0` question 2 answered "no", `ADR-NNN`
+must already have been amended in `EP-M1`; this milestone does not start
+otherwise.
 
 ### EP-M7 — inherited larger-N IR obligations
 
@@ -1190,9 +1260,13 @@ must be chosen deliberately and `FV-CONTRACT`'s stale citation corrected in the
 same commit; a decision, recorded in `Decision log`, on whether the six
 translated READMEs are updated in step or tracked separately;
 `docs/netsuke-design.md` §5.5 referencing `ADR-030` and correcting its
-unqualified determinism claim; a developers'-guide subsection; an annotation on
-`ADR-004` recording its deferred obligations as discharged; the roadmap marked
-done; and allocation of the real ADR number after re-checking remote branches.
+unqualified determinism claim; `docs/formal-verification-methods-in-netsuke.md`
+footnote `[^6]` repointed from the nonexistent `../src/ninja_gen.rs` to the
+module directory (footnote `[^9]` is correct and stays as-is); a
+developers'-guide subsection; an annotation on `ADR-004` recording its deferred
+obligations as discharged; the roadmap marked done; and confirmation that
+`ADR-030` is still the next free number after re-checking remote branches,
+since it was allocated in `EP-M1` and the claim is only as good as that sweep.
 
 *Acceptance:* all gates pass; every mutation patch applied and reverted once
 more against the final tree with results tabulated; classification counts
@@ -1256,17 +1330,17 @@ new `tests/` subdirectory with a `mod.rs` needs an explicit `mod` declaration.
 Mutation patches, named after the test they falsify per the house convention,
 with `__` for the module separator:
 
-| Handle           | Falsifies                               | Mutation                                                 |
-| ---------------- | --------------------------------------- | -------------------------------------------------------- |
-| `MUT-PATHKEY`    | `OBL-PATHKEY`                           | Delete `parts.sort_unstable()` in `path_key`.            |
-| `MUT-GUARD`      | `OBL-NOLOSS`                            | Move the path-character validator after the edge sort.   |
-| `MUT-EDGESORT`   | `OBL-ORDER`                             | Delete `edges.sort_by_key` in both paths.                |
-| `MUT-ACTIONSORT` | `OBL-ORDER`                             | Delete `actions.sort_by_key`.                            |
-| `MUT-DEFSORT`    | `OBL-DEFAULT`, `OBL-E2E`, `OBL-PROCESS` | Delete `defs.sort()`.                                    |
-| `MUT-DEFPOS`     | `OBL-DEFAULT`, `OBL-NINJA`              | Emit `default` before edge rendering.                    |
-| `MUT-HASHMETA`   | `OBL-ACTION`                            | Make the hasher skip `pool`.                             |
-| `MUT-DUPWITHIN`  | `OBL-DUP`                               | Disable the within-one-target half of `find_duplicates`. |
-| `MUT-CYCLEDEPTH` | `OBL-CYCLE`                             | Cap cycle traversal depth at 4.                          |
+| Handle           | Falsifies                  | Mutation                                                 |
+| ---------------- | -------------------------- | -------------------------------------------------------- |
+| `MUT-PATHKEY`    | `OBL-PATHKEY`              | Delete `parts.sort_unstable()` in `path_key`.            |
+| `MUT-GUARD`      | `OBL-NOLOSS`               | Move the path-character validator after the edge sort.   |
+| `MUT-EDGESORT`   | `OBL-ORDER`                | Delete `edges.sort_by_key` in both paths.                |
+| `MUT-ACTIONSORT` | `OBL-ORDER`, `OBL-PROCESS` | Delete `actions.sort_by_key`.                            |
+| `MUT-DEFSORT`    | `OBL-DEFAULT`, `OBL-E2E`   | Delete `defs.sort()`.                                    |
+| `MUT-DEFPOS`     | `OBL-DEFAULT`, `OBL-NINJA` | Emit `default` before edge rendering.                    |
+| `MUT-HASHMETA`   | `OBL-ACTION`               | Make the hasher skip `pool`.                             |
+| `MUT-DUPWITHIN`  | `OBL-DUP`                  | Disable the within-one-target half of `find_duplicates`. |
+| `MUT-CYCLEDEPTH` | `OBL-CYCLE`                | Cap cycle traversal depth at 4.                          |
 
 Nine, not the first draft's eleven. Two were cut because the existing nightly
 `cargo-mutants` job (`.github/workflows/mutation-testing.yml`, 03:05 UTC over
@@ -1468,8 +1542,12 @@ which proposed a separate fix for those files, is withdrawn with it.
 independently drawn insertion orders of the same key set frequently produce the
 *same* iteration order, and at small sizes no other order is reachable at all.
 The `OBL-ORDER` section above records the measurements and the replacement
-design: a well-separated pair of key sets, with the end-to-end arm skipped and
-counted below five distinct keys.
+design: the graph value is held fixed, the guaranteed perturbation moves to the
+collector-level arm over an explicitly shuffled `Vec`, and the end-to-end arm
+is counted and graded inconclusive when no case's iteration orders diverged.
+`EP-M1`'s review round later found that the first replacement — a
+well-separated pair of *key sets* — was itself unsound, and corrected it; see
+`ADR-030` amendment 4 and the fourth revision note.
 
 **Question 2 — `OBL-E2E` holds today.** Twenty-four declaration permutations of
 a four-target manifest (including reversals and rotations), lowered and
@@ -1611,8 +1689,10 @@ leaks now live there rather than here.
 - [x] (2026-09-27T00:00:00Z) `EP-M0` question 2: `OBL-E2E` holds across 24
       declaration permutations; the excluded rule-name class is reachable.
 - [x] (2026-09-27T00:00:00Z) `EP-M0` question 1: the bounded
-      re-materialization loop is unsound at small N; `OBL-ORDER` rewritten to
-      draw a well-separated pair.
+      re-materialization loop is unsound at small N. `OBL-ORDER` was first
+      rewritten to draw a well-separated pair of key sets; that replacement was
+      itself found unsound in the `EP-M1` review round and superseded by the
+      fixed-graph-value arm (see the fourth revision note).
 - [x] (2026-09-27T00:00:00Z) `EP-M0` question 4: shrinking does not converge on
       a gradient-free predicate; `Tolerance 5` and a new `Risk` added.
 - [x] (2026-09-27T00:00:00Z) Recorded all `EP-M0` answers and deleted the
@@ -1623,6 +1703,34 @@ leaks now live there rather than here.
       `docs/contents.md`. Reading the code to state the contract found two
       defects in this plan, both recorded as amendments in the ADR and
       corrected here (see `Surprises & discoveries`).
+- [x] (2026-10-10T00:00:00Z) `EP-M1` review round: `coderabbit review --agent`
+      returned four findings, disposed **accept, accept, already fixed,
+      decline**. Two were major design defects in `OBL-ORDER` and `OBL-PROCESS`
+      and are corrected; the third was raised against the committed revision and
+      is already fixed in the tree; the fourth asked for a bare ADR `Status`
+      value, which the style guide's operative sentence forbids, and is
+      declined with the style-guide citation and the ADR corpus as evidence. A
+      fifth class the review did not raise was found by sweeping both
+      documents: the `OBL-ORDER` defect recurred unswept in the ADR's `I-1`
+      (`ADR-030` amendment 4), and the `Amendments` intro miscounted. A sixth
+      was found by re-deriving the mechanism rather than propagating it:
+      finding 2's proposed remedy (`MUT-HASHMETA` for `OBL-PROCESS`) is itself
+      unsound, and was superseded by `MUT-ACTIONSORT` before commit. Six
+      `Decision log` entries, four `ADR-030` amendments, and the mutation table
+      reflect the corrected positions.
+- [x] (2026-10-10T00:00:00Z) The three Markdown gates passed on the frozen
+      correction, at `HEAD`
+      `593c7b745c52fb60e0c9b3acb136a365d0c7d005`. `make check-fmt` exit 0,
+      "167 files left unchanged"; `make markdownlint` exit 0, spelling
+      prerequisite executed and "0 issues in 0 files"; `make nixie` exit 0,
+      "All diagrams validated successfully!". Logs:
+      `/tmp/check-fmt-netsuke-4-3-1-proptests-for-deterministic-ninja-emission.out`,
+      `/tmp/markdownlint-netsuke-4-3-1-proptests-for-deterministic-ninja-emission.out`,
+      `/tmp/nixie-netsuke-4-3-1-proptests-for-deterministic-ninja-emission.out`.
+      The first `check-fmt` run failed and needed one `make fmt` cycle; the
+      `mdtablefix` change was proven to be a whitespace-only rewrap (identical
+      word sequence, unchanged ordered-list marker count) before it was
+      applied.
 - [ ] `EP-M2`: file splits, mutation-evidence contract, ordering helpers,
       `make proptest`.
 - [ ] `EP-M3`: shared strategy and compact `Debug`.
@@ -1675,7 +1783,11 @@ leaks now live there rather than here.
 - (2026-09-09) `process_rules` is last-writer-wins on duplicate rule names and
   no `DuplicateRule` error exists, so `OBL-E2E`'s unrestricted form is false.
 - (2026-09-09) An output-less target still registers its action, so its `rule`
-  block is emitted with no `build` statement referencing it.
+  block is emitted with no `build` statement referencing it. **Partly
+  superseded 2026-10-10:** the *rule block* half holds, but the framing implied
+  the edge is dropped. It is not — `insert_canonical_edge` pushes it and
+  `render_edges` emits a `build` line with an empty left-hand side. See
+  `ADR-030` amendment 2 and the corrected entry below.
 - (2026-10-10) *(Corrected.)* The `Constraint 10` mechanism,
   "`insert_edge_for_outputs` stores an edge once per output, so the emitter's
   sort sees `targets.len()`", was true on 2026-09-09 and stopped being true on
@@ -1723,6 +1835,71 @@ leaks now live there rather than here.
   design review's `ADR-NNN` placeholder resolves to a concrete number instead
   of being deferred. The plan's two-round-old claim that `adr-020` and
   `adr-021` were both multiply claimed is stale.
+- (2026-10-10) `docs/formal-verification-methods-in-netsuke.md`, the document
+  this plan descends from, carries three defects that `EP-M8` inherits and that
+  no earlier section of this plan had recorded. First, footnote `[^6]` links
+  `../src/ninja_gen.rs`, which does not exist — `src/ninja_gen` is a directory.
+  Second, footnote `[^9]` links `../src/manifest/mod.rs`, which **does** exist,
+  so that link is correct and must not be "fixed". Third, line 311 cites a
+  README promise "a reproducible, fully static dependency graph" attributed to
+  "line 17"; the phrase appears nowhere in `README.md`, and line 17 is a badge
+  definition block. The plan already records the stale citation; the two
+  footnote findings are new and are now named in `EP-M8`'s scope. **Correction
+  to an earlier note in this session:** the `[^9]` path was believed broken
+  too. It is not. Probe the path before recording a documentation defect, and
+  re-probe at the tree you are correcting.
+- (2026-10-10) Prose written *for* a gate can still fail a gate, and the two
+  gates here disagree about what is legal. Three defects introduced by the
+  review-round corrections, all caught by `make check-fmt` and
+  `make markdownlint` on the first re-gate:
+  - `MD049` requires *underscore* emphasis, and the house prose uses it
+    throughout. Writing `*key sets*` instead of `_key sets_` is a lint error,
+    not a style preference.
+  - `MD033` rejects inline HTML, so a prose mention of an angle-bracketed
+    placeholder such as `<title>` must be in backticks or reworded.
+  - `mdtablefix` reflows any paragraph whose lines are not already at the
+    canonical wrap, so *adding* a sentence to a paragraph re-opens
+    `make check-fmt` for that paragraph. Rewrap as part of the edit, or expect
+    `make fmt` to touch the file again.
+
+  **Lesson:** the three Markdown gates are not redundant, and a docs-only
+  change is not exempt from the edit-then-gate cycle. Run them after prose
+  edits, not only after structural ones.
+- (2026-10-10) **The remedy proposed by a review finding can be as unsound as
+  the defect it names, and it has to be re-derived rather than adopted.**
+  Finding 2 correctly identified that `MUT-DEFSORT` cannot fail a two-run
+  comparison. Its remedy — validate `OBL-PROCESS` with `MUT-HASHMETA`, on the
+  grounds that the hasher would then derive an `Action`'s identity from a
+  per-process `RandomState` — was written into three places before it was
+  checked, and it is wrong. `OBL-ACTION` generates `Action` values directly and
+  does set `pool`, so `MUT-HASHMETA` is a sound validator *there*; but
+  `OBL-PROCESS` never sees a generated `Action`. `pool` is never `Some` at any
+  construction site in `src/`, and `register_action` recomputes the same hash
+  from the same fixed manifest in both processes, so perturbing hash *values*
+  moves both runs together. The right validator is `MUT-ACTIONSORT`, which
+  deletes the only guard over the only unordered collection the emitter
+  iterates: `graph.actions` is an `IrHashMap` and `actions.sort_by_key` in
+  `write_action_rules` is what re-establishes order.
+
+  **Lesson:** a mechanism claim is verified against `src/`, not against the
+  plausibility of the sentence carrying it. The check that would have caught
+  this on first writing is cheap — grep the field the mutation perturbs, and
+  confirm it is ever populated. Two `grep`s (`pool: Some`, `RandomState`) took
+  under a second and falsify the whole argument.
+- (2026-10-10) The sweep for that fourth defect found it in the fourth place it
+  was written, not the first: the plan's non-vacuity note, its mutation table
+  row, and the `EP-M6` acceptance criterion all propagated the unsound remedy
+  mechanically, and only the `Decision log` entry re-deriving the mechanism
+  exposed the error. **Lesson:** when a correction is mechanical propagation of
+  a claim, re-derive the claim at exactly one site, before propagating.
+
+- (2026-10-10) A `Progress` checkbox asserted "All three Markdown gates green
+  on the correction" *before* the correction had been gated, and the first
+  re-gate then failed on two lints. A checkbox is a claim about evidence that
+  exists, not a statement of intent, and a plan whose progress log overstates
+  its verification is worse than one with no log. The entry was rewritten to
+  cite the gate result rather than predict it. **Rule adopted:** no `Progress`
+  entry may cite a gate outcome that is not already in a log file.
 
 ## Decision log
 
@@ -1810,14 +1987,17 @@ leaks now live there rather than here.
   in flight. Deferring allocation again risks a second collision, and `EP-M1`
   needs the number to write the filename. Date/Author: 2026-09-27 /
   implementation agent.
-- Decision: `OBL-ORDER`'s end-to-end arm draws a well-separated pair of key
-  sets instead of re-materializing until iteration orders differ, and raises
-  the generated lower bound to five actions and five edges. Rationale: `EP-M0`
-  question 1 measured that the original loop cannot succeed below five keys
-  (200/200 failures at one key, 23/200 at two), so it would have failed every
-  minimal counter-example. Failing a case for a property the *domain* makes
-  unreachable is a flakiness source, and this repository has an explicit
-  no-retry policy. Date/Author: 2026-09-27 / implementation agent.
+- Decision: `OBL-ORDER`'s end-to-end arm stops re-materializing until iteration
+  orders differ, and the generated lower bound rises to five actions and five
+  edges. Rationale: `EP-M0` question 1 measured that the original loop cannot
+  succeed below five keys (200/200 failures at one key, 23/200 at two), so it
+  would have failed every minimal counter-example. Failing a case for a
+  property the *domain* makes unreachable is a flakiness source, and this
+  repository has an explicit no-retry policy. The replacement first chosen — a
+  well-separated pair of key sets — was itself unsound and was superseded on
+  2026-10-10 by the fixed-graph-value arm; the five-key lower bound survives
+  that correction unchanged, since it bounds generation rather than the
+  comparison. Date/Author: 2026-09-27 / implementation agent.
 - Decision: add `Tolerance 5`, bounding what a representation-independent
   property may assert, and a matching `Risk`. Rationale: `EP-M0` question 4
   showed shrinking does not converge for such predicates, so the plan could
@@ -1871,6 +2051,73 @@ leaks now live there rather than here.
   Both corrections are recorded as `ADR-030` amendments, because the
   obligations cite that document as their authority. Date/Author: 2026-10-10 /
   implementation agent.
+- Decision: hold the graph **value** fixed in `OBL-ORDER`'s end-to-end arm and
+  grade the arm inconclusive when no case's iteration orders diverged, rather
+  than requiring a differing key set to force divergence. Rationale: a pair of
+  graphs with different key sets is a pair of different graphs, so any bundle
+  difference is legitimate and any agreement is uninformative — the arm could
+  not have established `I-1` in either outcome. The weaker arm is the sound
+  one; the collector-level arm over an explicitly shuffled `Vec` supplies the
+  guaranteed perturbation the end-to-end arm cannot. Date/Author: 2026-10-10 /
+  implementation agent.
+- Decision: validate `OBL-PROCESS` with `MUT-ACTIONSORT`, not `MUT-DEFSORT`,
+  and remove `OBL-PROCESS` from `MUT-DEFSORT`'s coverage. Rationale:
+  `MUT-DEFSORT` deletes a sort whose input order is fixed for a fixed manifest,
+  so it is deterministic across processes and cannot fail a two-run comparison;
+  using it as the validator would have produced a test that passes whether or
+  not it can see anything. `OBL-PROCESS` exists to catch *cross-process*
+  divergence, which is the `HashMap` `RandomState` class, and `MUT-ACTIONSORT`
+  is the mutation that reaches it: `graph.actions` is an `IrHashMap`, and
+  `actions.sort_by_key` in `write_action_rules` is the only guard
+  re-establishing a deterministic order over it. Date/Author: 2026-10-10 /
+  implementation agent.
+- Decision: **supersede** the first correction of the entry above, which had
+  named `MUT-HASHMETA` as `OBL-PROCESS`'s validator. Rationale: that choice was
+  unsound, and the sweep that caught it is the reason a claim is worth
+  re-deriving before it is preferred to another agent's. `MUT-HASHMETA` does
+  validly falsify `OBL-ACTION` — that property generates `Action` values
+  directly with `pool` set — but `OBL-PROCESS` never sees a generated `Action`.
+  `pool` is never `Some` in any construction site in `src/`, and the hash
+  `register_action` computes is recomputed identically in both processes for a
+  fixed manifest, so perturbing hash *values* moves both runs together. The
+  earlier entry's own *premise* about `MUT-DEFSORT` was and remains correct;
+  only its replacement was wrong. Date/Author: 2026-10-10 / implementation
+  agent.
+- Decision: **decline** the review finding that `ADR-030`'s `Status` must be a
+  bare closed-set value, and keep `Accepted` with its date and a one-sentence
+  summary on the following line. Rationale: the review cited the style guide's
+  template placeholder, but the guide's operative sentence
+  (`docs/documentation-style-guide.md:378-379`) *requires* "the date and a
+  brief summary of what was decided" for `Accepted`. Complying would have
+  violated the rule invoked to support the finding. Corpus evidence: `adr-002`
+  uses the same shape, `adr-019` and `adr-027` append a summary sentence, and
+  no gate in `tests/`, `scripts/`, or `tests/workflow_contracts/` reads the
+  field. The value is still the closed-set token; only the qualifier is
+  retained, and it sits outside the value's own paragraph. Date/Author:
+  2026-10-10 / implementation agent.
+- Decision: correct `ADR-030`'s `I-1` as well as the plan's `OBL-ORDER`, and
+  record the change as `Amendment 4` rather than as an edit to the ADR's body.
+  Rationale: both documents stated the same unsound mechanism — the review
+  found it in the plan and reported the ADR as contradicting the plan, but the
+  ADR carried the defect too, at `:169`–`:173`. Because the ExecPlan's
+  obligations cite the ADR as their authority, the correction is recorded where
+  a reader arrives from that citation. This is the fourth instance of a single
+  pattern: a defect corrected in one document recurring unswept in its sibling.
+  Date/Author: 2026-10-10 / implementation agent.
+- Decision: keep `(2026-09-09)` and `(2026-09-27)` entries in
+  `Surprises & discoveries` and `Progress` in their original wording, adding a
+  dated correction beside them rather than rewriting them. Rationale: a dated
+  entry records what was believed on that date, and a later reader needs to see
+  that the belief was held and then corrected. Rewriting it destroys the
+  evidence that the correction happened. The review asked for one such rewrite;
+  it is declined for this reason. Date/Author: 2026-10-10 / implementation
+  agent.
+- Decision: sweep and re-verify **every** `src/` line citation in both documents
+  after a citation check exposed drift, instead of fixing the cited instances.
+  Rationale: the drift has a single cause — `2c030fd1` rewrote the files these
+  plans cite — so instances are symptoms, not the defect. Fixing only reported
+  instances would leave the next reader trusting five more stale numbers.
+  Date/Author: 2026-10-10 / implementation agent.
 
 ## Design review findings
 
@@ -1890,9 +2137,14 @@ accepted but deferred, so they are not lost:
   existing files deserve a separate fix.~~ **Withdrawn 2026-09-27:** the
   premise was falsified by `EP-M0` question 5. The files are live and need no
   fix.
-- `src/ninja_gen/mod.rs:178` clones a key that is dead immediately after
+- ~~`src/ninja_gen/mod.rs:178` clones a key that is dead immediately after
   (`seen.insert(key.clone())`), where `dyndep.rs:161` already moves it. A
-  trivial follow-up, not taken here under `Constraint 1`.
+  trivial follow-up, not taken here under `Constraint 1`.~~ **Withdrawn
+  2026-10-10:** the cited line is now a `graph.actions.get(...)` lookup, there
+  is no `insert(key.clone())` anywhere in `src/ninja_gen/`, and the
+  `staged_sidecars` insert at `dyndep.rs:286` already clones without a needless
+  rebind. `2c030fd1` removed the code this note described, so the follow-up is
+  moot.
 - The review recommended splitting `EP-M7` into a sibling roadmap item and
   dropping `OBL-NINJA` entirely. Both were declined: the first because the user
   directed the wide scope, the second because the measured `-n` finding shows
@@ -1908,6 +2160,73 @@ generalized mutation-evidence contract held up.
 
 ## Revision note
 
+- 2026-10-10 (fourth revision, `EP-M1` review round): a CodeRabbit pass over
+  the `EP-M1` commit returned four findings. Dispositions were **accept,
+  accept, already fixed, decline**. A fifth defect the review did not raise was
+  found by sweeping both documents, and a sixth — an unsound remedy adopted
+  from finding 2 — by re-deriving its mechanism against `src/`.
+
+  Accepted — finding 1 (major, `OBL-ORDER`): the end-to-end arm varied the *key
+  set* rather than only insertion order, which cannot establish `I-1` because a
+  differing key set is a differing graph. The arm now holds the graph value
+  fixed and grades itself inconclusive when no case's iteration orders
+  diverged. The review's own verdict on the rest of this finding was a partial
+  misread and is not acted on: it suggested the ADR contradicted the plan, but
+  the ADR carried the *same* defect at `:169`–`:173`, so both documents needed
+  the same correction rather than a reconciliation. That second site was found
+  by the sweep below and recorded as `ADR-030` amendment 4.
+
+  Accepted — finding 2 (major, `OBL-PROCESS`): `MUT-DEFSORT` is deterministic
+  across processes for a fixed manifest, so it can never fail a two-run
+  comparison. The finding propagated to two further assertions that repeated the
+  `MUT-DEFSORT` claim; both are corrected. The remedy first adopted here —
+  validating `OBL-PROCESS` with `MUT-HASHMETA` — was itself unsound and was
+  superseded before commit by `MUT-ACTIONSORT`; see the two `Decision log`
+  entries and the second `(2026-10-10)` surprise. This is the second defect in
+  the round that was a wrong *mechanism* rather than a wrong assertion, the
+  first being finding 1's key-set arm.
+
+  Already fixed — finding 3 (minor, the `EP-M1` instruction list). The live
+  tree has said "output-less edges **retained** and emitted with an empty
+  left-hand side" since the third revision. The finding was raised against the
+  committed revision `593c7b74`, which still carried the old text; the working
+  tree had already moved past it. Its second half — that the dated
+  `(2026-09-09)` historical entry should be rewritten — is declined: a dated
+  `Surprises & discoveries` entry is a record of what was believed then, and the
+  `(2026-10-10)` entry immediately below it carries the correction.
+
+  **Declined** — finding 4 (minor, `ADR-030`'s `Status`). The finding asked for
+  a bare `Accepted.` on the authority of the style guide's template
+  placeholder. The operative rule in
+  `docs/documentation-style-guide.md:378-379` says the opposite: "For
+  `Accepted` status, include the date and a brief summary of what was decided."
+  Corpus evidence agrees — `adr-002` carries the same summary shape, `adr-019`
+  and `adr-027` append one, and nothing in `tests/`, `scripts/`, or
+  `tests/workflow_contracts/` enforces the bare form. Complying would have
+  violated the rule cited to support it. *Observation, not acted on:* the
+  heading is `# Architecture decision record (ADR): <title>` where the template
+  and `adr-002` use `# Architectural decision record (ADR) NNN:` plus a title.
+  The whole corpus varies here and no gate reads it.
+
+  Found by the sweep, not raised by the review — five items in three classes.
+  *Unfixed twin:* the `OBL-ORDER` defect recurred verbatim in `ADR-030`'s
+  `I-1`, which is `Amendment 4`. *Stale-revision drift* of the same `2c030fd1`
+  origin that produced amendments 1 and 2, in five more places
+  (`Constraint 10`'s blueprint block, `OBL-NOHASH`'s "two `seen` sets", a
+  withdrawn `mod.rs:178` note, and six line citations), recorded as
+  `Amendment 3` and the citation sweep below. *Count:* the `Amendments` intro
+  said "Two facts" with three amendments below it; corrected to four once
+  `Amendment 4` landed. Every `src/` line citation in both documents was
+  re-verified against the tree at this revision. *Lesson:* when a review finds
+  a design defect in one document and the sibling document states the same
+  mechanism, fix both — the majority of these findings were the unfixed twin of
+  something already corrected.
+
+  *Process note:* the first pass at these corrections left the plan's
+  `Progress` entry asserting "All three Markdown gates green on the correction"
+  before the correction had been gated. A checkbox is a claim about evidence,
+  so it was rewritten to point at the gate result rather than to predict it. Do
+  not let a Progress entry outrun the gate log it cites.
 - 2026-10-10 (third revision, `EP-M1`): `ADR-030` is written and indexed. Two
   defects found while deriving the contract from the code at the implementation
   revision, both corrected here and recorded as `ADR-030` amendments: the
