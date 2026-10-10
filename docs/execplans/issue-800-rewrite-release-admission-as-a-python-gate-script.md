@@ -47,6 +47,30 @@ once the shell scripts are deleted.
       passes against `.github/scripts/release_admission.py`, including the
       PR #770 newline-revision cases in both modes.
 - [ ] Replace the executable fakes with cmd-mox and port the case matrix.
+      Design settled:
+      - The subprocess boundary stays. The gate is still invoked as a real
+        process, because only that exercises its shebang, its exit status, its
+        artefact files, and its redirections. cmd-mox replaces the *fake
+        executables*, intercepting at the command-name level.
+      - `python3` is never shimmed. cmd-mox's POSIX shims are symlinks whose
+        shebang is `#!/usr/bin/env python3`, so a shim named `python3` would
+        resolve its own interpreter back to itself. The clock therefore runs
+        as the real `python3` by default, and the tests that need a
+        deterministic or failing clock point
+        `NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER` at a shim named `clock`.
+      - `gh` and `git` are shimmed under their documented default names, so
+        the default resolution path is what the tests exercise; an
+        operator-supplied adapter path is covered by pointing an adapter
+        variable at a shim by absolute path.
+      - The in-process handler cannot ignore `SIGTERM`, so the
+        term-ignoring-timeout case moves out of the gate matrix and becomes a
+        direct test of `commands.run_bounded_sync` against a real
+        TERM-trapping child. In the gate's records a TERM-ignoring child and a
+        compliant one are indistinguishable: `run_bounded` returns `None` on
+        either, and `classify_result` maps that to `124`.
+      - `NETSUKE_FAKE_*` variables disappear. Behaviour is configured by
+        registering doubles, which is cmd-mox's own idiom, and the assertions
+        move onto the doubles' recorded invocations.
 - [ ] Switch `release.yml` to the Python entry point and delete the shell.
 - [ ] Update the workflow contract, ADR-020, and the developers' guide.
 
@@ -55,8 +79,8 @@ once the shell scripts are deleted.
 - Cyclopts' default result action, `print_non_int_return_int_as_exit_code`,
   returns an integer command result unchanged. The first version of the entry
   point called `app()` and then returned a literal `0`, which discarded the
-  gate's own status and made every enforced failure exit successfully. The
-  fix is to return `app()`'s value; the alternative considered was an explicit
+  gate's own status and made every enforced failure exit successfully. The fix
+  is to return `app()`'s value; the alternative considered was an explicit
   `sys.exit(admission.finish())` inside `main`, which would move the process
   boundary into the command and make the function untestable in process.
 

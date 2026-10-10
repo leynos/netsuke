@@ -263,7 +263,8 @@ test-release-admission: ## Validate the release-admission runtime contract
 		--with 'cmd-mox==0.2.0' --with 'cuprum==0.1.0' --with 'cyclopts==4.25.3' \
 		python -m pytest scripts/tests/test_release_admission_metrics.py \
 		scripts/tests/test_release_admission_metric_failures.py \
-		scripts/tests/test_release_admission_metric_boundedness.py -c /dev/null \
+		scripts/tests/test_release_admission_metric_boundedness.py \
+		scripts/tests/test_release_admission_metric_degradation.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 
 test-coverage-artifact: ## Test hostile LCOV artefact validation
