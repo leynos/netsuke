@@ -260,6 +260,38 @@ def fail_nth_call(number: int, message: str) -> Wrapper:
     return wrapper
 
 
+def fail_first_calls(number: int, status: int) -> Wrapper:
+    """Return a wrapper that refuses the first *number* invocations.
+
+    A sink that refuses a bounded prefix and then recovers is how a guarded
+    write is separated from an unguarded one: the metric writes an operation
+    makes sit inside a call the shell negated, so their failure was suspended
+    rather than adopted, while the gate's own record is written outside that
+    guard and its status becomes the gate's.
+
+    Returns
+    -------
+    Wrapper
+        A wrapper that refuses *number* invocations and delegates the rest.
+
+    Notes
+    -----
+    *status* is the exit status the refused invocations report. It is passed
+    in rather than fixed because the cases using this wrapper observe a status
+    the gate never produces: an adapter may choose any, and the gate adopts
+    what it chose.
+    """
+    remaining = itertools.count(number, step=-1)
+
+    def wrapper(invocation: Invocation, handler: Handler) -> tuple[str, str, int]:
+        """Refuse while the countdown is positive, then answer normally."""
+        if next(remaining) > 0:
+            return "", "the sink refused the record\n", status
+        return handler(invocation)
+
+    return wrapper
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class FailureCase:
     """Describe one controlled admission failure and its bounded category.
@@ -357,6 +389,7 @@ __all__ = (
     "delay_commit_query",
     "delay_workflow_run_query",
     "fail_commit_query",
+    "fail_first_calls",
     "fail_git",
     "fail_nth_call",
     "fail_workflow_run_query",

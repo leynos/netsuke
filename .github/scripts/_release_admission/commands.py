@@ -82,7 +82,7 @@ class Programs:
     def from_environment(cls) -> Programs:
         """Read the three adapter names, defaulting unset *and* empty values.
 
-        The shell used ``${VAR-default}`` with the colon, so an empty value
+        The shell used ``${VAR:-default}``, with the colon, so an empty value
         substituted the default exactly as an unset one did. A configuration
         that exported an empty adapter therefore ran ``gh``, ``git``, or
         ``python3``, and that is what is reproduced here rather than letting

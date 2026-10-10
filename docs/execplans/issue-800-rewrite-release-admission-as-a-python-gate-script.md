@@ -2,6 +2,11 @@
 
 Status: IN PROGRESS
 
+Delivered and validated; the status stays `IN PROGRESS` because the change is
+still open for review. The style guide reserves `COMPLETE` for a plan whose
+work is delivered *and* whose review has concluded, and this one has not
+concluded yet.
+
 ## Purpose
 
 Release admission is roughly 300 lines of Bash under `.github/scripts/`
@@ -39,7 +44,9 @@ once the shell scripts are deleted.
       environment variables.
 - [x] Implement the Python gate. `.github/scripts/release_admission.py` is the
       entry point; `.github/scripts/_release_admission/` holds six modules
-      (`policy`, `records`, `delivery`, `commands`, `telemetry`, `gate`).
+      (`policy`, `records`, `delivery`, `commands`, `telemetry`, `gate`). The
+      runtime-test support in `scripts/tests/` is a facade and five modules,
+      after the two-stage split recorded under *Decisions and findings*.
 - [x] Clear the Python gates. `make lint-python` passes all five stages:
       Ruff 0.16.4, Pylint 4.0.9 at 10.00/10, the df12 house lints, ambrleaks,
       and interrogate at 100%.
@@ -48,7 +55,7 @@ once the shell scripts are deleted.
       PR #770 newline-revision cases in both modes.
 - [x] Replace the executable fakes with cmd-mox and port the case matrix.
       `release_admission_test_fakes.py` is deleted, the four runtime modules
-      run through registered doubles, and the modules pass with 35 cases in
+      run through registered doubles, and the modules pass with 37 cases in
       under 90 seconds. The design the port settled on, and the reasons:
       - The subprocess boundary stays. The gate is still invoked as a real
         process, because only that exercises its shebang, its exit status, its
@@ -120,7 +127,11 @@ once the shell scripts are deleted.
   `C0302`, `max-module-lines = 400`). `release_admission_test_support.py` was
   exactly 400 lines at HEAD, so the runtime-test support was split into a facade
   (`..._test_support.py`), the subprocess harness (`..._test_harness.py`), and
-  the record assertions (`..._test_records.py`).
+  the record assertions (`..._test_records.py`). The cmd-mox port then split
+  three further modules out of the facade: the doubles (`..._test_doubles.py`),
+  the wrappers each case composes (`..._test_scenarios.py`), and the case table
+  (`..._test_cases.py`). The support is therefore a facade and five modules,
+  against the three of the first split.
 - The repository has no `pylint: disable` comment anywhere and no function
   over four parameters outside the new gate. AGENTS.md requires grouping
   parameters into meaningfully named structs, so `records.py` gained the
@@ -142,10 +153,11 @@ deferred in the test module rather than simulated.
 
 ## Outcomes and retrospective
 
-Complete. The Bash gate is now a Cyclopts `uv run --script` entry point with
-its implementation split across six modules, its behaviour held to a frozen
-oracle, and its tests running through cmd-mox doubles. `release.yml` invokes
-the Python entry point; the three shell scripts are deleted.
+The port is complete, validated, and open for review. The Bash gate is now a
+Cyclopts `uv run --script` entry point with its implementation split across six
+modules, its behaviour held to a frozen oracle, and its tests running through
+cmd-mox doubles. `release.yml` invokes the Python entry point; the three shell
+scripts are deleted.
 
 ### Behaviour preserved
 
@@ -193,8 +205,9 @@ change admission semantics beyond the scope of a form change.
   Returning a literal `0` after `app()` silently discards every enforced
   failure's status; return `app()` itself.
 - The 400-line module ceiling is enforced for Python too (Pylint `C0302`), so
-  the runtime-test support had to be split into a facade and four modules
-  before the port was possible.
+  the runtime-test support had to be split twice: into a facade and three
+  modules before the port, then into a facade and five once cmd-mox replaced
+  the executable fakes.
 - `os.environ.get(VAR, default)` is not Bash's `${VAR-default}`: the dash
   substitutes only when the variable is unset. An exported empty
   `NETSUKE_RELEASE_ADMISSION_ENFORCE` must reach the mode check, not be
@@ -205,3 +218,19 @@ change admission semantics beyond the scope of a form change.
   leaving a clean checkout dirty after a spelling run. That one-line
   regeneration is committed separately at the head of this branch so a reviewer
   can split it without touching the port's commits.
+
+## Revision note
+
+- 2026-10-10 — Initial ExecPlan for `#800`: freeze the Bash gate's behaviour,
+  port it to a Cyclopts `uv run --script` entry point, port the runtime cases
+  to cmd-mox, switch `release.yml` over, and delete the shell.
+- 2026-10-10 — Review pass. Two contradictions in this plan were corrected
+  rather than papered over. The ExecPlan claimed a *facade and four modules*
+  while its own account of the first split named two, and the case count had
+  gone stale at 35; both counts are now stated per stage, because the support
+  was split twice — into a facade and three modules before the port, and into a
+  facade and five once cmd-mox replaced the executable fakes. The status stays
+  `IN PROGRESS` with a review caveat beneath the header, since the style guide
+  reserves `COMPLETE` for a plan whose review has concluded. The port is
+  unaffected: no source file, gate, workflow, or test case changed with this
+  note.

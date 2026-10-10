@@ -16,8 +16,8 @@ Example (run from the repository root)::
         -c /dev/null --rootdir=. -p no:cacheprovider
 """
 
+import os
 import pathlib
-import subprocess  # ruff: ignore[suspicious-subprocess-import] - the bound under test spawns a child.
 import sys
 import tempfile
 from pathlib import Path
@@ -262,8 +262,8 @@ def _launch_bound(
     return commands.run_bounded_sync(command, timeout_seconds=timeout_seconds)
 
 
-def _process_state(pid: int) -> str | None:
-    """Return the process state letter, or ``None`` once the pid is gone.
+def _process_exists(pid: int) -> bool:
+    """Return whether the pid still names a live process.
 
     Parameters
     ----------
@@ -272,17 +272,31 @@ def _process_state(pid: int) -> str | None:
 
     Returns
     -------
-    str | None
-        The one-letter state from ``ps``, or ``None`` when no such process
-        remains, which is how the escalation's reap is observed.
+    bool
+        Whether the process is still there, which is how the escalation's reap
+        is observed.
+
+    Notes
+    -----
+    Signal ``0`` is the portable liveness question: it performs the permission
+    and existence checks without delivering a signal, and raises
+    :class:`ProcessLookupError` exactly when no such process remains. It
+    replaces an earlier ``ps`` probe, which answered the same question but
+    depended on a binary at a fixed path and on how that binary spells its
+    output. The child is reaped by the call under test, so the zone where it
+    could vanish between this check and the previous assertion belongs to that
+    call rather than here.
+
+    A process the kernel has reaped but whose identifier another process has
+    since reused would be reported as alive. The window is microscopic and the
+    mistake is in the safe direction: it fails this test rather than passing a
+    broken one.
     """
-    probe = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed probe argv.
-        ["/usr/bin/ps", "-o", "stat=", "-p", str(pid)],
-        capture_output=True,
-        check=False,
-        text=True,
-    )
-    return probe.stdout.strip() or None
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
 
 
 def test_bounded_run_escalates_against_a_child_that_ignores_sigterm(
@@ -327,6 +341,6 @@ def test_bounded_run_escalates_against_a_child_that_ignores_sigterm(
         "an elapsed bound must classify as the timeout status"
     )
     pid = int(pid_file.read_text(encoding="utf-8").strip())
-    assert _process_state(pid) is None, (
+    assert not _process_exists(pid), (
         "the escalate-to-kill path must leave no surviving child"
     )

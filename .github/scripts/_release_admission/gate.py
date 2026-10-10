@@ -106,12 +106,12 @@ def load_configuration() -> Configuration:
     """
     repository = _required(REPOSITORY_VARIABLE, REPOSITORY_DIAGNOSTIC)
     revision = _required(REVISION_VARIABLE, REVISION_DIAGNOSTIC)
-    temporary = os.environ.get("RUNNER_TEMP") or DEFAULT_TEMPORARY_DIRECTORY
+    temporary = Path(os.environ.get("RUNNER_TEMP") or DEFAULT_TEMPORARY_DIRECTORY)
     metrics_file = Path(
-        os.environ.get(METRICS_FILE_VARIABLE) or f"{temporary}/{METRICS_FILE_NAME}"
+        os.environ.get(METRICS_FILE_VARIABLE) or temporary / METRICS_FILE_NAME
     )
     trace_file = Path(
-        os.environ.get(TRACE_FILE_VARIABLE) or f"{temporary}/{TRACE_FILE_NAME}"
+        os.environ.get(TRACE_FILE_VARIABLE) or temporary / TRACE_FILE_NAME
     )
     _create_artefacts(metrics_file, trace_file)
     output = _required(OUTPUT_VARIABLE, OUTPUT_DIAGNOSTIC)
