@@ -387,10 +387,15 @@ question.
    `src/ninja_gen_property_tests/ninja_oracle.rs`, and ordinary assertions are
    permitted *after* the runner returns.
 10. Generated graphs stay within the roadmap bound of 50 actions and 100 edges,
-    **and** within a total of 200 explicit outputs. The second bound is the one
-    that governs cost: `insert_edge_for_outputs` stores an edge once per
-    output, so the emitter's sort sees `targets.len()`, not the edge count.
-    Without it, per-case cost swings 13-fold.
+    **and** within a total of 200 explicit outputs. The second bound is a
+    **cost budget**, not a correctness bound, and the mechanism once stated for
+    it is stale: `insert_edge_for_outputs` no longer stores an edge once per
+    output. Commit `2c030fd1` ("Store multi-output build edges once", #652/#714)
+    made it call `graph.insert_edge` directly, which pushes a single arena
+    entry, so `graph.edges()` yields the edge count and the emitter's sort sees
+    that rather than `targets.len()`. The bound is retained because the measured
+    per-case cost table was derived under it and the cost is real; the mechanism
+    is withdrawn. See `ADR-030`, amendment 1.
 11. All prose is en-GB-oxendict, wrapped at 80 columns; code blocks at 120.
     Markdown must be `mdtablefix`-canonical. After running `make fmt` over
     authored prose, read the diff: `--renumber` will silently convert a wrapped
@@ -589,10 +594,21 @@ explicit output appears exactly once on the left-hand side of a `build` line.
 
 This replaces the first draft's `OBL-GUARD`, which asserted a *mechanism*
 ("validation runs before sorting") as a proxy for the failure that matters. The
-failure that matters is the `seen` set dropping a real edge. Asserting the
-outcome survives refactors that legitimately move the validator, and it also
-catches the silent drop of output-less edges that `insert_edge_for_outputs`
-performs — which the first draft recorded as a surprise and left untested.
+failure that matters is a real edge being dropped between the graph and the
+emitted text. Asserting the outcome survives refactors that legitimately move
+the validator without weakening it.
+
+The "silent drop of output-less edges", which the first draft recorded as a
+surprise and this obligation was partly justified by, **does not survive a
+re-read**. `insert_canonical_edge` pushes unconditionally and `render_edges`
+renders every arena entry with no `seen` set, so an output-less edge is not
+dropped: it emits a `build` line with an empty left-hand side. Whether such a
+graph is constructible through the loader at all is unresolved — `Target::name`
+accepts `StringOrList::Empty`, which maps to an empty vector, and
+`get_target_display_name` tolerates the empty case, but `REJECTED_EMPTY` is an
+error for command lists and the name path is untested. `EP-M4` establishes
+reachability before either half of the claim is asserted. Recorded as `ADR-030`
+amendment 2.
 
 - **Method:** Proptest over well-formed graphs, plus directed tests for the
   known bypasses.
@@ -608,11 +624,14 @@ performs — which the first draft recorded as a surprise and left untested.
 - **Artefact:** `src/ninja_gen/determinism/no_loss.rs`.
 - **Non-vacuity:**
   - *Covers.* Per-case assertion that at least one graph in the run had a
-    multi-output edge (the case where the map holds several clones). Directed
-    cases pin the two bypasses.
+    multi-output edge. Directed cases pin the two bypasses, but only after
+    `EP-M4` has established what each actually does; until then the
+    output-less case is a reachability question, not a known bypass.
   - *Mutation.* `MUT-GUARD` moves `reject_unsupported_path_characters` after
-    the edge sort, which under a NUL-bearing path collapses two edges into one
-    and drops a `build` line.
+    the edge sort. The intended failure is that a path carrying an unsupported
+    character is sorted on and then rejected, so the run reports an error rather
+    than a dropped line. If `EP-M4` finds no reachable collapsing input, replace
+    the patch rather than keeping a mutation that demonstrates nothing.
 
 ______________________________________________________________________
 
@@ -1042,6 +1061,20 @@ statements in `Context and orientation`. It must state:
 *End state:* the contract exists and is reviewable before anything claims to
 verify it. *Acceptance:* `make markdownlint`, `make nixie`, `make check-fmt`
 pass; the ADR is indexed in `docs/contents.md`. *Recovery:* documentation-only.
+
+*Outcome:* `docs/adr-030-ninja-emission-determinism-contract.md` is written and
+indexed. It publishes one guarantee (`G-1`, process-level reproducibility over
+the five-element parameter tuple, sidecars included) and records the
+insertion-order, declaration-order, and within-edge statements as internal
+invariants `I-1` … `I-3`; five numbered preconditions `P-1` … `P-5` that
+obligations now cite instead of restating; four explicit non-promises `N-1` …
+`N-4`; the Kani argument; the rejected options with their real reasons; and the
+two domain-purity leaks.
+
+Deriving the contract from the code at *this* revision, rather than from the
+plan, falsified two of the plan's own mechanism claims — both recorded as
+amendments in the ADR and corrected above. Neither changes what any obligation
+asserts; both change why. This is the whole reason `EP-M1` precedes the work.
 
 ### EP-M2 — make room, and make the patch contract usable
 
@@ -1528,8 +1561,16 @@ production scale is 16.2 ms release for a 10,000-edge graph, so the repeated
 ### Still to record
 
 `EP-M2` timings; per-obligation classification counts; per-mutation
-transcripts; final gate logs; CodeRabbit outcomes. All `EP-M0` questions are
+transcripts; final gate logs; CodeRabbit outcomes; whether an output-less
+target is constructible through the loader (`EP-M4`). All `EP-M0` questions are
 answered above.
+
+The determinism contract itself is no longer on this list: it is
+[`docs/adr-030-ninja-emission-determinism-contract.md`](../adr-030-ninja-emission-determinism-contract.md),
+written in `EP-M1`. Every numbered precondition an obligation cites (`P-1` …
+`P-5`), every published and unpublished statement (`G-1`, `I-1` … `I-3`, `N-1` …
+`N-4`), the parameter tuple, the Kani argument, and the two domain purity
+leaks now live there rather than here.
 
 ## Progress
 
@@ -1577,7 +1618,11 @@ answered above.
 - [x] (2026-09-27T00:00:00Z) Recorded all `EP-M0` answers and deleted the
       scratch prototype. `EP-M0` is complete; nothing from the prototype is
       merged.
-- [ ] `EP-M1`: write `ADR-030`.
+- [x] (2026-10-10T00:00:00Z) `EP-M1`: wrote
+      `docs/adr-030-ninja-emission-determinism-contract.md` and indexed it in
+      `docs/contents.md`. Reading the code to state the contract found two
+      defects in this plan, both recorded as amendments in the ADR and
+      corrected here (see `Surprises & discoveries`).
 - [ ] `EP-M2`: file splits, mutation-evidence contract, ordering helpers,
       `make proptest`.
 - [ ] `EP-M3`: shared strategy and compact `Debug`.
@@ -1631,6 +1676,25 @@ answered above.
   no `DuplicateRule` error exists, so `OBL-E2E`'s unrestricted form is false.
 - (2026-09-09) An output-less target still registers its action, so its `rule`
   block is emitted with no `build` statement referencing it.
+- (2026-10-10) *(Corrected.)* The `Constraint 10` mechanism,
+  "`insert_edge_for_outputs` stores an edge once per output, so the emitter's
+  sort sees `targets.len()`", was true on 2026-09-09 and stopped being true on
+  2026-09-18. `2c030fd1` ("Store multi-output build edges once", #652/#714) made
+  `insert_edge_for_outputs` call `graph.insert_edge` directly, which pushes
+  one arena entry. `graph.edges()` therefore yields the edge count, and the
+  200-output bound is a cost budget rather than a correctness bound.
+  **Lesson:** the plan was drafted against one revision and rebased onto
+  another; a mechanism claim in a plan that spans a refactor must be re-derived
+  at the revision it will be implemented on, not carried forward.
+- (2026-10-10) *(Corrected.)* The output-less edge is **not** silently dropped.
+  `insert_canonical_edge` pushes unconditionally and `render_edges` renders
+  every arena entry, with no `seen` set anywhere. Such an edge emits a `build`
+  line with an empty left-hand side. Whether a manifest can produce one at all
+  is unresolved: `Target::name` accepts `StringOrList::Empty`, which `map_each`
+  maps to an empty vector, and `get_target_display_name` explicitly tolerates
+  it, but nothing tests that path. `OBL-NOLOSS`'s justification and
+  `MUT-GUARD`'s mechanism are both corrected pending `EP-M4`'s reachability
+  finding.
 - (2026-09-09) `make fmt`'s `mdtablefix --renumber` converted a wrapped line
   beginning "72." into an ordered-list item, truncating the sentence before it.
   No gate caught it; it was found by a reviewer reading the prose.
@@ -1777,6 +1841,36 @@ answered above.
   sentence-case back-matter headings. Rationale: it is the most recent
   precedent and the closest structural analogue. Date/Author: 2026-09-09 /
   planning agent.
+- Decision: publish exactly one guarantee — process-level reproducibility on a
+  fixed `(manifest, environment, platform, shell selection, Netsuke version)`
+  tuple, covering the main file and every sidecar — and record the
+  insertion-order, declaration-order, and within-edge statements as internal
+  invariants with numbered preconditions rather than as promises. Rationale:
+  the four statements have different scope and strength and are routinely
+  conflated; users cache against the process-level one; and only a stated
+  specification gives `ADR-004`'s hand-off something to hand off to.
+  Date/Author: 2026-10-10 / implementation agent.
+- Decision: state **not** promised, as loudly as the promise, that byte
+  stability holds across Netsuke versions neither. Rationale: `PARENT_SCHEMA`
+  and `DYNDEP_SCHEMA` embed a format tag into every content-addressed dyndep
+  identity precisely so the staging format can change without colliding with an
+  older namespace; a cross-version promise would make those tags pointless.
+  Date/Author: 2026-10-10 / implementation agent.
+- Decision: keep the ordered-map port rejected, but on the *evidence* ground
+  rather than on `Constraint 1`. Rationale: determinism is already structural,
+  so a `BTreeMap` would leave both `sort_by_key` calls dead and
+  `MUT-EDGESORT`/`MUT-ACTIONSORT` unable to fail anything. Recording the real
+  reason matters because the earlier phrasing made the rejection look like an
+  appeal to this plan's own constraint, which is circular. Date/Author:
+  2026-10-10 / implementation agent.
+- Decision: `Constraint 10`'s 200-output bound is retained as a **cost budget**
+  and its stated mechanism withdrawn; `OBL-NOLOSS`'s "silently dropped" premise
+  and `MUT-GUARD`'s mechanism are corrected pending a reachability finding in
+  `EP-M4`. Rationale: reading the code at the implementation revision falsified
+  both. `2c030fd1` removed the per-output storage, and no `seen` set exists.
+  Both corrections are recorded as `ADR-030` amendments, because the
+  obligations cite that document as their authority. Date/Author: 2026-10-10 /
+  implementation agent.
 
 ## Design review findings
 
@@ -1814,7 +1908,16 @@ generalized mutation-evidence contract held up.
 
 ## Revision note
 
-- 2026-09-27 (this revision, post-`EP-M0`): all seven `EP-M0` questions are
+- 2026-10-10 (third revision, `EP-M1`): `ADR-030` is written and indexed. Two
+  defects found while deriving the contract from the code at the implementation
+  revision, both corrected here and recorded as `ADR-030` amendments: the
+  200-output bound's stated mechanism is stale (`2c030fd1` removed per-output
+  edge storage), and `OBL-NOLOSS`'s "silently dropped output-less edge" premise
+  is false (nothing drops edges; reachability of the construct is unresolved
+  and is assigned to `EP-M4`). Neither changes a milestone or an obligation's
+  statement; both change a justification, which is why the obligations now cite
+  `ADR-030` rather than restating a mechanism.
+- 2026-09-27 (post-`EP-M0`): all seven `EP-M0` questions are
   answered and the spike is complete. Two plan defects were found and fixed
   before any implementation began: `OBL-ORDER`'s bounded re-materialization
   loop was unsound below five keys, and the "regression seeds are inert" risk
