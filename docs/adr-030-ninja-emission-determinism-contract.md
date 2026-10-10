@@ -133,9 +133,9 @@ would add an invalidation surface to a value that is currently a pure function.
 **Y-statement:** In the context of a manifest compiled to a Ninja build graph
 and emitted as `build.ninja`, and facing the forces of incremental-build
 caching, reproducible artefacts, a claim already published in the README, and a
-verification hand-off from Kani that has nothing to verify against, we decided
-to publish exactly one determinism guarantee — process-level reproducibility on
-an identical
+verification hand-off from Kani that has nothing to verify against, the
+decision is to publish exactly one determinism guarantee — process-level
+reproducibility on an identical
 `(manifest, environment, platform, shell selection, Netsuke version)` tuple —
 and to record the order-invariance, declaration-invariance, and non-invariance
 statements as internal invariants with their own preconditions, accepting that
@@ -174,12 +174,15 @@ they are the mechanism G-1 rests on and each carries its own preconditions.
   of insertion order alone, so a map with fewer than five keys frequently has
   no alternative iteration order to reach at all. The verification plan's
   answer is to assert the invariant at the extracted collection helpers
-  (`ordered_edges`, `ordered_actions`) over an explicitly shuffled `Vec`, where
-  perturbation is by construction. A whole-bundle comparison is retained only
-  as a secondary arm that **holds the graph value fixed**, materializing one
-  `GraphSpec` twice so that both `BuildGraph` values have identical key sets
-  and identical values, and it grades itself _inconclusive_ (rather than
-  passing) when no case's iteration orders actually diverged.
+  (`ordered_edges`, `ordered_actions`) over a `Vec` presented in two
+  _constructed_ orders that are checked to be distinct, so perturbation is
+  structural. A sampled shuffle alone is not sufficient: a permutation of a
+  short input frequently reproduces the input order, and a mandatory reorder
+  assertion would then reject a valid case. A whole-bundle comparison is
+  retained only as a secondary arm that **holds the graph value fixed**,
+  materializing one `GraphSpec` twice so that both `BuildGraph` values have
+  identical key sets and identical values, and it grades itself _inconclusive_
+  (rather than passing) when no case's iteration orders actually diverged.
 
   The earlier formulation compared whole bundles on a pair whose _key sets_
   differed. That was wrong and is recorded in `Amendment 4`: a differing key
@@ -244,7 +247,18 @@ than a defect.
   explicit output sets are pairwise disjoint across edges and internally
   duplicate-free; no output path is empty; every `action_id` exists in
   `actions`; every edge indexed under key `k` has `k` among its explicit
-  outputs; and no path contains a rejected character.
+  outputs; and no path contains a rejected character. The non-empty-output
+  clause is **not** enforced by the loader for every manifest. A `name:` whose
+  value is `null`, `~`, `""`, or `[]` all deserialize to `StringOrList::Empty`,
+  which lowers to `explicit_outputs: []`, which `BuildGraph::insert_edge`
+  accepts because it has nothing to collide with; the emitted Ninja carries an
+  empty left-hand side, which real `ninja` rejects with `expected path`. (An
+  absent `name:` key is different — the field has no `#[serde(default)]`, so
+  that is a deserialization error.) Properties citing P-1 must therefore
+  exclude empty target names from their generated domain, which is what
+  `OBL-NOLOSS` does; the alternative — adding loader validation — is out of
+  scope here and would change user-visible behaviour for a manifest that
+  currently loads.
 - **P-2, `generate` requires a sidecar-free graph.** `generate`,
   `generate_into`, and `generate_with_shell` reject a graph for which
   `graph_requires_dyndep` is true, because they cannot materialize sidecars.

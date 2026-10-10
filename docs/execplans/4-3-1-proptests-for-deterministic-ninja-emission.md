@@ -210,7 +210,8 @@ incompatible `BuildGraph` generators. Its `retain_disjoint_output_edges`
 answer to the filtering trap and is adopted here. And `GraphView` is itself a
 canonical projection of `BuildGraph` computed by a structurally different
 mechanism (`BTreeMap`/`BTreeSet` iteration rather than explicit `sort_by_key`),
-which makes it usable as a differential oracle rather than only prior art.
+so it serves as a reference for the projection's own order-invariance. It is
+*not* an oracle for emitted Ninja text: it never reads the emitter's output.
 
 ### What Proptest is and how this repository already uses it
 
@@ -245,7 +246,10 @@ or a conditional skip is needed.
   explicit output sets are pairwise disjoint and internally duplicate-free; no
   output path is empty; every `action_id` exists in `actions`; every edge under
   key `k` has `k` among its explicit outputs; and no path contains a rejected
-  character.
+  character. The first clause is a **property-domain restriction, not a loader
+  guarantee**: an empty `Target::name` lowers to `explicit_outputs: []` and is
+  accepted by `insert_edge`, so a well-formed graph means one whose generator
+  excludes empty target names. See `ADR-030` P-1.
 - **Insertion-order permutation** — building two `BuildGraph` values from the
   same pairs in two different sequences.
 - **Metamorphic property** — one relating outputs of two runs on *related*
@@ -621,13 +625,28 @@ The "silent drop of output-less edges", which the first draft recorded as a
 surprise and this obligation was partly justified by, **does not survive a
 re-read**. `insert_canonical_edge` pushes unconditionally and `render_edges`
 renders every arena entry with no `seen` set, so an output-less edge is not
-dropped: it emits a `build` line with an empty left-hand side. Whether such a
-graph is constructible through the loader at all is unresolved — `Target::name`
-accepts `StringOrList::Empty`, which maps to an empty vector, and
-`get_target_display_name` tolerates the empty case, but `REJECTED_EMPTY` is an
-error for command lists and the name path is untested. `EP-M4` establishes
-reachability before either half of the claim is asserted. Recorded as `ADR-030`
-amendment 2.
+dropped: it emits a `build` line with an empty left-hand side. The reachability
+question the first draft left open is **now closed by probe**, run against the
+built binary over five `name:` shapes:
+
+```plaintext
+name key absent   -> Stage 4 (deserialize) fails; no manifest
+name: null        -> Stages 4-5 pass; Stage 6 emits "build : <hash>..."
+name: ~           -> as above
+name: ""          -> as above
+name: []          -> as above
+```
+
+Two corrections follow. First, the loader *does* accept an empty target name:
+`to_paths` maps it to `[]`, `duplicate_output_error` finds nothing to reject in
+an empty slice, and `insert_canonical_edge` pushes unconditionally. The absent
+key is different — `Target.name` has no `#[serde(default)]`, so a missing field
+is a deserialization error, not `Empty`. Second, the emitted artefact is worse
+than "an empty left-hand side": real `ninja` rejects it outright
+(`ninja: error: ...:4: expected path`). So the directed case is a
+loader-reachable input, not a direct-constructor artefact, and the generated
+domain must exclude empty target names so that "well-formed" keeps meaning what
+`ADR-030` P-1 says. Recorded as `ADR-030` amendment 2.
 
 - **Method:** Proptest over well-formed graphs, plus directed tests for the
   known bypasses.
@@ -669,10 +688,15 @@ is not seed-reproducible.
 *Core (seed-deterministic).* `EP-M2` extracts the two collection points as pure
 helpers,
 `ordered_edges<'a>(impl Iterator<Item = &'a BuildEdge>) -> Vec<&'a BuildEdge>`
-and `ordered_actions`, changing no behaviour. The property feeds each helper an
-explicitly `prop_shuffle`d `Vec` and asserts the output is invariant. Every
-case is genuinely permuted by construction, non-vacuity is structural rather
-than measured, shrinking is exact, and seeds replay.
+and `ordered_actions`, changing no behaviour. The property feeds each helper a
+`Vec` whose order is *constructed*, not sampled: the same elements in two
+orders that are derived from one another and then **checked to be distinct**,
+re-drawing on the rare coincidence rather than asserting it. `prop_shuffle`
+alone is not sufficient here, because sampling a permutation of a short input
+returns the input order often enough to matter, and a mandatory reorder
+assertion would then reject a valid case; the constructed pair is what makes
+perturbation genuine. Non-vacuity is structural rather than measured, shrinking
+is exact, and seeds replay.
 
 *End-to-end (composition).* One property builds two `BuildGraph` values from
 one spec in two insertion orders and compares whole bundles — `build_file`, and
@@ -708,16 +732,19 @@ unfalsifiable rather than merely imprecise.
 
 Divergence in iteration order is therefore *not* required for the end-to-end
 arm, which is sound but may be vacuous on a given case. Two guards keep it
-honest. The collector-level arm perturbs an explicitly shuffled `Vec`, where
-divergence is by construction and is asserted. The end-to-end arm records, per
-case, whether the two iteration orders actually differed, and the end-to-end
-assertion is graded inconclusive — not passed — when they did not, so a run in
-which no case diverged cannot be reported as evidence for I-1. Drawing two
-permutations of a ≥ 5-key domain makes the orders differ with probability ≥
-0.99 per draw; at 1–4 keys the end-to-end arm is unreachable in principle
-rather than by bad luck, and the case is counted, not silently skipped. The
-generated domain's lower bound is raised from 1 to 5 actions and edges for the
-same reason.
+honest. The collector-level arm perturbs a `Vec` whose two orders are
+constructed and verified distinct, so divergence is structural and is asserted.
+The end-to-end arm records, per case, whether the two iteration orders actually
+differed, and the end-to-end assertion is graded inconclusive — not passed —
+when they did not, so a run in which no case diverged cannot be reported as
+evidence for I-1. Drawing two permutations of a ≥ 5-key domain makes the orders
+differ with probability ≥ 0.99 per draw. At 1–4 keys divergence is *reachable
+but only a minority of the time* — measured at 23 of 200 two-key trials
+exhausting eight attempts, 200 of 200 at one key — so the minimum of five is a
+**sampling threshold**, chosen to keep the arm's informative share high and the
+test budget bounded, not a statement that smaller domains make the arm
+unreachable in principle. The generated domain's lower bound is raised from 1
+to 5 actions and edges for that budget reason.
 
 - **Method:** Proptest, metamorphic.
 - **Rationale:** `RM-4.3.1.a`.
@@ -727,17 +754,23 @@ same reason.
   exercised. The end-to-end arm requires at least `ORDER_MIN_DIVERGENCE` (5)
   distinct keys per collection before it treats a case as informative, and
   otherwise records the case without asserting on it.
-- **Oracle:** the second emission — metamorphic. Additionally, a *differential*
-  arm asserts that whenever
-  `GraphView::from_build_graph(g_u) == GraphView::from_build_graph(g_v)`, the
-  bundles are equal. `GraphView` derives its ordering through `BTreeMap`/
-  `BTreeSet` iteration rather than explicit `sort_by_key`, so it is an
-  independent reference, not a reimplementation. Metamorphic testing alone
-  cannot catch two emissions being wrong in the same way; this arm can.
+- **Oracle:** the second emission — metamorphic, with no independent check on
+  emitted *content*. The first draft described a *differential arm* conditioned
+  on `GraphView::from_build_graph(g_u) == GraphView::from_build_graph(g_v)`.
+  That arm does not exist as a separate thing, for two reasons. `GraphView` is
+  a projection of `BuildGraph` and never reads the emitted text, so it cannot
+  validate emission content; and because the end-to-end arm holds the **graph
+  value fixed**, `GraphView` equality holds by construction on every case, so
+  the antecedent is a tautology rather than a selection predicate. Metamorphic
+  testing alone cannot catch two emissions being wrong in the same way, and
+  this arm does not close that gap. Closing it needs an oracle that computes
+  expected Ninja text independently — `OBL-NINJA`'s real-`ninja` arm is the one
+  that does.
 - **Artefact:** `src/ninja_gen/determinism/order.rs`.
 - **Non-vacuity:**
-  - *Covers.* Per-case: the shuffle reordered; and, separately, whether the two
-    iteration orders differed. Recorded classes must include the *intersection*
+  - *Covers.* Per-case: the constructed reordering was distinct; and,
+    separately, whether the two iteration orders differed. Recorded classes must
+    include the *intersection*
     multi-output ∧ phony ∧ dyndep-staged ∧ non-empty defaults, not only the
     marginals, and all four combinations of `BuildEdge::always` and
     `Action::restat` — `DisplayEdge` emits `restat` only when
@@ -1556,11 +1589,13 @@ is stronger and matches the discipline `ADR-004` established:
 2. Applying `MUT-EDGESORT` and running `make proptest` fails, naming the
    insertion-order core property, with a counter-example small enough to read.
    Reverting restores a passing run.
-3. The same holds for each of the other eight patches. Each fails its named
-   property, **plus** `every_patch_applies_cleanly` in the mutation-evidence
-   contract test — because `git apply --check` of an already-applied patch
-   fails — and no other test. The first draft's criterion omitted that second
-   failure and was therefore unachievable as written.
+3. The same holds for each of the other eight patches. Each fails **every**
+   property the mutation table assigns it — `MUT-ACTIONSORT`, `MUT-DEFSORT`, and
+   `MUT-DEFPOS` are each assigned two — **plus** `every_patch_applies_cleanly`
+   in the mutation-evidence contract test, because `git apply --check` of an
+   already-applied patch fails. No *unrelated* test may fail. The first draft's
+   criterion said "and no other test", which contradicted the table's own
+   two-obligation rows and was therefore unachievable as written.
 4. `make test` passes, and its wall-time delta against `origin/main` is within
    the figure recorded in `EP-M2` (expected: a few seconds).
 5. With Ninja installed, the oracle property reports a non-zero case count;
@@ -1844,6 +1879,17 @@ leaks now live there rather than here.
       One `make fmt` cycle was needed before the first `check-fmt`; it wrapped
       the new revision-note paragraphs and re-applied the intended second-person
       and `prop_shuffle` edits.
+- [x] (2026-10-10T00:00:00Z) `EP-M1` review round 3: a confirming pass returned
+      six findings — one major, five minor — all verified against the tree and
+      all accepted. The major one **reverses** the previous round's `prop_shuffle`
+      disposition: the collector arm's perturbation was claimed by construction
+      but was in fact sampled, and both arms are now disjoint. The differential
+      arm was withdrawn outright once reading `src/graph_view/mod.rs:97` showed
+      its antecedent is a tautology under the fixed-graph-value construction; a
+      probe against the built binary over five `name:` shapes turned `OBL-NOLOSS`'s
+      open reachability question into a measured result, and corrected an
+      overclaim written into the same edit. Recorded in the sixth `Revision note`
+      entry.
 - [ ] `EP-M2`: file splits, mutation-evidence contract, ordering helpers,
       `make proptest`.
 - [ ] `EP-M3`: shared strategy and compact `Debug`.
@@ -2070,6 +2116,42 @@ leaks now live there rather than here.
 - Decision: keep this ExecPlan pre-implementation and approval-gated.
   Rationale: the user stated the plan must be approved before implementation.
   Date/Author: 2026-09-09 / planning agent.
+
+- Decision: state `P-1`'s non-empty-output clause as a **property-domain
+  restriction** rather than a loader guarantee, and exclude empty target names
+  from the generated domain. Rationale: the loader genuinely accepts a `name:`
+  of `null`, `~`, `""`, or `[]`, lowering it to an output-less edge whose
+  emitted Ninja real `ninja` rejects. Establishing the clause as a loader
+  invariant would require *adding* validation, which changes user-visible
+  behaviour for a manifest that currently loads — a scope increase this plan
+  was not approved for, and one that belongs to whichever item owns manifest
+  validation. Restricting the domain is the minimal honest statement. The
+  alternative — leaving `P-1` as written — would have made every property built
+  on it unsound in the same direction. Date/Author: 2026-10-10 / implementation
+  agent.
+
+- Decision: withdraw `OBL-ORDER`'s differential arm rather than repair it.
+  Rationale: the arm conditioned an assertion on
+  `GraphView(g_u) == GraphView(g_v)`, but the end-to-end arm had already been
+  narrowed to hold the graph value fixed, and `GraphView` sorts through
+  `BTreeMap`/`BTreeSet`. The antecedent therefore holds on every case, so the
+  arm degenerates into the metamorphic comparison it was meant to supplement.
+  Repair options were to vary the graph value (which the fourth revision had
+  already rejected as unsound, since a differing key set is a differing graph)
+  or to build an independently computed expected Ninja text (which is
+  `OBL-NINJA`'s job). Withdrawing and naming `OBL-NINJA` avoids two obligations
+  claiming the same gap. Date/Author: 2026-10-10 / implementation agent.
+
+- Decision: construct, rather than sample, the collector arm's second ordering.
+  Rationale: this reverses the fifth revision's disposition of the same concern.
+  `prop_shuffle` samples a permutation, so a short input can and does come
+  back unchanged; asserting a reorder would reject a valid case, and not
+  asserting one leaves "perturbation by construction" false. Deriving two
+  orders from one another and re-drawing until they differ gives both a real
+  perturbation and no invalid rejection. The lesson is that "the test controls
+  the permutation" must be checked against what the combinator actually does,
+  not against what the arm's prose says it does. Date/Author: 2026-10-10 /
+  implementation agent.
 
 - Decision: include the larger-N duplicate-output and cycle-rejection
   obligations inherited from `4.2.1` and `ADR-004`. Rationale: the user chose
@@ -2346,6 +2428,54 @@ generalized mutation-evidence contract held up.
 
 ## Revision note
 
+- 2026-10-10 (sixth revision, `EP-M1` review round 3): a confirming CodeRabbit
+  pass returned six findings — one major, five minor. All six were verified
+  against the tree before anything changed; all six were **accepted**. Four
+  were correctness defects in the plan's own reasoning rather than wording.
+
+  The major finding is a **reversal of the previous round's disposition**, and
+  it is the reviewer who was right. The fifth revision accepted that
+  `prop_shuffle` may return its input order but held that the collector arm was
+  exempt because it "shuffles an explicitly constructed `Vec` whose permutation
+  the test controls". Re-reading the arm as it actually stood — "feeds each
+  helper an explicitly `prop_shuffle`d `Vec` … genuinely permuted by
+  construction" — shows the exemption was misapplied: `prop_shuffle` *samples*
+  a permutation and cannot be made to return a different order, so "by
+  construction" was a claim about the caller's intent, not about the case. The
+  two arms are now genuinely disjoint: the collector arm constructs two orders
+  that are *checked to be distinct* (re-drawing on coincidence rather than
+  asserting), and only the end-to-end arm samples. The same correction is
+  applied to `ADR-030`.
+
+  Accepted — the differential-oracle finding, in a stronger form than raised.
+  The finding said `GraphView` equality selects cases but supplies no
+  independent expected output. Reading `src/graph_view/mod.rs:97` shows the
+  antecedent is not merely uninformative but **tautological**: the end-to-end
+  arm now holds the graph value fixed, and `GraphView` sorts through
+  `BTreeMap`/`BTreeSet`, so `GraphView(g_u) == GraphView(g_v)` holds on every
+  case. The arm is withdrawn and `OBL-NINJA`'s real-`ninja` oracle is named as
+  the thing that actually closes the content gap.
+
+  Accepted — findings 2, 4, and 6, three places where the plan's own text
+  contradicted itself or the loader. The five-key minimum is now stated as a
+  sampling threshold, not an unreachability result (divergence *is* reachable
+  at 2–4 keys; it is simply unlikely, at 23/200 two-key trials). Acceptance
+  item 3 no longer requires "no other test" to fail, which contradicted the
+  mutation table's own two-obligation rows. And `P-1`'s non-empty-output clause
+  is restated as a **property-domain restriction**: a probe against the built
+  binary over five `name:` shapes showed that `null`, `~`, `""`, and `[]` all
+  lower to an output-less edge and emit `build : <hash>`, which real `ninja`
+  rejects — while an absent `name:` is a deserialization error, since the field
+  has no `#[serde(default)]`. Finding 1 removed the only first-person pronoun
+  in the ADR, which the style guide bans outside `README.md`.
+
+  *Provenance note:* this pass reviewed `ea571de8`, not the `c91e96c2` it was
+  briefed against, because four commits landed between dispatch and execution.
+  Findings were therefore re-anchored by quoted content rather than line
+  number; the ADR was byte-identical across all five revisions, so two findings
+  applied unchanged. The lesson is the one already recorded for drift verdicts,
+  applied to my own dispatch: pin the revision and *stop writing to the tree*
+  until the pass returns.
 - 2026-10-10 (fifth revision, `EP-M1` review round 2): a second CodeRabbit pass,
   over `74cff9ce`, returned nine findings — six major, three minor. Every
   finding was checked against the tree by hand before anything was changed.
