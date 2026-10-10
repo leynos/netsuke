@@ -5,8 +5,8 @@ Status: COMPLETE
 Delivered, validated, and reviewed. Two CodeRabbit passes have concluded: the
 first raised three findings, all triaged; the second read the revision that
 answered them and returned none. The pull request remains open for the
-repository's own review and merge, which is a separate concern from this
-plan's completion.
+repository's own review and merge, which is a separate concern from this plan's
+completion.
 
 ## Purpose
 
