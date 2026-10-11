@@ -8,9 +8,12 @@ through the shell's convention, and two downstream decisions depend on it:
   ``timeout``, and the outcome is decided by ``statuses`` from the translated
   status, so a ``kill -KILL`` that reached it untranslated (``-9``) would be
   classified as an ordinary command failure and the operation's own category
-  would survive a real timeout. ``SIGTERM`` is the contrast: it translates to
-  ``143``, which is deliberately *not* a timeout status, so a command that
-  accepted the group signal stays an ordinary failure.
+  would survive a real timeout. A command independently terminated by
+  ``SIGTERM`` reports ``-15``, which translates to ``143`` and remains an
+  ordinary failure, because ``143`` is deliberately *not* a timeout status.
+  The bound is a different case and does not depend on which signal stopped the
+  command: when it elapses, ``bounding`` returns ``None``, and
+  ``translate_exit(None)`` reports ``124`` regardless.
 - At the unguarded gate-output write, the sink adapter's status *becomes* the
   gate's exit status, so a translated kernel status would leave the step
   exiting a number no shell ever produced.

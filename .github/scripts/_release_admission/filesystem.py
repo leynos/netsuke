@@ -1,11 +1,12 @@
 """Perform the two filesystem effects configuration initialization needs.
 
 The gate creates both artefact files and both of their parents before it runs
-any operation. That is the only filesystem access configuration resolution has,
-and it is isolated behind :class:`FileSystem` so the two halves of the start-up
-can be observed apart: resolution can then be shown to write nothing at all,
-and initialization to perform exactly these two effects, in the shell's order,
-without a refusal having to be arranged on a real filesystem.
+any operation. These are the filesystem effects configuration initialization
+performs, and they are isolated behind :class:`FileSystem` so the two halves of
+the start-up can be observed apart: resolution can then be shown to perform no
+filesystem access at all, and initialization to perform exactly these two
+effects, in the shell's order, without a refusal having to be arranged on a
+real filesystem.
 
 The interface names whole *effects* rather than an ``open``/``mkdir`` pair. A
 caller that opened a path itself would be choosing the mode and the truncation,

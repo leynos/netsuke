@@ -1333,3 +1333,26 @@ change admission semantics beyond the scope of a form change.
   re-wraps are whitespace-only, which leaves no semantic regression for them to
   have missed, but `check-fmt`, `markdownlint`, and `spelling` are re-run on
   the committed tree rather than reported as cleared.
+
+- 2026-10-11 — The follow-up assessment at `b01229d4` accepted the eleven
+  repairs but kept the documentation confirmation partial, naming one
+  correction that needs qualification and one site the sweep missed. Both were
+  checked against the source before being applied, and neither reopens the
+  executable refactor.
+
+  The missed site was `filesystem.py`, which still read "that is the only
+  filesystem access configuration resolution has" — the same boundary claim
+  repaired in `configuration.py` and in the package docstring. Resolution
+  performs no filesystem access at all; only initialization does. The sentence
+  now says so.
+
+  The qualification was in the status-translation module. Saying `SIGTERM`
+  "stays an ordinary failure" is true of an independent termination and false
+  of a bound, because `bounding` returns `None` whenever its bound elapses and
+  `translate_exit(None)` reports `124` whatever signal ended the command. The
+  two cases are now stated apart. This was a working guess when it was written,
+  and the mechanism that makes it wrong is the one the docstring already had to
+  state precisely once before, at `143`-versus-`124`.
+
+  Both claims were swept across the tree rather than fixed where reported; no
+  third site carries either. `configuration.py`'s own claim was already correct.
