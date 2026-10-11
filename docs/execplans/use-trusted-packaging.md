@@ -1,9 +1,9 @@
 # Publish `netsuke-build` through crates.io Trusted Publishing
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
-`Verification plan` must be kept up to date as work proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision log`,
+`Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
+be kept up to date as work proceeds.
 
 Status: DRAFT
 
@@ -20,22 +20,22 @@ user who runs `cargo install netsuke-build` today gets whatever bytes a
 maintainer uploaded by hand, with no release job able to say which commit they
 came from. After this change, a single tagged run resolves one candidate
 commit, builds and verifies the platform artefacts and the Cargo package from
-it, publishes the package to crates.io through Trusted Publishing, verifies
-the registry bytes, and only then publishes the GitHub Release. A user can
-`cargo install netsuke-build --version 0.1.0-beta3` and get a crate the
-release run can account for.
+it, publishes the package to crates.io through Trusted Publishing, verifies the
+registry bytes, and only then publishes the GitHub Release. A user can
+`cargo install netsuke-build --version 0.1.0-beta4` and get a crate the release
+run can account for.
 
-The registry upload itself stops depending on a long-lived secret. GitHub
-mints a short-lived, repository-scoped token from an OIDC identity; the token
-exists only inside the one step that needs it and is revoked by the action's
-own post-step. No maintainer rotates it, and no log, cache, or job output can
-leak it.
+The registry upload itself stops depending on a long-lived secret. GitHub mints
+a short-lived, repository-scoped token from an OIDC identity; the token exists
+only inside the one step that needs it and is revoked by the action's own
+post-step. No maintainer rotates it, and no log, cache, or job output can leak
+it.
 
 A maintainer watching a tagged release sees one ordered sequence, and can
 re-run any part of it without double-publishing or corrupting an
 already-published version. A reviewer can read the release run and see, for
-every uploaded file, which commit it came from and which digest was expected.
-A pull request still rehearses the whole release without a token, without an
+every uploaded file, which commit it came from and which digest was expected. A
+pull request still rehearses the whole release without a token, without an
 environment approval, and without touching any remote state.
 
 ## Context and orientation
@@ -55,30 +55,36 @@ root; `test_support/` is a second, `publish = false` workspace member. Only
 `-p` selector would attempt `test_support` and fail, or worse succeed under a
 name nobody reviewed.
 
-**The release today.** `.github/workflows/release.yml` is 438 lines. It runs
-on a `v*.*.*` tag push, and as a reusable workflow (`workflow_call`) with
-inputs `publish`, `dry-run`, and `wix-extension-version`, and outputs
-`bin_name`, `version`, `should_publish`, `dry_run`,
-`should_upload_workflow_artifacts`, `wix_extension_version`.
+**The release today.** `.github/workflows/release.yml` is 685 lines on `main` —
+grown from the 438 this plan was drafted against, and now well past the
+400-line ceiling that `AGENTS.md` sets for code files. It runs on a `v*.*.*`
+tag push, and as a reusable workflow (`workflow_call`) with inputs `publish`,
+`dry-run`, and `wix-extension-version`, and outputs `bin_name`, `version`,
+`should_publish`, `dry_run`, `should_upload_workflow_artifacts`,
+`wix_extension_version`.
 
 Its jobs are:
 
 1. `metadata` — resolves the repository name, the release modes through the
    `determine-release-modes` shared action, the crate version through
-   `ensure-cargo-version` (with `check-tag` bound to `should-publish`), the
-   WiX extension version, and the binary name through
-   `export-cargo-metadata`.
+   `ensure-cargo-version` (with `check-tag` bound to `should-publish`), the WiX
+   extension version, and the binary name through `export-cargo-metadata`.
 2. `build-linux`, `build-windows`, `build-macos` — each a two-leg matrix
-   calling `./.github/workflows/build-and-package.yml`, which compiles,
-   packages (`.deb`, `.rpm`, `.msi`, `.pkg`), runs the release-help tooling,
-   and uploads workflow artefacts.
+   calling `./.github/workflows/build-and-package.yml`, which compiles, packages
+   (`.deb`, `.rpm`, `.msi`, `.pkg`), runs the release-help tooling, and
+   uploads workflow artefacts.
 3. `windows-native-recipe-smoke` — a native Windows debug build plus
    `./scripts/windows-recipe-smoke.ps1`, skipped on a dry run except for the
    `ready_for_review` event.
 4. `release-admission-canaries` — the ADR-020 admission-evidence gate.
 5. `release` — creates a **draft** GitHub Release, downloads the workflow
    artefacts into `dist/`, hoists the cargo-binstall archives to the release
-   root, and calls the shared `upload-release-assets` action.
+   root, and calls the shared `upload-release-assets` action at pin `a5765019…`.
+6. `publish-release` — added by #834 after this plan was drafted. It holds
+   `contents: write`, and is where API-bound publication was isolated so that
+   read-only staging could stay reachable from dry runs. It calls the same
+   `upload-release-assets` action but at the newer pin `0606ca89…`, so the
+   repository now invokes one shared action at two revisions, chosen by job.
 
 Nothing in that path publishes to a registry, and nothing un-drafts the
 release: today a human publishes the draft.
@@ -92,19 +98,26 @@ five shell completions, per-platform manual pages or PowerShell help, and the
 the nested workflow-artefact layout to `dist/` root, because the shared upload
 action namespaces any file not already at the root.
 
-**The upload action's real selection rule.** Read from
-`leynos/shared-actions` at pin `a5765019912a8ab6882b12db049c7cde635f3a85`, its
-`_is_candidate` accepts exactly: a file named `{bin-name}`, `{bin-name}.exe`,
-or `{bin-name}.1`; any file whose name ends `.sha256`; and any file whose
-suffix is `.deb`, `.rpm`, `.pkg`, or `.msi`. It therefore **rejects**
-`.tar.gz`, `.crate`, `.json`, and `.sigstore` bundles. `clobber` defaults to
-`"true"`, and the action never fails its own step: a `gh` failure sets
-`upload_error=true` and `uploaded_count=0`, which `release.yml`'s
-`Check asset upload errors` step converts into an exit 1.
+**The upload action's real selection rule.** Read from `leynos/shared-actions`
+at pin `0606ca899ce2995a0c4bc78e660e80832e6e8855` (the newer of the two pins
+`main` now carries; the `release` job still runs
+`a5765019912a8ab6882b12db049c7cde635f3a85`), its `_is_candidate` accepts
+exactly: a file named `{bin-name}`, `{bin-name}.exe`, or `{bin-name}.1`; any
+file whose name ends `.sha256`; and any file whose suffix is `.deb`, `.rpm`,
+`.pkg`, or `.msi`. It therefore **rejects** `.tar.gz`, `.crate`, `.json`, and
+`.sigstore` bundles. `clobber` defaults to `"true"`, and the action never fails
+its own step: a `gh` failure sets `upload_error=true` and `uploaded_count=0`,
+which `release.yml`'s `Check asset upload errors` step converts into an exit 1.
+The selection rule is unchanged between the two pins, so this plan's
+asset-selection findings hold at either revision.
 
 **The dry run.** `.github/workflows/release-dry-run.yml` calls `release.yml`
 with `dry-run: true` on `pull_request` events `opened`, `synchronize`,
-`reopened`, and `ready_for_review`, with `secrets: inherit`.
+`reopened`, and `ready_for_review`. It no longer passes `secrets: inherit` —
+pull request 833 removed that, and the file now carries a comment explaining
+that a called workflow receives `GITHUB_TOKEN` regardless. A `concurrency`
+block cancels superseded pull-request runs (pull request 777), and
+`pr_concurrency_test.py` guards it.
 
 **How contract tests read these files.** `tests/workflow_contracts/` is a
 PyYAML-based suite run by `make test-workflow-contracts`. It parses workflows
@@ -115,12 +128,11 @@ second, Rust-side suite (`tests/workflow_release.rs`,
 `tests/workflow_shared_actions_pins.rs`) asserts raw substrings and full-commit
 pins.
 
-**The file-size ceiling.** No source file may exceed 400 lines
-(`AGENTS.md`, enforced for Python by Pylint's `max-module-lines = 400`, for
-Rust by Whitaker's `module_max_lines`, and by convention for
-`.github/workflows/*.yml` — see `docs/developers-guide.md`, which states that
-each lane's cache steps live in a composite action *because* the workflow
-files must stay inside that limit).
+**The file-size ceiling.** No source file may exceed 400 lines (`AGENTS.md`,
+enforced for Python by Pylint's `max-module-lines = 400`, for Rust by Whitaker's
+`module_max_lines`, and by convention for `.github/workflows/*.yml` — see
+`docs/developers-guide.md`, which states that each lane's cache steps live in a
+composite action *because* the workflow files must stay inside that limit).
 
 **Trusted Publishing.** crates.io Trusted Publishing exchanges a GitHub OIDC
 token for a short-lived registry token. Its registration fields are the
@@ -129,8 +141,7 @@ name), and an **optional environment**. Two properties of that design drive
 this plan: the exchange must therefore happen in a job that lives in
 `release.yml` itself, not in a reusable workflow (whose filename would be
 presented instead); and the crate must already exist on crates.io, because the
-very first publication cannot be trusted-published and needs a manual API
-token.
+very first publication cannot be trusted-published and needs a manual API token.
 
 ## Signposts: documentation and skills
 
@@ -155,12 +166,19 @@ Skills to load when their subject comes up: `rust-router` before touching
 
 ## Conformance basis
 
-No Terms of Reference or technical-design document covers release
-publication, so none is cited for it; this plan does not invent one. The
-governing artefacts are:
+No technical-design document covers release publication mechanics, so none is
+cited for it; this plan does not invent one. A Terms of Reference (ToR) does
+now exist — `docs/terms-of-reference.md`, Draft v0.2, added by #786 and absent
+when this plan was first drafted. It does not prescribe publication mechanics,
+but it does state release-adjacent success criteria and dependencies that this
+plan must not contradict: crates.io downloads are named as the first external
+adoption signal, and the three release-admission canaries are named as a
+dependency. It is cited for those, not for the mechanics. The governing
+artefacts are:
 
 ```plaintext
 AGENTS.md                      -> EP-M1..EP-M6  -> every gate named below
+docs/terms-of-reference.md     -> EP-M1, EP-M4   -> 7.3 strategic / 8.3 dependencies
 docs/adr-007-...              -> EP-M2         -> tests/binstall_metadata_tests.rs
 docs/adr-020-...              -> EP-M6         -> make test-release-admission
 docs/documentation-style-guide.md -> EP-M1      -> tests/execplan_status_contract_tests.rs
@@ -168,15 +186,31 @@ docs/developers-guide.md      -> EP-M2, EP-M6   -> docs updates
 docs/repository-layout.md     -> EP-M2         -> docs updates
 ```
 
-External dependencies, cited by revision and treated as axioms:
+PR #834 landed on `main` after this plan was drafted and already supplies
+infrastructure this plan must build on rather than duplicate. It is a governing
+artefact for EP-M3 to EP-M6:
+
+```plaintext
+scripts/release_operation_observability.py       -> EP-M6  -> bounded release telemetry
+tests/workflow_contracts/release_publish_path_permissions_test.py -> EP-M3 -> permission separation
+tests/workflow_contracts/release_publish_path_mutations.py        -> EP-M3/EP-M5 -> mutation harness
+tests/workflow_contracts/release_publish_path_*.py                -> EP-M3..EP-M5 -> publish-path contracts
+tests/workflow_contracts/actions_expression_evaluator.py          -> EP-M6  -> expression evaluation
+```
+
+External dependencies, cited by revision and treated as axioms. The shared
+action now carries two pins on `main`, because `release` and the new
+`publish-release` job were bumped separately; this plan must pin whichever it
+invokes to the newer of the two:
 
 ```plaintext
 rust-lang/crates-io-auth-action  c6f97d42243bad5fab37ca0427f495c86d5b1a18  (v1.0.5)
-leynos/shared-actions            a5765019912a8ab6882b12db049c7cde635f3a85
+leynos/shared-actions (release job)         a5765019912a8ab6882b12db049c7cde635f3a85
+leynos/shared-actions (publish-release job) 0606ca899ce2995a0c4bc78e660e80832e6e8855
 ```
 
-Cuprum (`leynos/cuprum`) is a motivating context only. Its release design —
-a pure-policy module, a thin CLI, and workflow `curl`/`gh` steps as the sole
+Cuprum (`leynos/cuprum`) is a motivating context only. Its release design — a
+pure-policy module, a thin CLI, and workflow `curl`/`gh` steps as the sole
 network boundary — is the shape reused here. Cuprum issues #487 and #499 are
 the sources of two gaps this plan closes locally; nothing in this plan closes
 them upstream, and no Cuprum test or workflow is modified.
@@ -236,81 +270,65 @@ Stop and escalate when any of these is breached.
 
 - Risk: a mocked OIDC exchange passes while the real one would not, because
   the repository/workflow/environment triple does not match the crates.io
-  registration.
-  Severity: high
-  Likelihood: medium
-  Mitigation: make the triple an explicit, tested value
-  (`crates-io` environment, workflow filename `release.yml`, owner `leynos`,
-  repository `netsuke`); assert it in a contract test; and state plainly in
-  the PR and the runbook that no live exchange was validated.
+  registration. Severity: high Likelihood: medium Mitigation: make the triple
+  an explicit, tested value (`crates-io` environment, workflow filename
+  `release.yml`, owner `leynos`, repository `netsuke`); assert it in a contract
+  test; and state plainly in the PR and the runbook that no live exchange was
+  validated.
 
 - Risk: the initial publication cannot be trusted-published at all, because
-  the package does not yet exist on crates.io.
-  Severity: high
-  Likelihood: high
-  Mitigation: record it as the first item of the maintainer checklist, and
-  have the publisher detect the registry's "crate does not exist" response
-  and fail with an actionable message rather than a stack trace.
+  the package does not yet exist on crates.io. Severity: high Likelihood: high
+  Mitigation: record it as the first item of the maintainer checklist, and have
+  the publisher detect the registry's "crate does not exist" response and fail
+  with an actionable message rather than a stack trace.
 
 - Risk: `cargo publish --dry-run` is slow on the release lane and blows the
   job timeout, as it already does on Windows for the existing packaging test
   (`tests/packaging_smoke_tests.rs` cites 240.8 s median, 265.6 s max).
-  Severity: medium
-  Likelihood: medium
-  Mitigation: run the package job on a Linux lane with a measured timeout,
-  and allow `--no-verify` only where a prior verified build exists for the
-  same digest.
+  Severity: medium Likelihood: medium Mitigation: run the package job on a
+  Linux lane with a measured timeout, and allow `--no-verify` only where a
+  prior verified build exists for the same digest.
 
 - Risk: a re-run of a tagged workflow double-uploads an asset or attempts to
-  re-publish an existing version.
-  Severity: high
-  Likelihood: high
-  Mitigation: `concurrency` with `cancel-in-progress: false` for the tag
-  event, reconciliation that inspects remote state before acting, and a
-  digest comparison before any skip.
+  re-publish an existing version. Severity: high Likelihood: high Mitigation:
+  `concurrency` with `cancel-in-progress: false` for the tag event,
+  reconciliation that inspects remote state before acting, and a digest
+  comparison before any skip.
 
 - Risk: expanding `make github-actions-lint` to cover composite actions
-  breaks the existing contract test that pins its recipe, or breaks the
-  `lint` target for an unrelated reason.
-  Severity: medium
-  Likelihood: medium
+  breaks the existing contract test that pins its recipe, or breaks the `lint`
+  target for an unrelated reason. Severity: medium Likelihood: medium
   Mitigation: keep yamllint's existing invocation and actionlint's position
-  unchanged; add composite-action validation as a separate, additional
-  recipe line, and update
-  `tests/workflow_contracts/github_actions_validation_test.py` in the same
-  change-set.
+  unchanged; add composite-action validation as a separate, additional recipe
+  line, and update `tests/workflow_contracts/github_actions_validation_test.py`
+  in the same change-set.
 
 - Risk: a new composite action under `.github/actions/` silently violates the
   repository-wide source-build or cache policy, because three existing suites
-  glob `**/action.yml` and apply those policies to anything added.
-  Severity: medium
-  Likelihood: medium
-  Mitigation: the consumer smoke is specified as a digest-checked archive
-  extraction rather than a `cargo install` (see `Surprises & discoveries`),
-  and no new action saves a cache. Both are checked by running
-  `make test-workflow-contracts` after the first new action lands, before
-  more are added.
+  glob `**/action.yml` and apply those policies to anything added. Severity:
+  medium Likelihood: medium Mitigation: the consumer smoke is specified as a
+  digest-checked archive extraction rather than a `cargo install` (see
+  `Surprises & discoveries`), and no new action saves a cache. Both are checked
+  by running `make test-workflow-contracts` after the first new action lands,
+  before more are added.
 
 - Risk: adding jobs to `release.yml` pushes it past 400 lines.
-  Severity: medium
-  Likelihood: high
-  Mitigation: move every extracted step body into a composite action under
-  `.github/actions/`, leaving only the job graph inline.
+  Severity: medium Likelihood: high Mitigation: move every extracted step body
+  into a composite action under `.github/actions/`, leaving only the job graph
+  inline.
 
 - Risk: a contract test that enumerates release jobs or runner assignments
-  fails after a job is added.
-  Severity: low
-  Likelihood: medium
-  Mitigation: the two suites that do enumerate
-  (`runner_placement_test.py` through `DIRECT_RUNNER_SOURCES` and
-  `REQUIRED_RUNNER_ASSIGNMENTS`) were read before planning. Any added job
-  must be registered in `runner_placement_invariants.py` and given a
-  `timeout-minutes`; nothing else enumerates the job set.
+  fails after a job is added. Severity: low Likelihood: medium Mitigation: the
+  two suites that do enumerate (`runner_placement_test.py` through
+  `DIRECT_RUNNER_SOURCES` and `REQUIRED_RUNNER_ASSIGNMENTS`) were read before
+  planning. Any added job must be registered in
+  `runner_placement_invariants.py` and given a `timeout-minutes`; nothing else
+  enumerates the job set.
 
 ## Verification plan
 
-The change introduces one central invariant and a small family of lemmas
-around it.
+The change introduces one central invariant and a small family of lemmas around
+it.
 
 **INV-1 (single candidate).** Every file published by a release run — registry
 bytes, GitHub release assets, and the identity record — is derived from one
@@ -333,15 +351,15 @@ peeled commit SHA, validated against one Cargo package identity.
   `tests/workflow_contracts/release_publication_mutations.py` supplies a
   stale-candidate record, a wrong-digest record, and a record whose tag and
   package version disagree. Each must be rejected; a run over the unmutated
-  records must be accepted. The `ready_for_review` row is reachable and is
-  the exact row the current skip condition exempts.
+  records must be accepted. The `ready_for_review` row is reachable and is the
+  exact row the current skip condition exempts.
 
 **LEM-1 (tag/version agreement).** A `v`-prefixed tag accepts exactly the
 package version it spells, prerelease included, with no lossy normalization.
 
-- Obligation: `v0.1.0-beta3` accepts `0.1.0-beta3` and nothing else.
+- Obligation: `v0.1.0-beta4` accepts `0.1.0-beta4` and nothing else.
 - Method: parameterized table over accept and reject cases, including
-  `0.1.0-beta4`, `0.1.0`, `0.1.0-beta3+meta`, `v0.1.0-beta3` and `0.1.0-beta03`.
+  `0.1.0-beta3`, `0.1.0`, `0.1.0-beta4+meta`, `v0.1.0-beta4` and `0.1.0-beta04`.
 - Rationale: a finite, enumerable standards corpus.
 - Artefact: `scripts/tests/test_release_candidate.py`.
 - Evidence: the reject rows fail before the validator exists.
@@ -365,9 +383,9 @@ escaping path.
   well-formed names would make the check vacuous and must be fixed.
 
 **LEM-3 (reconciliation is state-based).** For crates.io, version absence,
-identical package, conflicting package, yanked version, and indeterminate
-error are five distinct outcomes with four distinct actions; only an
-identical checksum permits a skip.
+identical package, conflicting package, yanked version, and indeterminate error
+are five distinct outcomes with four distinct actions; only an identical
+checksum permits a skip.
 
 - Obligation: `LEM-3` holds for every classification input.
 - Method: parameterized table over recorded registry response bodies, plus a
@@ -393,9 +411,9 @@ conflict; it is never re-uploaded.
 - Non-vacuity: a matching asset must produce a skip, so a reconciler that
   always conflicts also fails.
 
-**LEM-5 (permission separation).** No job holds both a registry credential
-path and GitHub release-write authority; the registry-exchange job is the only
-one carrying `id-token: write` **and** `environment: crates-io`.
+**LEM-5 (permission separation).** No job holds both a registry credential path
+and GitHub release-write authority; the registry-exchange job is the only one
+carrying `id-token: write` **and** `environment: crates-io`.
 
 - Obligation: `LEM-5` holds for every job in `release.yml`.
 - Method: contract test over parsed jobs.
@@ -406,8 +424,8 @@ one carrying `id-token: write` **and** `environment: crates-io`.
   `id-token: write` and at least one job with `contents: write`, or the
   separation assertion would be vacuously true.
 
-**LEM-6 (dry runs publish nothing).** A dry run exchanges no token, creates
-no release, uploads no asset, and requires no environment approval.
+**LEM-6 (dry runs publish nothing).** A dry run exchanges no token, creates no
+release, uploads no asset, and requires no environment approval.
 
 - Obligation: `LEM-6` holds for every dry-run event.
 - Method: contract test over the mode matrix.
@@ -424,13 +442,13 @@ no release, uploads no asset, and requires no environment approval.
 registry token on `steps.<id>.outputs.token` and revokes it in a post step.
 Verified by reading its `action.yml`. Its internals are not verified here.
 
-**AXIOM-2.** `crates.io` presents the OIDC `job_workflow_ref` of the file
-that declares the job, and requires the registered environment name to match
+**AXIOM-2.** `crates.io` presents the OIDC `job_workflow_ref` of the file that
+declares the job, and requires the registered environment name to match
 exactly. Consequence: the exchange job must be declared in `release.yml`.
 
-**AXIOM-3.** `cargo publish` with `CARGO_REGISTRY_TOKEN` set, and no
-`--token`, uploads the `.crate` that `cargo package` produced for the same
-source tree, and rejects a duplicate version with a distinct error.
+**AXIOM-3.** `cargo publish` with `CARGO_REGISTRY_TOKEN` set, and no `--token`,
+uploads the `.crate` that `cargo package` produced for the same source tree,
+and rejects a duplicate version with a distinct error.
 
 **AXIOM-4.** `static.crates.io` serves a published crate's `.crate` file
 without a token, so post-upload verification needs no credential.
@@ -445,8 +463,8 @@ discharged.
 
 - Obligation: `LEM-7` holds for every file this change adds or edits.
 - Method: reuse the repository's own detector
-  (`source_build_data.source_build_commands`) over the concatenated text of
-  the changed workflows and actions; it is already a tokenizer rather than a
+  (`source_build_data.source_build_commands`) over the concatenated text of the
+  changed workflows and actions; it is already a tokenizer rather than a
   substring search, so it does not need reimplementing.
 - Rationale: the policy already exists and already globs
   `.github/actions/**/action.yml`; reusing its detector proves the new files
@@ -459,12 +477,12 @@ discharged.
   `cargo install netsuke-build` returns a non-empty list and so fails.
 - Non-vacuity: the detector is first exercised on a positive control — the
   literal string `cargo install netsuke-build` — which is asserted to be
-  *detected*. Without that control, a detector that had been broken or
-  narrowed to match nothing would make this lemma pass for the wrong reason.
+  *detected*. Without that control, a detector that had been broken or narrowed
+  to match nothing would make this lemma pass for the wrong reason.
 
-No non-trivial Rust invariant is introduced: this change touches no Rust
-source file, so no Kani harness or Verus proof is owed. That conclusion is
-recorded here rather than left implicit.
+No non-trivial Rust invariant is introduced: this change touches no Rust source
+file, so no Kani harness or Verus proof is owed. That conclusion is recorded
+here rather than left implicit.
 
 ## Plan of work
 
@@ -488,8 +506,8 @@ New pure modules under `scripts/`, each stdlib-only and under 400 lines:
    with a stable key order.
 2. `scripts/release_inventory.py` — `expected_assets(...)` from
    `.github/release-staging.toml` plus `Cargo.toml`, and
-   `validate_inventory(...)` implementing LEM-2: non-empty, unique, relative,
-   no `..` component, exact set equality against the manifest.
+   `validate_inventory(...)` implementing LEM-2: non-empty, unique, relative, no
+   `..` component, exact set equality against the manifest.
 3. `scripts/release_reconcile_crates.py` — `classify_registry_state(...)`
    returning one of `ABSENT`, `IDENTICAL`, `CONFLICT`, `YANKED`,
    `INDETERMINATE` from a recorded response body and the intended digest
@@ -521,17 +539,24 @@ Each gains a `scripts/tests/test_<module>.py`. The contract tests gain:
   identity record.
 - `github-release-finalize/` — reconcile the draft, then un-draft.
 
-`.github/workflows/release.yml` gains, after the existing `metadata`,
-`build-*`, `windows-native-recipe-smoke`, and `release-admission-canaries`
-jobs:
+`.github/workflows/release.yml` gains, after the existing `metadata`, `build-*`,
+`windows-native-recipe-smoke`, and `release-admission-canaries` jobs:
 
 1. `package-crate` — `needs: metadata`; `contents: read`; ubuntu-latest. The
    order is: resolve candidate -> package -> verify.
-2. `publish-crates-io` — `needs: [metadata, package-crate, build-linux,
-   build-windows, build-macos, windows-native-recipe-smoke,
-   release-admission-canaries]`; `if: needs.metadata.outputs.should_publish
-   == 'true'`; `environment: crates-io`; `permissions: {contents: read,
-   id-token: write}`.
+2. `publish-crates-io` — the registry exchange. Its dependency list is long
+   because the package must be verified against a complete platform build, so
+   it is shown as a fence rather than an inline span:
+
+   ```plaintext
+   needs: [metadata, package-crate, build-linux, build-windows,
+           build-macos, windows-native-recipe-smoke,
+           release-admission-canaries]
+   if: needs.metadata.outputs.should_publish == 'true'
+   environment: crates-io
+   permissions: {contents: read, id-token: write}
+   ```
+
 3. `verify-release-inventory` — `needs: [publish-crates-io, release]`;
    `contents: read`.
 4. `publish-github-release` — `needs: [verify-release-inventory]`;
@@ -553,8 +578,8 @@ the draft is not created before a package exists. The workflow's
 `workflow_call`, and `false` for a tag push, so a queued re-run of a tag
 reconciles rather than interrupting an upload.
 
-Adding jobs 1–5 to `release.yml` would exceed 400 lines, so each new job's
-body is a single `uses: ./.github/actions/...` step.
+Adding jobs 1–5 to `release.yml` would exceed 400 lines, so each new job's body
+is a single `uses: ./.github/actions/...` step.
 
 ### Stage D — wiring and documentation
 
@@ -562,8 +587,8 @@ body is a single `uses: ./.github/actions/...` step.
   `scripts/tests` modules with pinned `pytest` and `hypothesis`, and a
   `test-release-negative-mutation` target.
 - `Makefile`: `github-actions-lint` additionally runs yamllint with the same
-  policy over `.github/actions/*/action.yml`, and a new
-  `bash -n`-based syntax check over each composite action's `run` blocks.
+  policy over `.github/actions/*/action.yml`, and a new `bash -n`-based syntax
+  check over each composite action's `run` blocks.
 - `.github/workflows/ci.yml`: run the new targets in `build-test`.
 - `docs/developers-guide.md`: the release runbook — job graph, package and
   asset identity contract, provenance verification, re-run procedure, and
@@ -622,8 +647,8 @@ body is a single `uses: ./.github/actions/...` step.
 - Requirements: AXIOM-1, AXIOM-2, INV-1.
 - Acceptance evidence: the dry run produces a `.crate`, its digest, and its
   file list, and reaches no network write.
-- Conformance check: no long-lived token anywhere; `persist-credentials:
-  false` on the publisher's checkout; no cache restore in the publisher.
+- Conformance check: no long-lived token anywhere; `persist-credentials: false`
+  on the publisher's checkout; no cache restore in the publisher.
 - Recovery: both jobs are gated on `should_publish`, so a revert or a skip
   leaves the current release path intact.
 - Remaining gaps: the live exchange is unvalidated by construction.
@@ -726,11 +751,11 @@ Stage D wiring change is committed after the gate that covers it passes.
 
 ## Idempotence and recovery
 
-Every step is re-runnable. The publisher inspects registry state before
-acting, so a second run over an already-published version with a matching
-digest is a no-op success, and a second run with a differing digest fails
-closed. The GitHub finalizer inspects the draft and uploads only missing
-assets. Nothing in this change deletes a remote object.
+Every step is re-runnable. The publisher inspects registry state before acting,
+so a second run over an already-published version with a matching digest is a
+no-op success, and a second run with a differing digest fails closed. The
+GitHub finalizer inspects the draft and uploads only missing assets. Nothing in
+this change deletes a remote object.
 
 Local recovery: `git switch --detach ebcedaef` restores the pre-change tree.
 Re-running a release is a maintainer action and is documented, not performed
@@ -805,6 +830,11 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `release`, and the repository-wide `cargo install` prohibition now covering
   composite actions. Corrected the consumer-smoke design and recorded the
   finding in `Surprises & discoveries`, `Risks`, and `Verification plan`.
+- [x] (2026-10-11) Rebased onto `main` at `557966c8`. One conflict-free
+  replay; the `typos.toml` refresh became empty and was skipped (see
+  `Surprises & discoveries`), leaving the branch a single commit, `0132d0c1`.
+  Corrected four stale figures in this plan against the rebased tree, cited the
+  Terms of Reference added by #786, and recorded the #834 collision.
 - [ ] Obtain approval (EP-M1).
 - [ ] Stage B: pure modules and their failing suites (EP-M2).
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
@@ -813,19 +843,20 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 ## Surprises & discoveries
 
 - Observation: the shared `upload-release-assets` action rejects `.tar.gz`
-  outright, because `Path("x.tar.gz").suffix` is `.gz`.
-  Evidence: read from its `scripts/upload_release_assets.py` at pin
-  `a5765019912a8ab6882b12db049c7cde635f3a85`.
+  outright, because `Path("x.tar.gz").suffix` is `.gz`. Evidence: read from its
+  `scripts/upload_release_assets.py` at pin
+  `a5765019912a8ab6882b12db049c7cde635f3a85`; the rule is unchanged at the newer
+  `0606ca899ce2995a0c4bc78e660e80832e6e8855` that `publish-release` uses.
   Impact: binstall archives reach the release root only through
   `scripts/hoist_binstall_archives.py`, and any new asset type (`.crate`, a
   provenance bundle) will need the same treatment or a different uploader.
 
 - Observation: the action's `clobber` defaults to `"true"`, so the current
-  upload path already overwrites same-named assets on a re-run.
-  Evidence: same source, `clobber: str = "true"`.
-  Impact: the reconciliation design must pass `clobber: false` explicitly
-  and verify existing assets itself; leaving the default is the
-  "clobber alone is not reconciliation" failure the mission forbids.
+  upload path already overwrites same-named assets on a re-run. Evidence: same
+  source, `clobber: str = "true"`. Impact: the reconciliation design must pass
+  `clobber: false` explicitly and verify existing assets itself; leaving the
+  default is the "clobber alone is not reconciliation" failure the mission
+  forbids.
 
 - Observation: `runner_placement_invariants.REQUIRED_RUNNER_ASSIGNMENTS` is
   compared for exact equality, but it enumerates named jobs, so adding a job
@@ -837,23 +868,21 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 - Observation: `actionlint` does not lint composite action files at all.
   Evidence: `rhysd/actionlint` issue 401; `make github-actions-lint` passes
   `.github/workflows` only, and the existing contract test pins that recipe.
-  Impact: Cuprum #487 cannot be closed here by adding a flag to actionlint.
-  A separate check is required, and the plan must not claim actionlint
-  validates composite actions.
+  Impact: Cuprum #487 cannot be closed here by adding a flag to actionlint. A
+  separate check is required, and the plan must not claim actionlint validates
+  composite actions.
 
 - Observation: `release.yml` never un-drafts the release it creates.
   Evidence: the only `gh release` invocations in the repository are
-  `gh release view` and `gh release create --draft`.
-  Impact: "publish GitHub Release" is new behaviour, not a preserved one,
-  and the runbook must say so.
+  `gh release view` and `gh release create --draft`. Impact: "publish GitHub
+  Release" is new behaviour, not a preserved one, and the runbook must say so.
 
 - Observation: PR #780 is open, draft, and `CHANGES_REQUESTED`, and it adds
   jobs named `release-candidate`, `downstream-canaries`, and
   `downstream-canaries-windows`, plus a `candidate-ref` workflow input.
-  Evidence: `gh pr view 780`.
-  Impact: this plan must not reuse those job names, must not depend on that
-  branch, and should say so in the PR so a reviewer is not surprised by the
-  collision on merge.
+  Evidence: `gh pr view 780`. Impact: this plan must not reuse those job names,
+  must not depend on that branch, and should say so in the PR so a reviewer is
+  not surprised by the collision on merge.
 
 - Observation: `cargo install` is forbidden anywhere in a workflow **or any
   composite action**, by
@@ -861,58 +890,98 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   which scans `.github/actions/**/action.yml` as well as the workflows. The
   detector is a tokenizer, not a substring search, so it survives
   `cargo  install`, `cargo +nightly install`, and a folded line continuation,
-  and it resolves ambiguity toward detection on purpose.
-  Evidence: probed directly —
+  and it resolves ambiguity toward detection on purpose. Evidence: probed
+  directly —
   `source_build_commands("cargo install netsuke-build --version 0.1.0-beta3")`
   returns `["netsuke-build --version 0.1.0-beta3"]`, a non-empty result, which
   is the failure condition. `cargo publish` and a curl-pipe-tar are not
-  matched.
-  Impact: a "consumer smoke" cannot be a `cargo install`. It must instead
-  fetch the published archive by its public URL, verify the digest, extract,
-  and run the binary — which is also the stronger test, because it exercises
-  the exact bytes and the exact download path a `cargo-binstall` user takes.
-  This is why the plan specifies digest-checked archive extraction rather than
-  an install.
+  matched. Impact: a "consumer smoke" cannot be a `cargo install`. It must
+  instead fetch the published archive by its public URL, verify the digest,
+  extract, and run the binary — which is also the stronger test, because it
+  exercises the exact bytes and the exact download path a `cargo-binstall` user
+  takes. This is why the plan specifies digest-checked archive extraction
+  rather than an install.
 
 - Observation: three existing tests glob every composite action —
   `cache_write_policy_test.py` (only those *with* a cache save),
   `cache_ownership_test.py` (the source-build policy above), and
   `ci_mdtablefix_installer_test.py` (searches for a retired path string) — so
   each new action under `.github/actions/` is subject to those policies
-  automatically, with no inventory edit needed.
-  Evidence: `grep -rn 'rglob("action.yml")' tests/` returns exactly those
-  three files.
+  automatically, with no inventory edit needed. Evidence:
+  `grep -rn 'rglob("action.yml")' tests/` returns exactly those three files.
   Impact: new composite actions inherit the cache and source-build policies by
   construction. That is the desired direction, and it means the plan's Stage D
-  does not need to register new actions in those suites. It does, however,
-  mean a new action must not *save* a cache (the key step would then need an
+  does not need to register new actions in those suites. It does, however, mean
+  a new action must not *save* a cache (the key step would then need an
   `IS_TRUNK_PUSH` env entry), which the plan already respects.
+
+- Observation: #834 (`24293a1b`, "Exercise release staging in dry runs")
+  landed on `main` on 2026-10-10 and built much of the scaffolding this plan
+  designs — under different names, in a different shape, and without any
+  registry publication. It adds 27 files and 3554 lines, including
+  `tests/workflow_contracts/release_publish_path_permissions_test.py`,
+  `release_publish_path_mutations.py` and its test,
+  `release_publish_path_ contract.py`, an `actions_expression_evaluator.py`, and
+  `scripts/release_operation_observability.py`. It also splits API-bound
+  publication out of staging into a new `publish-release` job holding
+  `contents: write`. Evidence: `git show --stat 24293a1b`; the permissive job
+  header is at `release.yml:537` on `main`. Impact: Stage B must extend these
+  modules rather than introduce parallel ones, and Stage C must add the
+  registry exchange *inside* the existing `publish-release` job rather than
+  create a competing publication job. The plan's own permission-separation
+  obligation (EP-M3) is therefore partly already discharged by a test that
+  exists; the work is to make the crates.io exchange satisfy it, not to write
+  the separation from scratch.
+
+- Observation: `docs/terms-of-reference.md` (Draft v0.2) was added by #786
+  after this plan was drafted, and does state release-adjacent criteria —
+  crates.io downloads as the first external adoption signal, and the three
+  release-admission canaries as a dependency. Evidence: ToR sections 7.3 and
+  8.3, and open question Q12. Impact: this plan's earlier claim that no ToR
+  covers release is now false and has been corrected in `Conformance basis`.
+  The ToR governs the publication *outcome*; it still does not prescribe
+  publication mechanics, which remains this plan's own design.
 
 ## Decision log
 
 - Decision: keep the existing `release` job's name and identity.
-  Rationale: `runner_placement_test.py`,
-  `release_dry_run_smoke_test.py`, and `release_workflow_hoist_test.py`
-  each name it; renaming buys nothing and churns three suites.
-  Date/Author: 2026-09-27, planning agent.
+  Rationale: `runner_placement_test.py`, `release_dry_run_smoke_test.py`, and
+  `release_workflow_hoist_test.py` each name it; renaming buys nothing and
+  churns three suites. Date/Author: 2026-09-27, planning agent.
 
 - Decision: extract every new step body into a composite action rather than
-  growing `release.yml` inline.
-  Rationale: the repository's own convention, stated in
-  `docs/developers-guide.md`, and the only way to keep the file under 400
-  lines while making the sequence explicit.
-  Date/Author: 2026-09-27, planning agent.
+  growing `release.yml` inline. Rationale: the repository's own convention,
+  stated in `docs/developers-guide.md`, and the only way to keep the file under
+  400 lines while making the sequence explicit. Date/Author: 2026-09-27,
+  planning agent.
 
 - Decision: do not adopt Cuprum's filename-first identity rule.
-  Rationale: crates.io keys the trusted-publisher registration on the
-  Cargo package name, not on a distribution filename; copying the PyPI rule
-  would be an unverified transplant.
-  Date/Author: 2026-09-27, planning agent.
+  Rationale: crates.io keys the trusted-publisher registration on the Cargo
+  package name, not on a distribution filename; copying the PyPI rule would be
+  an unverified transplant. Date/Author: 2026-09-27, planning agent.
 
 - Decision: no Cuprum runtime dependency.
   Rationale: the reusable part is a decomposition, not code. Python here is
-  stdlib-only and runs under `uv run --no-project`.
-  Date/Author: 2026-09-27, planning agent.
+  stdlib-only and runs under `uv run --no-project`. Date/Author: 2026-09-27,
+  planning agent.
+
+- Decision: skip the `typos.toml` refresh commit on rebase rather than
+  replay it as an empty commit. Rationale: `main` reached the identical blob
+  (`d32137d0`) through #892 and moved `TYPOS_CONFIG_BUILDER_VERSION` to v0.1.3,
+  so the commit's content is already present and the branch adds nothing by
+  keeping it. The commit was non-code generated churn whose own message
+  anticipated being dropped. Verified by blob comparison against `origin/main`,
+  not by the rebase's own "empty" verdict alone. Date/Author: 2026-10-11,
+  planning agent.
+
+- Decision: build the crates.io exchange into #834's existing
+  `publish-release` job instead of adding a new publication job. Rationale:
+  #834 already isolated API-bound publication there and wrote
+  `release_publish_path_permissions_test.py` to hold the separation. A second
+  publication job would duplicate that boundary and split the permission story
+  across two places. This supersedes the plan's earlier job-layout sketch; the
+  `release` job keeps its name, as previously decided, and no third job is
+  introduced. Date/Author: 2026-10-11, planning agent.
 
 ## Outcomes & retrospective
 
@@ -926,3 +995,12 @@ Draft 1, 2026-09-27: initial plan, written after reconnaissance of
 `Verification plan` map to milestones in `Milestones and plateaus`; the
 one-line placeholder in `Purpose / big picture` must be replaced before the
 plan can leave `DRAFT`.
+
+Draft 2, 2026-10-11: rebased onto `main` at `557966c8` (56 commits on from the
+draft's base) and corrected against the rebased tree. `release.yml` is 685
+lines, not 438; the version is `0.1.0-beta4`, not beta3; the dry run no longer
+inherits secrets. #786 added a Terms of Reference, so the "no ToR covers
+release" claim is corrected in `Conformance basis`. #834 landed a
+staging/publication split and much of the contract scaffolding, recorded as a
+discovery and as a decision to build within it. Still `DRAFT`, still not
+approved, and still not implemented: EP-M1 through EP-M6 remain open.
