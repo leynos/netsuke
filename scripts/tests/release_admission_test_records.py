@@ -140,7 +140,7 @@ def assert_complete_records(
     traces: list[dict[str, object]],
     shape: RunShape,
 ) -> None:
-    """Assert a run emitted exactly the records *shape* names, before exclusion.
+    """Assert a run's records match the shape *shape* names, before exclusion.
 
     Parameters
     ----------
@@ -173,6 +173,14 @@ def assert_complete_records(
     per-operation one -- both are the final operation's here, because the gate
     stops at the first failure -- and the delivery traces succeed because both
     channels remain writable when the records are present at all.
+
+    This asserts the records *carry* the shape, not that the run emitted
+    nothing else; it is not an exact check of every metric emission. Duration
+    records are ignored (see :func:`describe_run_shape`), and a gate counter
+    before the run's final one would pass, because the labels are read off the
+    last record rather than by rejecting extras. Both are shape limits, not
+    gaps in the vacuity guard above, which is the failure mode this helper
+    exists to refuse.
     """
     assert describe_run_shape(metrics) == shape, (
         "the run's metric records must name the operations and outcome asserted"
