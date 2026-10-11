@@ -78,8 +78,20 @@ def _concurrency(document: dict[str, object]) -> dict[object, object]:
 
 
 def _group(document: dict[str, object]) -> str:
-    """Return a workflow's concurrency group as written, or an empty string."""
-    return str(_concurrency(document).get("group", ""))
+    """Return a workflow's concurrency group, or an empty string if it is not one.
+
+    GitHub requires ``concurrency.group`` to be a string, so a mapping, a list
+    or any other value is invalid there. Coercing one would let its Python text
+    stand in for a group and pass the contracts below; reading it as no group
+    fails the workflow that declares it instead.
+
+    Returns
+    -------
+    str
+        The ``group`` value when it is a string, otherwise an empty string.
+    """
+    declared = _concurrency(document).get("group")
+    return declared if isinstance(declared, str) else ""
 
 
 def _workflow_name(file_name: str, document: dict[str, object]) -> str:
