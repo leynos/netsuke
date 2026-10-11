@@ -25,9 +25,15 @@ still wrong, and split the module when the added prose pushed it past the
 project's file-size ceiling. A tenth pass then swept the documentation the
 split had invalidated: it corrected two stale paragraphs in the developers'
 guide and this plan's own current-state module count, changing no code and no
-case. The accounting for all of it is under *Outcomes and retrospective*. The
-pull request remains open for the repository's own review and merge, which is a
-separate concern from this plan's completion.
+case. An eleventh pass corrected the `assert_complete_records` docstring, whose
+summary line contradicted its own detail. A twelfth pass then acted on four
+documentation items the assessment confirmation had verified — a bounded
+generator described as unbounded, a helper attributed to the wrong module, a
+contradiction in this plan's own ninth-pass entry, and a descendant-signalling
+claim its own module docstring refutes — and corrected a fifth claim in its own
+verification notice. The accounting for all of it is under *Outcomes and
+retrospective*. The pull request remains open for the repository's own review
+and merge, which is a separate concern from this plan's completion.
 
 ## Purpose
 
@@ -860,3 +866,81 @@ change admission semantics beyond the scope of a form change.
   diff adds or modifies no fence, and the suite passes anyway (14 tests across
   2 binaries, 42 skipped). No code, test, or workflow changed, so the twelve
   collected modules and the 96-case count are unchanged.
+
+- 2026-10-11 — **Eleventh pass, the record helper's overstated shape claim.**
+  Committed as `b791db23`, "Correct the record helper's overstated shape claim".
+  `assert_complete_records`'s summary line said it asserted a run emitted
+  *"exactly the records `shape` names"*, while its own body two paragraphs down
+  states that every duration record is ignored and `_gate_labels` reads the
+  last record rather than rejecting extras. The summary contradicted its own
+  detail in the same docstring, and the plan's earlier account of that helper
+  repeated the overstatement. The summary now reads "match the shape `shape`
+  names", and a paragraph names both limits — a clock reading outside the
+  accepted number shape drops a duration without touching its counter, so a
+  fixed record count would assert the host clock rather than the gate, and the
+  gate labels are read off the last record rather than by rejecting extras. The
+  two other descriptions of the same helper, in the developers' guide and above
+  in this plan, describe what is asserted without claiming exhaustiveness and
+  needed no change; the docstring summary was the only place asserting
+  "exactly".
+
+  The first, longer wording took the helper to 72 lines and tripped CodeScene's
+  70-line `Large Method` threshold, dropping `cs check` to 9.59 with one
+  warning; condensed to a four-line paragraph it is back to 10.00. This is the
+  second time on this branch that explanatory prose has inflated a scored
+  method, and both times it was measured rather than assumed.
+
+- 2026-10-11 — **Twelfth pass, four prose claims the sixth confirmation
+  verified.** Committed as `1109225d`, "Correct four prose claims the sixth
+  review pass verified". Each was checked against source before the prose was
+  written, and each was real:
+
+  1. The boundedness property's domain commentary claimed arbitrary Unicode
+     payloads without stating the bound. `IDENTIFIER_TEXT` is
+     `st.text(..., min_size=4, max_size=31)` mapped through
+     `f"{IDENTIFIER_MARKER}{value}{IDENTIFIER_MARKER}"`, so payloads run 4–31
+     characters and identifiers 6–33. The comment now gives both ranges and
+     states that the bound is the strategy's rather than something the marker
+     excludes; the test module's parameter note says "generated identifiers"
+     rather than "unbounded identifiers".
+  2. The guide attributed `assert_identifiers_excluded_from_values` to the
+     boundedness module. It is defined in
+     `release_admission_test_exclusions.py`; the guide now names that module.
+  3. This plan's ninth-pass entry named `39c8a03d` where the confirmation read
+     it, and `fee4151d` six lines later. Rather than trust either sentence, the
+     cited comment was read: `6108101750` names `fee4151d` and does not contain
+     the string `39c8a03d` anywhere, so both places now say `fee4151d`.
+  4. The package docstring said `bounding` signals "every descendant". Its own
+     module docstring names `setsid()` as an escape, so the entry now limits
+     signalling to the descendants that remain in the process group.
+
+  A fifth correction went to the confirmation reply itself: its verification
+  notice claimed no case was skipped in any gate, contradicting its own table.
+  The table was the accurate half — 6 skips under `make test`, 3 under
+  `make test-workflow-contracts`, 42 under
+  `make test-documentation-contracts` — and the notice now separates "no gate
+  failed" from "no case skipped".
+
+  Gates on `1109225d`: five re-run on its own bytes — `make check-fmt`,
+  `make markdownlint` with `make spelling`, `make lint`,
+  `make test-release-admission` (96 passed), and
+  `make test-documentation-contracts` (14 passed, 42 skipped) — all passing
+  with a clean tree. The full nine-gate set was last run in one pass on
+  `b791db23`, and the two revisions are reported separately rather than one set
+  of numbers being stretched over both.
+
+  **Lesson: an ExecPlan can contradict itself, and the citation is the
+  tiebreaker.** Item 3 was not a stale value to overwrite but two incompatible
+  sentences in one document. Reading the comment the entry cited settled which
+  sentence was right, and neither could be trusted on its own.
+
+  **Lesson: a posting helper's failure message can name the wrong cause.** The
+  manual-comment helper refused with "Expected a non-leynos pool account",
+  reporting an identity mismatch for what was an environment problem: all three
+  pool tokens were valid non-`leynos` accounts when called directly. `BASH_ENV`
+  injects the Lody `gh` shim into non-interactive bash, and the broker's
+  `[Lody GitHub] {"source":"personal","stage":"acquire","code": "timeout"}`
+  notice was captured by the helper's `2>&1` login read, so a valid
+  136-character login string failed validation. The helper's logic was correct
+  and the environment was dirty; running it with `BASH_ENV` unset and `~/.lody`
+  off `PATH` is the fix. A refusal message states a hypothesis, not a finding.
