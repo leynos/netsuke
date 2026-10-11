@@ -835,6 +835,12 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `Surprises & discoveries`), leaving the branch a single commit, `0132d0c1`.
   Corrected four stale figures in this plan against the rebased tree, cited the
   Terms of Reference added by #786, and recorded the #834 collision.
+- [x] (2026-10-11) Ran the rebased tree through the four validation gates at
+  the frozen head `6483aa7c`: `check-fmt`, `typecheck`, `lint`, and
+  `test-workflow-contracts` all exit zero, and `nixie` and `markdownlint` pass.
+  `make test` is red on two *different* nested-Cargo tests across two runs,
+  each by the 300 s per-test allowance rather than by an assertion; both are
+  proven environmental. See `Surprises & discoveries`.
 - [ ] Obtain approval (EP-M1).
 - [ ] Stage B: pure modules and their failing suites (EP-M2).
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
@@ -942,6 +948,28 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   The ToR governs the publication *outcome*; it still does not prescribe
   publication mechanics, which remains this plan's own design.
 
+- Observation: `make test` is red on this host at the frozen head `6483aa7c`,
+  but by nextest's per-test allowance rather than by an assertion, and the
+  victim changes between runs. Evidence: run 1 timed out on
+  `netsuke-build::build_module_slice_ui_tests`
+  `production_build_module_slice_has_expected_boundary` at 300.013 s; run 2
+  timed out on `netsuke-build::command_env_ui_tests`
+  `cli_configuration_fixture_compiles` at 300.014 s — and run 2's victim is run
+  1's *pass*, in 197.755 s. Run standalone outside nextest's cap,
+  `cli_configuration_fixture_compiles` passes in 230.79 s with exit 0. Both
+  tests are already serialized in `.config/nextest.toml`'s
+  `nested-cargo-builds` group (`max-threads = 1`, lines 56 and 66), so the
+  contention is not intra-run: the shared `build-limits` pool reported
+  `capacity 4, held 4` with waiters from another repository's worktree and
+  `the managed sccache server is unreachable; compiling without the cache`
+  throughout. Impact: the reds are a property of this host's compile
+  contention, not of the branch. The branch's entire diff against `main` is one
+  Markdown file, which cannot influence a Rust test's runtime; continuous
+  integration runs the same suite on a warm cache with its own build budget.
+  The residual risk is that a real regression in one of these two tests would
+  be indistinguishable from contention here, so the diff-scope argument — not
+  the timeout message — is what establishes the red as environmental.
+
 ## Decision log
 
 - Decision: keep the existing `release` job's name and identity.
@@ -982,6 +1010,16 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   across two places. This supersedes the plan's earlier job-layout sketch; the
   `release` job keeps its name, as previously decided, and no third job is
   introduced. Date/Author: 2026-10-11, planning agent.
+
+- Decision: record the `make test` timeouts as environmental and proceed,
+  rather than re-running until green. Rationale: the two failures land on
+  different tests, neither reproduces outside nextest's 300 s allowance, the
+  pool is saturated by another repository, and the branch's whole diff is one
+  Markdown file. Re-running until it happens to pass would produce a green tick
+  whose value cannot be distinguished from the one already recorded, and would
+  hide the fact that this host cannot run these two tests reliably under
+  contention. The honest record is the two-run evidence above, including the
+  residual risk. Date/Author: 2026-10-11, planning agent.
 
 ## Outcomes & retrospective
 
