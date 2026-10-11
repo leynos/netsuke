@@ -130,19 +130,18 @@ def load_configuration() -> Configuration:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class OutputPath:
-    """Carry one artefact path in both spellings its two consumers need.
+    """Carry one artefact path in both forms its two consumers need.
 
     ``configured`` is the string the operator supplied, verbatim, and
-    ``resolved`` is the same path as a filesystem object. They are not
-    interchangeable, and the split is not "one spelling per boundary": the
-    configured string reaches *every* observable one -- the argument a sink
-    adapter is named with, the ``metrics-file`` and ``trace-file`` workflow
-    outputs, and the open that truncates the file -- so
-    ``./observations//metrics.jsonl`` stayed spelled that way everywhere the
-    shell spelled it that way. ``resolved`` is used for ``mkdir`` alone, where
-    the trailing slash is not a distinction: ``Path`` normalizes it away, and
-    ``mkdir -p "dir/"`` and ``mkdir -p "dir"`` name the same directory either
-    way.
+    ``directory`` is the parent the shell's ``mkdir -p "$(dirname "$file")"``
+    named for it. They are not interchangeable, and the split is not "one
+    spelling per boundary": the configured string reaches *every* observable
+    boundary -- the argument a sink adapter is named with, the ``metrics-file``
+    and ``trace-file`` workflow outputs, and the open that truncates the file --
+    so ``./observations//metrics.jsonl`` stayed spelled that way everywhere the
+    shell spelled it that way. ``directory`` is the ``mkdir`` operand alone,
+    and :func:`_directory_name` is where its difference from the configured
+    path's :attr:`~pathlib.Path.parent` is set out.
 
     Rendering ``Path`` back to text at any of the configured boundaries would
     rewrite the operator's spelling, and at the truncation open it would change
@@ -153,13 +152,13 @@ class OutputPath:
     """
 
     configured: str
-    resolved: Path
+    directory: Path
 
     @classmethod
     def of(cls, variable: str, default: str) -> OutputPath:
         """Resolve one artefact path from its variable and default."""
         configured = _optional(variable, default)
-        return cls(configured=configured, resolved=Path(configured))
+        return cls(configured=configured, directory=Path(_directory_name(configured)))
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -270,19 +269,71 @@ def _create_artefacts(*paths: OutputPath) -> None:
 def _make_parent(path: OutputPath) -> None:
     """Create one artefact's parent directory, refusing a rejection.
 
-    ``Path`` normalizes a trailing slash away, but the *directory* is the same
-    either way -- ``mkdir -p "dir/"`` and ``mkdir -p "dir"`` both succeed in the
-    shell -- so the resolved parent is the correct operand here. The file's own
-    operand is not, which is why :func:`_truncate` opens the configured
-    spelling instead, and why the refusal travels through :func:`_refusing` as
-    a :class:`ConfigurationError`.
+    The operand is the parent :func:`_directory_name` derived from the
+    *configured* string, not the configured path's
+    :attr:`~pathlib.Path.parent`. The two agree on every spelling a slash or a
+    redundant separator distinguishes -- ``mkdir -p "dir/"`` and
+    ``mkdir -p "dir"`` name the same directory -- but they disagree on a
+    trailing ``/.``, which is the one spelling with a different filesystem
+    effect: see :class:`OutputPath`. The :class:`~pathlib.Path` conversion here
+    is the ``mkdir`` call's own, and the file's operand is not taken from it,
+    which is why :func:`_truncate` opens the configured spelling instead and
+    why the refusal travels through :func:`_refusing` as a
+    :class:`ConfigurationError`.
     """
 
     def create() -> None:
         """Make the parent directory, tolerating one that already exists."""
-        path.resolved.parent.mkdir(parents=True, exist_ok=True)
+        path.directory.mkdir(parents=True, exist_ok=True)
 
     _refusing("release-admission could not create the directory for", path, create)
+
+
+def _directory_name(configured: str) -> str:
+    """Return the directory the shell's ``dirname`` named for *configured*.
+
+    The shell computed the ``mkdir`` operand as ``$(dirname "$file")``, so the
+    operand is coreutils ``dirname(1)`` applied to the operator's own string --
+    not the configured path's :attr:`~pathlib.Path.parent`, and not
+    :func:`os.path.dirname` either. All three disagree somewhere, and the
+    disagreement that matters is a final ``/.``: ``dirname(1)`` answers
+    ``reports`` for ``reports/.``, ``Path("reports/.").parent`` answers ``.``,
+    and making the latter is a no-op, so the truncation would then fail with
+    ``No such file or directory`` where the shell had already created
+    ``reports`` and failed with ``Is a directory``.
+
+    :func:`os.path.dirname` is the near miss rather than the answer: it returns
+    ``reports`` for ``reports/`` where ``dirname(1)`` returns ``.``, so
+    adopting it would put a new divergence exactly where the trailing-slash
+    cases already look.
+
+    Returns
+    -------
+    str
+        The parent directory of the configured string, spelled as the shell's
+        ``dirname`` spelled it.
+
+    Examples
+    --------
+    >>> _directory_name("reports/."), _directory_name("reports/")
+    ('reports', '.')
+    >>> _directory_name("/obs//m.jsonl"), _directory_name("obs//")
+    ('/obs', '.')
+    >>> _directory_name("/"), _directory_name("")
+    ('/', '.')
+    """
+    # dirname(1)'s own algorithm: strip the trailing separators first, so a
+    # string that was *only* separators has no final component to shed, then
+    # shed everything from the last remaining separator onwards. A path with no
+    # separator left has no directory part and names the current directory; one
+    # whose directory part is empty is the filesystem root.
+    stripped = configured.rstrip("/")
+    if not stripped:
+        return "/" if configured.startswith("/") else "."
+    parent, separator, _ = stripped.rpartition("/")
+    if not separator:
+        return "."
+    return parent.rstrip("/") or "/"
 
 
 def _truncate(path: OutputPath) -> None:

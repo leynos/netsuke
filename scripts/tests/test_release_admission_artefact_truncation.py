@@ -32,6 +32,19 @@ nonexistent target was not created, and that an existing target's prior bytes
 survive -- the last of which is the difference between a refusal and a
 ``write_bytes`` that destroyed the file before reporting anything.
 
+**The parent** is what the ``/.`` case pins, and it is a third contract rather
+than a variant of the operand one. The shell's ``mkdir`` operand was
+``$(dirname "$file")`` -- coreutils ``dirname(1)`` over the configured string --
+while the port derived it from the configured path's
+:attr:`~pathlib.Path.parent`. The two agree on every slash spelling and diverge
+on a final ``/.``: ``dirname(1)`` answers ``reports`` for ``reports/.``, which
+the shell then *created*, while ``Path("reports/.").parent`` answers ``.``,
+whose ``mkdir`` makes nothing. Both then refuse the truncation and both fail
+closed, which is precisely why the case has to assert on the *filesystem* and
+on the operating system's sentence: the parent directory must exist afterwards,
+and the reason must be ``Is a directory`` rather than the ``No such file or
+directory`` a missing parent produces.
+
 The refusal is induced through the filesystem rather than the environment, so
 the ``mkdir`` of both parents succeeds and only the truncation can fail.
 Nothing reaches an adapter afterwards, which is asserted rather than assumed,
@@ -77,6 +90,13 @@ PRESERVED = b'{"name": "a previous run left this here"}\n'
 #: it exists only in the configured string -- which is why a case that asserts
 #: on a :class:`Path` cannot see the difference the defect turned on.
 SLASH_SUFFIX = "/"
+
+#: The suffix that separates the shell's ``mkdir`` operand from the configured
+#: path's :attr:`~pathlib.Path.parent`. ``Path`` normalizes *this* away too, but
+#: the two forms then name different directories rather than the same one in
+#: two spellings: the shell made the target's parent, and the normalised parent
+#: is the directory the target sits in.
+DOT_COMPONENT_SUFFIX = "/."
 
 #: The two truncation boundaries, each with the bytes the *other* artefact must
 #: hold once the gate has exited. ``None`` removes the guesswork: the expected
@@ -228,6 +248,58 @@ def test_slash_target_is_refused_in_the_configured_spelling(
             "a slash-terminated target must not be created as the regular file "
             "the resolved spelling would have written"
         )
+    _assert_refused_diagnostic(run, configured)
+    _assert_no_boundary_was_reached(adapted)
+    assert run.outputs == {}, "a refusal before the trap writes no workflow output"
+
+
+def test_dot_component_target_creates_the_parent_the_shell_created(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+) -> None:
+    r"""Verify a ``/.``-terminated target's parent is made as ``dirname(1)`` made it.
+
+    Notes
+    -----
+    A configured target ending in ``/.`` is the one spelling where the shell's
+    ``mkdir`` operand and the configured path's :attr:`~pathlib.Path.parent`
+    name different directories. The shell asked coreutils ``dirname(1)``, which
+    answers ``reports`` for ``reports/.``, so ``mkdir -p reports`` ran and the
+    directory existed by the time the redirection refused the target with
+    ``Is a directory``. ``Path("reports/.")`` normalises the trailing component
+    away, so a port deriving the operand from it asks for ``.``, makes nothing,
+    and refuses the same target with ``No such file or directory``.
+
+    Both outcomes fail closed, so the exit status alone cannot tell them apart.
+    The parent's *existence* is the discriminating claim, and the operating
+    system's sentence is the second half of it: ``Is a directory`` can only be
+    reported against a directory that is there. The parent is deliberately left
+    absent at the start -- the harness names artefact paths inside ``tmp_path``
+    and creates none of their parents -- so a port that made nothing cannot pass
+    by finding a directory some earlier step had already made.
+
+    The target's own directory *is* the parent, so the assertion is stated as
+    the parent's existence rather than as ``not target.exists()``: an absent
+    target is exactly what the failing implementation leaves behind, and
+    asserting it would pin the defect rather than the contract.
+    """
+    adapted = install_adapted(cmd_mox)
+    parent = tmp_path / "reports"
+    configured = f"{parent}{DOT_COMPONENT_SUFFIX}"
+    run = run_gate(
+        cmd_mox,
+        tmp_path,
+        extra_environment={
+            **adapted.variables(cmd_mox),
+            METRICS_FILE_VARIABLE: configured,
+            TRACE_FILE_VARIABLE: configured,
+        },
+    )
+
+    assert parent.is_dir(), (
+        "the shell's dirname named the parent and mkdir -p created it, so the "
+        "port must create it too rather than mkdir-ing the normalised parent"
+    )
     _assert_refused_diagnostic(run, configured)
     _assert_no_boundary_was_reached(adapted)
     assert run.outputs == {}, "a refusal before the trap writes no workflow output"
