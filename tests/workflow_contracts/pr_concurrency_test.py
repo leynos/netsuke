@@ -91,7 +91,11 @@ def _group(document: dict[str, object]) -> str:
         The ``group`` value when it is a string, otherwise an empty string.
     """
     declared = _concurrency(document).get("group")
-    return declared if isinstance(declared, str) else ""
+    match declared:
+        case str() as group:
+            return group
+        case _:
+            return ""
 
 
 def _workflow_name(file_name: str, document: dict[str, object]) -> str:
