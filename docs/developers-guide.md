@@ -2206,16 +2206,17 @@ command and the upload's input, because deleting the token would otherwise pass
 for keeping it out of an `env`.
 
 Publishers queue on the concurrency group `coverage-main-${{ github.ref }}` with
-`cancel-in-progress: false`, asserted whole by the same module. Two runs
-writing at once would race, and cancelling one would abandon its work half
-done. Runs in the group never overlap, and a newer trigger replaces an older
-pending run. GitHub does not promise to start runs in trigger order, so the
-workflow makes no commit-order promise either. The coverage action saves the
-ratchet baseline only on a push, under a cache key naming the run. A dispatch
-therefore uploads coverage but leaves the baseline where the last completed
-push left it, and how far that trails `main` depends on how many pushes were
-replaced while runs waited. A merge made by the Dependabot automerge workflow's
-token fires no push event at all (see
+`cancel-in-progress: false`, which the shared CV-005 checker asserts whole
+(`publisher.concurrency`) alongside the upload job's `codescene` environment
+(`environment.placement`). Two runs writing at once would race, and cancelling
+one would abandon its work half done. Runs in the group never overlap, and a
+newer trigger replaces an older pending run. GitHub does not promise to start
+runs in trigger order, so the workflow makes no commit-order promise either.
+The coverage action saves the ratchet baseline only on a push, under a cache
+key naming the run. A dispatch therefore uploads coverage but leaves the
+baseline where the last completed push left it, and how far that trails `main`
+depends on how many pushes were replaced while runs waited. A merge made by the
+Dependabot automerge workflow's token fires no push event at all (see
 [shared-actions issue 518](https://github.com/leynos/shared-actions/issues/518)).
 A dispatch from `main` uploads that merge's coverage, but does not save a
 baseline for it; only the next push does. A manual "Re-run jobs" on an older
