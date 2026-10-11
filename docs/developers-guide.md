@@ -2235,6 +2235,21 @@ shape. Its positive half requires the token to be named exactly in the check's
 command and the upload's input, because deleting the token would otherwise pass
 for keeping it out of an `env`.
 
+The upload step passes no checksum input. The pinned upload action verifies the
+CodeScene CLI archive against its own committed `cli-manifest.json` on every
+run, so a value supplied from here could only repeat the manifest's own digest,
+and any other value is refused. The retired `installer-checksum` is rejected
+outright — a non-empty value fails the action's own validation rather than
+being ignored — and `archive-checksum`, its replacement, is not passed either.
+No workflow reads the `CODESCENE_CLI_SHA256` repository variable that once fed
+the retired input; the repository declares no variables at all.
+`tests/workflow_contracts/codescene_uploader_checksum_test.py` scans every
+workflow for the retired input and the variable and holds the uploader to the
+one approved revision, while
+`tests/workflow_contracts/codescene_upload_invariants.py` refuses either
+checksum input by name on the upload step, so a reintroduction is caught rather
+than run.
+
 Publishers queue on the concurrency group `coverage-main-${{ github.ref }}` with
 `cancel-in-progress: false`, which the shared CV-005 checker asserts whole
 (`publisher.concurrency`) alongside the upload job's `codescene` environment
