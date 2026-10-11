@@ -31,7 +31,6 @@ Run via ``make test-workflow-contracts``.
 import typing as typ
 
 from actions_expressions import contains_unquoted_or, top_level_conjuncts
-from codescene_check_depth_invariants import CODESCENE_COVERAGE_ACTION
 from timeout_budgets import COVERAGE_ACTION
 from workflow_call_closure import (
     called_workflows,
@@ -51,7 +50,9 @@ GENERATE_COVERAGE_ACTION: typ.Final[str] = COVERAGE_ACTION
 
 #: The action that submits a report to CodeScene, in either of its modes.
 #: `main` owns this call. Defined beside the depth its `check` mode needs.
-UPLOAD_COVERAGE_ACTION: typ.Final[str] = CODESCENE_COVERAGE_ACTION
+UPLOAD_COVERAGE_ACTION: typ.Final[str] = (
+    "leynos/shared-actions/.github/actions/upload-codescene-coverage"
+)
 
 #: The generic artefact action. A pull request must not carry the report to it
 #: under any step name.

@@ -134,17 +134,17 @@ must conjoin both `steps.codescene_token.outputs.available == 'true'` and
 `github.ref == 'refs/heads/main'`, since a gate that does not test what the
 check published opens on exactly the run the gate exists to skip. The rule is
 `is_trunk_only_upload`'s, in
-`tests/workflow_contracts/ci_coverage_wiring_invariants.py`, which
-`tests/workflow_contracts/coverage_upload_guard_test.py` also drives over the
-repository file. It refuses any unquoted `||` at any depth, because `&&` binds
-tighter and one disjunct would authorize the upload alone, then splits the
-condition into top-level conjuncts — a `&&` inside a string literal or a
-parenthesized group is not split on — and requires each guard clause to be
-present compared whole. A substring test would accept a clause that is quoted,
-negated or nested, since each such form still contains the clause's text, and a
-clause wrapped in its own parentheses is not equal to its bare form, so the
-reading fails closed. Further conjuncts are allowed, as without a disjunction
-they only narrow the step. The credential's source is a separate rule, owned by
+`tests/workflow_contracts/ci_coverage_wiring_invariants.py`, which the shared
+CV-005 checker (ADR-042) also holds over the repository file. It refuses any
+unquoted `||` at any depth because `&&` binds tighter and one disjunct would
+authorize the upload alone, then splits the condition into top-level conjuncts
+— a `&&` inside a string literal or a parenthesized group is not split on — and
+requires each guard clause to be present compared whole. A substring test would
+accept a clause that is quoted, negated or nested, since each such form still
+contains the clause's text, and a clause wrapped in its own parentheses is not
+equal to its bare form, so the reading fails closed. Further conjuncts are
+allowed, as without a disjunction they only narrow the step. The credential's
+source is a separate rule, owned by
 `tests/workflow_contracts/codescene_credential_invariants.py`: the
 `access-token` input must be exactly `${{ secrets.CS_ACCESS_TOKEN }}`, compared
 whole, because the fault refused is a value that _names_ the credential while
@@ -186,3 +186,13 @@ is any mention of `codescene.io`.
 
 The developers' guide, under _Coverage ratchet and CodeScene publication_,
 records the contracts that hold both.
+
+## Addendum, 2026-10-11: part of the contract moved to the shared checker
+
+The shared CV-005 checker (`make test-workflow-contracts`, ADR-042) now holds
+the environment placement, the upload guard, the token's scope and the
+publisher's concurrency group. The local modules that held them
+(`codescene_environment_rules.py`, `coverage_upload_guard_test.py`,
+`coverage_publisher_token_test.py` and the check-depth modules) are removed.
+The report-delivery contract, the lcov handoff, the uploader's retired inputs
+and the execution of the upload guard stay local.
