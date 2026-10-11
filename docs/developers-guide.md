@@ -1857,16 +1857,27 @@ bound at all, exactly as the shell left it unwrapped.
 Statuses are normalized to Bash's convention before anything classifies them.
 Python reports a signal death as the negation of the signal where a shell
 reports `128 + signal`, and `policy.classify_command_failure` reads only `124`
-and `137` as a timeout, so an untranslated `-15` would silently change a
-timed-out operation's published category. A refused launch keeps the shell's
-statuses — `127` for a program that does not exist and `126` for any other
-refusal — and a failed in-process append reports `1`, which is what the shell's
-`>>` failure produced.
+and `137` as a timeout, so an untranslated `-9` — the `SIGKILL` the bound
+escalates to — would be classified as `api_error` or `fetch_error` instead of
+`timeout` and silently change a timed-out operation's published category.
+`SIGTERM` is translated for the same reason and is a different case: `143` is
+not a timeout status, so an adapter killed by `SIGTERM` keeps its operation's
+own category. A refused launch keeps the shell's statuses — `127` for a program
+that does not exist and `126` for any other refusal — and a failed in-process
+append reports `1`, which is what the shell's `>>` failure produced.
 
 Both artefact paths are handled in the spelling the operator supplied. The
 shell passed its own string to a sink adapter and published it in the
-`metrics-file` and `trace-file` workflow outputs, while only `mkdir` and the
-redirection saw a normalized form; the port carries both spellings in an
+`metrics-file` and `trace-file` workflow outputs, and the port reaches all of
+those boundaries with the same string. Neither creation step normalizes it
+either: the truncation opens the configured spelling, because
+`Path("metrics.jsonl/")` drops the slash and would create the regular file the
+shell's redirection refused, and `mkdir` is given the parent that
+`configuration._directory_name` derives from the configured string, which
+reproduces coreutils `dirname(1)` — the operand the shell's
+`$(dirname "$file")` produced. The path's `Path.parent` is not that operand:
+`Path("reports/.")` normalizes the trailing `/.` away and its parent is `.`,
+where `dirname(1)` answers `reports`. The port carries both forms in an
 `OutputPath`. Creation is still two-phase: both parent directories are made
 before either file is truncated, so a refused trace parent leaves the metrics
 file untouched, and a filesystem refusal prints one bounded diagnostic rather
