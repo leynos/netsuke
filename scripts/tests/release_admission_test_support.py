@@ -154,10 +154,12 @@ reproduce:
   shows the same lines only when both terminate the last one.
 - ``GITHUB_OUTPUT`` is not the only target whose value can be unset: when a
   required variable aborts the gate before the artefact paths are computed, the
-  shell's ``>>"$file"`` redirection carried no operand and Bash wrote the
-  record to *its own standard output*. The Python port reproduces that for the
-  metrics and trace appends rather than dropping the record, so a run that
-  fails on ``GITHUB_REPOSITORY`` is byte-identical on stdout as well.
+  shell's ``>>"$file"`` redirection carried no operand. Bash did not write the
+  record to its own standard output in that state; it tried to open an empty
+  filename, failed, and reported the failure, so the record went nowhere. The
+  Python port returns the same refusal status for an empty target rather than
+  inventing a destination no shell ever had, so a run that fails on
+  ``GITHUB_REPOSITORY`` is byte-identical on stdout as well: both emit nothing.
 """
 
 from release_admission_test_doubles import (

@@ -135,12 +135,14 @@ once the shell scripts are deleted.
   `release-admission adapter could not be run: <program>: <reason>` and maps
   the exception back to the same status. The status and classification are
   preserved; the sentence is a stated wording difference.
-- `os.environ.get(VAR, default)` is not equivalent to Bash's `${VAR-default}`.
-  The dash substitutes only when the variable is *unset*, so an exported empty
-  `NETSUKE_RELEASE_ADMISSION_ENFORCE` was kept and refused by the gate's own
-  mode check rather than replaced with the observation default. The membership
-  test in `configuration.load_configuration` is therefore load-bearing and
-  carries a comment saying so.
+- An exported empty `NETSUKE_RELEASE_ADMISSION_ENFORCE` was kept, not replaced
+  by the observation default, because Bash read it with `${VAR-default}` -- the
+  dash form, without the colon -- which substitutes only when the variable is
+  *unset*. The kept empty value is then refused by the gate's own mode check.
+  `os.environ.get(VAR, default)` happens to agree, because it also substitutes
+  only for an unset variable; the membership test in
+  `configuration.load_configuration` is what states the no-colon form, so a
+  reader cannot mistake the helper for the colon form its siblings implement.
 - The 400-line module ceiling applies to Python as well as Rust (Pylint
   `C0302`, `max-module-lines = 400`). `release_admission_test_support.py` was
   exactly 400 lines at HEAD, so the runtime-test support was split into a facade
@@ -269,11 +271,12 @@ change admission semantics beyond the scope of a form change.
   `SyntaxError` since they were written, with every gate green over them. Run a
   new `Examples` block rather than reading it: a docstring containing `>>>` is
   not evidence that the block executes.
-- `os.environ.get(VAR, default)` is not Bash's `${VAR-default}`: the dash
-  substitutes only when the variable is unset. An exported empty
-  `NETSUKE_RELEASE_ADMISSION_ENFORCE` must reach the mode check, not be
-  replaced by the observation default, so `configuration.load_configuration`
-  tests membership rather than truthiness.
+- An exported empty `NETSUKE_RELEASE_ADMISSION_ENFORCE` must reach the mode
+  check, not be replaced by the observation default, because Bash's
+  `${VAR-default}` substitutes only when the variable is unset.
+  `os.environ.get(VAR, default)` shares that substitution rule, so it would
+  agree here; `configuration.load_configuration` tests membership anyway so
+  that the helper states the no-colon form its siblings do not implement.
 - A review finding can cite this repository's own prose as its authority. The
   counter-suppression finding quoted a sentence from the frozen oracle's
   docstring that asserted the shell dropped an operation's counter with its
