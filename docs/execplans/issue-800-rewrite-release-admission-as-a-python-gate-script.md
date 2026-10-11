@@ -257,6 +257,20 @@ standard output from a redirection that never executes, because the shell armed
 its exit trap after the required-variable checks. Both are docstring
 corrections; the behaviour was already right.
 
+The parity revision, `b10620a2`, was then gated in full: `make check-fmt`
+including its `mdtablefix` stage, `make lint` with all twelve sub-suites,
+`make typecheck-python`, `make doc-coverage` (98.87%), `make test` (3917
+passed, 6 skipped, both doctest targets), `make test-release-admission` (82
+passed), `make test-workflow-contracts`, `make test-documentation-contracts`,
+`make markdownlint` including `markdownlint-cli2`, `make nixie`, and
+`make github-actions-lint`. The first run of that set was red on four gates,
+all four introduced by this pass rather than by the port it repairs: a Pylint
+`R0913` as the cases gained parameters, a df12 `C9102`, an `assert` without a
+message, and a stale `RUNTIME_MODULES` tuple in the workflow contract that
+enumerated four runtime modules against the ten the Makefile now names. That
+last one is the reason the contract exists, and it worked: the fix was the
+amended list, not a relaxed assertion.
+
 ### Behaviour preserved
 
 - The five operations, their order, argument vectors, classification, records,
