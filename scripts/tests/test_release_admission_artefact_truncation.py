@@ -4,24 +4,39 @@ r"""Pin where the gate stops when an artefact target cannot be truncated.
 else, and it does so in two passes: every parent directory first, then every
 file truncated empty. The first pass refuses a path whose *parent* cannot be
 made, which :mod:`test_release_admission_environment_contract` pins. This
-module pins the second, where the target itself cannot be opened -- it names an
-existing *directory* -- and the order inside that pass is what an operator can
-observe.
+module pins the second, where the target itself cannot be opened, and it
+separates two contracts a single technique cannot both hold.
 
-The order is the whole point, and it is asymmetric. The shell ran
-``: >"$metrics_file"; : >"$trace_file"``, so a refused *metrics* target stopped
-before the trace file was touched and left a previous run's trace bytes intact,
-while a refused *trace* target had already truncated the metrics file to zero.
-A port that truncated the two in the other order, or that created both files
-before refusing either, would destroy or preserve a previous run's records on a
-configuration it then refuses -- and the gate's reputation is that a refused
-configuration changes nothing it was not told to change.
+**The order** is what the directory cases pin, and it is asymmetric. The shell
+ran ``: >"$metrics_file"; : >"$trace_file"``, so a refused *metrics* target
+stopped before the trace file was touched and left a previous run's trace bytes
+intact, while a refused *trace* target had already truncated the metrics file
+to zero. A port that truncated the two in the other order, or that created both
+files before refusing either, would destroy or preserve a previous run's
+records on a configuration it then refuses -- and the gate's reputation is that
+a refused configuration changes nothing it was not told to change.
 
-The refusal is induced through the filesystem rather than the environment: the
-target is made a directory, so the ``mkdir`` of both parents succeeds and only
-the truncation can fail. Nothing reaches an adapter afterwards, which is
-asserted rather than assumed, because "refused before any operation ran" is a
-claim the shell's ``set -e`` also made.
+**The operand** is what the slash cases pin, and a directory target alone
+cannot pin it. The defect this module exists for was that ``_truncate`` wrote
+to the *resolved* path, so a target spelled with a trailing slash was rewritten
+to the regular file the shell had refused: ``Path("metrics.jsonl/")`` drops the
+slash and ``write_bytes`` then created ``metrics.jsonl``. A directory target is
+refused by that implementation too -- ``write_bytes`` on a directory raises
+``IsADirectoryError``, whose message contains *Is a directory*, which is what
+the order cases assert on -- so the module would have kept passing had the
+defect been reintroduced. What discriminates is a configured string ending in
+``/``: opening it refuses with the system's own sentence, while writing to the
+resolved path silently succeeds at a target that does not exist and silently
+truncates one that does. The slash cases therefore assert a refusal, that the
+nonexistent target was not created, and that an existing target's prior bytes
+survive -- the last of which is the difference between a refusal and a
+``write_bytes`` that destroyed the file before reporting anything.
+
+The refusal is induced through the filesystem rather than the environment, so
+the ``mkdir`` of both parents succeeds and only the truncation can fail.
+Nothing reaches an adapter afterwards, which is asserted rather than assumed,
+because "refused before any operation ran" is a claim the shell's ``set -e``
+also made.
 
 Example (run from the repository root)::
 
@@ -58,6 +73,11 @@ TRACE_FILE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_TRACE_FILE"
 #: are the shape a real artefact holds.
 PRESERVED = b'{"name": "a previous run left this here"}\n'
 
+#: The suffix that separates the two spellings. ``Path`` normalizes it away, so
+#: it exists only in the configured string -- which is why a case that asserts
+#: on a :class:`Path` cannot see the difference the defect turned on.
+SLASH_SUFFIX = "/"
+
 #: The two truncation boundaries, each with the bytes the *other* artefact must
 #: hold once the gate has exited. ``None`` removes the guesswork: the expected
 #: bytes are stated per case, because they differ, and the difference is the
@@ -73,6 +93,16 @@ TRUNCATION_CASES = [
         b"",
         id="trace-refused-truncates-the-metrics-first",
     ),
+]
+
+#: The two states a slash-terminated target can be in, which the defect
+#: distinguished by *succeeding*: at a target that did not exist it created the
+#: regular file the shell refused, and at one that did it truncated the file to
+#: zero. Both are asserted, because the module's earlier revision only ever
+#: exercised the refusal a directory also produces.
+SLASH_CASES = [
+    pytest.param(False, id="slash-target-does-not-exist"),
+    pytest.param(True, id="slash-target-is-an-existing-file"),
 ]
 
 
@@ -131,6 +161,78 @@ def test_truncation_refusal_stops_at_the_artefact_it_cannot_create(
     assert run.outputs == {}, "a refusal before the trap writes no workflow output"
 
 
+@pytest.mark.parametrize("target_exists", SLASH_CASES)
+def test_slash_target_is_refused_in_the_configured_spelling(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+    *,
+    target_exists: bool,
+) -> None:
+    """Verify a slash-terminated artefact target is refused, not rewritten.
+
+    Parameters
+    ----------
+    cmd_mox
+        Active controller whose shims stand in for every adapter.
+    tmp_path
+        Isolated directory that owns the slash-terminated target.
+    target_exists
+        Whether the target already exists as a regular file. Both states are
+        run because the defect succeeded in a *different* way in each: at an
+        absent target it created the file the shell refused, and at an existing
+        one it truncated the operator's file to zero before the gate went on to
+        fail for some other reason.
+
+    Notes
+    -----
+    The substitution is the whole discriminator. ``bash`` refuses
+    ``: >"metrics.jsonl/"`` with ``Is a directory`` in both states and leaves an
+    existing file's bytes alone, so a *directory* target pins nothing about the
+    operand: ``write_bytes`` on a directory raises ``IsADirectoryError`` too,
+    with the same sentence this module asserts on. Only the trailing slash
+    separates "the configured spelling was opened" from "the resolved path was
+    written", and the assertions below are what the resolved form cannot
+    satisfy -- it creates the absent target, and it empties the existing one.
+
+    The two artefact variables both name the refused target, so the refusal is
+    reached whichever of the two the gate truncates first. That is deliberate
+    here and is *not* the order contract: this case claims nothing about which
+    file is touched first, which is what the directory cases above pin.
+    """
+    adapted = install_adapted(cmd_mox)
+    slash_target = tmp_path / "metrics.jsonl"
+    if target_exists:
+        slash_target.write_bytes(PRESERVED)
+    configured = f"{slash_target}{SLASH_SUFFIX}"
+    run = run_gate(
+        cmd_mox,
+        tmp_path,
+        extra_environment={
+            **adapted.variables(cmd_mox),
+            METRICS_FILE_VARIABLE: configured,
+            TRACE_FILE_VARIABLE: configured,
+        },
+    )
+
+    # The filesystem claim is asserted before the diagnostic one: it is the
+    # claim the defect cannot satisfy, so a reintroduction should name the
+    # destroyed or created target rather than a missing refusal status that is
+    # merely downstream of it.
+    if target_exists:
+        assert slash_target.read_bytes() == PRESERVED, (
+            "a slash-terminated target that already exists must keep its bytes, "
+            "because the shell's redirection refused it without opening it"
+        )
+    else:
+        assert not slash_target.exists(), (
+            "a slash-terminated target must not be created as the regular file "
+            "the resolved spelling would have written"
+        )
+    _assert_refused_diagnostic(run, configured)
+    _assert_no_boundary_was_reached(adapted)
+    assert run.outputs == {}, "a refusal before the trap writes no workflow output"
+
+
 def _target_expressions(
     refused: pathlib.Path,
     survivor: pathlib.Path,
@@ -168,10 +270,16 @@ def _targets(tmp_path: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path]:
     return refused, survivor
 
 
-def _assert_refused_diagnostic(run: GateRun, refused: pathlib.Path) -> None:
-    """Assert the gate refused the target in one bounded diagnostic."""
+def _assert_refused_diagnostic(run: GateRun, configured: str | pathlib.Path) -> None:
+    """Assert the gate refused the target in one bounded diagnostic.
+
+    The operand is the *configured* string rather than a :class:`Path`, because
+    the slash cases need the diagnostic to carry the trailing slash the
+    operator supplied; rendering a ``Path`` back to text would drop it, which is
+    the very rewriting those cases exist to catch.
+    """
     assert run.result.returncode == 1, "a refused artefact target must fail closed"
-    assert str(refused) in run.result.stderr, (
+    assert str(configured) in run.result.stderr, (
         "the diagnostic must carry the configured path the operator supplied"
     )
     assert "Is a directory" in run.result.stderr, (
