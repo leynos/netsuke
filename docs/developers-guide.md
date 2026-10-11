@@ -1966,8 +1966,8 @@ the direct child still being unreaped. The pipe case is GNU `timeout`'s
 exposure as well — the shell's command substitution read the same pipe — so it
 is a preserved limitation rather than a regression. A command whose streams are
 inherited rather than captured cannot be held open by a survivor this way,
-because there is no pipe of ours to drain; it is bounded by its direct child's
-exit alone. The group-escalation limitation is not escaped by inheriting the
+because there is no pipe for it to hold open; it is bounded by its child's exit
+alone. The group-escalation limitation is not escaped by inheriting the
 streams, because it turns on when the direct child exited rather than on who
 holds the pipe.
 

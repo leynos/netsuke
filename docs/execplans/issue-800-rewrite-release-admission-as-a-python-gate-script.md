@@ -1323,14 +1323,14 @@ change admission semantics beyond the scope of a form change.
   files — so it was scoped to eight gates rather than the full commit set:
   `check-fmt`, `lint-python`, `typecheck-python`, `test-release-admission`,
   `test-workflow-contracts`, `spelling`, `markdownlint`, and `lint-clippy`.
-  Seven passed; `check-fmt` failed at its third stage, and the failure was mine
-  rather than the tool's. Editing prose in a Markdown file requires re-running
-  the wrap pass, because `mdtablefix --wrap` refills a paragraph rather than
-  capping its lines: a hand-wrap that reads correctly at 78 columns can still
-  be non-canonical. The tool's `--diff` was used to read the canonical form for
-  each of the three hunks, and the edits were applied by hand rather than by
-  running the mutating `fmt` target. `mdtablefix --check` then exited 0 over
-  174 files.
+  Seven passed; `check-fmt` failed at its third stage, and the failure lay in
+  the edit rather than in the tool. Editing prose in a Markdown file needs
+  re-running the wrap pass, because `mdtablefix --wrap` refills a paragraph
+  rather than capping its lines: a hand-wrap that reads correctly at 78 columns
+  can still be non-canonical. The tool's `--diff` was used to read the
+  canonical form for each of the three hunks, and the edits were applied by
+  hand rather than by running the mutating `fmt` target. `mdtablefix --check`
+  then exited 0 over 174 files.
 
 - 2026-10-11 — Timing caveat on that same run, recorded because it bounds what
   the results establish. Three of the five edited files — the package docstring
