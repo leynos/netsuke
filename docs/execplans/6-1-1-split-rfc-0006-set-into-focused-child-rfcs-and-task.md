@@ -10,20 +10,21 @@ Status: COMPLETE
 
 The eight child RFCs and the coverage contract are delivered. Two volume
 tolerances are breached and recorded rather than waived — the aggregate budget,
-now **4871** against 4000 at `7e9f11f2`, and the per-file 400-line limit, now
+now **4877** against 4000 at `7d404a83`, and the per-file 400-line limit, now
 breached by **all eight** children rather than the seven recorded at
 `7b0794af`. Each successive repair round has widened the breach rather than
 narrowing it, because the findings repaired are prose additions; the aggregate
-moved 4533 → 4792 → 4871 across three rounds, and the density control moved
-48.0 → 51.7. Neither breach blocks the milestone, for the reasons the
-Tolerances section and `D12`'s amendment give, but neither is waived either:
-acceptance is the user's decision, and this plan records the question rather
-than answering it. **The two tolerances are jointly satisfiable, which is why
-this needs that decision rather than a derivation.** Eight children at exactly
-400 lines total 3200, inside the 4000 budget, so the pair is not arithmetically
-unsatisfiable the way the retired 2400 budget was; meeting it means cutting
-**1671** lines, **34.3%** of the set, unevenly distributed (RFC 0014 −8, RFC
-0019 −474). The branch remains open for review.
+moved 4533 → 4792 → 4871 → 4877 across four rounds, and the density control
+moved 48.0 → 51.7. **The breach does not block the milestone in the sense that
+the artefacts are delivered**, but delivery is not acceptance: acceptance is
+the user's decision, and this plan records the question rather than answering
+it. **The two tolerances are jointly satisfiable, which is why this needs that
+decision rather than a derivation.** Eight children at exactly 400 lines total
+3200, inside the 4000 budget, so the pair is not arithmetically unsatisfiable
+the way the retired 2400 budget was; meeting it means cutting **1677** lines,
+**34.4%** of the set, unevenly distributed (RFC 0014 −8, RFC 0019 −476).
+Compression therefore remains a live remedy, and the fixed child count does not
+discharge it. The branch remains open for review.
 
 ## Purpose / big picture
 
@@ -171,14 +172,21 @@ Hard invariants. Violating one requires escalation, not a workaround.
   was derived from five children and the three written afterwards (0018 at 708,
   0019 at 733, 0020 at 664) are the largest in the set, so the figures it
   extrapolated are superseded rather than confirmed. The per-child table below
-  is the measurement. **The breach does not block `EP-M11`**, and the reason is
-  the same one that retired the 2400 figure: the denominator is fixed at eight
-  by four contract tests, the child count cannot move, and the eight are
-  written — so the only remedies left are to raise the budget again or to
-  record a decided waiver, neither of which changes a byte of the set. **It is
-  recorded and escalated to the user for the record; it is not carried as an
-  accepted breach, and the "accepted" wording that previously stood at the end
-  of this sentence has been withdrawn.** See `D12`'s amendment for the
+  is the measurement. **The breach does not block `EP-M11` in the sense that
+  the artefacts are delivered**; the milestone's deliverables are on the branch
+  and the contract is green. **But delivery is not acceptance, and the
+  rationale that previously stood here conflated them.** It read that the
+  denominator is fixed at eight by four contract tests, the child count cannot
+  move, and the eight are written, so the only remedies left are to raise the
+  budget again or to record a decided waiver. **The conclusion does not follow
+  from the fixed child count.** A fixed partition bounds the number of files,
+  not their length; compression is a third remedy that a fixed count leaves
+  open, which the satisfiability test below now shows. The correct statement is
+  the one recorded here: the artefacts are delivered, tolerance acceptance
+  remains pending, and the process exception is not discharged by delivery.
+  **It is recorded and escalated to the user for the record; it is not carried
+  as an accepted breach, and the "accepted" wording that previously stood at
+  the end of this sentence has been withdrawn.** See `D12`'s amendment for the
   per-child figures and the density analysis.
 
   **The unsatisfiability test that retired the 2400 figure does not retire this
@@ -191,12 +199,12 @@ Hard invariants. Violating one requires escalation, not a workaround.
   lines to spare. The pair is therefore satisfiable by an admissible output, so
   reaching it needs no re-derivation and lifting it would be a waiver. The cost
   is what makes it a decision rather than a defect: every one of the eight
-  children is over the per-file limit, so meeting it means cutting **1671**
-  lines, which is **34.3%** of the set, and the same cut also satisfies the
+  children is over the per-file limit, so meeting it means cutting **1677**
+  lines, which is **34.4%** of the set, and the same cut also satisfies the
   aggregate with room to spare. The distribution is the part that matters to
-  the decision — RFC 0014 would lose 8 lines (2.0%) and RFC 0019 would lose 474
-  (54.2%). Recorded with its measurement rather than as a projection, so a
-  reader can re-run the three counts.
+  the decision — RFC 0014 would lose 8 lines (2.0%) and RFC 0019 would lose 476
+  (54.3%). Recorded at `7d404a83` with its measurement rather than as a
+  projection, so a reader can re-run the three counts.
 - **Per-file volume.** If any child RFC exceeds 400 lines, stop and escalate.
   A child carries no per-helper contract, so a larger one means section 5 has
   become restatement. **Breached by RFC 0013 at 470 lines, and recorded rather
@@ -4591,14 +4599,18 @@ historical measurements and are labelled here rather than restated as
 current.** At `7b0794af` the set measured **4533**, 533 over, with the density
 control at **48.0** section-5 lines per helper against the 36.5 baseline, and
 the per-file limit was breached by seven of the eight children, 0014 at 397
-being the only one under. At the current head the set measures **4871**, 871
-over, with **all eight** children over the per-file limit (0013 484, 0014 408,
-0015 609, 0016 545, 0017 529, 0018 753, 0019 874, 0020 669) and the density
-control at **51.7** — so all three recorded controls have moved in the wrong
-direction across the repair rounds, by **+338** aggregate lines and **+3.7**
-density since `7b0794af`. Neither control blocks the task: the child count is
-fixed at eight by four contract tests and the eight are written. **Acceptance
-is not this plan's to record.** An earlier revision of this paragraph ended by
+being the only one under. At `7d404a83` the set measures **4877**, 877 over,
+with **all eight** children over the per-file limit (0013 484, 0014 408, 0015
+613, 0016 545, 0017 529, 0018 753, 0019 876, 0020 669) and the density control
+at **51.7** — so all three recorded controls have moved in the wrong direction
+across the repair rounds, by **+344** aggregate lines and **+3.7** density since
+`7b0794af`. **Neither control blocks the task in the sense that the artefacts
+are delivered, but delivery does not discharge the breach.** The rationale that
+previously stood here — that the child count is fixed at eight by four contract
+tests and the eight are written — does not reach the conclusion it was used
+for: a fixed partition bounds the number of files, not their length, and
+compression remains a third remedy the fixed count leaves open. **Acceptance is
+not this plan's to record.** An earlier revision of this paragraph ended by
 calling the breach accepted, and that wording has been withdrawn — the
 unsatisfiability test that retired the 2400 budget does not retire this pair,
 so accepting it is a decision the user has not been asked for and has not
