@@ -170,6 +170,7 @@ from release_admission_test_doubles import (
     AdaptedBoundaries,
     Boundaries,
     GateRun,
+    Handler,
     Subprocess,
     Wrapper,
     install_adapted,
@@ -178,6 +179,11 @@ from release_admission_test_doubles import (
     reply_to_github,
     reply_to_sink,
     shim,
+)
+from release_admission_test_exclusions import (
+    assert_identifiers_excluded_from_diagnostics,
+    assert_identifiers_excluded_from_records,
+    assert_identifiers_excluded_from_values,
 )
 from release_admission_test_harness import (
     METRICS_VALIDATOR,
@@ -190,9 +196,6 @@ from release_admission_test_records import (
     RunShape,
     assert_complete_records,
     assert_failure_trace_sequence,
-    assert_identifiers_excluded_from_diagnostics,
-    assert_identifiers_excluded_from_records,
-    assert_identifiers_excluded_from_values,
     operation_duration,
     operation_records,
 )
@@ -209,6 +212,7 @@ __all__ = (
     "AdaptedBoundaries",
     "Boundaries",
     "GateRun",
+    "Handler",
     "RunShape",
     "Subprocess",
     "Wrapper",

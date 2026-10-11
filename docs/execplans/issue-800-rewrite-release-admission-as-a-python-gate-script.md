@@ -12,10 +12,11 @@ fifth pass, over three items a later confirmation raised, fixed a second
 behaviour defect — the `mkdir` operand for a target ending in `/.` — and
 corrected two more stale claims. A sixth pass, over three concerns a
 proof-substance assessment raised, repaired the boundedness property's evidence
-without changing the gate or the case count; the accounting for both is under
-*Outcomes and retrospective*. The pull request remains open for the
-repository's own review and merge, which is a separate concern from this plan's
-completion.
+without changing the gate or the case count, and a seventh pass withdrew part
+of that repair after measurement falsified the reason given for it; the
+accounting for all of it is under *Outcomes and retrospective*. The pull
+request remains open for the repository's own review and merge, which is a
+separate concern from this plan's completion.
 
 ## Purpose
 
@@ -147,9 +148,11 @@ once the shell scripts are deleted.
       to twelve modules and 89 cases; a fourth pass then added six more, for
       95, and a fifth added one for the `/.` parent derivation, for 96. A sixth
       pass changed no case count: it repaired the boundedness property's
-      evidence rather than the gate, with the count staying at 96. The counts
-      and the per-gap modules are recorded under *Outcomes and retrospective*.
-      The figure reached 96 at `54a6ec66`, when the `dirname(1)` case landed.
+      evidence rather than the gate, with the count staying at 96. A seventh
+      pass changed none either, withdrawing part of that repair and closing one
+      further evidence gap. The counts and the per-gap modules are recorded
+      under *Outcomes and retrospective*. The figure reached 96 at `54a6ec66`,
+      when the `dirname(1)` case landed.
 - [x] Clear the third repair pass. It fixed the trailing-slash refusal
       described under *The trailing-slash defect and its repair* and cleared
       the CodeScene duplication at the same site; added coverage for the
@@ -597,36 +600,57 @@ change admission semantics beyond the scope of a form change.
   changed and no case count moved**; what the pass repaired is the property's
   evidence. All three concerns were valid. The first was that the property
   generated a workflow-run identifier, asserted its exclusion, and never
-  exercised it. Tracing the reachability rather than accepting the frame
-  produced a stronger result than the concern: `verify_evidence` is the last of
-  the five operations and the gate returns at the first failure, so it runs
-  only when `check_scan_freshness` succeeded; `classify_scan_freshness`
-  succeeds only for `fresh`; and for `fresh`, `classify_evidence` satisfies its
-  disjunction on the first operand, so the `not workflow_run_id` truthiness
-  test is **never evaluated**. The stored identifier has no reachable consumer
-  at all. The removed probe was weaker still: read at the comparison base, its
-  fake set the run answer for an input the gate rejects at the *first*
-  operation, so the identifier never reached even the boundary crossing the
-  probe claimed to test. The disposition is therefore a **narrowing, not a
-  claimed improvement** — the run-identifier exclusion is simply not asserted —
-  and the reachability argument, including what the narrowing costs, is written
-  into the property's own docstring. The second concern was that the `path` and
-  `url` values the property transports are read by nothing in production; the
-  claim is now stated as auxiliary-environment transport, which is what the
-  evidence supports, and the module docstring names the variables as scenarios
-  rather than configuration. The third was that both shared validators and the
-  exclusion helper accept an empty list, so the property could pass on a run
-  that wrote no telemetry. `assert_complete_records` now asserts the operation
-  counters in emission order, the final outcome and category, and the exact
-  trace sequence **before** any exclusion is checked. The measurement that
-  preceded the assertion caught a real error in the expectation I had written
-  from reading rather than running: `gate_complete` carries the *gate's*
-  outcome, not a per-operation success. A diagnostics check was added alongside
-  the records, because the child's standard error is retained with the release
-  and carries the same hazard. Twelve negative controls confirm every new
-  assertion fires, with the trace mutations correctly attributed to the trace
-  assertion rather than masked by the metric one. Two corrections to the
-  assessment's own text were verified and accepted: the expected-label helpers
-  build their dicts from arguments rather than from production enum members
-  (which strengthens the oracle), and the direct requirement is ADR 020's
-  prohibition on identifier-derived labels.
+  exercised it. The first disposition taken was a **narrowing**: the identifier
+  was dropped rather than exercised, on the reasoning that `verify_evidence` is
+  the last of the five operations, the gate returns at the first failure, and
+  `classify_evidence` satisfies its disjunction on the `fresh` operand — so the
+  stored identifier has no reachable consumer. **That narrowing was withdrawn
+  in a seventh pass, because the reason given for it was false and the
+  assessment's alternative was available.** The claim that the base probe
+  "never reached the boundary crossing it claimed to test" was measured and is
+  wrong: the base fake line `${NETSUKE_FAKE_WORKFLOW_RUN_ID-1001}` uses `-`, a
+  default for the *unset* case, so an injected identifier was returned. `1001`
+  appears in a calls log only when the variable is unset (the
+  `answer_no_workflow_run` case). I had generalized from the unset case to the
+  set case without running the set case. A three-arm probe settles it: with the
+  stored identifier copied into an operation record, the property **fails**
+  when the doubled API answers with the identifier and **passes** when it
+  answers with nothing — a no-op control that shows the failure can only come
+  from the generated value reaching production. The property therefore
+  generates the identifier and the double **returns** it, placing it on the
+  gate's own result through `github_find_workflow_run`; the reachability limit
+  is retained as a note on what the case does *not* cover. The second concern
+  was that the `path` and `url` values the property transports are read by
+  nothing in production; the claim is now stated as auxiliary-environment
+  transport, which is what the evidence supports, and the module docstring
+  names the variables as scenarios rather than configuration. The third was
+  that both shared validators and the exclusion helper accept an empty list, so
+  the property could pass on a run that wrote no telemetry.
+  `assert_complete_records` now asserts the operation counters in emission
+  order, the final outcome and category, **the gate counter repeating that
+  outcome**, and the exact trace sequence **before** any exclusion is checked.
+  The measurement that preceded the assertion caught a real error in the
+  expectation I had written from reading rather than running: `gate_complete`
+  carries the *gate's* outcome, not a per-operation success. A diagnostics
+  check was added alongside the records, because the child's standard error is
+  retained with the release and carries the same hazard. Negative controls
+  confirm every new assertion fires, with the trace mutations correctly
+  attributed to the trace assertion rather than masked by the metric one. Two
+  corrections to the assessment's own text were verified and accepted: the
+  expected-label helpers build their dicts from arguments rather than from
+  production enum members (which strengthens the oracle), and the direct
+  requirement is ADR 020's prohibition on identifier-derived labels.
+- 2026-10-11 — The repairs above took `release_admission_test_records.py` to
+  **412 lines**, over the 400-line ceiling, which `make lint-python` reports as
+  Pylint `C0302`. `release_admission_test_exclusions.py` was split out at the
+  seam between the two kinds of claim the module made: shape assertions stay in
+  `..._records.py` (298 lines) and the identifier-exclusion helpers move to the
+  new module (130 lines). The support facade re-exports both, so no runtime
+  module's import changed. The `make test-release-admission` module count is a
+  count of *test* modules and is unaffected — the split added a helper, not a
+  test. The first attempt at the cut was wrong and was caught by collection
+  error, not by review: the cut point dropped `assert_failure_trace_sequence`,
+  `operation_records`, and `operation_duration`, which the facade imports.
+  Restored from the committed revision and the module re-linted. **Lesson: a
+  split point is safe only when the remaining module still exports everything
+  its consumers import — check the importers, not the seam.**

@@ -2912,7 +2912,10 @@ owns the subprocess boundary, `release_admission_test_doubles.py` owns the
 cmd-mox registration and inspection surface,
 `release_admission_test_scenarios.py` owns the wrappers each case composes, and
 `release_admission_test_cases.py` owns the case table and its RFC 0005 mapping.
-`release_admission_test_records.py` owns their fixed-record assertions. Its
+`release_admission_test_records.py` owns their fixed-record shape assertions,
+and `release_admission_test_exclusions.py` owns the identifier-exclusion
+helpers — the split is by the kind of claim each makes, shape versus leakage,
+and it exists because the combined module reached the 400-line file ceiling. Its
 `assert_identifiers_excluded_from_values` helper ignores non-string values and
 checks for each identifier as a substring of every string, reporting matching
 identifier/value pairs on failure. The shared
@@ -2925,9 +2928,12 @@ utilities.
 
 Two of those helpers exist because the exclusion assertions accept an empty
 list. `assert_complete_records` asserts the run's record shape — the operation
-counters in emission order, the final outcome and category, and the exact trace
-sequence — before anything is searched, so a property whose exclusion claim
-holds vacuously over a gate that wrote nothing cannot pass.
+counters in emission order, the final outcome and category, the gate counter
+repeating that outcome, and the exact trace sequence — before anything is
+searched, so a property whose exclusion claim holds vacuously over a gate that
+wrote nothing cannot pass. It reads both telemetry channels: a run that wrote
+metrics but no traces, or traces but no metrics, fails there rather than
+satisfying an exclusion check on one channel alone.
 `assert_identifiers_excluded_from_diagnostics` applies the same substring rule
 to the child's standard error, which is retained with the release and therefore
 carries the same cardinality hazard as a label. It is not redundant with the
@@ -2938,20 +2944,22 @@ The isolated subprocess uses `GITHUB_REPOSITORY` as the fixed repository value
 at its doubled GitHub boundary. The boundedness property generates canonical
 lowercase hexadecimal Git object IDs of 40 or 64 characters so execution
 reaches the commit and workflow-run requests. Arbitrary Unicode values remain
-probes for telemetry-only identifiers, which do not construct requests;
+probes for identifiers that reach telemetry through paths other than request
+construction — the workflow-run identifier and two environment-only values;
 malformed newline revisions are covered by deterministic failure tests.
 
-The property deliberately generates **no** workflow-run identifier, and that
-absence is a finding rather than a saving. `verify_evidence` is the last of the
-five operations and the gate stops at the first failure, so it runs only when
-`check_scan_freshness` succeeded; `classify_scan_freshness` succeeds only for
-`fresh`; and `classify_evidence` short-circuits its disjunction on the `fresh`
-operand, so its `not workflow_run_id` test is never evaluated. The stored
-identifier consequently has no reachable consumer, and neither the identifier
-the API returns nor a fabricated one can reach a record. A change that makes a
-run identifier reachable — by letting a non-fresh state reach
-`verify_evidence`, or by recording the identifier — needs its own case, because
-this property does not cover it.
+The property generates a workflow-run identifier and makes the doubled API
+**answer with it**, so the value reaches the gate's own result through
+`github_find_workflow_run` rather than through an environment variable
+production ignores. That is a safety property in the ordinary sense: the
+identifier's current consumption is limited — `verify_evidence` never sees it
+on the states the chain reaches, because `check_scan_freshness` stops every
+non-fresh state and `classify_evidence` short-circuits its disjunction on the
+`fresh` operand — but a change that copies the stored identifier into telemetry
+is exactly what the case detects. The two environment-only values
+(`NETSUKE_RELEASE_ADMISSION_SCENARIO_PATH` and `..._URL`) make the weaker claim
+and are labelled as such: they establish transport only, because no consumer
+reads either name anywhere under `.github/scripts`.
 
 Pull-request CI invokes this target separately from the workflow-contract
 tests. Keep both gates: the runtime suite exercises the process boundary, while

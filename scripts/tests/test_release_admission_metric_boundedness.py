@@ -2,11 +2,13 @@ r"""Verify release-admission metrics stay bounded.
 
 The fixed failure-category matrix pins operation and category pairs to bounded
 labels. The Hypothesis property uses canonical Git object IDs to reach commit
-and workflow-run requests, keeps generated identifiers out of metric labels,
-trace fields, and diagnostics, and asserts the run's record shape first so that
-the exclusion cannot hold vacuously on an empty artefact. The bound the gate
-places on its own adapters is exercised separately, against a real child that
-refuses to leave, in :mod:`test_release_admission_process_bounds`.
+and workflow-run requests, has the doubled API answer the run query with a
+generated identifier so that value reaches the gate through production, keeps
+generated identifiers out of metric labels, trace fields, and diagnostics, and
+asserts the run's record shape first so that the exclusion cannot hold
+vacuously on an empty artefact. The bound the gate places on its own adapters is
+exercised separately, against a real child that refuses to leave, in
+:mod:`test_release_admission_process_bounds`.
 
 Example (run from the repository root)::
 
@@ -21,6 +23,7 @@ Example (run from the repository root)::
 import pathlib
 import sys
 import tempfile
+import typing as typ
 from pathlib import Path
 
 import pytest
@@ -28,7 +31,11 @@ from cmd_mox import CmdMox
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from release_admission_test_cases import FAILURE_CASES
-from release_admission_test_scenarios import FailureCase, install_case
+from release_admission_test_scenarios import (
+    FailureCase,
+    install_case,
+    is_workflow_run_query,
+)
 from release_admission_test_support import (
     CANARY_BY_OPERATION,
     GITHUB_REPOSITORY,
@@ -36,6 +43,7 @@ from release_admission_test_support import (
     OPERATION_SEQUENCE,
     Boundaries,
     GateRun,
+    Handler,
     RunShape,
     assert_complete_records,
     assert_failure_trace_sequence,
@@ -55,10 +63,13 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 pytest_plugins = ("cmd_mox.pytest_plugin",)
 
+if typ.TYPE_CHECKING:
+    from cmd_mox.ipc import Invocation
+
 #: The environment variables the property uses to carry generated identifiers
 #: that are not the revision. Production never reads these names -- there is no
-#: consumer of either anywhere under ``.github/scripts`` -- so the property
-#: proves transport only, and the claim it makes is exactly that: a value that
+#: consumer of either anywhere under ``.github/scripts`` -- so they prove
+#: transport only, and the claim they support is exactly that: a value that
 #: reaches the child's environment does not reach a record or a diagnostic.
 #: They are named as *scenario* variables rather than as configuration so a
 #: reader is not misled into thinking the gate has inputs the production code
@@ -154,10 +165,32 @@ def test_gate_emits_fixed_categories_for_failure_paths(
         )
 
 
+def _answer_workflow_run(run_id: str) -> Handler:
+    """Return a handler that names *run_id* for the workflow-run query.
+
+    The generated identifier is returned as the API's single line of output, and
+    production stores that line verbatim after stripping its newline. Returning
+    it here is what makes the exclusion claim below a claim about the workflow
+    run the gate read rather than about an environment variable the gate never
+    looks at.
+
+    Returns
+    -------
+    Handler
+        An answer for the run query that carries the generated identifier.
+    """
+
+    def answer(_invocation: Invocation) -> tuple[str, str, int]:
+        """Succeed with the generated run identifier."""
+        return f"{run_id}\n", "", 0
+
+    return answer
+
+
 def _run_under_generated_identifiers(
-    revision: str, path: str, url: str
+    revision: str, run_id: str, path: str, url: str
 ) -> tuple[GateRun, Boundaries]:
-    """Run the gate once with the given identifiers in its environment.
+    """Run the gate once with the given identifiers in play.
 
     A controller is built per example rather than taken from the fixture: the
     doubles must be registered before replay, and Hypothesis runs every example
@@ -167,6 +200,9 @@ def _run_under_generated_identifiers(
     ----------
     revision
         The canonical object ID the workflow exports and the queries must carry.
+    run_id
+        Generated identifier the workflow-run query must answer with, so the
+        value reaches the gate's own result through the production adapter.
     path, url
         Generated identifiers carried in the child's environment only. Nothing
         in production reads either name; the values exist to be transported.
@@ -182,6 +218,13 @@ def _run_under_generated_identifiers(
         CmdMox(verify_on_exit=False) as cmd_mox,
     ):
         boundaries = install_boundaries(cmd_mox)
+        boundaries.gh.wraps(
+            lambda invocation, handler: (
+                _answer_workflow_run(run_id)(invocation)
+                if is_workflow_run_query(invocation)
+                else handler(invocation)
+            )
+        )
         cmd_mox.replay()
         run = run_gate(
             cmd_mox,
@@ -200,50 +243,48 @@ def _run_under_generated_identifiers(
 
 @given(
     revision=GIT_OBJECT_ID,
+    run_id=IDENTIFIER_TEXT,
     path=IDENTIFIER_TEXT,
     url=IDENTIFIER_TEXT,
 )
 @settings(deadline=None, max_examples=20)
 def test_identifiers_never_become_metric_labels(
     revision: str,
+    run_id: str,
     path: str,
     url: str,
 ) -> None:
-    """Verify canonical revisions and transported identifiers stay out of records.
+    """Verify generated identifiers stay out of the gate's records.
 
     Parameters
     ----------
     revision
         A canonical 40-character SHA-1 or 64-character SHA-256 object ID.
+    run_id
+        A generated identifier the workflow-run query answers with.
     path, url
         Generated unbounded identifiers carried in the child's environment.
 
     Notes
     -----
-    **No workflow-run identifier is generated, and the omission is the finding
-    rather than a saving.** This branch previously fed a generated
-    ``run-<value>`` through ``NETSUKE_FAKE_WORKFLOW_RUN_ID`` and asserted it was
-    excluded. Tracing the production path shows that probe could never have
-    been a probe: ``verify_evidence`` is the last of the five operations and
-    :meth:`gate.Gate.run_operations` returns at the *first* failure, so it runs
-    only when ``check_scan_freshness`` succeeded -- and
-    :func:`policy.classify_scan_freshness` returns success only for ``"fresh"``.
-    For ``"fresh"``, :func:`policy.classify_evidence` satisfies its disjunction
-    on the *first* operand, so the ``not workflow_run_id`` truthiness test is
-    never evaluated; for every non-fresh state the chain has already stopped.
-    The stored identifier therefore has no reachable consumer at all, and the
-    identifier the API returns is never a record or a diagnostic.
+    **The workflow-run identifier is generated and returned by the double, so
+    it reaches the gate through production code rather than through an
+    environment variable production ignores.** The gate's
+    :func:`commands.github_find_workflow_run` captures the API's single line,
+    strips its newline, and stores it on the gate result, so the value the
+    exclusion set carries is the value the gate read. This is a safety
+    property in the ordinary sense: the current identifier's consumption is
+    limited -- ``verify_evidence`` never sees it on the states the chain
+    reaches, because ``check_scan_freshness`` stops every non-fresh state and
+    ``classify_evidence`` satisfies its disjunction on its first operand for
+    ``fresh`` -- but a future change that copies the stored identifier into
+    telemetry is exactly what this case detects.
 
-    That last clause is a statement about reachability, not a claim that
-    removing the probe *improved* anything: the earlier case asserted a
-    property of a value whose only route to a record was a path production does
-    not take. What the removal costs is recorded honestly rather than papered
-    over: arbitrary text no longer passes through the *workflow-run* response,
-    and the exclusion shapes below come from ``path`` and ``url`` instead, which
-    still generate arbitrary text over the identical domain. A future change
-    that makes a run identifier reachable -- by letting a non-fresh state reach
-    ``verify_evidence``, or by recording the identifier -- is exactly the change
-    this property no longer covers, and it needs its own case.
+    ``path`` and ``url`` make the weaker claim and are labelled as such: their
+    variable names have no consumer anywhere under ``.github/scripts``, so they
+    establish transport only. They are retained because they generate arbitrary
+    text over the same domain, which the revision (restricted to hex object
+    IDs) and the run identifier (one per example) do not.
 
     The property exercises the success path through request construction and
     lookup with canonical Git object IDs, then reports missing evidence because
@@ -252,8 +293,8 @@ def test_identifiers_never_become_metric_labels(
     resolved SHA before the equality check, so a newline revision mismatches the
     raw ``GITHUB_SHA`` it was given.
     """
-    identifiers = {revision, f"path-{path}", f"url-{url}"}
-    run, boundaries = _run_under_generated_identifiers(revision, path, url)
+    identifiers = {revision, run_id, f"path-{path}", f"url-{url}"}
+    run, boundaries = _run_under_generated_identifiers(revision, run_id, path, url)
 
     assert run.result.returncode == 0, run.result.stderr
     METRICS_VALIDATOR.validate_metrics(run.metrics)
