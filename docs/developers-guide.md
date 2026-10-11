@@ -2922,7 +2922,8 @@ and it exists because the combined module reached the 400-line file ceiling.
 mechanism — the generator strategies, the doubled answer to the workflow-run
 query, the run itself, and the four helpers that each state one claim about it
 — leaving the test module's two tests and the argument for each where a reader
-looks for them; that split exists for the same file-ceiling reason. Its
+looks for them; that split exists for the same file-ceiling reason. The
+`release_admission_test_exclusions.py` module's
 `assert_identifiers_excluded_from_values` helper ignores non-string values and
 checks for each identifier as a substring of every string, reporting matching
 identifier/value pairs on failure. The shared

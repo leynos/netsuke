@@ -753,7 +753,7 @@ change admission semantics beyond the scope of a form change.
   substring search over a fixed vocabulary is not a claim about identifiers
   until the identifiers are moved outside that vocabulary.**
 - 2026-10-11 — A ninth pass, over the proof-substance confirmation that read
-  `39c8a03d` (comment `6108101750`). It **accepted the run-identifier path as a
+  `fee4151d` (comment `6108101750`). It **accepted the run-identifier path as a
   live safety case and kept the overall confirmation partial**, naming three
   remaining problems. Two were real; the third was an ordering artefact of the
   reviewer reading an older revision.

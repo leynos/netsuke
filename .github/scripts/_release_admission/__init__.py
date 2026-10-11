@@ -7,7 +7,7 @@ owns exactly one of them:
 - ``records`` renders a validated value into the JSON Lines text a reader sees.
 - ``delivery`` writes that text to a file, an adapter, or standard output.
 - ``bounding`` spawns one allowlisted command in a process group of its own and
-  restores the shell's guarantee that every descendant is signalled with it.
+  signals the descendants that remain in that group during cancellation.
 - ``commands`` runs every external command and reports what the system said.
 - ``configuration`` resolves everything the gate is told before it runs: the
   required variables, the defaults, and the two artefact paths.

@@ -72,8 +72,11 @@ IDENTIFIER_URL_VARIABLE = "NETSUKE_RELEASE_ADMISSION_SCENARIO_URL"
 #: The digit also keeps the generated identifier on the far side of the runtime's
 #: fixed vocabulary *by construction* rather than by sampling, which is what a
 #: hypothesis example has to be able to state. It costs nothing the property was
-#: testing: the domain is still every string that can cross a shell and reach a
-#: JSON record, and the digits are inside it.
+#: testing: the domain is still arbitrary Unicode payloads within the declared
+#: bound, and the digits are inside it. The bound is the strategy's, not the
+#: vocabulary's -- payloads run 4 to 31 characters, so a generated identifier is
+#: 6 to 33 characters once both markers are added, and a value outside that range
+#: is not sampled rather than excluded by the marker.
 #:
 #: The marker is written at **both ends** for a second reason. Production strips
 #: every trailing LF from the API's answer before storing it

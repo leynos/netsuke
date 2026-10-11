@@ -154,7 +154,7 @@ def test_identifiers_never_become_metric_labels(
     run_id
         A generated identifier the workflow-run query answers with.
     path, url
-        Generated unbounded identifiers carried in the child's environment.
+        Generated identifiers carried in the child's environment.
 
     Notes
     -----
