@@ -137,9 +137,10 @@ once the shell scripts are deleted.
       failures. A later repair pass closed two more gaps and corrected one
       real defect: a trailing-slash artefact target was silently accepted where
       the shell refused it, and an external sink's argument vector was never
-      asserted. It added two modules and eight cases, so the runtime suite is
-      now twelve modules and 89 cases; the counts and the per-gap modules are
-      recorded under *Outcomes and retrospective*.
+      asserted. It added two modules and eight cases, taking the runtime suite
+      to twelve modules and 89 cases; a fourth pass then added six more, for
+      95. The counts and the per-gap modules are recorded under *Outcomes and
+      retrospective*, and the current figure is 95 at `bac20fcc`.
 - [x] Clear the third repair pass. It fixed the trailing-slash refusal
       described under *The trailing-slash defect and its repair* and cleared
       the CodeScene duplication at the same site; added coverage for the
@@ -284,10 +285,11 @@ are separate modules because the modules they belong to by scope are within a
 few dozen lines of the 400-line ceiling, and the count is recorded per revision
 below rather than as one "current" number.
 
-`make test-release-admission` now runs twelve modules and 89 cases: 81 at
+`make test-release-admission` now runs twelve modules and 95 cases: 81 at
 `51d27ae5`, plus two from the external-sink argument-spelling case and the
 set-but-empty `GITHUB_OUTPUT` case, plus two truncation cases, plus four
-adapter-default cases. The Makefile and the workflow contract's
+adapter-default cases, plus two trailing-slash cases, plus four unset-default
+cases. The Makefile and the workflow contract's
 `RUNTIME_MODULES` tuple both name the twelve, in the same order, and the
 contract's own prose says twelve.
 
@@ -337,6 +339,18 @@ converts an `OSError` into the bounded diagnostic appeared twice. One
 drift apart between them. Measured with `cs check` on
 `.github/scripts/_release_admission/configuration.py`: 9.38 with two warnings at
 `:258` and `:276` before, 10.00 with no warnings after.
+
+The first regression written for that defect did not actually detect it, and
+the gap is worth recording because the module looked complete. It pointed the
+refused variable at a *directory*, and a directory is refused by the old
+implementation too: `Path(...).write_bytes(b"")` raises `IsADirectoryError`,
+carrying the same sentence the assertions keyed on. The module therefore pinned
+the truncation *order*, which is a real contract, while leaving the *operand*
+— the thing the repair changed — untested. The cases that discriminate supply a
+configured string ending in `/` for an absent target and for an existing
+regular file: the resolved spelling creates the first and truncates the second,
+and neither survives assertions that the target was not created and that the
+existing bytes remain.
 
 Two further premises were checked rather than assumed, and one was partly
 falsified. `policy.TIMEOUT_STATUSES` is exactly `{124, 137}`, so the docstrings
