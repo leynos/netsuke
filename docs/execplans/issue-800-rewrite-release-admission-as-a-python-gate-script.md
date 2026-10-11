@@ -31,9 +31,12 @@ documentation items the assessment confirmation had verified — a bounded
 generator described as unbounded, a helper attributed to the wrong module, a
 contradiction in this plan's own ninth-pass entry, and a descendant-signalling
 claim its own module docstring refutes — and corrected a fifth claim in its own
-verification notice. The accounting for all of it is under *Outcomes and
-retrospective*. The pull request remains open for the repository's own review
-and merge, which is a separate concern from this plan's completion.
+verification notice. A thirteenth pass then repaired two defects the recording
+commit had introduced and qualified two historical commit references an
+intervening rebase had invalidated. The accounting for all of it is under
+*Outcomes and retrospective*. The pull request remains open for the
+repository's own review and merge, which is a separate concern from this plan's
+completion.
 
 ## Purpose
 
@@ -304,6 +307,15 @@ twelve sub-suites, with Clippy clean so Whitaker genuinely ran),
 doctests), `make test-release-admission` (38 passed),
 `make test-workflow-contracts` (1150 passed, 3 skipped), `make markdownlint`,
 and `make github-actions-lint`.
+
+`30b961d8` and `c6a9d023` are the revisions those passes actually read, and
+they are named as such. They are **not** ancestors of this branch's head: an
+intervening rebase replayed their changes, so the current-history counterparts
+are `66ec7582` and `49df29cb`. Each pair carries an identical stable patch ID —
+`78186157` and `5ea72ce3` respectively — which is what identifies them as the
+same changes. Naming the historical revisions is deliberate: a review is
+evidence about the revision it read, and rewriting that name to a later one
+would claim the pass read bytes it never saw.
 
 A third pass then read the delivered port for *behaviour parity* rather than
 for the port's own quality, and it found more than the first two together. It
@@ -599,8 +611,9 @@ change admission semantics beyond the scope of a form change.
   full on the exact bytes committed, and the three defects the first pass found
   were each either fixed or falsified before the pass was requested. A clean
   review is evidence about a revision, not about a change, so the revision it
-  read is named here — `c6a9d023` — and the gates that ran against it are
-  recorded under *Outcomes and retrospective*.
+  read is named here — `c6a9d023`, whose current-history counterpart after the
+  rebase is `49df29cb`, identified by the shared patch ID — and the gates that
+  ran against it are recorded under *Outcomes and retrospective*.
 - 2026-10-11 — A third review pass, this time for behaviour parity rather than
   for the port's own quality, and the most productive of the three. It found
   five behavioural defects and five acceptance-coverage gaps; the table under
@@ -873,8 +886,7 @@ change admission semantics beyond the scope of a form change.
   *"exactly the records `shape` names"*, while its own body two paragraphs down
   states that every duration record is ignored and `_gate_labels` reads the
   last record rather than rejecting extras. The summary contradicted its own
-  detail in the same docstring, and the plan's earlier account of that helper
-  repeated the overstatement. The summary now reads "match the shape `shape`
+  detail in the same docstring. The summary now reads "match the shape `shape`
   names", and a paragraph names both limits — a clock reading outside the
   accepted number shape drops a duration without touching its counter, so a
   fixed record count would assert the host clock rather than the gate, and the
@@ -907,9 +919,10 @@ change admission semantics beyond the scope of a form change.
      boundedness module. It is defined in
      `release_admission_test_exclusions.py`; the guide now names that module.
   3. This plan's ninth-pass entry named `39c8a03d` where the confirmation read
-     it, and `fee4151d` six lines later. Rather than trust either sentence, the
-     cited comment was read: `6108101750` names `fee4151d` and does not contain
-     the string `39c8a03d` anywhere, so both places now say `fee4151d`.
+     it, and `fee4151d` later in the same entry. Rather than trust either
+     sentence, the cited comment was read: `6108101750` names `fee4151d` and
+     does not contain the string `39c8a03d` anywhere, so both places now say
+     `fee4151d`.
   4. The package docstring said `bounding` signals "every descendant". Its own
      module docstring names `setsid()` as an escape, so the entry now limits
      signalling to the descendants that remain in the process group.
@@ -944,3 +957,43 @@ change admission semantics beyond the scope of a form change.
   136-character login string failed validation. The helper's logic was correct
   and the environment was dirty; running it with `BASH_ENV` unset and `~/.lody`
   off `PATH` is the fix. A refusal message states a hypothesis, not a finding.
+
+- 2026-10-11 — **Thirteenth pass, the eleventh and twelfth passes' own
+  defects, found by the confirmation that read them.** The confirmation assessed
+  `c2138f8a`, the commit that recorded the two preceding passes, and named two
+  inconsistencies in the prose that commit had just added:
+
+  1. The eleventh entry said the plan's earlier account of
+     `assert_complete_records` "repeated the overstatement" and, later in the
+     same entry, that those same descriptions "needed no change" because they
+     do not claim exhaustiveness. Both could not hold. The earlier account, at
+     *Progress*'s account of the sixth pass, describes what the helper asserts
+     without claiming emission completeness, so the first sentence was false.
+     It is deleted; the entry now records only that the docstring summary
+     contradicted its own detail.
+  2. The twelfth entry's third item said the two conflicting revisions sat
+     "six lines later". In `f2073a8c` they are at line 756 and line 793 —
+     37 apart. The correction to `fee4151d` was right, but the distance was
+     not, and it was a distance that changes on every rewrap. Replaced with
+     "later in the same entry".
+
+  The confirmation also qualified two commit references rather than finding a
+  defect: `30b961d8` and `c6a9d023`, the revisions the first two review passes
+  read, are not ancestors of this head because an intervening rebase replayed
+  them as `66ec7582` and `49df29cb`. Each pair has an identical stable patch ID
+  (`78186157`, `5ea72ce3`), which is what proves they are the same changes.
+  Both references now name their current-history counterpart; the historical
+  names are kept because a review is evidence about the revision it read.
+
+  The lesson is the same one the twelfth pass recorded, one level up: **a
+  correction entry is itself a claim, and it needs the same check as the thing
+  it corrects.** Both defects were in newly written sentences about older ones,
+  and neither was caught by a gate — only by reading the entry against the
+  evidence it cites. Two more were found the same way in this entry's own first
+  draft. It gave the gap between the eleventh entry's two statements as a line
+  count, and the count was wrong and unstable under rewrap; it now says "later
+  in the same entry", the repair it prescribes. And it stated its own
+  insertions and deletions, a figure that cannot be a fixed point: writing the
+  number changes the number. That figure is stated once in the commit message
+  instead, measured against the frozen tree. A count embedded in the diff it
+  describes is unstable by construction; this plan should not carry one.
