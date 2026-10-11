@@ -25,7 +25,9 @@ RUNTIME_MODULES = (
     "scripts/tests/test_release_admission_metric_boundedness.py",
     "scripts/tests/test_release_admission_process_bounds.py",
     "scripts/tests/test_release_admission_environment_contract.py",
+    "scripts/tests/test_release_admission_artefact_truncation.py",
     "scripts/tests/test_release_admission_default_forms.py",
+    "scripts/tests/test_release_admission_adapter_defaults.py",
     "scripts/tests/test_release_admission_status_translation.py",
     "scripts/tests/test_release_admission_runner_contract.py",
     "scripts/tests/test_release_admission_metric_degradation.py",
@@ -108,7 +110,7 @@ def test_make_target_runs_only_the_release_admission_runtime_modules() -> None:
     Notes
     -----
     The target must use the repository Python baseline, explicit test
-    dependencies, isolated pytest configuration, and exactly the ten
+    dependencies, isolated pytest configuration, and exactly the twelve
     release-admission modules -- no more, because a stray path would make this
     target responsible for a suite that has its own gate.
     """
@@ -121,7 +123,7 @@ def test_make_target_runs_only_the_release_admission_runtime_modules() -> None:
         token for token in recipe.split() if token.startswith("scripts/tests/test_")
     ]
     assert runtime_paths == list(RUNTIME_MODULES), (
-        f"{TARGET} must execute exactly the ten release-admission modules, "
+        f"{TARGET} must execute exactly the twelve release-admission modules, "
         f"got {runtime_paths!r}"
     )
 

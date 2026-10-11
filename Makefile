@@ -275,7 +275,9 @@ test-release-admission: ## Validate the release-admission runtime contract
 		scripts/tests/test_release_admission_metric_boundedness.py \
 		scripts/tests/test_release_admission_process_bounds.py \
 		scripts/tests/test_release_admission_environment_contract.py \
+		scripts/tests/test_release_admission_artefact_truncation.py \
 		scripts/tests/test_release_admission_default_forms.py \
+		scripts/tests/test_release_admission_adapter_defaults.py \
 		scripts/tests/test_release_admission_status_translation.py \
 		scripts/tests/test_release_admission_runner_contract.py \
 		scripts/tests/test_release_admission_metric_degradation.py \

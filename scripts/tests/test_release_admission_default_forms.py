@@ -33,6 +33,7 @@ import typing as typ
 import pytest
 from release_admission_test_support import (
     METRICS_VALIDATOR,
+    install_adapted,
     install_boundaries,
     run_gate,
 )
@@ -252,3 +253,51 @@ def test_artefact_paths_are_created_at_the_spelling_they_were_given(
         "the published path must still be the spelling the operator configured"
     )
     METRICS_VALIDATOR.validate_metrics(run.metrics)
+
+
+def test_external_metrics_sink_receives_the_configured_spelling(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+) -> None:
+    r"""Verify the sink adapter is named with the operator's own path spelling.
+
+    Notes
+    -----
+    The shell fed each record to its adapter with
+    ``printf '%s\n' "$record" | "$adapter" "$file"``, where ``file`` was the
+    configured string rather than a resolved path, so
+    ``./observations//metrics.jsonl`` reached the adapter under exactly that
+    spelling. Retaining the string at the published boundaries is a different
+    statement from retaining it here: this is the one boundary where the
+    spelling is an argument to a program the operator supplied, and rendering
+    the path back to text would rewrite ``//`` and ``./`` before the adapter
+    ever saw them.
+
+    An external sink has to be configured for that argument to exist at all.
+    With no sink the gate appends in process, so a case that asserted only the
+    published outputs would leave this boundary unobserved; the sink double is
+    installed in the metrics position and records the argv it was handed.
+    """
+    adapted = install_adapted(cmd_mox)
+    spelled = f"{tmp_path}//observations/./metrics.jsonl"
+    normalised = f"{tmp_path}/observations/metrics.jsonl"
+    run = run_gate(
+        cmd_mox,
+        tmp_path,
+        extra_environment={
+            **adapted.variables(cmd_mox),
+            METRICS_FILE_VARIABLE: spelled,
+        },
+    )
+
+    assert run.result.returncode == 0, run.result.stderr
+    assert adapted.metrics.calls, (
+        "an external sink must have been invoked, or the argv assertion is vacuous"
+    )
+    assert set(map(tuple, adapted.metrics.calls)) == {(spelled,)}, (
+        "every sink invocation must name the target with the configured spelling"
+    )
+    handed = {argument for call in adapted.metrics.calls for argument in call}
+    assert normalised not in handed, (
+        "the adapter must not be handed a normalised spelling of the target"
+    )

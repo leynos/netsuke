@@ -79,6 +79,14 @@ REQUIRED_REFUSALS = [
     pytest.param(REVISION_VARIABLE, "", id="revision-empty"),
 ]
 
+#: The two states of the later required variable, whose refusal sits after both
+#: artefacts have been created. The states are the same pair as above because
+#: the ``:?`` form refuses them alike; only the refusal's position differs.
+OUTPUT_REFUSALS = [
+    pytest.param(None, id="output-unset"),
+    pytest.param("", id="output-empty"),
+]
+
 
 @pytest.mark.parametrize(("variable", "state"), REQUIRED_REFUSALS)
 def test_required_variable_refusal_precedes_every_artefact(
@@ -188,11 +196,22 @@ def test_trace_parent_refusal_preserves_a_previous_metrics_file(
     )
 
 
+@pytest.mark.parametrize("state", OUTPUT_REFUSALS)
 def test_missing_output_refusal_leaves_both_artefacts_empty(
     cmd_mox: CmdMox,
     tmp_path: pathlib.Path,
+    state: str | None,
 ) -> None:
     """Verify the output refusal follows creation and precedes the exit trap.
+
+    Parameters
+    ----------
+    cmd_mox
+        Active controller whose shims stand in for every adapter.
+    tmp_path
+        Isolated directory that must hold the two empty artefacts.
+    state
+        The value ``GITHUB_OUTPUT`` is given, or ``None`` to remove it.
 
     Notes
     -----
@@ -202,14 +221,24 @@ def test_missing_output_refusal_leaves_both_artefacts_empty(
     trace file *created and empty*, writes no output, and records no
     ``gate_complete`` trace -- the trap that would have written the delivery
     traces was never armed.
+
+    Both states are pinned because the shell expanded this variable with the
+    ``:?`` form, which refuses an exported *empty* value exactly as it refuses
+    an unset one. That is an assertion about the refusal's sentence and its
+    position rather than only about its exit status, and a case that removed
+    the variable alone would also pass for a gate that read an exported empty
+    value as present.
     """
     install_boundaries(cmd_mox)
-    run = run_gate(cmd_mox, tmp_path, extra_environment={OUTPUT_VARIABLE: None})
+    run = run_gate(cmd_mox, tmp_path, extra_environment={OUTPUT_VARIABLE: state})
 
-    assert run.result.returncode == 1, "a missing output file must fail closed"
+    assert run.result.returncode == 1, "an unusable output file must fail closed"
     assert OUTPUT_VARIABLE in run.result.stderr, (
         "the refusal must name the workflow output variable"
     )
+    assert "GITHUB_OUTPUT must identify the workflow output file" in (
+        run.result.stderr
+    ), "the refusal must keep the shell's own diagnostic sentence"
     for name in (CONFIGURED_METRICS_NAME, CONFIGURED_TRACE_NAME):
         path = tmp_path / name
         assert path.exists(), f"the output refusal is reached after {name} is created"
