@@ -302,7 +302,7 @@ jobs:
           profile: smoke
       - name: Install sccache
         uses: >-
-          taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0
+          taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0
         with:
           tool: sccache@0.16.0
           fallback: none
@@ -564,7 +564,7 @@ jobs:
       - name: Install uv
         # Pins the interpreter the release helper scripts run under to the
         # Python 3.14 baseline the repository's Python tooling targets.
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           python-version: '3.14'
           # These helpers are stdlib-only, so restoring a dependency cache
