@@ -248,7 +248,7 @@ the two persistent sink failures are
 `test_release_admission_sink_persistence.py`. The descendant and filesystem
 boundaries were already covered by `test_release_admission_process_bounds.py`
 and the environment-contract module respectively. `make test-release-admission`
-now runs ten modules and 82 cases.
+now runs ten modules and 81 cases.
 
 Two documentation defects were also cleared. `delivery.py`'s empty-target arm
 described an empty redirect operand and an unset one as the same arm, and they
@@ -260,7 +260,7 @@ corrections; the behaviour was already right.
 The parity revision, `b10620a2`, was then gated in full: `make check-fmt`
 including its `mdtablefix` stage, `make lint` with all twelve sub-suites,
 `make typecheck-python`, `make doc-coverage` (98.87%), `make test` (3917
-passed, 6 skipped, both doctest targets), `make test-release-admission` (82
+passed, 6 skipped, both doctest targets), `make test-release-admission` (81
 passed), `make test-workflow-contracts`, `make test-documentation-contracts`,
 `make markdownlint` including `markdownlint-cli2`, `make nixie`, and
 `make github-actions-lint`. The first run of that set was red on four gates,

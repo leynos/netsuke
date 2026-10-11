@@ -15,6 +15,8 @@ Both forms are exercised against the real gate, because the difference decides
 whether a refused configuration admits a release. The cases live apart from
 :mod:`test_release_admission_environment_contract` because they are about the
 *values* an input resolves to rather than the *order* the gate refuses them in.
+The non-canonical path spelling is one of those values, so it is asserted here
+alongside the defaults rather than in the refusal-order module.
 
 Example (run from the repository root)::
 

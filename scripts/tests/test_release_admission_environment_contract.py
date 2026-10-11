@@ -14,7 +14,11 @@ position rather than a value:
 
 The cases here are the ones no other module can express. Everything else drives
 a gate whose artefacts are already readable, and a run that correctly creates
-nothing is only assertable once the harness tolerates an absent file.
+nothing is only assertable once the harness tolerates an absent file. The
+non-canonical path spelling is asserted in
+:mod:`test_release_admission_default_forms` instead, because it is a statement
+about the *value* a configured input resolves to rather than about a refusal
+position, and one case with two homes is one case too many.
 
 The two Bash default forms are the other half of this contract. They are pinned
 in :mod:`test_release_admission_default_forms`, because they are about the
@@ -264,41 +268,6 @@ def test_absent_path_variables_derive_their_defaults_from_runner_temp(
     assert (runner_temp / DEFAULT_METRICS_NAME).exists(), (
         "the default metric artefact must be the file the gate wrote"
     )
-
-
-def test_gate_publishes_the_operators_own_path_spelling(
-    cmd_mox: CmdMox,
-    tmp_path: pathlib.Path,
-) -> None:
-    """Verify a non-canonical configured path reaches both observable boundaries.
-
-    Notes
-    -----
-    The shell passed the operator's string to the sink adapter and published it
-    verbatim in the ``metrics-file`` and ``trace-file`` workflow outputs; only
-    ``mkdir`` and the redirection saw a normalised form. Rendering a
-    :class:`~pathlib.Path` back to text would rewrite ``//`` and ``/./`` at
-    both boundaries, so the configured spelling is retained and asserted here.
-    """
-    install_boundaries(cmd_mox)
-    spelled = f"{tmp_path}//observations/./metrics.jsonl"
-    traces_spelled = f"{tmp_path}/traces/../traces.jsonl"
-    run = run_gate(
-        cmd_mox,
-        tmp_path,
-        extra_environment={
-            METRICS_FILE_VARIABLE: spelled,
-            TRACE_FILE_VARIABLE: traces_spelled,
-        },
-    )
-
-    assert run.outputs["metrics-file"] == spelled, (
-        "a workflow output must carry the configured spelling, not a normalised one"
-    )
-    assert run.outputs["trace-file"] == traces_spelled, (
-        "both published paths must keep the operator's own spelling"
-    )
-    assert run.result.returncode == 0, run.result.stderr
 
 
 def test_required_input_refusal_keeps_the_shells_diagnostic_sentence(
