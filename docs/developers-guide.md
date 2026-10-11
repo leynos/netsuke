@@ -4667,9 +4667,14 @@ Netsuke uses a mixed strategy:
   the GitHub Actions `shared-actions` group (`GITHUB_ACTIONS_LOCKSTEP_GROUPS`),
   which takes every `leynos/shared-actions` pin bump in one pull request
   because a SHA-to-SHA bump has no semver level, and the cargo lockstep
-  families listed in `CARGO_LOCKSTEP_GROUPS`. The contract requires each with
-  exactly its patterns and no `update-types` limit. Group options that narrow a
-  group's reach (`exclude-patterns`, `applies-to`, `group-by`) are refused.
+  families listed in `CARGO_LOCKSTEP_GROUPS`: `rustcrypto`, `rstest-bdd` and
+  `ortho-config-fluent`. The last takes `ortho_config` and `fluent-bundle`
+  together, because `fluent-bundle` is constrained to the version
+  `ortho_config` resolves or their `FluentValue` types would differ. Each such
+  group precedes the catch-all, as Dependabot uses the first group that
+  matches. The contract requires each with exactly its patterns and no
+  `update-types` limit. Group options that narrow a group's reach
+  (`exclude-patterns`, `applies-to`, `group-by`) are refused.
 - **Property-based tests** use `proptest` and take two shapes: some live in
   `*_tests.rs` modules adjacent to the code under test, included via
   `#[cfg(test)] #[path = "..."] mod ...;` declarations; others are standalone
