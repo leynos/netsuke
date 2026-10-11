@@ -14,11 +14,16 @@ now **4871** against 4000 at `7e9f11f2`, and the per-file 400-line limit, now
 breached by **all eight** children rather than the seven recorded at
 `7b0794af`. Each successive repair round has widened the breach rather than
 narrowing it, because the findings repaired are prose additions; the aggregate
-moved 4533 → 4792 → 4871 across three rounds. Neither breach blocks the
-milestone, for the reasons the Tolerances section and `D12`'s amendment give,
-but neither is waived either: acceptance is the user's decision, and this plan
-records the question rather than answering it. The branch remains open for
-review.
+moved 4533 → 4792 → 4871 across three rounds, and the density control moved
+48.0 → 51.7. Neither breach blocks the milestone, for the reasons the
+Tolerances section and `D12`'s amendment give, but neither is waived either:
+acceptance is the user's decision, and this plan records the question rather
+than answering it. **The two tolerances are jointly satisfiable, which is why
+this needs that decision rather than a derivation.** Eight children at exactly
+400 lines total 3200, inside the 4000 budget, so the pair is not arithmetically
+unsatisfiable the way the retired 2400 budget was; meeting it means cutting
+**1671** lines, **34.3%** of the set, unevenly distributed (RFC 0014 −8, RFC
+0019 −474). The branch remains open for review.
 
 ## Purpose / big picture
 
@@ -170,10 +175,28 @@ Hard invariants. Violating one requires escalation, not a workaround.
   the same one that retired the 2400 figure: the denominator is fixed at eight
   by four contract tests, the child count cannot move, and the eight are
   written — so the only remedies left are to raise the budget again or to
-  record a decided waiver, neither of which changes a byte of the set. It is
-  recorded, escalated to the user for the record, and carried as an accepted
-  breach so the final milestone can close. See `D12`'s amendment for the
+  record a decided waiver, neither of which changes a byte of the set. **It is
+  recorded and escalated to the user for the record; it is not carried as an
+  accepted breach, and the "accepted" wording that previously stood at the end
+  of this sentence has been withdrawn.** See `D12`'s amendment for the
   per-child figures and the density analysis.
+
+  **The unsatisfiability test that retired the 2400 figure does not retire this
+  one.** The `D12` derivation for 2400 was that no admissible eight-child
+  partition could satisfy it, because the per-child overhead alone exceeded the
+  budget — so there was no breach to accept. That test fails here, and it is
+  worth recording because the opposite conclusion is the tempting one. The
+  paired tolerances are 4000 aggregate and 400 per file, and a set of eight
+  children at exactly 400 lines totals **3200**, which is inside 4000 with 800
+  lines to spare. The pair is therefore satisfiable by an admissible output, so
+  reaching it needs no re-derivation and lifting it would be a waiver. The cost
+  is what makes it a decision rather than a defect: every one of the eight
+  children is over the per-file limit, so meeting it means cutting **1671**
+  lines, which is **34.3%** of the set, and the same cut also satisfies the
+  aggregate with room to spare. The distribution is the part that matters to
+  the decision — RFC 0014 would lose 8 lines (2.0%) and RFC 0019 would lose 474
+  (54.2%). Recorded with its measurement rather than as a projection, so a
+  reader can re-run the three counts.
 - **Per-file volume.** If any child RFC exceeds 400 lines, stop and escalate.
   A child carries no per-helper contract, so a larger one means section 5 has
   become restatement. **Breached by RFC 0013 at 470 lines, and recorded rather
@@ -4377,10 +4400,17 @@ tracked; the derivation it performs is reimplemented in the coverage test at
   reject it. The claim it was making survives the correction; the number did
   not. The control still identifies what it was built to identify — a child
   whose section 5 has become restatement — and on this set it identifies RFC
-  0018, which is the finding a reviewer would want from it. The breach is
-  accepted rather than waived: the eight are written, the count is fixed at
-  eight by four contract tests, and the only remaining remedy would be to move
-  the number a third time.
+  0018, which is the finding a reviewer would want from it. **The breach is
+  recorded rather than accepted, and the "accepted" wording that previously
+  stood here has been withdrawn.** It read that the breach was accepted rather
+  than waived because the eight are written, the count is fixed at eight by
+  four contract tests, and the only remaining remedy would be to move the
+  number a third time. The first two clauses are true; the conclusion does not
+  follow from them, and the third is not the only remedy — see the
+  unsatisfiability test recorded under the tolerance, which the raised 4000
+  budget fails where the retired 2400 budget passed it. Acceptance is the
+  user's to give for the same reason the escalation above says it is, and it
+  has not been given.
 
 **Repair round after the PR #860 review, 2026-10-09.** Six CodeRabbit findings
 were repaired, plus a second half of the §6-dependency finding the reviewer did
@@ -4554,16 +4584,27 @@ optioned names are excluded. Aggregate without that exclusion and it reads
 **54/5/1** against section 6.1 — which is why the contract's purity check
 filters, and why the unfiltered accessor would fail a correct set.
 
-**Tolerances: two breached, both recorded and neither waived.** The aggregate
-budget was raised to 4000 by `D12`; the measured set is **4533**, 533 over, and
-the density control fired at **48.0** section-5 lines per helper against a 36.5
-baseline. The per-file 400-line tolerance is breached by **seven of the eight
-children** — 0014, at 397, is the only one under. Neither control blocks the
-task: the child count is fixed at eight by four contract tests, the eight are
-written, and the only remaining remedy would be to move the number a third
-time. The density figure is what makes the breach assessable rather than merely
-counted — it identifies RFC 0018 as the child whose section 5 is closest to
-restatement, which is the finding the control exists to produce.
+**Tolerances: two breached, both recorded and neither waived, and acceptance
+still pending.** The aggregate budget was raised to 4000 by `D12`. **The
+figures in the previous revision of this paragraph were revision-pinned
+historical measurements and are labelled here rather than restated as
+current.** At `7b0794af` the set measured **4533**, 533 over, with the density
+control at **48.0** section-5 lines per helper against the 36.5 baseline, and
+the per-file limit was breached by seven of the eight children, 0014 at 397
+being the only one under. At the current head the set measures **4871**, 871
+over, with **all eight** children over the per-file limit (0013 484, 0014 408,
+0015 609, 0016 545, 0017 529, 0018 753, 0019 874, 0020 669) and the density
+control at **51.7** — so all three recorded controls have moved in the wrong
+direction across the repair rounds, by **+338** aggregate lines and **+3.7**
+density since `7b0794af`. Neither control blocks the task: the child count is
+fixed at eight by four contract tests and the eight are written. **Acceptance
+is not this plan's to record.** An earlier revision of this paragraph ended by
+calling the breach accepted, and that wording has been withdrawn — the
+unsatisfiability test that retired the 2400 budget does not retire this pair,
+so accepting it is a decision the user has not been asked for and has not
+given. The density figure is what makes the breach assessable rather than
+merely counted — it identifies RFC 0018 as the child whose section 5 is closest
+to restatement, which is the finding the control exists to produce.
 
 **Lessons that outlive the task.**
 
@@ -5581,8 +5622,11 @@ Order: `EP-M4` RFC 0014, `EP-M5` RFC 0015, `EP-M6` RFC 0016, `EP-M7` RFC 0017,
 0018 because `expandvars` and `abs` both depend on the dialect mechanism that
 section 8.6 defines and RFC 0017 discharges.
 
-Ship `EP-M4` to `EP-M7` as one pull request and `EP-M8` to `EP-M11` as another,
-so no reviewer faces the whole set at once.
+**The original instruction here — ship `EP-M4` to `EP-M7` as one pull request
+and `EP-M8` to `EP-M11` as another, so no reviewer faces the whole set at once
+— is superseded and retained only as the milestone plan's original intent.**
+The paragraph below records what shipped and why; it is authoritative where the
+two differ.
 
 **That two-pull-request split is the milestone plan's intent and not what
 shipped.** `EP-M3`'s RFC 0013 landed with PR #697, so the remainder is `EP-M4`
@@ -6201,7 +6245,12 @@ and the merge base, so the 34 replayed commits are exclusively this branch's
 own and none of #697's branch commits fall inside the range. All 34 replayed
 with no conflicts and recreated identically — `range-diff` marks every one `=`,
 which is expected because the nine commits `main` added touch `src/`,
-`scripts/`, and workflow files while this branch touches twelve Markdown files.
+`scripts/`, and workflow files while this branch touches twelve Markdown files
+and `typos.toml`. The `typos.toml` change is one line of the spelling gate's
+generated ignore expression, arriving with the regenerated file in `07d116dd`
+rather than as an authored edit; the base-to-head inventory is twelve Markdown
+files plus that one configuration file, and no runtime, dependency, schema, or
+CI file.
 
 Only `docs/contents.md` and `docs/roadmap.md` overlap, and their hunks are
 disjoint: `main` edits the index head and the ADR block while this branch

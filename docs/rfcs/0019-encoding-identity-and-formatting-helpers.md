@@ -503,19 +503,21 @@ together, and the group adds no second key for the same rejection.
 
 The table names constants and Fluent keys rather than `netsuke::jinja::*` codes
 because that is the form a reader greps for in `src/localization/keys.rs` and
-`locales/en-US/messages.ftl`, and because only one of the six carries a
-bracketed code in the message text it constructs.
+`locales/en-US/messages.ftl`, and because the table's key column records the
+key that first names each condition rather than the code the caller finally
+sees.
 
-**Which one, and which four do not, and why the RFC 0006 section 6.9 policy
-permits the difference.** An earlier draft of this paragraph said "two of the
-six"; that figure was wrong, and stating it correctly matters because the
-difference is a contract rather than a detail. Section 6.9 requires every new
-helper's error to carry a `netsuke::jinja::<module>::<reason>` code and says in
-terms that extending the requirement retroactively to the existing standard
-library is out of scope. `text_hash`'s two conditions are plain Fluent messages
-under `keys::STDLIB_PATH_HASH_*`, built by `src/stdlib/path/hash_utils.rs`, and
-carry no bracketed code — `hash` shipped without one and this group's reuse of
-its keys, required by section 5.6, does not add one to an existing helper's
+**Four of the six carry a code and two do not, and the RFC 0006 section 6.9
+policy is what permits the difference.** An earlier draft of this paragraph
+counted this wrongly twice — first as "two of the six", then as "only one of
+the six" — and stating it correctly matters because the difference is a
+contract rather than a detail. Section 6.9 requires every new helper's error to
+carry a `netsuke::jinja::<module>::<reason>` code and says in terms that
+extending the requirement retroactively to the existing standard library is out
+of scope. `text_hash`'s two conditions are plain Fluent messages under
+`keys::STDLIB_PATH_HASH_*`, built by `src/stdlib/path/hash_utils.rs`, and carry
+no bracketed code — `hash` shipped without one and this group's reuse of its
+keys, required by section 5.6, does not add one to an existing helper's
 messages.
 
 `shell_quote`'s four conditions are the more interesting case, because all four

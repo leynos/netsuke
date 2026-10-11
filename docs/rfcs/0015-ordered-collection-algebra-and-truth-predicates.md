@@ -560,13 +560,17 @@ input, because an over-large request is only decisive when the ceiling it
 crosses is stated. The two ceilings need two *different* inputs, and an earlier
 draft of this section used one input for both by mistake:
 `[[]] | product(repeat=100001)` has a single operand containing one empty
-sequence, so its cardinality is one and section 8.3 makes it an empty result —
-it crosses neither ceiling and demonstrates nothing.
+sequence, so its cardinality is one. It crosses neither ceiling and
+demonstrates nothing — but not because the result is empty. `[[]]` is a
+singleton whose one element happens to be empty, and RFC 0006 section 8.3
+reserves the empty result for an actually empty operand such as `[]`. The
+distinction is worth keeping because it separates the three quantities the task
+exercises: cardinality, tuple width, and output content.
 
 Task 6.4.2 therefore succeeds on **cardinality** when `range(100001) | product`
 fails naming the computed cardinality (100001), the operand lengths, and the
-ceiling — and it should be read alongside the empty-operand case, which must
-return an empty result rather than an error, because the two together are what
+ceiling — and it should be read alongside the empty-operand case, where `[]`
+returns an empty result rather than an error, because the two together are what
 show the check is a comparison rather than a blanket refusal of large `repeat`
 values. It succeeds on **output** when a request the cardinality check is
 obliged to admit does not: `[[0]] | product(repeat=1000000)` is a single tuple
