@@ -4,9 +4,12 @@ Status: COMPLETE
 
 Delivered, validated, and reviewed. Two CodeRabbit passes have concluded: the
 first raised three findings, all triaged; the second read the revision that
-answered them and returned none. The pull request remains open for the
-repository's own review and merge, which is a separate concern from this plan's
-completion.
+answered them and returned none. A third repair pass has since fixed one real
+behaviour defect — a trailing-slash artefact target — cleared the CodeScene
+duplication at the same site, added the acceptance coverage listed under
+*Progress*, and corrected several prose claims that measurement falsified. The
+pull request remains open for the repository's own review and merge, which is a
+separate concern from this plan's completion.
 
 ## Purpose
 
@@ -67,8 +70,11 @@ once the shell scripts are deleted.
       run through registered doubles, and the modules pass with 37 cases in
       under 90 seconds. The design the port settled on, and the reasons:
       - The subprocess boundary stays. The gate is still invoked as a real
-        process, because only that exercises its shebang, its exit status, its
-        artefact files, and its redirections. cmd-mox replaces the *fake
+        process, because only that exercises its exit status, its artefact
+        files, and its redirections. The shebang is *not* among them: the
+        harness launches `[python, script]` by absolute path, so `uv` never
+        reads the first line. That contract is asserted statically instead, in
+        `test_release_admission_metrics.py`. cmd-mox replaces the *fake
         executables*, intercepting at the command-name level.
       - `python3` is never shimmed. cmd-mox's POSIX shims are symlinks whose
         shebang is `#!/usr/bin/env python3`, so a shim named `python3` would
@@ -128,8 +134,24 @@ once the shell scripts are deleted.
       order and the artefact-creation position, the two Bash default forms and
       the default artefact paths, the status translation, the real-child
       runner's private-versus-inherited streams, and the two persistent sink
-      failures. The runtime suite is now ten modules; the counts and the
-      per-gap modules are recorded under *Outcomes and retrospective*.
+      failures. A later repair pass closed two more gaps and corrected one
+      real defect: a trailing-slash artefact target was silently accepted where
+      the shell refused it, and an external sink's argument vector was never
+      asserted. It added two modules and eight cases, so the runtime suite is
+      now twelve modules and 89 cases; the counts and the per-gap modules are
+      recorded under *Outcomes and retrospective*.
+- [x] Clear the third repair pass. It fixed the trailing-slash refusal
+      described under *The trailing-slash defect and its repair* and cleared
+      the CodeScene duplication at the same site; added coverage for the
+      external sink's argument vector, the set-but-empty `GITHUB_OUTPUT`
+      refusal, both truncation boundaries, and the colon-form adapter and
+      timeout defaults; corrected five false or incomplete claims in prose —
+      the harness docstring's shebang claim, the ExecPlan's copy of it, the
+      `143`-as-timeout claims in `policy` and `commands`, and the bounding
+      module's unconditional-cleanup claims — and corrected the developers'
+      guide's matching claims. The `143` premise was verified false and the
+      bounding premise was verified incomplete; both were corrected as prose,
+      with no implementation change.
 
 ## Decisions and findings
 
@@ -247,8 +269,27 @@ real-child stream contract is `test_release_admission_runner_contract.py`; and
 the two persistent sink failures are
 `test_release_admission_sink_persistence.py`. The descendant and filesystem
 boundaries were already covered by `test_release_admission_process_bounds.py`
-and the environment-contract module respectively. `make test-release-admission`
-now runs ten modules and 81 cases.
+and the environment-contract module respectively.
+
+The repair pass that followed added two more modules, and the count moved with
+them. `test_release_admission_artefact_truncation.py` pins the *second*
+artefact-creation pass — the one where the target itself cannot be truncated —
+and it is asymmetric: a refused trace target has already truncated the metrics
+file to zero, while a refused metrics target leaves the trace file's previous
+bytes intact, exactly as the shell's `: >"$metrics_file"; : >"$trace_file"` did.
+`test_release_admission_adapter_defaults.py` pins the colon-form defaults
+whose consequences are read back from the run's own execution rather than from
+a published record: the three adapter *names* and the operation timeout. Both
+are separate modules because the modules they belong to by scope are within a
+few dozen lines of the 400-line ceiling, and the count is recorded per revision
+below rather than as one "current" number.
+
+`make test-release-admission` now runs twelve modules and 89 cases: 81 at
+`51d27ae5`, plus two from the external-sink argument-spelling case and the
+set-but-empty `GITHUB_OUTPUT` case, plus two truncation cases, plus four
+adapter-default cases. The Makefile and the workflow contract's
+`RUNTIME_MODULES` tuple both name the twelve, in the same order, and the
+contract's own prose says twelve.
 
 Two documentation defects were also cleared. `delivery.py`'s empty-target arm
 described an empty redirect operand and an unset one as the same arm, and they
@@ -276,6 +317,38 @@ duplicate, and that revision carries a green eleven-gate record over the same
 set, with `make test-release-admission` reporting 81. Both revisions' figures
 are stated because they differ: a single "current" number would be wrong about
 one of the two.
+
+### The trailing-slash defect and its repair
+
+A second repair pass found a real port defect, not a documentation one. Bash
+refused a trailing-slash artefact target — `: >"metrics.jsonl/"` reports
+`Is a directory` and exits `1` — while the port silently succeeded, because
+`Path("metrics.jsonl/")` drops the slash and `write_bytes` on the resolved path
+created the regular file the shell had refused. The fix opens the *configured*
+spelling in `configuration._truncate`, matching the precedent already in
+`delivery._append_in_process`, and lets the operating system's own sentence
+reach the caller through the existing `ConfigurationError` path. `mkdir` keeps
+using the resolved parent, because `mkdir -p "dir/"` and `mkdir -p "dir"` both
+succeed in the shell and the directory is the same either way.
+
+The same site carried a CodeScene duplication warning: the `try`/`except` that
+converts an `OSError` into the bounded diagnostic appeared twice. One
+`_refusing` helper now serves both operations, so the failure handling cannot
+drift apart between them. Measured with `cs check` on
+`.github/scripts/_release_admission/configuration.py`: 9.38 with two warnings at
+`:258` and `:276` before, 10.00 with no warnings after.
+
+Two further premises were checked rather than assumed, and one was partly
+falsified. `policy.TIMEOUT_STATUSES` is exactly `{124, 137}`, so the docstrings
+in `policy.as_bash_status` and `commands.classify_result` that called `143` a
+timeout status were wrong; they are corrected, and the implementation was
+already right. The bounding module's claim that no descendant survives was
+*almost* true and is now stated precisely: a descendant that inherits `SIGTERM`
+as ignored survives the group signal whenever the direct child has already
+exited, because the escalation to `SIGKILL` is armed only by the direct child
+still being unreaped. Measured against the port with a two-second bound and a
+child that traps `TERM` and starts a pipe-holding descendant: the call returned
+after 20 seconds, the descendant's own lifetime.
 
 ### Behaviour preserved
 
