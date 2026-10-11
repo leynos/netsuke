@@ -534,15 +534,19 @@ change admission semantics beyond the scope of a form change.
   mattered most were both invisible to every existing case: the bound signalled
   only its direct child, so a descendant survived cancellation and held the
   captured pipe open until the drain timed out, and a subprocess status reached
-  the gate untranslated, so a `kill -TERM` classified as an ordinary failure
-  rather than as a timeout. The first has no symptom in a passing run — it is a
-  child that outlives the command it belongs to — and the second needs the
-  shell's `128 + signal` convention to be known before `-15` reads as wrong.
-  The lesson is that "the tests pass" is not evidence of parity when the tests
-  were written from the port rather than from the shell: the two modules that
-  closed the largest gaps, the status translation and the real-child runner,
-  both need to run a real child or call a pure function directly, which is why
-  no cmd-mox-based case could have found either. Four of the five gaps were
-  expressed only after the harness could read an absent artefact and unset a
-  variable, so a test-support limitation had been silently bounding what the
-  suite could assert.
+  the gate untranslated, so a `kill -KILL` classified as an ordinary failure
+  rather than as a timeout: Python reports that death as `-9`, and only the
+  shell's `137` is in `TIMEOUT_STATUSES`, which is exactly `{124, 137}`. The
+  first has no symptom in a passing run — it is a child that outlives the
+  command it belongs to — and the second needs the shell's `128 + signal`
+  convention to be known before `-9` reads as wrong. `SIGTERM` is translated
+  for the same reason and is a *different* case: `143` is not a timeout status,
+  so an adapter killed by `SIGTERM` keeps its operation's own category and
+  remains an ordinary operation failure. The lesson is that "the tests pass" is
+  not evidence of parity when the tests were written from the port rather than
+  from the shell: the two modules that closed the largest gaps, the status
+  translation and the real-child runner, both need to run a real child or call
+  a pure function directly, which is why no cmd-mox-based case could have found
+  either. Four of the five gaps were expressed only after the harness could
+  read an absent artefact and unset a variable, so a test-support limitation
+  had been silently bounding what the suite could assert.
