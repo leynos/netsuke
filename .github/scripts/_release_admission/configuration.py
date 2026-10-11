@@ -66,11 +66,14 @@ class Configuration:
 
 
 class ConfigurationError(Exception):
-    """Report a required variable that is unset or empty.
+    """Report a required variable that is unset or empty, or a refused path.
 
     The message is the diagnostic itself, so the caller prints exactly the
     sentence the shell's ``:?`` form produced and nothing derived from the
-    environment.
+    environment. The shell printed no sentence of its own for a filesystem
+    refusal -- it let ``mkdir`` or the redirection report one -- so this class
+    is also what carries the one bounded diagnostic the port prints in that
+    state instead of escaping as an uncaught traceback.
     """
 
 
@@ -201,7 +204,73 @@ def _defaulted_only_when_unset(variable: str, default: str) -> str:
 
 
 def _create_artefacts(*paths: Path) -> None:
-    """Create the artefact files empty, as the shell truncated them."""
+    """Create the artefact files empty, refusing a path the system rejects.
+
+    The shell made *both* parent directories before truncating *either* file:
+    ``mkdir -p "$(dirname "$metrics_file")" "$(dirname "$trace_file")"`` then
+    ``: >"$metrics_file"; : >"$trace_file"``. The order is observable. A refused
+    trace parent left the metrics file untouched, because the whole ``mkdir``
+    ran first; interleaving the two would truncate metrics before discovering
+    that trace could not be created, destroying a previous run's records on a
+    configuration the gate then refuses.
+
+    A refusal by the operating system reaches the caller as a
+    :class:`ConfigurationError` from one of the two helpers below, so the gate
+    reports one bounded diagnostic rather than an uncaught traceback.
+    ``mkdir`` and the truncation each reported their own sentence in the shell,
+    so this message is a port-specific wording; the position and the exit
+    status are the shell's.
+    """
     for path in paths:
+        _make_parent(path)
+    for path in paths:
+        _truncate(path)
+
+
+def _make_parent(path: Path) -> None:
+    """Create one artefact's parent directory, refusing a rejection.
+
+    Raises
+    ------
+    ConfigurationError
+        When the operating system refuses the directory.
+    """
+    try:
         path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        msg = (
+            f"release-admission could not create the directory for "
+            f"{path}: {_reason(error)}"
+        )
+        raise ConfigurationError(msg) from error
+
+
+def _truncate(path: Path) -> None:
+    """Create one artefact file empty, refusing a rejection.
+
+    Raises
+    ------
+    ConfigurationError
+        When the operating system refuses the file.
+    """
+    try:
         path.write_bytes(b"")
+    except OSError as error:
+        msg = f"release-admission could not create {path}: {_reason(error)}"
+        raise ConfigurationError(msg) from error
+
+
+def _reason(error: OSError) -> str:
+    """Render one operating-system refusal as a short reason.
+
+    The shell printed the operating system's own sentence, so this carries its
+    text rather than a class name whenever the system supplied one. The
+    fallback is for the rare :class:`OSError` raised without a message, where
+    the class is the only thing left to name.
+
+    Returns
+    -------
+    str
+        The system's own description, or the error's class name without one.
+    """
+    return error.strerror or error.__class__.__name__
