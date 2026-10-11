@@ -289,9 +289,8 @@ below rather than as one "current" number.
 `51d27ae5`, plus two from the external-sink argument-spelling case and the
 set-but-empty `GITHUB_OUTPUT` case, plus two truncation cases, plus four
 adapter-default cases, plus two trailing-slash cases, plus four unset-default
-cases. The Makefile and the workflow contract's
-`RUNTIME_MODULES` tuple both name the twelve, in the same order, and the
-contract's own prose says twelve.
+cases. The Makefile and the workflow contract's `RUNTIME_MODULES` tuple both
+name the twelve, in the same order, and the contract's own prose says twelve.
 
 Two documentation defects were also cleared. `delivery.py`'s empty-target arm
 described an empty redirect operand and an unset one as the same arm, and they
@@ -345,8 +344,8 @@ the gap is worth recording because the module looked complete. It pointed the
 refused variable at a *directory*, and a directory is refused by the old
 implementation too: `Path(...).write_bytes(b"")` raises `IsADirectoryError`,
 carrying the same sentence the assertions keyed on. The module therefore pinned
-the truncation *order*, which is a real contract, while leaving the *operand*
-— the thing the repair changed — untested. The cases that discriminate supply a
+the truncation *order*, which is a real contract, while leaving the *operand* —
+the thing the repair changed — untested. The cases that discriminate supply a
 configured string ending in `/` for an absent target and for an existing
 regular file: the resolved spelling creates the first and truncates the second,
 and neither survives assertions that the target was not created and that the
