@@ -16,10 +16,15 @@ without changing the gate or the case count, and a seventh pass withdrew part
 of that repair after measurement falsified the reason given for it. An eighth
 pass then repaired two defects those two passes introduced: a CodeScene
 `Large Method` regression in the test module they edited, and a false positive
-in the property's own exclusion assertion. The accounting for all of it is
-under *Outcomes and retrospective*. The pull request remains open for the
-repository's own review and merge, which is a separate concern from this plan's
-completion.
+in the property's own exclusion assertion. A ninth pass then acted on the
+proof-substance confirmation that read the eighth pass's revision: it closed a
+third assertion defect in that same property — a false *negative*, where a
+leaked value production had normalized would not have matched the identifier
+searched for — corrected the reachability claim the confirmation showed was
+still wrong, and split the module when the added prose pushed it past the
+project's file-size ceiling. The accounting for all of it is under *Outcomes
+and retrospective*. The pull request remains open for the repository's own
+review and merge, which is a separate concern from this plan's completion.
 
 ## Purpose
 
@@ -156,7 +161,13 @@ once the shell scripts are deleted.
       further evidence gap. An eighth pass then repaired two defects those two
       passes introduced — a CodeScene `Large Method` regression and a false
       positive in the property's exclusion assertion — and likewise changed no
-      case count, the suite reporting 96 again. The counts and the per-gap
+      case count, the suite reporting 96 again. A ninth pass closed a false
+      negative in that same assertion (a normalized value a leak would carry
+      was not in the searched set), corrected the reachability claim in the
+      property and the guide, and split the property's mechanism into a support
+      module when the added argument pushed the test module past the 400-line
+      ceiling. That support module is not collected, so the twelve collected
+      modules and the case count are unchanged. The counts and the per-gap
       modules are recorded under *Outcomes and retrospective*. The figure
       reached 96 at `54a6ec66`, when the `dirname(1)` case landed.
 - [x] Clear the third repair pass. It fixed the trailing-slash refusal
@@ -250,6 +261,16 @@ Cyclopts `uv run --script` entry point with its implementation split across
 eight modules, its behaviour held to a frozen oracle, and its tests running
 through cmd-mox doubles. `release.yml` invokes the Python entry point; the
 three shell scripts are deleted.
+
+The boundedness property has taken four passes to become well-formed, and each
+pass was found by a different instrument: the sixth by a proof-substance
+assessment, the seventh by the property failing on its own restored evidence,
+the eighth by a hosted CodeScene check, and the ninth by a confirmation reading
+the eighth. Only the eighth was a *false positive* — a passing run reported as
+a failure. The seventh and ninth were false *negatives* in the exclusion
+itself, the direction that stays silent, and the ninth's fix is the one that
+generalizes: an exclusion set must carry every normalization of the value it
+searches for, not only the form the generator produced.
 
 Two review passes have run over it. The first, at `30b961d8`, raised three
 findings: two were accepted and fixed, and one was rejected against a
@@ -717,3 +738,60 @@ change admission semantics beyond the scope of a form change.
   metric, and a passing property does not mean its assertion is well-formed — a
   substring search over a fixed vocabulary is not a claim about identifiers
   until the identifiers are moved outside that vocabulary.**
+- 2026-10-11 — A ninth pass, over the proof-substance confirmation that read
+  `39c8a03d` (comment `6108101750`). It **accepted the run-identifier path as a
+  live safety case and kept the overall confirmation partial**, naming three
+  remaining problems. Two were real; the third was an ordering artefact of the
+  reviewer reading an older revision.
+
+  The real defect is a **false negative in the same exclusion assertion the
+  eighth pass repaired**, and it runs in the *dangerous* direction. Production
+  strips every trailing LF from the API's answer before storing it
+  (`commands._status_and_output` applies `rstrip("\n")`), so an identifier
+  ending in a newline is stored as a *different string* from the one the
+  property searches for. The eighth pass's marker was a **prefix**
+  (`marker + value`), which does nothing about a trailing newline: the raw value
+  `"run-example\n"` is stored as `"run-example"`, a leak of the *stored* value
+  would not have matched the raw identifier in the exclusion set, and the
+  assertion would have passed on a run that leaked. The all-newline case is
+  worse — it normalizes to the empty string, which is a substring of every
+  label. The repair is structural and explicit: the marker is now written at
+  **both ends** so a newline strip cannot remove it, and the exclusion set
+  carries the identifier **both as generated and as production stores it**. A
+  probe falsifies the claim rather than asserting it — arm A reproduces the
+  miss (raw-only set, leak of the stored value, helper silent), arm B shows the
+  repair catching it, and arm C runs 264 generated values through the strip
+  with **0 changed and 0 normalizing to empty**.
+
+  The second is a **prose defect this project's own measurement had already
+  contradicted**: the property said `verify_evidence` "never sees" the
+  identifier, and the guide repeated it. The reviewer is right that production
+  *does* pass the stored identifier — `gate._dispatch` supplies it as the
+  `workflow_run_id` argument of `policy.classify_evidence`. Only its
+  *truthiness* goes unevaluated on this path. Argument delivery and truthiness
+  evaluation are different boundaries, and both the property's docstring and
+  the guide now say so. This is the same class of error the eighth pass
+  corrected once already, which is the lesson: **a reachability claim needs the
+  same probe as a behaviour claim.**
+
+  The third item — that the exclusion set compared a raw value against raw
+  vocabulary — was already answered by the eighth pass's marker; the reviewer
+  had read `fee4151d`. The response names the revision that carries the fix.
+
+  Adding the argument pushed the test module past Pylint's
+  `max-module-lines = 400` (`C0302: Too many lines in module (448/400)`), so
+  the property's **mechanism** moved to
+  `scripts/tests/release_admission_test_boundedness.py` (275 lines) and the two
+  tests and their argument stayed in the test module (210 lines). The seam is
+  deliberate: the correctness *claims* stay where a reader looks for them, and
+  the strategies, the doubled answer, the run, and the four assertions move
+  out. Every moved name loses its leading underscore, the two the eighth pass
+  entry above names included, because it now crosses a module boundary. Both
+  files score **10.00** on CodeScene. `make lint-python`, `make check-fmt`, and
+  `make test-release-admission` pass, the last at **96 cases as before**.
+
+  **Lesson: an exclusion assertion is only as strong as the identity it
+  searches for. When production normalizes a value between receipt and storage,
+  a set carrying the pre-normalization form under-covers the exact leak the
+  assertion exists to catch, and it fails silently. A trailing marker is not a
+  guard against a strip that removes the character the marker is not at.**

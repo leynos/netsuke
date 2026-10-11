@@ -2955,15 +2955,20 @@ length bound alone would not do it: `none` and `failure` are both labels.
 The property generates a workflow-run identifier and makes the doubled API
 **answer with it**, so the value reaches the gate's own result through
 `github_find_workflow_run` rather than through an environment variable
-production ignores. That is a safety property in the ordinary sense: the
-identifier's current consumption is limited — `verify_evidence` never sees it
-on the states the chain reaches, because `check_scan_freshness` stops every
-non-fresh state and `classify_evidence` short-circuits its disjunction on the
-`fresh` operand — but a change that copies the stored identifier into telemetry
-is exactly what the case detects. The two environment-only values
-(`NETSUKE_RELEASE_ADMISSION_SCENARIO_PATH` and `..._URL`) make the weaker claim
-and are labelled as such: they establish transport only, because no consumer
-reads either name anywhere under `.github/scripts`.
+production ignores. `_status_and_output` strips every trailing newline from
+that answer, so the property carries the identifier both as generated and as
+stored, and its generator ends every value in a marker character that a newline
+strip cannot remove. That is a safety property in the ordinary sense. The
+stored identifier does reach a consumer — `gate._dispatch` passes it as the
+`workflow_run_id` argument of `classify_evidence` — but `classify_evidence`
+only ever *evaluates* it on a path this run does not reach: for `fresh` its
+disjunction satisfies on the first operand, and every non-fresh state stops
+earlier still, at `check_scan_freshness`. Argument delivery and truthiness
+evaluation are different boundaries. A change that copies the stored identifier
+into telemetry is exactly what the case detects. The two environment-only values
+(`NETSUKE_RELEASE_ADMISSION_SCENARIO_PATH` and `..._URL`) make the weaker
+claim and are labelled as such: they establish transport only, because no
+consumer reads either name anywhere under `.github/scripts`.
 
 Pull-request CI invokes this target separately from the workflow-contract
 tests. Keep both gates: the runtime suite exercises the process boundary, while
