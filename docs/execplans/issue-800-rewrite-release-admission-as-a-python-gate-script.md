@@ -22,9 +22,12 @@ third assertion defect in that same property — a false *negative*, where a
 leaked value production had normalized would not have matched the identifier
 searched for — corrected the reachability claim the confirmation showed was
 still wrong, and split the module when the added prose pushed it past the
-project's file-size ceiling. The accounting for all of it is under *Outcomes
-and retrospective*. The pull request remains open for the repository's own
-review and merge, which is a separate concern from this plan's completion.
+project's file-size ceiling. A tenth pass then swept the documentation the
+split had invalidated: it corrected two stale paragraphs in the developers'
+guide and this plan's own current-state module count, changing no code and no
+case. The accounting for all of it is under *Outcomes and retrospective*. The
+pull request remains open for the repository's own review and merge, which is a
+separate concern from this plan's completion.
 
 ## Purpose
 
@@ -72,8 +75,10 @@ once the shell scripts are deleted.
       `configuration`, `bounding`, `gate`); the last three of those were split
       out when the CodeScene refactor and the real-child bound pushed `gate`
       and `commands` over the module ceiling. The runtime-test support in
-      `scripts/tests/` is a facade and five modules, after the two-stage split
-      recorded under *Decisions and findings*.
+      `scripts/tests/` is a facade and seven modules — the two-stage split
+      recorded under *Decisions and findings*, plus the two later splits that
+      kept pace with the file ceiling — and the count is stated per revision
+      below rather than as one "current" number.
 - [x] Clear the Python gates. `make lint-python` passes all five stages:
       Ruff 0.16.4, Pylint 4.0.9 at 10.00/10, the df12 house lints, ambrleaks,
       and interrogate at 100%.
@@ -182,6 +187,15 @@ once the shell scripts are deleted.
       guide's matching claims. The `143` premise was verified false and the
       bounding premise was verified incomplete; both were corrected as prose,
       with no implementation change.
+- [x] Clear the tenth pass, a documentation sweep after the ninth pass's split.
+      It corrected two stale paragraphs in the developers' guide — the
+      support-module inventory, which the split had invalidated, and the
+      runtime-module list, which had said "ten" and named ten since
+      `9a0edd5d` while the Makefile and the workflow contract's
+      `RUNTIME_MODULES` tuple had named twelve since `36a913ed` — and corrected
+      this plan's own current-state module count, which the same split had
+      invalidated. No code, test, or workflow changed, so the case count and
+      the twelve collected modules are unchanged.
 
 ## Decisions and findings
 
@@ -809,3 +823,40 @@ change admission semantics beyond the scope of a form change.
   defects share a cause worth naming: **the count and the list live in three
   places — the Makefile, the contract, and the guide — and the pass that moved
   the figure updated two of them.**
+
+- 2026-10-11 — **Tenth pass, a documentation sweep.** Committed as
+  `47bd4889`, "Repair the guide's stale module count and support list". The
+  ninth pass split a support module and corrected the guide's inventory and
+  `_status_and_output` note; sweeping the surrounding prose afterwards found
+  the three defects recorded above — the guide's inventory (mine), the guide's
+  runtime-module list (older), and this plan's own current-state support-module
+  count, which had said "a facade and five modules" while disk held eight.
+
+  Every provenance claim in the corrected prose was verified against history
+  before it was committed, because a prose correction that names a commit is
+  only as good as that name: `9a0edd5d`'s diff shows `-four runtime modules`
+  becoming `+ten runtime modules` with six list entries added, and `36a913ed`'s
+  shows the Makefile and `RUNTIME_MODULES` both going 10 → 12 via exactly the
+  two modules the guide omitted. The corrected list was then proved against the
+  Makefile by script — `identical & in order: True`, 12 == 12 — rather than by
+  re-counting by eye.
+
+  **Lesson: a probe is code, and its bookkeeping can be wrong in the direction
+  that manufactures a verdict.** The normalization probe first printed
+  `FALSIFIED` on a real defect that was not there: it asserted "marker at both
+  ends" over all 264 sampled values, but only the 200 strategy-generated ones
+  carry the marker — the 64 `path-`/`url-` values are prefix-derived by
+  construction, exactly as production derives them. The probe was corrected to
+  test the marker claim against the 200 alone, and the re-run is
+  `not falsified` with the cited figures (264 through the strip, 0 changed, 0
+  empty, 200/200 marked). A probe that reports a failure should be suspected of
+  carrying it until its own assertion is read.
+
+  Gates: `make check-fmt`, `make markdownlint` (including `make spelling`), and
+  `make test-documentation-contracts` all pass on `47bd4889` with a clean tree.
+  The documentation-contracts gate is the one the preceding run had explicitly
+  left unverified, since that suite reads the guide through
+  `tests/documentation_examples/mod.rs` under `FencePolicy::MarkedOnly`; the
+  diff adds or modifies no fence, and the suite passes anyway (14 tests across
+  2 binaries, 42 skipped). No code, test, or workflow changed, so the twelve
+  collected modules and the 96-case count are unchanged.
