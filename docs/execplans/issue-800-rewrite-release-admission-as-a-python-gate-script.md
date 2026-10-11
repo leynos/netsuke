@@ -261,10 +261,15 @@ once the shell scripts are deleted.
   boundary into the command and make the function untestable in process.
 
 - Bounding is native. The shell wrapped each command in GNU `timeout`;
-  `bounding.run_bounded` reproduces both the one-second grace and the `124`
-  (SIGTERM) / `137` (SIGKILL) classification without an external binary, and it
-  does so by signalling the command's *process group* rather than cuprum's
-  cancellation path, which reaches only the direct child.
+  `bounding.run_bounded` reproduces both the one-second grace and the
+  process-group reach without an external binary, and it does so by signalling
+  the command's *process group* rather than cuprum's cancellation path, which
+  reaches only the direct child. The signal *number* is not reproduced: GNU
+  `timeout` told `124` from `137` by whether the command had to be killed, and
+  `run_bounded` reports an elapsed bound as `None` even after escalating to
+  `SIGKILL`, because that escalation discards the child's own status. Every
+  elapsed bound is therefore `124`, which classifies identically because both
+  numbers mean a timeout.
 - The configured adapter names are the cuprum allowlist catalogue, because the
   adapter environment variables are a documented part of this gate's contract.
 - A launch the operating system refuses (a missing adapter, a file without its
@@ -497,8 +502,10 @@ after 20 seconds, the descendant's own lifetime.
 - Observation mode and publication independence are unchanged; the contract
   still asserts that no publication job depends on the canary job.
 - Bounding is native: `bounding.run_bounded` reproduces GNU `timeout`'s
-  one-second grace, its `124`/`137` classification, and its process-group reach
-  without an external binary.
+  one-second grace, its process-group reach, and a timeout classification for
+  an elapsed bound, without an external binary. It reports `124` where the
+  shell could also have reported `137`, because its expiry is reported as
+  `None` whatever signal ended the command rather than as the child's status.
 
 ### Stated differences
 
@@ -1354,5 +1361,59 @@ change admission semantics beyond the scope of a form change.
   and the mechanism that makes it wrong is the one the docstring already had to
   state precisely once before, at `143`-versus-`124`.
 
-  Both claims were swept across the tree rather than fixed where reported; no
-  third site carries either. `configuration.py`'s own claim was already correct.
+  Both claims were swept across the tree rather than fixed where reported, and
+  `configuration.py`'s own claim was already correct. The sweep was not
+  exhaustive, and the sentence that said it was — "no third site carries
+  either" — was itself too broad: the follow-up assessment named a third site,
+  and re-sweeping found a fourth. What the sweep missed is recorded below
+  rather than quietly corrected.
+
+- 2026-10-11 — A third pass over the same claim class, after the follow-up
+  assessment called the previous sweep's "no third site carries either" too
+  broad. It was right to. The claim class is *the bound's own escalation
+  reaches classification through the child's status*, and it appeared at four
+  further sites, not one:
+
+  - `statuses.py`'s `CommandStatus` docstring, which read that the escalated
+    child's "own status for that death is `137` through `as_bash_status`" —
+    the same attribution, and the one the file's own `translate_exit` had
+    already been contradicting.
+  - `statuses.as_bash_status`, which named "a command killed by the bound's own
+    escalation" as the reason `137` is in the timeout set.
+  - `statuses.translate_exit`, whose Notes named "the bound's own escalation"
+    as the `-9` that would be misclassified.
+  - `gate.py`'s module docstring, which read that `bounding` "reproduces both
+    the grace and the escalation" and `statuses` "turns the result into the
+    outcome", implying the escalation's status is what is turned.
+
+  Two further sites claimed a parity that does not hold, and are now qualified
+  rather than removed: the summary and the *Behaviour preserved* list both said
+  `bounding` reproduces GNU `timeout`'s `124`/`137` classification. It does not
+  reproduce the number. The mechanism, checked again in `bounding.py` rather
+  than recalled: `_wait_for_exit` and `_wait_for_streams` both
+  `except TimeoutError`, call `_terminate_group`, and `return None` — so the
+  child's status after the escalation is discarded, and `translate_exit(None)`
+  reports `124` whatever signal ended the command. `137` therefore remains
+  reachable only for a *completed* command independently terminated by
+  `SIGKILL`, which is what the test module's own `classify_result` case still
+  exercises and what keeps `TIMEOUT_BY_KILL` in the set.
+
+  The distinction was measured against GNU coreutils 9.5 rather than reasoned:
+  `timeout --kill-after=1 1 ./traps-term` exits `137`, and
+  `timeout --kill-after=1 1 sleep 2` exits `124`, so GNU `timeout` did make the
+  distinction the port cannot. Nothing published depends on the number:
+  `records.py` has no `status` field and `gate.py` never reads one, so the
+  outcome and error category — both unchanged — are what reach the artefacts.
+
+  One earlier dated entry carries the same imprecise attribution and is left
+  standing as a record of what was believed when it was written: the fifth
+  repair pass calls `-9` "cuprum's `-9` from the `SIGKILL` escalation". The
+  `-9` that matters is a completed command's, and the conclusion that repair
+  reached — that `-15` cannot change a timeout category — is unaffected.
+
+  The test module's three sites were corrected for attribution, not for
+  mechanism: `test_signal_statuses_are_translated_into_the_shells_convention`
+  now says a completed command independently terminated by `SIGKILL`, and
+  `test_classify_result_translates_a_signalled_command` no longer says the
+  command was killed by the escalation. Its assertions are unchanged, and so is
+  `{124, 137}`.

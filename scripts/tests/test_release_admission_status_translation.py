@@ -6,14 +6,14 @@ through the shell's convention, and two downstream decisions depend on it:
 
 - :func:`policy.classify_command_result` maps only a timed-out outcome to
   ``timeout``, and the outcome is decided by ``statuses`` from the translated
-  status, so a ``kill -KILL`` that reached it untranslated (``-9``) would be
-  classified as an ordinary command failure and the operation's own category
-  would survive a real timeout. A command independently terminated by
-  ``SIGTERM`` reports ``-15``, which translates to ``143`` and remains an
-  ordinary failure, because ``143`` is deliberately *not* a timeout status.
-  The bound is a different case and does not depend on which signal stopped the
-  command: when it elapses, ``bounding`` returns ``None``, and
-  ``translate_exit(None)`` reports ``124`` regardless.
+  status, so a completed command independently terminated by ``SIGKILL`` and
+  reported as ``-9`` would be classified as an ordinary command failure and the
+  operation's own category would survive a real timeout. A command
+  independently terminated by ``SIGTERM`` reports ``-15``, which translates to
+  ``143`` and remains an ordinary failure, because ``143`` is deliberately
+  *not* a timeout status. The bound is a different case and does not depend on
+  which signal stopped the command: when it elapses, ``bounding`` returns
+  ``None``, and ``translate_exit(None)`` reports ``124`` regardless.
 - At the unguarded gate-output write, the sink adapter's status *becomes* the
   gate's exit status, so a translated kernel status would leave the step
   exiting a number no shell ever produced.
@@ -79,9 +79,9 @@ def test_signal_statuses_are_translated_into_the_shells_convention(
     -----
     ``137`` is the load-bearing case. It is both the shell's ``SIGKILL`` status
     and one of the two statuses :data:`statuses.TIMEOUT_STATUSES` holds, which
-    :func:`statuses.translate_exit` reads when it names an outcome, so an
-    untranslated ``-9`` would stop the gate recognizing an escalated bound as a
-    timeout at all.
+    :func:`statuses.translate_exit` reads when it names an outcome, so a
+    completed command independently terminated by ``SIGKILL`` would stop being
+    recognized as a timeout if its ``-9`` reached classification untranslated.
     """
     assert statuses.as_bash_status(reported) == expected, (
         "a signal death must be reported in the shell's 128+signal convention"
@@ -217,9 +217,9 @@ def test_classify_result_translates_a_signalled_command(
     Notes
     -----
     This is the whole point of the translation: ``classify_result`` is the only
-    place a completed command's status becomes a decision, so a command killed
-    by the escalation must classify as a timeout here rather than fall through
-    to the operation's own category.
+    place a completed command's status becomes a decision, so a command
+    independently terminated by a signal must classify as a timeout here rather
+    than fall through to the operation's own category.
     """
     assert statuses.classify_result(_result(reported)) == expected, (
         "a signalled command must reach classification in the shell's convention"

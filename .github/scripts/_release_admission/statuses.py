@@ -54,9 +54,11 @@ class CommandStatus(enum.IntEnum):
 
     The bound this port enforces itself reports only :attr:`TIMEOUT_BY_TERM`.
     It has no ``SIGKILL``-then-report path of its own: a group that ignores
-    ``SIGTERM`` is escalated to ``SIGKILL``, and the command's own status for
-    that death is ``137`` through :func:`as_bash_status`, which is the same
-    number for the same reason.
+    ``SIGTERM`` is escalated to ``SIGKILL`` and that status is discarded, so
+    the bound's expiry is reported as ``None`` either way. Leaving
+    :attr:`TIMEOUT_BY_KILL` in the set still matters, because a completed
+    command independently terminated by ``SIGKILL`` reaches classification
+    through :func:`as_bash_status` as ``137``.
     """
 
     TIMEOUT_BY_TERM = 124
@@ -73,14 +75,20 @@ def as_bash_status(exit_code: int) -> int:
     A process that dies from a signal does not exit with a status at all; the
     shell that waited reports ``128`` plus the signal number. Python's
     ``subprocess`` family reports the negation of the signal instead, and the
-    distinction is not cosmetic: a command killed by the bound's own escalation
-    is classified through ``137``, which :attr:`CommandStatus.TIMEOUT_BY_KILL`
-    names. Passing cuprum's ``-9`` through unchanged would classify a
-    killed-by-escalation operation as ``api_error`` or ``fetch_error`` and
-    silently change the published category. ``143`` is translated too, but it
-    is not a timeout status: :data:`TIMEOUT_STATUSES` is exactly ``{124, 137}``,
-    so an operator's adapter killed by ``SIGTERM`` keeps its operation's own
-    category.
+    distinction is not cosmetic: a completed command independently terminated
+    by ``SIGKILL`` reports ``-9``, and ``137`` is what
+    :attr:`CommandStatus.TIMEOUT_BY_KILL` names. Passing cuprum's ``-9``
+    through unchanged would classify that operation as ``api_error`` or
+    ``fetch_error`` and silently change the published category.
+
+    The bound this port enforces does not reach classification through a
+    signal at all. Its expiry is reported as ``None`` whatever signal ended the
+    command, so the escalation to ``SIGKILL`` is never read as a status and the
+    elapsed bound is always ``124``; :func:`translate_exit` records that.
+
+    ``143`` is translated too, but it is not a timeout status:
+    :data:`TIMEOUT_STATUSES` is exactly ``{124, 137}``, so an operator's
+    adapter killed by ``SIGTERM`` keeps its operation's own category.
 
     A status that is not negative is already the shell's own, including the
     ``124`` the bound reports for itself.
@@ -197,11 +205,18 @@ def translate_exit(
 
     Notes
     -----
-    ``None`` is the elapsed bound, which GNU ``timeout`` reported as ``124``.
+    ``None`` is the elapsed bound, which the port reports as ``124``. GNU
+    ``timeout`` told ``124`` from ``137`` by whether the command had to be
+    killed; the bound here reports ``None`` either way, even after escalating
+    to ``SIGKILL``, because that escalation discards the child's own status.
+    The elapsed bound is therefore always ``124``, and the distinction GNU
+    ``timeout`` drew is not one this port can make.
+
     A signal death is translated before it is named, because only the shell's
-    own ``128 + signal`` spelling matches the timeout statuses: an untranslated
-    ``-9`` from the bound's own escalation would be classified as an ordinary
-    failure rather than as a timeout.
+    own ``128 + signal`` spelling matches the timeout statuses: a *completed*
+    command independently terminated by ``SIGKILL`` reports ``-9``, and
+    untranslated it would be classified as an ordinary failure rather than as a
+    timeout.
 
     Examples
     --------

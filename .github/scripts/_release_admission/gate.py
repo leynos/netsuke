@@ -20,10 +20,12 @@ freeze them:
   argument vector keeps them; the comparison between the two is what turns a
   revision ending in a newline into a bounded mismatch.
 
-Bounding is native. The shell wrapped each command in GNU ``timeout`` and
-reported ``124`` (or ``137``) when it elapsed; :mod:`bounding` reproduces both
-the grace and the escalation, and :mod:`statuses` turns the result into the
-outcome this module classifies.
+Bounding is native. The shell wrapped each command in GNU ``timeout``, which
+reported ``124`` when the command accepted ``SIGTERM`` and ``137`` when it had
+to be killed. :mod:`bounding` reproduces the grace and the escalation, but it
+reports an elapsed bound as ``None`` rather than as the status of whichever
+signal ended the command, so every elapsed bound reaches this module's outcome
+vocabulary as a timeout and the killed variant is not one a bound produces.
 """
 
 import dataclasses
