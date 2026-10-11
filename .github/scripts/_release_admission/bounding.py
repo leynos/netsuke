@@ -3,9 +3,10 @@
 The shell wrapped every bounded admission command in GNU ``timeout``, and two
 properties of that wrapper are load-bearing rather than incidental:
 
-- a command that outlives its bound is terminated within the bound plus one
+- a command that outlives its bound is signalled within the bound plus one
   second of grace, and
-- no descendant of the command is still running when it is.
+- every descendant that stayed in the command's process group is signalled
+  with it.
 
 GNU ``timeout`` gets the second property by placing the command in a process
 group of its own and signalling the group rather than the direct child. Cuprum
@@ -43,6 +44,30 @@ A descendant that leaves the group deliberately, with its own ``setsid()``,
 still escapes. That hole is GNU ``timeout``'s as well -- the developers' guide
 records the same limitation for the Kani scope wrapper -- so it is a
 preserved limitation rather than a regression.
+
+The group signal is not the only way a bound can be exceeded, and the second
+hole is a property of the escalation rather than of the group. A descendant
+that outlives its *direct parent* while holding the captured standard-output
+pipe keeps that pipe open, so the drain in :func:`_wait_for_streams` reaches no
+end-of-file and the call waits past its bound.
+
+Membership of the group does not save it. :func:`_terminate_group` escalates to
+``SIGKILL`` only when the *direct child* is still unreaped after the grace, and
+a direct child that exited long ago satisfies that wait immediately; a
+descendant that inherited ``SIGTERM`` as ignored therefore survives the group
+signal with nothing left to escalate against it, and the drain waits for it.
+Measured: a child that ignores ``SIGTERM`` and starts a pipe-holding descendant
+before exiting returns after the descendant's own lifetime, 20 seconds, against
+a two-second bound.
+
+The shell had the same exposure. GNU ``timeout`` signalled the group on expiry,
+but a direct child that had already exited made it report that child's status
+and leave, and nothing revoked a pipe a surviving writer still held, so a shell
+command substitution could overrun its bound the same way. Only the *captured*
+stream is affected: an ``inherit_streams`` command is bounded by its direct
+child's exit alone, because there is no pipe of ours to reach end-of-file. That
+is why the captured drain is the one place this module's bound is not an upper
+limit.
 """
 
 import asyncio
@@ -96,10 +121,17 @@ async def run_bounded(
     Notes
     -----
     A command that outlives its bound is sent ``SIGTERM`` as a *group*, which
-    is what lets the escalation reach a descendant the command started. The
-    direct child is then reaped whether or not it complied, so the bound is
-    ``timeout_seconds + cancel_grace`` at worst and no process the command
-    started is left running.
+    is what lets the escalation reach a descendant the command started, and the
+    direct child is reaped whether or not it complied. The *reaping* of the
+    direct child therefore completes within ``timeout_seconds + cancel_grace``.
+    That is not an upper limit on the call. A descendant that leaves the group
+    with its own ``setsid()`` is never signalled; a descendant that outlives
+    its parent while holding the captured standard-output pipe keeps the drain
+    open past the bound, the escalation against it notwithstanding; and a
+    descendant that inherited ``SIGTERM`` as ignored survives the group signal
+    whenever the direct child has already exited, because the escalation to
+    ``SIGKILL`` is armed only by the direct child still being unreaped. The
+    module docstring records all three, with the measurement for the last.
     """
     process = await _spawn(command, inherit_streams=inherit_streams)
     if inherit_streams:

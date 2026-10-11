@@ -9,10 +9,18 @@ facade the runtime modules import from, and the doubles the child reaches are
 registered by :mod:`release_admission_test_doubles`.
 
 The gate is a real process because only a process exercises the whole contract:
-the shebang ``uv`` honours, the exit status the workflow reads, the artefact
-files the gate creates for itself, and the redirections it performs. The
-executables it runs are cmd-mox shims, so the boundary under test is the one
-production reaches while every external effect stays inside the test.
+the exit status the workflow reads, the artefact files the gate creates for
+itself, and the redirections it performs. The executables it runs are cmd-mox
+shims, so the boundary under test is the one production reaches while every
+external effect stays inside the test.
+
+The *shebang* is not one of those properties. :func:`run_gate` launches
+``[str(PYTHON_PATH), str(SCRIPT_PATH)]`` -- the interpreter by absolute path,
+with the script as its first argument -- so the shebang ``uv`` honours is never
+consulted and this harness cannot vouch for it. That contract is asserted
+statically instead, by
+:func:`test_release_admission_metrics.test_entry_point_declares_the_runtime_contract_the_workflow_needs`,
+which reads the first line of the file and its executable bit.
 """
 
 import dataclasses

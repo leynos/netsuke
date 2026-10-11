@@ -1837,11 +1837,13 @@ each argument vector from the configured adapter names, so the allowlist
 decides which executables may run, but the gate spawns the child itself with
 `start_new_session=True`. A command that outlives its bound is signalled as a
 *process group*: `SIGTERM` first, then `SIGKILL` after the same one-second grace
-`timeout --kill-after=1s` gave. The worst case is therefore the bound plus
-that grace, and no process the command started is left running. A descendant
-that leaves the group with its own `setsid()` still escapes, which is GNU
-`timeout`'s hole as well and is the same limitation the
-[Kani scope wrapper](#kani-scope-wrapper) records.
+`timeout --kill-after=1s` gave. Every descendant still in that group is
+signalled with it, so the reaping finishes within the bound plus that grace,
+and a descendant still in the group is not left running. A descendant can
+outlast it in two ways — by leaving the group with its own `setsid()`, which is
+GNU `timeout`'s hole as well and the same limitation the
+[Kani scope wrapper](#kani-scope-wrapper) records, or by holding the captured
+pipe past its parent's exit; the timeout paragraph above records both.
 
 The streams follow the shell's redirections rather than one rule. A command
 whose output the gate *parses* — the GitHub and clock adapters — has its
@@ -1914,11 +1916,24 @@ and metric classification remains fail-closed.
 Each operation has a 30-second timeout by default. Set
 `NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS` only to an integer from 1
 through 300 seconds, inclusive. The timeout terminates the command's whole
-process group, so a descendant the command started ends with it, and it gives
-the group a one-second termination grace period. A timed-out operation emits
+process group, so a descendant that stayed in it ends with it, and it gives the
+group a one-second termination grace period. A timed-out operation emits
 `outcome=failure` with `error_category=timeout`; invalid timeout configuration
 fails closed as `outcome=failure` with `error_category=unknown` before any
 admission operation runs.
+
+The termination has limits worth knowing before trusting it as an upper bound
+on a call. A descendant that leaves the group with its own `setsid()` is never
+signalled. A descendant that outlives its direct parent while holding a
+*captured* standard-output pipe keeps that pipe open, so the drain waits past
+the bound even after the group has been signalled — and a descendant that
+inherited `SIGTERM` as ignored survives the group signal whenever the direct
+child has already exited, because the escalation to `SIGKILL` is armed only by
+the direct child still being unreaped. The pipe case is GNU `timeout`'s
+exposure as well — the shell's command substitution read the same pipe — so it
+is a preserved limitation rather than a regression. A command whose streams are
+inherited rather than captured has neither problem, because it is bounded by
+its direct child's exit alone.
 
 Instruments emitted by the gate are:
 

@@ -151,8 +151,10 @@ def classify_result(result: CommandResult | None) -> int:
     -----
     A status the child reported for a signal death is translated before it is
     returned, because downstream classification reads the shell's convention:
-    ``kill -TERM`` is ``143`` to a shell and ``-15`` to Python, and only the
-    former matches the timeout statuses.
+    ``kill -KILL`` is ``137`` to a shell and ``-9`` to Python, and only the
+    former matches the timeout statuses. ``kill -TERM`` is translated for the
+    same reason -- ``143`` rather than ``-15`` -- but it is *not* a timeout
+    status: :data:`policy.TIMEOUT_STATUSES` is exactly ``{124, 137}``.
 
     Examples
     --------

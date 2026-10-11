@@ -161,11 +161,14 @@ def as_bash_status(exit_code: int) -> int:
     A process that dies from a signal does not exit with a status at all; the
     shell that waited reports ``128`` plus the signal number. Python's
     ``subprocess`` family reports the negation of the signal instead, and the
-    distinction is not cosmetic: ``SIGTERM`` is the status a *timeout* produces,
-    so Bash's ``143`` and ``137`` are the two statuses
-    :func:`classify_command_failure` reads as a timeout. Passing cuprum's
-    ``-15`` through unchanged would classify a timed-out operation as
-    ``api_error`` or ``fetch_error`` and silently change the published category.
+    distinction is not cosmetic: the bound classifies a command killed by its
+    own escalation through ``137``, which :attr:`CommandStatus.TIMEOUT_BY_KILL`
+    names. Passing cuprum's ``-9`` through unchanged would classify a
+    killed-by-escalation operation as ``api_error`` or ``fetch_error`` and
+    silently change the published category. ``143`` is translated too, but it
+    is not a timeout status: :data:`TIMEOUT_STATUSES` is exactly ``{124, 137}``,
+    so an operator's adapter killed by ``SIGTERM`` keeps its operation's own
+    category.
 
     A status that is not negative is already the shell's own, including the
     ``124`` the bound reports for itself.

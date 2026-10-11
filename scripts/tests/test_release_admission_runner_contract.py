@@ -20,6 +20,15 @@ gate's stream wiring rests on:
 The status contracts are in :mod:`test_release_admission_status_translation`,
 which needs no child; this module needs one, which is why the two are separate.
 
+Scope: every case here calls :mod:`bounding` *directly* through
+``run_bounded_sync`` and ``run_unbounded_sync``. Nothing in this module covers
+the gate's dependency provisioning or its shebang execution -- both are
+properties of invoking ``release_admission.py`` as ``uv run --script``, which
+this module never does. The entry point's runtime contract is asserted
+statically in
+:mod:`test_release_admission_metrics`, and the whole-gate boundary is
+:mod:`release_admission_test_harness`'s.
+
 Example (run from the repository root)::
 
     PYTHONPATH=scripts uv run --no-project --python 3.14 \
