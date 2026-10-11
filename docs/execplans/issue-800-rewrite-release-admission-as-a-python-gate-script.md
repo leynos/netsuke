@@ -44,12 +44,18 @@ once the shell scripts are deleted.
       exit statuses, stderr, JSONL key order and types, default paths, and
       environment variables.
 - [x] Implement the Python gate. `.github/scripts/release_admission.py` is the
-      entry point; `.github/scripts/_release_admission/` holds seven modules
+      entry point; it carries the PEP 723 block with the `cuprum==0.1.0` and
+      `cyclopts==4.25.3` pins and a `#!/usr/bin/env -S uv run --script` shebang,
+      and `release.yml` invokes it with the equivalent
+      `uv run --script <path>` (the workflow does not rely on the executable
+      bit, which is why the shebang is not the load-bearing part of the
+      invocation). `.github/scripts/_release_admission/` holds eight modules
       (`policy`, `records`, `delivery`, `commands`, `telemetry`,
-      `configuration`, `gate`); the last of those was split out of `gate` when
-      the CodeScene refactor pushed it over the module ceiling. The
-      runtime-test support in `scripts/tests/` is a facade and five modules,
-      after the two-stage split recorded under *Decisions and findings*.
+      `configuration`, `bounding`, `gate`); the last three of those were split
+      out when the CodeScene refactor and the real-child bound pushed `gate`
+      and `commands` over the module ceiling. The runtime-test support in
+      `scripts/tests/` is a facade and five modules, after the two-stage split
+      recorded under *Decisions and findings*.
 - [x] Clear the Python gates. `make lint-python` passes all five stages:
       Ruff 0.16.4, Pylint 4.0.9 at 10.00/10, the df12 house lints, ambrleaks,
       and interrogate at 100%.
@@ -112,6 +118,18 @@ once the shell scripts are deleted.
       against measurement. The rejection also corrected a false sentence in the
       frozen oracle's docstring, which was the finding's premise, and added the
       regression case that pins the measured behaviour.
+- [x] Clear the second review pass's behaviour-parity defect list and its
+      acceptance-coverage gaps. Five defects were verified against the shell
+      and fixed: the bound signalled only its direct child rather than the
+      process group, the adapters' standard error was discarded, subprocess
+      statuses reached the gate untranslated, the two artefact parents were
+      created and truncated in one interleaved pass, and a configured path was
+      normalised at two observable boundaries. The gaps closed are the refusal
+      order and the artefact-creation position, the two Bash default forms and
+      the default artefact paths, the status translation, the real-child
+      runner's private-versus-inherited streams, and the two persistent sink
+      failures. The runtime suite is now ten modules; the counts and the
+      per-gap modules are recorded under *Outcomes and retrospective*.
 
 ## Decisions and findings
 
@@ -203,6 +221,40 @@ twelve sub-suites, with Clippy clean so Whitaker genuinely ran),
 doctests), `make test-release-admission` (38 passed),
 `make test-workflow-contracts` (1150 passed, 3 skipped), `make markdownlint`,
 and `make github-actions-lint`.
+
+A third pass then read the delivered port for *behaviour parity* rather than
+for the port's own quality, and it found more than the first two together. It
+listed five behavioural defects, each verified against the shell before being
+fixed, and five acceptance-coverage gaps. Every fix is a separate commit and
+every gap is a case in one of the four modules the suite gained.
+
+| Defect | Verified against the shell | Fix |
+| --- | --- | --- |
+| The bound signalled the direct child only, so a descendant survived cancellation and held the captured pipe open | GNU `timeout` signals the supervised command's *process group* and escalates to `SIGKILL` after a one-second grace | `bounding` starts the child in its own session and kills the group, with a real-child escalation case and a descendant case |
+| The adapters' output was discarded | The shell redirected no adapter stream, so an operator's diagnostic reached the runner | GitHub/clock standard output stays private but their stderr is inherited; the Git and sink adapters inherit both |
+| A subprocess status reached the gate untranslated | A shell reports a signal death as `128 + signal`, and `timeout` reported `127`/`126` for a refused launch | `policy.as_bash_status` and `policy.launch_failure_status`, pinned as pure functions |
+| The artefact parents were created and truncated in one pass | The shell ran one `mkdir -p` naming both parents and only then truncated both files | `load_configuration` creates every parent first, then truncates; a filesystem refusal is a `ConfigurationError`, not a traceback |
+| A configured path was normalised at two boundaries | The shell passed the operator's own string to its sink and to `GITHUB_OUTPUT` | `OutputPath` retains the configured spelling and resolves separately for the filesystem |
+
+The gaps are the cases the port's own tests could not express, and each is now
+a module of its own. The refusal order and the artefact-creation position are
+`test_release_admission_environment_contract.py`; the two Bash default forms,
+including the no-colon enforcement mode, are
+`test_release_admission_default_forms.py`; the status translation and the
+launch refusals are `test_release_admission_status_translation.py`; the
+real-child stream contract is `test_release_admission_runner_contract.py`; and
+the two persistent sink failures are
+`test_release_admission_sink_persistence.py`. The descendant and filesystem
+boundaries were already covered by `test_release_admission_process_bounds.py`
+and the environment-contract module respectively. `make test-release-admission`
+now runs ten modules and 82 cases.
+
+Two documentation defects were also cleared. `delivery.py`'s empty-target arm
+described an empty redirect operand and an unset one as the same arm, and they
+are not; and the frozen oracle's note derived a pre-trap refusal's silent
+standard output from a redirection that never executes, because the shell armed
+its exit trap after the required-variable checks. Both are docstring
+corrections; the behaviour was already right.
 
 ### Behaviour preserved
 
@@ -296,6 +348,18 @@ change admission semantics beyond the scope of a form change.
   leaving a clean checkout dirty after a spelling run. That one-line
   regeneration is committed separately at the head of this branch so a reviewer
   can split it without touching the port's commits.
+- A test suite written *from* a port rather than *from* the specification it
+  replaces reproduces the port's own misreadings as expectations. The coverage
+  the third pass added was not new behaviour to test — every defect it found
+  had been reachable from the day the port landed — it was a second reading of
+  the shell, this time asking what each line was *for* rather than what the
+  port made it do. The two cases that would have caught the worst defects
+  needed facilities the harness lacked, so the harness itself was part of the
+  gap: it could not assert a run that correctly creates nothing, because it
+  read an absent artefact as a fault, and it could not express an *unset*
+  variable at all, only an empty one. A support module that cannot represent a
+  state the specification distinguishes is a ceiling on every case written
+  against it.
 
 ## Revision note
 
@@ -369,3 +433,22 @@ change admission semantics beyond the scope of a form change.
   review is evidence about a revision, not about a change, so the revision it
   read is named here — `c6a9d023` — and the gates that ran against it are
   recorded under *Outcomes and retrospective*.
+- 2026-10-11 — A third review pass, this time for behaviour parity rather than
+  for the port's own quality, and the most productive of the three. It found
+  five behavioural defects and five acceptance-coverage gaps; the table under
+  *Outcomes and retrospective* records each defect and its fix. The two that
+  mattered most were both invisible to every existing case: the bound signalled
+  only its direct child, so a descendant survived cancellation and held the
+  captured pipe open until the drain timed out, and a subprocess status reached
+  the gate untranslated, so a `kill -TERM` classified as an ordinary failure
+  rather than as a timeout. The first has no symptom in a passing run — it is a
+  child that outlives the command it belongs to — and the second needs the
+  shell's `128 + signal` convention to be known before `-15` reads as wrong.
+  The lesson is that "the tests pass" is not evidence of parity when the tests
+  were written from the port rather than from the shell: the two modules that
+  closed the largest gaps, the status translation and the real-child runner,
+  both need to run a real child or call a pure function directly, which is why
+  no cmd-mox-based case could have found either. Four of the five gaps were
+  expressed only after the harness could read an absent artefact and unset a
+  variable, so a test-support limitation had been silently bounding what the
+  suite could assert.
