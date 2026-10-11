@@ -253,9 +253,7 @@ async def _terminate_group(
         await process.wait()
 
 
-def _signal_group(
-    process: asyncio.subprocess.Process, number: signal.Signals
-) -> None:
+def _signal_group(process: asyncio.subprocess.Process, number: signal.Signals) -> None:
     """Send one signal to the command's process group.
 
     ``start_new_session`` makes the child a session leader, so its process-group

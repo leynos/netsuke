@@ -324,6 +324,4 @@ def test_required_input_refusal_keeps_the_shells_diagnostic_sentence(
     assert os.sep not in run.result.stderr, (
         "the port must not prefix the sentence with a script path"
     )
-    assert REVISION not in run.result.stderr, (
-        "the refusal must not carry the revision"
-    )
+    assert REVISION not in run.result.stderr, "the refusal must not carry the revision"

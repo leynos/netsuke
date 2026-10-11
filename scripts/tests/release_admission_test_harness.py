@@ -15,15 +15,13 @@ executables it runs are cmd-mox shims, so the boundary under test is the one
 production reaches while every external effect stays inside the test.
 """
 
+import collections.abc as cabc
 import dataclasses
 import importlib.util
 import os
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script boundary is under test.
 import typing as typ
 from pathlib import Path
-
-if typ.TYPE_CHECKING:
-    import collections.abc as cabc
 
 from release_admission_test_doubles import (
     GITHUB_REPOSITORY,
@@ -135,7 +133,7 @@ def run_gate(
     tmp_path: Path,
     *,
     evidence_state: str = "missing",
-    extra_environment: dict[str, str | None] | None = None,
+    extra_environment: cabc.Mapping[str, str | None] | None = None,
 ) -> GateRun:
     """Run the production gate under cmd-mox and collect everything it wrote.
 
@@ -248,7 +246,7 @@ class GateInputs:
 
     tmp_path: Path
     evidence_state: str
-    extra_environment: dict[str, str | None] | None
+    extra_environment: cabc.Mapping[str, str | None] | None
     paths: dict[str, Path]
 
 
@@ -290,7 +288,11 @@ def _gate_environment(
     shim_dir = cmd_mox.environment.shim_dir
     assert shim_dir is not None, "CmdMox must create its command shim directory"
     paths = inputs.paths
-    environment = {
+    # The overrides are merged below, where a ``None`` *removes* a name rather
+    # than being stored: the returned mapping therefore holds only ``str``
+    # values, and the annotation is what says so rather than a narrowed view a
+    # reader would have to reconstruct.
+    environment: dict[str, str] = {
         **os.environ,
         "GITHUB_OUTPUT": str(paths["output"]),
         "GITHUB_REPOSITORY": GITHUB_REPOSITORY,

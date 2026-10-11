@@ -273,9 +273,7 @@ def test_missing_sink_executable_reports_the_shells_status(tmp_path: Path) -> No
     assert delivery.append_record(str(missing), str(target), "record") == 127, (
         "a sink the operating system cannot find must report 127, as a shell did"
     )
-    assert not target.exists(), (
-        "a sink that never ran must not leave a target behind"
-    )
+    assert not target.exists(), "a sink that never ran must not leave a target behind"
 
 
 def test_unexecutable_sink_reports_the_shells_status(tmp_path: Path) -> None:

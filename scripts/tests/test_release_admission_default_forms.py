@@ -25,6 +25,7 @@ Example (run from the repository root)::
         -c /dev/null --rootdir=. -p no:cacheprovider
 """
 
+import dataclasses
 import typing as typ
 
 import pytest
@@ -53,21 +54,50 @@ ENFORCE_VARIABLE = "NETSUKE_RELEASE_ADMISSION_ENFORCE"
 DEFAULT_METRICS_NAME = "netsuke-release-admission-metrics.jsonl"
 DEFAULT_TRACE_NAME = "netsuke-release-admission-traces.jsonl"
 
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class EnforcementCase:
+    """Describe one state of the gate's no-colon input and what it must produce.
+
+    The two states travel with the outcome each must reach, because the pair
+    only means something together: the *value* supplied and the exit status and
+    category it produces are one statement about the no-colon form, and a case
+    that carried only the value would have nothing to assert it against.
+
+    Attributes
+    ----------
+    state
+        The value the enforcement variable is given, or ``None`` to remove it.
+    status
+        The exit status the state must produce.
+    category
+        The gate error category the state must publish.
+    """
+
+    state: str | None
+    status: int
+    category: str
+
+
 #: The two states of the one no-colon input, and the category each publishes.
 #: ``None`` removes the variable; the empty string exports it empty.
 ENFORCEMENT_STATES = [
-    pytest.param(None, 0, "missing_evidence", id="unset-takes-the-default"),
-    pytest.param("", 1, "unknown", id="empty-is-kept-and-refused"),
+    pytest.param(
+        EnforcementCase(None, 0, "missing_evidence"),
+        id="unset-takes-the-default",
+    ),
+    pytest.param(
+        EnforcementCase("", 1, "unknown"),
+        id="empty-is-kept-and-refused",
+    ),
 ]
 
 
-@pytest.mark.parametrize(("state", "status", "category"), ENFORCEMENT_STATES)
+@pytest.mark.parametrize("case", ENFORCEMENT_STATES)
 def test_enforcement_default_distinguishes_unset_from_empty(
     cmd_mox: CmdMox,
     tmp_path: pathlib.Path,
-    state: str | None,
-    status: int,
-    category: str,
+    case: EnforcementCase,
 ) -> None:
     """Verify only an *unset* enforcement variable takes the documented default.
 
@@ -77,12 +107,8 @@ def test_enforcement_default_distinguishes_unset_from_empty(
         Active controller whose shims stand in for every adapter.
     tmp_path
         Isolated output directory for the gate.
-    state
-        The value the enforcement variable is given, or ``None`` to remove it.
-    status
-        The exit status the state must produce.
-    category
-        The gate error category the state must publish.
+    case
+        The state under test and the status and category it must produce.
 
     Notes
     -----
@@ -98,12 +124,12 @@ def test_enforcement_default_distinguishes_unset_from_empty(
     that only supplied valid modes could not tell the two implementations apart.
     """
     install_boundaries(cmd_mox)
-    run = run_gate(cmd_mox, tmp_path, extra_environment={ENFORCE_VARIABLE: state})
+    run = run_gate(cmd_mox, tmp_path, extra_environment={ENFORCE_VARIABLE: case.state})
 
-    assert run.result.returncode == status, (
+    assert run.result.returncode == case.status, (
         "only an unset enforcement variable may take the observation default"
     )
-    assert run.outputs["gate-error-category"] == category, (
+    assert run.outputs["gate-error-category"] == case.category, (
         "the state must publish the category its refusal or observation produces"
     )
 

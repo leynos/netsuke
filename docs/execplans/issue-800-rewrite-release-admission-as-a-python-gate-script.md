@@ -124,7 +124,7 @@ once the shell scripts are deleted.
       process group, the adapters' standard error was discarded, subprocess
       statuses reached the gate untranslated, the two artefact parents were
       created and truncated in one interleaved pass, and a configured path was
-      normalised at two observable boundaries. The gaps closed are the refusal
+      normalized at two observable boundaries. The gaps closed are the refusal
       order and the artefact-creation position, the two Bash default forms and
       the default artefact paths, the status translation, the real-child
       runner's private-versus-inherited streams, and the two persistent sink
@@ -235,7 +235,7 @@ every gap is a case in one of the five modules the suite gained.
 | The adapters' output was discarded                                                                               | The shell redirected no adapter stream, so an operator's diagnostic reached the runner                             | GitHub/clock standard output stays private but their stderr is inherited; the Git and sink adapters inherit both                 |
 | A subprocess status reached the gate untranslated                                                                | A shell reports a signal death as `128 + signal`, and `timeout` reported `127`/`126` for a refused launch          | `policy.as_bash_status` and `policy.launch_failure_status`, pinned as pure functions                                             |
 | The artefact parents were created and truncated in one pass                                                      | The shell ran one `mkdir -p` naming both parents and only then truncated both files                                | `load_configuration` creates every parent first, then truncates; a filesystem refusal is a `ConfigurationError`, not a traceback |
-| A configured path was normalised at two boundaries                                                               | The shell passed the operator's own string to its sink and to `GITHUB_OUTPUT`                                      | `OutputPath` retains the configured spelling and resolves separately for the filesystem                                          |
+| A configured path was normalized at two boundaries                                                               | The shell passed the operator's own string to its sink and to `GITHUB_OUTPUT`                                      | `OutputPath` retains the configured spelling and resolves separately for the filesystem                                          |
 
 The gaps are the cases the port's own tests could not express, and each is now
 a module of its own. The refusal order and the artefact-creation position are
