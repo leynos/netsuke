@@ -226,6 +226,24 @@ once the shell scripts are deleted.
       resolving the truncation operand through `Path` fails two of the new
       cases plus both trailing-slash cases in `..._artefact_truncation.py`.
 
+- 2026-10-11 — Pushed the repair and the orthography pass as `5a1bab9f`, one
+  commit on top of the reviewed `678b87be`. The push went over SSH from an
+  environment with Lody's `GIT_CONFIG_*` injections and `gh` credential helpers
+  stripped, because those rewrite `git@github.com:` to `https://github.com/`
+  and route the push through a credential helper; a trace confirmed the clean
+  invocation reaching `/usr/bin/ssh git@github.com 'git-receive-pack'` and the
+  injected one reaching `git-remote-https`. The API then read the branch head
+  back as `5a1bab9f`, and the tracking ref was updated to match, since an SSH
+  push leaves it stale.
+
+  All nine of the review's inline findings are verifiably present in the new
+  head: the sink path calls `report_launch_failure`, the four `TRACE_*`
+  constants and the evidence-state literals are gone, the plan's first-person
+  passages are rewritten, the orphaned `sys.path` mutation and the local
+  `CLOCK_ARGUMENTS` are gone, the runner docstring was corrected, and the
+  fabricated `FileNotFoundError(20, ...)` case is now
+  `NotADirectoryError(20, …)`, which is what a real `ENOTDIR` exec raises.
+
 ## Decisions and findings
 
 - Cyclopts' default result action, `print_non_int_return_int_as_exit_code`,
