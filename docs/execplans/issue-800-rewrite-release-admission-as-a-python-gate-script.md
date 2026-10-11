@@ -7,9 +7,12 @@ first raised three findings, all triaged; the second read the revision that
 answered them and returned none. A third repair pass has since fixed one real
 behaviour defect — a trailing-slash artefact target — cleared the CodeScene
 duplication at the same site, added the acceptance coverage listed under
-*Progress*, and corrected several prose claims that measurement falsified. The
-pull request remains open for the repository's own review and merge, which is a
-separate concern from this plan's completion.
+*Progress*, and corrected several prose claims that measurement falsified. A
+fifth pass, over three items a later confirmation raised, fixed a second
+behaviour defect — the `mkdir` operand for a target ending in `/.` — and
+corrected two more stale claims; the accounting is under *Outcomes and
+retrospective*. The pull request remains open for the repository's own review
+and merge, which is a separate concern from this plan's completion.
 
 ## Purpose
 
@@ -139,8 +142,9 @@ once the shell scripts are deleted.
       the shell refused it, and an external sink's argument vector was never
       asserted. It added two modules and eight cases, taking the runtime suite
       to twelve modules and 89 cases; a fourth pass then added six more, for
-      95. The counts and the per-gap modules are recorded under *Outcomes and
-      retrospective*, and the current figure is 95 at `bac20fcc`.
+      95, and a fifth added one for the `/.` parent derivation, for 96. The
+      counts and the per-gap modules are recorded under *Outcomes and
+      retrospective*, and the current figure is 96 at `5fc18f23`.
 - [x] Clear the third repair pass. It fixed the trailing-slash refusal
       described under *The trailing-slash defect and its repair* and cleared
       the CodeScene duplication at the same site; added coverage for the
@@ -252,13 +256,14 @@ listed five behavioural defects, each verified against the shell before being
 fixed, and five acceptance-coverage gaps. Every fix is a separate commit and
 every gap is a case in one of the five modules the suite gained.
 
-| Defect                                                                                                           | Verified against the shell                                                                                         | Fix                                                                                                                              |
-| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| The bound signalled the direct child only, so a descendant survived cancellation and held the captured pipe open | GNU `timeout` signals the supervised command's *process group* and escalates to `SIGKILL` after a one-second grace | `bounding` starts the child in its own session and kills the group, with a real-child escalation case and a descendant case      |
-| The adapters' output was discarded                                                                               | The shell redirected no adapter stream, so an operator's diagnostic reached the runner                             | GitHub/clock standard output stays private but their stderr is inherited; the Git and sink adapters inherit both                 |
-| A subprocess status reached the gate untranslated                                                                | A shell reports a signal death as `128 + signal`, and `timeout` reported `127`/`126` for a refused launch          | `policy.as_bash_status` and `policy.launch_failure_status`, pinned as pure functions                                             |
-| The artefact parents were created and truncated in one pass                                                      | The shell ran one `mkdir -p` naming both parents and only then truncated both files                                | `load_configuration` creates every parent first, then truncates; a filesystem refusal is a `ConfigurationError`, not a traceback |
-| A configured path was normalized at two boundaries                                                               | The shell passed the operator's own string to its sink and to `GITHUB_OUTPUT`                                      | `OutputPath` retains the configured spelling and resolves separately for the filesystem                                          |
+| Defect                                                                                                           | Verified against the shell                                                                                         | Fix                                                                                                                                           |
+| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| The bound signalled the direct child only, so a descendant survived cancellation and held the captured pipe open | GNU `timeout` signals the supervised command's *process group* and escalates to `SIGKILL` after a one-second grace | `bounding` starts the child in its own session and kills the group, with a real-child escalation case and a descendant case                   |
+| The adapters' output was discarded                                                                               | The shell redirected no adapter stream, so an operator's diagnostic reached the runner                             | GitHub/clock standard output stays private but their stderr is inherited; the Git and sink adapters inherit both                              |
+| A subprocess status reached the gate untranslated                                                                | A shell reports a signal death as `128 + signal`, and `timeout` reported `127`/`126` for a refused launch          | `policy.as_bash_status` and `policy.launch_failure_status`, pinned as pure functions                                                          |
+| The artefact parents were created and truncated in one pass                                                      | The shell ran one `mkdir -p` naming both parents and only then truncated both files                                | `load_configuration` creates every parent first, then truncates; a filesystem refusal is a `ConfigurationError`, not a traceback              |
+| A configured path was normalized at two boundaries                                                               | The shell passed the operator's own string to its sink and to `GITHUB_OUTPUT`                                      | `OutputPath` retains the configured spelling and derives the `mkdir` operand from it separately                                               |
+| The `mkdir` operand was the resolved path's `Path.parent`                                                        | The shell asked coreutils `dirname(1)`, which answers `reports` for `reports/.` where `Path.parent` answers `.`    | `configuration._directory_name` reproduces `dirname(1)`, with a `/.` case asserting the parent is created and the refusal is `Is a directory` |
 
 The gaps are the cases the port's own tests could not express, and each is now
 a module of its own. The refusal order and the artefact-creation position are
@@ -285,12 +290,13 @@ are separate modules because the modules they belong to by scope are within a
 few dozen lines of the 400-line ceiling, and the count is recorded per revision
 below rather than as one "current" number.
 
-`make test-release-admission` now runs twelve modules and 95 cases: 81 at
+`make test-release-admission` now runs twelve modules and 96 cases: 81 at
 `51d27ae5`, plus two from the external-sink argument-spelling case and the
 set-but-empty `GITHUB_OUTPUT` case, plus two truncation cases, plus four
 adapter-default cases, plus two trailing-slash cases, plus four unset-default
-cases. The Makefile and the workflow contract's `RUNTIME_MODULES` tuple both
-name the twelve, in the same order, and the contract's own prose says twelve.
+cases, plus the `/.` parent-derivation case. The Makefile and the workflow
+contract's `RUNTIME_MODULES` tuple both name the twelve, in the same order, and
+the contract's own prose says twelve.
 
 Two documentation defects were also cleared. `delivery.py`'s empty-target arm
 described an empty redirect operand and an unset one as the same arm, and they
@@ -563,3 +569,21 @@ change admission semantics beyond the scope of a form change.
   either. Four of the five gaps were expressed only after the harness could
   read an absent artefact and unset a variable, so a test-support limitation
   had been silently bounding what the suite could assert.
+- 2026-10-11 — A fifth repair pass, over the three items a CodeRabbit
+  confirmation raised after accepting the two earlier repairs. All three were
+  real. The behavioural one is the `mkdir` operand: the shell computed each
+  parent with `$(dirname "$file")` and the port derived it from the configured
+  path's `Path.parent`, which agree on every slash spelling and diverge on a
+  final `/.` — `dirname(1)` answers `reports` for `reports/.`, which the shell
+  created before refusing the target with `Is a directory`, while
+  `Path("reports/.").parent` answers `.`, so the port made nothing and refused
+  it with `No such file or directory`. Both fail closed, which is why the case
+  has to assert the parent's existence and the operating system's sentence
+  rather than the exit status. `os.path.dirname` is the near miss rather than
+  the answer — it returns `reports` for `reports/` where `dirname(1)` returns
+  `.` — so `configuration._directory_name` implements `dirname(1)`'s own
+  algorithm, and the count moves to 96. The other two items were stale prose in
+  this guide's own sibling: an untranslated `-15` cannot change a *timeout*
+  category, because `143` is not in `TIMEOUT_STATUSES`, and the real case is
+  cuprum's `-9` from the `SIGKILL` escalation; and the artefact path paragraph
+  still described a normalizing `mkdir` and redirection that no longer exist.
