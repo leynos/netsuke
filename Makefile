@@ -274,7 +274,12 @@ test-release-admission: ## Validate the release-admission runtime contract
 		scripts/tests/test_release_admission_metric_failures.py \
 		scripts/tests/test_release_admission_metric_boundedness.py \
 		scripts/tests/test_release_admission_process_bounds.py \
-		scripts/tests/test_release_admission_metric_degradation.py -c /dev/null \
+		scripts/tests/test_release_admission_environment_contract.py \
+		scripts/tests/test_release_admission_default_forms.py \
+		scripts/tests/test_release_admission_status_translation.py \
+		scripts/tests/test_release_admission_runner_contract.py \
+		scripts/tests/test_release_admission_metric_degradation.py \
+		scripts/tests/test_release_admission_sink_persistence.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 
 test-coverage-artifact: ## Test hostile LCOV artefact validation

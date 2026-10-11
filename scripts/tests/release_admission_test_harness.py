@@ -135,7 +135,7 @@ def run_gate(
     tmp_path: Path,
     *,
     evidence_state: str = "missing",
-    extra_environment: dict[str, str] | None = None,
+    extra_environment: dict[str, str | None] | None = None,
 ) -> GateRun:
     """Run the production gate under cmd-mox and collect everything it wrote.
 
@@ -149,7 +149,9 @@ def run_gate(
     evidence_state
         Evidence state passed to the admission subprocess.
     extra_environment
-        Optional child-process environment overrides for a test scenario.
+        Optional child-process environment overrides for a test scenario. A
+        value of ``None`` removes the variable instead of setting it, which is
+        how a case expresses *unset* rather than *empty*.
 
     Returns
     -------
@@ -246,7 +248,7 @@ class GateInputs:
 
     tmp_path: Path
     evidence_state: str
-    extra_environment: dict[str, str] | None
+    extra_environment: dict[str, str | None] | None
     paths: dict[str, Path]
 
 
@@ -299,8 +301,14 @@ def _gate_environment(
         "PATH": os.pathsep.join([str(shim_dir), os.environ["PATH"]]),
         "RUNNER_TEMP": str(inputs.tmp_path),
     }
-    if inputs.extra_environment is not None:
-        environment.update(inputs.extra_environment)
+    # Mapping a name to ``None`` *unsets* it, which is not the same as mapping
+    # it to ``""``: the gate's colon-form default substitutes for an empty
+    # value, so only an unset variable reaches the earlier arm.
+    for name, value in (inputs.extra_environment or {}).items():
+        if value is None:
+            environment.pop(name, None)
+        else:
+            environment[name] = value
     return environment
 
 
