@@ -2865,16 +2865,18 @@ Python gate. It uses the repository's Python 3.14 baseline and provisions
 `pytest==9.0.2` and `hypothesis==6.151.9` explicitly, alongside
 `cmd-mox==0.2.0` for the command doubles and `cuprum==0.1.0` and
 `cyclopts==4.25.3` for the entry point the tests import. The target runs the
-ten runtime modules with `python -m pytest`, `-c /dev/null`, `--rootdir=.`, and
-`-p no:cacheprovider`, so the test run is isolated from repository-local pytest
-configuration and cache state:
+twelve runtime modules with `python -m pytest`, `-c /dev/null`, `--rootdir=.`,
+and `-p no:cacheprovider`, so the test run is isolated from repository-local
+pytest configuration and cache state:
 
 - `scripts/tests/test_release_admission_metrics.py`
 - `scripts/tests/test_release_admission_metric_failures.py`
 - `scripts/tests/test_release_admission_metric_boundedness.py`
 - `scripts/tests/test_release_admission_process_bounds.py`
 - `scripts/tests/test_release_admission_environment_contract.py`
+- `scripts/tests/test_release_admission_artefact_truncation.py`
 - `scripts/tests/test_release_admission_default_forms.py`
+- `scripts/tests/test_release_admission_adapter_defaults.py`
 - `scripts/tests/test_release_admission_status_translation.py`
 - `scripts/tests/test_release_admission_runner_contract.py`
 - `scripts/tests/test_release_admission_metric_degradation.py`
@@ -2915,7 +2917,12 @@ cmd-mox registration and inspection surface,
 `release_admission_test_records.py` owns their fixed-record shape assertions,
 and `release_admission_test_exclusions.py` owns the identifier-exclusion
 helpers — the split is by the kind of claim each makes, shape versus leakage,
-and it exists because the combined module reached the 400-line file ceiling. Its
+and it exists because the combined module reached the 400-line file ceiling.
+`release_admission_test_boundedness.py` owns the boundedness property's
+mechanism — the generator strategies, the doubled answer to the workflow-run
+query, the run itself, and the four helpers that each state one claim about it
+— leaving the test module's two tests and the argument for each where a reader
+looks for them; that split exists for the same file-ceiling reason. Its
 `assert_identifiers_excluded_from_values` helper ignores non-string values and
 checks for each identifier as a substring of every string, reporting matching
 identifier/value pairs on failure. The shared
@@ -2947,10 +2954,12 @@ reaches the commit and workflow-run requests. Arbitrary Unicode values remain
 probes for identifiers that reach telemetry through paths other than request
 construction — the workflow-run identifier and two environment-only values;
 malformed newline revisions are covered by deterministic failure tests. Those
-generated identifiers carry a marker character that no emitted label value
-contains, so an exclusion failure means an identifier leaked rather than that a
-short identifier happened to be a substring of the gate's own vocabulary. A
-length bound alone would not do it: `none` and `failure` are both labels.
+generated identifiers carry a marker character at **both ends** that no emitted
+label value contains, so an exclusion failure means an identifier leaked rather
+than that a short identifier happened to be a substring of the gate's own
+vocabulary. A length bound alone would not do it: `none` and `failure` are both
+labels. The trailing marker does a second job — see the note on
+`_status_and_output` below.
 
 The property generates a workflow-run identifier and makes the doubled API
 **answer with it**, so the value reaches the gate's own result through

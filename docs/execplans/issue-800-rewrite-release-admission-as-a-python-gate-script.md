@@ -795,3 +795,17 @@ change admission semantics beyond the scope of a form change.
   a set carrying the pre-normalization form under-covers the exact leak the
   assertion exists to catch, and it fails silently. A trailing marker is not a
   guard against a strip that removes the character the marker is not at.**
+
+  A sweep of the guide after the split found **two stale paragraphs**, one mine
+  and one not. The one mine is the support-module inventory: it named seven
+  modules where the directory now holds eight, so
+  `release_admission_test_boundedness.py` is named and its ownership stated.
+  The one that is not is older: the same section says the target "runs the ten
+  runtime modules" and lists ten, while the Makefile and the workflow contract's
+  `RUNTIME_MODULES` tuple have named **twelve** since `36a913ed`. The two
+  modules the guide omitted are `..._artefact_truncation.py` and
+  `..._adapter_defaults.py`. The list is corrected and now matches the Makefile
+  exactly, in order, verified by diffing the two rather than by counting. Both
+  defects share a cause worth naming: **the count and the list live in three
+  places — the Makefile, the contract, and the guide — and the pass that moved
+  the figure updated two of them.**
