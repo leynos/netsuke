@@ -136,7 +136,7 @@ check published opens on exactly the run the gate exists to skip. The rule is
 `is_trunk_only_upload`'s, in
 `tests/workflow_contracts/ci_coverage_wiring_invariants.py`, which the shared
 CV-005 checker (ADR-042) also holds over the repository file. It refuses any
-unquoted `||` at any depth, because `&&` binds tighter and one disjunct would
+unquoted `||` at any depth because `&&` binds tighter and one disjunct would
 authorize the upload alone, then splits the condition into top-level conjuncts
 — a `&&` inside a string literal or a parenthesized group is not split on — and
 requires each guard clause to be present compared whole. A substring test would
