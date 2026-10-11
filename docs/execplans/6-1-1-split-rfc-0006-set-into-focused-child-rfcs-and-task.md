@@ -4580,11 +4580,17 @@ withdrawn.** The reconciliation comment `6104971471` stated that only 133 of
 `49dc6447` under three stated definitions gives 5.9%, 5.4% and 4.2%, and a
 sweep of 512 boundary configurations returns no total near 2,671, so the pair
 has no definition behind it and was withdrawn in `6104985187`. The order of
-magnitude survives — about 5%, at most 5.9%, of the set's prose repeats across
-children — and the plan records that range rather than the withdrawn point
-figure. The lesson is the one this plan already carries: a ratio quoted to
-three significant figures needs the definition it was measured under, or
-nobody, including its author, can check it.
+magnitude survives — about 5%, at most 5.9%, of the set's prose repeats
+*exactly* across children — and the plan records that range rather than the
+withdrawn point figure. CodeRabbit accepted the correction and added a
+constraint the plan had not met: "**Keep the conclusion narrower than the
+measurement.** Low textual repetition supports a claim of low textual
+duplication. It does not establish that a 34.4% reduction must remove
+specification", because concise wording and consolidation of semantically
+equivalent text remain possible without exact repetition. The paragraph in the
+outcomes section now states the narrower claim. The lesson is the one this plan
+already carries: a ratio quoted to three significant figures needs the
+definition it was measured under, or nobody, including its author, can check it.
 
 ## Outcomes & retrospective
 
@@ -4657,18 +4663,29 @@ given. The density figure is what makes the breach assessable rather than
 merely counted — it identifies RFC 0018 as the child whose section 5 is closest
 to restatement, which is the finding the control exists to produce.
 
-**What a cut would cost, measured rather than assumed.** A 34.4% reduction is
-the floor for meeting both tolerances, and the question a reader will ask is
-whether it removes repetition or specification. Measured at `49dc6447` across
-the eight committed children, the share of prose that repeats in more than one
-child is **4.2% to 5.9%** depending on where the line/block boundary is drawn
-(4,034 substantive lines with 239 repeated instances; 3,244 prose-only lines
-with 174; 448 paragraph blocks with 19). A cut of roughly a third therefore
-removes text that appears once and was written to discharge a clause, not
-duplication the set could shed for free. That is what makes `A2` a trade-off to
-decide rather than a defect to fix, and it is the only measurement in this plan
-whose figure is stated as a range, because the boundary is a definition rather
-than a fact.
+**Textual repetition across children, measured under a stated definition.** A
+34.4% reduction is the floor for meeting both tolerances, and the question a
+reader will ask is whether it removes repetition or specification. Measured at
+`49dc6447` across the eight committed children, the share of prose that repeats
+*exactly* in more than one child is **4.2% to 5.9%** depending on where the
+line/block boundary is drawn (4,034 substantive lines with 239 repeated
+instances; 3,244 prose-only lines with 174; 448 paragraph blocks with 19).
+**These are author-reported measurements, not independently verified, and the
+figure is a range rather than a point because the boundary is a definition
+rather than a fact.**
+
+**What that measurement does and does not establish.** It establishes low
+*exact* textual duplication. **It does not establish that a reduction of that
+size must remove specification**, and an earlier revision of this paragraph
+claimed exactly that — that a cut of roughly a third "removes text that appears
+once and was written to discharge a clause, not duplication the set could shed
+for free". The inference is too strong: concise wording, consolidation of
+semantically equivalent passages, and tighter sentence structure can all remove
+lines without any exact repeat to detect first. Low repetition bounds one
+source of removable text; it does not bound the others. What survives is the
+weaker claim that makes `A2` a decision rather than a defect — the reduction
+target is large enough, and the obvious duplication small enough, that the work
+is a real trade-off whose size has not been established by measurement.
 
 **Lessons that outlive the task.**
 
