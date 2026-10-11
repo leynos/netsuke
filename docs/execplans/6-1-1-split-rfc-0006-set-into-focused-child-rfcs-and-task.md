@@ -4547,6 +4547,45 @@ breach paragraph and this entry — so a reader diffing this branch against
 is unaffected: it carries the `f6f6c83c` measurement of **4533**, which is a
 different revision and remains correct for it.
 
+**Reconciliation rounds with CodeRabbit, 2026-10-11, and their closure.** Three
+focused reconciliation rounds followed the repair commit, each answered by
+CodeRabbit against a named revision rather than by a fresh review. The second
+round's reply (`6104830283`) closed findings 1, 2, 3 and 6 of its own re-audit
+and asked for residual repairs to 4 and 5; those landed in `7d404a83`. The
+third round's reply (`6104904519`) closed findings 4 and 5 and raised two
+remaining ExecPlan inconsistencies — the figures had not been updated after the
+six lines those repairs added, and two passages still argued the breach cannot
+block because the child count is fixed at eight. Both were repaired in
+`49dc6447`. CodeRabbit's reply to that (`6104977683`) reads: "**Close both
+remaining ExecPlan corrections. No residual defect remains in these two items at
+`49dc6447`**", and its independent recount of the committed blobs reproduces
+every figure the plan now states — 4,877 aggregate, 877 over, all eight
+children over 400, 1,677 lines (34.4%) to meet the per-file limits, 0014 −8,
+0019 −476.
+
+**The fixed-child-count rationale was wrong, and the plan now says so.** Two
+passages had inferred that the breach cannot block the milestone because four
+contract tests fix the child count at eight and the eight are written, leaving
+only a budget increase or a recorded waiver. A fixed partition bounds the
+number of files, not their length, so compression is a third remedy the fixed
+count leaves open — which is exactly what the satisfiability test added in
+`7d404a83` demonstrates, since 8 × 400 = 3200 sits inside the 4000 budget. The
+plan had asserted a conclusion its own test refuted. Delivery of the artefacts
+and acceptance of the process exception are now stated separately, and
+acceptance remains with the user.
+
+**A figure was published in a review reply that does not reproduce, and was
+withdrawn.** The reconciliation comment `6104971471` stated that only 133 of
+2,671 substantive prose lines appear in more than one child. Re-deriving at
+`49dc6447` under three stated definitions gives 5.9%, 5.4% and 4.2%, and a
+sweep of 512 boundary configurations returns no total near 2,671, so the pair
+has no definition behind it and was withdrawn in `6104985187`. The order of
+magnitude survives — about 5%, at most 5.9%, of the set's prose repeats across
+children — and the plan records that range rather than the withdrawn point
+figure. The lesson is the one this plan already carries: a ratio quoted to
+three significant figures needs the definition it was measured under, or
+nobody, including its author, can check it.
+
 ## Outcomes & retrospective
 
 Roadmap task 6.1.1 is delivered. RFC 0006's accepted set is partitioned across
@@ -4617,6 +4656,19 @@ so accepting it is a decision the user has not been asked for and has not
 given. The density figure is what makes the breach assessable rather than
 merely counted — it identifies RFC 0018 as the child whose section 5 is closest
 to restatement, which is the finding the control exists to produce.
+
+**What a cut would cost, measured rather than assumed.** A 34.4% reduction is
+the floor for meeting both tolerances, and the question a reader will ask is
+whether it removes repetition or specification. Measured at `49dc6447` across
+the eight committed children, the share of prose that repeats in more than one
+child is **4.2% to 5.9%** depending on where the line/block boundary is drawn
+(4,034 substantive lines with 239 repeated instances; 3,244 prose-only lines
+with 174; 448 paragraph blocks with 19). A cut of roughly a third therefore
+removes text that appears once and was written to discharge a clause, not
+duplication the set could shed for free. That is what makes `A2` a trade-off to
+decide rather than a defect to fix, and it is the only measurement in this plan
+whose figure is stated as a range, because the boundary is a definition rather
+than a fact.
 
 **Lessons that outlive the task.**
 
