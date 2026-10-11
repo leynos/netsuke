@@ -79,13 +79,15 @@ once the shell scripts are deleted.
       and `release.yml` invokes it with the equivalent
       `uv run --script <path>` (the workflow does not rely on the executable
       bit, which is why the shebang is not the load-bearing part of the
-      invocation). `.github/scripts/_release_admission/` holds nine modules
+      invocation). `.github/scripts/_release_admission/` holds eleven modules
       (`policy`, `records`, `delivery`, `commands`, `statuses`, `telemetry`,
-      `configuration`, `bounding`, `gate`); the last four of those were split
-      out when the CodeScene refactor, the real-child bound, and the formal
-      review's domain-architecture finding pushed `gate`, `commands`, and
-      `policy` over the module ceiling or across a boundary they should not
-      have owned. The runtime-test support in
+      `environment`, `filesystem`, `configuration`, `bounding`, `gate`); the
+      later of those were split out when the CodeScene refactor, the
+      real-child bound, and the formal review's domain-architecture finding
+      pushed `gate`, `commands`, and `policy` over the module ceiling or
+      across a boundary they should not have owned, and `statuses`,
+      `environment`, and `filesystem` arrived with the repair of that finding.
+      The runtime-test support in
       `scripts/tests/` is a facade and seven modules — the two-stage split
       recorded under *Decisions and findings*, plus the two later splits that
       kept pace with the file ceiling — and the count is stated per revision
@@ -211,9 +213,12 @@ once the shell scripts are deleted.
       Architecture finding required resolution and initialization to be
       separable, and the repair split them: `configuration` now exposes
       `resolve_destination`, `resolve_configuration`,
-      `prepare_destination`, and `require_workflow_output`, the last two
-      writing only through the `filesystem.FileSystem` they are handed, and
-      the entry point calls the four in the shell's refusal order. The
+      `prepare_destination`, and `require_workflow_output`. Only
+      `prepare_destination` writes, and it does so solely through the
+      `filesystem.FileSystem` it is handed; `require_workflow_output` reads a
+      mapping and can refuse the value it finds there, so it performs no
+      filesystem effect at all. The entry point calls the four in the shell's
+      refusal order. The
       effects gained a port (`filesystem`) whose two members are written as
       positional-only functions so a plain callable is assignable to it.
       Two runtime modules were added — `..._configuration_resolution.py`
@@ -226,15 +231,16 @@ once the shell scripts are deleted.
       resolving the truncation operand through `Path` fails two of the new
       cases plus both trailing-slash cases in `..._artefact_truncation.py`.
 
-- 2026-10-11 — Pushed the repair and the orthography pass as `5a1bab9f`, one
-  commit on top of the reviewed `678b87be`. The push went over SSH from an
-  environment with Lody's `GIT_CONFIG_*` injections and `gh` credential helpers
-  stripped, because those rewrite `git@github.com:` to `https://github.com/`
-  and route the push through a credential helper; a trace confirmed the clean
-  invocation reaching `/usr/bin/ssh git@github.com 'git-receive-pack'` and the
-  injected one reaching `git-remote-https`. The API then read the branch head
-  back as `5a1bab9f`, and the tracking ref was updated to match, since an SSH
-  push leaves it stale.
+- 2026-10-11 — Pushed the repair and the orthography pass as `5a1bab9f`, which
+  follows `d5b0b072`, itself one commit on top of the reviewed `678b87be`: the
+  nine-finding repair and the split-plus-orthography pass were pushed as two
+  commits, not one. The push went over SSH from an environment with Lody's
+  `GIT_CONFIG_*` injections and `gh` credential helpers stripped, because those
+  rewrite `git@github.com:` to `https://github.com/` and route the push through
+  a credential helper; a trace confirmed the clean invocation reaching
+  `/usr/bin/ssh git@github.com 'git-receive-pack'` and the injected one reaching
+  `git-remote-https`. The API then read the branch head back as `5a1bab9f`,
+  and the tracking ref was updated to match, since an SSH push leaves it stale.
 
   All nine of the review's inline findings are verifiably present in the new
   head: the sink path calls `report_launch_failure`, the four `TRACE_*`
@@ -319,7 +325,7 @@ deferred in the test module rather than simulated.
 
 The port is complete, validated, and open for review. The Bash gate is now a
 Cyclopts `uv run --script` entry point with its implementation split across
-nine modules, its behaviour held to a frozen oracle, and its tests running
+eleven modules, its behaviour held to a frozen oracle, and its tests running
 through cmd-mox doubles. `release.yml` invokes the Python entry point; the
 three shell scripts are deleted.
 
@@ -395,13 +401,20 @@ are separate modules because the modules they belong to by scope are within a
 few dozen lines of the 400-line ceiling, and the count is recorded per revision
 below rather than as one "current" number.
 
-`make test-release-admission` now runs twelve modules and 96 cases: 81 at
-`51d27ae5`, plus two from the external-sink argument-spelling case and the
-set-but-empty `GITHUB_OUTPUT` case, plus two truncation cases, plus four
-adapter-default cases, plus two trailing-slash cases, plus four unset-default
-cases, plus the `/.` parent-derivation case. The Makefile and the workflow
-contract's `RUNTIME_MODULES` tuple both name the twelve, in the same order, and
-the contract's own prose says twelve.
+`make test-release-admission` ran twelve modules and 96 cases at that point in
+the branch's history: 81 at `51d27ae5`, plus two from the external-sink
+argument-spelling case and the set-but-empty `GITHUB_OUTPUT` case, plus two
+truncation cases, plus four adapter-default cases, plus two trailing-slash
+cases, plus four unset-default cases, plus the `/.` parent-derivation case.
+That accounting is historical rather than current, because the formal-review
+repair then added the two modules the split required.
+
+The current registration is **fourteen modules and 118 cases**, measured on
+this head: the twelve above plus the fifteen cases of
+`test_release_admission_configuration_resolution.py` and the seven of
+`test_release_admission_artefact_initialization.py`. The Makefile and the
+workflow contract's `RUNTIME_MODULES` tuple both name the fourteen, in the same
+order, and the contract's own prose and assertion message both say fourteen.
 
 Two documentation defects were also cleared. `delivery.py`'s empty-target arm
 described an empty redirect operand and an unset one as the same arm, and they
@@ -1143,7 +1156,10 @@ change admission semantics beyond the scope of a form change.
   `bounding` or `gate`. `commands.classify_result` moves there as
   `statuses.classify_result`, because a bound that elapsed is a *status*
   conversion and `bounding` must not import status vocabulary to describe it.
-  `bounding` is unchanged: it still reports `None` and nothing else.
+  `bounding` is unchanged: it still declines to interpret a status number,
+  reporting `None` for an elapsed bound where a completed command keeps
+  cuprum's own result. It is that `None` -- not a shell's `124` -- that
+  `statuses.translate_exit` turns into the gate's timeout status.
 
   `commands` now returns `policy.CommandResult` from all four effects and no
   longer imports `statuses` only to translate — its `policy` import is real,
@@ -1256,3 +1272,64 @@ change admission semantics beyond the scope of a form change.
   and the developers' guide), and the pre-existing `normalised_build_script` in
   `tests/build_module_slice_ui_tests.rs` is left untouched because it is main's
   and not on a line this branch edits.
+
+- 2026-10-11 — Candidate-bound assessment re-reads, and the plan corrections
+  they produced. Both assessments were asked to carry their conclusions to
+  `3cb8c35b`, because the increment since the head they had confirmed
+  (`678b87be`) changes production code. The proof assessment retained its
+  conclusion with no new concern; the completeness assessment retained the
+  implementation conclusion — no executable regression found — but named eleven
+  documentation defects, which were verified against the source and repaired
+  here.
+
+  The substantive ones were current-state claims this plan had outlived. It
+  still said the package holds nine modules and named nine; it holds eleven,
+  because the review repair added `statuses`, `environment`, and `filesystem`.
+  It still gave the suite as twelve modules and 96 cases, which was true at the
+  point in the history where it sits, so that sentence is now marked historical
+  and the current registration — fourteen modules and 118 cases, measured by
+  collection on this head — is stated separately. It attributed the
+  two-artefact write to `require_workflow_output` as well as
+  `prepare_destination`; only the latter writes, and the former reads a mapping
+  and refuses its value. Beside it, the package docstring called `filesystem`
+  the gate's only filesystem write when `delivery` also writes, and said
+  `configuration` performs no effect when only its resolution functions are
+  pure. It put `5a1bab9f` one commit on top of `678b87be` when `d5b0b072`
+  intervenes. It said `bounding` reports `None` and nothing else, when `None`
+  is the elapsed bound and a completed command keeps cuprum's result.
+
+  Three prose defects were of the kind this branch has already had to correct
+  once: the status-translation module offered `kill -TERM`/`-15` as the timeout
+  example, but `SIGTERM` translates to `143` and is deliberately *not* a
+  timeout status — only `124` and `137` are; the same file still attributed the
+  timeout set to the removed `classify_command_failure`; and the default-forms
+  module said the redirection saw a normalized form when it opened the
+  configured spelling and only `mkdir` derived an operand.
+
+  One figure was checked by running it rather than by reading it:
+  `118 tests collected` over the fourteen modules named in the Makefile, which
+  is the count the plan now reports. The developers' guide's module list was
+  missing the same two modules and gained them.
+
+- 2026-10-11 — Gate scoping for the repair, and the `mdtablefix` canonical
+  form. The repair is prose only — three module docstrings and two Markdown
+  files — so it was scoped to eight gates rather than the full commit set:
+  `check-fmt`, `lint-python`, `typecheck-python`, `test-release-admission`,
+  `test-workflow-contracts`, `spelling`, `markdownlint`, and `lint-clippy`.
+  Seven passed; `check-fmt` failed at its third stage, and the failure was mine
+  rather than the tool's. Editing prose in a Markdown file requires re-running
+  the wrap pass, because `mdtablefix --wrap` refills a paragraph rather than
+  capping its lines: a hand-wrap that reads correctly at 78 columns can still
+  be non-canonical. The tool's `--diff` was used to read the canonical form for
+  each of the three hunks, and the edits were applied by hand rather than by
+  running the mutating `fmt` target. `mdtablefix --check` then exited 0 over
+  174 files.
+
+- 2026-10-11 — Timing caveat on that same run, recorded because it bounds what
+  the results establish. Three of the five edited files — the package docstring
+  and the two test modules — were written before the run began. The two
+  Markdown files were canonicalized after `markdownlint` and `spelling` had
+  already passed, so those two stages ran against the pre-wrap text. The
+  re-wraps are whitespace-only, which leaves no semantic regression for them to
+  have missed, but `check-fmt`, `markdownlint`, and `spelling` are re-run on
+  the committed tree rather than reported as cleared.

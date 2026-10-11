@@ -14,12 +14,16 @@ owns exactly one of them:
   numbering is interpreted, and both ``commands`` and ``delivery`` call it.
 - ``environment`` reads a variable in one of Bash's two default forms.
 - ``filesystem`` performs the two filesystem effects start-up needs: make a
-  parent directory, and create one file empty. It is the gate's only filesystem
-  write, and it exists so that effect can be doubled rather than induced.
+  parent directory, and create one file empty. It is the gate's only
+  *start-up* filesystem write, and it exists so that effect can be doubled
+  rather than induced. ``delivery`` writes files too, but only ever through a
+  configured sink or its own in-process append, so its effects are named by
+  the record it delivers rather than by a port of their own.
 - ``configuration`` resolves everything the gate is told before it runs: the
-  required variables, the defaults, and the two artefact paths. Resolution
-  writes nothing; only :func:`~.configuration.prepare_destination` does, and it
-  is handed the filesystem it performs them on.
+  required variables, the defaults, and the two artefact paths. Its resolution
+  functions perform no filesystem effect;
+  :func:`~.configuration.prepare_destination` orchestrates them through the
+  supplied port.
 - ``telemetry`` decides whether and where a record is written, and what a
   failed write costs the gate.
 - ``gate`` owns orchestration, and is the composition root. It depends on
@@ -32,10 +36,11 @@ The entry point is the ``release_admission`` module beside this package; it
 owns the Cyclopts surface, the start-up order, and the process exit status.
 
 ``configuration``, ``environment``, and ``filesystem`` are this package's port
-and adapter layer. ``configuration`` names what the gate is told and performs
-no effect at all; ``environment`` reads the values one variable at a time; and
-``filesystem`` performs the two effects that are left. The three are separate
-modules because the ceiling on Python module length is a repository rule rather
+and adapter layer. ``configuration`` names what the gate is told and its
+resolution functions perform no effect at all; ``environment`` reads the values
+one variable at a time; and ``filesystem`` performs the two start-up effects
+that are left. The three are separate modules because the ceiling on Python
+module length is a repository rule rather
 than a preference, and because the split is the same one the design draws: a
 pure resolver, a reader of the ambient source it resolves from, and an adapter
 for the only system the gate writes to.

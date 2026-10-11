@@ -1818,10 +1818,13 @@ the metric, output, and trace sinks, `bounding` owns the process-group command
 bound and the stream wiring, `commands` owns the bounded external command
 runner, `statuses` translates an exit status, an elapsed bound, or a refused
 launch into the gate's own command result, `telemetry` owns the emitted records,
-`configuration` resolves the environment the gate is told, and `gate` composes
-the operations and reporting. The workflow's `astral-sh/setup-uv` step
-provisions the interpreter; `uv` reads the entry point's own `requires-python`
-and dependency pins rather than the workflow restating them.
+`environment` reads a variable in one of Bash's two default forms,
+`filesystem` performs the two start-up effects that create the artefact parents
+and truncate the artefacts, `configuration` resolves the environment the gate
+is told, and `gate` composes the operations and reporting. The workflow's
+`astral-sh/setup-uv` step provisions the interpreter; `uv` reads the entry
+point's own `requires-python` and dependency pins rather than the workflow
+restating them.
 
 The gate keeps fallible boundaries behind explicit adapters. Set
 `NETSUKE_RELEASE_ADMISSION_GH_ADAPTER` for GitHub API requests,

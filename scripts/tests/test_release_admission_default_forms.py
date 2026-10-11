@@ -191,8 +191,9 @@ def test_gate_publishes_the_operators_own_path_spelling(
     Notes
     -----
     The shell passed the operator's string to its sink adapter and published it
-    verbatim in the ``metrics-file`` and ``trace-file`` workflow outputs; only
-    ``mkdir`` and the redirection saw a normalized form. Rendering a
+    verbatim in the ``metrics-file`` and ``trace-file`` workflow outputs, and
+    the redirection opened that same spelling. Only ``mkdir`` saw a derived
+    form, because its operand came from coreutils ``dirname(1)``. Rendering a
     :class:`~pathlib.Path` back to text would rewrite ``//`` and ``./`` at both
     boundaries, so the configured spelling is retained.
 

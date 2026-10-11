@@ -6,9 +6,11 @@ through the shell's convention, and two downstream decisions depend on it:
 
 - :func:`policy.classify_command_result` maps only a timed-out outcome to
   ``timeout``, and the outcome is decided by ``statuses`` from the translated
-  status, so a ``kill -TERM`` that reached it untranslated (``-15``) would be
+  status, so a ``kill -KILL`` that reached it untranslated (``-9``) would be
   classified as an ordinary command failure and the operation's own category
-  would survive a real timeout.
+  would survive a real timeout. ``SIGTERM`` is the contrast: it translates to
+  ``143``, which is deliberately *not* a timeout status, so a command that
+  accepted the group signal stays an ordinary failure.
 - At the unguarded gate-output write, the sink adapter's status *becomes* the
   gate's exit status, so a translated kernel status would leave the step
   exiting a number no shell ever produced.
@@ -73,9 +75,10 @@ def test_signal_statuses_are_translated_into_the_shells_convention(
     Notes
     -----
     ``137`` is the load-bearing case. It is both the shell's ``SIGKILL`` status
-    and one of the two statuses ``classify_command_failure`` reads as a timeout,
-    so an untranslated ``-9`` would stop the gate recognizing an escalated
-    bound as a timeout at all.
+    and one of the two statuses :data:`statuses.TIMEOUT_STATUSES` holds, which
+    :func:`statuses.translate_exit` reads when it names an outcome, so an
+    untranslated ``-9`` would stop the gate recognizing an escalated bound as a
+    timeout at all.
     """
     assert statuses.as_bash_status(reported) == expected, (
         "a signal death must be reported in the shell's 128+signal convention"
