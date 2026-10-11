@@ -18,8 +18,8 @@ Run via ``make test-workflow-contracts``.
 
 import typing as typ
 
-import pytest
 import pr_concurrency_test as concurrency_contracts
+import pytest
 
 #: The group ``ci.yml`` declares, which every correct workflow repeats.
 ESTATE_GROUP: typ.Final = (

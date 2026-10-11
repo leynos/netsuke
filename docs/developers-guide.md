@@ -2192,13 +2192,23 @@ exactly the event-conditioned expression. `pr_concurrency_groups_test.py`
 drives the renderer with the shapes the rules refuse, and an expression it does
 not model is refused rather than guessed at.
 
+A group must also be a string, which GitHub requires: a workflow that writes a
+mapping or a list there has no group to key a run on, and reading that value's
+Python text in its place would render the same sharing, separation, fallback
+and workflow-keying properties as the real one. `_group` reads any other type
+as no group.
+
 Each clause was proved by mutation, and every mutation fails the suite: the
 cancel line removed, a literal `true`, a group from `run_id` alone, a constant
 group, a `head_ref` group, a `format()` group, a `ref` fallback, `run_number`
 as the fallback, the run identifier ahead of the number, the block removed, the
 trigger renamed to `pull_request_target`, a duplicated block, a quoted `on`
-beside the unquoted key, the `github.workflow` prefix dropped, and the casefold
-removed from the comparison. `cancel-in-progress: true` restored on
+beside the unquoted key, the `github.workflow` prefix dropped, the casefold
+removed from the comparison, and a group written as a mapping.
+`pr_concurrency_group_type_test.py` calls the declaration contract with
+isolated documents to prove the last of these: the estate group's own string
+passes it, and a mapping, a list, an integer, `None` and `False` each fail it.
+`cancel-in-progress: true` restored on
 `release.yml` fails `test_no_other_workflow_cancels_a_run`. That clause reads a
 missing `cancel-in-progress` as not cancelling, so
 `test_the_release_lane_queues_rather_than_cancels` also pins `release.yml`'s
