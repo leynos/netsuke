@@ -2200,7 +2200,7 @@ condition reads `steps.codescene_token.outputs.available == 'true'`, and the
 upload takes `access-token: ${{ secrets.CS_ACCESS_TOKEN }}` directly. The
 upload is a composite action, and a composite action's nested steps inherit the
 calling step's environment, so a token in the step's `env` reached every one of
-them. `tests/workflow_contracts/coverage_publisher_token_test.py` holds the
+them. The shared CV-005 checker (`make test-workflow-contracts`) holds the
 shape. Its positive half requires the token to be named exactly in the check's
 command and the upload's input, because deleting the token would otherwise pass
 for keeping it out of an `env`.
@@ -2223,15 +2223,14 @@ baseline for it; only the next push does. A manual "Re-run jobs" on an older
 replaces no baseline already saved under that run's key. Only a later push to
 `main` publishes a newer baseline.
 
-`tests/workflow_contracts/coverage_upload_guard_test.py` holds that guard.
-`is_trunk_only_upload` refuses any unquoted `||`, at any depth, through
-`contains_unquoted_or`, the helper `is_trunk_only_save` uses for cache saves:
-`&&` binds tighter than `||`, so one disjunct authorizes the upload alone
-however complete the rest is. It then splits the condition on `&&` and requires
-each guard clause as a whole conjunct, so a negated clause or one quoted inside
-another does not count. The disjunction cases keep both clauses whole, so only
-the `||` refusal can reject them. That is how the case proves the refusal
-rather than the split.
+The shared CV-005 checker holds that guard. `is_trunk_only_upload` refuses any
+unquoted `||`, at any depth, through `contains_unquoted_or`, the helper
+`is_trunk_only_save` uses for cache saves: `&&` binds tighter than `||`, so one
+disjunct authorizes the upload alone however complete the rest is. It then
+splits the condition on `&&` and requires each guard clause as a whole
+conjunct, so a negated clause or one quoted inside another does not count. The
+disjunction cases keep both clauses whole, so only the `||` refusal can reject
+them. That is how the case proves the refusal rather than the split.
 
 The CodeScene analysis schedule and the setting that suppresses its coverage
 gate when data is unavailable live in CodeScene's project configuration, not in

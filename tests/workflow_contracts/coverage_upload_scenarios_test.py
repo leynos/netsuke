@@ -1,6 +1,6 @@
 """The CodeScene upload runs for exactly the events that may publish.
 
-`coverage_upload_guard_test` holds the upload step's condition to its shape.
+The shared CV-005 checker holds the upload step's condition to its shape.
 This module runs that condition, as written in `coverage-main.yml`, against
 the events the workflow answers: a push to `main`, a dispatch from `main`, a
 dispatch from a feature branch, and each of those without the credential. The
