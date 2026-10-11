@@ -27,7 +27,6 @@ reproduces both the grace and the classification.
 
 import dataclasses
 import typing as typ
-from pathlib import Path
 
 from . import commands, policy, records, telemetry
 
@@ -123,7 +122,7 @@ class Gate:
         configuration = self._configuration
         status = telemetry.record_gate_result(
             configuration.sinks,
-            output=Path(configuration.output),
+            output=configuration.output,
             record=records.GateRecord(self._outcome, self._error_category),
             trace_sink_failed=self._trace_sink_failed,
         )

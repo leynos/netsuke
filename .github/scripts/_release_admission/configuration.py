@@ -59,8 +59,8 @@ class Configuration:
     evidence_state: str
     timeout_seconds: str
     enforcement: str
-    metrics_file: Path
-    trace_file: Path
+    metrics_file: OutputPath
+    trace_file: OutputPath
     programs: commands.Programs
     sinks: telemetry.Sinks
 
@@ -115,13 +115,39 @@ def load_configuration() -> Configuration:
         trace_file=outputs.trace_file,
         programs=commands.Programs.from_environment(),
         sinks=telemetry.Sinks(
-            metrics_file=outputs.metrics_file,
-            trace_file=outputs.trace_file,
+            metrics_file=outputs.metrics_file.configured,
+            trace_file=outputs.trace_file.configured,
             metrics_sink=_optional(commands.METRICS_SINK_VARIABLE, ""),
             output_sink=_optional(commands.OUTPUT_SINK_VARIABLE, ""),
             trace_sink=_optional(commands.TRACE_SINK_VARIABLE, ""),
         ),
     )
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class OutputPath:
+    """Carry one artefact path in both spellings its two consumers need.
+
+    ``configured`` is the string the operator supplied, verbatim, and
+    ``resolved`` is the same path as a filesystem object. They are not
+    interchangeable. The shell passed the configured string to a sink adapter
+    and published it in a workflow output, so ``./observations//metrics.jsonl``
+    stayed spelled that way on both boundaries; only ``mkdir`` and the
+    redirection saw a normalized form. Rendering ``Path`` back to text would
+    rewrite the operator's spelling at two observable boundaries and can even
+    change whether a target is treated as a file or refused as directory-shaped,
+    because a trailing slash is a filesystem distinction rather than a
+    cosmetic one.
+    """
+
+    configured: str
+    resolved: Path
+
+    @classmethod
+    def of(cls, variable: str, default: str) -> OutputPath:
+        """Resolve one artefact path from its variable and default."""
+        configured = _optional(variable, default)
+        return cls(configured=configured, resolved=Path(configured))
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -133,25 +159,25 @@ class _OutputPaths:
     one value rather than as two arguments threaded through each caller.
     """
 
-    metrics_file: Path
-    trace_file: Path
+    metrics_file: OutputPath
+    trace_file: OutputPath
 
     @classmethod
     def from_environment(cls) -> _OutputPaths:
-        """Resolve both artefact paths, creating each file empty.
+        """Resolve both artefact paths and create both files empty.
 
         Returns
         -------
         _OutputPaths
             The metric and trace paths, with both files created.
         """
-        temporary = Path(_optional("RUNNER_TEMP", DEFAULT_TEMPORARY_DIRECTORY))
+        temporary = _optional("RUNNER_TEMP", DEFAULT_TEMPORARY_DIRECTORY)
         paths = cls(
-            metrics_file=Path(
-                _optional(METRICS_FILE_VARIABLE, str(temporary / METRICS_FILE_NAME))
+            metrics_file=OutputPath.of(
+                METRICS_FILE_VARIABLE, f"{temporary}/{METRICS_FILE_NAME}"
             ),
-            trace_file=Path(
-                _optional(TRACE_FILE_VARIABLE, str(temporary / TRACE_FILE_NAME))
+            trace_file=OutputPath.of(
+                TRACE_FILE_VARIABLE, f"{temporary}/{TRACE_FILE_NAME}"
             ),
         )
         _create_artefacts(paths.metrics_file, paths.trace_file)
@@ -189,8 +215,10 @@ def _defaulted_only_when_unset(variable: str, default: str) -> str:
     therefore kept and refused by the gate's own mode check rather than
     replaced here, and that refusal is load-bearing: substituting the default
     would let a refused configuration run as observation mode.
-    ``os.environ.get(variable, default)`` implements the colon form and would
-    do exactly that, which is why this helper asks membership instead.
+    ``os.environ.get(variable, default)`` happens to agree here, because it
+    substitutes only for an *unset* variable too; the membership test is what
+    states that, so a reader cannot mistake the helper for the colon form the
+    two above it implement.
 
     Returns
     -------
@@ -203,7 +231,7 @@ def _defaulted_only_when_unset(variable: str, default: str) -> str:
     return os.environ[variable]
 
 
-def _create_artefacts(*paths: Path) -> None:
+def _create_artefacts(*paths: OutputPath) -> None:
     """Create the artefact files empty, refusing a path the system rejects.
 
     The shell made *both* parent directories before truncating *either* file:
@@ -227,7 +255,7 @@ def _create_artefacts(*paths: Path) -> None:
         _truncate(path)
 
 
-def _make_parent(path: Path) -> None:
+def _make_parent(path: OutputPath) -> None:
     """Create one artefact's parent directory, refusing a rejection.
 
     Raises
@@ -236,16 +264,16 @@ def _make_parent(path: Path) -> None:
         When the operating system refuses the directory.
     """
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        path.resolved.parent.mkdir(parents=True, exist_ok=True)
     except OSError as error:
         msg = (
             f"release-admission could not create the directory for "
-            f"{path}: {_reason(error)}"
+            f"{path.configured}: {_reason(error)}"
         )
         raise ConfigurationError(msg) from error
 
 
-def _truncate(path: Path) -> None:
+def _truncate(path: OutputPath) -> None:
     """Create one artefact file empty, refusing a rejection.
 
     Raises
@@ -254,9 +282,9 @@ def _truncate(path: Path) -> None:
         When the operating system refuses the file.
     """
     try:
-        path.write_bytes(b"")
+        path.resolved.write_bytes(b"")
     except OSError as error:
-        msg = f"release-admission could not create {path}: {_reason(error)}"
+        msg = f"release-admission could not create {path.configured}: {_reason(error)}"
         raise ConfigurationError(msg) from error
 
 

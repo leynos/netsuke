@@ -25,15 +25,11 @@ status becomes the gate's own exit status. A failed in-process append reports
 """
 
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the sink seam runs one adapter.
-import typing as typ
 
 from . import policy
 
-if typ.TYPE_CHECKING:
-    from pathlib import Path
 
-
-def append_record(sink: str, target: Path | None, record: str) -> int:
+def append_record(sink: str, target: str, record: str) -> int:
     r"""Write one record to a sink, returning the status the write contributed.
 
     Either path terminates the record with the newline ``printf '%s\n'`` added,
@@ -60,7 +56,7 @@ def append_record(sink: str, target: Path | None, record: str) -> int:
     return _append_via_adapter(sink, target, payload)
 
 
-def _append_in_process(target: Path | None, payload: bytes) -> int:
+def _append_in_process(target: str, payload: bytes) -> int:
     r"""Append one record to a file, or refuse as the shell's ``>>`` did.
 
     An empty target is not a special case with a destination of its own. The
@@ -76,17 +72,17 @@ def _append_in_process(target: Path | None, payload: bytes) -> int:
         ``0`` for a write that succeeded, otherwise ``1`` -- the status the
         shell's own failed redirection produced.
     """
-    if target is None:
+    if not target:
         return 1
     try:
-        with target.open("ab") as stream:
+        with open(target, "ab") as stream:  # ruff: ignore[builtin-open] - the shell opened this path by its configured spelling.
             stream.write(payload)
     except OSError:
         return 1
     return 0
 
 
-def _append_via_adapter(sink: str, target: Path | None, data: bytes) -> int:
+def _append_via_adapter(sink: str, target: str, data: bytes) -> int:
     """Run one sink adapter with the record on its standard input.
 
     The adapter is the operator's own configured program, named through an
@@ -112,15 +108,10 @@ def _append_via_adapter(sink: str, target: Path | None, data: bytes) -> int:
     """
     try:
         completed = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - a fixed argument list, never a shell.
-            [sink, _rendered_target(target)],
+            [sink, target],
             input=data,
             check=False,
         )
     except OSError as error:
         return policy.launch_failure_status(error)
     return policy.as_bash_status(completed.returncode)
-
-
-def _rendered_target(target: Path | None) -> str:
-    """Render an append target as the path the shell would have passed."""
-    return "" if target is None else str(target)

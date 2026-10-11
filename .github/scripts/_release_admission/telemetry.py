@@ -37,9 +37,6 @@ from .records import (
     render_trace,
 )
 
-if typ.TYPE_CHECKING:
-    from pathlib import Path
-
 #: The diagnostic printed when a label or value is outside its vocabulary.
 VOCABULARY_DIAGNOSTIC = (
     "release-admission metric labels are outside the fixed vocabulary"
@@ -92,13 +89,15 @@ class Sinks:
     """Hold where each artefact goes and how it is written.
 
     A sink adapter is the empty string when the gate should append in process.
-    ``metrics_file`` and ``trace_file`` are absent only before the gate has
-    created them, which is the state a missing required variable leaves; no
-    record is written in that state.
+    The four targets are the *configured* spelling rather than a resolved
+    :class:`~pathlib.Path`: the shell passed the operator's own string to its
+    sink adapter and to ``>>`` alike, so ``./observations//metrics.jsonl``
+    reached both unchanged, and normalizing it would rewrite a path at two
+    boundaries the operator can observe.
     """
 
-    metrics_file: Path | None
-    trace_file: Path | None
+    metrics_file: str
+    trace_file: str
     metrics_sink: str
     output_sink: str
     trace_sink: str
@@ -211,7 +210,7 @@ def record_operation(sinks: Sinks, record: OperationRecord) -> bool:
 def record_gate_result(
     sinks: Sinks,
     *,
-    output: Path | None,
+    output: str,
     record: GateRecord,
     trace_sink_failed: bool,
 ) -> int:
@@ -234,8 +233,8 @@ def record_gate_result(
     for key, value in (
         ("gate-outcome", record.outcome),
         ("gate-error-category", record.error_category),
-        ("metrics-file", _rendered_path(sinks.metrics_file)),
-        ("trace-file", _rendered_path(sinks.trace_file)),
+        ("metrics-file", sinks.metrics_file),
+        ("trace-file", sinks.trace_file),
     ):
         status = write_output(sinks, output, f"{key}={value}")
         if status:
@@ -246,12 +245,7 @@ def record_gate_result(
     return 0
 
 
-def _rendered_path(path: Path | None) -> str:
-    """Render an artefact path for a workflow output, empty when unset."""
-    return "" if path is None else str(path)
-
-
-def write_output(sinks: Sinks, output: Path | None, record: str) -> int:
+def write_output(sinks: Sinks, output: str, record: str) -> int:
     """Write one workflow-output line through the output sink.
 
     The output sink is its own adapter variable and its target is the
@@ -268,6 +262,6 @@ def write_output(sinks: Sinks, output: Path | None, record: str) -> int:
         the state a required variable left behind before the artefact paths
         existed.
     """
-    if output is None:
+    if not output:
         return int(Refusal.VOCABULARY)
     return delivery.append_record(sinks.output_sink, output, record)
