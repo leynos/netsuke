@@ -15,6 +15,15 @@ The three adapter defaults are the shell's own: ``gh``, ``git``, and
 decimal integer in ``1``..``300``; the frozen measurement is recorded in
 :mod:`release_admission_test_support`.
 
+Each of the four is exercised in *both* states the colon form substitutes for:
+an exported empty value and a variable that is not set at all. Both are stated
+rather than assumed, because the harness builds its child environment as
+``{**os.environ, ...}`` -- an *omitted* override therefore leaves whatever the
+host happens to export in place, and a case that is silently satisfied by the
+host's own value would stop testing the default without failing. The unset arm
+is the one only the harness can express: it passes ``None``, which removes the
+name from the child environment instead of setting it.
+
 This module is apart from :mod:`test_release_admission_default_forms` for two
 reasons. The first is scope: that module pins defaults whose consequences are
 *published* -- an artefact path appears in a workflow output, an evidence state
@@ -64,6 +73,14 @@ COMMAND_ADAPTERS = [
     pytest.param(GIT_ADAPTER_VARIABLE, id="git-adapter-empty"),
 ]
 
+#: The same two adapters, *not set* rather than exported empty. ``None`` is the
+#: harness's own vocabulary for "remove this name from the child environment",
+#: which is the only way to state the arm the colon form's unset branch serves.
+UNSET_COMMAND_ADAPTERS = [
+    pytest.param(GH_ADAPTER_VARIABLE, id="gh-adapter-unset"),
+    pytest.param(GIT_ADAPTER_VARIABLE, id="git-adapter-unset"),
+]
+
 #: The category a well-formed default run publishes when the fixture state is
 #: the harness's default ``missing``. A clock read that failed would replace it
 #: with ``unknown``, which is what makes it the observable for the clock case.
@@ -100,9 +117,56 @@ def test_empty_command_adapter_falls_back_to_its_default_name(
     *something* else entirely, so the pair of assertions -- default reached,
     adapted untouched -- is what pins which name was used.
     """
+    _assert_command_adapter_default(cmd_mox, tmp_path, variable, value="")
+
+
+@pytest.mark.parametrize("variable", UNSET_COMMAND_ADAPTERS)
+def test_unset_command_adapter_falls_back_to_its_default_name(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+    variable: str,
+) -> None:
+    """Verify an adapter the child never sees runs the documented default.
+
+    Parameters
+    ----------
+    cmd_mox
+        Active controller whose shims stand in for every adapter.
+    tmp_path
+        Isolated output directory for the gate.
+    variable
+        The command-adapter variable that is removed from the child.
+
+    Notes
+    -----
+    The empty case's twin, and not a duplicate of it: the colon form's two
+    substitution arms are ``unset`` and ``empty``, and only an absent name
+    exercises the first. The child environment is built from ``os.environ``, so
+    an override the case simply *omits* would leave a host value in place and
+    the case would silently test something else; passing ``None`` removes the
+    name instead, which is what makes the state the case names the state the
+    gate sees.
+    """
+    _assert_command_adapter_default(cmd_mox, tmp_path, variable, value=None)
+
+
+def _assert_command_adapter_default(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+    variable: str,
+    value: str | None,
+) -> None:
+    """Run one command-adapter case and assert which double was reached.
+
+    ``value`` is the override the harness receives: an empty string for the
+    exported-empty arm, ``None`` for the unset one. Both arms assert the same
+    pair, because the gate cannot tell them apart -- that is what the colon
+    form means -- and the assertion is what would catch a port that treated
+    them differently.
+    """
     boundaries = install_boundaries(cmd_mox)
     adapted = install_adapted(cmd_mox)
-    run = run_gate(cmd_mox, tmp_path, extra_environment={variable: ""})
+    run = run_gate(cmd_mox, tmp_path, extra_environment={variable: value})
 
     assert run.result.returncode == 0, run.result.stderr
     reached, untouched = (
@@ -111,10 +175,10 @@ def test_empty_command_adapter_falls_back_to_its_default_name(
         else (boundaries.git, adapted.git)
     )
     assert reached.calls, (
-        "an empty adapter name must fall back to the default name on PATH"
+        "an unset or empty adapter name must fall back to the default name on PATH"
     )
     assert untouched.calls == [], (
-        "an empty adapter name must not reach the adapter shim it displaced"
+        "an unset or empty adapter name must not reach the adapter shim it displaced"
     )
 
 
@@ -144,22 +208,57 @@ def test_empty_clock_adapter_falls_back_to_the_default_interpreter(
     variable is overridden *after* the merge, so the empty value is the one the
     gate reads.
     """
+    _assert_clock_adapter_default(cmd_mox, tmp_path, value="")
+
+
+def test_unset_clock_adapter_falls_back_to_the_default_interpreter(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify a clock adapter the child never sees still reads a clock.
+
+    Notes
+    -----
+    The unset twin of the empty case, and the same observable: a value of
+    ``None`` removes the name from the child, which the harness documents as
+    the way a case expresses *unset*. The reading's consequence is checked
+    rather than the program name, for the reason the empty case gives -- the
+    default is ``python3``, which is never shimmed.
+
+    Removing the name matters here for the same reason as in the command
+    adapters: the child environment is built from ``os.environ``, so a host
+    that exported this variable would decide which interpreter ran unless the
+    case removed it.
+    """
+    _assert_clock_adapter_default(cmd_mox, tmp_path, value=None)
+
+
+def _assert_clock_adapter_default(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+    value: str | None,
+) -> None:
+    """Run one clock-adapter case and assert the default interpreter ran.
+
+    Both arms share this body because the gate cannot distinguish them, which
+    is the whole content of the colon form.
+    """
     adapted = install_adapted(cmd_mox)
     run = run_gate(
         cmd_mox,
         tmp_path,
         extra_environment={
             **adapted.variables(cmd_mox),
-            CLOCK_ADAPTER_VARIABLE: "",
+            CLOCK_ADAPTER_VARIABLE: value,
         },
     )
 
     assert run.result.returncode == 0, run.result.stderr
     assert run.outputs["gate-error-category"] == DEFAULT_RUN_CATEGORY, (
-        "an empty clock adapter must read the real clock, not fail a launch"
+        "an unset or empty clock adapter must read the real clock, not fail a launch"
     )
     assert adapted.clock.calls == [], (
-        "an empty clock adapter must not reach the adapter shim it displaced"
+        "an unset or empty clock adapter must not reach the adapter shim it displaced"
     )
 
 
@@ -190,17 +289,48 @@ def test_empty_timeout_takes_the_documented_default(
     timeout is overridden after the merge so the empty value is what the gate
     reads.
     """
+    _assert_timeout_default(cmd_mox, tmp_path, value="")
+
+
+def test_unset_timeout_takes_the_documented_default(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify a timeout the child never sees is accepted as the default.
+
+    Notes
+    -----
+    The unset twin of the empty case. Its observable is identical -- the run's
+    category reports the bound's acceptance, not its value -- because the gate
+    substitutes the same default in both states.
+
+    Stating it separately is not redundant bookkeeping. The harness environment
+    is built from ``os.environ``, so a case that merely *omitted* the override
+    would inherit a host value: on a machine that exported this variable the
+    case would be exercising that value while claiming to exercise the default,
+    and it would pass. ``None`` removes the name, so the state the case names is
+    the state the gate sees.
+    """
+    _assert_timeout_default(cmd_mox, tmp_path, value=None)
+
+
+def _assert_timeout_default(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+    value: str | None,
+) -> None:
+    """Run one timeout case and assert the default bound was accepted."""
     adapted = install_adapted(cmd_mox)
     run = run_gate(
         cmd_mox,
         tmp_path,
         extra_environment={
             **adapted.variables(cmd_mox),
-            TIMEOUT_VARIABLE: "",
+            TIMEOUT_VARIABLE: value,
         },
     )
 
     assert run.result.returncode == 0, run.result.stderr
     assert run.outputs["gate-error-category"] == DEFAULT_RUN_CATEGORY, (
-        "an empty timeout must take the default rather than be refused"
+        "an unset or empty timeout must take the default rather than be refused"
     )
