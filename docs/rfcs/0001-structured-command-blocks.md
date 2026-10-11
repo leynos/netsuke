@@ -736,9 +736,11 @@ child's process working directory, and it does not make the directory available
 for reuse by a later stage.
 [RFC 0010](0010-runtime-bindings-and-secure-tempdirs.md) section 6.4 defines
 the separate `cwd: { tempdir: ... }` forms, which select a working directory
-and, when named, publish a sequence-local directory binding. Section 12.1
-records how the two forms combine and which one wins on the conventional
-variables.
+and, when named, publish a sequence-local directory binding. Section 10.4.1
+records how the two facilities combine: neither wins, because each owns a
+different surface. The `cwd` form sets the process working directory and leaves
+the conventional variables alone, while `temp_dir` binds `TMPDIR`, `TMP`, and
+`TEMP` and never changes the working directory.
 
 ### 11.4 Deferred operations
 

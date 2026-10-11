@@ -2563,12 +2563,14 @@ composition tracks without making either local foundation wait for the other's
 implementation.
 
 The RFCs remain proposed until their acceptance work completes. Task 12.1.1
-must settle their conflicting text before implementation; this roadmap does not
-silently choose a different contract. Intermediate slices must reject
-unsupported forms rather than ignore fields or fall back to legacy execution.
-Task 14.3.3 gates publication of the complete amended schema. Every delivery
-task includes unit and behavioural coverage, with properties and bounded proofs
-at pure boundaries and cross-feature suites at integration boundaries.
+settled their conflicting text; implementation follows
+[ADR-043](adr-043-consolidated-structured-command-execution-contract.md) rather
+than the superseded paragraphs of any single amendment. Intermediate slices
+must reject unsupported forms rather than ignore fields or fall back to legacy
+execution. Task 14.3.3 gates publication of the complete amended schema. Every
+delivery task includes unit and behavioural coverage, with properties and
+bounded proofs at pure boundaries and cross-feature suites at integration
+boundaries.
 
 ### 12.1. Fix command structure before evaluating template values
 
