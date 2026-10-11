@@ -336,7 +336,9 @@ def test_sink_delivery_passes_the_record_on_standard_input(tmp_path: Path) -> No
         f'#!/bin/sh\ncat >>"{target}"\nprintf "%s" "$#" >>"{target}.argc"\n',
     )
 
-    assert delivery.append_record(sink, str(target), "the record") == 0
+    assert delivery.append_record(sink, str(target), "the record") == 0, (
+        "a sink that reads its standard input must be delivered successfully"
+    )
     assert target.read_text(encoding="utf-8") == "the record\n", (
         "the adapter must receive the record on its standard input"
     )

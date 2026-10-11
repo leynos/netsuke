@@ -15,13 +15,15 @@ executables it runs are cmd-mox shims, so the boundary under test is the one
 production reaches while every external effect stays inside the test.
 """
 
-import collections.abc as cabc
 import dataclasses
 import importlib.util
 import os
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script boundary is under test.
 import typing as typ
 from pathlib import Path
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
 
 from release_admission_test_doubles import (
     GITHUB_REPOSITORY,
