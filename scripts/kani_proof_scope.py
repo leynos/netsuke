@@ -45,6 +45,9 @@ uv run --script scripts/kani_proof_scope.py --event-name pull_request
 """
 
 import dataclasses
+import enum
+import json
+import sys
 import tomllib
 import typing as typ
 from pathlib import Path
@@ -81,21 +84,32 @@ class ScopeFileError(Exception):
     """Report a proof-scope file the decision cannot trust."""
 
 
+class DecisionCategory(enum.StrEnum):
+    """Name the fixed reason class behind a proof-scope decision."""
+
+    FULL_RUN = enum.auto()
+    IN_SCOPE = enum.auto()
+    OUT_OF_SCOPE = enum.auto()
+    UNREADABLE_DIFF = enum.auto()
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class Decision:
-    """Whether the proofs run, and the sentence explaining why."""
+    """Whether the proofs run, and the fixed and human-readable reasons."""
 
     run_proofs: bool
     reason: str
+    category: DecisionCategory
 
 
 @Parameter(name="*")
 @dataclasses.dataclass(frozen=True, slots=True)
 class StepFiles:
-    """The files GitHub Actions reads a step's outputs and job summary from."""
+    """Hold GitHub Actions output and decision-record paths for one step."""
 
     output: typ.Annotated[Path | None, Parameter(env_var="GITHUB_OUTPUT")] = None
     summary: typ.Annotated[Path | None, Parameter(env_var="GITHUB_STEP_SUMMARY")] = None
+    metrics: typ.Annotated[Path | None, Parameter(env_var="INPUT_METRICS_FILE")] = None
 
 
 def read_scope(scope_file: Path) -> tuple[str, ...]:
@@ -117,7 +131,7 @@ def read_scope(scope_file: Path) -> tuple[str, ...]:
     """
     try:
         document = tomllib.loads(scope_file.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as error:
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
         msg = f"cannot read the proof scope {scope_file}: {error}"
         raise ScopeFileError(msg) from error
     scope = document.get("scope")
@@ -226,13 +240,16 @@ def decide(
     """
     if event_name != "pull_request":
         return Decision(
-            run_proofs=True, reason=f"A `{event_name}` run verifies every harness."
+            run_proofs=True,
+            reason=f"A `{event_name}` run verifies every harness.",
+            category=DecisionCategory.FULL_RUN,
         )
     if changes is None:
         return Decision(
             run_proofs=True,
             reason="The pull request's change set could not be read, so every "
             "harness runs.",
+            category=DecisionCategory.UNREADABLE_DIFF,
         )
     matched = [path for path in changes if is_in_scope(path, scope)]
     if matched:
@@ -242,6 +259,7 @@ def decide(
         return Decision(
             run_proofs=True,
             reason=f"This pull request changes proof inputs: {named}{elided}.",
+            category=DecisionCategory.IN_SCOPE,
         )
     return Decision(
         run_proofs=False,
@@ -249,6 +267,7 @@ def decide(
         f"the {len(scope)} proof inputs in `tools/kani/proof-scope.toml`, so the "
         "harnesses would verify the same inputs as on `main`. Every push to "
         "`main` and the nightly schedule run them in full.",
+        category=DecisionCategory.OUT_OF_SCOPE,
     )
 
 
@@ -265,6 +284,29 @@ def publish(decision: Decision, files: StepFiles) -> None:
     print(f"::notice title={heading}::{decision.reason}")
 
 
+def write_decision_record(metrics_file: Path | None, category: str) -> None:
+    """Write only the fixed decision category for the metrics finalizer.
+
+    Parameters
+    ----------
+    metrics_file : Path | None
+        Destination for the separate decision record, when configured.
+    category : str
+        Fixed decision category consumed by the finalizer.
+    """
+    if metrics_file is None:
+        return
+    try:
+        metrics_file.parent.mkdir(parents=True, exist_ok=True)
+        record = json.dumps({"decision": category}, separators=(",", ":"))
+        metrics_file.write_text(f"{record}\n", encoding="utf-8")
+    except OSError:
+        print(
+            "::warning::Kani scope decision metrics could not be recorded.",
+            file=sys.stderr,
+        )
+
+
 @app.default
 def main(
     *,
@@ -277,10 +319,22 @@ def main(
 
     A scope file that cannot be trusted raises out of here, which fails the
     step rather than deciding from it.
+
+    Raises
+    ------
+    ScopeFileError
+        When the proof scope is missing, malformed, or undecodable.
     """
-    scope = read_scope(scope_file)
+    step_files = files or StepFiles()
+    try:
+        scope = read_scope(scope_file)
+    except ScopeFileError:
+        write_decision_record(step_files.metrics, "invalid_scope")
+        raise
     changes = pull_request_changes(repository) if event_name == "pull_request" else None
-    publish(decide(event_name, scope, changes), files or StepFiles())
+    decision = decide(event_name, scope, changes)
+    publish(decision, step_files)
+    write_decision_record(step_files.metrics, decision.category.value)
 
 
 if __name__ == "__main__":

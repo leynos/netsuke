@@ -197,6 +197,7 @@ infrastructure = [
   "docs/verification/mutations/",
   "rust-toolchain.toml",
   "scripts/kani_proof_scope.py",
+  "scripts/kani_smoke_metrics.py",
   "tests/kani_mutation_evidence_tests.rs",
   "tests/kani_mutation_evidence_tests/",
   "tests/kani_scope_wrapper_e2e_tests.rs",

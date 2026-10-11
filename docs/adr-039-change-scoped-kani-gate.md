@@ -166,6 +166,41 @@ again. At adoption the closure is 44 files, listed as 18 `sources` entries:
   the contract and prints the paths to add. Moving code so that a harness no
   longer reaches a file fails it too, and prints the entry to remove.
 
+## Observability addendum
+
+The required job now records one bounded run counter and one cache counter for
+each attempt, plus a proof-duration observation when timing marks permit it.
+The scope step writes its decision category to a separate JSON record, leaving
+the public `run-proofs` output unchanged. Its vocabulary is `full_run`,
+`in_scope`, `out_of_scope`, `unreadable_diff` and `invalid_scope`; missing or
+malformed records become `unknown`. An invalid scope still fails the decision
+step and the job after recording `invalid_scope` for the finalizer.
+
+The finalizer classifies the proof and mutation outcomes using a fixed
+precedence and emits the bounded JSONL contract described in the
+[developers' guide](developers-guide.md#kani-smoke-metrics). Its per-attempt
+artefact is retained for 30 days. The decision file is deliberately separate
+from GitHub step outputs: telemetry failure must not change the decision or the
+exact `run-proofs` contract. Timing mark failures produce a fixed warning and
+do not prevent the Kani harness or mutation gate from running. When the scope
+guard does not select proofs, the finalizer omits duration without warning;
+missing or malformed marks during a selected proof produce a fixed warning.
+
+Metric labels contain only the workflow event, fixed decision and outcome
+categories, or the cache result. Paths, commit IDs, run IDs, URLs and free-form
+errors are excluded from every label. The cache `miss` category means that no
+exact payload was restored; it does not claim that the cache service was
+healthy, because `actions/cache` can report service errors as warnings. The
+duration marks bracket `make kani-ir`; cancellation may prevent the end mark,
+and job timeout or runner loss can prevent finalization or upload.
+
+Implementation and contracts live in
+[`scripts/kani_proof_scope.py`](../scripts/kani_proof_scope.py),
+[`scripts/kani_smoke_metrics.py`](../scripts/kani_smoke_metrics.py),
+[`tests/workflow_contracts/kani_smoke_metrics_test.py`](../tests/workflow_contracts/kani_smoke_metrics_test.py),
+[`tests/workflow_contracts/kani_smoke_metrics_wiring_test.py`](../tests/workflow_contracts/kani_smoke_metrics_wiring_test.py),
+and [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+
 ## Reuse in other repositories
 
 The mechanism is repository-independent apart from the scope file. A step by
