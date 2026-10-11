@@ -134,13 +134,21 @@ class OutputPath:
 
     ``configured`` is the string the operator supplied, verbatim, and
     ``resolved`` is the same path as a filesystem object. They are not
-    interchangeable. The shell passed the configured string to a sink adapter
-    and published it in a workflow output, so ``./observations//metrics.jsonl``
-    stayed spelled that way on both boundaries; only ``mkdir`` and the
-    redirection saw a normalized form. Rendering ``Path`` back to text would
-    rewrite the operator's spelling at two observable boundaries and can even
-    change whether a target is treated as a file or refused as directory-shaped,
-    because a trailing slash is a filesystem distinction rather than a
+    interchangeable, and the split is not "one spelling per boundary": the
+    configured string reaches *every* observable one -- the argument a sink
+    adapter is named with, the ``metrics-file`` and ``trace-file`` workflow
+    outputs, and the open that truncates the file -- so
+    ``./observations//metrics.jsonl`` stayed spelled that way everywhere the
+    shell spelled it that way. ``resolved`` is used for ``mkdir`` alone, where
+    the trailing slash is not a distinction: ``Path`` normalizes it away, and
+    ``mkdir -p "dir/"`` and ``mkdir -p "dir"`` name the same directory either
+    way.
+
+    Rendering ``Path`` back to text at any of the configured boundaries would
+    rewrite the operator's spelling, and at the truncation open it would change
+    which file is written: ``Path("metrics.jsonl/")`` drops the slash, so the
+    resolved form creates the regular file where the shell's redirection
+    refused one. A trailing slash is a filesystem distinction rather than a
     cosmetic one.
     """
 
