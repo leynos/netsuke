@@ -415,15 +415,16 @@ both route their diagnostics through. It needs no canonical value key, because
 `sort_keys` orders by the canonical key of a value this group has already
 parsed rather than establishing the equality relation clause 6.7 defines.
 
-Section 14.2 states the slice 0 requirement this group restates. The other
-seven slices state one too, and the parent now records that explicitly: 14.3
-and 14.9 name the canonical equality relation, 14.4 to 14.6 and 14.10 name the
+Section 14.2 states the slice 0 requirement this group restates. Every other
+slice states one too, and the parent now records that explicitly: 14.3 and 14.9
+name the canonical equality relation, 14.4 to 14.6 and 14.10 name the
 bounded-materialization helper or the diagnostic scaffolding, and 14.7 names
-the scaffolding alongside slice 5. Slice 7 (14.8) is the one exception — it
-needs roadmap task 3.14.8 settled but reaches slice 0 nowhere, because none of
-its nine helpers materializes a bounded expansion and `shell_quote` already
-ships its own key family. Figure 1 draws the edge to every slice for this
-reason.
+the scaffolding alongside slice 5. Slice 7 (14.8) requires roadmap task 3.14.8
+and slice 0's domain-error scaffolding, but not its canonical value key or
+bounded-materialization helper: none of its nine helpers uses the shared
+bounded-materialization helper, and `shell_quote` already ships its own key
+family. Figure 1 draws the edge to every slice because every one of them, slice
+7 included, reaches the scaffolding.
 
 It requires no other child RFC, and no other child RFC requires it.
 

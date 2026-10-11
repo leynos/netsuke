@@ -159,18 +159,19 @@ argument would have pretended to be.
 
 ### 5.6. Type and error contract
 
-RFC 0006 section 8.2 specifies the kinds each helper accepts. What follows is
-when a kind, a key, or an option value is rejected, each carrying a code from
-section 5.9. Options are listed in section 5.9 rather than repeated here.
+RFC 0006 section 8.2 specifies the kinds each helper accepts and the values its
+options admit. What follows is when a kind, a key, or an option value is
+rejected, each carrying a code from section 5.9; section 5.9 carries the codes
+their invalid values raise rather than the accepted values themselves.
 
-| Helper            | Accepted as                                   | Rejects                                                                                                                                |
-| ----------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `combine`         | mapping, subject and every positional operand | `wrong_kind` naming the position and kind found; `list_merge_invalid`; `depth_exceeded`; `output_too_large`                            |
-| `dict2items`      | mapping                                       | `wrong_kind`; `empty_name`; `names_equal`                                                                                              |
-| `items2dict`      | sequence of mappings                          | `wrong_kind`; `missing_field` naming index and field; `key_kind`; `duplicates_invalid`; `duplicate_key` under the default policy       |
-| `extract`         | mapping or sequence                           | `wrong_kind`; `index_kind` for a negative or non-integer index; `missing_key` naming the failing step; `not_a_container`               |
-| `subelements`     | sequence of mappings                          | `wrong_kind` for a non-mapping parent; `path_kind`; `missing_path`, including `none` at the path; `not_a_sequence`; `output_too_large` |
-| `rekey_on_member` | sequence of mappings                          | `wrong_kind`; `missing_member` naming the index; `key_kind`; `duplicates_invalid`; `duplicate_key` under the default policy            |
+| Helper            | Accepted as                                   | Rejects                                                                                                                                                   |
+| ----------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `combine`         | mapping, subject and every positional operand | `undefined_input` for an undefined operand; `wrong_kind` naming the position and kind found; `list_merge_invalid`; `depth_exceeded`; `output_too_large`   |
+| `dict2items`      | mapping                                       | `undefined_input`; `wrong_kind`; `empty_name`; `names_equal`                                                                                              |
+| `items2dict`      | sequence of mappings                          | `undefined_input`; `wrong_kind`; `missing_field` naming index and field; `key_kind`; `duplicates_invalid`; `duplicate_key` under the default policy       |
+| `extract`         | mapping or sequence                           | `undefined_input`; `wrong_kind`; `index_kind` for a negative or non-integer index; `missing_key` naming the failing step; `not_a_container`               |
+| `subelements`     | sequence of mappings                          | `undefined_input`; `wrong_kind` for a non-mapping parent; `path_kind`; `missing_path`, including `none` at the path; `not_a_sequence`; `output_too_large` |
+| `rekey_on_member` | sequence of mappings                          | `undefined_input`; `wrong_kind`; `missing_member` naming the index; `key_kind`; `duplicates_invalid`; `duplicate_key` under the default policy            |
 
 Three decisions this group adds:
 

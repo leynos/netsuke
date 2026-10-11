@@ -22,11 +22,11 @@ timestamp out of text and render a timestamp back to text, using the timestamp
 value `now()` already returns. Section 5.1's registry lists two members, **both
 new pure filters**, and both are usable from a manifest query.
 
-The group is RFC 0006 section 8.10 entire, and it is the smallest child in the
-set at two helpers. It is also the last: with its two pure helpers the written
-children account for **52 of the 52 pure helpers** section 6.1 names, so
-whatever else the RFC may be, it is the one whose landing closes the purity
-arithmetic rather than advancing it.
+The group covers RFC 0006 section 8.10 in its entirety, and it is the smallest
+child in the set at two helpers. It is also the last: with its two pure helpers
+the written children account for **52 of the 52 pure helpers** section 6.1
+names, so whatever else the RFC may be, it is the one whose landing closes the
+purity arithmetic rather than advancing it.
 
 What makes the group interesting is not its size but the boundary it draws.
 Netsuke already reads the clock, in `now(offset=...)`, and already does
@@ -231,9 +231,9 @@ remove it from every manifest query, which is precisely the trade RFC 0018's
 `expandvars` had to make and this group does not. The resolution is the same
 shape as RFC 0019's `comment`: the helper operates on text, and the reading is
 a separate capability the manifest already has. Section 8.10 says nothing about
-a file for this reason, and the guide should state the composition —
-`read_text` or `from_json` when a file is involved — where `to_datetime` is
-documented.
+a file for this reason, and the guide should state the composition — the
+existing `contents` filter or `from_json` when a file is involved — where
+`to_datetime` is documented.
 
 ### 5.5. Platform contract
 

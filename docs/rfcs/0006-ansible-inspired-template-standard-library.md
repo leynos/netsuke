@@ -1957,9 +1957,9 @@ _Figure 1: Prerequisite relationships between the delivery slices._
 
 ### 14.1. Slice 0: shared contract and inventory foundation
 
-This slice exists because every one of the eight remaining slices would
+This slice exists because every one of the nine remaining slices would
 otherwise invent its own version of the same shared machinery. Figure 1 shows
-it as a prerequisite for all eight: a slice that adds no helper still uses the
+it as a prerequisite for all nine: a slice that adds no helper still uses the
 domain-error scaffolding for the helpers it does add, and a slice whose helpers
 materialize nothing still declares the bounds it does not reach, which is why
 the edge is drawn to slices 4, 5, and 9 as well as to the four that plainly

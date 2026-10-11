@@ -83,8 +83,9 @@ Eight helpers: four filters and four tests, all pure, all newly registered.
 - `regex_replace` — replace matches, with `$1`-form replacements and an
   optional exact-count requirement.
 - `regex_search` — the matched text or a selected group, or `none`.
-- `regex_findall` — every whole match or one group per match, as a sequence of
-  strings.
+- `regex_findall` — every whole match or one group per match, as a sequence
+  whose elements are strings or `none` when a selected group did not
+  participate.
 - `regex_escape` — a pattern matching the subject literally.
 - `match` — true when the pattern matches at the start of the subject.
 - `search` — true when the pattern matches anywhere in the subject.
@@ -248,8 +249,9 @@ Four decisions this group adds:
 No additional obligation beyond RFC 0006 section 6.7. Clause 6.7 opens by naming
 `subset`, `superset`, `contains`, and duplicate detection, and adds the
 canonical-JSON domain those relations are defined over. Nothing in this group
-keys a collection on a value: `regex_findall` returns strings, the four tests
-return booleans, and `regex_search` returns a string or `none`. No mapping is
+keys a collection on a value: `regex_findall` returns strings or `none` at a
+position whose selected group did not participate, the four tests return
+booleans, and `regex_search` returns a string or `none`. No mapping is
 traversed and no deduplication occurs, so the canonical key is never computed
 and the clause's rule about a hash-set iteration order has nothing to reach.
 
@@ -498,11 +500,12 @@ Roadmap step 6.5, which implements this RFC in five tasks:
 Each task carries the acceptance criteria that make this RFC checkable: an
 unsupported construct producing a typed diagnostic naming the construct and the
 offset; a Python-style replacement failing loudly rather than emitting `\1`;
-`regex_findall` returning a sequence of strings whether the pattern has zero,
-one, or several capture groups; a `regex_replace` whose replacement doubles
-every match failing with `output_too_large` on a subject whose match count is
-under the ceiling; and a version parse failure naming which operand failed and
-the offending text.
+`regex_findall` returning a sequence of strings, or `none` at a position whose
+selected group did not participate, whether the pattern has zero, one, or
+several capture groups; a `regex_replace` whose replacement doubles every match
+failing with `output_too_large` on a subject whose match count is under the
+ceiling; and a version parse failure naming which operand failed and the
+offending text.
 
 ## 8. Open questions
 

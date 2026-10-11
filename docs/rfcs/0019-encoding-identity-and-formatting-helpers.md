@@ -24,14 +24,15 @@ subprocess and without a second quoting implementation. Section 5.1's registry
 lists nine members, **all nine new pure filters**, and all nine are usable from
 a manifest query.
 
-The group is RFC 0006 section 8.9 entire, which is why it is a child rather
-than part of a neighbour: section 14.13's partition splits at the capability
-seam, and "encode, identify, and format a value" is one seam rather than four.
-Two members carry a debt the rest of the set does not, and both are named here
-rather than discovered in section 5. `shell_quote` was **already delivered** by
-roadmap task 3.14.8, so this RFC adopts it rather than specifying it from
-scratch, and what remains is the dialect set. `text_hash` is a **rename**, not
-an introduction, so section 5.10 and section 11.1's policy applies to it.
+The group covers RFC 0006 section 8.9 in its entirety, which is why it is a
+child rather than part of a neighbour: section 14.13's partition splits at the
+capability seam, and "encode, identify, and format a value" is one seam rather
+than four. Two members carry a debt the rest of the set does not, and both are
+named here rather than discovered in section 5. `shell_quote` was **already
+delivered** by roadmap task 3.14.8, so this RFC adopts it rather than
+specifying it from scratch, and what remains is the dialect set. `text_hash` is
+a **rename**, not an introduction, so section 5.10 and section 11.1's policy
+applies to it.
 
 ## 2. Problem
 
@@ -94,7 +95,8 @@ Nine new pure filters.
 - `b64decode(urlsafe=false, strict=true)` — decode Base64 to UTF-8 text.
 - `urldecode(plus=false)` — percent-decode to UTF-8 text.
 - `to_uuid(namespace=...)` — deterministic UUID version 5 over the subject.
-- `shell_quote(dialect='sh')` — quote one value for a named shell dialect.
+- `shell_quote(dialect=...)` — quote one value for a named shell dialect,
+  defaulting to `RecipeShell::host_default()` rather than to a fixed dialect.
 - `comment(style='hash', prefix=none)` — decorate text as comments.
 - `human_readable(unit_system='binary', unit=none, precision=2, bits=false)` —
   format a byte or bit count for display.
@@ -418,8 +420,11 @@ The remaining eight are bounded by their input or output rather than by a
 materialized expansion, and each is stated because the reasoning is not uniform:
 
 - **The two decoders shrink.** `b64decode` and `urldecode` produce at most
-  their input's length, so table 3's input row bounds them and no output row is
-  needed.
+  their input's length, so no output row is needed and no cardinality can grow.
+  Table 3's input-length row names `b64decode` and not `urldecode`; the second
+  is bounded by the same argument rather than by the same row, because
+  percent-decoding is length-decreasing on every input and needs no ceiling to
+  stay so.
 - **The two size formatters are constant-bounded.** `human_readable` produces a
   short fixed-width string for any input, and `human_to_bytes` produces one
   integer. Neither can amplify.
@@ -498,8 +503,33 @@ together, and the group adds no second key for the same rejection.
 
 The table names constants and Fluent keys rather than `netsuke::jinja::*` codes
 because that is the form a reader greps for in `src/localization/keys.rs` and
-`locales/en-US/messages.ftl`, and because only two of the six carry a bracketed
-code in their message text.
+`locales/en-US/messages.ftl`, and because only one of the six carries a
+bracketed code in the message text it constructs.
+
+**Which one, and which four do not, and why the RFC 0006 section 6.9 policy
+permits the difference.** An earlier draft of this paragraph said "two of the
+six"; that figure was wrong, and stating it correctly matters because the
+difference is a contract rather than a detail. Section 6.9 requires every new
+helper's error to carry a `netsuke::jinja::<module>::<reason>` code and says in
+terms that extending the requirement retroactively to the existing standard
+library is out of scope. `text_hash`'s two conditions are plain Fluent messages
+under `keys::STDLIB_PATH_HASH_*`, built by `src/stdlib/path/hash_utils.rs`, and
+carry no bracketed code — `hash` shipped without one and this group's reuse of
+its keys, required by section 5.6, does not add one to an existing helper's
+messages.
+
+`shell_quote`'s four conditions are the more interesting case, because all four
+*do* acquire a code, and it is not the key the table names. The Fluent entries
+under `keys::STDLIB_SHELL_QUOTE_*` — the subject-kind and control-byte
+conditions — are unwrapped details; `src/stdlib/recipe_text/mod.rs` raises them
+through `args_error` and `unquotable_error`, which wrap them in the bracketed
+messages `STDLIB_SHELL_ARGS_ERROR` (`[netsuke::jinja::shell::args]`) and
+`STDLIB_SHELL_UNQUOTABLE` (`[netsuke::jinja::shell::unquotable]`). The dialect
+conditions take the same route: both `dialect_not_string_error` and
+`dialect_invalid_error` build through `args_error`. So the four are coded at
+runtime through two shared wrapper keys, which is what section 5.9's "reused,
+not added" means for them, and what the table records is the key that first
+names each condition rather than the code the caller finally sees.
 
 `output_too_large` is new here and is not optional: section 5.8's checked
 `comment` ceiling has to fail with a code, and the group's enum is the only
@@ -516,14 +546,18 @@ and a digest, and only two of those are encoding. `text` matches the names the
 group's own members carry and the section 8.9 title, so a reader who sees
 `STDLIB_TEXT_INVALID_SIZE` can find the ring the key belongs to without
 consulting the registry. Seven of the nine helpers reach their errors through
-this enum — the two decoders, the two size formatters, `to_uuid`, and
-`comment` — so every `Error::new` call in their leaf functions is replaced by a
-variant of it, and a caller can tell a text failure from a manifest diagnostic
-by the code alone. The other two are the exceptions, for the reasons already
-given: `shell_quote` keeps the shipped `stdlib.shell.*` keys, and `text_hash`
-raises `hash`'s own `stdlib.path.hash.*` pair, so neither routes through
-`TextError`. Renaming a key a manifest author already reads is a worse outcome
-than one group whose helpers span three key families.
+this enum — `b64encode`, the two decoders, the two size formatters, `to_uuid`,
+and `comment` — so every `Error::new` call in their leaf functions is replaced
+by a variant of it, and a caller can tell a text failure from a manifest
+diagnostic by the code alone. `b64encode` is the one that looks like an
+exception and is not: RFC 0006 section 8.9 requires its subject to be a string
+before it is encoded as UTF-8, so it raises the first table's `not a string`
+condition and routes through `TextError` like the decoders it inverts. The
+other two are the exceptions, for the reasons already given: `shell_quote`
+keeps the shipped `stdlib.shell.*` keys, and `text_hash` raises `hash`'s own
+`stdlib.path.hash.*` pair, so neither routes through `TextError`. Renaming a
+key a manifest author already reads is a worse outcome than one group whose
+helpers span three key families.
 
 Three further decisions belong here rather than in the code.
 
@@ -658,19 +692,19 @@ disagreeing rather than by a manifest failing at runtime.
 
 ### Clause discharge
 
-| Clause | Discharge                                                                                                                                                                                                                                    |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `6.1`  | Nine `New` pure filters; the group contributes 9 of 52 and the six written children reach 50 of 52, leaving 2 for RFC 0020.                                                                                                                  |
-| `6.2`  | All nine register in `register_query_helpers`; `shell_quote` is already registered there and its registration is unchanged.                                                                                                                  |
-| `6.3`  | Every helper is pure; `human_readable` is locale-independent, `to_uuid` is deterministic, `text_hash` is lowercase, and `shell_quote`'s default is disclosed.                                                                                |
-| `6.4`  | No capability handle: nothing opens, resolves, or reads; `comment` guards its input text rather than the target file.                                                                                                                        |
-| `6.5`  | Eight helpers are platform-uniform; `shell_quote` diverges only in its default dialect, with each named dialect's output uniform.                                                                                                            |
-| `6.6`  | Twenty-one conditions: fifteen coded by this group's enum and six reusing the shipped `STDLIB_SHELL_*` and `STDLIB_PATH_HASH_*` families; the decoders name the offset, and the dialect and algorithm conditions enumerate the accepted set. |
-| `6.7`  | No value is keyed or deduplicated; `text_hash` and `to_uuid` are explicitly not identity relations.                                                                                                                                          |
-| `6.8`  | Table 3's input row bounds the decoders; `comment` checks `m + n * checked_mul(k)` against the 8 MiB output ceiling before building; the rest are constant- or input-bounded, and `human_to_bytes` uses checked arithmetic.                  |
-| `6.9`  | One enum, one `From` impl, fifteen new `netsuke::jinja::text::*` codes, with `shell_quote` and `text_hash` extending the shipped `STDLIB_SHELL_*` and `STDLIB_PATH_HASH_*` families rather than forking them.                                |
-| `6.10` | Nine new names, none an alias; `text_hash` is a section 7.8 rename, `shell_quote`'s name is 3.14.8's, and `comment`'s styles name the syntax family.                                                                                         |
-| `6.11` | Nine guide entries, nine `tested-example` fences, the Base64 and percent round trips, the size inverse, the UUID and comment laws, and the both-platform quoting suite.                                                                      |
+| Clause | Discharge                                                                                                                                                                                                                                                                               |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `6.1`  | Nine `New` pure filters; the group contributes 9 of 52 and the six written children reach 50 of 52, leaving 2 for RFC 0020.                                                                                                                                                             |
+| `6.2`  | All nine register in `register_query_helpers`; `shell_quote` is already registered there and its registration is unchanged.                                                                                                                                                             |
+| `6.3`  | Every helper is pure; `human_readable` is locale-independent, `to_uuid` is deterministic, `text_hash` is lowercase, and `shell_quote`'s default is disclosed.                                                                                                                           |
+| `6.4`  | No capability handle: nothing opens, resolves, or reads; `comment` guards its input text rather than the target file.                                                                                                                                                                   |
+| `6.5`  | Eight helpers are platform-uniform; `shell_quote` diverges only in its default dialect, with each named dialect's output uniform.                                                                                                                                                       |
+| `6.6`  | Twenty-one conditions: fifteen coded by this group's enum and six reusing the shipped `STDLIB_SHELL_*` and `STDLIB_PATH_HASH_*` families; the decoders name the offset, and the dialect and algorithm conditions enumerate the accepted set.                                            |
+| `6.7`  | No value is keyed or deduplicated; `text_hash` and `to_uuid` are explicitly not identity relations.                                                                                                                                                                                     |
+| `6.8`  | Table 3's input row names `b64decode`, the only decoder it reaches; `comment` checks `m + n * checked_mul(k)` against the 8 MiB output ceiling before building, the one ceiling this group owes; the rest are constant- or input-bounded, and `human_to_bytes` uses checked arithmetic. |
+| `6.9`  | One enum, one `From` impl, fifteen new `netsuke::jinja::text::*` codes, with `shell_quote` and `text_hash` extending the shipped `STDLIB_SHELL_*` and `STDLIB_PATH_HASH_*` families rather than forking them.                                                                           |
+| `6.10` | Nine new names, none an alias; `text_hash` is a section 7.8 rename, `shell_quote`'s name is 3.14.8's, and `comment`'s styles name the syntax family.                                                                                                                                    |
+| `6.11` | Nine guide entries, nine `tested-example` fences, the Base64 and percent round trips, the size inverse, the UUID and comment laws, and the both-platform quoting suite.                                                                                                                 |
 
 ## 6. Dependencies
 
@@ -688,22 +722,30 @@ whatever the existing `hash` filter already uses, including its
 `legacy-digests` gate.
 
 Within the RFC set, the group requires the shared contract that RFC 0006
-section 14.1's "slice 0" describes, delivered by roadmap task 6.1.4: the
-domain-error and diagnostic scaffolding the group's `TextError` enum is built
-on, per clause 6.9. It needs neither task 6.1.2 nor task 6.1.3 — section 5.7
-records that no value is keyed or deduplicated, and section 5.8 that only
-`comment` materializes anything larger than its input, under the checked output
-ceiling section 5.8 states rather than through the shared combinatorial helper.
-RFC 0006 section 14.8 states no slice 0 requirement of its own, so task 6.1.4
-is the only slice 0 prerequisite the parent names for this group; the edge
-Figure 1 draws to slice 7 is the scaffolding, which the parent's own sentence
-in 14.1 ("a slice that adds no helper still uses the domain-error scaffolding
-for the helpers it does add") covers. It requires **no other child RFC**, which
-makes it the second independent leaf after RFC 0013: nothing in encoding,
-identity, or formatting composes with a path, a collection, or a date, so no
-sibling's mechanism has to land first. It is in turn required by nothing — RFC
-0020's date filters do not consume a digest or a quoted word — so the group is
-genuinely terminal.
+section 14.1's "slice 0" describes, delivered by roadmap tasks 6.1.3 and 6.1.4:
+the domain-error and diagnostic scaffolding the group's `TextError` enum is
+built on (task 6.1.4, per clause 6.9), and the shared bounded-materialization
+helper's input-length coverage (task 6.1.3), which is the row table 3 scopes to
+`b64decode` and which roadmap tasks 6.8.1 and 6.8.5 both declare. An earlier
+draft of this paragraph denied the 6.1.3 edge, on the reasoning that none of
+the group's nine helpers uses the helper's *combinatorial* path; that reasoning
+is sound about the path and wrong about the task, which covers "input length,
+nesting depth, checked combinatorial cardinality, and match counts" rather than
+cardinality alone, and the roadmap is the authority for the sequencing. What
+this RFC asserts is the narrower claim: no helper here materializes a bounded
+expansion through the combinatorial path. It needs task 6.1.2 nowhere, because
+section 5.7 records that no value is keyed or deduplicated, and section 5.8
+records that only `comment` materializes anything larger than its input, under
+the checked output ceiling section 5.8 states. RFC 0006 section 14.8 states no
+slice 0 requirement of its own, so task 6.1.4 is the only slice 0 prerequisite
+the parent names for this group; the edge Figure 1 draws to slice 7 is the
+scaffolding, which the parent's own sentence in 14.1 ("a slice that adds no
+helper still uses the domain-error scaffolding for the helpers it does add")
+covers. It requires **no other child RFC**, which makes it the second
+independent leaf after RFC 0013: nothing in encoding, identity, or formatting
+composes with a path, a collection, or a date, so no sibling's mechanism has to
+land first. It is in turn required by nothing — RFC 0020's date filters do not
+consume a digest or a quoted word — so the group is genuinely terminal.
 
 The one cross-child relationship worth stating is a **negative** one, because a
 reader who expects a dependency will look for it. `shell_quote` and RFC 0017's

@@ -156,7 +156,7 @@ RFC 0006 section 6.2's clause 1 registers pure helpers in
 2 for every row: each registers a **stub** in `register_disabled_query_helpers`
 that fails with the explicit restriction diagnostic.
 
-Two of the five are not new to that treatment. `glob` is already a
+Two of them are worth stating separately. `glob` is already a
 filesystem-observing function and already has the disposition it needs — adding
 `files_only` extends the recipe without touching the registration, so the
 option cannot make the two disagree. `expandvars` is deliberately excluded from
@@ -166,14 +166,14 @@ read-only generation caller, not only `netsuke help targets`.
 
 The group's obligation beyond RFC 0006 section 6.2 is that the stub's message
 must be actionable in each case. "Unavailable during manifest queries" is the
-right answer for all five, and section 5.9 gives each its own code so a
+right answer for all six, and section 5.9 gives each its own code, so a
 manifest author can tell which helper they reached for rather than inferring it
 from the surrounding text.
 
 ### 5.3. Determinism
 
-No additional obligation beyond RFC 0006 section 6.3 for four of the five
-tests: each returns a boolean, and a boolean has no ordering to get wrong.
+No additional obligation beyond RFC 0006 section 6.3 for four of the five new
+helpers: each returns a boolean, and a boolean has no ordering to get wrong.
 `expandvars` returns the input's text with substitutions applied in a single
 left-to-right pass, so its output is a function of its arguments and the
 injected environment alone.
@@ -334,20 +334,25 @@ give and, in the hard-link case, the one that is actually wanted.
 
 ### 5.8. Resource bounds
 
-The bounds are RFC 0006 table 3's, and this group reaches **two** of its rows —
-the input-length row, which every path argument meets, and the match-count row
-by adoption — **plus two ceilings of its own** on the two members that
-materialize: 100000 matches for `glob(files_only=false)` and 8 MiB of output for
-`expandvars`. Each of the four is stated where it applies rather than folded
-into one sentence, because three of them bound different things and the fourth
-is the status quo.
+The bounds are RFC 0006 table 3's, and this group reaches **one** of its rows,
+the match-count row by adoption, **plus two ceilings of its own** on the two
+members that materialize: 100000 matches for `glob(files_only=false)` and 8 MiB
+of output for `expandvars`. Each of the three is stated where it applies rather
+than folded into one sentence, because they bound different things.
 
-The input-length row bounds a subject at 8 MiB, and a path supplied to `exists`,
-`link_exists`, `same_file`, or `mount` arrives through the same template
-evaluation as any other string, so it is bounded by the same ceiling. That is
-the input row's ordinary operation rather than a bound this group adds: none of
-the four allocates anything that grows with its input, each returns a boolean,
-and the path is consumed by one capability-handled lookup.
+**Table 3's input-length row does not reach this group, and an earlier draft of
+this section claimed it did.** The row names four helpers — `from_json`,
+`from_yaml`, `from_yaml_all`, and `b64decode` — and scopes its 8 MiB figure to
+them. The four filesystem tests take a path, and `expandvars` takes a subject,
+through the same template evaluation as any other argument; that makes them
+ordinary string consumers, not parser entry points, and ordinary string
+arguments acquire no input ceiling merely by being evaluated. Extending the row
+to reach them would change RFC 0006's contract for every helper that reads a
+string, which is a decision for the parent rather than a bound this group may
+assert on its behalf. What the four tests actually have is the property that
+makes the row unnecessary for them: none allocates anything that grows with its
+input, each returns a boolean, and the path is consumed by one
+capability-handled lookup.
 
 `glob(files_only=...)` is the member the clause genuinely reaches, and it
 reaches it because it *materializes*. The existing `glob` already collects its
@@ -405,8 +410,9 @@ the multiplier and the ceiling is the honest discharge: the first is why the
 multiplier is not manifest-driven, and the second is why the result is bounded
 anyway.
 
-The four tests reach no row of table 3. Each consumes a path bounded by the
-input row, allocates nothing that grows with it, and returns a boolean.
+The four tests reach no row of table 3. Each consumes a path, allocates nothing
+that grows with it, and returns a boolean, so no bound of the table has
+anything to constrain.
 
 ### 5.9. Diagnostics and localization
 
@@ -565,7 +571,7 @@ removed without the inventory disagreeing.
 | `6.5`  | Platform is uniform for four helpers, identity-based for `same_file`, divergent only in `mount`, and dialect-sensitive in `expandvars`'s input.                                                                                                                               |
 | `6.6`  | Eleven rejected conditions with their own codes, one of which (`unknown_dialect`) is RFC 0017's code reused rather than a twelfth; `outside_capability` is distinct from not-found; both platform codes name the platform.                                                    |
 | `6.7`  | No value is keyed or deduplicated; `same_file`'s identity relation is a filesystem fact, not the canonical key.                                                                                                                                                               |
-| `6.8`  | Table 3's input row bounds every path; `files_only=false` adds a 100000-match ceiling checked before materialization; `expandvars` adds an 8 MiB output ceiling checked before materialization.                                                                               |
+| `6.8`  | Table 3's input row names the parsers and not these helpers, so this group adds both ceilings it relies on; `files_only=false` takes a 100000-match ceiling checked before materialization, and `expandvars` an 8 MiB output ceiling checked before materialization.          |
 | `6.9`  | One enum, one `From` impl, eleven `netsuke::jinja::path::*` codes extending the existing module namespace; `unknown_dialect` is one code shared with RFC 0017, and `match_limit` shares RFC 0016's bound and discipline but is this module's own code per clause 6.9's shape. |
 | `6.10` | Five new names, none an alias; `mount` keeps the noun spelling the test namespace supplies the "is" for; `fileglob` stays rejected.                                                                                                                                           |
 | `6.11` | Five guide entries, five `tested-example` fences, the dangling-link and subsequence laws, the two-platform suite, and the all-stubs disposition suite.                                                                                                                        |
@@ -583,13 +589,21 @@ section 8.7 already states, and it would have to be trusted on two platforms
 where the RFC specifies both.
 
 Within the RFC set, the group requires the shared contract that RFC 0006
-section 14.1's "slice 0" describes, delivered by roadmap task 6.1.4: the
-domain-error and diagnostic scaffolding the group's `PathError` extension and
-its `unknown_dialect` and `match_limit` codes register through, per RFC 0006
-sections 14.6 and 14.7. It needs neither task 6.1.2 nor task 6.1.3 — section
-5.7 records that no value is keyed or deduplicated, and section 5.8's match and
-output ceilings are counted with the same table 3 arithmetic RFC 0016 and RFC
-0017 already carry rather than through the shared helper's combinatorial path.
+section 14.1's "slice 0" describes, delivered by roadmap tasks 6.1.4 to 6.1.6:
+the domain-error and diagnostic scaffolding the group's `PathError` extension
+and its `unknown_dialect` and `match_limit` codes register through (task 6.1.4,
+per RFC 0006 sections 14.6 and 14.7); the manifest-query disclosure closure of
+task 6.1.5, which section 5.2 depends on for `expandvars`'s exclusion to cover
+every read-only caller rather than only `netsuke help targets`; and the
+registration contract test of task 6.1.6, which is what verifies the
+disposition section 5.2 states for every one of the group's six rows. Roadmap
+task 6.7.1 declares 6.1.6 as its prerequisite and task 6.7.4 declares 6.1.5,
+and this paragraph states the same two edges from the child's side. It needs
+neither task 6.1.2 nor task 6.1.3 — section 5.7 records that no value is keyed
+or deduplicated, and section 5.8's match and output ceilings are this group's
+own additions, counted with arithmetic it states itself rather than through the
+shared helper's combinatorial path.
+
 It requires no other child RFC for the filesystem tests, and it requires
 [RFC 0017](0017-lexical-path-composition.md) for `expandvars`, because the
 environment-observing helper takes the same `dialect` argument that RFC defines

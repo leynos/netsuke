@@ -212,7 +212,7 @@ carrying a code from section 5.9.
 | `product`              | sequences, plus `repeat` and `*others`  | `wrong_kind`; `repeat_range`; `cardinality_exceeded`; `output_too_large`; `overflow`                                                    |
 | `combinations`         | a sequence, plus `r`                    | `wrong_kind`; `r_kind` for a negative or non-integer `r`; `cardinality_exceeded`; `output_too_large`; `overflow`                        |
 | `permutations`         | a sequence, plus `r` or `none`          | `wrong_kind`; `r_kind`; `cardinality_exceeded` naming the lower ceiling; `output_too_large`; `overflow`                                 |
-| `zip_longest`          | sequences, plus a required `fill_value` | `wrong_kind`; `fill_value_required` when it is omitted                                                                                  |
+| `zip_longest`          | sequences, plus a required `fill_value` | `wrong_kind`; `fill_value_required` when it is omitted; `output_too_large`                                                              |
 | `any`                  | a sequence                              | `wrong_kind`; `undefined_input` naming the index                                                                                        |
 | `all`                  | a sequence                              | as `any`                                                                                                                                |
 | `subset`               | two sequences                           | `wrong_kind`; `uncanonical_value` naming the element's kind                                                                             |
@@ -315,11 +315,24 @@ three of table 3's rows, more than any other child: `product` and
 lower 10000-tuple one. The other twelve enforce none beyond the input already
 materialized.
 
-| Bound         | Value  | Where it applies                              |
-| ------------- | ------ | --------------------------------------------- |
-| Output tuples | 100000 | `product`, `combinations`                     |
-| Output tuples | 10000  | `permutations`                                |
-| Output length | 8 MiB  | the three combinatorial helpers in this group |
+| Bound         | Value  | Where it applies                                   |
+| ------------- | ------ | -------------------------------------------------- |
+| Output tuples | 100000 | `product`, `combinations`                          |
+| Output tuples | 10000  | `permutations`                                     |
+| Output length | 8 MiB  | the three combinatorial helpers, and `zip_longest` |
+
+`zip_longest` carries the output ceiling without carrying a tuple ceiling, and
+the asymmetry is the point rather than an omission. A tuple ceiling bounds a
+result's *length*, and `zip_longest`'s is already bounded by its longest
+operand: the helper emits one entry per position of that operand and never
+multiplies positions together, so it cannot reach 100000 entries from a shorter
+request the way `product` can. What it can do is repeat a large `fill_value`
+across every position past a short operand's end — a two-element operand zipped
+against a hundred-thousand-element one materializes that value 99998 times — so
+the bound that binds it is the content ceiling, not the count one. RFC 0006
+section 8.3 makes `fill_value` required precisely so a silent `none` cannot
+enter a build graph, and requiring it also means the padded positions carry a
+value the author chose, which is what makes counting them worth doing.
 
 Four consequences this group decides:
 
@@ -366,6 +379,10 @@ Four consequences this group decides:
   `regex_replace` already apply. The count is taken before any tuple is built,
   per clause 6.8, which is what makes the guarantee hold for the inputs the
   cardinality check admits rather than only for the ones it refuses.
+  `zip_longest` joins them at the content ceiling for the reason section 5.8
+  gives, and it is the one helper here that reaches the ceiling without a
+  cardinality check above it: the padded positions are counted as they are
+  produced, and the walk stops at the same 8 MiB.
 - **An over-large request fails without allocating, which is a testable
   claim.** RFC 0006 section 6.8 opens with "rejects unreasonable expansion
   **before** allocating", and roadmap task 6.4.2's success criterion restates
@@ -479,19 +496,19 @@ contradict the contract".
 
 ### Clause discharge
 
-| Clause | Discharge                                                                                                                                               |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `6.1`  | Fifteen pure `New` helpers; the fifteen section 5.1 rows are 15 of 52.                                                                                  |
-| `6.2`  | All fifteen pure, so all register in `register_query_helpers`, none stubbed.                                                                            |
-| `6.3`  | Order defined from input order by all eight filters; the seven predicates reorder nothing.                                                              |
-| `6.4`  | No filesystem, environment, or subprocess access; no handle taken.                                                                                      |
-| `6.5`  | No `dialect` argument; the helpers are platform-invariant.                                                                                              |
-| `6.6`  | Undefined rejected; three enumerated option sets; overflow separate from the cardinality comparison.                                                    |
-| `6.7`  | Deduplication, subset, superset, and contains all keyed on the canonical key, never a hash set.                                                         |
-| `6.8`  | Table 3's 100000-tuple ceiling for `product` and `combinations`, 10000 for `permutations`, plus an 8 MiB output ceiling, all counted before allocation. |
-| `6.9`  | One enum, one `From` impl, eleven `netsuke::jinja::collections::*` codes.                                                                               |
-| `6.10` | Fifteen new names, two alias families resolved in section 5.10.                                                                                         |
-| `6.11` | The clause's seven obligations, with the algebra and complement properties the parent states.                                                           |
+| Clause | Discharge                                                                                                                                                                                   |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `6.1`  | Fifteen pure `New` helpers; the fifteen section 5.1 rows are 15 of 52.                                                                                                                      |
+| `6.2`  | All fifteen pure, so all register in `register_query_helpers`, none stubbed.                                                                                                                |
+| `6.3`  | Order defined from input order by all eight filters; the seven predicates reorder nothing.                                                                                                  |
+| `6.4`  | No filesystem, environment, or subprocess access; no handle taken.                                                                                                                          |
+| `6.5`  | No `dialect` argument; the helpers are platform-invariant.                                                                                                                                  |
+| `6.6`  | Undefined rejected; three enumerated option sets; overflow separate from the cardinality comparison.                                                                                        |
+| `6.7`  | Deduplication, subset, superset, and contains all keyed on the canonical key, never a hash set.                                                                                             |
+| `6.8`  | Table 3's 100000-tuple ceiling for `product` and `combinations`, 10000 for `permutations`, plus an 8 MiB output ceiling on those three and on `zip_longest`, all counted before allocation. |
+| `6.9`  | One enum, one `From` impl, eleven `netsuke::jinja::collections::*` codes.                                                                                                                   |
+| `6.10` | Fifteen new names, two alias families resolved in section 5.10.                                                                                                                             |
+| `6.11` | The clause's seven obligations, with the algebra and complement properties the parent states.                                                                                               |
 
 ## 6. Dependencies
 
@@ -525,7 +542,8 @@ Roadmap step 6.4, which implements this RFC in five tasks:
   first-appearance ordering and canonical-key deduplication.
 - 6.4.2. `product`, `combinations`, and `permutations`, with checked
   cardinality, checked output content, and the lower ceiling for `permutations`.
-- 6.4.3. `zip_longest`, with a required fill value.
+- 6.4.3. `zip_longest`, with a required fill value and the checked 8 MiB
+  output ceiling the padded positions are counted against.
 - 6.4.4. The seven predicates, with `convert_bool` restricted to the closed
   eight-spelling vocabulary.
 - 6.4.5. The matrix-determinism end-to-end suite over `product`, the set
