@@ -6,6 +6,9 @@
 //! scope discovery plus precedence) and `config_discovery_overrides.rs`
 //! (environment, CLI flag, and explicit path overrides).
 
+#[cfg(unix)]
+#[path = "config_discovery_env_provenance.rs"]
+mod env_provenance;
 #[path = "config_discovery_overrides.rs"]
 mod overrides;
 #[path = "config_discovery_scopes.rs"]

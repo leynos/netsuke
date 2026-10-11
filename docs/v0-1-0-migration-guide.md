@@ -420,7 +420,7 @@ explicit CLI options are operator-controlled. The primary project
 `fetch_allow_host` entries do not widen the operator's allowlists. The primary
 project file may still tighten the policy by setting
 `fetch_default_deny = true`; a `false` request cannot undo an operator
-restriction. Files loaded through `extends` retain ordinary file-layer
+restriction. Inherited fetch-policy fields retain ordinary file-layer merge
 semantics. Project `fetch_block_host` entries remain cumulative, and a block
 wins over an allow.
 
@@ -480,11 +480,14 @@ An empty allowlist preserves default-allow behaviour. Once at least one
 effective `env_allow_var` entry exists, names outside that list are denied.
 `env_block_var` entries deny only their exact names when no allowlist is
 active, and always override matching allow entries. The policy has no glob or
-pattern matching. Primary-project `env_allow_var` entries are quarantined
-before policy composition, so a project cannot grant itself access to inherited
-environment variables or activate default-deny. Primary-project `env_block_var`
-entries remain cumulative because they only restrict access; configuration
-loaded through `extends` retains ordinary file-layer precedence.
+pattern matching. `env_allow_var` entries from the primary project file and
+every file reached through `extends` in an automatically discovered project
+chain are quarantined before policy composition. A checkout-controlled ancestor
+therefore cannot widen the operator allowlist or activate default-deny.
+`env_block_var` entries remain cumulative because they only restrict access.
+Operator chains retain their grants, and ancestors in an explicitly selected
+configuration chain retain operator authority; a selected primary project file
+remains quarantined.
 
 This policy reduces secret ingress into rendered manifest fields. It does not
 make rendered manifest contents safe to log: allowed values still require the

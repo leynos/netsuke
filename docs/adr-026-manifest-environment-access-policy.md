@@ -6,7 +6,7 @@ Accepted.
 
 ## Date
 
-2026-09-17
+2026-10-11
 
 ## Context and problem statement
 
@@ -37,9 +37,10 @@ unconditional.
 ## Decision
 
 Add `manifest::EnvAccessPolicy`, an exact-name allow and block policy for the
-manifest `env()` port. Adopt it as the sole manifest environment grant surface,
-and treat only the primary project `.netsuke.toml` as a project policy request
-before generic configuration merging.
+manifest `env()` port and adopt it as the sole manifest environment grant
+surface. Quarantine `env_allow_var` from a project-scoped primary file and all
+occurrences reached through an automatically discovered project root before
+generic merging; keep project fetch-policy requests primary-file-scoped.
 
 The policy itself:
 
@@ -60,14 +61,33 @@ The policy itself:
 
 Trust handling for the *grants*, following ADR-021's reconciliation shape:
 
-- Discovery preserves primary-file provenance and removes that layer's
-  `env_allow_var` field from the generic layer, so project allow entries cannot
-  widen the operator's effective allowlist or activate default-deny.
+- Automatic discovery removes `env_allow_var` from the primary project file
+  and every file reached through that root's `extends` chain before generic
+  merging, so a checkout-controlled ancestor cannot widen the operator's
+  effective allowlist or activate default-deny.
 - Project `env_block_var` entries stay in the ordinary merge and remain
   cumulative, so a lower-trust project can add a restriction but cannot remove
   one.
-- Files loaded through `extends` remain ordinary file layers by design. Only
-  the exact primary project path is quarantined.
+- Operator chains retain their grants. An explicitly selected ancestor also
+  retains operator authority; a selected primary project file remains subject
+  to primary-file quarantine.
+
+### Addendum: preserve project-chain provenance (2026-10-11)
+
+Issue #844 corrected an escape in the original implementation. Discovery had
+marked only the primary `.netsuke.toml` as project-scoped, so an inherited
+checkout-controlled file was treated as an operator layer and its appended
+`env_allow_var` entries survived quarantine.
+
+The environment grant rule now follows each occurrence reached through an
+automatically discovered project root. The chain-wide `project_chain` marker
+causes allow entries from the primary file and each ancestor to be validated
+and removed before generic merging. The marker does not classify a physical
+file globally: if an operator root and a project root both reach the same file,
+the operator occurrence retains its grants and the project occurrence loses
+them. An explicitly selected chain keeps operator authority for its ancestors.
+This addendum changes only environment grants; fetch-policy fields remain
+subject to their existing primary-only quarantine.
 
 Enforcement belongs at the registered `env()` call boundary, not at the reader.
 The registered closure delegates to `env_var_with`, which evaluates the

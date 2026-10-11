@@ -1293,7 +1293,10 @@ providing a secure bridge to the underlying system.
   is evaluated at the `env()` registration boundary before the reader runs, so
   a denied name never obtains a process value. Each lookup, including a
   refusal, is counted once on the bounded `netsuke_manifest_env_lookups_total`
-  series recorded by [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md),
+  series. Automatic project discovery quarantines allow entries throughout the
+  selected `.netsuke.toml` `extends` chain, while each shared file occurrence
+  retains the authority of the root that reached it. The counter is recorded by
+  [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md),
   which carries only the `outcome` label and never the name or its value. A
   `default=` keyword argument supplies the value to use when the variable is
   absent, which keeps `PATH`-style optional configuration out of the manifest's
