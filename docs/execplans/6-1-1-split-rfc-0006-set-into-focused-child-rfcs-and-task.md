@@ -8,23 +8,24 @@ proceeds.
 
 Status: COMPLETE
 
-The eight child RFCs and the coverage contract are delivered. Two volume
-tolerances are breached and recorded rather than waived — the aggregate budget,
-now **4877** against 4000 at `7d404a83`, and the per-file 400-line limit, now
-breached by **all eight** children rather than the seven recorded at
-`7b0794af`. Each successive repair round has widened the breach rather than
-narrowing it, because the findings repaired are prose additions; the aggregate
-moved 4533 → 4792 → 4871 → 4877 across four rounds, and the density control
-moved 48.0 → 51.7. **The breach does not block the milestone in the sense that
-the artefacts are delivered**, but delivery is not acceptance: acceptance is
-the user's decision, and this plan records the question rather than answering
-it. **The two tolerances are jointly satisfiable, which is why this needs that
-decision rather than a derivation.** Eight children at exactly 400 lines total
-3200, inside the 4000 budget, so the pair is not arithmetically unsatisfiable
-the way the retired 2400 budget was; meeting it means cutting **1677** lines,
-**34.4%** of the set, unevenly distributed (RFC 0014 −8, RFC 0019 −476).
-Compression therefore remains a live remedy, and the fixed child count does not
-discharge it. The branch remains open for review.
+The eight child RFCs and the coverage contract are delivered. **Both volume
+tolerances are withdrawn, on the user's ruling of 2026-10-11 that there is no
+400-line cap on RFCs.** The per-file tolerance applied `AGENTS.md`'s 400-line
+rule to Markdown, but that rule is scoped to *code* files and is enforced by
+Whitaker's `module_max_lines`, a Rust module lint that never reads a document.
+The evidence is decisive: **20 of the 29 RFCs in `docs/rfcs/` run past 400
+lines**, the parent RFC 0006 — the document this task splits — is **2,246** of
+them, and no Make target or Markdown gate measures document length. The
+aggregate budget was calibrated to the per-file figure by `D12`
+(`8 × 400 = 3200`, plus an 800-line margin, gives 4000), so withdrawing the
+per-file limit removes the basis for the aggregate's specific value; it is
+withdrawn with it. **`A2` is closed, and the question it escalated is answered
+rather than deferred.** The density figure is retained as a **diagnostic** to
+report rather than a gate that stops work: section 5 runs at **51.7** lines per
+helper against the **36.5** baseline measured at `845ef556`, and a set that
+runs denser than five earlier children is a fact to read, not a stop condition.
+How the breach was measured and escalated is kept in `Tolerances` as the record
+of the error, not only of its correction. The branch remains open for review.
 
 ## Purpose / big picture
 
@@ -155,126 +156,49 @@ Hard invariants. Violating one requires escalation, not a workaround.
 
 ## Tolerances (exception triggers)
 
-- **Aggregate volume.** If the eight child RFCs together exceed **4000**
-  lines, stop and escalate. Per-file limits alone cannot catch a set that is
-  individually reasonable and collectively disproportionate. **Raised from 2400
-  by `D12` (2026-10-03) and paired with a density control**, because the
-  denominator is fixed at eight by four contract tests and re-partitioning adds
-  children rather than relieving the aggregate; see `D12` for the derivation.
-  The **density** figure is the proportionality control that the raw total
-  cannot be: section 5 ran at **36.5 lines per helper** across the five written
-  children at `845ef556`, and a child materially above that density is section
-  5 becoming restatement whatever its total. **Correction, added 2026-10-03 at
-  `f6f6c83c`: the eight-child set is now complete, and it breaches both
-  controls — 4533 lines against the 4000 budget, and 48.0 section-5 lines per
-  helper against the 36.5 baseline.** The measurement replaces the projection in
-  `D12`, and it is recorded as a breach rather than a waiver: the projection
-  was derived from five children and the three written afterwards (0018 at 708,
-  0019 at 733, 0020 at 664) are the largest in the set, so the figures it
-  extrapolated are superseded rather than confirmed. The per-child table below
-  is the measurement. **The breach does not block `EP-M11` in the sense that
-  the artefacts are delivered**; the milestone's deliverables are on the branch
-  and the contract is green. **But delivery is not acceptance, and the
-  rationale that previously stood here conflated them.** It read that the
-  denominator is fixed at eight by four contract tests, the child count cannot
-  move, and the eight are written, so the only remedies left are to raise the
-  budget again or to record a decided waiver. **The conclusion does not follow
-  from the fixed child count.** A fixed partition bounds the number of files,
-  not their length; compression is a third remedy that a fixed count leaves
-  open, which the satisfiability test below now shows. The correct statement is
-  the one recorded here: the artefacts are delivered, tolerance acceptance
-  remains pending, and the process exception is not discharged by delivery.
-  **It is recorded and escalated to the user for the record; it is not carried
-  as an accepted breach, and the "accepted" wording that previously stood at
-  the end of this sentence has been withdrawn.** See `D12`'s amendment for the
-  per-child figures and the density analysis.
+- **Aggregate volume — WITHDRAWN 2026-10-11 on the user's ruling.** This
+  control read: "If the eight child RFCs together exceed **4000** lines, stop
+  and escalate." **It is withdrawn, and it never had a valid basis.** The 4000
+  figure was calibrated by `D12` to the per-file 400-line limit —
+  `8 × 400 = 3200` plus an 800-line margin — so it inherited that limit's scope
+  error; with the per-file rule withdrawn below, the aggregate's specific value
+  has nothing left to derive from. The history is kept because the error is
+  instructive: the control was raised from 2400 to 4000 by `D12` (2026-10-03)
+  on the reasoning that 2400 was unsatisfiable for any eight-child partition,
+  then breached at `f6f6c83c` (4533 lines), widened through four repair rounds
+  (4533 → 4792 → 4871 → **4877**), and escalated. **The escalation was the
+  right call and the tolerance was still wrong**: it asked the user to waive a
+  limit that never applied. The measurement record survives — the eight
+  children total **4877** lines at `7d404a83` — but as a size, not a breach.
+  **The density figure is retained as a diagnostic, not a gate.** Section 5
+  runs at **51.7** lines per helper against the **36.5** baseline measured
+  across five children at `845ef556`; the figure is worth reporting because it
+  is what distinguishes a padded child from a dense one, and it is deliberately
+  not a stop condition. `A2` is closed: the question it escalated was "accept
+  the breach or cut 1677 lines", and the user's ruling is that neither applies,
+  because there is no cap on RFC length.
+- **Per-file volume — WITHDRAWN 2026-10-11 on the user's ruling.** This
+  control read: "If any child RFC exceeds 400 lines, stop and escalate."
+  **There is no 400-line cap on RFCs.** The control applied `AGENTS.md`'s rule
+  to documents, and that rule — "No single **code** file may be longer than 400
+  lines" — is scoped to code and enforced by Whitaker's `module_max_lines`, a
+  Rust module lint that never reads a document. The evidence is decisive and
+  was available throughout:
 
-  **The unsatisfiability test that retired the 2400 figure does not retire this
-  one.** The `D12` derivation for 2400 was that no admissible eight-child
-  partition could satisfy it, because the per-child overhead alone exceeded the
-  budget — so there was no breach to accept. That test fails here, and it is
-  worth recording because the opposite conclusion is the tempting one. The
-  paired tolerances are 4000 aggregate and 400 per file, and a set of eight
-  children at exactly 400 lines totals **3200**, which is inside 4000 with 800
-  lines to spare. The pair is therefore satisfiable by an admissible output, so
-  reaching it needs no re-derivation and lifting it would be a waiver. The cost
-  is what makes it a decision rather than a defect: every one of the eight
-  children is over the per-file limit, so meeting it means cutting **1677**
-  lines, which is **34.4%** of the set, and the same cut also satisfies the
-  aggregate with room to spare. The distribution is the part that matters to
-  the decision — RFC 0014 would lose 8 lines (2.0%) and RFC 0019 would lose 476
-  (54.3%). Recorded at `7d404a83` with its measurement rather than as a
-  projection, so a reader can re-run the three counts.
-- **Per-file volume.** If any child RFC exceeds 400 lines, stop and escalate.
-  A child carries no per-helper contract, so a larger one means section 5 has
-  become restatement. **Breached by RFC 0013 at 470 lines, and recorded rather
-  than waived**; see the Progress entry dated 2026-10-01 that begins "Two
-  preamble findings recorded before `EP-M4` begins". **Breached again by RFC
-  0015 at 465 lines, rising to 498 after review repairs across two review
-  rounds, and this time the waiver is decided rather than merely recorded**:
-  the per-helper density shows the tolerance's stated failure mode is absent,
-  and the escalation is answered in the `EP-M5` Progress entry. **The intent to
-  write the remaining children to a tighter shape did not hold, and the
-  tolerance was breached with them rather than narrowly avoided** — five
-  children now total **2418** against the 2400 budget at `3c337c89`, as the
-  2026-10-03 corrections below record. Each child's line count is recorded at
-  its own commit, which is how the drift was caught. **The aggregate is the
-  binding control and it is now breached, not approached**; the sentence that
-  previously stood here read "five children are written at 2374 lines against
-  the 2400 budget, leaving 26 for three children whose measured floor is ~183
-  each", and every figure in it is superseded — that total was true at
-  `5895fc4c` only, and the "26 lines remaining" it implies was already false by
-  `e359cd66`. **The figures in this paragraph are superseded by the 2026-10-03
-  correction below**, which re-derives them from the files. The `EP-M7`
-  Progress entry carries the figures and the escalation, and its correction
-  records that a nine-or-ten-child re-partition **raises** the aggregate rather
-  than relieving it. The remedies that address this control are to raise the
-  budget or to record a decided waiver; the plan stops for that decision before
-  RFC 0018 is written. **Correction, added 2026-10-03: the budget is now
-  exceeded by the five written children alone.** The 2374 figure was measured at
-  `5895fc4c` and was true there; the round-2 review repairs then grew RFC 0016
-  by 27 lines and RFC 0017 by 3, taking the five to **2404 against 2400 at
-  `e359cd66` — 4 lines over, with RFCs 0018, 0019, and 0020 still unwritten.**
-  Three children at the measured honest-child floor of roughly 183 lines each
-  project the complete set to about **2950**, a shortfall near **550 lines**.
-  The figure is re-derived from the files rather than carried forward, because
-  the repair that fixed the wrestling match also moved the number the
-  escalation is about. **Second correction, same day: the round-3 repairs moved
-  it again, to 2418 at `3c337c89`** — 0016 is **538** and 0017 is **515** —
-  which is 14 lines further over and projects the set to about **2960**. Each
-  figure is now cited with the revision it was measured at, so a later repair
-  cannot silently make it false: the number is a property of a revision, not of
-  the branch. **Final correction at `EP-M11`: the breach covers seven of the
-  eight children, and the count closes the record rather than opening a new
-  escalation.** Measured at `7b0794af`, the children run 0013 **470**, 0014
-  **397**, 0015 **502**, 0016 **538**, 0017 **521**, 0018 **708**, 0019
-  **733**, and 0020 **664** — 0014 alone is under the 400-line limit. Only
-  0013's and 0015's breaches had been recorded while they were written; the
-  other five were not, because the tolerance's escalation was already open and
-  standing. The remedy is the same one the aggregate control takes, for the
-  same reason: the eight are written, the per-file limit cannot be met without
-  cutting per-helper prose the clauses require, and the density control — not
-  the raw limit — is what distinguishes a padded child from a dense one.
-  Recorded here so the breach count is complete rather than partial. **Third
-  correction, 2026-10-09: the figures above are superseded by the review-repair
-  round on `dafd90fe`, and the breach is now measured at the working tree.**
-  The children run 0013 **483**, 0014 **407**, 0015 **591**, 0016 **542**, 0017
-  **529**, 0018 **739**, 0019 **832**, and 0020 **669** — **4792** together,
-  against the 4000-line aggregate budget. The aggregate breach is **+792**
-  rather than the 4533/+533 recorded at `7b0794af`, because the repairs that
-  corrected seven findings added text rather than removing it: 0018 and 0019
-  grew most, since F4's two-table inventory and the `match_limit` correction
-  are both additions. **The per-file breach set has widened from seven to all
-  eight.** RFC 0014 was the one child under the 400-line limit at `7b0794af`,
-  at 397; F3's three inserted diagnostic rows took it over, and F6's second
-  pass took it to **407**, so no child meets the limit. That is worth stating
-  plainly rather than folding into the aggregate, because the previous round's
-  record named 0014 as the exception and a reader comparing the two would
-  otherwise read a silently changed set. **These figures are the working
-  tree's, not a committed revision's**, and they are superseded by the commit
-  that follows this repair round; the measurement is recorded here because the
-  tolerance requires the breach to be measured rather than projected, and the
-  tree is what the next reader will gate.
+  - **20 of the 29 RFCs in `docs/rfcs/` exceed 400 lines** — 69% of them,
+    including every one of the eight children.
+  - **The parent RFC 0006, the document this task splits, is 2,246 lines** —
+    5.6× the limit the children were held to.
+  - No Make target, Markdown gate, or lint measures document length; the only
+    Markdown constraints are `markdownlint-cli2`'s style rules, none of which
+    is a length rule.
+
+  The breach history is kept for the same reason as the aggregate's: RFC 0013
+  was recorded at 470 lines, RFC 0015 rose to 498 across two review rounds, and
+  the set closed at `7d404a83` with all eight children over and RFC 0014 the
+  last to cross at 408. Each of those readings was a correct measurement of a
+  limit that did not exist. The per-child counts remain in the Progress record
+  as sizes and are not breaches.
 - **Vacuity.** If any section 5 subsection cannot state a group-specific
   consequence — a bound, a registry row, a diagnostic code, a purity
   assignment, a named error condition — and cannot honestly say "no additional
@@ -2367,6 +2291,30 @@ Hard invariants. Violating one requires escalation, not a workaround.
   contract (9 of 9). `make fmt` was confirmed idempotent on the edited RFC by
   re-running it and diffing.
 
+- [x] (2026-10-11) **The user ruled that there is no 400-line cap on RFCs, and
+  `A2` closes with both volume tolerances withdrawn.** The ruling came in
+  response to the escalation this plan had carried since 2026-10-03, and it
+  removes the premise rather than answering the question inside it: the
+  controls applied `AGENTS.md`'s 400-line rule, which is scoped to *code* files
+  and enforced by Whitaker's `module_max_lines` — a Rust module lint that never
+  reads a document. **The evidence is decisive and was always available: 20 of
+  the 29 RFCs in `docs/rfcs/` exceed 400 lines, and the parent RFC 0006 that
+  this task splits is 2,246 lines.** No Make target, `markdownlint-cli2` rule,
+  or other gate measures document length; the Markdown configuration constrains
+  line width (MD013, 80 columns) and table style, not file size. The aggregate
+  budget goes with the per-file limit because `D12` derived 4000 from it
+  (`8 × 400 = 3200`, plus an 800-line margin). **What survives:** the
+  per-helper density figure as a diagnostic that reports rather than stops
+  (51.7 lines per helper against the 36.5 baseline at `845ef556`, which marks
+  RFC 0018's section 5 as the closest to restatement), and every measured size
+  — 4877 aggregate at `7d404a83` with its per-child counts — because a
+  correctly measured number stays correct as a size when the limit it was
+  measured against turns out not to exist. Recorded as `D13`. **The escalation
+  was nevertheless correct**: the plan's own text said "stop and escalate", the
+  scope question was the user's to settle, and the refusal to self-issue a
+  waiver was what kept the question open long enough for the premise to be
+  examined.
+
 - [x] (2026-10-09) **CodeRabbit's review of `dafd90fe` raised six findings on
   the child RFCs, and all six were verified against the source and repaired.**
   Each was re-derived rather than taken on the reviewer's word, and one of the
@@ -2464,15 +2412,15 @@ Hard invariants. Violating one requires escalation, not a workaround.
   names the commit boundaries — one adding commit per child, repairs in their
   own commits — as how the no-reviewer-reads-everything intent is met instead.
 
-  **A2 remains open and is not the agent's to close.** The aggregate breach
-  (4792 lines against the 4000 budget in this repair round's tree) and the
-  per-file breach (now all eight children, 0014 at 407 having lost its
-  previously sole exemption) require the user's explicit acceptance. The plan's
-  own record says the escalation "was raised but the user has still not been
-  asked and has not approved", and the two 2026-10-03 remedies were retired by
-  derivation rather than by an answer. This entry records the reopened
-  question; it does not answer it, because a waiver the agent issues to itself
-  is the defect the original finding names.
+  **A2 was reopened here and is now closed by the user's ruling of 2026-10-11
+  that there is no 400-line cap on RFCs.** At this revision the aggregate read
+  4792 lines against the 4000 budget and all eight children exceeded the
+  per-file limit, 0014 at 407 having lost its previously sole exemption. Both
+  controls are now withdrawn, and the paragraph that stood here — recording the
+  question without answering it, because a waiver the agent issues to itself is
+  the defect the original finding names — was the right instinct applied to a
+  limit that turned out not to exist. The ruling is recorded in `Tolerances`
+  with its evidence.
 
 - [x] (2026-10-03) **`scrutineer` independently re-ran the full nine-gate set
   and returned green for `7b0794af`, and its change-surface probe corrected a
@@ -4408,17 +4356,20 @@ tracked; the derivation it performs is reimplemented in the coverage test at
   reject it. The claim it was making survives the correction; the number did
   not. The control still identifies what it was built to identify — a child
   whose section 5 has become restatement — and on this set it identifies RFC
-  0018, which is the finding a reviewer would want from it. **The breach is
-  recorded rather than accepted, and the "accepted" wording that previously
-  stood here has been withdrawn.** It read that the breach was accepted rather
-  than waived because the eight are written, the count is fixed at eight by
-  four contract tests, and the only remaining remedy would be to move the
-  number a third time. The first two clauses are true; the conclusion does not
-  follow from them, and the third is not the only remedy — see the
-  unsatisfiability test recorded under the tolerance, which the raised 4000
-  budget fails where the retired 2400 budget passed it. Acceptance is the
-  user's to give for the same reason the escalation above says it is, and it
-  has not been given.
+  0018, which is the finding a reviewer would want from it. **The breach this
+  paragraph argues about is withdrawn, and three successive rationales for it
+  were each answered.** The first said the breach was accepted rather than
+  waived because the eight are written, the count is fixed at eight by four
+  contract tests, and the only remaining remedy would be to move the number a
+  third time; the first two clauses are true and the conclusion does not follow
+  from them, because a fixed count bounds files rather than their length. The
+  second recorded acceptance as the user's to give, which was correct and
+  produced the escalation. **The third — the implicit premise that a 400-line
+  limit applied to an RFC at all — is false**, and the user's ruling of
+  2026-10-11 settles it: there is no 400-line cap on RFCs, 20 of the 29 in
+  `docs/rfcs/` exceed it, and the parent RFC 0006 is 2,246 lines. The density
+  control survives as a diagnostic rather than a gate; the volume controls are
+  withdrawn.
 
 **Repair round after the PR #860 review, 2026-10-09.** Six CodeRabbit findings
 were repaired, plus a second half of the §6-dependency finding the reviewer did
@@ -4454,13 +4405,49 @@ though the gate itself is unrun. `make test-workflow-contracts` passed on the
 pre-repair tree (1119 passed, 3 skipped; 27 passed) and is superseded by this
 round rather than carried forward.
 
-**A2 remains open and is not the agent's to close.** Both volume tolerances are
-still breached at this revision: the aggregate at **4792** against the 4000
-budget, and the per-file limit against **all eight** children, RFC 0014 having
-lost its previously sole exemption at 407. The repair round widened rather than
-narrowed the breach, because the diagnosis that corrected seven findings added
-text. This entry records the question; it does not answer it, because a waiver
-the agent issues to itself is the defect the original finding names.
+**A2 was escalated here and is now closed by ruling, not by waiver.** At this
+revision both volume tolerances were recorded as breached: the aggregate at
+**4792** against the 4000 budget, and the per-file limit against **all eight**
+children, RFC 0014 having lost its previously sole exemption at 407. This entry
+recorded the question rather than answering it, on the reasoning that a waiver
+the agent issues to itself is the defect the original finding names — which was
+the right instinct applied to a limit that turned out not to exist. **The
+user's ruling of 2026-10-11 is that there is no 400-line cap on RFCs**, so both
+controls are withdrawn and `A2` closes with them. The escalation was still
+correct: the plan's own text said "stop and escalate", and the scope question
+behind it was the user's to settle. What the episode shows is that the
+*premise* of a tolerance deserves the same scrutiny as its breach — 20 of 29
+RFCs already exceeded the limit, and nobody had noticed, because the limit was
+never real.
+
+- Decision `D13`: **the two volume tolerances are withdrawn; there is no
+  400-line cap on RFCs.** Rationale: both controls applied `AGENTS.md`'s
+  400-line rule to Markdown documents. That rule is scoped to *code* — "No
+  single **code** file may be longer than 400 lines" — and is enforced by
+  Whitaker's `module_max_lines`, a Rust module lint that reads `.rs` files and
+  never a document. No Make target, `markdownlint-cli2` rule, or other gate
+  measures document length; the Markdown configuration constrains line *width*
+  (MD013, 80 columns) and table style, not file size. The empirical check is
+  decisive and was available from the first breach: **20 of the 29 RFCs in
+  `docs/rfcs/` exceed 400 lines** — 69% — the largest being the **2,246-line
+  RFC 0006** that this very task splits. The per-file control was therefore
+  never a repository requirement, and the aggregate budget is withdrawn with
+  it, because `D12` derived the 4000 figure from the per-file 400
+  (`8 × 400 = 3200`, plus an 800-line margin), so it has no independent basis.
+  **What is retained:** the per-helper **density** figure, as a *diagnostic*
+  that reports rather than stops — section 5 runs at **51.7** lines per helper
+  against the **36.5** baseline at `845ef556`, and that reading identifies RFC
+  0018's section 5 as the closest to restatement, which is what the control was
+  built to surface. **What is also retained:** the measured sizes (**4877**
+  aggregate at `7d404a83`, with the per-child counts), because a number that
+  was correctly measured stays correct as a size even when the limit it was
+  measured against turns out not to exist. **`A2` closes.** Its question was
+  "accept the breach or cut 1677 lines"; the ruling is that neither applies.
+  Date/Author: 2026-10-11, the repository owner, in response to the plan's own
+  escalation. The failure this records is not the breach — there was none — but
+  the tolerance's premise: three successive rationales were written for a
+  breach of a rule nobody had checked was real, and the check would have taken
+  one `wc -l` over `docs/rfcs/`.
 
 ## Alternatives considered
 
@@ -4571,8 +4558,11 @@ number of files, not their length, so compression is a third remedy the fixed
 count leaves open — which is exactly what the satisfiability test added in
 `7d404a83` demonstrates, since 8 × 400 = 3200 sits inside the 4000 budget. The
 plan had asserted a conclusion its own test refuted. Delivery of the artefacts
-and acceptance of the process exception are now stated separately, and
-acceptance remains with the user.
+and acceptance of the process exception were then stated separately, with
+acceptance left to the user. That separation is superseded by the ruling of
+2026-10-11: the escalation it prompted was answered by withdrawing both volume
+tolerances, not by accepting an exception, so there is no longer an exception
+for anyone to accept.
 
 **A figure was published in a review reply that does not reproduce, and was
 withdrawn.** The reconciliation comment `6104971471` stated that only 133 of
@@ -4637,42 +4627,43 @@ optioned names are excluded. Aggregate without that exclusion and it reads
 **54/5/1** against section 6.1 — which is why the contract's purity check
 filters, and why the unfiltered accessor would fail a correct set.
 
-**Tolerances: two breached, both recorded and neither waived, and acceptance
-still pending.** The aggregate budget was raised to 4000 by `D12`. **The
-figures in the previous revision of this paragraph were revision-pinned
-historical measurements and are labelled here rather than restated as
-current.** At `7b0794af` the set measured **4533**, 533 over, with the density
-control at **48.0** section-5 lines per helper against the 36.5 baseline, and
-the per-file limit was breached by seven of the eight children, 0014 at 397
-being the only one under. At `7d404a83` the set measures **4877**, 877 over,
-with **all eight** children over the per-file limit (0013 484, 0014 408, 0015
-613, 0016 545, 0017 529, 0018 753, 0019 876, 0020 669) and the density control
-at **51.7** — so all three recorded controls have moved in the wrong direction
-across the repair rounds, by **+344** aggregate lines and **+3.7** density since
-`7b0794af`. **Neither control blocks the task in the sense that the artefacts
-are delivered, but delivery does not discharge the breach.** The rationale that
-previously stood here — that the child count is fixed at eight by four contract
-tests and the eight are written — does not reach the conclusion it was used
-for: a fixed partition bounds the number of files, not their length, and
-compression remains a third remedy the fixed count leaves open. **Acceptance is
-not this plan's to record.** An earlier revision of this paragraph ended by
-calling the breach accepted, and that wording has been withdrawn — the
-unsatisfiability test that retired the 2400 budget does not retire this pair,
-so accepting it is a decision the user has not been asked for and has not
-given. The density figure is what makes the breach assessable rather than
-merely counted — it identifies RFC 0018 as the child whose section 5 is closest
-to restatement, which is the finding the control exists to produce.
+**Tolerances: both weakened, and neither should have been written.** The
+aggregate budget was raised to 4000 by `D12`, calibrated to the per-file 400
+line limit as `8 × 400 = 3200` plus an 800-line margin, and the per-file limit
+applied `AGENTS.md`'s rule to documents. **The user's ruling of 2026-10-11 is
+that there is no 400-line cap on RFCs**, so both controls are withdrawn and
+`A2` closes with them. The evidence was available throughout: **20 of the 29
+RFCs in `docs/rfcs/` exceed 400 lines**, the parent RFC 0006 is **2,246**, and
+no Make target or Markdown gate measures document length. The recorded
+measurements stand as sizes — **4533** at `7b0794af` with the density control
+at **48.0**, and **4877** at `7d404a83` with all eight children over 400 (0013
+484, 0014 408, 0015 613, 0016 545, 0017 529, 0018 753, 0019 876, 0020 669) and
+the density at **51.7** — but they are not breaches, and the repair rounds grew
+the set rather than shrinking it because their findings were repairs. **What
+went wrong is worth keeping.** Three successive rationales were written here,
+and each was answered: the breach "cannot block" because the child count is
+fixed (withdrawn — a fixed count bounds files, not their length); acceptance
+"is not this plan's to record" (correct, and it produced a clean escalation);
+and the tolerance "applies" at all (false — it was never a repository rule).
+The third is the one that mattered, and it was checkable from the start. The
+density figure survives as a **diagnostic rather than a gate** — at 51.7
+against the 36.5 baseline measured at `845ef556` it marks RFC 0018's section 5
+as the closest to restatement, which is the reading worth having, and it
+deliberately stops nothing.
 
-**Textual repetition across children, measured under a stated definition.** A
-34.4% reduction is the floor for meeting both tolerances, and the question a
-reader will ask is whether it removes repetition or specification. Measured at
-`49dc6447` across the eight committed children, the share of prose that repeats
-*exactly* in more than one child is **4.2% to 5.9%** depending on where the
-line/block boundary is drawn (4,034 substantive lines with 239 repeated
-instances; 3,244 prose-only lines with 174; 448 paragraph blocks with 19).
-**These are author-reported measurements, not independently verified, and the
-figure is a range rather than a point because the boundary is a definition
-rather than a fact.**
+**Textual repetition across children, measured under a stated definition.**
+Under the withdrawn tolerances the reduction target would have been 34.4%, and
+the question a reader would ask is whether that removes repetition or
+specification. Measured at `49dc6447` across the eight committed children, the
+share of prose that repeats *exactly* in more than one child is **4.2% to
+5.9%** depending on where the line/block boundary is drawn (4,034 substantive
+lines with 239 repeated instances; 3,244 prose-only lines with 174; 448
+paragraph blocks with 19). **These are author-reported measurements, not
+independently verified, and the figure is a range rather than a point because
+the boundary is a definition rather than a fact.** With the tolerance withdrawn
+the figure no longer supports a decision; it is retained as the measure one
+would need if a length budget were ever proposed again, so that the next person
+does not have to re-derive it.
 
 **What that measurement does and does not establish.** It establishes low
 *exact* textual duplication. **It does not establish that a reduction of that
@@ -4682,10 +4673,12 @@ once and was written to discharge a clause, not duplication the set could shed
 for free". The inference is too strong: concise wording, consolidation of
 semantically equivalent passages, and tighter sentence structure can all remove
 lines without any exact repeat to detect first. Low repetition bounds one
-source of removable text; it does not bound the others. What survives is the
-weaker claim that makes `A2` a decision rather than a defect — the reduction
-target is large enough, and the obvious duplication small enough, that the work
-is a real trade-off whose size has not been established by measurement.
+source of removable text; it does not bound the others. A later measurement
+sharpened the point — of the 1,677 lines a 400-line cap would have demanded,
+only 843 could come from blank lines and headings, so **at least 834 content
+lines** would have had to go. That is a floor on deletion, not a finding about
+quality, and with the cap withdrawn it is the kind of number that makes a
+future budget proposal honest rather than the basis for a cut.
 
 **Lessons that outlive the task.**
 
