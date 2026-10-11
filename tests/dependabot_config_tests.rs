@@ -66,6 +66,10 @@ const CARGO_LOCKSTEP_GROUPS: &[LockstepGroup<'static>] = &[
         name: "rstest-bdd",
         patterns: &["rstest-bdd*"],
     },
+    LockstepGroup {
+        name: "ortho-config-fluent",
+        patterns: &["ortho_config", "fluent-bundle"],
+    },
 ];
 /// Return the repository root as a UTF-8 Camino path.
 fn repo_root_path() -> Utf8PathBuf {
