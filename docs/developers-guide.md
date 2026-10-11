@@ -2208,9 +2208,9 @@ removed from the comparison, and a group written as a mapping.
 `pr_concurrency_group_type_test.py` calls the declaration contract with
 isolated documents to prove the last of these: the estate group's own string
 passes it, and a mapping, a list, an integer, `None` and `False` each fail it.
-`cancel-in-progress: true` restored on
-`release.yml` fails `test_no_other_workflow_cancels_a_run`. That clause reads a
-missing `cancel-in-progress` as not cancelling, so
+`cancel-in-progress: true` restored on `release.yml` fails
+`test_no_other_workflow_cancels_a_run`. That clause reads a missing
+`cancel-in-progress` as not cancelling, so
 `test_the_release_lane_queues_rather_than_cancels` also pins `release.yml`'s
 block exactly; deleting the block fails it.
 
