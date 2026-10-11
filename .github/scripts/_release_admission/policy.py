@@ -9,8 +9,16 @@ The module also owns the bounded vocabularies. They are the gate's operator
 contract -- the workflow's summary step and the published artefacts both
 key off them -- so they are enumerated once, here, and every other module
 imports them rather than repeating a literal.
+
+What an external command did is one of those vocabularies, so
+:class:`CommandOutcome` and the :class:`CommandResult` carrying it are declared
+here, and :func:`classify_command_result` consumes them. The translation that
+*produces* them -- a signal death, an elapsed bound, a launch the operating
+system refused -- is not a decision and does not live here; it belongs to the
+adapters that observed the operating system, and :mod:`statuses` performs it.
 """
 
+import dataclasses
 import enum
 import re
 import typing as typ
@@ -139,85 +147,45 @@ class EvidenceState(Vocabulary):
     MISSING = "missing"
 
 
-class CommandStatus(enum.IntEnum):
-    """Interpret the exit status of a bounded command.
+class CommandOutcome(enum.StrEnum):
+    """Name what an external command did, in the operating system's terms.
 
-    GNU ``timeout`` reports ``124`` when the command accepted ``SIGTERM`` and
-    ``137`` when it had to be killed, so both mean the operation ran out of
-    time. Every other status -- including the ``126`` and ``127`` a missing or
-    non-executable program produces -- is handed to the caller's own category,
-    because a broken adapter is not a timed-out one.
+    The vocabulary lives here rather than in an adapter because a caller has to
+    name the *decision* it reached, and the caller is the gate: an adapter
+    reports that a command timed out, and the gate decides that a timed-out
+    ``gh api`` is an API failure. Naming the decision beside the policy that
+    consumes it is what keeps the adapters free to say only what they observed.
 
-    The bound this port enforces itself reports only :attr:`TIMEOUT_BY_TERM`.
-    It has no ``SIGKILL``-then-report path of its own: a group that ignores
-    ``SIGTERM`` is escalated to ``SIGKILL``, and the command's own status for
-    that death is ``137`` through :func:`as_bash_status`, which is the same
-    number for the same reason.
+    ``LAUNCH_FAILED`` is separate from ``FAILED`` because the two tell an
+    operator different things. A command that ran and failed may have failed
+    for a reason its operation understands; a command the operating system
+    refused to start did not run at all, so the fault is in the adapter
+    configuration that names it.
     """
 
-    TIMEOUT_BY_TERM = 124
-    TIMEOUT_BY_KILL = 137
+    SUCCEEDED = "succeeded"
+    TIMED_OUT = "timed_out"
+    FAILED = "failed"
+    LAUNCH_FAILED = "launch_failed"
 
 
-#: Statuses that mean a bounded command ran out of time rather than failed.
-TIMEOUT_STATUSES: frozenset[int] = frozenset(int(status) for status in CommandStatus)
+@dataclasses.dataclass(frozen=True, slots=True)
+class CommandResult:
+    """Carry what one external command produced, as the gate needs it.
 
+    ``status`` is retained beside the outcome because the gate's own exit
+    status is decided from it: a sink that died of ``SIGTERM`` must leave the
+    step exiting ``143``, a number the outcome vocabulary alone cannot express.
 
-def as_bash_status(exit_code: int) -> int:
-    """Translate a reported exit status into the status Bash would have seen.
-
-    A process that dies from a signal does not exit with a status at all; the
-    shell that waited reports ``128`` plus the signal number. Python's
-    ``subprocess`` family reports the negation of the signal instead, and the
-    distinction is not cosmetic: the bound classifies a command killed by its
-    own escalation through ``137``, which :attr:`CommandStatus.TIMEOUT_BY_KILL`
-    names. Passing cuprum's ``-9`` through unchanged would classify a
-    killed-by-escalation operation as ``api_error`` or ``fetch_error`` and
-    silently change the published category. ``143`` is translated too, but it
-    is not a timeout status: :data:`TIMEOUT_STATUSES` is exactly ``{124, 137}``,
-    so an operator's adapter killed by ``SIGTERM`` keeps its operation's own
-    category.
-
-    A status that is not negative is already the shell's own, including the
-    ``124`` the bound reports for itself.
-
-    Returns
-    -------
-    int
-        The status the shell would have reported.
-
-    Examples
-    --------
-    >>> as_bash_status(-15), as_bash_status(-9), as_bash_status(124)
-    (143, 137, 124)
+    ``output`` is the command's retained standard output, empty for every
+    outcome but success. A failed command substitution left Bash's variable
+    empty, and the gate must not parse a diagnostic as though it were an
+    answer.
     """
-    return 128 + -exit_code if exit_code < 0 else exit_code
 
-
-def launch_failure_status(error: OSError) -> int:
-    """Return the status GNU ``timeout`` reported for a command it could not run.
-
-    Cuprum raises where the shell's ``timeout`` returned a status, so the two
-    launch failures have to be mapped back by hand. The mapping matters because
-    it is what keeps a missing adapter in ``api_error`` or ``fetch_error``
-    rather than forcing it into ``timeout``: only ``124`` and ``137`` mean the
-    command ran out of time, and neither of these is either of them.
-
-    Returns
-    -------
-    int
-        ``127`` when the program does not exist, and ``126`` for any other
-        reason the operating system refused the launch -- a permission bit, a
-        directory, or a failed ``execve``.
-
-    Examples
-    --------
-    >>> launch_failure_status(FileNotFoundError(2, "No such file or directory"))
-    127
-    >>> launch_failure_status(PermissionError(13, "Permission denied"))
-    126
-    """
-    return 127 if isinstance(error, FileNotFoundError) else 126
+    outcome: CommandOutcome
+    status: int
+    output: str = ""
 
 
 class Classification(typ.NamedTuple):
@@ -227,28 +195,37 @@ class Classification(typ.NamedTuple):
     error_category: ErrorCategory
 
 
-def classify_command_failure(
-    returncode: int, error_category: ErrorCategory
+def classify_command_result(
+    result: CommandResult, error_category: ErrorCategory
 ) -> Classification:
-    """Classify a bounded command that exited unsuccessfully.
+    """Classify what an external command produced, given the caller's category.
 
-    A status of ``124`` or ``137`` means the command was killed for exceeding
-    its timeout, whatever category the caller would otherwise use; anything
-    else keeps the caller's category.
+    A command that ran out of time is ``timeout`` whatever the caller would
+    otherwise say, because exceeding the bound is the more specific fault and
+    the one an operator acts on. Every other unsuccessful command keeps the
+    caller's category: a ``gh api`` that exited ``1`` is an API failure and a
+    ``git fetch`` that exited ``1`` is a fetch failure, and neither the adapter
+    nor this classifier has to know which is which. The category arrives from
+    the call site that does know.
 
     Returns
     -------
     Classification
-        The failure outcome and its category.
+        Success for a command that succeeded, otherwise the failure outcome and
+        its category.
 
     Examples
     --------
-    >>> classify_command_failure(124, ErrorCategory.API_ERROR).error_category
+    >>> timed_out = CommandResult(CommandOutcome.TIMED_OUT, 124)
+    >>> classify_command_result(timed_out, ErrorCategory.FETCH_ERROR).error_category
     <ErrorCategory.TIMEOUT: 'timeout'>
-    >>> classify_command_failure(1, ErrorCategory.API_ERROR).error_category
+    >>> failed = CommandResult(CommandOutcome.FAILED, 1)
+    >>> classify_command_result(failed, ErrorCategory.API_ERROR).error_category
     <ErrorCategory.API_ERROR: 'api_error'>
     """
-    if returncode in TIMEOUT_STATUSES:
+    if result.outcome == CommandOutcome.SUCCEEDED:
+        return Classification(Outcome.SUCCESS, ErrorCategory.NONE)
+    if result.outcome == CommandOutcome.TIMED_OUT:
         return Classification(Outcome.FAILURE, ErrorCategory.TIMEOUT)
     return Classification(Outcome.FAILURE, error_category)
 

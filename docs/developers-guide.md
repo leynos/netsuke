@@ -1816,11 +1816,12 @@ invocation. Its implementation is split across
 classifications, `records` owns the metric and trace shapes, `delivery` owns
 the metric, output, and trace sinks, `bounding` owns the process-group command
 bound and the stream wiring, `commands` owns the bounded external command
-runner, `telemetry` owns the emitted records, `configuration` resolves the
-environment the gate is told, and `gate` composes the operations and reporting.
-The workflow's `astral-sh/setup-uv` step provisions the interpreter; `uv` reads
-the entry point's own `requires-python` and dependency pins rather than the
-workflow restating them.
+runner, `statuses` translates an exit status, an elapsed bound, or a refused
+launch into the gate's own command result, `telemetry` owns the emitted records,
+`configuration` resolves the environment the gate is told, and `gate` composes
+the operations and reporting. The workflow's `astral-sh/setup-uv` step
+provisions the interpreter; `uv` reads the entry point's own `requires-python`
+and dependency pins rather than the workflow restating them.
 
 The gate keeps fallible boundaries behind explicit adapters. Set
 `NETSUKE_RELEASE_ADMISSION_GH_ADAPTER` for GitHub API requests,
@@ -1856,15 +1857,15 @@ bound at all, exactly as the shell left it unwrapped.
 
 Statuses are normalized to Bash's convention before anything classifies them.
 Python reports a signal death as the negation of the signal where a shell
-reports `128 + signal`, and `policy.classify_command_failure` reads only `124`
-and `137` as a timeout, so an untranslated `-9` — the `SIGKILL` the bound
-escalates to — would be classified as `api_error` or `fetch_error` instead of
-`timeout` and silently change a timed-out operation's published category.
-`SIGTERM` is translated for the same reason and is a different case: `143` is
-not a timeout status, so an adapter killed by `SIGTERM` keeps its operation's
-own category. A refused launch keeps the shell's statuses — `127` for a program
-that does not exist and `126` for any other refusal — and a failed in-process
-append reports `1`, which is what the shell's `>>` failure produced.
+reports `128 + signal`, and `statuses` reads only `124` and `137` as a timeout
+after translating, so an untranslated `-9` — the `SIGKILL` the bound escalates
+to — would be classified as `api_error` or `fetch_error` instead of `timeout`
+and silently change a timed-out operation's published category. `SIGTERM` is
+translated for the same reason and is a different case: `143` is not a timeout
+status, so an adapter killed by `SIGTERM` keeps its operation's own category. A
+refused launch keeps the shell's statuses — `127` for a program that does not
+exist and `126` for any other refusal — and a failed in-process append reports
+`1`, which is what the shell's `>>` failure produced.
 
 Both artefact paths are handled in the spelling the operator supplied. The
 shell passed its own string to a sink adapter and published it in the
@@ -1883,6 +1884,19 @@ before either file is truncated, so a refused trace parent leaves the metrics
 file untouched, and a filesystem refusal prints one bounded diagnostic rather
 than escaping as an uncaught traceback.
 
+Start-up is four steps behind one seam, and the seam is what makes the claim
+above testable. `configuration.resolve_destination` and
+`configuration.resolve_configuration` are pure: they read the mapping they are
+handed and write nothing, so `test_release_admission_configuration_resolution`
+can prove that resolution performs no writes rather than inferring it from a
+surviving file. `configuration.prepare_destination` is the only step that
+touches a filesystem, and it is handed a `filesystem.FileSystem` rather than
+looking one up, so `test_release_admission_artefact_initialization` drives it
+with a recording port and asserts the effect order and operands directly.
+`configuration.require_workflow_output` performs the one required-variable
+refusal that belongs after both artefacts exist. The entry point calls the four
+in the shell's order, and each refusal's position is part of the contract.
+
 The internal module boundaries are deliberately narrow: `gate` is the
 composition and reporting entry point, `delivery` and `commands` own the
 external-effect adapters, and `policy` owns the pure bounded classifications.
@@ -1900,12 +1914,13 @@ keep an answer in one place:
   bring its own copy. `is_metric_value` stays a function, because a rendered
   number is a regex rather than an enumeration member.
 - Bash's two default forms have one helper each, and the choice between them is
-  never incidental. `configuration._optional` is `${VAR:-default}` and
-  substitutes for an unset *or empty* value;
-  `configuration._defaulted_only_when_unset` is `${VAR-default}` and
-  substitutes only when the variable is unset. The enforcement mode uses the
-  latter, so an exported empty value reaches the gate's own mode check and is
-  refused there rather than silently becoming observation mode.
+  never incidental. `environment.optional` is `${VAR:-default}` and substitutes
+  for an unset *or empty* value; `environment.defaulted_only_when_unset` is
+  `${VAR-default}` and substitutes only when the variable is unset. The
+  enforcement mode uses the latter, so an exported empty value reaches the
+  gate's own mode check and is refused there rather than silently becoming
+  observation mode. Both live in the `environment` module, which owns every
+  form the shell's expansions used.
 
 The metric contract is deliberately closed. The only label names are `canary`,
 `operation`, `outcome`, and `error_category`, and the only values are:
@@ -2865,15 +2880,17 @@ Python gate. It uses the repository's Python 3.14 baseline and provisions
 `pytest==9.0.2` and `hypothesis==6.151.9` explicitly, alongside
 `cmd-mox==0.2.0` for the command doubles and `cuprum==0.1.0` and
 `cyclopts==4.25.3` for the entry point the tests import. The target runs the
-twelve runtime modules with `python -m pytest`, `-c /dev/null`, `--rootdir=.`,
-and `-p no:cacheprovider`, so the test run is isolated from repository-local
-pytest configuration and cache state:
+fourteen runtime modules with `python -m pytest`, `-c /dev/null`,
+`--rootdir=.`, and `-p no:cacheprovider`, so the test run is isolated from
+repository-local pytest configuration and cache state:
 
 - `scripts/tests/test_release_admission_metrics.py`
 - `scripts/tests/test_release_admission_metric_failures.py`
 - `scripts/tests/test_release_admission_metric_boundedness.py`
 - `scripts/tests/test_release_admission_process_bounds.py`
 - `scripts/tests/test_release_admission_environment_contract.py`
+- `scripts/tests/test_release_admission_configuration_resolution.py`
+- `scripts/tests/test_release_admission_artefact_initialization.py`
 - `scripts/tests/test_release_admission_artefact_truncation.py`
 - `scripts/tests/test_release_admission_default_forms.py`
 - `scripts/tests/test_release_admission_adapter_defaults.py`
@@ -2890,9 +2907,9 @@ cancel grace rather than overrunning on a pipe the descendant holds open.
 `..._runner_contract.py` pins the private-versus-inherited stream contract
 against a real child, which a shim cannot show: only the process owning the
 file descriptor can observe an inherited stream. `..._status_translation.py`
-calls `policy.as_bash_status` and `policy.launch_failure_status` directly and
-drives real sink processes, so a signal death and a refused launch are observed
-rather than fabricated.
+calls `statuses.as_bash_status` and `statuses.launch_failure_status` directly
+and drives real sink processes, so a signal death and a refused launch are
+observed rather than fabricated.
 
 The runtime modules drive the gate as a real process and intercept its external
 commands with cmd-mox doubles registered under the gate's own adapter names.

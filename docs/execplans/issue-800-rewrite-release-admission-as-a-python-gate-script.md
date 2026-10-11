@@ -79,11 +79,13 @@ once the shell scripts are deleted.
       and `release.yml` invokes it with the equivalent
       `uv run --script <path>` (the workflow does not rely on the executable
       bit, which is why the shebang is not the load-bearing part of the
-      invocation). `.github/scripts/_release_admission/` holds eight modules
-      (`policy`, `records`, `delivery`, `commands`, `telemetry`,
-      `configuration`, `bounding`, `gate`); the last three of those were split
-      out when the CodeScene refactor and the real-child bound pushed `gate`
-      and `commands` over the module ceiling. The runtime-test support in
+      invocation). `.github/scripts/_release_admission/` holds nine modules
+      (`policy`, `records`, `delivery`, `commands`, `statuses`, `telemetry`,
+      `configuration`, `bounding`, `gate`); the last four of those were split
+      out when the CodeScene refactor, the real-child bound, and the formal
+      review's domain-architecture finding pushed `gate`, `commands`, and
+      `policy` over the module ceiling or across a boundary they should not
+      have owned. The runtime-test support in
       `scripts/tests/` is a facade and seven modules — the two-stage split
       recorded under *Decisions and findings*, plus the two later splits that
       kept pace with the file ceiling — and the count is stated per revision
@@ -205,6 +207,24 @@ once the shell scripts are deleted.
       this plan's own current-state module count, which the same split had
       invalidated. No code, test, or workflow changed, so the case count and
       the twelve collected modules are unchanged.
+- [x] Clear the formal-review repair pass. The first formal review's Unit
+      Architecture finding required resolution and initialization to be
+      separable, and the repair split them: `configuration` now exposes
+      `resolve_destination`, `resolve_configuration`,
+      `prepare_destination`, and `require_workflow_output`, the last two
+      writing only through the `filesystem.FileSystem` they are handed, and
+      the entry point calls the four in the shell's refusal order. The
+      effects gained a port (`filesystem`) whose two members are written as
+      positional-only functions so a plain callable is assignable to it.
+      Two runtime modules were added — `..._configuration_resolution.py`
+      proves resolution reads only the mapping it is given and writes
+      nothing, and `..._artefact_initialization.py` drives the effects with a
+      recording port — and the Makefile, the workflow contract's
+      `RUNTIME_MODULES`, and the developers' guide's module list all moved
+      from twelve to fourteen together. The two new modules were probed
+      before being trusted: interleaving the passes fails three cases, and
+      resolving the truncation operand through `Path` fails two of the new
+      cases plus both trailing-slash cases in `..._artefact_truncation.py`.
 
 ## Decisions and findings
 
@@ -234,9 +254,9 @@ once the shell scripts are deleted.
   dash form, without the colon -- which substitutes only when the variable is
   *unset*. The kept empty value is then refused by the gate's own mode check.
   `os.environ.get(VAR, default)` happens to agree, because it also substitutes
-  only for an unset variable; the membership test in
-  `configuration.load_configuration` is what states the no-colon form, so a
-  reader cannot mistake the helper for the colon form its siblings implement.
+  only for an unset variable; `environment.defaulted_only_when_unset` is what
+  states the no-colon form, so a reader cannot mistake the helper for the colon
+  form its siblings implement.
 - The 400-line module ceiling applies to Python as well as Rust (Pylint
   `C0302`, `max-module-lines = 400`). `release_admission_test_support.py` was
   exactly 400 lines at HEAD, so the runtime-test support was split into a facade
@@ -258,11 +278,11 @@ once the shell scripts are deleted.
   forms, and the artefact paths -- and `gate` owns everything it then *does*.
   `gate` therefore imports one name, `Configuration`, and the entry point
   reaches `configuration` directly for the three variable names Cyclopts binds
-  and for `load_configuration`/`ConfigurationError`. The alternative, having
-  `gate` re-bind every moved name, was rejected: it would have made `gate` an
-  indirection no reader needed, and one of the names it would have carried,
-  `DIAGNOSTIC_PREFIX`, turned out to be referenced nowhere at all and was
-  deleted instead of moved.
+  and for the four start-up steps and `ConfigurationError`. The alternative,
+  having `gate` re-bind every moved name, was rejected: it would have made
+  `gate` an indirection no reader needed, and one of the names it would have
+  carried, `DIAGNOSTIC_PREFIX`, turned out to be referenced nowhere at all and
+  was deleted instead of moved.
 - `from __future__ import annotations` is redundant on the 3.14 baseline and
   the df12 house lints reject it (`C9112`). PEP 649 defers annotation
   evaluation, so a `TYPE_CHECKING`-only `Path` in a dataclass annotation is
@@ -281,7 +301,7 @@ deferred in the test module rather than simulated.
 
 The port is complete, validated, and open for review. The Bash gate is now a
 Cyclopts `uv run --script` entry point with its implementation split across
-eight modules, its behaviour held to a frozen oracle, and its tests running
+nine modules, its behaviour held to a frozen oracle, and its tests running
 through cmd-mox doubles. `release.yml` invokes the Python entry point; the
 three shell scripts are deleted.
 
@@ -323,14 +343,14 @@ listed five behavioural defects, each verified against the shell before being
 fixed, and five acceptance-coverage gaps. Every fix is a separate commit and
 every gap is a case in one of the five modules the suite gained.
 
-| Defect                                                                                                           | Verified against the shell                                                                                         | Fix                                                                                                                                           |
-| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| The bound signalled the direct child only, so a descendant survived cancellation and held the captured pipe open | GNU `timeout` signals the supervised command's *process group* and escalates to `SIGKILL` after a one-second grace | `bounding` starts the child in its own session and kills the group, with a real-child escalation case and a descendant case                   |
-| The adapters' output was discarded                                                                               | The shell redirected no adapter stream, so an operator's diagnostic reached the runner                             | GitHub/clock standard output stays private but their stderr is inherited; the Git and sink adapters inherit both                              |
-| A subprocess status reached the gate untranslated                                                                | A shell reports a signal death as `128 + signal`, and `timeout` reported `127`/`126` for a refused launch          | `policy.as_bash_status` and `policy.launch_failure_status`, pinned as pure functions                                                          |
-| The artefact parents were created and truncated in one pass                                                      | The shell ran one `mkdir -p` naming both parents and only then truncated both files                                | `load_configuration` creates every parent first, then truncates; a filesystem refusal is a `ConfigurationError`, not a traceback              |
-| A configured path was normalized at two boundaries                                                               | The shell passed the operator's own string to its sink and to `GITHUB_OUTPUT`                                      | `OutputPath` retains the configured spelling and derives the `mkdir` operand from it separately                                               |
-| The `mkdir` operand was the resolved path's `Path.parent`                                                        | The shell asked coreutils `dirname(1)`, which answers `reports` for `reports/.` where `Path.parent` answers `.`    | `configuration._directory_name` reproduces `dirname(1)`, with a `/.` case asserting the parent is created and the refusal is `Is a directory` |
+| Defect                                                                                                           | Verified against the shell                                                                                         | Fix                                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| The bound signalled the direct child only, so a descendant survived cancellation and held the captured pipe open | GNU `timeout` signals the supervised command's *process group* and escalates to `SIGKILL` after a one-second grace | `bounding` starts the child in its own session and kills the group, with a real-child escalation case and a descendant case                     |
+| The adapters' output was discarded                                                                               | The shell redirected no adapter stream, so an operator's diagnostic reached the runner                             | GitHub/clock standard output stays private but their stderr is inherited; the Git and sink adapters inherit both                                |
+| A subprocess status reached the gate untranslated                                                                | A shell reports a signal death as `128 + signal`, and `timeout` reported `127`/`126` for a refused launch          | `policy.as_bash_status` and `policy.launch_failure_status`, pinned as pure functions                                                            |
+| The artefact parents were created and truncated in one pass                                                      | The shell ran one `mkdir -p` naming both parents and only then truncated both files                                | `configuration.prepare_destination` creates every parent first, then truncates; a filesystem refusal is a `ConfigurationError`, not a traceback |
+| A configured path was normalized at two boundaries                                                               | The shell passed the operator's own string to its sink and to `GITHUB_OUTPUT`                                      | `OutputPath` retains the configured spelling and derives the `mkdir` operand from it separately                                                 |
+| The `mkdir` operand was the resolved path's `Path.parent`                                                        | The shell asked coreutils `dirname(1)`, which answers `reports` for `reports/.` where `Path.parent` answers `.`    | `configuration._directory_name` reproduces `dirname(1)`, with a `/.` case asserting the parent is created and the refusal is `Is a directory`   |
 
 The gaps are the cases the port's own tests could not express, and each is now
 a module of its own. The refusal order and the artefact-creation position are
@@ -490,12 +510,15 @@ change admission semantics beyond the scope of a form change.
   modules before the port, then into a facade and five once cmd-mox replaced
   the executable fakes.
 - A refactor that clears a complexity finding lengthens the code it clarifies,
-  and the ceiling applies to the result. Extracting `_OutputPaths`,
-  `_optional`, and `_defaulted_only_when_unset` from `load_configuration` took
-  `gate.py` from well inside the ceiling to 442 lines, so the refactor could
-  not be committed on its own: it had to carry the split that made the module
-  fit. "Separate atomic refactors" is a rule about intent, not a licence to
-  commit a red tree.
+  and the ceiling applies to the result. Extracting the artefact-path value
+  object and the two default helpers from the one loader they lived in -- then
+  named `_OutputPaths`, `_optional`, and `_defaulted_only_when_unset`; the two
+  helpers are now `environment.optional` and
+  `environment.defaulted_only_when_unset`, and the loader is now
+  `resolve_configuration` -- took `gate.py` from well inside the ceiling to 442
+  lines, so the refactor could not be committed on its own: it had to carry the
+  split that made the module fit. "Separate atomic refactors" is a rule about
+  intent, not a licence to commit a red tree.
 - No gate in this repository collects doctests from `.github/scripts/`.
   `make test` runs the Rust suites, and `make test-workflow-contracts` passes
   `--doctest-modules` to `scripts/*.py` rather than to the implementation
@@ -507,8 +530,8 @@ change admission semantics beyond the scope of a form change.
   check, not be replaced by the observation default, because Bash's
   `${VAR-default}` substitutes only when the variable is unset.
   `os.environ.get(VAR, default)` shares that substitution rule, so it would
-  agree here; `configuration.load_configuration` tests membership anyway so
-  that the helper states the no-colon form its siblings do not implement.
+  agree here; `environment.defaulted_only_when_unset` states the no-colon form
+  as its own helper rather than leaving it to a call the siblings also make.
 - A review finding can cite this repository's own prose as its authority. The
   counter-suppression finding quoted a sentence from the frozen oracle's
   docstring that asserted the shell dropped an operation's counter with its
@@ -560,22 +583,22 @@ change admission semantics beyond the scope of a form change.
   review named three issues on code this change introduces, and a fourth
   surfaced from a test this pass had already lengthened. The refactor: `policy`
   gained a `Vocabulary` base whose `contains` class method replaced five
-  same-shaped predicates; `load_configuration` was split so each Bash default
-  form has one named helper (`_optional` for `${VAR:-default}`,
-  `_defaulted_only_when_unset` for `${VAR-default}`) and the artefact paths
-  travel as an `_OutputPaths` value; and the two oversized tests were reduced
-  by reusing `assert_failure_trace_sequence` and by extracting
-  `_run_under_generated_identifiers`. That work took `gate.py` to 442 lines, so
-  the same commit moves the configuration half into the new `configuration`
-  module. The entry point and the developers' guide now name `configuration`
-  where they named `gate`; `DIAGNOSTIC_PREFIX`, a constant the port introduced
-  but nothing ever read, is deleted rather than moved. CodeScene scores every
-  touched file at 10.00, and the 37-case runtime suite is unchanged, which is
-  the evidence that the refactor preserved behaviour. The developers' guide
-  records both conventions, as the house abstraction policy requires. One
-  instrument detail is worth keeping: `cs check HEAD:./file` scores the
-  *committed* blob, so a working-tree refactor must be measured with
-  `cs check ./file`.
+  same-shaped predicates; the configuration loader was split so each Bash
+  default form has one named helper (then `_optional` for `${VAR:-default}` and
+  `_defaulted_only_when_unset` for `${VAR-default}`, both now module functions
+  on `environment`) and the artefact paths travel as one value; and the two
+  oversized tests were reduced by reusing `assert_failure_trace_sequence` and
+  by extracting `_run_under_generated_identifiers`. That work took `gate.py` to
+  442 lines, so the same commit moves the configuration half into the new
+  `configuration` module. The entry point and the developers' guide now name
+  `configuration` where they named `gate`; `DIAGNOSTIC_PREFIX`, a constant the
+  port introduced but nothing ever read, is deleted rather than moved.
+  CodeScene scores every touched file at 10.00, and the 37-case runtime suite
+  is unchanged, which is the evidence that the refactor preserved behaviour.
+  The developers' guide records both conventions, as the house abstraction
+  policy requires. One instrument detail is worth keeping:
+  `cs check HEAD:./file` scores the *committed* blob, so a working-tree
+  refactor must be measured with `cs check ./file`.
 - 2026-10-10 — Doctest repair. Checking the moved examples by hand turned up a
   defect no gate had run: `MetricFields.is_valid`'s two examples wrapped as
   ``MetricFields(...)`` then ``.is_valid()``. The first line is a complete
@@ -673,34 +696,33 @@ change admission semantics beyond the scope of a form change.
   appears in a calls log only when the variable is unset (the
   `answer_no_workflow_run` case). The narrowing generalized from the unset case
   to the set case without the set case having been run. A three-arm probe
-  settles it: with the
-  stored identifier copied into an operation record, the property **fails**
-  when the doubled API answers with the identifier and **passes** when it
-  answers with nothing — a no-op control that shows the failure can only come
-  from the generated value reaching production. The property therefore
-  generates the identifier and the double **returns** it, placing it on the
-  gate's own result through `github_find_workflow_run`; the reachability limit
-  is retained as a note on what the case does *not* cover. The second concern
-  was that the `path` and `url` values the property transports are read by
-  nothing in production; the claim is now stated as auxiliary-environment
-  transport, which is what the evidence supports, and the module docstring
-  names the variables as scenarios rather than configuration. The third was
-  that both shared validators and the exclusion helper accept an empty list, so
-  the property could pass on a run that wrote no telemetry.
+  settles it: with the stored identifier copied into an operation record, the
+  property **fails** when the doubled API answers with the identifier and
+  **passes** when it answers with nothing — a no-op control that shows the
+  failure can only come from the generated value reaching production. The
+  property therefore generates the identifier and the double **returns** it,
+  placing it on the gate's own result through `github_find_workflow_run`; the
+  reachability limit is retained as a note on what the case does *not* cover.
+  The second concern was that the `path` and `url` values the property
+  transports are read by nothing in production; the claim is now stated as
+  auxiliary-environment transport, which is what the evidence supports, and the
+  module docstring names the variables as scenarios rather than configuration.
+  The third was that both shared validators and the exclusion helper accept an
+  empty list, so the property could pass on a run that wrote no telemetry.
   `assert_complete_records` now asserts the operation counters in emission
   order, the final outcome and category, **the gate counter repeating that
   outcome**, and the exact trace sequence **before** any exclusion is checked.
   The measurement that preceded the assertion caught a real error in the
-  expectation written from reading rather than running: `gate_complete`
-  carries the *gate's* outcome, not a per-operation success. A diagnostics
-  check was added alongside the records, because the child's standard error is
-  retained with the release and carries the same hazard. Negative controls
-  confirm every new assertion fires, with the trace mutations correctly
-  attributed to the trace assertion rather than masked by the metric one. Two
-  corrections to the assessment's own text were verified and accepted: the
-  expected-label helpers build their dicts from arguments rather than from
-  production enum members (which strengthens the oracle), and the direct
-  requirement is ADR 020's prohibition on identifier-derived labels.
+  expectation written from reading rather than running: `gate_complete` carries
+  the *gate's* outcome, not a per-operation success. A diagnostics check was
+  added alongside the records, because the child's standard error is retained
+  with the release and carries the same hazard. Negative controls confirm every
+  new assertion fires, with the trace mutations correctly attributed to the
+  trace assertion rather than masked by the metric one. Two corrections to the
+  assessment's own text were verified and accepted: the expected-label helpers
+  build their dicts from arguments rather than from production enum members
+  (which strengthens the oracle), and the direct requirement is ADR 020's
+  prohibition on identifier-derived labels.
 - 2026-10-11 — The repairs above took `release_admission_test_records.py` to
   **412 lines**, over the 400-line ceiling, which `make lint-python` reports as
   Pylint `C0302`. `release_admission_test_exclusions.py` was split out at the
@@ -833,17 +855,16 @@ change admission semantics beyond the scope of a form change.
   A sweep of the guide after the split found **two stale paragraphs**, one
   introduced by the split and one older. The one introduced by the split is the
   support-module inventory: it named seven modules where the directory now
-  holds eight, so
-  `release_admission_test_boundedness.py` is named and its ownership stated.
-  The one that is not is older: the same section says the target "runs the ten
-  runtime modules" and lists ten, while the Makefile and the workflow contract's
-  `RUNTIME_MODULES` tuple have named **twelve** since `36a913ed`. The two
-  modules the guide omitted are `..._artefact_truncation.py` and
-  `..._adapter_defaults.py`. The list is corrected and now matches the Makefile
-  exactly, in order, verified by diffing the two rather than by counting. Both
-  defects share a cause worth naming: **the count and the list live in three
-  places — the Makefile, the contract, and the guide — and the pass that moved
-  the figure updated two of them.**
+  holds eight, so `release_admission_test_boundedness.py` is named and its
+  ownership stated. The one that is not is older: the same section says the
+  target "runs the ten runtime modules" and lists ten, while the Makefile and
+  the workflow contract's `RUNTIME_MODULES` tuple have named **twelve** since
+  `36a913ed`. The two modules the guide omitted are
+  `..._artefact_truncation.py` and `..._adapter_defaults.py`. The list is
+  corrected and now matches the Makefile exactly, in order, verified by diffing
+  the two rather than by counting. Both defects share a cause worth naming:
+  **the count and the list live in three places — the Makefile, the contract,
+  and the guide — and the pass that moved the figure updated two of them.**
 
 - 2026-10-11 — **Tenth pass, a documentation sweep.** Committed as
   `47bd4889`, "Repair the guide's stale module count and support list". The
@@ -1024,7 +1045,7 @@ change admission semantics beyond the scope of a form change.
      `MISSING`, consumed from `configuration` too. `EvidenceState` inherits
      `Vocabulary` directly: **an enumeration cannot be subclassed**, so it
      cannot extend a sibling vocabulary. The members substitute for the
-     literals without change — `StrEnum` members equal, hash, and serialise as
+     literals without change — `StrEnum` members equal, hash, and serialize as
      their plain strings, and a probe through both classifiers returns the same
      `success`/`stale_evidence`/`missing_evidence`/`unknown` answers the
      literals produced, including for the empty string.
@@ -1064,3 +1085,156 @@ change admission semantics beyond the scope of a form change.
   three metric names, `EvidenceState` is an operator *input* vocabulary that
   reaches no record or label, and a probe confirms the members are disjoint
   from every emitted token. The figure stands.
+
+- 2026-10-11 — **Fifteenth pass, the formal review's Domain Architecture row
+  and the module-ceiling breach the fourteenth pass introduced.** Two changes,
+  and the second is the one that made the first necessary.
+
+  1. `EvidenceState` took `policy` from 393 lines to 401 against a 400-line
+     ceiling enforced by `pylint`'s `C0302` through
+     `[tool.pylint.main] max-module-lines`. The ceiling binds test modules too:
+     `per-file-ignores` exempts `assert`, `too-many-arguments`, and three
+     others for `scripts/tests/*.py`, and `too-many-lines` is not among them.
+     The repair therefore had to *remove* code from `policy` rather than move
+     it into a file with headroom, because `commands` at 342 had only 58 lines
+     spare and the status region is longer than that.
+  2. The Domain Architecture row asked that Bash/GNU `timeout`, Python
+     negative return-code, and `OSError` translation move out of `policy` and
+     into the command and delivery adapters, and that those adapters expose
+     adapter-neutral domain results rather than raw statuses. Both halves were
+     substantive. `policy` held five names that were not decisions at all —
+     `CommandStatus`, `TIMEOUT_STATUSES`, `as_bash_status`,
+     `launch_failure_status`, and the timeout branch of the classifier — and
+     three call sites compared a bare integer to `0`
+     (`gate.py:220`, `:240`, `:257`), which is precisely the shell-status
+     leak the row describes.
+
+  The split follows the dependency direction rather than the file sizes. What a
+  command *did* is policy's own vocabulary, so `CommandOutcome` (`succeeded`,
+  `timed_out`, `failed`, `launch_failed`) and the `CommandResult` carrying it
+  are declared in `policy`, and `classify_command_result(outcome, category)`
+  now consumes them. The classifier's category argument stays at the call site,
+  because the per- operation default is the gate's judgement — an unsuccessful
+  `gh api` is `api_error` and an unsuccessful `git fetch` is `fetch_error` —
+  and an adapter that emitted `Failed(category=…)` would have to know its
+  caller's category, which is the leak the row is about.
+
+  The translation that *produces* those values is the ninth module, `statuses`.
+  It is the only place a shell status number is interpreted, it imports
+  `policy` and is imported by `commands` and `delivery`, and it does not import
+  `bounding` or `gate`. `commands.classify_result` moves there as
+  `statuses.classify_result`, because a bound that elapsed is a *status*
+  conversion and `bounding` must not import status vocabulary to describe it.
+  `bounding` is unchanged: it still reports `None` and nothing else.
+
+  `commands` now returns `policy.CommandResult` from all four effects and no
+  longer imports `statuses` only to translate — its `policy` import is real,
+  for the result type, and it no longer interprets a number anywhere.
+  `delivery.append_record` keeps returning `int`, because at the unguarded
+  gate-output write that number *is* the gate's exit status; its private
+  `_append_via_adapter` returns the result and `append_record` takes `.status`.
+  The two adapters needed a primitive for two different libraries —
+  `cuprum.CommandResult.exit_code` and
+  `subprocess.CompletedProcess.returncode` — so
+  `statuses.translate_exit(exit_code, stdout)` is that primitive and
+  `translate_result` is the cuprum-shaped wrapper over it.
+
+  Line counts after the pass: `policy` 401 → 378, `commands` 342 → 300, `gate`
+  263 → 269, `delivery` 127 → 133, `statuses` new at 271, and `__init__` 24 →
+  27 for the ninth module bullet. Every module is inside the ceiling with
+  headroom rather than at it.
+
+  The frozen behaviour the runtime tests pin was re-verified rather than
+  assumed. `test_release_admission_environment_contract.py`'s three refusal
+  positions and two-phase truncation order are untouched — `configuration` is
+  not changed by this pass. The status translation's own contracts are
+  preserved: `137` remains both the shell's `SIGKILL` status and a timeout
+  status, `143` remains translated but not a timeout, and a sink killed by
+  `SIGTERM` still reports `128 + signal`. The launch-refusal statuses `127` and
+  `126` still hold, and a refused launch still keeps the operation's own
+  category because neither number maps to `timed_out`.
+
+  Consumers updated with the move:
+  `test_release_admission_status_translation.py` (import, four direct calls,
+  and the elapsed-bound case now asserting the outcome rather than the literal),
+  `test_release_admission_process_bounds.py` (two `classify_result` calls),
+  and the prose in `release_admission_test_boundedness.py`,
+  `release_admission_test_support.py`,
+  `test_release_admission_metric_failures.py`, and
+  `test_release_admission_runner_contract.py`. The developers' guide's module
+  map, status paragraph, and runtime-module paragraph were updated with them.
+
+  `make test-release-admission` passes with all 96 cases after the pass.
+- 2026-10-11 — Formal-review repair pass: resolution split from initialization.
+  The first formal review returned `CHANGES_REQUESTED` with nine inline
+  findings, one of which was the Unit Architecture row this pass answers: a
+  single loader both read the variables and created both artefacts, so the two
+  kinds of consequence could not be observed apart. `configuration` now exposes
+  four steps — `resolve_destination`, `resolve_configuration`,
+  `prepare_destination`, and `require_workflow_output` — of which the first two
+  are pure and the third takes the filesystem it uses as an argument. The
+  effects moved behind a `filesystem` port whose two members are declared
+  positional-only, because a dataclass field holding a `Callable` is not
+  assignable to a member that requires a keyword. `Sinks` gained `bindings()`
+  so initialization reads the same resolved spellings the workflow outputs
+  publish rather than re-deriving them from the environment.
+
+  The new tests were probed for liveness before being trusted, which is the
+  discipline the earlier trailing-slash defect earned: interleaving the two
+  passes fails three cases in `..._artefact_initialization.py`, and resolving
+  the truncation operand through `Path` fails two of its cases and both
+  trailing-slash cases in `..._artefact_truncation.py`. A third probe of the
+  resolution module found a defect in the *test*, not the code: the spelling
+  first chosen for the parent-derivation case was one where `dirname(1)` and
+  `Path.parent` happen to agree, so the case asserted a false expectation and
+  failed. The production helper was right; the case now uses `reports/.`, the
+  one spelling where the two genuinely diverge, and asserts the divergence as a
+  precondition rather than assuming it.
+
+  `make test-release-admission` passes with all 118 cases over the fourteen
+  pinned modules.
+
+- 2026-10-11 — Gate pass over the review repair. Driving `lint-python` to
+  completion took three rounds, and each round's failure was the *next* stage's
+  finding rather than a repeat of the previous one, because the target is a
+  five-stage cascade that stops at the first failure.
+
+  1. The df12 house lints reported nineteen `C9102`
+     (`assert-missing-message`): eighteen in the new resolution module and one
+     pre-existing in `test_release_admission_status_translation.py`. The house
+     rule requires a failure message on every `assert`, so the messages were
+     added. Adding them took the resolution module to 407 lines against the
+     same 400-line ceiling `C0302` enforces, so its prose was tightened — the
+     module docstring's bullet list became running prose, and six notes blocks
+     lost their padding, none of it load-bearing.
+  2. With `C9102` clear the df12 stage advanced and reported `R9108`
+     (`prefer-snapshot-assertion`) on the initialization module. The rule fires
+     on `assert x == <literal>` where the literal has eight or more AST leaves,
+     and its remedy is a syrupy snapshot; this repository uses syrupy nowhere,
+     so that remedy has never been the house answer. The four-element call-list
+     literal was the offender, and splitting it into its two halves — every
+     parent before either truncation, then both truncations in order — states
+     the same contract in two claims and no longer trips the rule. That is a
+     stronger statement than the single comparison it replaced, not a way round
+     the check.
+  3. Interrogate then reported 99.9%: two `__init__` methods on the recording
+     doubles had no docstring. They now carry one.
+
+  `make lint-python` passes all five stages, `make typecheck-python` passes,
+  `make test-release-admission` passes all 118 cases, and
+  `make test-workflow-contracts` passes 1254 with 3 skipped.
+
+- 2026-10-11 — Orthography pass over this branch's own additions. The spelling
+  gate scans tracked Markdown only, so the `-ise` forms this branch introduced
+  in Python, the Makefile, and the plan were not gate-visible — but they are
+  contra `AGENTS.md` and were flagged in the previous round's review. The
+  affected words are `initialisation`/`initialiser`, `normalised`/`normalises`,
+  `serialise`, `recognising`, and `unrecognised`; all are genuine `-ize` verbs
+  in the house's en-GB-oxendict spelling. `analyse` and its family are
+  deliberately left alone, since Oxford keeps `-yse`. The test module named for
+  artefact initialization is renamed to
+  `test_release_admission_artefact_initialization.py` with its three
+  referencing sites (the Makefile, the workflow contract's `RUNTIME_MODULES`,
+  and the developers' guide), and the pre-existing `normalised_build_script` in
+  `tests/build_module_slice_ui_tests.rs` is left untouched because it is main's
+  and not on a line this branch edits.

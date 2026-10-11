@@ -80,7 +80,7 @@ IDENTIFIER_URL_VARIABLE = "NETSUKE_RELEASE_ADMISSION_SCENARIO_URL"
 #:
 #: The marker is written at **both ends** for a second reason. Production strips
 #: every trailing LF from the API's answer before storing it
-#: (``commands._status_and_output`` applies ``rstrip("\n")``), so a generated
+#: (``statuses.translate_exit`` applies ``rstrip("\n")``), so a generated
 #: identifier ending in a newline would be stored as a *different* string from
 #: the one the property searches for -- and the difference runs in the dangerous
 #: direction, because a leak of the stored value would not match the raw
@@ -122,7 +122,7 @@ RUN_QUERY_FILTER = ".workflow_runs[0].id // empty"
 def stored_identifier(run_id: str) -> str:
     r"""Return the identifier as production stores it.
 
-    ``commands._status_and_output`` applies ``rstrip("\\n")`` to the API's
+    ``statuses.translate_exit`` applies ``rstrip("\\n")`` to the API's
     answer, so the value on the gate result is the generated identifier with
     every trailing newline removed. The strategy's own trailing marker means
     this is the identity for every value it generates, but stating the rule here

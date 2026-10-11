@@ -102,6 +102,19 @@ class Sinks:
     output_sink: str
     trace_sink: str
 
+    def bindings(self) -> tuple[str, str]:
+        """Return both artefact bindings in the order the shell named them.
+
+        The order fixes which parent is created first and which file is
+        truncated first, and so which artefact survives a refusal of the other.
+
+        Returns
+        -------
+        tuple[str, str]
+            The metrics binding followed by the trace binding.
+        """
+        return (self.metrics_file, self.trace_file)
+
 
 def emit_metric(sinks: Sinks, name: str, fields: MetricFields) -> int:
     """Write one metric record, returning the status on which the gate stops.

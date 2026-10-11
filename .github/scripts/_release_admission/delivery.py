@@ -29,7 +29,7 @@ own ``timeout`` printed such a sentence too. A failed in-process append reports
 
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the sink seam runs one adapter.
 
-from . import commands, policy
+from . import policy, statuses
 
 
 def append_record(sink: str, target: str, record: str) -> int:
@@ -52,11 +52,16 @@ def append_record(sink: str, target: str, record: str) -> int:
     The record is encoded with ``surrogateescape`` because an environment value
     can carry bytes the locale cannot represent, and an unencodable record must
     cost one record rather than the gate's remaining artefacts.
+
+    The status is kept beside the outcome because at the unguarded gate-output
+    write it *becomes* the gate's exit status, so a sink that died of
+    ``SIGTERM`` must leave the step exiting ``143``. Translating it into an
+    outcome would discard the number the workflow reads.
     """
     payload = record.encode("utf-8", "surrogateescape") + b"\n"
     if not sink:
         return _append_in_process(target, payload)
-    return _append_via_adapter(sink, target, payload)
+    return _append_via_adapter(sink, target, payload).status
 
 
 def _append_in_process(target: str, payload: bytes) -> int:
@@ -80,6 +85,16 @@ def _append_in_process(target: str, payload: bytes) -> int:
     int
         ``0`` for a write that succeeded, otherwise ``1`` -- the status the
         shell's own failed redirection produced.
+
+    Notes
+    -----
+    This opens a file directly rather than through
+    :mod:`._release_admission.filesystem`, and deliberately. The port performs
+    configuration's two start-up effects on a *fresh* artefact through a
+    doubled boundary, while this appends one record to a file that already
+    exists and reports the shell's status for a refusal rather than raising a
+    diagnostic. The two share an operand convention -- the configured spelling,
+    never a resolved :class:`~pathlib.Path` -- and nothing else.
     """
     if not target:
         return 1
@@ -91,20 +106,21 @@ def _append_in_process(target: str, payload: bytes) -> int:
     return 0
 
 
-def _append_via_adapter(sink: str, target: str, data: bytes) -> int:
+def _append_via_adapter(sink: str, target: str, data: bytes) -> policy.CommandResult:
     """Run one sink adapter with the record on its standard input.
 
     The adapter is the operator's own configured program, named through an
-    adapter environment variable, and its status is returned verbatim once
-    translated into the form a shell reports. The command is a fixed argument
-    list with no shell, and the record arrives on the adapter's standard input
-    rather than in its argument vector.
+    adapter environment variable. The command is a fixed argument list with no
+    shell, and the record arrives on the adapter's standard input rather than
+    in its argument vector.
 
     Returns
     -------
-    int
-        The adapter's own status in Bash's convention, or the launch status the
-        shell reported for an adapter it could not run.
+    policy.CommandResult
+        The adapter's own outcome and status, with the status in the shell's
+        convention, or the launch status the shell reported for an adapter it
+        could not run. The output is never retained: a sink's own standard
+        output is inherited rather than captured.
 
     Notes
     -----
@@ -122,6 +138,6 @@ def _append_via_adapter(sink: str, target: str, data: bytes) -> int:
             check=False,
         )
     except OSError as error:
-        commands.report_launch_failure(sink, error)
-        return policy.launch_failure_status(error)
-    return policy.as_bash_status(completed.returncode)
+        statuses.report_launch_failure(sink, error)
+        return statuses.launch_failure_result(error)
+    return statuses.translate_exit(completed.returncode)

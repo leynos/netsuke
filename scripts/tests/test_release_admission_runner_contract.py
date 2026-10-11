@@ -259,7 +259,7 @@ def test_unexecutable_program_is_reported_by_the_runner(tmp_path: Path) -> None:
     Notes
     -----
     The runner does not translate a launch refusal; :mod:`commands` does, by
-    catching the error and asking :func:`policy.launch_failure_status`. Pinning
+    catching the error and asking :func:`statuses.launch_failure_status`. Pinning
     the division of labour is the point: the runner raises, so a caller that
     forgot to catch is a visible fault rather than a silently adopted status.
     """

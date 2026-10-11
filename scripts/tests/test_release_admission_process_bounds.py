@@ -31,7 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / ".github" / "scripts"))
 import cuprum
 import cuprum.sh
-from _release_admission import bounding, commands
+from _release_admission import bounding, commands, statuses
 
 #: How long the child reports nothing for before the bound must escalate.
 ESCALATION_SECONDS = 1
@@ -153,7 +153,7 @@ def _is_zombie(pid: int) -> bool:
     stat_file = pathlib.Path(f"/proc/{pid}/stat")
     try:
         fields = stat_file.read_text(encoding="utf-8").rsplit(")", 1)[1].split()
-    except (OSError, IndexError):
+    except OSError, IndexError:
         return False
     return fields[0] == "Z"
 
@@ -266,7 +266,7 @@ def test_bounded_run_escalates_against_a_child_that_ignores_sigterm(
     result = _launch_bound(_bounded_probe_command(child, pid_file), ESCALATION_SECONDS)
 
     assert result is None, "a bound that elapsed must report no result, not a status"
-    assert commands.classify_result(result) == 124, (
+    assert statuses.classify_result(result) == 124, (
         "an elapsed bound must classify as the timeout status"
     )
     assert not _process_exists(_recorded_pid(pid_file)), (
@@ -319,7 +319,7 @@ def test_bounded_run_reaps_a_descendant_that_holds_the_captured_pipe(
         f"bound: {elapsed:.2f}s against a {limit:.2f}s limit"
     )
     assert result is None, "a bound that elapsed must report no result, not a status"
-    assert commands.classify_result(result) == 124, (
+    assert statuses.classify_result(result) == 124, (
         "an elapsed bound must classify as the timeout status"
     )
     descendant_pid = _recorded_pid(pid_file.with_name(f"{pid_file.name}.desc"))

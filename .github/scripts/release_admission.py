@@ -47,6 +47,8 @@ uv run --script .github/scripts/release_admission.py
 ```
 """
 
+import dataclasses
+import os
 import sys
 import typing as typ
 from pathlib import Path
@@ -61,6 +63,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 #: The status a configuration that nothing can be observed from exits with.
 CONFIGURATION_FAILURE = 1
+
+if typ.TYPE_CHECKING:
+    # An annotation-only import, named absolutely because a relative one would
+    # not resolve from a module the loader runs as ``__main__``. It is never
+    # executed, so the ``runpy`` load above is unaffected; the only executed
+    # import of the package is the one inside :func:`run`.
+    from _release_admission import configuration
 
 
 def run() -> int:
@@ -119,7 +128,7 @@ def run() -> int:
         """
         del repository, revision, output
         try:
-            settings = configuration.load_configuration()
+            settings = _start_up()
         except configuration.ConfigurationError as error:
             print(error, file=sys.stderr)
             return CONFIGURATION_FAILURE
@@ -133,6 +142,41 @@ def run() -> int:
     # every enforced failure exit ``0``, which is the one thing the shell's
     # ``set -e`` semantics must survive the port intact.
     return typ.cast("int", app())
+
+
+def _start_up() -> configuration.Configuration:
+    """Resolve the gate's settings, creating its artefacts, in the shell's order.
+
+    A required variable that is unset or empty, or an artefact effect the
+    operating system refuses, reaches the caller as
+    :class:`_release_admission.configuration.ConfigurationError`; the caller
+    prints its message, which is the diagnostic itself.
+
+    Returns
+    -------
+    configuration.Configuration
+        The resolved settings, with ``output`` filled in from
+        ``GITHUB_OUTPUT``.
+
+    Notes
+    -----
+    Four steps, in the order the shell refused in: resolve the artefact
+    spellings, resolve the settings, create both parents and truncate both
+    files, and only then read ``GITHUB_OUTPUT``. Each refusal's *position* is
+    part of the contract -- the environment-contract tests run the workflow's
+    step order to pin it -- so the order is stated here, in the one place that
+    owns it, rather than inside any of the steps.
+    """
+    from _release_admission import configuration, filesystem
+
+    variables = os.environ
+    destination = configuration.resolve_destination(variables)
+    settings = configuration.resolve_configuration(variables, destination)
+    file_system = filesystem.production_filesystem()
+    configuration.prepare_destination(settings.sinks, file_system)
+    return dataclasses.replace(
+        settings, output=configuration.require_workflow_output(variables)
+    )
 
 
 if __name__ == "__main__":

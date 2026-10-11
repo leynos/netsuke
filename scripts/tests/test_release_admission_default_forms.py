@@ -153,7 +153,7 @@ def test_optional_values_are_read_with_the_colon_default_form(
 
     The evidence state's default is ``missing``, so an empty value must reach
     the freshness check as a missing-evidence refusal rather than as the
-    ``unknown`` category an unrecognised state produces. Those two categories
+    ``unknown`` category an unrecognized state produces. Those two categories
     are the whole difference between "the shell substituted" and "the shell
     passed the empty string through", and asserting the category rather than
     only the exit status is what pins it.
@@ -192,7 +192,7 @@ def test_gate_publishes_the_operators_own_path_spelling(
     -----
     The shell passed the operator's string to its sink adapter and published it
     verbatim in the ``metrics-file`` and ``trace-file`` workflow outputs; only
-    ``mkdir`` and the redirection saw a normalised form. Rendering a
+    ``mkdir`` and the redirection saw a normalized form. Rendering a
     :class:`~pathlib.Path` back to text would rewrite ``//`` and ``./`` at both
     boundaries, so the configured spelling is retained.
 
@@ -215,7 +215,7 @@ def test_gate_publishes_the_operators_own_path_spelling(
 
     assert run.result.returncode == 0, run.result.stderr
     assert run.outputs["metrics-file"] == spelled, (
-        "a workflow output must carry the configured spelling, not a normalised one"
+        "a workflow output must carry the configured spelling, not a normalized one"
     )
     assert run.outputs["trace-file"] == traces_spelled, (
         "both published paths must keep the operator's own spelling"
@@ -280,7 +280,7 @@ def test_external_metrics_sink_receives_the_configured_spelling(
     """
     adapted = install_adapted(cmd_mox)
     spelled = f"{tmp_path}//observations/./metrics.jsonl"
-    normalised = f"{tmp_path}/observations/metrics.jsonl"
+    normalized = f"{tmp_path}/observations/metrics.jsonl"
     run = run_gate(
         cmd_mox,
         tmp_path,
@@ -298,6 +298,6 @@ def test_external_metrics_sink_receives_the_configured_spelling(
         "every sink invocation must name the target with the configured spelling"
     )
     handed = {argument for call in adapted.metrics.calls for argument in call}
-    assert normalised not in handed, (
-        "the adapter must not be handed a normalised spelling of the target"
+    assert normalized not in handed, (
+        "the adapter must not be handed a normalized spelling of the target"
     )

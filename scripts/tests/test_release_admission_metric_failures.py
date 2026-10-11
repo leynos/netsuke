@@ -347,7 +347,7 @@ def test_operating_system_refusal_keeps_the_operations_own_category(
     Notes
     -----
     GNU ``timeout`` reported ``127`` for a program it could not run and ``126``
-    for any other refusal, and ``classify_command_failure`` maps neither to
+    for any other refusal, and ``classify_command_result`` maps neither to
     ``timeout``. A ``gh`` whose file cannot be executed must therefore still be
     ``api_error``, which is the classification a missing adapter depends on.
     """

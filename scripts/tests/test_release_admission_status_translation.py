@@ -4,9 +4,10 @@ A subprocess reports a child that died of a signal as the *negation* of that
 signal; a shell reports it as ``128 + signal``. The shell gate read every status
 through the shell's convention, and two downstream decisions depend on it:
 
-- :func:`policy.classify_command_failure` maps only ``{124, 137}`` to
-  ``timeout``, so a ``kill -TERM`` that reached it untranslated (``-15``) would
-  be classified as an ordinary command failure and the operation's own category
+- :func:`policy.classify_command_result` maps only a timed-out outcome to
+  ``timeout``, and the outcome is decided by ``statuses`` from the translated
+  status, so a ``kill -TERM`` that reached it untranslated (``-15``) would be
+  classified as an ordinary command failure and the operation's own category
   would survive a real timeout.
 - At the unguarded gate-output write, the sink adapter's status *becomes* the
   gate's exit status, so a translated kernel status would leave the step
@@ -36,7 +37,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / ".github" / "scripts"))
 import cuprum
-from _release_admission import commands, delivery, policy
+from _release_admission import delivery, policy, statuses
 
 #: The statuses a signal death translates to, and the signals they come from.
 #: Bash reports ``128 + N``; Python reports ``-N``.
@@ -73,10 +74,10 @@ def test_signal_statuses_are_translated_into_the_shells_convention(
     -----
     ``137`` is the load-bearing case. It is both the shell's ``SIGKILL`` status
     and one of the two statuses ``classify_command_failure`` reads as a timeout,
-    so an untranslated ``-9`` would stop the gate recognising an escalated
+    so an untranslated ``-9`` would stop the gate recognizing an escalated
     bound as a timeout at all.
     """
-    assert policy.as_bash_status(reported) == expected, (
+    assert statuses.as_bash_status(reported) == expected, (
         "a signal death must be reported in the shell's 128+signal convention"
     )
 
@@ -101,7 +102,7 @@ def test_ordinary_statuses_pass_through_untranslated(
     from a shell-like child would otherwise become ``271``, which no shell can
     report and which no comparison downstream expects.
     """
-    assert policy.as_bash_status(reported) == expected, (
+    assert statuses.as_bash_status(reported) == expected, (
         "a non-negative status is already in the shell's convention"
     )
 
@@ -141,7 +142,7 @@ def test_launch_refusals_keep_the_shells_statuses(
     (``ENOTDIR``), which ``timeout`` reported as ``126`` -- only ``ENOENT``
     produced ``127``.
     """
-    assert policy.launch_failure_status(error) == expected, (
+    assert statuses.launch_failure_status(error) == expected, (
         "a refused launch must keep the status the shell's timeout produced"
     )
 
@@ -166,29 +167,32 @@ def _result(exit_code: int) -> cuprum.CommandResult:
 
 
 def test_elapsed_bound_classifies_as_the_timeout_status() -> None:
-    """Verify an elapsed bound is classified by ``classify_command_failure``.
+    """Verify an elapsed bound is classified as a timeout, not as its caller's.
 
     Notes
     -----
-    The bound reports ``None`` rather than a status, so ``classify_result`` is
-    what supplies ``124``. Asserting the classification rather than the literal
-    is what makes this the contract the gate's own dispatch depends on: a
-    ``None`` that reached :func:`policy.classify_command_failure` as anything
-    else would classify an elapsed bound by the operation's own category.
+    The bound reports ``None`` rather than a status, so ``translate_exit`` is
+    what supplies the ``124`` and, with it, the ``timed_out`` outcome. The
+    classification is asserted rather than the literal because the *outcome* is
+    what :func:`policy.classify_command_result` reads: a ``None`` that reached
+    it as anything else would classify an elapsed bound by the operation's own
+    category.
     """
-    assert commands.classify_result(None) == 124, (
+    assert statuses.translate_exit(None).status == 124, (
         "an elapsed bound must carry the timeout status"
     )
-    assert (
-        policy.classify_command_failure(124, policy.ErrorCategory.API_ERROR).outcome
-        == policy.Outcome.FAILURE
-    ), "the timeout status must be classified"
-    assert (
-        policy.classify_command_failure(
-            124, policy.ErrorCategory.API_ERROR
-        ).error_category
-        == policy.ErrorCategory.TIMEOUT
-    ), "an elapsed bound must reach the timeout category, not the caller's own"
+    assert statuses.translate_exit(None).outcome == policy.CommandOutcome.TIMED_OUT, (
+        "an elapsed bound must be named as a timeout, not as a plain failure"
+    )
+    classification = policy.classify_command_result(
+        statuses.translate_exit(None), policy.ErrorCategory.API_ERROR
+    )
+    assert classification.outcome == policy.Outcome.FAILURE, (
+        "the timeout status must be classified as a failure"
+    )
+    assert classification.error_category == policy.ErrorCategory.TIMEOUT, (
+        "an elapsed bound must reach the timeout category, not the caller's own"
+    )
 
 
 @pytest.mark.parametrize(("reported", "expected"), SIGNAL_STATUS_CASES)
@@ -211,14 +215,14 @@ def test_classify_result_translates_a_signalled_command(
     by the escalation must classify as a timeout here rather than fall through
     to the operation's own category.
     """
-    assert commands.classify_result(_result(reported)) == expected, (
+    assert statuses.classify_result(_result(reported)) == expected, (
         "a signalled command must reach classification in the shell's convention"
     )
 
 
 def test_classify_result_leaves_an_ordinary_status_alone() -> None:
     """Verify a command that failed on its own terms is not reclassified."""
-    assert commands.classify_result(_result(1)) == 1, (
+    assert statuses.classify_result(_result(1)) == 1, (
         "a plain failure must reach classification unchanged"
     )
 
@@ -296,7 +300,11 @@ def test_refused_sink_launch_names_the_program(
     """
     missing = tmp_path / "definitely-not-here"
 
-    assert delivery.append_record(str(missing), str(tmp_path / "t.jsonl"), "r") == 127
+    status = delivery.append_record(str(missing), str(tmp_path / "t.jsonl"), "r")
+
+    assert status == 127, (
+        "a program the operating system cannot launch must read as 127"
+    )
     captured = capsys.readouterr()
     assert f"release-admission adapter could not be run: {missing}" in captured.err, (
         "a refused sink launch must name the program it could not run"

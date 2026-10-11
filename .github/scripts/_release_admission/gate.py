@@ -21,8 +21,9 @@ freeze them:
   revision ending in a newline into a bounded mismatch.
 
 Bounding is native. The shell wrapped each command in GNU ``timeout`` and
-reported ``124`` (or ``137``) when it elapsed; :func:`commands.run_bounded`
-reproduces both the grace and the classification.
+reported ``124`` (or ``137``) when it elapsed; :mod:`bounding` reproduces both
+the grace and the escalation, and :mod:`statuses` turns the result into the
+outcome this module classifies.
 """
 
 import dataclasses
@@ -175,8 +176,8 @@ class Gate:
 
     def _read_clock(self) -> tuple[str, bool]:
         """Read the clock adapter once, reporting an unsuccessful exit."""
-        status, reading = commands.read_monotonic_seconds(self._configuration.programs)
-        return reading, status != 0
+        result = commands.read_monotonic_seconds(self._configuration.programs)
+        return result.output, result.outcome != policy.CommandOutcome.SUCCEEDED
 
     def _dispatch(self, operation: policy.Operation) -> None:
         """Run the named operation and adopt its policy classification.
@@ -207,54 +208,61 @@ class Gate:
                 )
 
     def _resolve_tag_commit(self) -> None:
-        """Resolve the candidate revision through the API and compare it."""
-        status, resolved = commands.github_resolve_commit(
+        """Resolve the candidate revision through the API and compare it.
+
+        The comparison itself is a policy decision about two revisions, so it
+        runs only once the command has succeeded; a command that did not is
+        classified by its own outcome and the operation's ``api_error``
+        category.
+        """
+        result = commands.github_resolve_commit(
             self._configuration.programs,
             repository=self._configuration.repository,
             revision=self._configuration.revision,
             timeout_seconds=int(self._configuration.timeout_seconds),
         )
         self._apply(
-            policy.classify_commit_resolution(self._configuration.revision, resolved)
-            if status == 0
-            else policy.classify_command_failure(status, policy.ErrorCategory.API_ERROR)
+            policy.classify_commit_resolution(
+                self._configuration.revision, result.output
+            )
+            if result.outcome == policy.CommandOutcome.SUCCEEDED
+            else policy.classify_command_result(result, policy.ErrorCategory.API_ERROR)
         )
 
     def _fetch_candidate_revision(self) -> None:
         """Fetch the candidate revision from ``origin``.
 
-        A fetch that succeeds while the gate has already classified nothing is
-        success/none, which is the shell's ``return 0`` from its fetch helper.
-        Any other status enters :func:`policy.classify_command_failure` with
-        ``fetch_error`` as the caller's own category, so only a timeout is
-        re-classified.
+        The fetch is reported rather than parsed, so the only decision is
+        whether it succeeded. Any other outcome enters
+        :func:`policy.classify_command_result` with ``fetch_error`` as the
+        caller's own category, so only a timeout is re-classified.
         """
-        status = commands.git_fetch_revision(
+        result = commands.git_fetch_revision(
             self._configuration.programs,
             revision=self._configuration.revision,
             timeout_seconds=int(self._configuration.timeout_seconds),
         )
         self._apply(
-            policy.Classification(policy.Outcome.SUCCESS, policy.ErrorCategory.NONE)
-            if status == 0
-            else policy.classify_command_failure(
-                status, policy.ErrorCategory.FETCH_ERROR
-            )
+            policy.classify_command_result(result, policy.ErrorCategory.FETCH_ERROR)
         )
 
     def _fetch_workflow_run(self) -> None:
-        """Ask the API for the workflow run covering the candidate revision."""
-        status, run_id = commands.github_find_workflow_run(
+        """Ask the API for the workflow run covering the candidate revision.
+
+        The run identifier is adopted even from an unsuccessful command, which
+        is what the shell's command substitution did: a failed request left the
+        variable empty, and an empty identifier is precisely what
+        :func:`policy.classify_evidence` refuses.
+        """
+        result = commands.github_find_workflow_run(
             self._configuration.programs,
             repository=self._configuration.repository,
             revision=self._configuration.revision,
             timeout_seconds=int(self._configuration.timeout_seconds),
         )
-        self._result.workflow_run_id = run_id
+        self._result.workflow_run_id = result.output
         self._apply(
-            policy.Classification(policy.Outcome.SUCCESS, policy.ErrorCategory.NONE)
-            if status == 0
-            else policy.classify_command_failure(status, policy.ErrorCategory.API_ERROR)
+            policy.classify_command_result(result, policy.ErrorCategory.API_ERROR)
         )
 
     def _apply(self, result: policy.Classification) -> None:

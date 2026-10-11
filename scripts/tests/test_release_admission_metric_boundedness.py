@@ -26,7 +26,6 @@ Example (run from the repository root)::
         -c /dev/null --rootdir=. -p no:cacheprovider
 """
 
-import pathlib
 import typing as typ
 
 import pytest
@@ -57,6 +56,8 @@ from release_admission_test_support import (
 pytest_plugins = ("cmd_mox.pytest_plugin",)
 
 if typ.TYPE_CHECKING:
+    import pathlib
+
     from cmd_mox import CmdMox
 
 

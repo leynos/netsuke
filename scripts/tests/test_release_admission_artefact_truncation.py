@@ -1,11 +1,19 @@
 r"""Pin where the gate stops when an artefact target cannot be truncated.
 
-``load_configuration`` creates both artefact files before it reads anything
-else, and it does so in two passes: every parent directory first, then every
-file truncated empty. The first pass refuses a path whose *parent* cannot be
-made, which :mod:`test_release_admission_environment_contract` pins. This
-module pins the second, where the target itself cannot be opened, and it
-separates two contracts a single technique cannot both hold.
+The gate creates both artefact files before it runs any operation, and it does
+so in two passes: every parent directory first, then every file truncated empty.
+The first pass refuses a path whose *parent* cannot be made, which
+:mod:`test_release_admission_environment_contract` pins. This module pins the
+second, where the target itself cannot be opened, and it separates two contracts
+a single technique cannot both hold.
+
+The effects are *orchestrated* by
+:func:`~_release_admission.configuration.prepare_destination`, and the recording
+port in :mod:`test_release_admission_artefact_initialization` pins that
+orchestration directly -- which operand each effect receives, and in what order.
+What this module adds cannot be reached from a double: it drives the real entry
+point against real paths, so the configured spelling is shown to reach the
+operating system itself rather than a substitute for it.
 
 **The order** is what the directory cases pin, and it is asymmetric. The shell
 ran ``: >"$metrics_file"; : >"$trace_file"``, so a refused *metrics* target
@@ -94,7 +102,7 @@ SLASH_SUFFIX = "/"
 #: The suffix that separates the shell's ``mkdir`` operand from the configured
 #: path's :attr:`~pathlib.Path.parent`. ``Path`` normalizes *this* away too, but
 #: the two forms then name different directories rather than the same one in
-#: two spellings: the shell made the target's parent, and the normalised parent
+#: two spellings: the shell made the target's parent, and the normalized parent
 #: is the directory the target sits in.
 DOT_COMPONENT_SUFFIX = "/."
 
@@ -266,7 +274,7 @@ def test_dot_component_target_creates_the_parent_the_shell_created(
     name different directories. The shell asked coreutils ``dirname(1)``, which
     answers ``reports`` for ``reports/.``, so ``mkdir -p reports`` ran and the
     directory existed by the time the redirection refused the target with
-    ``Is a directory``. ``Path("reports/.")`` normalises the trailing component
+    ``Is a directory``. ``Path("reports/.")`` normalizes the trailing component
     away, so a port deriving the operand from it asks for ``.``, makes nothing,
     and refuses the same target with ``No such file or directory``.
 
@@ -298,7 +306,7 @@ def test_dot_component_target_creates_the_parent_the_shell_created(
 
     assert parent.is_dir(), (
         "the shell's dirname named the parent and mkdir -p created it, so the "
-        "port must create it too rather than mkdir-ing the normalised parent"
+        "port must create it too rather than mkdir-ing the normalized parent"
     )
     _assert_refused_diagnostic(run, configured)
     _assert_no_boundary_was_reached(adapted)

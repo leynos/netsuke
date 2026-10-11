@@ -142,7 +142,7 @@ reproduce:
   own kind. The shell reached it through GNU ``timeout``, which printed
   ``timeout: failed to run command '<program>': <reason>`` and exited ``127``
   for a missing program and ``126`` for any other refusal. Neither status is
-  ``124`` or ``137``, so ``classify_command_failure`` keeps the operation's own
+  ``124`` or ``137``, so ``classify_command_result`` keeps the operation's own
   category: a missing ``gh`` is ``api_error``, a missing ``git`` is
   ``fetch_error``. The Python gate prints its own sentence naming the program
   and reproducing the status, because cuprum raises ``FileNotFoundError`` or
