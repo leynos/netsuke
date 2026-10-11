@@ -10,9 +10,12 @@ duplication at the same site, added the acceptance coverage listed under
 *Progress*, and corrected several prose claims that measurement falsified. A
 fifth pass, over three items a later confirmation raised, fixed a second
 behaviour defect — the `mkdir` operand for a target ending in `/.` — and
-corrected two more stale claims; the accounting is under *Outcomes and
-retrospective*. The pull request remains open for the repository's own review
-and merge, which is a separate concern from this plan's completion.
+corrected two more stale claims. A sixth pass, over three concerns a
+proof-substance assessment raised, repaired the boundedness property's evidence
+without changing the gate or the case count; the accounting for both is under
+*Outcomes and retrospective*. The pull request remains open for the
+repository's own review and merge, which is a separate concern from this plan's
+completion.
 
 ## Purpose
 
@@ -142,9 +145,11 @@ once the shell scripts are deleted.
       the shell refused it, and an external sink's argument vector was never
       asserted. It added two modules and eight cases, taking the runtime suite
       to twelve modules and 89 cases; a fourth pass then added six more, for
-      95, and a fifth added one for the `/.` parent derivation, for 96. The
-      counts and the per-gap modules are recorded under *Outcomes and
-      retrospective*, and the current figure is 96 at `5fc18f23`.
+      95, and a fifth added one for the `/.` parent derivation, for 96. A sixth
+      pass changed no case count: it repaired the boundedness property's
+      evidence rather than the gate, with the count staying at 96. The counts
+      and the per-gap modules are recorded under *Outcomes and retrospective*.
+      The figure reached 96 at `54a6ec66`, when the `dirname(1)` case landed.
 - [x] Clear the third repair pass. It fixed the trailing-slash refusal
       described under *The trailing-slash defect and its repair* and cleared
       the CodeScene duplication at the same site; added coverage for the
@@ -587,3 +592,41 @@ change admission semantics beyond the scope of a form change.
   category, because `143` is not in `TIMEOUT_STATUSES`, and the real case is
   cuprum's `-9` from the `SIGKILL` escalation; and the artefact path paragraph
   still described a normalizing `mkdir` and redirection that no longer exist.
+- 2026-10-11 — A sixth repair pass, over the three concerns a proof-substance
+  assessment raised against the boundedness property. **No production code
+  changed and no case count moved**; what the pass repaired is the property's
+  evidence. All three concerns were valid. The first was that the property
+  generated a workflow-run identifier, asserted its exclusion, and never
+  exercised it. Tracing the reachability rather than accepting the frame
+  produced a stronger result than the concern: `verify_evidence` is the last of
+  the five operations and the gate returns at the first failure, so it runs
+  only when `check_scan_freshness` succeeded; `classify_scan_freshness`
+  succeeds only for `fresh`; and for `fresh`, `classify_evidence` satisfies its
+  disjunction on the first operand, so the `not workflow_run_id` truthiness
+  test is **never evaluated**. The stored identifier has no reachable consumer
+  at all. The removed probe was weaker still: read at the comparison base, its
+  fake set the run answer for an input the gate rejects at the *first*
+  operation, so the identifier never reached even the boundary crossing the
+  probe claimed to test. The disposition is therefore a **narrowing, not a
+  claimed improvement** — the run-identifier exclusion is simply not asserted —
+  and the reachability argument, including what the narrowing costs, is written
+  into the property's own docstring. The second concern was that the `path` and
+  `url` values the property transports are read by nothing in production; the
+  claim is now stated as auxiliary-environment transport, which is what the
+  evidence supports, and the module docstring names the variables as scenarios
+  rather than configuration. The third was that both shared validators and the
+  exclusion helper accept an empty list, so the property could pass on a run
+  that wrote no telemetry. `assert_complete_records` now asserts the operation
+  counters in emission order, the final outcome and category, and the exact
+  trace sequence **before** any exclusion is checked. The measurement that
+  preceded the assertion caught a real error in the expectation I had written
+  from reading rather than running: `gate_complete` carries the *gate's*
+  outcome, not a per-operation success. A diagnostics check was added alongside
+  the records, because the child's standard error is retained with the release
+  and carries the same hazard. Twelve negative controls confirm every new
+  assertion fires, with the trace mutations correctly attributed to the trace
+  assertion rather than masked by the metric one. Two corrections to the
+  assessment's own text were verified and accepted: the expected-label helpers
+  build their dicts from arguments rather than from production enum members
+  (which strengthens the oracle), and the direct requirement is ADR 020's
+  prohibition on identifier-derived labels.

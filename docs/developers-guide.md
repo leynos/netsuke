@@ -2923,12 +2923,35 @@ boundedness metric modules use it. Keep these helpers within the
 release-admission runtime suite rather than treating them as general test
 utilities.
 
+Two of those helpers exist because the exclusion assertions accept an empty
+list. `assert_complete_records` asserts the run's record shape — the operation
+counters in emission order, the final outcome and category, and the exact trace
+sequence — before anything is searched, so a property whose exclusion claim
+holds vacuously over a gate that wrote nothing cannot pass.
+`assert_identifiers_excluded_from_diagnostics` applies the same substring rule
+to the child's standard error, which is retained with the release and therefore
+carries the same cardinality hazard as a label. It is not redundant with the
+record check: the gate's own diagnostics are fixed sentences, but an adapter's
+message reaches that stream through the inherited stderr.
+
 The isolated subprocess uses `GITHUB_REPOSITORY` as the fixed repository value
 at its doubled GitHub boundary. The boundedness property generates canonical
 lowercase hexadecimal Git object IDs of 40 or 64 characters so execution
 reaches the commit and workflow-run requests. Arbitrary Unicode values remain
 probes for telemetry-only identifiers, which do not construct requests;
 malformed newline revisions are covered by deterministic failure tests.
+
+The property deliberately generates **no** workflow-run identifier, and that
+absence is a finding rather than a saving. `verify_evidence` is the last of the
+five operations and the gate stops at the first failure, so it runs only when
+`check_scan_freshness` succeeded; `classify_scan_freshness` succeeds only for
+`fresh`; and `classify_evidence` short-circuits its disjunction on the `fresh`
+operand, so its `not workflow_run_id` test is never evaluated. The stored
+identifier consequently has no reachable consumer, and neither the identifier
+the API returns nor a fabricated one can reach a record. A change that makes a
+run identifier reachable — by letting a non-fresh state reach
+`verify_evidence`, or by recording the identifier — needs its own case, because
+this property does not cover it.
 
 Pull-request CI invokes this target separately from the workflow-contract
 tests. Keep both gates: the runtime suite exercises the process boundary, while
