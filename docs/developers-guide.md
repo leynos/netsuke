@@ -2946,7 +2946,11 @@ lowercase hexadecimal Git object IDs of 40 or 64 characters so execution
 reaches the commit and workflow-run requests. Arbitrary Unicode values remain
 probes for identifiers that reach telemetry through paths other than request
 construction — the workflow-run identifier and two environment-only values;
-malformed newline revisions are covered by deterministic failure tests.
+malformed newline revisions are covered by deterministic failure tests. Those
+generated identifiers carry a marker character that no emitted label value
+contains, so an exclusion failure means an identifier leaked rather than that a
+short identifier happened to be a substring of the gate's own vocabulary. A
+length bound alone would not do it: `none` and `failure` are both labels.
 
 The property generates a workflow-run identifier and makes the doubled API
 **answer with it**, so the value reaches the gate's own result through

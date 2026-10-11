@@ -13,10 +13,13 @@ behaviour defect — the `mkdir` operand for a target ending in `/.` — and
 corrected two more stale claims. A sixth pass, over three concerns a
 proof-substance assessment raised, repaired the boundedness property's evidence
 without changing the gate or the case count, and a seventh pass withdrew part
-of that repair after measurement falsified the reason given for it; the
-accounting for all of it is under *Outcomes and retrospective*. The pull
-request remains open for the repository's own review and merge, which is a
-separate concern from this plan's completion.
+of that repair after measurement falsified the reason given for it. An eighth
+pass then repaired two defects those two passes introduced: a CodeScene
+`Large Method` regression in the test module they edited, and a false positive
+in the property's own exclusion assertion. The accounting for all of it is
+under *Outcomes and retrospective*. The pull request remains open for the
+repository's own review and merge, which is a separate concern from this plan's
+completion.
 
 ## Purpose
 
@@ -150,9 +153,12 @@ once the shell scripts are deleted.
       pass changed no case count: it repaired the boundedness property's
       evidence rather than the gate, with the count staying at 96. A seventh
       pass changed none either, withdrawing part of that repair and closing one
-      further evidence gap. The counts and the per-gap modules are recorded
-      under *Outcomes and retrospective*. The figure reached 96 at `54a6ec66`,
-      when the `dirname(1)` case landed.
+      further evidence gap. An eighth pass then repaired two defects those two
+      passes introduced — a CodeScene `Large Method` regression and a false
+      positive in the property's exclusion assertion — and likewise changed no
+      case count, the suite reporting 96 again. The counts and the per-gap
+      modules are recorded under *Outcomes and retrospective*. The figure
+      reached 96 at `54a6ec66`, when the `dirname(1)` case landed.
 - [x] Clear the third repair pass. It fixed the trailing-slash refusal
       described under *The trailing-slash defect and its repair* and cleared
       the CodeScene duplication at the same site; added coverage for the
@@ -654,3 +660,60 @@ change admission semantics beyond the scope of a form change.
   Restored from the committed revision and the module re-linted. **Lesson: a
   split point is safe only when the remaining module still exports everything
   its consumers import — check the importers, not the seam.**
+- 2026-10-11 — An eighth pass, after the sixth and seventh were pushed and the
+  hosted checks were read. It repairs **two defects the sixth and seventh
+  passes themselves introduced**, both of them mine and both found by
+  measurement rather than by review.
+
+  The first is a **CodeScene `Large Method` regression in the property module
+  the sixth and seventh passes edited**. The advisory check went from `success`
+  at `3ad4d90a` to **`failure` at `fee4151d`** on the file the sixth and
+  seventh passes edited. `cs check` on the file at each revision gives the
+  shape of it: 10.00 at `05fa166e` and `3ad4d90a`, **9.54** at `9199d26b` (81
+  counted lines, threshold 70), **9.56** at `fee4151d` (78 lines by CodeScene's
+  own count). The cause is that the sixth pass folded the exclusion assertions
+  *back into* the property body: measured from the body's first statement,
+  `identifiers = ...`, to its last assertion, that body went from 52 lines at
+  `3ad4d90a` to CodeScene's 78 counted lines at `fee4151d`, and the seventh
+  pass kept all of it. The repair is the one `AGENTS.md` asks for — "where a
+  function is too long, extract meaningfully named helper functions" — and it
+  is the pattern the module already used for `_answer_workflow_run` and
+  `_run_under_generated_identifiers`. Four helpers now each state one claim:
+  the run is valid under the fixed schema and reached the evidence check; the
+  generated revision reached both doubled boundaries; the environment-only
+  identifiers crossed the subprocess boundary and no further; and the records
+  exist *before* the identifiers are excluded from records and diagnostics. No
+  assertion is removed, reordered, weakened, or moved to an unmeasured path,
+  nothing is suppressed, no threshold moves, and no rule is disabled. The file
+  returns to **10.00**.
+
+  The second is a **real false positive in the property's own exclusion
+  assertion**, which the seventh pass's run-id restoration exposed.
+  `make test-release-admission` failed:
+  `AssertionError: generated identifiers
+  must never become metric label values; matching identifier/value pairs:
+  [('_', 'resolve_tag_commit')]`,
+  falsified by `run_id='_'`. The assertion is a substring search of each
+  identifier against every label value, so a one-character identifier collides
+  with the gate's own vocabulary and the property fails on a run where the gate
+  leaked nothing. **The first fix I tried — a minimum length — was not enough,
+  and the reason is structural, not a matter of picking a better number: `none`
+  is four characters and is a label, and `failure` is seven.** The fix is a
+  marker character: `IDENTIFIER_TEXT` maps every generated value through a `7`
+  prefix, and a probe checks the two claims in the comment rather than
+  asserting them — all 26 fixed tokens across the six validator vocabularies are
+  `[a-z_]+`, no diagnostic sentence contains the marker, and **0 of 160
+  generated values is a substring of any of the 33 emitted tokens**. The same
+  probe shows what the marker replaced: `'_'` is a substring of 18 of those 33
+  tokens, `'a'` of 22, and the empty string of all 33. A negative control
+  confirms the helper still fires on an injected leak. It costs nothing the
+  property was testing — 137 of 160 generated values still contain non-ASCII
+  text — and Hypothesis seeds 1–5 plus the full suite now pass, **96 cases as
+  before**.
+
+  **Lesson: a body length that was safe becomes unsafe when a later pass adds
+  assertions to it, and the check that would have caught it is the hosted one.
+  A git-level "the property passes" verdict does not cover a *file-health*
+  metric, and a passing property does not mean its assertion is well-formed — a
+  substring search over a fixed vocabulary is not a claim about identifiers
+  until the identifiers are moved outside that vocabulary.**
