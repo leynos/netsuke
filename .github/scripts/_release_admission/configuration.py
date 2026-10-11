@@ -22,9 +22,13 @@ mode check rather than quietly becoming observation mode.
 
 import dataclasses
 import os
+import typing as typ
 from pathlib import Path
 
 from . import commands, policy, telemetry
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
 
 #: Environment variables the gate requires, and the diagnostic each produces.
 REPOSITORY_VARIABLE = "GITHUB_REPOSITORY"
@@ -243,11 +247,11 @@ def _create_artefacts(*paths: OutputPath) -> None:
     configuration the gate then refuses.
 
     A refusal by the operating system reaches the caller as a
-    :class:`ConfigurationError` from one of the two helpers below, so the gate
-    reports one bounded diagnostic rather than an uncaught traceback.
-    ``mkdir`` and the truncation each reported their own sentence in the shell,
-    so this message is a port-specific wording; the position and the exit
-    status are the shell's.
+    :class:`ConfigurationError` from :func:`_refusing`, so the gate reports one
+    bounded diagnostic rather than an uncaught traceback. ``mkdir`` and the
+    truncation each reported their own sentence in the shell, so the diagnostic
+    is a port-specific wording; the position, the reason, and the exit status
+    are the shell's.
     """
     for path in paths:
         _make_parent(path)
@@ -258,33 +262,63 @@ def _create_artefacts(*paths: OutputPath) -> None:
 def _make_parent(path: OutputPath) -> None:
     """Create one artefact's parent directory, refusing a rejection.
 
-    Raises
-    ------
-    ConfigurationError
-        When the operating system refuses the directory.
+    ``Path`` normalizes a trailing slash away, but the *directory* is the same
+    either way -- ``mkdir -p "dir/"`` and ``mkdir -p "dir"`` both succeed in the
+    shell -- so the resolved parent is the correct operand here. The file's own
+    operand is not, which is why :func:`_truncate` opens the configured
+    spelling instead, and why the refusal travels through :func:`_refusing` as
+    a :class:`ConfigurationError`.
     """
-    try:
+
+    def create() -> None:
+        """Make the parent directory, tolerating one that already exists."""
         path.resolved.parent.mkdir(parents=True, exist_ok=True)
-    except OSError as error:
-        msg = (
-            f"release-admission could not create the directory for "
-            f"{path.configured}: {_reason(error)}"
-        )
-        raise ConfigurationError(msg) from error
+
+    _refusing("release-admission could not create the directory for", path, create)
 
 
 def _truncate(path: OutputPath) -> None:
-    """Create one artefact file empty, refusing a rejection.
+    r"""Create one artefact file empty, refusing a rejection.
+
+    The operand is the operator's *configured* string rather than the resolved
+    :class:`~pathlib.Path`, because a trailing slash is a filesystem
+    distinction rather than a cosmetic one. ``Path("metrics.jsonl/")`` drops
+    the slash, so ``write_bytes`` on it silently creates the regular file the
+    shell's ``: >"metrics.jsonl/"`` refused with ``Is a directory``; opening
+    the configured spelling refuses it as well, and with the system's own
+    sentence. This mirrors ``delivery._append_in_process``, which opens the
+    configured spelling for the same reason, and the refusal travels through
+    :func:`_refusing` as a :class:`ConfigurationError`.
+    """
+
+    def open_empty() -> None:
+        """Open the configured path for writing, truncating it to nothing."""
+        # ruff: ignore[builtin-open] - the configured string is the operand.
+        with open(path.configured, "wb"):
+            pass
+
+    _refusing("release-admission could not create", path, open_empty)
+
+
+def _refusing(lead: str, path: OutputPath, operation: cabc.Callable[[], None]) -> None:
+    """Perform one filesystem operation, refusing a rejection.
+
+    ``mkdir`` and the redirection each reported their own sentence in the
+    shell, and both reach the caller as the same bounded diagnostic: the
+    message keeps the system's own text through :func:`_reason`, so the
+    operator still reads *why* the path was refused. One helper serves both
+    operations because the failure handling is identical and duplicating the
+    seek-and-name logic twice would only invite the two to drift apart.
 
     Raises
     ------
     ConfigurationError
-        When the operating system refuses the file.
+        When the operating system refuses the operation.
     """
     try:
-        path.resolved.write_bytes(b"")
+        operation()
     except OSError as error:
-        msg = f"release-admission could not create {path.configured}: {_reason(error)}"
+        msg = f"{lead} {path.configured}: {_reason(error)}"
         raise ConfigurationError(msg) from error
 
 
