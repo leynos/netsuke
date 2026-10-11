@@ -1419,3 +1419,48 @@ change admission semantics beyond the scope of a form change.
   `test_classify_result_translates_a_signalled_command` no longer says the
   command was killed by the escalation. Its assertions are unchanged, and so is
   `{124, 137}`.
+
+- 2026-10-11 — The follow-up at `c43bb6fc` accepted the escalation correction
+  but kept the documentation confirmation partial, naming four statements that
+  were still inaccurate. Each was checked against the source before being acted
+  on, and all four are repaired at `f88b12ef`:
+
+  - `statuses.py`'s module summary said GNU `timeout` reported `124` for an
+    elapsed timeout. It could report `124` **or** `137`, and this port
+    translates `None` to `124` in both cases. The summary now says so.
+  - Two explanations — the test module's first bullet and the developers'
+    guide — said a completed `SIGKILL` termination *would* receive an
+    ordinary-failure classification without stating the condition. Both now
+    say "without translation", and both add the positive statement that
+    translation maps `-9` to `137`, which the policy classifies as a timeout.
+    The test explanation no longer says the operation's category would survive
+    "a real timeout": independent signal termination does not establish that
+    the bound expired.
+  - `test_classify_result_translates_a_signalled_command`'s Notes said a
+    command terminated by a signal must classify as a timeout. That is false
+    for two of its own three cases. It now states that the status must reach
+    `classify_result` in the shell's convention, and that only the `SIGKILL`
+    case produces a timeout-classified status: `143` and `130` are not in
+    `TIMEOUT_STATUSES` and keep their operation's own category. Confirmed by
+    running the translation — `translate_exit(-15)` → `143`/`FAILED`,
+    `translate_exit(-2)` → `130`/`FAILED`, `translate_exit(-9)` →
+    `137`/`TIMED_OUT`.
+  - The entry above claimed `137` is reachable "only" through independent
+    `SIGKILL` termination. That was too restrictive: `translate_exit(137)`
+    also names an explicit exit status of `137` as `TIMED_OUT`, checked
+    directly. The entry now names both routes.
+
+  Every edit is a docstring or prose change. Stripping module, class, and
+  function docstrings from the two edited Python files leaves an identical AST,
+  and no assertion moved. The assessment's own limitation stands as recorded:
+  it did not execute repository code, reproduce the `timeout` probes, inspect
+  CI, or verify the merge-base, so those results are supplied evidence rather
+  than independent confirmation.
+
+  The follow-up was answered at `6114090202` with **"Treat the requested
+  documentation check as complete at this candidate"**: all four corrections
+  match the source, no documentation defect from the previous list remains
+  unrepaired, and the related-claim sweep found no further instance of the
+  attribution contradiction in the inspected paths. Its confirmation is
+  candidate-bound to `f88b12ef` and explicitly does not establish integration
+  with the latest `main`.
