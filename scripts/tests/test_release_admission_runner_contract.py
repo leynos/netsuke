@@ -11,7 +11,7 @@ These cases run real children instead. The distinction they pin is the one the
 gate's stream wiring rests on:
 
 - A runner that *captures* standard output returns that text, and reports
-  standard error as a string -- because the child's standard error goes to the
+  standard error as ``None`` -- because the child's standard error goes to the
   gate's own, it is not in the pipe.
 - A runner that *inherits* both streams returns ``None`` for each, because
   there was no stream of ours to read, while the text still reaches the gate's

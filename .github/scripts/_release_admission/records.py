@@ -149,7 +149,7 @@ class OperationRecord:
     def trace_fields(self) -> TraceFields:
         """Return the fields for the operation's completion trace."""
         return TraceFields(
-            policy.TRACE_OPERATION,
+            policy.TraceEvent.OPERATION_COMPLETE,
             self.operation,
             self.outcome,
             self.error_category,
@@ -183,7 +183,7 @@ class GateRecord:
     def trace_fields(self) -> TraceFields:
         """Return the fields for the gate-completion trace."""
         return TraceFields(
-            policy.TRACE_GATE,
+            policy.TraceEvent.GATE_COMPLETE,
             policy.Operation.VERIFY_EVIDENCE,
             self.outcome,
             self.error_category,
@@ -195,7 +195,7 @@ class GateRecord:
 #: It reports delivery, not admission, so it is unconditional success and does
 #: not belong to any gate result.
 WORKFLOW_OUTPUT_TRACE: typ.Final[TraceFields] = TraceFields(
-    policy.TRACE_WORKFLOW_OUTPUT,
+    policy.TraceEvent.WORKFLOW_OUTPUT_DELIVERY,
     policy.Operation.VERIFY_EVIDENCE,
     policy.Outcome.SUCCESS,
     policy.ErrorCategory.NONE,
@@ -227,14 +227,14 @@ def delivery_trace_fields(*, trace_sink_failed: bool) -> TraceFields:
     """
     if trace_sink_failed:
         return TraceFields(
-            policy.TRACE_DELIVERY,
+            policy.TraceEvent.TRACE_DELIVERY,
             policy.Operation.VERIFY_EVIDENCE,
             policy.Outcome.FAILURE,
             policy.ErrorCategory.UNKNOWN,
             "0",
         )
     return TraceFields(
-        policy.TRACE_DELIVERY,
+        policy.TraceEvent.TRACE_DELIVERY,
         policy.Operation.VERIFY_EVIDENCE,
         policy.Outcome.SUCCESS,
         policy.ErrorCategory.NONE,

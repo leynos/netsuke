@@ -108,7 +108,7 @@ def load_configuration() -> Configuration:
         repository=repository,
         revision=revision,
         output=_required(OUTPUT_VARIABLE, OUTPUT_DIAGNOSTIC),
-        evidence_state=_optional(EVIDENCE_VARIABLE, policy.DEFAULT_EVIDENCE_STATE),
+        evidence_state=_optional(EVIDENCE_VARIABLE, policy.EvidenceState.MISSING),
         timeout_seconds=_optional(
             TIMEOUT_VARIABLE, str(policy.DEFAULT_OPERATION_TIMEOUT_SECONDS)
         ),

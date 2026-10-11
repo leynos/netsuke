@@ -27,9 +27,7 @@ Example (run from the repository root)::
 """
 
 import pathlib
-import sys
 import typing as typ
-from pathlib import Path
 
 import pytest
 from hypothesis import given, settings
@@ -55,10 +53,6 @@ from release_admission_test_support import (
     operation_records,
     run_gate,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS_DIR = REPO_ROOT / ".github" / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
 
 pytest_plugins = ("cmd_mox.pytest_plugin",)
 

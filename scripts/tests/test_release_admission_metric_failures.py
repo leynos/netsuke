@@ -20,6 +20,7 @@ from release_admission_test_doubles import REVISION
 from release_admission_test_scenarios import delay_workflow_run_query
 from release_admission_test_support import (
     CANARY_BY_OPERATION,
+    CLOCK_ARGUMENTS,
     GITHUB_REPOSITORY,
     METRICS_VALIDATOR,
     AdaptedBoundaries,
@@ -56,8 +57,6 @@ INVALID_CONFIGURATION_TRACE_SIGNATURES = [
     ("workflow_output_delivery", "verify_evidence", "success", "none"),
     ("trace_delivery", "verify_evidence", "success", "none"),
 ]
-#: The clock the gate reads twice around every operation, as it invokes it.
-CLOCK_ARGUMENTS = ("-c", "import time; print(time.monotonic())")
 
 #: The one-second delay the duration test injects, well inside both the
 #: default thirty-second operation bound and the shim's own client timeout.

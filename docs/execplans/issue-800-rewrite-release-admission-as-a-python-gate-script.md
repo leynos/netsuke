@@ -671,8 +671,9 @@ change admission semantics beyond the scope of a form change.
   wrong: the base fake line `${NETSUKE_FAKE_WORKFLOW_RUN_ID-1001}` uses `-`, a
   default for the *unset* case, so an injected identifier was returned. `1001`
   appears in a calls log only when the variable is unset (the
-  `answer_no_workflow_run` case). I had generalized from the unset case to the
-  set case without running the set case. A three-arm probe settles it: with the
+  `answer_no_workflow_run` case). The narrowing generalized from the unset case
+  to the set case without the set case having been run. A three-arm probe
+  settles it: with the
   stored identifier copied into an operation record, the property **fails**
   when the doubled API answers with the identifier and **passes** when it
   answers with nothing — a no-op control that shows the failure can only come
@@ -690,7 +691,7 @@ change admission semantics beyond the scope of a form change.
   order, the final outcome and category, **the gate counter repeating that
   outcome**, and the exact trace sequence **before** any exclusion is checked.
   The measurement that preceded the assertion caught a real error in the
-  expectation I had written from reading rather than running: `gate_complete`
+  expectation written from reading rather than running: `gate_complete`
   carries the *gate's* outcome, not a per-operation success. A diagnostics
   check was added alongside the records, because the child's standard error is
   retained with the release and carries the same hazard. Negative controls
@@ -716,8 +717,8 @@ change admission semantics beyond the scope of a form change.
   its consumers import — check the importers, not the seam.**
 - 2026-10-11 — An eighth pass, after the sixth and seventh were pushed and the
   hosted checks were read. It repairs **two defects the sixth and seventh
-  passes themselves introduced**, both of them mine and both found by
-  measurement rather than by review.
+  passes themselves introduced**, both introduced by those passes and both
+  found by measurement rather than by review.
 
   The first is a **CodeScene `Large Method` regression in the property module
   the sixth and seventh passes edited**. The advisory check went from `success`
@@ -750,7 +751,7 @@ change admission semantics beyond the scope of a form change.
   falsified by `run_id='_'`. The assertion is a substring search of each
   identifier against every label value, so a one-character identifier collides
   with the gate's own vocabulary and the property fails on a run where the gate
-  leaked nothing. **The first fix I tried — a minimum length — was not enough,
+  leaked nothing. **The first fix tried — a minimum length — was not enough,
   and the reason is structural, not a matter of picking a better number: `none`
   is four characters and is a label, and `failure` is seven.** The fix is a
   marker character: `IDENTIFIER_TEXT` maps every generated value through a `7`
@@ -829,9 +830,10 @@ change admission semantics beyond the scope of a form change.
   assertion exists to catch, and it fails silently. A trailing marker is not a
   guard against a strip that removes the character the marker is not at.**
 
-  A sweep of the guide after the split found **two stale paragraphs**, one mine
-  and one not. The one mine is the support-module inventory: it named seven
-  modules where the directory now holds eight, so
+  A sweep of the guide after the split found **two stale paragraphs**, one
+  introduced by the split and one older. The one introduced by the split is the
+  support-module inventory: it named seven modules where the directory now
+  holds eight, so
   `release_admission_test_boundedness.py` is named and its ownership stated.
   The one that is not is older: the same section says the target "runs the ten
   runtime modules" and lists ten, while the Makefile and the workflow contract's
@@ -847,9 +849,10 @@ change admission semantics beyond the scope of a form change.
   `47bd4889`, "Repair the guide's stale module count and support list". The
   ninth pass split a support module and corrected the guide's inventory and
   `_status_and_output` note; sweeping the surrounding prose afterwards found
-  the three defects recorded above — the guide's inventory (mine), the guide's
-  runtime-module list (older), and this plan's own current-state support-module
-  count, which had said "a facade and five modules" while disk held eight.
+  the three defects recorded above — the guide's inventory (introduced by the
+  split), the guide's runtime-module list (older), and this plan's own
+  current-state support-module count, which had said "a facade and five
+  modules" while disk held eight.
 
   Every provenance claim in the corrected prose was verified against history
   before it was committed, because a prose correction that names a commit is
@@ -997,3 +1000,67 @@ change admission semantics beyond the scope of a form change.
   number changes the number. That figure is stated once in the commit message
   instead, measured against the frozen tree. A count embedded in the diff it
   describes is unstable by construction; this plan should not carry one.
+- 2026-10-11 — **Fourteenth pass, the first formal review's nine inline
+  findings.** Review `5483892176` returned `CHANGES_REQUESTED` on `678b87be`
+  with nine inline comments and no separate banner findings. All nine were
+  verified against the current source before any edit; none was invalid and
+  none was out of scope, so all nine are repaired here. Two are production
+  defects and the rest are contracts or prose.
+
+  1. `delivery._append_via_adapter` converted a refused launch to its status
+     and printed nothing, so a mistyped `..._METRICS_SINK` or `..._OUTPUT_SINK`
+     exited `127` with no diagnostic — while the command adapters' own path
+     called `commands.report_launch_failure` for exactly that reason. The sink
+     path now calls it too, and a new case
+     (`test_refused_sink_launch_names_the_program`) pins the diagnostic and its
+     status together. The module docstring already stated the status mapping;
+     it now states the diagnostic as well.
+  2. `policy` enumerated two vocabularies twice. The four `TRACE_*` constants
+     repeated `TraceEvent` members and had five live consumers in `records`,
+     so those call sites were moved to the members rather than the constants
+     deleted alone; `EVIDENCE_FRESH`, `DEFAULT_EVIDENCE_STATE`, and the bare
+     `"stale"` and `{"missing", ""}` literals in the two classifiers are
+     replaced by an `EvidenceState(Vocabulary)` with `FRESH`, `STALE`, and
+     `MISSING`, consumed from `configuration` too. `EvidenceState` inherits
+     `Vocabulary` directly: **an enumeration cannot be subclassed**, so it
+     cannot extend a sibling vocabulary. The members substitute for the
+     literals without change — `StrEnum` members equal, hash, and serialise as
+     their plain strings, and a probe through both classifiers returns the same
+     `success`/`stale_evidence`/`missing_evidence`/`unknown` answers the
+     literals produced, including for the empty string.
+  3. The ADR-020 addendum claimed "no process the command started is left
+     running" with `setsid()` as the only named escape. `bounding._terminate_group`
+     arms `SIGKILL` only while the direct child is unreaped, and the
+     developers' guide already records the survivor, so the contract was
+     stronger than the code. The addendum now states both survivors and points
+     at the guide for the full limits.
+  4. The plan itself carried seven first-person passages. The rule that forbids
+     them is the project's own (`docs/documentation-style-guide.md`: "Avoid
+     first and second person personal pronouns outside the `README.md` file"),
+     so each sentence is rewritten in the third person rather than flagged.
+  5. The remaining four are test-module defects: an orphaned `sys.path`
+     mutation with nothing importing the package (deleted, with the two
+     imports it alone used), a duplicated `CLOCK_ARGUMENTS` (imported from the
+     support facade instead), a docstring claiming captured standard error is a
+     string where the module's own assertion pins `None`, and a fabricated
+     `FileNotFoundError(20, …)` case asserting a state production cannot
+     reach. The last was the most interesting: `FileNotFoundError(20, …)` keeps
+     its class because only `OSError(errno, …)` maps an errno to a subclass, a
+     real `ENOTDIR` exec raises `NotADirectoryError`, and GNU `timeout` reports
+     `126` — not `127` — for it. The case is deleted and the docstring now says
+     so; `NotADirectoryError` is not a `FileNotFoundError`, so the class-based
+     mapping already answers correctly and no production change was needed.
+  6. The process-bounds case asserted `not _process_exists(descendant_pid)`
+     with a single `os.kill(pid, 0)` check. A zombie answers signal `0`, and
+     the descendant is a reparented grandchild, so the assertion raced
+     whichever process reaps it. A bounded polling helper treats a zombie as
+     gone (`/proc/<pid>/stat` state `Z`) without weakening the claim: the
+     descendant must still die, and the deadline is far shorter than the
+     defect the case guards.
+
+  The plan's own figure of "26 fixed tokens across the six validator
+  vocabularies" was checked against the change rather than assumed unaffected:
+  the emitted token set is built from the five validator enumerations and the
+  three metric names, `EvidenceState` is an operator *input* vocabulary that
+  reaches no record or label, and a probe confirms the members are disjoint
+  from every emitted token. The figure stands.

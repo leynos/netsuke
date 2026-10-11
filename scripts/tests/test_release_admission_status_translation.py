@@ -113,11 +113,6 @@ def test_ordinary_statuses_pass_through_untranslated(
             FileNotFoundError(2, "No such file or directory"), 127, id="absent"
         ),
         pytest.param(
-            FileNotFoundError(20, "Not a directory"),
-            127,
-            id="path-component-is-a-file",
-        ),
-        pytest.param(
             PermissionError(13, "Permission denied"), 126, id="execute-bit-missing"
         ),
         pytest.param(
@@ -142,9 +137,9 @@ def test_launch_refusals_keep_the_shells_statuses(
     The distinction is by error class rather than by errno: ``timeout`` printed
     ``127`` when the program could not be found and ``126`` for every other
     refusal, and :class:`FileNotFoundError` is precisely the first of those.
-    A path whose parent is a file raises :class:`FileNotFoundError` with errno
-    ``ENOTDIR``, which ``timeout`` also reported as ``127`` -- the program is
-    unreachable, so it is indistinguishable from absent.
+    A path whose parent is a regular file raises :class:`NotADirectoryError`
+    (``ENOTDIR``), which ``timeout`` reported as ``126`` -- only ``ENOENT``
+    produced ``127``.
     """
     assert policy.launch_failure_status(error) == expected, (
         "a refused launch must keep the status the shell's timeout produced"
@@ -282,6 +277,29 @@ def test_unexecutable_sink_reports_the_shells_status(tmp_path: Path) -> None:
 
     assert delivery.append_record(sink, str(tmp_path / "target.jsonl"), "r") == 126, (
         "a sink the operating system refuses to execute must report 126"
+    )
+
+
+def test_refused_sink_launch_names_the_program(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Verify a sink the operating system refuses is named on standard error.
+
+    Notes
+    -----
+    The status alone does not say which configured program was refused, and the
+    gate's exit status is that status. A mistyped sink variable would otherwise
+    fail the step in silence. The shell reached the same state through GNU
+    ``timeout``, which printed its own "No such file or directory" line; cuprum
+    raises instead, so the port prints its own sentence, naming the program the
+    same way the command adapters' diagnostic does.
+    """
+    missing = tmp_path / "definitely-not-here"
+
+    assert delivery.append_record(str(missing), str(tmp_path / "t.jsonl"), "r") == 127
+    captured = capsys.readouterr()
+    assert f"release-admission adapter could not be run: {missing}" in captured.err, (
+        "a refused sink launch must name the program it could not run"
     )
 
 

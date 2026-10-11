@@ -31,19 +31,9 @@ _METRIC_VALUE = re.compile(r"[0-9]+([.][0-9]+)?")
 ADMISSION_OBSERVATION_MODE = "false"
 ADMISSION_ENFORCEMENT_MODE = "true"
 
-#: Evidence state meaning "a scan ran for this revision".
-EVIDENCE_FRESH = "fresh"
-
 GATE_METRIC = "netsuke_release_admission_gate_total"
 OPERATION_METRIC = "netsuke_release_admission_operation_total"
 DURATION_METRIC = "netsuke_release_admission_operation_duration_seconds"
-
-TRACE_OPERATION = "operation_complete"
-TRACE_GATE = "gate_complete"
-TRACE_WORKFLOW_OUTPUT = "workflow_output_delivery"
-TRACE_DELIVERY = "trace_delivery"
-
-DEFAULT_EVIDENCE_STATE = "missing"
 
 
 class Vocabulary(enum.StrEnum):
@@ -129,6 +119,24 @@ class TraceEvent(Vocabulary):
     GATE_COMPLETE = "gate_complete"
     WORKFLOW_OUTPUT_DELIVERY = "workflow_output_delivery"
     TRACE_DELIVERY = "trace_delivery"
+
+
+class EvidenceState(Vocabulary):
+    """Name the evidence states the operator reports for a revision.
+
+    The three states a caller can act on are enumerated here so the two
+    classifiers that read an evidence state -- :func:`classify_scan_freshness`
+    and :func:`classify_evidence` -- name the same values the default in
+    :mod:`configuration` supplies, rather than each spelling its own literal.
+    A state outside this set is deliberately *not* enumerated: the
+    classifiers report it as unknown rather than forcing it into one of
+    these, so the vocabulary cannot claim to be closed when the gate accepts
+    more.
+    """
+
+    FRESH = "fresh"
+    STALE = "stale"
+    MISSING = "missing"
 
 
 class CommandStatus(enum.IntEnum):
@@ -290,11 +298,11 @@ def classify_scan_freshness(evidence_state: str) -> Classification:
     >>> classify_scan_freshness("stale").error_category
     <ErrorCategory.STALE_EVIDENCE: 'stale_evidence'>
     """
-    if evidence_state == EVIDENCE_FRESH:
+    if evidence_state == EvidenceState.FRESH:
         return Classification(Outcome.SUCCESS, ErrorCategory.NONE)
-    if evidence_state == "stale":
+    if evidence_state == EvidenceState.STALE:
         return Classification(Outcome.FAILURE, ErrorCategory.STALE_EVIDENCE)
-    if evidence_state in {"missing", ""}:
+    if evidence_state in {EvidenceState.MISSING, ""}:
         return Classification(Outcome.FAILURE, ErrorCategory.MISSING_EVIDENCE)
     return Classification(Outcome.FAILURE, ErrorCategory.UNKNOWN)
 
@@ -324,7 +332,7 @@ def classify_evidence(evidence_state: str, workflow_run_id: str) -> Classificati
     >>> classify_evidence("fresh", "1001").error_category
     <ErrorCategory.MISSING_EVIDENCE: 'missing_evidence'>
     """
-    if evidence_state == EVIDENCE_FRESH or not workflow_run_id:
+    if evidence_state == EvidenceState.FRESH or not workflow_run_id:
         return Classification(Outcome.FAILURE, ErrorCategory.MISSING_EVIDENCE)
     return Classification(Outcome.SUCCESS, ErrorCategory.NONE)
 

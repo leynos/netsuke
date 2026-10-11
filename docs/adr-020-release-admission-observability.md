@@ -244,9 +244,11 @@ contractual rather than incidental.
 **The bound reaches a process group.** A command that outlives its operation
 timeout is signalled as a group, `SIGTERM` first and `SIGKILL` after a
 one-second grace, which is the escalation GNU `timeout --kill-after=1s` gave.
-The worst case is therefore the timeout plus that grace, and no process the
-command started is left running. A descendant that leaves the group with its own
-`setsid()` still escapes, exactly as it did under GNU `timeout`.
+The direct child is reaped within the timeout plus that grace. Two descendants
+can survive, both shared with GNU `timeout`: one that leaves the group with its
+own `setsid()`, and one that ignores `SIGTERM` after the direct child has
+already exited, because `SIGKILL` is sent only while the direct child is
+unreaped. The limits are recorded in full in the developers' guide.
 
 **The streams follow the shell's redirections.** A command whose output the
 gate parses has that stream captured in a pipe the gate reads to end-of-file,

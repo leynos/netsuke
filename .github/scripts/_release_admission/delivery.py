@@ -20,13 +20,16 @@ record keeps being able to say so.
 An adapter the operating system refuses to launch is reported with the status
 the shell produced for the same refusal -- ``127`` for a program that does not
 exist and ``126`` otherwise -- because at the unguarded gate-output write that
-status becomes the gate's own exit status. A failed in-process append reports
+status becomes the gate's own exit status. The refusal is also named on
+standard error, with the same sentence the command adapters print, because a
+status alone does not say which configured program was refused; the shell's
+own ``timeout`` printed such a sentence too. A failed in-process append reports
 ``1``, which is what the shell's ``>>`` failure produced.
 """
 
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the sink seam runs one adapter.
 
-from . import policy
+from . import commands, policy
 
 
 def append_record(sink: str, target: str, record: str) -> int:
@@ -119,5 +122,6 @@ def _append_via_adapter(sink: str, target: str, data: bytes) -> int:
             check=False,
         )
     except OSError as error:
+        commands.report_launch_failure(sink, error)
         return policy.launch_failure_status(error)
     return policy.as_bash_status(completed.returncode)

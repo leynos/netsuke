@@ -124,6 +124,73 @@ def _process_exists(pid: int) -> bool:
     return True
 
 
+def _is_zombie(pid: int) -> bool:
+    """Return whether the pid names an exited process its parent has not reaped.
+
+    Parameters
+    ----------
+    pid
+        Process identifier the probe recorded.
+
+    Returns
+    -------
+    bool
+        Whether the process has exited and is waiting to be reaped.
+
+    Notes
+    -----
+    A zombie still answers signal ``0``, so :func:`_process_exists` alone
+    cannot tell a running process from a finished one. Only ``/proc`` exposes
+    the state character, and this test needs the distinction because the
+    descendant is not this process's child: after the group ``SIGKILL`` the
+    kernel reparents it, and whichever process reaps it decides when the
+    identifier finally disappears. A zombie is dead for this test's purpose --
+    the bound's signal arrived; the bookkeeping is somebody else's.
+
+    An unreadable or absent ``/proc`` entry means the process is gone, which
+    is the answer this probe wants, so both failure modes report ``False``.
+    """
+    stat_file = pathlib.Path(f"/proc/{pid}/stat")
+    try:
+        fields = stat_file.read_text(encoding="utf-8").rsplit(")", 1)[1].split()
+    except (OSError, IndexError):
+        return False
+    return fields[0] == "Z"
+
+
+def _eventually_gone(pid: int, deadline_seconds: float = 2.0) -> bool:
+    """Return whether the pid exits or becomes a zombie before the deadline.
+
+    Parameters
+    ----------
+    pid
+        Process identifier to watch.
+    deadline_seconds
+        How long to keep asking before reporting failure.
+
+    Returns
+    -------
+    bool
+        Whether the process is gone, or dead and awaiting its parent's reap.
+
+    Notes
+    -----
+    The group signal and the descendant's exit are not the same instant. The
+    drain returns when the descendant's descriptors close, which happens at
+    exit, before any reaper collects it, so a single check races the reaper and
+    fails permanently on a host whose ``PID 1`` does not reap. Polling the
+    state character closes that race without weakening the claim: the
+    descendant must still *die*, and the deadline is far shorter than the
+    defect this test guards against.
+    """
+    deadline = time.monotonic() + deadline_seconds
+    while time.monotonic() < deadline:
+        if not _process_exists(pid) or _is_zombie(pid):
+            return True
+        time.sleep(0.05)
+    return False
+
+
 def _bounded_probe_command(
     child: pathlib.Path, pid_file: pathlib.Path
 ) -> cuprum.SafeCmd:
@@ -256,6 +323,6 @@ def test_bounded_run_reaps_a_descendant_that_holds_the_captured_pipe(
         "an elapsed bound must classify as the timeout status"
     )
     descendant_pid = _recorded_pid(pid_file.with_name(f"{pid_file.name}.desc"))
-    assert not _process_exists(descendant_pid), (
+    assert _eventually_gone(descendant_pid), (
         "the group signal must reach a descendant the direct child started"
     )
