@@ -134,11 +134,17 @@ class TraceEvent(Vocabulary):
 class CommandStatus(enum.IntEnum):
     """Interpret the exit status of a bounded command.
 
-    ``timeout`` reports ``124`` when the command accepted ``SIGTERM`` and
+    GNU ``timeout`` reports ``124`` when the command accepted ``SIGTERM`` and
     ``137`` when it had to be killed, so both mean the operation ran out of
     time. Every other status -- including the ``126`` and ``127`` a missing or
     non-executable program produces -- is handed to the caller's own category,
     because a broken adapter is not a timed-out one.
+
+    The bound this port enforces itself reports only :attr:`TIMEOUT_BY_TERM`.
+    It has no ``SIGKILL``-then-report path of its own: a group that ignores
+    ``SIGTERM`` is escalated to ``SIGKILL``, and the command's own status for
+    that death is ``137`` through :func:`as_bash_status`, which is the same
+    number for the same reason.
     """
 
     TIMEOUT_BY_TERM = 124
@@ -147,6 +153,60 @@ class CommandStatus(enum.IntEnum):
 
 #: Statuses that mean a bounded command ran out of time rather than failed.
 TIMEOUT_STATUSES: frozenset[int] = frozenset(int(status) for status in CommandStatus)
+
+
+def as_bash_status(exit_code: int) -> int:
+    """Translate a reported exit status into the status Bash would have seen.
+
+    A process that dies from a signal does not exit with a status at all; the
+    shell that waited reports ``128`` plus the signal number. Python's
+    ``subprocess`` family reports the negation of the signal instead, and the
+    distinction is not cosmetic: ``SIGTERM`` is the status a *timeout* produces,
+    so Bash's ``143`` and ``137`` are the two statuses
+    :func:`classify_command_failure` reads as a timeout. Passing cuprum's
+    ``-15`` through unchanged would classify a timed-out operation as
+    ``api_error`` or ``fetch_error`` and silently change the published category.
+
+    A status that is not negative is already the shell's own, including the
+    ``124`` the bound reports for itself.
+
+    Returns
+    -------
+    int
+        The status the shell would have reported.
+
+    Examples
+    --------
+    >>> as_bash_status(-15), as_bash_status(-9), as_bash_status(124)
+    (143, 137, 124)
+    """
+    return 128 + -exit_code if exit_code < 0 else exit_code
+
+
+def launch_failure_status(error: OSError) -> int:
+    """Return the status GNU ``timeout`` reported for a command it could not run.
+
+    Cuprum raises where the shell's ``timeout`` returned a status, so the two
+    launch failures have to be mapped back by hand. The mapping matters because
+    it is what keeps a missing adapter in ``api_error`` or ``fetch_error``
+    rather than forcing it into ``timeout``: only ``124`` and ``137`` mean the
+    command ran out of time, and neither of these is either of them.
+
+    Returns
+    -------
+    int
+        ``127`` when the program does not exist, and ``126`` for any other
+        reason the operating system refused the launch -- a permission bit, a
+        directory, or a failed ``execve``.
+
+    Examples
+    --------
+    >>> launch_failure_status(FileNotFoundError(2, "No such file or directory"))
+    127
+    >>> launch_failure_status(PermissionError(13, "Permission denied"))
+    126
+    """
+    return 127 if isinstance(error, FileNotFoundError) else 126
 
 
 class Classification(typ.NamedTuple):

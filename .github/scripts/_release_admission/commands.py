@@ -10,16 +10,21 @@ than a fixed list, because the adapter environment variables are a documented
 part of this gate's contract: an operator may point the gate at a wrapper, and
 the catalogue is what records which executables that configuration permits.
 
-Bounding is native. The shell wrapped each command in GNU ``timeout``, which
-reports ``124`` when the command accepted ``SIGTERM`` and ``137`` when it had
-to be killed, after exactly one second of grace. :func:`run_bounded` reproduces
-both the grace and the classification through cuprum's own cancellation path,
-so a timeout cannot depend on an external binary being present.
+Bounding is :mod:`bounding`'s, and the reason it is a module of its own is that
+it needs more than cuprum offers: a bound that reaches a command's descendants.
+The shell had that through GNU ``timeout``, which signals the command's process
+group; see that module for the mechanism, the stream wiring, and the trade-off.
+
+Only an adapter's *stdout* is private. The shell captured it in a command
+substitution, so nothing read it; its stderr was never redirected and reached
+the runner log. A command whose output is only reported rather than parsed --
+the ``git`` fetch -- gets both streams through, and a launch the operating
+system refuses is reported with the status the shell produced for the same
+refusal.
 
 Sink delivery has no cuprum equivalent and lives in :mod:`delivery`.
 """
 
-import asyncio
 import dataclasses
 import os
 import sys
@@ -27,7 +32,6 @@ import typing as typ
 
 from cuprum import (
     CommandResult,
-    ExecutionContext,
     Program,
     ProgramCatalogue,
     ProjectSettings,
@@ -36,9 +40,7 @@ from cuprum import (
 from cuprum import sh as cuprum_sh
 
 from . import policy
-
-#: How long a command keeps running after ``SIGTERM`` before ``SIGKILL``.
-CANCEL_GRACE_SECONDS = 1.0
+from .bounding import run_bounded_sync, run_unbounded_sync
 
 #: Environment variables naming the executables the gate runs.
 GH_ADAPTER_VARIABLE = "NETSUKE_RELEASE_ADMISSION_GH_ADAPTER"
@@ -132,54 +134,25 @@ def _adapter_name(variable: str, default: str) -> str:
     return os.environ.get(variable) or default
 
 
-async def run_bounded(
-    command: SafeCmd,
-    *,
-    timeout_seconds: int,
-    cancel_grace: float = CANCEL_GRACE_SECONDS,
-) -> CommandResult | None:
-    """Run a command under a native timeout.
-
-    A command that outlives its timeout is terminated with ``SIGTERM``, given
-    ``cancel_grace`` seconds to leave, and killed if it has not -- the grace
-    the shell passed to GNU ``timeout`` as ``--kill-after=1s``.
-
-    Returns
-    -------
-    CommandResult | None
-        The command's result, or ``None`` when the timeout elapsed.
-    """
-    context = ExecutionContext(cancel_grace=cancel_grace)
-    try:
-        async with asyncio.timeout(timeout_seconds):
-            return await command.run(context=context)
-    except TimeoutError:
-        return None
-
-
-def run_bounded_sync(
-    command: SafeCmd,
-    *,
-    timeout_seconds: int,
-    cancel_grace: float = CANCEL_GRACE_SECONDS,
-) -> CommandResult | None:
-    """Drive :func:`run_bounded` to completion, as cuprum's ``run_sync`` does."""
-    return asyncio.run(
-        run_bounded(command, timeout_seconds=timeout_seconds, cancel_grace=cancel_grace)
-    )
-
-
 def classify_result(result: CommandResult | None) -> int:
     """Return the exit status a bounded call contributes to its policy decision.
 
-    A ``None`` result is the elapsed timeout. GNU ``timeout`` reported that as
+    A ``None`` result is the elapsed bound. GNU ``timeout`` reported that as
     ``124``, and :func:`policy.classify_command_failure` maps that status to
     ``error_category=timeout`` for whichever operation was running.
 
     Returns
     -------
     int
-        The command's own exit status, or ``124`` when the timeout elapsed.
+        The command's own status in Bash's convention, or ``124`` when the
+        bound elapsed.
+
+    Notes
+    -----
+    A status the child reported for a signal death is translated before it is
+    returned, because downstream classification reads the shell's convention:
+    ``kill -TERM`` is ``143`` to a shell and ``-15`` to Python, and only the
+    former matches the timeout statuses.
 
     Examples
     --------
@@ -188,33 +161,7 @@ def classify_result(result: CommandResult | None) -> int:
     """
     if result is None:
         return int(policy.CommandStatus.TIMEOUT_BY_TERM)
-    return result.exit_code
-
-
-def launch_failure_status(error: OSError) -> int:
-    """Return the status GNU ``timeout`` reported for a command it could not run.
-
-    Cuprum raises where the shell's ``timeout`` returned a status, so the two
-    launch failures have to be mapped back by hand. The mapping matters because
-    it is what keeps a missing adapter in ``api_error`` or ``fetch_error``
-    rather than forcing it into ``timeout``: only ``124`` and ``137`` mean the
-    command ran out of time, and neither of these is either of them.
-
-    Returns
-    -------
-    int
-        ``127`` when the program does not exist, and ``126`` for any other
-        reason the operating system refused the launch -- a permission bit, a
-        directory, or a failed ``execve``.
-
-    Examples
-    --------
-    >>> launch_failure_status(FileNotFoundError(2, "No such file or directory"))
-    127
-    >>> launch_failure_status(PermissionError(13, "Permission denied"))
-    126
-    """
-    return 127 if isinstance(error, FileNotFoundError) else 126
+    return policy.as_bash_status(result.exit_code)
 
 
 def report_launch_failure(program: str, error: OSError) -> None:
@@ -283,11 +230,17 @@ def git_fetch_revision(
 ) -> int:
     """Fetch one revision from ``origin``, without tags and only one deep.
 
+    Both of the fetch's streams are inherited rather than captured. The shell
+    never redirected either one, so ``git``'s progress on stderr and its
+    report on stdout both reached the runner log; capturing them would have
+    discarded the only diagnostic a failed fetch produces.
+
     Returns
     -------
     int
-        The command's exit status, the timeout status GNU ``timeout`` used, or
-        the launch status it reported for a ``git`` it could not run.
+        The command's exit status in Bash's convention, the timeout status the
+        bound uses, or the launch status GNU ``timeout`` reported for a ``git``
+        it could not run.
     """
     catalogue = programs.catalogue()
     command = cuprum_sh.make(Program(programs.git), catalogue=catalogue)(
@@ -295,11 +248,13 @@ def git_fetch_revision(
     )
     try:
         return classify_result(
-            run_bounded_sync(command, timeout_seconds=timeout_seconds)
+            run_bounded_sync(
+                command, timeout_seconds=timeout_seconds, inherit_streams=True
+            )
         )
     except OSError as error:
         report_launch_failure(programs.git, error)
-        return launch_failure_status(error)
+        return policy.launch_failure_status(error)
 
 
 def read_monotonic_seconds(programs: Programs) -> tuple[int, str]:
@@ -320,7 +275,14 @@ def read_monotonic_seconds(programs: Programs) -> tuple[int, str]:
 def _status_and_output(
     command: SafeCmd, *, program: str, timeout_seconds: int | None
 ) -> tuple[int, str]:
-    """Run a capture-only command and return its status and stripped output.
+    """Run a command whose standard output the gate parses, and return both.
+
+    The command is the shell's own command substitution: its standard output is
+    captured in a pipe the gate reads to end-of-file, so a caller never parses a
+    prefix of it, and its standard error is inherited so the adapter's own
+    diagnostic reaches the runner log as it did before. Passing ``None`` for
+    *timeout_seconds* is the clock adapter, which the shell read with no
+    ``timeout`` around it at all.
 
     A command the operating system refused to launch is reported with the
     status GNU ``timeout`` produced for the same refusal rather than allowed to
@@ -329,19 +291,20 @@ def _status_and_output(
     Returns
     -------
     tuple[int, str]
-        The exit status, and the retained standard output with its trailing
-        newlines removed. The output is empty whenever the status is non-zero,
-        because a failed command substitution left Bash's variable empty.
+        The exit status in Bash's convention, and the retained standard output
+        with its trailing newlines removed. The output is empty whenever the
+        status is non-zero, because a failed command substitution left Bash's
+        variable empty.
     """
     try:
         result = (
-            command.run_sync(context=ExecutionContext())
+            run_unbounded_sync(command)
             if timeout_seconds is None
             else run_bounded_sync(command, timeout_seconds=timeout_seconds)
         )
     except OSError as error:
         report_launch_failure(program, error)
-        return launch_failure_status(error), ""
+        return policy.launch_failure_status(error), ""
     if result is None or result.exit_code != 0:
         return classify_result(result), ""
     return result.exit_code, (result.stdout or "").rstrip("\n")
