@@ -260,7 +260,7 @@ corrections; the behaviour was already right.
 The parity revision, `b10620a2`, was then gated in full: `make check-fmt`
 including its `mdtablefix` stage, `make lint` with all twelve sub-suites,
 `make typecheck-python`, `make doc-coverage` (98.87%), `make test` (3917
-passed, 6 skipped, both doctest targets), `make test-release-admission` (81
+passed, 6 skipped, both doctest targets), `make test-release-admission` (82
 passed), `make test-workflow-contracts`, `make test-documentation-contracts`,
 `make markdownlint` including `markdownlint-cli2`, `make nixie`, and
 `make github-actions-lint`. The first run of that set was red on four gates,
@@ -270,6 +270,12 @@ message, and a stale `RUNTIME_MODULES` tuple in the workflow contract that
 enumerated four runtime modules against the ten the Makefile now names. That
 last one is the reason the contract exists, and it worked: the fix was the
 amended list, not a relaxed assertion.
+
+The count fell to 81 at `51d27ae5`, which drops one of those cases as a
+duplicate, and that revision carries a green eleven-gate record over the same
+set, with `make test-release-admission` reporting 81. Both revisions' figures
+are stated because they differ: a single "current" number would be wrong about
+one of the two.
 
 ### Behaviour preserved
 
