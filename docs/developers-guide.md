@@ -9272,12 +9272,12 @@ fed back upstream.
 
 All four tiers are set here.
 
-| Tier                     | What it bounds                     | Where it is set                               | Current value                                                     |
-| ------------------------ | ---------------------------------- | --------------------------------------------- | ----------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5); 600 s (60 s x 10) for the mutation compile gate |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 780 s (13 m) in CI; unset locally                                 |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m), armed twice per coverage step                     |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 90 m                                                              |
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                                        |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5); 600 s (60 s x 10) for the mutation compile gate and the cold package publish check |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 780 s (13 m) in CI; unset locally                                                                    |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m), armed twice per coverage step                                                        |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 90 m                                                                                                 |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
@@ -9297,23 +9297,46 @@ asserts it explicitly rather than leaving it implied.
 
 There are two such figures and the larger one governs. `[profile.default]`'s own
 `slow-timeout` gives five periods — 300 s — to every test no override matches,
-which is almost all of them. One override widens it: the mutation compile gate
-takes ten periods, 600 s, because it compiles all 18 patched trees through the
-Kani frontend into a target directory no cache restores. A whole-run budget has
-to sit above the largest allowance in the file, so 600 s is the figure the
-ordering below is written against, not the 300 s most tests get.
+which is almost all of them. Two overrides widen it to ten periods, 600 s: the
+mutation compile gate, which compiles all 18 patched trees through the Kani
+frontend into a target directory no cache restores, and
+`packaged_manifest_retains_build_script_sources`, whose
+`cargo publish --dry-run` verification build lands in a nested target directory
+whatever `CARGO_TARGET_DIR` it is given and so inherits nothing from `target/`.
+A whole-run budget has to sit above the largest allowance in the file, so 600 s
+is the figure the ordering below is written against, not the 300 s most tests
+get.
 
-That override is the targeted, written-rationale case `.config/nextest.toml`'s
-own policy asks for, and it is worth reading as the worked example of it. The
-gate passed twice at 257.7 s and 261.5 s and then failed at 300.008 s on a head
-whose only diff was eight lines of Markdown. The code was not slow; the cap was
-too near the cost, and a margin of 38 s is the difference between one runner
-and another rather than a budget. The widened allowance is a chosen figure
-inside the ordering rather than at its edge: what
+The second of those is scoped to one test deliberately, and the distinction is
+about where the cost falls rather than about how slow the two look. Their
+sibling `cli_configuration_fixture_compiles` spawns a nested Cargo build too
+and shares the same `test-group`, but its child `cargo check` runs in the same
+four-slot compiler-admission pool as every other build on the host, so its wall
+clock is the queue's to decide and not a budget's to bound: it has finished in
+171.4 s on a quiet run and been terminated at the 300 s cap on a contended one,
+with the sccache server unreachable and every slot held by peer worktrees. A
+wider allowance cannot reach a cost incurred before the compiler starts.
+Sharing a serialization group is a statement about resource contention, not
+about budget; the two were briefly treated as one case and are not one.
+
+Those overrides are the targeted, written-rationale case
+`.config/nextest.toml`'s own policy asks for, and the mutation gate is worth
+reading as the worked example of it. The gate passed twice at 257.7 s and 261.5
+s and then failed at 300.008 s on a head whose only diff was eight lines of
+Markdown. The code was not slow; the cap was too near the cost, and a margin of
+38 s is the difference between one runner and another rather than a budget. The
+packaging smoke test failed the same way and for the same reason: it runs
+`cargo publish --dry-run`, whose verification build lands in a nested target
+directory whatever `CARGO_TARGET_DIR` it is given, and it has passed at 145 s
+and timed out at 300.047 s on this host on one head whose only change between
+the two runs was a word in a plan, with load average the rest of the
+difference. Against the 300 s allowance it measured 259.5 s in the gate run
+that passed, 40 s of margin. The widened allowance is a chosen figure inside
+the ordering rather than at its edge: what
 `global-timeout > largest per-test allowance` permits at 60 s periods is up to
 720 s under the 780 s budget, so the 600 s leaves 180 s of margin and the two
-tiers still bound each other. That override binds only because its filter
-carries the test's module path; for a period it did not, and the two passing
+tiers still bound each other. Each override binds only because its filter
+carries the test's module path; for a period one did not, and the two passing
 runs above were read as evidence the widened allowance was in force when both
 sit inside the 300 s default anyway. See "nextest configuration" for the rule.
 

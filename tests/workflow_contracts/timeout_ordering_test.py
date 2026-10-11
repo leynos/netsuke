@@ -19,10 +19,10 @@ ordering assertion does not.
 The per-test allowance is ``period`` multiplied by ``terminate-after``,
 not ``period`` alone. Every period here is 60 seconds and every platform
 uses the same multipliers, so the profile's own five periods give 300 s
-and the mutation compile gate's override gives 600 s. The largest
-allowance is therefore the gate's, and it is that figure the whole-run
-budget has to clear; reading the period as the budget would understate
-either by its multiplier.
+and the widened overrides give 600 s: the mutation compile gate and the
+cold package publish check. The largest allowance is therefore 600 s, and
+it is that figure the whole-run budget has to clear; reading the period
+as the budget would understate either by its multiplier.
 
 See "Test timeouts: the tiers this repository sets" in
 ``docs/developers-guide.md``, and the canonical wording in
