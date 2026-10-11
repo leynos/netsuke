@@ -10,15 +10,15 @@ Status: COMPLETE
 
 The eight child RFCs and the coverage contract are delivered. Two volume
 tolerances are breached and recorded rather than waived — the aggregate budget,
-now **4870** against 4000 at the 2026-10-11 repair round's tree, and the
-per-file 400-line limit, now breached by **all eight** children rather than the
-seven recorded at `7b0794af`. Each successive repair round has widened the
-breach rather than narrowing it, because the findings repaired are prose
-additions; the aggregate moved 4533 → 4792 → 4870 across three rounds. Neither
-breach blocks the milestone, for the reasons the Tolerances section and `D12`'s
-amendment give, but neither is waived either: acceptance is the user's
-decision, and this plan records the question rather than answering it. The
-branch remains open for review.
+now **4871** against 4000 at `7e9f11f2`, and the per-file 400-line limit, now
+breached by **all eight** children rather than the seven recorded at
+`7b0794af`. Each successive repair round has widened the breach rather than
+narrowing it, because the findings repaired are prose additions; the aggregate
+moved 4533 → 4792 → 4871 across three rounds. Neither breach blocks the
+milestone, for the reasons the Tolerances section and `D12`'s amendment give,
+but neither is waived either: acceptance is the user's decision, and this plan
+records the question rather than answering it. The branch remains open for
+review.
 
 ## Purpose / big picture
 
@@ -4452,21 +4452,22 @@ of roadmap step 6.11 — genuinely cheaper and fully reversible, but the
 commissioned task asks for RFCs, and a normative contract discharge belongs in
 the RFC review process.
 
-**Repair round after the PR #860 review round of 2026-10-11, at head `07d116dd`
-.** Sixteen distinct findings were read verbatim and verified against the
-current tree: seven from CodeRabbit (`coderabbitai[bot]`, ids
-`4239714127`–`4239714149`) and six from Codex (`chatgpt-codex-connector[bot]`,
-ids `4239691695`–`4239691707`), with three pairs collapsing to the same defect.
-Fifteen were valid and are repaired: the slice-0 prerequisite count in RFC 0006
-(nine remaining slices, not eight); the RFC 0013 dependency restatement; RFC
-0014's pointer at RFC 0006 section 8.2 and its six rejection rows, which now
-all name `undefined_input` so the discharge's "exactly the set" claim holds; the
-`zip_longest` ceilings across five sites in RFC 0015; RFC 0016's
-non-participating-group wording in four places; RFC 0018's counts, its table 3
-reach, and its prerequisite list; RFC 0019's `host_default()`, its section 8.9
-scope, its decoder-bounds argument, its seven-of-nine error routing, and its
-six-versus-seven code-bearing conditions; and RFC 0020's `contents` composition
-and section 8.10 scope.
+**Repair round after the PR #860 review round of 2026-10-11.** The review
+assessed `07d116dd`; the repairs landed in `7e9f11f2`, whose blobs are what the
+figures below are measured from. Sixteen distinct findings were read verbatim
+and verified against the current tree: seven from CodeRabbit
+(`coderabbitai[bot]`, ids `4239714127`–`4239714149`) and six from Codex
+(`chatgpt-codex-connector[bot]`, ids `4239691695`–`4239691707`), with three
+pairs collapsing to the same defect. Fifteen were valid and are repaired: the
+slice-0 prerequisite count in RFC 0006 (nine remaining slices, not eight); the
+RFC 0013 dependency restatement; RFC 0014's pointer at RFC 0006 section 8.2 and
+its six rejection rows, which now all name `undefined_input` so the discharge's
+"exactly the set" claim holds; the `zip_longest` ceilings across five sites in
+RFC 0015; RFC 0016's non-participating-group wording in four places; RFC 0018's
+counts, its table 3 reach, and its prerequisite list; RFC 0019's
+`host_default()`, its section 8.9 scope, its decoder-bounds argument, its
+seven-of-nine error routing, and its six-versus-seven code-bearing conditions;
+and RFC 0020's `contents` composition and section 8.10 scope.
 
 **One finding was invalid, and the rebuttal is evidence-based.** CodeRabbit
 `4239714149` claimed RFC 0020's `to_datetime` default diverges from Ansible's,
@@ -4490,13 +4491,23 @@ Validation for the repaired tree, before any reply: `clause_ids` still yields
 duplicate rows; every section 5 subsection either carries the `D6` escape
 sentence or names a helper in its own registry, and none contains a deference
 phrase. **The volume figures moved and are remeasured here rather than
-asserted:** `wc -l` at this working tree gives 0013 **484**, 0014 **408**, 0015
-**609**, 0016 **545**, 0017 **529**, 0018 **752**, 0019 **874**, and 0020
-**669** — **4870** together, against the 4000 budget, and **all eight** above
-the 400-line per-file limit. The aggregate rose from 4792 because this round's
-repairs are prose additions, which is the same direction the previous round
-moved and the same reason. These are working-tree figures and are superseded by
-the commit that follows, per the Tolerances section's own instruction.
+asserted:** `wc -l` on the committed blobs at `7e9f11f2` gives 0013 **484**,
+0014 **408**, 0015 **609**, 0016 **545**, 0017 **529**, 0018 **753**, 0019
+**874**, and 0020 **669** — **4871** together, against the 4000 budget, and
+**all eight** above the 400-line per-file limit. The aggregate rose from 4792
+because this round's repairs are prose additions, which is the same direction
+the previous round moved and the same reason. **The 0018 figure of 752 was off
+by one, and 4870 was committed with it.** Both figures were carried from the
+pre-commit working tree rather than re-read from the blob after `7e9f11f2` was
+cut, so the commit that records them also contains the error they derive from.
+Re-derived at that commit with three independent counters (`wc -l`,
+`awk 'END{print NR}'`, `grep -c ''`), all three agree on **753** and **4871**,
+which is what the header above now states. The off-by-one is recorded rather
+than silently applied because it reached two committed sites — the header's
+breach paragraph and this entry — so a reader diffing this branch against
+`7e9f11f2` would otherwise find the correction unexplained. The `D12` amendment
+is unaffected: it carries the `f6f6c83c` measurement of **4533**, which is a
+different revision and remains correct for it.
 
 ## Outcomes & retrospective
 
