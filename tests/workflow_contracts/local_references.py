@@ -46,6 +46,7 @@ TEST_SOURCE_SUFFIXES = frozenset({
 CONTRACT_SOURCE_PATHS = frozenset({
     "tests/workflow_contracts/local_references.py",
     "tests/workflow_contracts/local_reference_coverage_test.py",
+    "tests/workflow_contracts/local_reference_comments_test.py",
     "tests/workflow_contracts/local_reference_edge_cases_test.py",
     "tests/workflow_contracts/local_reference_inventory.py",
     "tests/workflow_contracts/local_reference_inventory_test.py",

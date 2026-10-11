@@ -2189,7 +2189,8 @@ test sources, and reached scripts report `RepositoryFileError` with the failing
 path. Inventory classification and fail-closed exemption checks live in
 `local_reference_inventory_test.py`; coverage assertions live in
 `local_reference_coverage_test.py`, and adversarial matching cases live in
-`local_reference_edge_cases_test.py`. These suites use the private workspace
+`local_reference_edge_cases_test.py`; comment masking cases live in
+`local_reference_comments_test.py`. These suites use the private workspace
 writer in `local_reference_test_support.py`. The path-to-reason `EXEMPTIONS`
 map in `local_reference_coverage_test.py` must stay limited to inventory items
 with a documented reason; exemptions for covered or removed paths are rejected.

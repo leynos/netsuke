@@ -6,11 +6,24 @@ the contract scans, so comment-looking text inside strings remains visible.
 """
 
 import io
+import re
 import tokenize
 import typing as typ
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
+
+
+_HASH_COMMENT_OR_QUOTED_TEXT = re.compile(
+    r"""(?P<quoted>'[^'\r\n]*'|"(?:\\.|[^"\\])*")
+    |(?P<prefix>^[ \t]*|[ \t]+)\#(?P<comment>[^\r\n]*)""",
+    re.MULTILINE | re.VERBOSE,
+)
+_RUST_RAW_STRING_PREFIX = re.compile(r'(?:br|r)(?P<hashes>#+)?"')
+_RUST_STRING_LITERAL = re.compile(r'"(?:\\[\s\S]|[^"\\])*"')
+_RUST_CHAR_LITERAL = re.compile(
+    r"""'(?:[^'\\\s]|\\(?:[nrt0\\'"]|x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f_]+\}))'"""
+)
 
 
 def strip_reference_comments(text: str, suffix: str | None) -> str:
@@ -109,21 +122,14 @@ def _strip_rust_comments(text: str) -> str:
         raw_end = _raw_string_end(text, index)
         if raw_end is not None:
             index = raw_end
-        elif text.startswith("//", index):
-            comment_end = _line_end(text, index)
+            continue
+        comment_end = _rust_comment_end(text, index)
+        if comment_end is not None:
             _mask_comment(characters, index, comment_end)
             index = comment_end
-        elif text.startswith("/*", index):
-            comment_end = _rust_block_comment_end(text, index)
-            _mask_comment(characters, index, comment_end)
-            index = comment_end
-        elif text[index] == '"':
-            index = _quoted_string_end(text, index)
-        elif text[index] == "'":
-            char_end = _char_literal_end(text, index)
-            index = index + 1 if char_end is None else char_end
-        else:
-            index += 1
+            continue
+        literal_end = _rust_literal_end(text, index)
+        index = index + 1 if literal_end is None else literal_end
     return "".join(characters)
 
 
@@ -141,43 +147,42 @@ def _strip_markdown_comments(text: str) -> str:
 
 def _strip_quoted_hash_comments(text: str) -> str:
     """Mask TOML and feature comments outside single- or double-quoted text."""
-    characters = list(text)
-    quote: str | None = None
-    escaped = False
-    for index, current in enumerate(text):
-        if current == "\n":
-            quote = None
-            escaped = False
-        elif escaped:
-            escaped = False
-        elif quote == '"' and current == "\\":
-            escaped = True
-        elif quote is not None and current == quote:
-            quote = None
-        elif quote is None and current in {"'", '"'}:
-            quote = current
-        elif _is_hash_comment_outside_quotes(text, index, quote, current):
-            comment_end = _line_end(text, index)
-            _mask_comment(characters, index, comment_end)
-    return "".join(characters)
+    return _HASH_COMMENT_OR_QUOTED_TEXT.sub(_replace_hash_comment_match, text)
+
+
+def _replace_hash_comment_match(match: re.Match[str]) -> str:
+    """Preserve quoted text and mask a matched hash comment."""
+    quoted = match.group("quoted")
+    if quoted is not None:
+        return quoted
+    return match.group("prefix") + " " * len(match.group("comment"))
 
 
 def _raw_string_end(text: str, index: int) -> int | None:
     """Return the end of a Rust raw string beginning at an ``r`` prefix."""
-    prefix = index
-    if text.startswith("br", index):
-        prefix += 1
-    if prefix >= len(text) or text[prefix] != "r":
+    match = _RUST_RAW_STRING_PREFIX.match(text, index)
+    if match is None:
         return None
-    quote = text.find('"', prefix + 1)
-    if quote < 0 or "\n" in text[prefix:quote]:
-        return None
-    hashes = text[prefix + 1 : quote]
-    if hashes.strip("#"):
-        return None
-    terminator = '"' + hashes
-    end = text.find(terminator, quote + 1)
+    terminator = '"' + (match.group("hashes") or "")
+    end = text.find(terminator, match.end())
     return len(text) if end < 0 else end + len(terminator)
+
+
+def _rust_comment_end(text: str, index: int) -> int | None:
+    """Return the end of a Rust line or nested block comment at ``index``."""
+    if text.startswith("//", index):
+        return _line_end(text, index)
+    if text.startswith("/*", index):
+        return _rust_block_comment_end(text, index)
+    return None
+
+
+def _rust_literal_end(text: str, index: int) -> int | None:
+    """Return the end of a Rust string or character literal at ``index``."""
+    if text[index] == '"':
+        return _quoted_string_end(text, index)
+    match = _RUST_CHAR_LITERAL.match(text, index)
+    return None if match is None else match.end()
 
 
 def _rust_block_comment_end(text: str, start: int) -> int:
@@ -198,44 +203,8 @@ def _rust_block_comment_end(text: str, start: int) -> int:
 
 def _quoted_string_end(text: str, start: int) -> int:
     """Find the end of a Rust double-quoted string, including escapes."""
-    escaped = False
-    for index in range(start + 1, len(text)):
-        current = text[index]
-        if escaped:
-            escaped = False
-        elif current == "\\":
-            escaped = True
-        elif current == '"':
-            return index + 1
-    return len(text)
-
-
-def _char_literal_end(text: str, start: int) -> int | None:
-    """Recognise Rust character literals without mistaking lifetimes for them."""
-    first_character = start + 1
-    if first_character >= len(text) or text[first_character].isspace():
-        return None
-    if text[first_character] != "\\":
-        end = first_character + 1
-        return end + 1 if text[end : end + 1] == "'" else None
-    for index in range(first_character + 1, len(text)):
-        if text[index] == "\n" or text[index].isspace():
-            return None
-        if text[index] == "'":
-            return index + 1
-    return None
-
-
-def _is_hash_comment_outside_quotes(
-    text: str,
-    index: int,
-    quote: str | None,
-    current: str,
-) -> bool:
-    """Identify a TOML, YAML or feature comment outside quoted content."""
-    if quote is not None or current != "#":
-        return False
-    return index == 0 or text[index - 1].isspace()
+    match = _RUST_STRING_LITERAL.match(text, start)
+    return len(text) if match is None else match.end()
 
 
 def _advance_shell_quote(quote: str, current: str) -> tuple[str | None, bool]:
