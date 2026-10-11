@@ -273,6 +273,7 @@ test-release-admission: ## Validate the release-admission runtime contract
 		python -m pytest scripts/tests/test_release_admission_metrics.py \
 		scripts/tests/test_release_admission_metric_failures.py \
 		scripts/tests/test_release_admission_metric_boundedness.py \
+		scripts/tests/test_release_admission_process_bounds.py \
 		scripts/tests/test_release_admission_metric_degradation.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 

@@ -22,6 +22,9 @@ import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script bou
 import typing as typ
 from pathlib import Path
 
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
 from release_admission_test_doubles import (
     GITHUB_REPOSITORY,
     PYTHON_PATH,
@@ -320,14 +323,42 @@ def _read_gate_records(
     -----
     Contract invariant: JSON Lines are decoded through the shared validator so
     runtime tests exercise the same schema as workflow-contract tests.
+
+    An absent file is read as no records. Neither artefact exists when a
+    required variable aborts the gate before the two paths are computed, and
+    that state is one the tests assert on deliberately: the shell refused
+    ``GITHUB_REPOSITORY`` and ``GITHUB_SHA`` before any artefact was created.
+    Raising :class:`FileNotFoundError` here would make that run unpresentable
+    rather than assertable, so an absent file reads as an empty record set and
+    the file's existence is a separate, explicit assertion.
     """
-    metrics = METRICS_VALIDATOR.parse_metrics(
-        paths["metrics"].read_text(encoding="utf-8").splitlines()
+    return (
+        _parse_records(paths["metrics"], METRICS_VALIDATOR.parse_metrics),
+        _parse_records(paths["trace"], METRICS_VALIDATOR.parse_traces),
     )
-    traces = METRICS_VALIDATOR.parse_traces(
-        paths["trace"].read_text(encoding="utf-8").splitlines()
-    )
-    return metrics, traces
+
+
+def _parse_records(
+    path: Path,
+    parse: cabc.Callable[[list[str]], list[dict[str, object]]],
+) -> list[dict[str, object]]:
+    """Parse one JSON Lines artefact, or report it as empty when absent.
+
+    Parameters
+    ----------
+    path
+        The artefact file one run may or may not have created.
+    parse
+        The shared validator's parser for this artefact's schema.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        The records, or an empty list when the file does not exist.
+    """
+    if not path.exists():
+        return []
+    return parse(path.read_text(encoding="utf-8").splitlines())
 
 
 __all__ = (
