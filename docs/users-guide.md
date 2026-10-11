@@ -1181,16 +1181,17 @@ configuration chain, so ordinary project values can override the winner while
 fields present only in the winner remain available.
 
 Fetch-policy fields are the security-sensitive exception to this ordinary
-precedence. Only the exact primary project file is a project request, so its
-grants remain below operator policy unless the operator enables
-`trust_project_fetch_policy`. Environment allow rules use a different boundary:
-automatic discovery removes `env_allow_var` from the primary project file and
-every file reached through its `extends` chain before policy composition. An
-explicit `--config` selector bypasses automatic project discovery; its ancestor
-occurrences retain operator authority, while a selected primary project file
-remains subject to primary-file quarantine. `env_block_var` remains cumulative
-because it only restricts access. This environment rule does not change the
-primary-only fetch-policy boundary.
+precedence. Every occurrence selected through the project `.netsuke.toml` and
+its `extends` chain is a project request, so its grants remain quarantined
+unless an operator enables `trust_project_fetch_policy`. Automatic discovery
+also removes project-chain `env_allow_var` entries before policy composition.
+An explicit `--config` selector bypasses automatic discovery. If its selected
+layers include the project `.netsuke.toml`, that file and its inherited parents
+remain project-scoped for fetch and environment allow policy; an unrelated
+explicit configuration chain retains operator authority. A file reached from
+both project and trusted configuration roots retains each occurrence's
+authority. `fetch_block_host` and `env_block_var` remain cumulative because
+they only add restrictions.
 
 An explicit selector bypasses automatic discovery. Selectors are checked in
 this order:
@@ -1200,6 +1201,11 @@ this order:
 
 An explicit file that is missing or invalid causes an error; Netsuke does not
 fall back to discovery.
+
+When an explicit `--config` chain contains the matching project
+`.netsuke.toml`, that project occurrence and its inherited parents are
+project-scoped for fetch and environment allow policy. An unrelated explicit
+configuration chain remains operator-scoped.
 
 When automatic discovery finds no configuration file, Netsuke uses its built-in
 defaults. When it finds a candidate that cannot be loaded, such as malformed
@@ -1646,8 +1652,8 @@ Exactly one outcome branch is present:
 with global flags or their configuration equivalents. Fetch policy has a trust
 boundary that differs from ordinary configuration precedence: system and user
 configuration, `NETSUKE_` environment variables, and explicit CLI options are
-operator policy, while only the primary project `.netsuke.toml` is an untrusted
-project request.
+operator policy, while every occurrence in the selected project configuration
+chain is an untrusted project request.
 
 - `--fetch-allow-scheme <SCHEME>`
 - `--fetch-allow-host <HOST>`
@@ -1655,15 +1661,20 @@ project request.
 - `--fetch-default-deny`
 - `--trust-project-fetch-policy`
 
-By default, project configuration may only narrow the operator policy. A project
+By default, the project chain may only narrow the operator policy. A project
 `fetch_default_deny = true` can enable default-deny, but a project
 `fetch_default_deny = false` cannot disable an operator's default-deny setting.
 Project `fetch_block_host` entries accumulate with entries from the other
-layers, and a block always wins over an allow. Project `fetch_allow_scheme` and
-`fetch_allow_host` entries are ignored by default; the project cannot enable
-them by setting `trust_project_fetch_policy` itself. Inherited fetch-policy
-fields keep their ordinary file-layer merge behaviour; this is separate from
-the chain-wide environment-grant quarantine described below.
+layers, and a block always wins over an allow. Project-chain
+`fetch_allow_scheme` and `fetch_allow_host` entries are ignored by default; no
+project-chain file can enable them by setting `trust_project_fetch_policy`
+itself.
+
+For example, if `.netsuke.toml` extends `policy.toml`, grants in either file
+are project-chain requests and need operator opt-in before they can widen the
+fetch policy. A `trust_project_fetch_policy = true` in `policy.toml` is also
+quarantined and cannot authorize those grants; trust must come from system,
+user, environment, or CLI configuration.
 
 An operator who deliberately trusts a checkout can set
 `trust_project_fetch_policy = true` in system or user configuration, set
@@ -1672,8 +1683,9 @@ An operator who deliberately trusts a checkout can set
 allow-host entries are appended to the operator values in dependency-first
 order, with the primary file last. A present `fetch_default_deny` value from
 the project chain applies directly; the last present project value wins. The
-opt-in is resolved only from operator-controlled layers, so no project file can
-self-authorize.
+opt-in is resolved only from operator-controlled layers, so no project-chain
+file can self-authorize. When a file is reached from both operator and project
+roots, each occurrence retains its own authority.
 
 Host patterns may contain wildcards such as `*.example.com`. A block rule wins
 over an allow rule. `--fetch-default-deny` permits only explicitly allowed
@@ -1716,14 +1728,14 @@ compatibility. Adding at least one effective `env_allow_var` entry makes the
 allowlist restrictive: only listed names may resolve. An `env_block_var` list
 without an allowlist blocks only its listed names. A blocklist entry always
 overrides an allowlist entry. Every entry is one exact variable name; this
-policy has no glob or pattern matching. `env_allow_var` entries from the
-primary project file and every file reached through `extends` in an
-automatically discovered project chain are removed before policy composition.
-This prevents a checkout-controlled ancestor from widening the operator
-allowlist or activating default-deny. `env_block_var` entries remain cumulative
-because they only restrict access. Operator chains retain their grants, and
-ancestors in an explicitly selected configuration chain retain operator
-authority; a selected primary project file remains quarantined.
+policy has no glob or pattern matching. `env_allow_var` entries from project
+occurrences selected through `.netsuke.toml` and its `extends` chain are
+removed before policy composition. This prevents a checkout-controlled
+ancestor from widening the operator allowlist or activating default-deny.
+`env_block_var` entries remain cumulative because they only restrict access.
+Operator chains and unrelated explicit configuration chains retain their
+grants; a file reached from both project and operator roots keeps its separate
+authority for each occurrence.
 
 This policy reduces secret ingress into rendered manifest fields. It does not
 make rendered manifest contents safe to log: allowed values still require the

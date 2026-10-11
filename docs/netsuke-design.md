@@ -3667,11 +3667,28 @@ arguments then override the file layers.
    selector remains unchanged. The `-C/--directory` project-root anchor applies
    to manifest lookup and automatic project configuration discovery.
 
+   Fetch-policy authority follows each file occurrence. If an explicit selector
+   chooses the matching project `.netsuke.toml`, that occurrence and its
+   inherited `extends` parents are project-scoped for grant-bearing fetch
+   fields. An unrelated explicit configuration chain remains operator-scoped.
+   If a file is also reached from an operator root, its separate operator
+   occurrence retains that authority.
+
 2. **Project scope**: Configuration files in the current working directory (or
    the directory specified via `-C/--directory`):
    - `.netsuke.toml` (dotfile in project root)
    - Additional formats when features are enabled: `.netsuke.json`,
      `.netsuke.json5`, `.netsuke.yaml`, `.netsuke.yml`
+
+   For fetch policy, the selected project configuration and every file in its
+   `extends` chain are project requests. By default, their allowlist grants are
+   quarantined, and their trust setting cannot authorize those grants.
+   Project-chain `trust_project_fetch_policy` and `env_allow_var` are
+   discarded; only system, user, environment, or CLI configuration can enable
+   fetch trust. Requests combine dependency-first, with the primary file last;
+   allowlists append in that order and the last present default-deny value
+   applies. Project-chain `fetch_block_host` and `env_block_var` remain
+   cumulative.
 
 3. **User scope**: Configuration files in user-specific directories:
    - **Unix-like systems**:
