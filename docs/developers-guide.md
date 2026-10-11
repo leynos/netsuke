@@ -7990,16 +7990,18 @@ minimal feature for returning an owned digest.
 Because these crates share their breaking changes, `.github/dependabot.yml`
 collects them into a `rustcrypto` group for the `cargo` ecosystem, so the next
 major arrives as one buildable pull request rather than several that cannot
-compile individually. It and the `rstest-bdd` group are the only groups
-permitted to take majors, and both are listed before the `minor-and-patch`
-catch-all because Dependabot assigns a dependency to the first group that
-matches it. The `rstest-bdd` group exists because `rstest-bdd` and
-`rstest-bdd-macros` also release in lockstep, and Cargo's pre-1.0 rules count a
-0.x minor as a major, which the catch-all would leave ungrouped. Add any new
-RustCrypto crate to the `rustcrypto` group's `patterns` list at the same time
-as the dependency itself. Never work around a lockstep break by pinning one
-member to an exact version: that blocks the whole family, and undoing it was
-the work of issue #477.
+compile individually. It, the `rstest-bdd` group and the `ortho-config-fluent`
+group are the only groups permitted to take majors, and all three are listed
+before the `minor-and-patch` catch-all because Dependabot assigns a dependency
+to the first group that matches it. The `rstest-bdd` group exists because
+`rstest-bdd` and `rstest-bdd-macros` also release in lockstep, and Cargo's
+pre-1.0 rules count a 0.x minor as a major, which the catch-all would leave
+ungrouped. The `ortho-config-fluent` group keeps `ortho_config` and
+`fluent-bundle` on one version, since their `FluentValue` types must match. Add
+any new RustCrypto crate to the `rustcrypto` group's `patterns` list at the
+same time as the dependency itself. Never work around a lockstep break by
+pinning one member to an exact version: that blocks the whole family, and
+undoing it was the work of issue #477.
 
 Both removals are pinned by `tests/sha2_migration_guard_tests.rs`, which
 asserts at compile time that the digest type does not implement
