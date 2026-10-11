@@ -60,11 +60,17 @@ def _append_in_process(target: str, payload: bytes) -> int:
     r"""Append one record to a file, or refuse as the shell's ``>>`` did.
 
     An empty target is not a special case with a destination of its own. The
-    shell's ``>>"$file"`` with an empty or unset ``file`` failed to open an
-    empty filename and reported the failure; it never wrote the record
-    anywhere. Reproducing that as "return the refusal status" is therefore the
-    honest shape, and inventing a destination would have been a behaviour no
-    shell ever exhibited.
+    shell's ``>>"$file"`` with an empty ``file`` failed to open an empty
+    filename and reported the failure; it never wrote the record anywhere.
+    Reproducing that as "return the refusal status" is therefore the honest
+    shape, and inventing a destination would have been a behaviour no shell
+    ever exhibited.
+
+    An *unset* target is not the same arm: the shell ran under ``set -u``, so
+    its expansion aborted the command with status ``127`` before the
+    redirection was attempted at all. The port never sees that state -- every
+    target is a ``str`` by the time it is called -- and the statuses agree
+    anyway, so the empty case is the one this arm documents.
 
     Returns
     -------

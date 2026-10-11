@@ -152,14 +152,15 @@ reproduce:
   the adapter path and the in-process append. The JSON Lines reader drops a
   final record that has none, so a byte-level comparison between the two gates
   shows the same lines only when both terminate the last one.
-- ``GITHUB_OUTPUT`` is not the only target whose value can be unset: when a
-  required variable aborts the gate before the artefact paths are computed, the
-  shell's ``>>"$file"`` redirection carried no operand. Bash did not write the
-  record to its own standard output in that state; it tried to open an empty
-  filename, failed, and reported the failure, so the record went nowhere. The
-  Python port returns the same refusal status for an empty target rather than
-  inventing a destination no shell ever had, so a run that fails on
-  ``GITHUB_REPOSITORY`` is byte-identical on stdout as well: both emit nothing.
+- A required variable that aborts the gate before the artefact paths are
+  computed writes nothing at all, on either side of the port: the shell's
+  ``:?`` expansion aborted before it reached the ``trap`` that writes the gate
+  record, so no redirection was attempted and its standard output stayed empty.
+  The Python port returns from its configuration load in the same position, so
+  a run that fails on ``GITHUB_REPOSITORY`` is byte-identical on standard
+  output as well: both emit nothing. The port's empty-target arm, which reports
+  the status a shell's ``>>`` gives an empty operand, is a defensive path that
+  this scenario does not reach on either side.
 """
 
 from release_admission_test_doubles import (
