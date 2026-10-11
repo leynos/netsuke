@@ -1393,10 +1393,12 @@ change admission semantics beyond the scope of a form change.
   than recalled: `_wait_for_exit` and `_wait_for_streams` both
   `except TimeoutError`, call `_terminate_group`, and `return None` — so the
   child's status after the escalation is discarded, and `translate_exit(None)`
-  reports `124` whatever signal ended the command. `137` therefore remains
-  reachable only for a *completed* command independently terminated by
-  `SIGKILL`, which is what the test module's own `classify_result` case still
-  exercises and what keeps `TIMEOUT_BY_KILL` in the set.
+  reports `124` whatever signal ended the command. Status `137` therefore
+  remains reachable from a *completed* command by either of two routes: the
+  translation of `-9`, or an explicit exit status of `137`. The first is what
+  the test module's own `classify_result` case exercises, and between them they
+  are what keeps `TIMEOUT_BY_KILL` in the set. The runner's own elapsed bound
+  produces `124` and never `137`.
 
   The distinction was measured against GNU coreutils 9.5 rather than reasoned:
   `timeout --kill-after=1 1 ./traps-term` exits `137`, and

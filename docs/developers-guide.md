@@ -1860,19 +1860,20 @@ bound at all, exactly as the shell left it unwrapped.
 
 Statuses are normalized to Bash's convention before anything classifies them.
 Python reports a signal death as the negation of the signal where a shell
-reports `128 + signal`, and `statuses` reads only `124` and `137` as a timeout
-after translating, so a completed command independently terminated by
-`SIGKILL` — reported as `-9` — would be classified as `api_error` or
-`fetch_error` instead of `timeout` and silently change a timed-out operation's
-published category. The bound's own expiry is not that case and does not depend
-on which signal ended the command: it reports `None` even after escalating to
-`SIGKILL`, even though that escalation discarded the child's status, so every
-elapsed bound is `124`. `SIGTERM` is translated for the same reason and is a
-different case again: `143` is not a timeout status, so an adapter killed by
-`SIGTERM` keeps its operation's own category. A refused launch keeps the
-shell's statuses — `127` for a program that does not exist and `126` for any
-other refusal — and a failed in-process append reports `1`, which is what the
-shell's `>>` failure produced.
+reports `128 + signal`, and `statuses` reads only `124` and `137` as a timeout.
+Without translation, a completed command independently terminated by
+`SIGKILL` — reported as `-9` — would keep its operation's own category, so an
+`api_error` or `fetch_error` would be published where the preserved policy says
+`timeout`. Translation maps `-9` to `137`, which the policy classifies as a
+timeout. The bound's own expiry is not that case and does not depend on which
+signal ended the command: it reports `None` even after escalating to `SIGKILL`,
+even though that escalation discarded the child's status, so every elapsed
+bound is `124`. `SIGTERM` is translated for the same reason and is a different
+case again: `143` is not a timeout status, so an adapter killed by `SIGTERM`
+keeps its operation's own category. A refused launch keeps the shell's statuses
+— `127` for a program that does not exist and `126` for any other refusal — and
+a failed in-process append reports `1`, which is what the shell's `>>` failure
+produced.
 
 Both artefact paths are handled in the spelling the operator supplied. The
 shell passed its own string to a sink adapter and published it in the

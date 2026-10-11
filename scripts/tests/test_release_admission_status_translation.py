@@ -6,9 +6,10 @@ through the shell's convention, and two downstream decisions depend on it:
 
 - :func:`policy.classify_command_result` maps only a timed-out outcome to
   ``timeout``, and the outcome is decided by ``statuses`` from the translated
-  status, so a completed command independently terminated by ``SIGKILL`` and
-  reported as ``-9`` would be classified as an ordinary command failure and the
-  operation's own category would survive a real timeout. A command
+  status. Without translation, a completed command independently terminated by
+  ``SIGKILL`` and reported as ``-9`` would be classified as an ordinary command
+  failure and would keep its operation's own category. Translation maps ``-9``
+  to ``137``, which the preserved policy classifies as a timeout. A command
   independently terminated by ``SIGTERM`` reports ``-15``, which translates to
   ``143`` and remains an ordinary failure, because ``143`` is deliberately
   *not* a timeout status. The bound is a different case and does not depend on
@@ -217,9 +218,13 @@ def test_classify_result_translates_a_signalled_command(
     Notes
     -----
     This is the whole point of the translation: ``classify_result`` is the only
-    place a completed command's status becomes a decision, so a command
-    independently terminated by a signal must classify as a timeout here rather
-    than fall through to the operation's own category.
+    place a completed command's status becomes a decision, so the status of a
+    completed command independently terminated by a signal has to reach it in
+    the shell's convention rather than untranslated. Only the ``SIGKILL`` case
+    produces a timeout-classified status: ``137`` belongs to
+    :data:`statuses.TIMEOUT_STATUSES`, while the ``SIGTERM`` and ``SIGINT``
+    cases translate to ``143`` and ``130`` and keep their operation's own
+    category.
     """
     assert statuses.classify_result(_result(reported)) == expected, (
         "a signalled command must reach classification in the shell's convention"

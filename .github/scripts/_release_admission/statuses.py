@@ -8,7 +8,8 @@ happened:
   waited reports ``128`` plus the signal number, where cuprum reports the
   negation of it, so ``kill -KILL`` is ``137`` to a shell and ``-9`` to Python.
 - The gate's own bound reports an elapsed timeout as ``None``, where GNU
-  ``timeout`` reported ``124``.
+  ``timeout`` could report ``124`` or ``137``. This port translates ``None`` to
+  ``124`` in both cases.
 - A launch the operating system refused arrives as an :class:`OSError` rather
   than as a status, where ``timeout`` printed a sentence and exited ``127`` for
   a program that does not exist and ``126`` for any other refusal.
