@@ -206,8 +206,9 @@ safe and diagnosable.
 - Metric allowlist and JSONL validation:
   [`release_admission_metrics.py`](../tests/workflow_contracts/release_admission_metrics.py)
 - Script and workflow contract tests:
-  [`test_release_admission_metrics.py`](../scripts/tests/test_release_admission_metrics.py)
-  and
+  [`test_release_admission_metrics.py`](../scripts/tests/test_release_admission_metrics.py),
+  the rest of the runtime modules beside it under
+  [`scripts/tests/`](../scripts/tests/), and
   [`release_admission_metrics_test.py`](../tests/workflow_contracts/release_admission_metrics_test.py)
 - Operator guidance:
   [`developers-guide.md`](developers-guide.md#release-admission-observability)
@@ -234,3 +235,29 @@ exits non-zero for those results. An evidence-state value such as `fresh` does
 not substitute for a real evidence producer or enable enforcement. Publication
 must remain independent of the scaffold until that producer and its validation
 are available.
+
+## Addendum (2026-10-11): The bound, the streams, and the statuses
+
+The accepted decision above is unchanged. Three execution properties are now
+contractual rather than incidental.
+
+**The bound reaches a process group.** A command that outlives its operation
+timeout is signalled as a group, `SIGTERM` first and `SIGKILL` after a
+one-second grace, which is the escalation GNU `timeout --kill-after=1s` gave.
+The worst case is therefore the timeout plus that grace, and no process the
+command started is left running. A descendant that leaves the group with its own
+`setsid()` still escapes, exactly as it did under GNU `timeout`.
+
+**The streams follow the shell's redirections.** A command whose output the
+gate parses has that stream captured in a pipe the gate reads to end-of-file,
+and its standard error inherited, so only the parsed stream is private. A
+command whose output is only reported, and a sink adapter, have both streams
+inherited. The clock adapter runs with no bound at all, as the shell left it
+unwrapped.
+
+**Statuses are reported in Bash's convention.** A child killed by a signal is
+reported as `128` plus the signal, and a launch the operating system refuses
+keeps the shell's statuses: `127` when the program does not exist, `126` for
+any other refusal. Neither translation changes a published `error_category`;
+they keep it, because a timed-out operation is identified by the statuses the
+shell produced rather than the negative numbers Python reports.

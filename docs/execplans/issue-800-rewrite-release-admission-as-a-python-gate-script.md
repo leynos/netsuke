@@ -142,9 +142,10 @@ once the shell scripts are deleted.
   boundary into the command and make the function untestable in process.
 
 - Bounding is native. The shell wrapped each command in GNU `timeout`;
-  `commands.run_bounded` reproduces both the one-second grace and the `124`
-  (SIGTERM) / `137` (SIGKILL) classification through cuprum's cancellation
-  path, so a timeout no longer depends on an external binary being present.
+  `bounding.run_bounded` reproduces both the one-second grace and the `124`
+  (SIGTERM) / `137` (SIGKILL) classification without an external binary, and it
+  does so by signalling the command's *process group* rather than cuprum's
+  cancellation path, which reaches only the direct child.
 - The configured adapter names are the cuprum allowlist catalogue, because the
   adapter environment variables are a documented part of this gate's contract.
 - A launch the operating system refuses (a missing adapter, a file without its
@@ -205,7 +206,7 @@ deferred in the test module rather than simulated.
 
 The port is complete, validated, and open for review. The Bash gate is now a
 Cyclopts `uv run --script` entry point with its implementation split across
-seven modules, its behaviour held to a frozen oracle, and its tests running
+eight modules, its behaviour held to a frozen oracle, and its tests running
 through cmd-mox doubles. `release.yml` invokes the Python entry point; the
 three shell scripts are deleted.
 
@@ -226,15 +227,15 @@ A third pass then read the delivered port for *behaviour parity* rather than
 for the port's own quality, and it found more than the first two together. It
 listed five behavioural defects, each verified against the shell before being
 fixed, and five acceptance-coverage gaps. Every fix is a separate commit and
-every gap is a case in one of the four modules the suite gained.
+every gap is a case in one of the five modules the suite gained.
 
-| Defect | Verified against the shell | Fix |
-| --- | --- | --- |
-| The bound signalled the direct child only, so a descendant survived cancellation and held the captured pipe open | GNU `timeout` signals the supervised command's *process group* and escalates to `SIGKILL` after a one-second grace | `bounding` starts the child in its own session and kills the group, with a real-child escalation case and a descendant case |
-| The adapters' output was discarded | The shell redirected no adapter stream, so an operator's diagnostic reached the runner | GitHub/clock standard output stays private but their stderr is inherited; the Git and sink adapters inherit both |
-| A subprocess status reached the gate untranslated | A shell reports a signal death as `128 + signal`, and `timeout` reported `127`/`126` for a refused launch | `policy.as_bash_status` and `policy.launch_failure_status`, pinned as pure functions |
-| The artefact parents were created and truncated in one pass | The shell ran one `mkdir -p` naming both parents and only then truncated both files | `load_configuration` creates every parent first, then truncates; a filesystem refusal is a `ConfigurationError`, not a traceback |
-| A configured path was normalised at two boundaries | The shell passed the operator's own string to its sink and to `GITHUB_OUTPUT` | `OutputPath` retains the configured spelling and resolves separately for the filesystem |
+| Defect                                                                                                           | Verified against the shell                                                                                         | Fix                                                                                                                              |
+| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| The bound signalled the direct child only, so a descendant survived cancellation and held the captured pipe open | GNU `timeout` signals the supervised command's *process group* and escalates to `SIGKILL` after a one-second grace | `bounding` starts the child in its own session and kills the group, with a real-child escalation case and a descendant case      |
+| The adapters' output was discarded                                                                               | The shell redirected no adapter stream, so an operator's diagnostic reached the runner                             | GitHub/clock standard output stays private but their stderr is inherited; the Git and sink adapters inherit both                 |
+| A subprocess status reached the gate untranslated                                                                | A shell reports a signal death as `128 + signal`, and `timeout` reported `127`/`126` for a refused launch          | `policy.as_bash_status` and `policy.launch_failure_status`, pinned as pure functions                                             |
+| The artefact parents were created and truncated in one pass                                                      | The shell ran one `mkdir -p` naming both parents and only then truncated both files                                | `load_configuration` creates every parent first, then truncates; a filesystem refusal is a `ConfigurationError`, not a traceback |
+| A configured path was normalised at two boundaries                                                               | The shell passed the operator's own string to its sink and to `GITHUB_OUTPUT`                                      | `OutputPath` retains the configured spelling and resolves separately for the filesystem                                          |
 
 The gaps are the cases the port's own tests could not express, and each is now
 a module of its own. The refusal order and the artefact-creation position are
@@ -265,9 +266,9 @@ corrections; the behaviour was already right.
   key on are byte-identical.
 - Observation mode and publication independence are unchanged; the contract
   still asserts that no publication job depends on the canary job.
-- Bounding is native: `commands.run_bounded` reproduces GNU `timeout`'s
-  one-second grace and its `124`/`137` classification without an external
-  binary.
+- Bounding is native: `bounding.run_bounded` reproduces GNU `timeout`'s
+  one-second grace, its `124`/`137` classification, and its process-group reach
+  without an external binary.
 
 ### Stated differences
 

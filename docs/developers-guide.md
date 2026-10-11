@@ -1814,12 +1814,13 @@ runs with `uv run --script`, which resolves its declared dependencies at
 invocation. Its implementation is split across
 `.github/scripts/_release_admission/`: `policy` owns the pure bounded
 classifications, `records` owns the metric and trace shapes, `delivery` owns
-the metric, output, and trace sinks, `commands` owns the bounded external
-command runner, `telemetry` owns the emitted records, `configuration` resolves
-the environment the gate is told, and `gate` composes the operations and
-reporting. The workflow's `astral-sh/setup-uv` step provisions the interpreter;
-`uv` reads the entry point's own `requires-python` and dependency pins rather
-than the workflow restating them.
+the metric, output, and trace sinks, `bounding` owns the process-group command
+bound and the stream wiring, `commands` owns the bounded external command
+runner, `telemetry` owns the emitted records, `configuration` resolves the
+environment the gate is told, and `gate` composes the operations and reporting.
+The workflow's `astral-sh/setup-uv` step provisions the interpreter; `uv` reads
+the entry point's own `requires-python` and dependency pins rather than the
+workflow restating them.
 
 The gate keeps fallible boundaries behind explicit adapters. Set
 `NETSUKE_RELEASE_ADMISSION_GH_ADAPTER` for GitHub API requests,
@@ -1830,6 +1831,44 @@ The gate keeps fallible boundaries behind explicit adapters. Set
 `NETSUKE_RELEASE_ADMISSION_TRACE_SINK` for trace records. The defaults are `gh`,
 `git`, `python3`, and direct file or output appends. Adapters must retain the
 fixed, bounded contracts; they must not add identifiers or raw data.
+
+The bounded commands run through `commands` and `bounding`. Cuprum still builds
+each argument vector from the configured adapter names, so the allowlist
+decides which executables may run, but the gate spawns the child itself with
+`start_new_session=True`. A command that outlives its bound is signalled as a
+*process group*: `SIGTERM` first, then `SIGKILL` after the same one-second grace
+`timeout --kill-after=1s` gave. The worst case is therefore the bound plus
+that grace, and no process the command started is left running. A descendant
+that leaves the group with its own `setsid()` still escapes, which is GNU
+`timeout`'s hole as well and is the same limitation the
+[Kani scope wrapper](#kani-scope-wrapper) records.
+
+The streams follow the shell's redirections rather than one rule. A command
+whose output the gate *parses* — the GitHub and clock adapters — has its
+standard output captured in a pipe the gate reads to end-of-file, and its
+standard error inherited, so only the parsed stream is private. A command whose
+output is only *reported* — the `git` fetch — has both streams inherited, as
+does a sink adapter, which the shell ran as an ordinary command in a pipeline
+rather than in a command substitution. The clock adapter alone runs with no
+bound at all, exactly as the shell left it unwrapped.
+
+Statuses are normalized to Bash's convention before anything classifies them.
+Python reports a signal death as the negation of the signal where a shell
+reports `128 + signal`, and `policy.classify_command_failure` reads only `124`
+and `137` as a timeout, so an untranslated `-15` would silently change a
+timed-out operation's published category. A refused launch keeps the shell's
+statuses — `127` for a program that does not exist and `126` for any other
+refusal — and a failed in-process append reports `1`, which is what the shell's
+`>>` failure produced.
+
+Both artefact paths are handled in the spelling the operator supplied. The
+shell passed its own string to a sink adapter and published it in the
+`metrics-file` and `trace-file` workflow outputs, while only `mkdir` and the
+redirection saw a normalized form; the port carries both spellings in an
+`OutputPath`. Creation is still two-phase: both parent directories are made
+before either file is truncated, so a refused trace parent leaves the metrics
+file untouched, and a filesystem refusal prints one bounded diagnostic rather
+than escaping as an uncaught traceback.
 
 The internal module boundaries are deliberately narrow: `gate` is the
 composition and reporting entry point, `delivery` and `commands` own the
@@ -1874,8 +1913,9 @@ and metric classification remains fail-closed.
 
 Each operation has a 30-second timeout by default. Set
 `NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS` only to an integer from 1
-through 300 seconds, inclusive. The timeout terminates the command and gives
-descendants a one-second termination grace period. A timed-out operation emits
+through 300 seconds, inclusive. The timeout terminates the command's whole
+process group, so a descendant the command started ends with it, and it gives
+the group a one-second termination grace period. A timed-out operation emits
 `outcome=failure` with `error_category=timeout`; invalid timeout configuration
 fails closed as `outcome=failure` with `error_category=unknown` before any
 admission operation runs.
@@ -2797,14 +2837,32 @@ Python gate. It uses the repository's Python 3.14 baseline and provisions
 `pytest==9.0.2` and `hypothesis==6.151.9` explicitly, alongside
 `cmd-mox==0.2.0` for the command doubles and `cuprum==0.1.0` and
 `cyclopts==4.25.3` for the entry point the tests import. The target runs the
-four runtime modules with `python -m pytest`, `-c /dev/null`, `--rootdir=.`, and
-`-p no:cacheprovider`, so the test run is isolated from repository-local
-pytest configuration and cache state:
+ten runtime modules with `python -m pytest`, `-c /dev/null`, `--rootdir=.`, and
+`-p no:cacheprovider`, so the test run is isolated from repository-local pytest
+configuration and cache state:
 
 - `scripts/tests/test_release_admission_metrics.py`
 - `scripts/tests/test_release_admission_metric_failures.py`
 - `scripts/tests/test_release_admission_metric_boundedness.py`
+- `scripts/tests/test_release_admission_process_bounds.py`
+- `scripts/tests/test_release_admission_environment_contract.py`
+- `scripts/tests/test_release_admission_default_forms.py`
+- `scripts/tests/test_release_admission_status_translation.py`
+- `scripts/tests/test_release_admission_runner_contract.py`
 - `scripts/tests/test_release_admission_metric_degradation.py`
+- `scripts/tests/test_release_admission_sink_persistence.py`
+
+Three of these reach past the doubles. `..._process_bounds.py` holds the
+bound's own regression cases: a child and a descendant it starts, both trapping
+`SIGTERM`, asserting that the child is escalated to `SIGKILL`, that the
+descendant is reaped, and that the call returns within the bound plus the
+cancel grace rather than overrunning on a pipe the descendant holds open.
+`..._runner_contract.py` pins the private-versus-inherited stream contract
+against a real child, which a shim cannot show: only the process owning the
+file descriptor can observe an inherited stream. `..._status_translation.py`
+calls `policy.as_bash_status` and `policy.launch_failure_status` directly and
+drives real sink processes, so a signal death and a refused launch are observed
+rather than fabricated.
 
 The runtime modules drive the gate as a real process and intercept its external
 commands with cmd-mox doubles registered under the gate's own adapter names.

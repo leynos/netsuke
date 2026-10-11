@@ -23,7 +23,13 @@ RUNTIME_MODULES = (
     "scripts/tests/test_release_admission_metrics.py",
     "scripts/tests/test_release_admission_metric_failures.py",
     "scripts/tests/test_release_admission_metric_boundedness.py",
+    "scripts/tests/test_release_admission_process_bounds.py",
+    "scripts/tests/test_release_admission_environment_contract.py",
+    "scripts/tests/test_release_admission_default_forms.py",
+    "scripts/tests/test_release_admission_status_translation.py",
+    "scripts/tests/test_release_admission_runner_contract.py",
     "scripts/tests/test_release_admission_metric_degradation.py",
+    "scripts/tests/test_release_admission_sink_persistence.py",
 )
 #: The pinned dependencies the runtime modules import: pytest drives the suite,
 #: Hypothesis generates the identifier property, cmd-mox supplies every command
@@ -102,7 +108,7 @@ def test_make_target_runs_only_the_release_admission_runtime_modules() -> None:
     Notes
     -----
     The target must use the repository Python baseline, explicit test
-    dependencies, isolated pytest configuration, and exactly the four
+    dependencies, isolated pytest configuration, and exactly the ten
     release-admission modules -- no more, because a stray path would make this
     target responsible for a suite that has its own gate.
     """
@@ -115,7 +121,7 @@ def test_make_target_runs_only_the_release_admission_runtime_modules() -> None:
         token for token in recipe.split() if token.startswith("scripts/tests/test_")
     ]
     assert runtime_paths == list(RUNTIME_MODULES), (
-        f"{TARGET} must execute exactly the four release-admission modules, "
+        f"{TARGET} must execute exactly the ten release-admission modules, "
         f"got {runtime_paths!r}"
     )
 
