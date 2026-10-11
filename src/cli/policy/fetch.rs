@@ -5,10 +5,11 @@ use super::super::discovery::ProjectFetchPolicyRequest;
 use crate::stdlib::FetchPolicyReconciliationOutcome;
 use crate::stdlib::reconciliation::{OperatorFetchPolicy, ProjectFetchPolicy, reconcile};
 
-/// Reconcile fetch grants, preserving blocks and unrelated configuration.
+/// Reconcile project-chain fetch grants, preserving blocks and other settings.
 ///
-/// Discovery supplies the primary quarantined request. The domain owns the trust
-/// decision and returns value-free outcome data for the merge observer.
+/// Discovery supplies the combined dependency-first project-chain request.
+/// The domain owns the trust decision and returns value-free outcome data for
+/// the merge observer.
 pub(in crate::cli) fn reconcile_fetch_policy(
     mut config: CliConfig,
     project_request: Option<ProjectFetchPolicyRequest>,

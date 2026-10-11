@@ -65,6 +65,111 @@ fn explicit_absolute_config_ignores_cli_directory() -> Result<()> {
     assert_single_layer(&discovered, &selector)
 }
 
+#[test]
+fn explicit_project_selector_quarantines_its_inherited_chain() -> Result<()> {
+    let temp = tempdir().context("create project directory")?;
+    let inherited = temp.path().join("policy.toml");
+    let primary = temp.path().join(".netsuke.toml");
+    test_support::fs::write(
+        &inherited,
+        "fetch_allow_host = [\"169.254.169.254\"]\ntrust_project_fetch_policy = true\n",
+    )
+    .context("write inherited project policy")?;
+    test_support::fs::write(
+        &primary,
+        "extends = \"policy.toml\"\nfetch_allow_scheme = [\"http\"]\n",
+    )
+    .context("write explicit project selector")?;
+    let cli = Cli {
+        config: Some(primary),
+        directory: Some(
+            Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).map_err(|non_utf8| {
+                anyhow::anyhow!(
+                    "project directory is not valid UTF-8: {}",
+                    non_utf8.display()
+                )
+            })?,
+        ),
+        ..Cli::default()
+    };
+
+    let (layers, errors, project_request, _) = discover_file_layers(&cli, &TestEnv::default())
+        .into_layers()
+        .into_parts();
+
+    ensure!(
+        errors.is_empty(),
+        "explicit project chain should load: {errors:?}"
+    );
+    let request = project_request.context("explicit project chain should be quarantined")?;
+    ensure!(
+        request.allow_scheme == ["http"],
+        "project scheme should be captured"
+    );
+    ensure!(
+        request.allow_host == [crate::host_pattern::HostPattern::parse("169.254.169.254")?],
+        "project host should be captured"
+    );
+    for layer in layers {
+        let value = layer.into_value();
+        ensure!(
+            value.get("fetch_allow_scheme").is_none()
+                && value.get("fetch_allow_host").is_none()
+                && value.get("trust_project_fetch_policy").is_none(),
+            "project-chain grants and trust should be quarantined"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn unrelated_explicit_operator_selector_keeps_ordinary_file_fields() -> Result<()> {
+    let temp = tempdir().context("create project directory")?;
+    test_support::fs::write(
+        temp.path().join(".netsuke.toml"),
+        "fetch_default_deny = true\n",
+    )
+    .context("write automatically discoverable project config")?;
+    let selector = temp.path().join("operator.toml");
+    test_support::fs::write(&selector, "fetch_allow_scheme = [\"http\"]\n")
+        .context("write unrelated explicit config")?;
+    let cli = Cli {
+        config: Some(selector),
+        directory: Some(
+            Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).map_err(|non_utf8| {
+                anyhow::anyhow!(
+                    "project directory is not valid UTF-8: {}",
+                    non_utf8.display()
+                )
+            })?,
+        ),
+        ..Cli::default()
+    };
+
+    let (layers, errors, request, _) = discover_file_layers(&cli, &TestEnv::default())
+        .into_layers()
+        .into_parts();
+
+    ensure!(
+        errors.is_empty(),
+        "explicit operator config should load: {errors:?}"
+    );
+    ensure!(
+        request.is_none(),
+        "unrelated config has no project occurrence"
+    );
+    let layer = layers
+        .into_iter()
+        .next()
+        .context("explicit operator layer should be retained")?;
+    let value = layer.into_value();
+    ensure!(
+        value.get("fetch_allow_scheme") == Some(&serde_json::json!(["http"])),
+        "unrelated explicit configuration should retain ordinary fields"
+    );
+    Ok(())
+}
+
 /// A relative `--config` selector keeps its process-working-directory spelling.
 #[test]
 fn explicit_relative_config_ignores_cli_directory() -> Result<()> {
