@@ -53,6 +53,14 @@ updates:
       rstest-bdd:
         patterns:
           - "rstest-bdd*"
+      # ortho_config and fluent-bundle must resolve to one version: netsuke
+      # constrains `fluent-bundle` to the version `ortho_config` resolves, or
+      # the FluentValue types of the two would differ (see Cargo.toml). Group
+      # them so they bump together; this too must precede the catch-all.
+      ortho-config-fluent:
+        patterns:
+          - "ortho_config"
+          - "fluent-bundle"
       minor-and-patch:
         patterns:
           - "*"
