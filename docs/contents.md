@@ -271,6 +271,8 @@ operator, user, and contributor references are easier to find.
   and a host-dependent default.
 - [ADR-042](adr-042-run-the-shared-cv005-contract-checker.md): Running the
   pinned shared CV-005 contract checker beside the local workflow contracts.
+- [ADR-043](adr-043-isolate-command-list-entries.md): Opt-in command-list
+  entry isolation with shared mode preserved as the default.
 
 ## Proposals
 
