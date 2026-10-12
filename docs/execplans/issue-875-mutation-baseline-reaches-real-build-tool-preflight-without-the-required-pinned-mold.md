@@ -225,8 +225,46 @@ Every stopping point is documented here. Timestamps are UTC.
   rather than a fallback.
 - [x] (2026-10-12 15:35Z) **ETXTBSY audit complete, read-only.** No defect
   found; no helper changed; no retry added. See EP-M3 for the full chain.
-- [ ] Milestone 3: full local gates, worker dispatch, linker-selection
-  observation.
+- [x] (2026-10-12 19:20Z) **The dispatch's mutation report read from the
+  artefact, not the run conclusion.** `mutation-report-root-2` (artefact
+  `11760992373`, job `114916843738`) proves on `bc812986` that step 7 "Run
+  setup commands" = `completed/success` and the baseline's **Build** phase =
+  `process_status: "Success"` after 119.9 s of real Cargo — so the mold fix
+  works and the worker can now compile. It equally proves the baseline's
+  **Test** phase failed (`Failure: 101`) on
+  `runner::manifest_structure_telemetry::tests::manifest_structure_telemetry_carries_only_counts`
+  with `[]`, so `outcomes.json` has `total_mutants: 0`. Both conclusions are
+  recorded in *Surprises & discoveries*; the second is **out of scope** for
+  this plan and is escalated rather than fixed.
+- [x] (2026-10-12 19:30Z) **Green-run audit — the finding that reframes the
+  issue.** All eight runs from `3f86c09d` (5 Oct) to `c65ad970` (12 Oct)
+  concluded `success` with the `mutation / mutants` job `skipped` and zero
+  artefacts: they evaluated no mutants at all. Logged in *Surprises &
+  discoveries*.
+- [x] (2026-10-12 19:35Z) **`make test` and `make test-workflow-contracts` are
+  BLOCKED on disk exhaustion, not skipped and not failed.** A dispatched gate
+  runner was held before it launched either, on the plan's own 3 GB
+  kill-threshold being met by the *idle* machine. Measured evidence, all on
+  `/dev/md2` (one 1.8 TB device carrying `/`, `/tmp` and every worktree): free
+  space 15.47 GB at 19:16:30 → 3.43 GB at 19:23 → **2.95 GB at 19:25**, with
+  nothing of the runner's running; load average **54.12 / 43.02 / 36.84** on 6
+  cores; `pids.current` **7406 / 8192 (91%)**, the level at which an earlier
+  `make test` died with `os error 11`; `build-limits-status` reporting
+  `capacity 4, held 4, healthy, sccache unreachable, compiling directly` with
+  ~20 compiler groups queued, including for `netsuke/worktrees/af59be38-…` and
+  two `whitaker` worktrees. This worktree's `target/` alone is 30 GB; all six
+  sibling `target/` directories total ~117 GB and belong to other worktrees, so
+  **nothing has been deleted**. Consequence: no log exists for either gate, the
+  `doctest` stage has still never run at this revision, and the root
+  `rustls-webpki` compiler diagnostic remains *unavailable* rather than merely
+  unfound. Escalated to the operator for a pruning decision: any failure
+  produced now is un-attributable between a real defect and ENOSPC, which is
+  exactly how the previous attempt's two failures came to be uninterpretable.
+  Note also that `sccache unreachable` means sibling builds are compiling
+  uncached, so the collapse is faster than a cached build's.
+- [ ] Milestone 3 remainder, blocked on the above: `make test`,
+  `make test-workflow-contracts`, then the completed run's `setup-commands` log
+  text for the `RUSTFLAGS` / `CARGO_ENCODED_RUSTFLAGS` observation.
 - [ ] Milestone 4: ExecPlan finalized, commit, push, draft PR.
 
 ## Surprises & discoveries
@@ -285,6 +323,107 @@ Unexpected findings during implementation that were not anticipated as risks.
   `build-tools: mold not found on PATH (pinned 2.41.0)`, exit 2. The plan's
   EP-M2 commands below are corrected accordingly. A probe that removes the
   wrong thing, or verifies nothing, returns a green that means nothing.
+
+- **Observation (2026-10-12, milestone 3): the green runs were green because
+  they evaluated no mutants, and this inverts the issue's framing of the
+  evidence.** Evidence: every `Mutation testing` run from at least
+  `2026-10-05T10:07:08Z` (`3f86c09d`) through `2026-10-12T10:24:10Z`
+  (`c65ad970`) concluded `success` in GitHub, but in each one the
+  `mutation / mutants` job — the *only* job that can evaluate a mutant —
+  concluded **`skipped`**, and the run published **zero** artefacts. The
+  `detect` job's own step table ends at
+  `Detect changed files = completed/success`; it never decides to skip, so the
+  skip originates outside the caller's job table (the pinned shared workflow,
+  or a `paths` filter on the caller). The two runs in the same window that
+  *did* launch shards both went **red**: `b6e7cf50` (3 Oct) and `bc812986` (12
+  Oct). The relation is therefore green ⇔ shards skipped; shards run ⇒ red.
+
+  Impact, recorded because it changes what "the documented missing-mold
+  failure" is evidence *for*: the mold diagnostic is real and this plan
+  reproduces it, but it is **not** the reason this repository has evaluated no
+  mutants for at least a week. Confirming it requires artefact inspection, not
+  the run conclusion. The acceptance criterion "a non-empty mutant set
+  executes" cannot be discharged by any green run that predates this branch,
+  because none of them executed a mutant. See also the next observation, which
+  shows the same artefact-inspection discipline applied to the 3 Oct failure.
+
+- **Observation (2026-10-12, milestone 3): two *different* baseline tests have
+  failed the mutation worker, and cargo-mutants' phase split is what hides
+  which.** The 3 Oct report (`mutation-report-root-0`, artefact from run
+  `37111347135`) and the 12 Oct report (`mutation-report-root-2`, artefact
+  `11760992373`, job `114916843738`) agree on a structure that misleads: in
+  both, `phase_results[0]` is the Build phase and reports
+  `process_status: "Success"` — 122.4 s and 119.9 s of real Cargo respectively
+  — while `phase_results[1]`, the Test phase, reports `Failure: 101`. Both
+  record `total_mutants: 0`, and cargo-mutants states the consequence in
+  `debug.log`:
+  `cargo test failed in an unmutated tree, so no mutants were tested`.
+
+  The Build phase succeeding does **not** mean the worker could build what
+  matters. Its argv is `cargo test --no-run --package=netsuke-build@…`, which
+  compiles and links but never executes a test body, so it never reaches the
+  `make doctest` invocation that needs the linker. Everything this plan is
+  about happens in the Test phase. Reading `Build: Success` as "the mold
+  problem is not involved" would have been exactly the error this section
+  exists to warn about; it very nearly was.
+
+  The two failures, now identified test-by-test:
+
+  - **3 Oct (`b6e7cf50`) is the issue's documented mold failure, verbatim.**
+    `log/baseline.log` carries 20 repetitions of `Error: doctest with a
+    environment override should call fake Cargo successfully: build-tools: mold
+    not found on PATH (pinned 2.41.0)`, and the failing pair is
+    `rustdocflags::behavioural_doctest_passes_shell_sensitive_overrides_only_as_rustdocflags`
+    and `rustdocflags::property_doctest_preserves_rustdoc_override_values` —
+    the two tests named in issue #875, in the module this branch rewrites. The
+    last result line is `test result: FAILED. 36 passed; 2 failed`.
+  - **12 Oct (`bc812986`) is a different and out-of-scope failure.** This time
+    the two rustdoc tests are *not* among the failures. `log/baseline.log`
+    records `--- runner::manifest_structure_telemetry::tests::manifest_structure_telemetry_carries_only_counts`
+    with `Error: a structural summary must emit exactly one trace event: []`,
+    and `test result: FAILED. 1468 passed; 1 failed`. Its helper is
+    `test_support::tracing_capture::with_test_subscriber`
+    (`test_support/src/tracing_capture.rs:103`), which installs its subscriber
+    via `tracing::subscriber::with_default`; the sibling
+    `src/test_tracing_capture.rs:177` documents the identical caveat in the same
+    words — thread-local, "so only events emitted on the calling thread are
+    captured". This shares a symptom with the measured ~5%-under-multi-thread
+    flake in `stdlib::which::telemetry_tests::tracing_capture`, but the module,
+    test and helper all differ, so it is **not** asserted to be the same defect.
+    Neither the failing test nor any tracing helper is touched by this branch
+    (`git diff --name-only c65ad970..HEAD` lists five files, none of them
+    telemetry).
+
+  Impact: the two runs failed for different reasons, and only the first is in
+  scope. This branch removes the first from the worker entirely — the rustdoc
+  tests no longer cross the build-tools preflight at all — and there is direct
+  evidence of that landing (see Progress, 19:20Z). It does **not** address the
+  second, so the mutation baseline may still go red for an unrelated reason
+  after this merges. That is escalated rather than silently widened into scope:
+  the Worker dispatch section states what to look for.
+
+  Two smaller inferences recorded because they are traps. First, the 3 Oct
+  shard used a *different* pin (`ff1dd759…`, not the current `0606ca89…`) and
+  its `mutants` job name carried a large explicit source-file list rather than
+  the `0..5` shard indices, so the two runs are not the same regime. Second,
+  the step rows are not trustworthy evidence that a phase ran: on 12 Oct, step
+  12 `Upload mutation report = completed/success` while step 11 was `failure`,
+  and on 3 Oct the same pattern holds — the artefact is what proved the phases'
+  outcomes, and the step table alone would not have.
+
+  Retracted, same session: I first wrote here that
+  `manifest_structure_telemetry_carries_only_counts` had *also* failed in the
+  local `make test` at this revision, making two independent modules with the
+  same symptom. **That was false.** `/tmp/GATE3-issue-875-test.out` line 1469
+  records
+  `PASS [0.041s] (872/3914) netsuke-build runner::manifest_structure_telemetry::tests::manifest_structure_telemetry_carries_only_counts`;
+  the two failures in that log are
+  `build_module_slice_ui_tests::production_build_module_slice_has_expected_boundary`
+  and
+  `ninja_status_process_rss_tests::status_parsing_rss_stays_bounded_at_the_process_boundary`,
+  neither of them a tracing-capture test. Kept rather than deleted: the same
+  trap — reading a familiar symptom into a log without grepping for the name —
+  is what this whole bullet is about.
 
 ## Decision log
 
