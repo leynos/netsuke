@@ -475,9 +475,34 @@ Every stopping point is documented here. Timestamps are UTC.
   Untouched sibling tests in the same binary passed in the same run. The
   correct response is to re-run when the host is quieter, not to change any
   source: a test that cannot spawn a thread has not been evaluated.
-- [ ] Milestone 3 remainder: re-run `make test`, and run
-  `make test-workflow-contracts`, at the current revision once host load
-  permits.
+- [x] (2026-10-13 01:40Z) **`make test-workflow-contracts` passes**, so Task 3's
+  contract half is discharged. A gate run on this branch reported exit `0` in
+  200 s with `1266 passed, 3 skipped in 173.22s` followed by
+  `27 passed in 12.31s`; the log is
+  `/tmp/GATE5-issue-875-workflow-contracts.out`. In the same run `make test`
+  failed again with the same `os error 11` admission refusals, this time at
+  load ~31, so the environmental reading above is corroborated rather than a
+  one-off. That attempt also hit nextest fail-fast: `2435/3914` tests never ran
+  and the doctest half never started, so its verdict is incomplete evidence
+  rather than a red one.
+- [x] (2026-10-13 01:40Z) **CI went red on `172dd4ff` and the cause was this
+  plan's own Markdown, not the code.** Both failing jobs — `build-test` and
+  `Windows / lint-windows` — failed at `make check-fmt`, at the same step and
+  on the same line: `mdtablefix --check` reporting
+  `docs/execplans/issue-875-…mold.md +61 -62`. The prose written in the two
+  preceding commits had been hand-wrapped and so was not in the canonical form
+  the gate enforces. Fixed by running `mdtablefix --in-place` (a
+  whitespace-only rewrap plus table-rule padding, verified by collapsing
+  whitespace across before and after: the only surviving difference is the
+  table's `|---|` rule). The spelling gate then rejected `canceled`, which
+  appears solely inside a verbatim quotation of GitHub Actions' own runner
+  shutdown message; fencing that quotation as `plaintext` — the pattern this
+  file already uses for log excerpts — places it outside the prose scan without
+  misquoting the runner. Committed as `5460bd89`. `make markdownlint` (which
+  includes `make spelling`) and `mdtablefix --check` both pass locally
+  afterwards.
+- [ ] Milestone 3 remainder: re-run `make test` at the current revision once
+  host load permits. `make test-workflow-contracts` is discharged above.
 - [ ] Milestone 4: ExecPlan finalized, `coderabbit review --agent` clean, CI
   green, PR marked ready.
 
@@ -700,6 +725,29 @@ Unexpected findings during implementation that were not anticipated as risks.
   earlier retraction above — a familiar-looking symptom read as a verdict —
   with the twist that the useful check is not the test's name but *where* its
   failure occurred.
+
+- **Observation (2026-10-13, milestone 3): in a job log, `##[error]` is often an
+  action echoing its own script, so the *step* conclusions — not a grep — say
+  what failed.** Two jobs went red on `172dd4ff`: `build-test` and
+  `Windows / lint-windows`. Grepping the Windows log for `##[error]` returned,
+  among others:
+
+  ```plaintext
+  echo "::error title=Install mdtablefix failed::mdtablefix ${MDTABLEFIX_VERSION}
+    publishes no prebuilt release for ${RUNNER_OPERATING_SYSTEM:-unknown}/..."
+  ```
+
+  which reads exactly like the known upstream gap where mdtablefix ships no
+  Windows binary — an appealing story that would have exonerated this branch.
+  It is false. That line is the action's own script text printed verbatim; the
+  `Install mdtablefix` step concluded `success`. Asking the API for the step
+  list instead shows the real failure, and it is identical to `build-test`'s:
+  step `Format` (`make check-fmt`) failed on
+  `docs/execplans/issue-875-…mold.md +61 -62`. Both red jobs had one cause —
+  this plan's hand-wrapped Markdown. The general form: a composite action's
+  guard branches appear in the log whether or not they execute, so their text
+  is not evidence. Enumerate `steps[].conclusion` and read the log around the
+  first non-`success` step.
 
 ## Decision log
 
