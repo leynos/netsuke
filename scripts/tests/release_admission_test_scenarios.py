@@ -24,23 +24,11 @@ directly, with a real child, in
 
 Deferred refusals
 -----------------
-RFC 0005 names evidence refusals this suite cannot reach, because the gate has
-no producer of its own yet. The gate reads the freshness state from
-``NETSUKE_RELEASE_ADMISSION_EVIDENCE_STATE`` and the run identifier from the
-API, so a missing or malformed *evidence manifest*, a *digest mismatch* between
-an archive and its sidecar, a failing *advisory or licence* scan, and a
-*performance budget* breach are all refusals the evidence producer must raise.
-None is reachable from the gate's own inputs, and each is therefore recorded
-here as deferred rather than tested:
-
-- a missing or malformed evidence manifest,
-- an archive whose digest disagrees with its sidecar,
-- a failing advisory or licence scan, and
-- a breached performance budget.
-
-They become reachable when the producer lands. The gate's own side of that
-contract -- the ``verify_evidence`` operation and its ``missing_evidence``
-category -- already runs for every revision, and is covered.
+Four RFC 0005 refusals have no case in this suite, because neither half of the
+split RFC 0005 places them on is implemented yet. They are recorded, with that
+split and the composition limit that keeps ``verify_evidence`` out of reach,
+in :mod:`release_admission_test_cases`, which owns the RFC 0005 mapping for
+both the cases this suite runs and the refusals it does not.
 """
 
 import dataclasses

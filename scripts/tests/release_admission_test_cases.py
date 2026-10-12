@@ -9,9 +9,37 @@ Each case maps to one refusal class. ``api_error`` and ``fetch_error`` are the
 adapter failures RFC 0005 expects the gate to survive, ``mismatch`` is the
 exact-commit binding, ``stale_evidence`` and ``missing_evidence`` are the
 freshness refusals, ``unknown`` is the state the gate refuses to guess at, and
-``timeout`` is the bound it places on its own adapters. The refusals RFC 0005
-leaves to the evidence producer are recorded as deferred in
-:mod:`release_admission_test_scenarios`.
+``timeout`` is the bound it places on its own adapters.
+
+Deferred refusals
+-----------------
+Four RFC 0005 refusals have no case here, because neither half of the split RFC
+0005 places them on is implemented yet:
+
+- a missing or malformed evidence manifest,
+- an archive whose digest disagrees with its sidecar,
+- a failing advisory or licence scan, and
+- a breached performance budget.
+
+They are deferred *evidence-production and admission-validation integration*,
+not a producer's exclusive property. Producers supply the manifest, the scan
+results, and the measurements; admission then verifies what they supplied. RFC
+0005 requires admission to "verify provenance rather than trusting declared
+fields": it recomputes each archive's SHA-256 from its actual bytes and
+compares that with both the sidecar and the digest the manifest records,
+rejecting a mismatch. So the admission-side half is unimplemented here too, and
+calling the set producer-owned would understate what this gate still owes.
+
+The gate's own ``verify_evidence`` operation is covered, and its
+``missing_evidence`` category with it, but only when the four operations before
+it succeed: :meth:`gate.Gate.run_operations` stops at the first failed
+operation, so a missing, stale, or unknown freshness state, or an earlier
+adapter failure, prevents it from running at all. When it does run, its
+``fresh`` handling is the contradiction :mod:`gate` documents and the suite
+freezes -- ``check_scan_freshness`` admits a fresh state, but
+``verify_evidence`` refuses it unless the state is *not* fresh and a workflow
+run identifier is present. A passing freshness check is therefore never
+sufficient for admission.
 """
 
 import pytest

@@ -324,7 +324,24 @@ Producer-backed refusals are deferred. The gate has no scan producer of its own
 yet, so `NETSUKE_RELEASE_ADMISSION_EVIDENCE_STATE` arrives from the environment
 and the `missing_evidence`, `stale_evidence`, and `mismatch` categories are
 reachable; the categories that require a real producer to observe are named as
-deferred in the test module rather than simulated.
+deferred in `release_admission_test_cases.py` rather than simulated. That
+module already owns the RFC 0005 mapping for the refusals this suite runs, so
+the refusals it does not run belong there too; the deferral was moved there from
+`release_admission_test_scenarios.py`, which sat 399 lines into pylint's
+400-line module ceiling.
+
+The deferred set is an integration, not a producer's exclusive property. RFC
+0005 splits it: producers supply the manifest, the scan results, and the
+measurements, and admission then verifies what they supplied — it "verifies
+provenance rather than trusting declared fields", recomputes each archive's
+SHA-256 from its actual bytes, and rejects a mismatch against either the
+sidecar or the manifest's recorded digest. The admission-side half is therefore
+part of this port's remaining debt rather than another component's.
+
+`verify_evidence` runs only when the four operations before it succeed, because
+`gate.Gate.run_operations` stops at the first failed operation; a missing,
+stale, or unknown freshness state, or an earlier adapter failure, prevents it
+from running at all.
 
 ## Outcomes and retrospective
 
@@ -1464,3 +1481,47 @@ change admission semantics beyond the scope of a form change.
   attribution contradiction in the inspected paths. Its confirmation is
   candidate-bound to `f88b12ef` and explicitly does not establish integration
   with the latest `main`.
+
+- 2026-10-13 — The deferral's rationale, corrected at the reviewer's direction.
+  Two claims in the `Deferred` section and the two test-module docstrings were
+  too broad, and both were checked against the source before being accepted.
+  The first said the four deferred refusals are a producer's exclusive
+  property. RFC 0005 splits them: producers supply the manifest, the scan
+  results, and the measurements, and admission verifies what they supplied — it
+  "verifies provenance rather than trusting declared fields", recomputes each
+  archive's SHA-256 from its actual bytes, and rejects a mismatch against
+  either the sidecar or the manifest's recorded digest. The admission-side half
+  is therefore this port's own remaining debt, and calling the set
+  producer-owned understated it. The second said `verify_evidence` "runs for
+  every revision", which the composition contradicts: `run_operations` stops at
+  the first failed operation, so the fifth operation is unreachable once any of
+  the four before it fails. Both are now stated in the negative-free form the
+  reviewer asked for — *deferred evidence-production and admission-validation
+  integration*, and `verify_evidence` covered when the preceding operations
+  succeed — and the `fresh` contradiction is preserved unchanged, because it is
+  the behaviour the suite freezes rather than a defect to correct.
+
+  The sweep for both claim classes was run tree-wide rather than at the
+  reported lines, and found no fifth site: the only remaining instances of the
+  producer vocabulary are the corrected sentences themselves. The developers'
+  guide's four producer references were inspected and left alone, because each
+  is about the *publication* gate — the workflow runs observation mode until an
+  evidence producer is connected — which no part of this correction touches.
+  The two edited Python files carry docstring-only changes: stripping module,
+  class, and function docstrings from each leaves an AST identical to the
+  committed one, so no assertion moved.
+
+  Correcting the rationale cost lines, and the file that had carried it had
+  none to spare. `release_admission_test_scenarios.py` sat at 399 lines against
+  pylint's `max-module-lines` of 400, so the correction was moved rather than
+  grown: the deferral now lives in `release_admission_test_cases.py`, the
+  module that already owns the RFC 0005 mapping for the refusals this suite
+  runs, and the scenarios module points at it. The first attempt failed the
+  gates twice — `check-fmt` on an over-long Markdown paragraph, then
+  `lint-python` on `C0302: Too many lines in module (411/400)` — and the second
+  failure is worth recording because the first had masked it: both Python files
+  were already over budget at the revision `check-fmt` rejected, so the repair
+  was a move between modules rather than a trim.
+  `release_admission_test_scenarios.py` is now 387 lines and
+  `release_admission_test_cases.py` 192, and both keep docstring-stripped ASTs
+  identical to `c89535d0`.
