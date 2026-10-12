@@ -276,9 +276,69 @@ Every stopping point is documented here. Timestamps are UTC.
   still not ours to remove. Load average remains ~70 on 6 cores, so gates will
   be slow; the sampled disk log is retained so an ENOSPC failure stays
   distinguishable from a real one.
-- [ ] Milestone 3 remainder: `make test`, `make test-workflow-contracts`, then
-  the completed run's `setup-commands` log text for the `RUSTFLAGS` /
-  `CARGO_ENCODED_RUSTFLAGS` observation.
+- [x] (2026-10-12 20:50Z) **The worker's `setup-commands` text is read, and
+  the #544 observation is recorded.** `gh api
+  repos/leynos/netsuke/actions/jobs/<id>/logs --allow-escape-sequences`
+  downloads a *completed* job's log even while its run is still in progress;
+  only the `gh run view --job` form waits for the whole run. Downloaded all
+  four cancelled shards. Every one prints, immediately after
+  `build-tools: mold 2.41.0 at
+  /opt/hostedtoolcache/mold/2.41.0-a3696680d99e692970590a178bc3a33d78d60d1c6dc9db7a11b557b02b751f5d/x86_64/bin/mold`
+  and `build-tools: toolchain nightly-2026-08-23 available`:
+
+  ```plaintext
+  RUSTFLAGS=-D warnings
+  CARGO_ENCODED_RUSTFLAGS=<unset>
+  ```
+
+  So the linker-selection half of the risk is **confirmed, not resolved**:
+  `RUSTFLAGS` is exported with a value, and `CARGO_ENCODED_RUSTFLAGS` is unset.
+  Since an assigned `RUSTFLAGS` replaces every `rustflags` table in
+  `.cargo/config.toml`, the `-Clink-arg=-fuse-ld=mold` entry cannot apply.
+  This is exactly
+  <https://github.com/leynos/shared-actions/issues/544> ("Installed mold does
+  not imply Cargo actually selects it if `RUSTFLAGS` has replaced project
+  flags"). Per the plan's constraint, **no local workaround was added** and no
+  pin bump is made, because #544 has no fixing revision. Milestone 3's
+  observation obligation is now discharged with a literal transcript.
+- [x] (2026-10-12 20:50Z) **Acceptance criteria are met on the real worker.**
+  The four shards that were not killed ran the *unmodified* baseline to
+  completion and every one reported it green:
+
+  ```plaintext
+  Found 636 mutants to test
+   INFO Auto-set test timeout to 580s
+  ok      Unmutated baseline in 98s build + 193s test
+  ```
+
+  (the other three: `120s build + 213s test`, `107s build + 177s test`,
+  `95s build + 177s test`). Because a `cargo test` baseline runs *every* test
+  target and only stops at the first failing one, an `ok` line means the
+  `makefile_test_target` binary ran and passed — which is the two named
+  rustdoc tests, the pair that failed on 3 Oct. The same shards then evaluated
+  mutants and reported real outcomes (`MISSED`, `TIMEOUT`) with per-mutant
+  timings, so **a nonempty set of mutants executes**. All six shards also show
+  step 7 `Run setup commands = success` where the failing run had it
+  `skipped`, and the runner annotations carry
+  `notice: mold 2.41.0 installed for x86_64 (tool cache: miss)`.
+- [x] (2026-10-12 20:50Z) **The four `cancelled` shards are an infrastructure
+  event, not a defect.** Each ends with
+  `##[error]The runner has received a shutdown signal. This can happen when
+  the runner service is stopped, or a manually started runner is canceled.`
+  after 57–86 minutes of legitimate work, at staggered times (17:51, 17:53,
+  17:58, 18:20 UTC). The caller sets `cancel-in-progress: false` and no other
+  run of this workflow exists for this ref, so this is GitHub reclaiming
+  runners, not a concurrency decision. Recorded because the job conclusions
+  read `failure` and would otherwise look like the change failing.
+- [x] (2026-10-12 20:50Z) **The one genuine failure is the unrelated flake,
+  now measured.** Shard 2 exited `4` ("baseline tests failing") in 3 minutes on
+  `runner::manifest_structure_telemetry::tests::manifest_structure_telemetry_carries_only_counts`
+  with `Error: a structural summary must emit exactly one trace event: []`.
+  Four of the five completed shards ran that same lib suite green, so it is
+  nondeterministic. It is the out-of-scope failure already logged below, and
+  the branch does not touch that test or its helper.
+- [ ] Milestone 3 remainder: `make test` and `make test-workflow-contracts` at
+  the current revision.
 - [ ] Milestone 4: ExecPlan finalized, commit, push, draft PR.
 
 ## Surprises & discoveries
