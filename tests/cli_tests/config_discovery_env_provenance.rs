@@ -221,27 +221,10 @@ fn inherited_project_grant_cannot_widen_operator_allowlist_during_rendering() ->
         "the operator allowlist must remain restrictive"
     );
 
+    assert_blocked_without_read(&policy, "CI_TOKEN")?;
+
     let calls = Arc::new(Mutex::new(Vec::new()));
     let reader = recording_env_reader(&calls);
-    let Err(error) =
-        manifest::from_str_with_env_and_policy(&env_manifest("CI_TOKEN"), &reader, &policy)
-    else {
-        bail!("inherited project grant must not expose the token");
-    };
-    let error_chain = format!("{error:#}");
-    ensure!(
-        error_chain.contains("environment variable is blocked"),
-        "the render error should contain the blocked diagnostic: {error_chain}"
-    );
-    let recorded_calls = calls
-        .lock()
-        .map_err(|_| anyhow!("recording reader mutex poisoned"))?;
-    ensure!(
-        recorded_calls.is_empty(),
-        "the denied token must not reach the reader"
-    );
-    drop(recorded_calls);
-
     let rendered = manifest::from_str_with_env_and_policy(&env_manifest("SAFE"), &reader, &policy)?;
     ensure!(
         first_rule_command(&rendered) == Some("echo safe-value"),
