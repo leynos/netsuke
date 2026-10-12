@@ -171,30 +171,44 @@ likelihood, and mitigation.
 
 Every stopping point is documented here. Timestamps are UTC.
 
-- [x] (2026-10-12 16:45Z) Reconnaissance: confirmed the upstream diagnostic
+- [x] (2026-10-12 14:45Z) Reconnaissance: confirmed the upstream diagnostic
   reproduces locally. With `PATH` and `HOME` both free of `mold`/`rustup`,
   `make … doctest` exits 2 at
   `make: *** [Makefile:476: check-build-tools] Error 1` with
   `build-tools: mold not found on PATH (pinned 2.41.0)`.
-- [x] (2026-10-12 16:50Z) Reconnaissance: confirmed the byte-identical
+- [x] (2026-10-12 14:50Z) Reconnaissance: confirmed the byte-identical
   assertion travels through `run_doctest_with_override` →
   `assert_doctest_record` (`rustdocflags.rs:158-192`) and that the helper uses
   `env!("CARGO_MANIFEST_DIR")` + direct `Command::new("make")`, which under
   `cargo nextest` is the *worktree* root. Noted that whether `doctest` inherits
   `CARGO_TARGET_DIR` from the agent shell is unproven and is *not* load-bearing
   for this plan.
-- [x] (2026-10-12 16:55Z) Reconnaissance: read the pinned shared workflow's
+- [x] (2026-10-12 14:55Z) Reconnaissance: read the pinned shared workflow's
   `workflow_call.inputs`. `install-mold` is `type: string`, `default: 'false'`;
   `setup-commands` is `type: string`, `default: ""`. The shared revision
   already declares both — upstream `9a279509` ("Forward install-mold from
   mutation-cargo to setup-rust (#545)") is an ancestor of the pin. **No pin
   bump is needed.**
-- [ ] Milestone 1: caller enabled and verified; contract test extended; suite
-  green.
-- [ ] Milestone 2: rustdoc tests sandboxed; `doctest` added to the
-  real-preflight table; suite green under a mold-free `PATH`.
-- [ ] Milestone 3: local gates, worker dispatch, linker-selection observation,
-  ETXTBSY audit.
+- [x] (2026-10-12 15:19Z) **Milestone 1 complete.** `mutation-testing.yml`
+  gained `install-mold: 'true'` and a `setup-commands` block running
+  `make check-build-tools` then printing `RUSTFLAGS` and
+  `CARGO_ENCODED_RUSTFLAGS`. `mutation_testing_test.py` gained two typed
+  assertions (`EXPECTED_WITH` extended; a standalone test for each input).
+  `make test-workflow-contracts` green (317s, run in background). Committed as
+  `1b7b01f8`.
+- [x] (2026-10-12 15:40Z) **Milestone 2 complete, with invariant I2
+  discharged.** `rustdocflags.rs` now drives `doctest` through
+  `Sandbox::run_make` with a fake `mold` under the sandbox prefix and a fake
+  `rustup`; `doctest` joined the fail-before-Cargo table in
+  `build_tools_check_tests.rs`. Focused suite: 55/55 green with `mold`
+  present. **The same compiled binary, run under a verified mold-free `PATH`,
+  passes all 7 `rustdocflags` tests** (`7 passed; 0 failed`, RC=0) — the two
+  named in the issue among them. Evidence:
+  `/tmp/i2-moldfree-run-issue-875-*.out`. Not yet committed.
+- [x] (2026-10-12 15:35Z) **ETXTBSY audit complete, read-only.** No defect
+  found; no helper changed; no retry added. See EP-M3 for the full chain.
+- [ ] Milestone 3: full local gates, worker dispatch, linker-selection
+  observation.
 - [ ] Milestone 4: ExecPlan finalized, commit, push, draft PR.
 
 ## Surprises & discoveries
@@ -235,6 +249,24 @@ Unexpected findings during implementation that were not anticipated as risks.
   fake Cargo never invoked. Impact: this is why the diagnostic is so unhelpful,
   and why the fix must be split — the CI half makes the worker capable, the
   test half stops the test depending on worker capability at all.
+
+- **Observation:** a "mold-free `PATH`" is harder to construct on this host than
+  the plan's EP-M2 red command assumed, and the first attempt *silently tested
+  nothing*. Evidence: `PATH="/usr/bin:/bin"` still resolves a real
+  `/usr/bin/mold` (a root-owned 22 MB ELF build of the very tool), and the
+  Makefile re-prepends `$(BUILD_TOOLS_PREFIX)/bin`, `$(HOME)/.cargo/bin` and
+  `$(HOME)/.local/bin` to `PATH` (line 216), so `$HOME/.local/bin/mold` is
+  reachable from a child process whatever the caller passes. A probe built by
+  symlinking only a hand-picked subset of utilities also failed for the wrong
+  reason: it omitted `grep`, so `scripts/build-tools-common.sh` died at line 56
+  with `grep: command not found` and `[ : integer expression expected`, which
+  is a probe bug reported as a linker fault. Impact: the working probe mirrors
+  `/usr/local/bin`, `/usr/bin`, `/usr/sbin`, `/bin` and `/sbin` into a
+  temporary directory, symlinking every entry *except* `mold`, and is verified
+  before use. With it, the real preflight reproduces the CI failure exactly:
+  `build-tools: mold not found on PATH (pinned 2.41.0)`, exit 2. The plan's
+  EP-M2 commands below are corrected accordingly. A probe that removes the
+  wrong thing, or verifies nothing, returns a green that means nothing.
 
 ## Decision log
 
@@ -290,6 +322,26 @@ Record every significant decision made while working on the plan.
   `tests/build_tools_check_tests.rs::healthy_sandbox` already uses, and it is
   the only arrangement under which the rustdoc tests are hermetic. The
   `BENCH_ROOT`/`doctest` bookkeeping risk is therefore not applicable.
+  Date/Author: 2026-10-12, implementer.
+
+- **Decision:** change no helper for the 18 September `Text file busy`
+  (`ETXTBSY`), and add no retry. Rationale: the audit found the write handle
+  provably closed before the mode change and before any spawn —
+  `std::fs::write` returns `io::Result<()>` and so cannot leak a handle — and
+  the code is byte-identical to the revision that ran on 18 September. A
+  change without a reproduction would be a guess, and a retry would mask the
+  next real occurrence. The issue itself calls the earlier `ETXTBSY` "separate
+  from the demonstrated missing-mold failure". Date/Author: 2026-10-12,
+  implementer.
+
+- **Decision:** probe a mold-free `PATH` with a full mirror minus `mold`,
+  and verify the probe before using it. Rationale: the first two attempts
+  produced results that looked meaningful and were not —
+  `PATH="/usr/bin:/bin"` still found `/usr/bin/mold`, and a hand-picked subset
+  of symlinks omitted `grep`, failing inside
+  `scripts/build-tools-common.sh` for an unrelated reason. Impact: the
+  recorded evidence names the probe's construction and the checks that it was
+  sound, because a negative control that cannot fail is worse than none.
   Date/Author: 2026-10-12, implementer.
 
 ## Outcomes & retrospective
@@ -445,28 +497,53 @@ on the host. `doctest` is one of the parameterized cases in
 stops `make doctest` before the fake Cargo runs.
 
 **Red.** Under a mold-free `PATH`, the two rustdoc tests fail at
-`check-build-tools`. Reproduce with:
+`check-build-tools`. Build the probe first, then verify it before trusting it:
 
 ```sh
-mkdir -p /tmp/empty-tools
-PATH="$HOME/.cargo/bin:/usr/bin:/bin" make --no-print-directory -f Makefile \
-  CARGO=/bin/false RUSTDOCFLAGS='--cfg docsrs -D warnings' doctest
+build-nomold-path() {
+  dest="$1"; rm -rf "$dest"; mkdir -p "$dest"
+  for dir in /usr/local/bin /usr/bin /usr/sbin /bin /sbin; do
+    [ -d "$dir" ] || continue
+    for entry in "$dir"/*; do
+      name="$(basename "$entry")"
+      [ "$name" = mold ] && continue
+      [ -e "$dest/$name" ] && continue
+      ln -s "$entry" "$dest/$name"
+    done
+  done
+}
+build-nomold-path /tmp/nomold/bin
+PATH=/tmp/nomold/bin command -v mold  || echo "mold: NONE (expected)"
+PATH=/tmp/nomold/bin command -v make  || echo "make MISSING (probe is broken)"
+PATH=/tmp/nomold/bin command -v grep  || echo "grep MISSING (probe is broken)"
 ```
 
-After the change, run the focused suite with `mold` unreachable:
+Only once those say `mold: NONE` and show real paths for `make` and `grep` is
+the probe meaningful. The real preflight then reproduces CI exactly:
 
 ```sh
-PATH="/usr/bin:/bin" RUSTFLAGS="-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
-  cargo nextest run --test makefile_test_target --all-features -E 'test(rustdocflags)'
+PATH=/tmp/nomold/bin HOME=/tmp/nomold/home make check-build-tools
+# build-tools: mold not found on PATH (pinned 2.41.0)
+# make: *** [Makefile:476: check-build-tools] Error 1   (exit 2)
 ```
 
-Note the apparent contradiction: `RUSTFLAGS` here carries
-`-Clink-arg=-fuse-ld=mold` while `mold` is unreachable. That is deliberate and
-is precisely the CI worker's situation — it proves the tests no longer depend on
-`mold` being resolvable, because they never invoke a real compiler.
+After the change, the two rustdoc tests pass under that same probe. The test
+*binary* still needs `mold` to link, so build normally and run it under the
+probe — the compiled binary's `PATH` is what the test passes to its children:
 
-Also set `NETSUKE_REQUIRE_NINJA` is *not* needed here; these tests do not use
-Ninja.
+```sh
+cargo nextest run --test makefile_test_target --all-features -E 'test(rustdocflags)'
+PATH=/tmp/nomold/bin "$(ls -t target/debug/deps/makefile_test_target-* | grep -v '\.d$' | head -1)" \
+  rustdocflags
+```
+
+Note the apparent contradiction: the build itself uses
+`-Clink-arg=-fuse-ld=mold`, so it needs a real `mold`; the *test* run does not.
+That is precisely the CI worker's situation inverted — and it proves the tests
+no longer depend on `mold` being resolvable, because they never invoke a real
+compiler.
+
+`NETSUKE_REQUIRE_NINJA` is *not* needed here; these tests do not use Ninja.
 
 **Green.** Rewrite the helper to use the sandbox.
 
@@ -567,12 +644,38 @@ is "fixed locally":
   one exists.
 
 **ETXTBSY audit (read-only unless it reproduces).** The 18 September job
-reported `Text file busy` when launching a temporary Ninja fixture. Audit the
-write path: `test_support/src/exec.rs::write_exec_with_content` calls
-`test_support::fs::write` (which returns after the handle is dropped) and then
-`set_mode`. No handle can outlive the spawn on that path. Change a helper only
-if the audit finds a writer that keeps a `File` alive across a spawn; add no
-retries.
+(105527415501) reported `Text file busy` when launching a temporary Ninja
+fixture. The audit traced every writer on that path and found no defect:
+
+- `test_support/src/exec.rs::write_exec_with_content` calls
+  `crate::fs::write(&path, content)` and then `make_executable(&path)`.
+- `test_support/src/fs.rs::write` is `std::fs::write`, which opens, writes and
+  closes before returning; its signature is `io::Result<()>`, so it has no way
+  to hand a `File` back to its caller. The handle provably cannot outlive the
+  call, let alone a later spawn.
+- `make_executable` → `set_mode` uses `fs::metadata` plus
+  `fs::set_permissions`, neither of which opens the file for writing. A
+  permission change is not a write, so it cannot hold the file busy either.
+- The two fake-Ninja writers that reach this primitive —
+  `test_support/src/lib.rs::write_fake_ninja` (writes `ninja`, or `ninja.cmd`
+  on Windows) and `test_support/src/check_ninja/mod.rs::
+  write_fake_ninja_script_in_dir` (writes `ninja`) — each return a `TempDir`
+  *and* the path, so the directory outlives the write and is kept alive by the
+  caller across the spawn. That is the correct ownership shape.
+- `git log -S 'write_fake_ninja'` and `git log -S 'write_exec_with_content'`
+  place both helpers before the September run, and `git show` of
+  `test_support/src/exec.rs` and `test_support/src/fs.rs` at
+  `1e60fb18` (the 18 September revision) shows the write path byte-identical
+  to today's. There is no earlier revision in which a handle escaped.
+- `git log --all -i --grep='ETXTBSY\|text file busy'` returns nothing: the
+  repository has never recorded a fix for this, consistent with it being
+  environmental rather than a fixture defect.
+
+Conclusion: **no reproduction and no defect — no helper is changed, and no
+retry is added.** The observed `Text file busy` is consistent with an
+external writer still holding the file open (an antivirus/indexer, or a
+container overlay mid-copy), not with this repository's write path. It remains
+distinct from the demonstrated missing-mold failure, as the issue states.
 
 **Acceptance evidence:** the run URL, the `check-build-tools` line, the two
 test names in the baseline output, the mutant count, and the printed flag
