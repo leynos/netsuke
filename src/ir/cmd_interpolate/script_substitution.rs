@@ -1,8 +1,8 @@
-//! Interpolate script-specific recipe placeholders with POSIX lexical context.
+//! Interpolate POSIX and Bash script placeholders with script-specific context.
 //!
 //! Keeps multi-line script syntax, comments, and heredoc bodies intact while
-//! lowering Netsuke-owned placeholders only where shell quoting can preserve
-//! their path semantics.
+//! lowering Netsuke-owned placeholders where shell quoting can preserve their
+//! path semantics. PowerShell scripts use `SubstitutionTraversal` instead.
 
 use super::{
     CommandBindings, IrGenError, Placeholder, QuoteContext, find_script_substitution,
@@ -10,7 +10,7 @@ use super::{
     posix_lexical::{PosixCharacter, PosixLexicalState},
 };
 
-/// Track quote context while interpolating one shell script.
+/// Track quote context while interpolating one POSIX or Bash script.
 pub(super) struct ScriptSubstitutionTraversal<'template, 'bindings> {
     /// Preserve the source text for interpolation diagnostics.
     template: &'template str,
