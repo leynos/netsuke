@@ -16,6 +16,10 @@ fn operator_xdg_chain_retains_inherited_environment_grants() -> Result<()> {
     let cli = sandbox.merge_auto(&[])?;
 
     ensure!(
+        cli.env_allow_var == ["CI_TOKEN"],
+        "the operator-chain ancestor grant must remain in the effective allowlist"
+    );
+    ensure!(
         cli.env_access_policy().evaluate("CI_TOKEN").is_ok(),
         "operator-chain grants must retain operator authority"
     );
@@ -125,6 +129,10 @@ fn explicit_config_chain_retains_ancestor_environment_grants() -> Result<()> {
         .to_owned();
     let cli = sandbox.merge(&["netsuke", "--config", &config])?;
 
+    ensure!(
+        cli.env_allow_var == ["CI_TOKEN"],
+        "the explicitly selected ancestor grant must remain in the effective allowlist"
+    );
     ensure!(
         cli.env_access_policy().evaluate("CI_TOKEN").is_ok(),
         "an explicitly selected operator ancestor should retain its grant"
