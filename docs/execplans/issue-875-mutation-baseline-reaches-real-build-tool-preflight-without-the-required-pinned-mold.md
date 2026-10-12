@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -1309,3 +1309,21 @@ exposes `install-mold`, so no pin bump is required — contrary to the issue's
 conditional. Added `Axiom A3` and the linker-selection observation after
 reading the shared workflow's own guide, which states that a mold flag in
 `.cargo/config.toml` does not apply when `setup-rust` exports `RUSTFLAGS`.
+
+Revisions, 2026-10-13. Status moved from `DRAFT` to `IN PROGRESS` once the
+implementation milestones were committed. Corrected the run census in
+`Purpose / big picture` from "twenty-nine runs, six failures" to **30 runs,
+seven failures** — the earlier figure listed seven SHAs against a smaller
+total, so it was internally inconsistent as well as wrong. Added the
+`make test-workflow-contracts` pass and the `os error 11` repetition to
+`Progress`, and two `Surprises & discoveries` entries: that a spawn-side
+admission failure is a statement about the host rather than the branch, and that
+`##[error]` lines in a job log are frequently an action echoing its own
+script, so a job's cause must be read from its step conclusions. Canonicalized
+the Markdown through `mdtablefix --in-place` after CI's `make check-fmt`
+rejected the hand-wrapped prose, and fenced the runner's shutdown message as
+`plaintext` so its verbatim United States spelling stays out of the prose
+spell-check. The first dispatched mutation run of this revision reused the
+existing shared-workflow pin: the pinned revision already declares both
+`install-mold` and `setup-commands`, so the issue's conditional pin bump was
+not required.
