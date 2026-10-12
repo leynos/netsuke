@@ -10,10 +10,24 @@ Status: DRAFT
 
 ## Purpose / big picture
 
-The scheduled mutation-testing run has failed its *baseline* build for at least
-two weeks, so no mutant has been evaluated on this repository since. The
-baseline is the unmutated `make test` run the worker performs before it mutates
-anything; when it fails, cargo-mutants reports no mutant results at all.
+The scheduled mutation-testing run fails intermittently, and when it fails it
+fails at its *baseline*. The baseline is the unmutated `make test` run the
+worker performs before it mutates anything; when it fails, cargo-mutants
+reports no mutant results at all, so one failing test suppresses the entire
+mutant set.
+
+Measured from `gh run list --workflow "Mutation testing"`, which is the only
+honest way to state the rate: of **30 runs** between 14 September and 12
+October (one further run was still in progress at the time of counting),
+**seven failed** — `1e60fb18` 18 Sep, `024a9014` 19 Sep, `ee0e5523` 22 Sep,
+`a6430c9e` 25 Sep, `027a848e` 28 Sep, `5e6c0fbf` 2 Oct and `b6e7cf50` 3 Oct,
+the last being this issue's — and the other 22 concluded `success`. An earlier
+draft of this paragraph claimed "at least two weeks, so no mutant has been
+evaluated since"; that was an over-claim, and it is corrected here rather than
+left to be discovered at review. The separate and real skips — eight
+consecutive scheduled runs from 5 to 12 October that evaluated nothing because
+no source file changed inside the detection window — are a different
+phenomenon, recorded under *Surprises & discoveries*.
 
 Two distinct faults are tangled together in the reports, and only one of them
 is a CI provisioning problem:
@@ -277,13 +291,12 @@ Every stopping point is documented here. Timestamps are UTC.
   be slow; the sampled disk log is retained so an ENOSPC failure stays
   distinguishable from a real one.
 - [x] (2026-10-12 20:50Z) **The worker's `setup-commands` text is read, and
-  the #544 observation is recorded.** `gh api
-  repos/leynos/netsuke/actions/jobs/<id>/logs --allow-escape-sequences`
+  the #544 observation is recorded.**
+  `gh api repos/leynos/netsuke/actions/jobs/<id>/logs --allow-escape-sequences`
   downloads a *completed* job's log even while its run is still in progress;
   only the `gh run view --job` form waits for the whole run. Downloaded all
   four cancelled shards. Every one prints, immediately after
-  `build-tools: mold 2.41.0 at
-  /opt/hostedtoolcache/mold/2.41.0-a3696680d99e692970590a178bc3a33d78d60d1c6dc9db7a11b557b02b751f5d/x86_64/bin/mold`
+  `build-tools: mold 2.41.0 at /opt/hostedtoolcache/mold/2.41.0-a3696680d99e692970590a178bc3a33d78d60d1c6dc9db7a11b557b02b751f5d/x86_64/bin/mold`
   and `build-tools: toolchain nightly-2026-08-23 available`:
 
   ```plaintext
@@ -294,34 +307,33 @@ Every stopping point is documented here. Timestamps are UTC.
   So the linker-selection half of the risk is **confirmed, not resolved**:
   `RUSTFLAGS` is exported with a value, and `CARGO_ENCODED_RUSTFLAGS` is unset.
   Since an assigned `RUSTFLAGS` replaces every `rustflags` table in
-  `.cargo/config.toml`, the `-Clink-arg=-fuse-ld=mold` entry cannot apply.
-  This is exactly
-  <https://github.com/leynos/shared-actions/issues/544> ("Installed mold does
-  not imply Cargo actually selects it if `RUSTFLAGS` has replaced project
-  flags"). Per the plan's constraint, **no local workaround was added** and no
-  pin bump is made, because #544 has no fixing revision. Milestone 3's
+  `.cargo/config.toml`, the `-Clink-arg=-fuse-ld=mold` entry cannot apply. This
+  is exactly <https://github.com/leynos/shared-actions/issues/544> ("Installed
+  mold does not imply Cargo actually selects it if `RUSTFLAGS` has replaced
+  project flags"). Per the plan's constraint, **no local workaround was added**
+  and no pin bump is made, because #544 has no fixing revision. Milestone 3's
   observation obligation is now discharged with a literal transcript.
 
   The `setup-commands` print alone would not have settled it, because it shows
-  what the *environment* holds, not what the *compiler* received. The `--verbose`
-  baseline log carries every rustc argv, so the flags were counted directly.
-  The measurement is over the `mutation-report-root-2` artefact's
+  what the *environment* holds, not what the *compiler* received. The
+  `--verbose` baseline log carries every rustc argv, so the flags were counted
+  directly. The measurement is over the `mutation-report-root-2` artefact's
   `log/baseline.log` — the only shard whose baseline log was uploaded, since
-  the other four were cancelled before their upload step — across 569
-  compiler invocations:
+  the other four were cancelled before their upload step — across 569 compiler
+  invocations:
 
-  | Flag | Source | Occurrences |
-  | --- | --- | --- |
-  | `-D warnings` | exported `RUSTFLAGS` | **569** |
-  | `-Clink-arg=-fuse-ld=mold` | `.cargo/config.toml`, Linux table | **0** |
-  | `-Zthreads=8` | `.cargo/config.toml`, both tables | **0** |
+  | Flag                       | Source                            | Occurrences |
+  | -------------------------- | --------------------------------- | ----------- |
+  | `-D warnings`              | exported `RUSTFLAGS`              | **569**     |
+  | `-Clink-arg=-fuse-ld=mold` | `.cargo/config.toml`, Linux table | **0**       |
+  | `-Zthreads=8`              | `.cargo/config.toml`, both tables | **0**       |
 
   One `-D warnings` per invocation, and not a single occurrence of either
   project flag: `RUSTFLAGS` wholly displaced both `rustflags` tables, exactly
   as the build standard's own documentation says an assigned `RUSTFLAGS` does.
   This is the decisive form of the #544 finding — an installed mold the
-  compiler was never told to use — and it is now evidenced rather than
-  inferred from the shared workflow's guide.
+  compiler was never told to use — and it is now evidenced rather than inferred
+  from the shared workflow's guide.
 - [x] (2026-10-12 20:50Z) **Acceptance criteria are met on the real worker.**
   The four shards that were not killed ran the *unmodified* baseline to
   completion and every one reported it green:
@@ -333,34 +345,39 @@ Every stopping point is documented here. Timestamps are UTC.
   ```
 
   (the other three: `120s build + 213s test`, `107s build + 177s test`,
-  `95s build + 177s test`). An `ok Unmutated baseline` line describes the
-  whole `cargo test` run, not one target, so it entails that the
+  `95s build + 177s test`). An `ok Unmutated baseline` line describes the whole
+  `cargo test` run, not one target, so it entails that the
   `makefile_test_target` binary ran and passed — that binary being the two
-  named rustdoc tests. Two facts carry the entailment: cargo stops at the
-  first failing target, which shard 2 shows in the negative — its
-  `log/baseline.log` holds exactly **one** `test result:` line, pinning its
-  failure to `--lib`, where the 3 Oct log holds 54 over a full run — and on
-  3 Oct `makefile_test_target` was a target that failed. State the limit of
-  that evidence, though: the four green shards' per-target output is **not in
+  named rustdoc tests. Two facts carry the entailment: cargo stops at the first
+  failing target, which shard 2 shows in the negative — its `log/baseline.log`
+  holds exactly **one** `test result:` line, pinning its failure to `--lib`,
+  where the 3 Oct log holds 54 over a full run — and on 3 Oct
+  `makefile_test_target` was a target that failed. State the limit of that
+  evidence, though: the four green shards' per-target output is **not in
   hand**. Their job logs contain no `Running tests` or `makefile_test_target`
   lines, and only shard 2's artefact carries a `log/baseline.log`, so the step
   from "baseline ok" to "these two tests passed" is an inference from cargo's
   first-failure behaviour plus the 3 Oct ordering — not a line read out of
-  those four logs. The same shards then evaluated
-  mutants and reported real outcomes (`MISSED`, `TIMEOUT`) with per-mutant
-  timings, so **a nonempty set of mutants executes**. All six shards also show
-  step 7 `Run setup commands = success` where the failing run had it
-  `skipped`, and the runner annotations carry
+  those four logs. The same shards then evaluated mutants and reported real
+  outcomes (`MISSED`, `TIMEOUT`) with per-mutant timings, so **a nonempty set
+  of mutants executes**. All six shards also show step 7
+  `Run setup commands = success` where the failing run had it `skipped`, and
+  the runner annotations carry
   `notice: mold 2.41.0 installed for x86_64 (tool cache: miss)`.
 - [x] (2026-10-12 20:50Z) **The four `cancelled` shards are an infrastructure
-  event, not a defect.** Each ends with
-  `##[error]The runner has received a shutdown signal. This can happen when
-  the runner service is stopped, or a manually started runner is canceled.`
-  after 57–86 minutes of legitimate work, at staggered times (17:51, 17:53,
-  17:58, 18:20 UTC). The caller sets `cancel-in-progress: false` and no other
-  run of this workflow exists for this ref, so this is GitHub reclaiming
-  runners, not a concurrency decision. Recorded because the job conclusions
-  read `failure` and would otherwise look like the change failing.
+  event, not a defect.** Each ends after 57–86 minutes of legitimate work, at
+  staggered times (17:51, 17:53, 17:58, 18:20 UTC), with a shutdown signal:
+
+  ```plaintext
+  ##[error]The runner has received a shutdown signal. This can happen when the runner service is
+  stopped, or a manually started runner is canceled.
+  ```
+
+  Quoted verbatim, hence the United States spelling in the runner's own
+  message. The caller sets `cancel-in-progress: false` and no other run of this
+  workflow exists for this ref, so this is GitHub reclaiming runners, not a
+  concurrency decision. Recorded because the job conclusions read `failure` and
+  would otherwise look like the change failing.
 - [x] (2026-10-12 20:50Z) **The one genuine failure is the unrelated flake,
   now measured.** Shard 2 exited `4` ("baseline tests failing") in 3 minutes on
   `runner::manifest_structure_telemetry::tests::manifest_structure_telemetry_carries_only_counts`
@@ -374,34 +391,34 @@ Every stopping point is documented here. Timestamps are UTC.
   `if: ${{ needs.detect.outputs.has_changes == 'true' }}`, and `detect` runs
   `workflow_scripts/mutation_detect_changes.py`, whose `detect()` returns
   `full_run_matrix()` only for `workflow_dispatch` and otherwise takes
-  `changed_files()` — a `git log --since=<window-hours> <base-ref> --
-  <pathspec>` over the caller's `paths` (`src/,examples/,benches/`) with
-  `window-hours` 25 (one hour wider than a daily cron). An empty result writes
-  `has_changes=false`, and all six shards skip. So the green runs were not a
-  mystery nor a defect in the caller: on a quiet day the scheduled mutation
-  workflow deliberately does nothing. This supersedes the earlier Progress
-  entry's guess of "the pinned shared workflow, or a `paths` filter on the
-  caller" — right in implication, wrong in mechanism, and unfalsifiable as
-  written.
+  `changed_files()` — a
+  `git log --since=<window-hours> <base-ref> -- <pathspec>` over the caller's
+  `paths` (`src/,examples/,benches/`) with `window-hours` 25 (one hour wider
+  than a daily cron). An empty result writes `has_changes=false`, and all six
+  shards skip. So the green runs were not a mystery nor a defect in the caller:
+  on a quiet day the scheduled mutation workflow deliberately does nothing.
+  This supersedes the earlier Progress entry's guess of "the pinned shared
+  workflow, or a `paths` filter on the caller" — right in implication, wrong in
+  mechanism, and unfalsifiable as written.
 - [x] (2026-10-12 21:05Z) **The 3 Oct worker genuinely had no mold, now shown
   at the step level rather than inferred from the preflight message.** Job
   `111169751801`'s log carries `install-mold: false` (lines 48 and 388) and
   `mold-version: 2.41.0` (line 401), then
   `##[start-action display=Install mold;id=__self.mold]` →
-  `##[end-action id=__self.mold;outcome=skipped;conclusion=skipped]` followed
-  by `Skip mold off Linux`. The install was skipped because the caller never
+  `##[end-action id=__self.mold;outcome=skipped;conclusion=skipped]` followed by
+  `Skip mold off Linux`. The install was skipped because the caller never
   asked for it, so `build-tools: mold not found on PATH (pinned 2.41.0)` was
   reporting a true absence. The caller at `b6e7cf50` passes only
   `exclude-globs` and `extra-args` — no `install-mold`, no `setup-commands` —
   and pins `ff1dd759…`, a different revision from today's `0606ca89…`.
 - [x] (2026-10-12 21:05Z) **There is a second, unexposed source of truth for
-  the mold version, and it is a latent hazard this branch does not create.**
-  The `setup-rust` action at the pinned revision declares
+  the mold version, and it is a latent hazard this branch does not create.** The
+  `setup-rust` action at the pinned revision declares
   `mold-version: default='2.41.0'` alongside `install-mold: default='false'`.
   `mutation-cargo.yml` forwards **only** `install-mold` to that action, so the
   version the worker installs comes from the action's default, not from this
-  repository. Today both read `2.41.0`, so the preflight passes and this
-  branch is correct as it stands. But the two are independent: a bump to
+  repository. Today both read `2.41.0`, so the preflight passes and this branch
+  is correct as it stands. But the two are independent: a bump to
   `tools/mold/VERSION` would leave the caller asserting nothing (the preflight
   reads the file itself) while the *worker* still installed the action's
   default, and `make check-build-tools` would then fail the `setup-commands`
@@ -410,9 +427,59 @@ Every stopping point is documented here. Timestamps are UTC.
   mold-version input "if one exists" is discharged as *does not exist*: no
   input of that name is declared by `mutation-cargo.yml`. Recorded as an
   upstream improvement for `shared-actions#591`, not as a defect fixed here.
-- [ ] Milestone 3 remainder: `make test` and `make test-workflow-contracts` at
-  the current revision.
-- [ ] Milestone 4: ExecPlan finalized, commit, push, draft PR.
+- [x] (2026-10-12 21:10Z) **Pushed over SSH and opened draft PR #911.** The
+  branch had been pushed to `172dd4ff` and the tracking ref refreshed, with
+  `ls-remote` confirming the remote head equals `HEAD`. Two environment facts
+  made this worth recording. First, the harness injects **ten** `GIT_CONFIG_*`
+  slots, including an SSH→HTTPS `url.insteadOf` rewrite; the earlier habit of
+  stripping only `GIT_CONFIG_KEY_0` would have left the rewrite in place. A
+  push over such a rewrite still *succeeds*, so a green result proves nothing
+  about which transport ran. The push here stripped every `GIT_CONFIG_*`
+  variable, and the clean environment was verified before use by reading back
+  `git config --get-regexp '^url\.'` as empty. Second, the push itself took
+  over two minutes and appeared to hang with an empty log, because `fork` was
+  failing with `Resource temporarily unavailable`: the cgroup
+  `lody-daemon.service` was at `pids.current=8157` against `pids.max=8192`. The
+  push had in fact landed before the wrapper was stopped — `ls-remote` showed
+  the remote at `172dd4ff` — so the apparent hang was process starvation, not a
+  failed push.
+- [x] (2026-10-12 21:12Z) **PR #911 created as a draft**, MERGEABLE, 5 files,
+  +1449/−71, base `main` at the unchanged merge base `c65ad970`. The body
+  carries `Closes #875`, the Lody session link, and the closing attribution
+  line. CI began on `172dd4ff` (CI, Release Dry Run, Netsukefile Build Test).
+  CodeRabbit reported `Review skipped: draft pull request`, so the
+  `coderabbit review --agent` pass is still owed at a later milestone.
+- [x] (2026-10-12 21:12Z) **A follow-up comment was posted to #875**
+  (`#issuecomment-6130825428`) superseding two claims in the earlier comment:
+  the mechanism of the skipped green runs (now read from the pinned detector
+  script rather than guessed), and the retracted "shards run ⇒ red" relation.
+  The follow-up also records the 569/0/0 flag census and the two-source mold
+  version hazard for `shared-actions#591`.
+- [x] (2026-10-13 01:27Z) **The first `make test` attempt failed for an
+  environmental reason, and the distinction matters.** The run reached
+  `1479/3914 tests run: 1475 passed, 4 failed, 6 skipped` and then stopped. All
+  four failures are in `netsuke-build::advanced_usage_tests`, and none is a
+  claim about this branch's subject:
+
+  - three report `Error: run netsuke command` / `Caused by: Resource
+    temporarily unavailable (os error 11)`;
+  - the fourth fails in `std::thread::spawn` itself —
+    `failed to spawn thread: Os { code: 11, kind: WouldBlock, message:
+    "Resource temporarily unavailable" }` — i.e. *before* any netsuke code
+    runs.
+
+  This is exhausted thread/PID admission on the host, not a defect: the session
+  cgroup's `pids.events` records **18516** cumulative refusals, with
+  `pids.current` around 10.4k against `pids.max=16384`, and the host load
+  average was **35** on a 6-core machine because other agents were building.
+  Untouched sibling tests in the same binary passed in the same run. The
+  correct response is to re-run when the host is quieter, not to change any
+  source: a test that cannot spawn a thread has not been evaluated.
+- [ ] Milestone 3 remainder: re-run `make test`, and run
+  `make test-workflow-contracts`, at the current revision once host load
+  permits.
+- [ ] Milestone 4: ExecPlan finalized, `coderabbit review --agent` clean, CI
+  green, PR marked ready.
 
 ## Surprises & discoveries
 
@@ -485,13 +552,14 @@ Unexpected findings during implementation that were not anticipated as risks.
   `if: ${{ needs.detect.outputs.has_changes == 'true' }}`, and `detect` runs
   `workflow_scripts/mutation_detect_changes.py`, whose `detect()` dispatches to
   `full_run_matrix()` only for `workflow_dispatch` and otherwise calls
-  `changed_files()`, a `git log --since=<window-hours> <base-ref> --
-  <pathspec>` over the caller's `paths` (`src/,examples/,benches/`) with
-  `window-hours` 25. An empty result sets `has_changes=false` and the shards
-  skip. So the skip is neither a mystery nor a fault in the caller: on a quiet
-  day the scheduled mutation workflow deliberately does nothing. (The earlier
-  text here guessed "the pinned shared workflow, or a `paths` filter on the
-  caller" — both halves were wrong in mechanism and right in implication.)
+  `changed_files()`, a
+  `git log --since=<window-hours> <base-ref> -- <pathspec>` over the caller's
+  `paths` (`src/,examples/,benches/`) with `window-hours` 25. An empty result
+  sets `has_changes=false` and the shards skip. So the skip is neither a
+  mystery nor a fault in the caller: on a quiet day the scheduled mutation
+  workflow deliberately does nothing. (The earlier text here guessed "the
+  pinned shared workflow, or a `paths` filter on the caller" — both halves were
+  wrong in mechanism and right in implication.)
 
   The two runs in the same window that *did* launch shards both went **red**:
   `b6e7cf50` (3 Oct) and `bc812986` (12 Oct), though see the correction below:
@@ -505,18 +573,28 @@ Unexpected findings during implementation that were not anticipated as risks.
   `MISSED` and `TIMEOUT` outcomes with per-mutant timings — before GitHub
   killed them with a runner shutdown signal at 57–86 minutes. So the honest
   relation is narrower: green ⇔ shards skipped, and the red runs are red for
-  reasons that differ per run and must be read from the artefacts. The
-  "shards run ⇒ red" clause is retracted; it would have understated the
-  branch's effect, because it implies running the shards is itself the fault.
+  reasons that differ per run and must be read from the artefacts. The "shards
+  run ⇒ red" clause is retracted; it would have understated the branch's
+  effect, because it implies running the shards is itself the fault.
 
   Impact, recorded because it changes what "the documented missing-mold
   failure" is evidence *for*: the mold diagnostic is real and this plan
-  reproduces it, but it is **not** the reason this repository has evaluated no
-  mutants for at least a week. Confirming it requires artefact inspection, not
-  the run conclusion. The acceptance criterion "a non-empty mutant set
-  executes" cannot be discharged by any green run that predates this branch,
-  because none of them executed a mutant. See also the next observation, which
-  shows the same artefact-inspection discipline applied to the 3 Oct failure.
+  reproduces it, but it is **not** the reason eight consecutive runs evaluated
+  no mutants. Confirming it requires artefact inspection, not the run
+  conclusion.
+
+  A second over-claim, caught while preparing the PR body and corrected here:
+  this entry first said "no green run that predates this branch executed a
+  mutant". That is false. Run `35499357086` (20 September, head `c7cf1485`)
+  concluded `success` with `mutation / mutants` **and** `mutation / summarize`
+  both `success`, so it did evaluate mutants. The true statement is narrower
+  and more useful: a `skipped` shard and a `successful` shard both produce a
+  green run-level tick, so the run conclusion alone cannot distinguish "the
+  mutants passed" from "no mutant was evaluated" — which is why the shard job
+  is the only thing worth reading. The eight consecutive skip-only runs remain
+  a real gap; they are just not evidence that *no* earlier run ever worked. See
+  also the next observation, which shows the same artefact-inspection
+  discipline applied to the 3 Oct failure.
 
 - **Observation (2026-10-12, milestone 3): two *different* baseline tests have
   failed the mutation worker, and cargo-mutants' phase split is what hides
@@ -595,6 +673,33 @@ Unexpected findings during implementation that were not anticipated as risks.
   neither of them a tracing-capture test. Kept rather than deleted: the same
   trap — reading a familiar symptom into a log without grepping for the name —
   is what this whole bullet is about.
+
+- **Observation (2026-10-13, milestone 3): "four tests failed" and "the code
+  is broken" are different statements, and `os error 11` is the difference.**
+  The first `make test` of this milestone reported
+  `1479/3914 tests run: 1475 passed, 4 failed, 6 skipped`, and four failures
+  reads like a finding. It is not one. Three of the four failed with
+  `Resource temporarily unavailable (os error 11)` while spawning the netsuke
+  child process, and the fourth failed in `std::thread::spawn` itself:
+
+  ```plaintext
+  thread 'generate_to_unwritable_path_fails_with_path_error' (1113978) panicked at
+    .../library/std/src/thread/functions.rs:131:29:
+  failed to spawn thread: Os { code: 11, kind: WouldBlock, message: "Resource temporarily unavailable" }
+  ```
+
+  A panic inside `thread::spawn` precedes every line of netsuke's own logic, so
+  no assertion in that test was ever reached — it is a statement about the
+  host, not about the branch. Two measurements place it: the session cgroup
+  (`lody-daemon.service`) recorded **18516** cumulative `pids` refusals with
+  `pids.current` near 10.4k against `pids.max=16384`, and the host load average
+  was **35** on 6 cores because other agents were compiling. Untouched sibling
+  tests in the same binary passed in the same run, which is what rules out a
+  binary-wide or module-wide cause. The response is a re-run under lower load;
+  editing source here would be chasing a ghost. This is the same shape as the
+  earlier retraction above — a familiar-looking symptom read as a verdict —
+  with the twist that the useful check is not the test's name but *where* its
+  failure occurred.
 
 ## Decision log
 
