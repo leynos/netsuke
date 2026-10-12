@@ -2242,7 +2242,7 @@ and any other value is refused. The retired `installer-checksum` is rejected
 outright — a non-empty value fails the action's own validation rather than
 being ignored — and `archive-checksum`, its replacement, is not passed either.
 No workflow reads the `CODESCENE_CLI_SHA256` repository variable that once fed
-the retired input; the repository declares no variables at all.
+the retired input.
 `tests/workflow_contracts/codescene_uploader_checksum_test.py` scans every
 workflow for the retired input and the variable and holds the uploader to the
 one approved revision, while
