@@ -262,9 +262,23 @@ Every stopping point is documented here. Timestamps are UTC.
   exactly how the previous attempt's two failures came to be uninterpretable.
   Note also that `sccache unreachable` means sibling builds are compiling
   uncached, so the collapse is faster than a cached build's.
-- [ ] Milestone 3 remainder, blocked on the above: `make test`,
-  `make test-workflow-contracts`, then the completed run's `setup-commands` log
-  text for the `RUSTFLAGS` / `CARGO_ENCODED_RUSTFLAGS` observation.
+- [x] (2026-10-12 19:32Z) **Disk blocker cleared, without any deletion by this
+  session.** `/dev/md2` recovered from 2.95 GB free / 100% used to **525 GB
+  free / 69% used** between 19:25 and 19:29 — roughly 522 GB released. The
+  cause is outside this session: nothing here deleted anything, and the plan's
+  own constraint against touching sibling worktrees was honoured throughout.
+  Most likely the sibling worktrees completed their builds and reclaimed
+  intermediate artefacts, or another session pruned its own. The hold was
+  lifted and both gates re-dispatched. Recorded because a blocker that clears
+  itself is exactly as worth logging as one that does not — the next person
+  reading the previous entry needs to know the 2.95 GB figure is historical,
+  and that the ~117 GB of sibling `target/` directories still exist and are
+  still not ours to remove. Load average remains ~70 on 6 cores, so gates will
+  be slow; the sampled disk log is retained so an ENOSPC failure stays
+  distinguishable from a real one.
+- [ ] Milestone 3 remainder: `make test`, `make test-workflow-contracts`, then
+  the completed run's `setup-commands` log text for the `RUSTFLAGS` /
+  `CARGO_ENCODED_RUSTFLAGS` observation.
 - [ ] Milestone 4: ExecPlan finalized, commit, push, draft PR.
 
 ## Surprises & discoveries
