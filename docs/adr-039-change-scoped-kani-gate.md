@@ -201,6 +201,13 @@ Implementation and contracts live in
 [`tests/workflow_contracts/kani_smoke_metrics_wiring_test.py`](../tests/workflow_contracts/kani_smoke_metrics_wiring_test.py),
 and [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 
+The local-reference coverage contract added on `main` inventories scripts under
+`scripts/` and requires each one to be reachable from a workflow, Makefile
+target, or test. The Kani workflow invokes the metrics helper directly, so
+`scripts/kani_smoke_metrics.py` remains covered without an exemption. Keep
+future Kani workflow helpers explicitly referenced by their owning workflow or
+contract.
+
 ## Reuse in other repositories
 
 The mechanism is repository-independent apart from the scope file. A step by
