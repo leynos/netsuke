@@ -42,7 +42,7 @@ pub(super) struct SubstitutionTraversal<'template, 'bindings> {
     output: String,
     /// Record whether the current position is protected by backticks.
     in_backticks: bool,
-    /// Record the active POSIX quote context outside command substitutions.
+    /// Record the active shell quote context outside command substitutions.
     quote_context: QuoteContext,
     /// Retain nested `$()` parsing state where path insertion is refused.
     command_substitutions: Vec<CommandSubstitution>,
