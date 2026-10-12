@@ -196,15 +196,33 @@ Every stopping point is documented here. Timestamps are UTC.
   assertions (`EXPECTED_WITH` extended; a standalone test for each input).
   `make test-workflow-contracts` green (317s, run in background). Committed as
   `1b7b01f8`.
-- [x] (2026-10-12 15:40Z) **Milestone 2 complete, with invariant I2
+- [x] (2026-10-12 15:50Z) **Milestone 2 complete, with invariant I2
   discharged.** `rustdocflags.rs` now drives `doctest` through
   `Sandbox::run_make` with a fake `mold` under the sandbox prefix and a fake
   `rustup`; `doctest` joined the fail-before-Cargo table in
-  `build_tools_check_tests.rs`. Focused suite: 55/55 green with `mold`
-  present. **The same compiled binary, run under a verified mold-free `PATH`,
-  passes all 7 `rustdocflags` tests** (`7 passed; 0 failed`, RC=0) — the two
-  named in the issue among them. Evidence:
-  `/tmp/i2-moldfree-run-issue-875-*.out`. Not yet committed.
+  `build_tools_check_tests.rs`. Focused suite: 55/55 green with `mold` present.
+  **The same compiled binary, run under a verified mold-free `PATH`, passes all
+  7 `rustdocflags` tests** (`7 passed; 0 failed`, RC=0) — the two named in the
+  issue among them. Evidence: `/tmp/i2-moldfree-run-issue-875-*.out`, written
+  `15:49:35Z`; the probe soundness block at the head of that log reports
+  `mold: NONE` with `make` and `grep` both resolving, so the run is evidence
+  about mold and not about a broken `PATH`.
+- [x] (2026-10-12 16:35Z) Committed Milestone 2 as `b92dcbf4` ("Make the
+  rustdoc override tests hermetic"), after fixing two defects a gate run found
+  in the new code: a `clippy::shadow-reuse` violation on the fake-Cargo path
+  binding, and an unformatted expression at the same site. Both were mine;
+  `cargo fmt --all -- --check` and a focused
+  `cargo clippy --test makefile_test_target --all-features -- -D warnings
+  -D clippy::shadow-reuse`
+  then ran clean.
+- [x] (2026-10-12 16:45Z) **Upstream CI evidence frozen.** Job
+  `111169751801` (run `37111347135`, head `b6e7cf50`) carries the decisive
+  proof that the caller passed *no* setup commands: step 7, "Run setup
+  commands", concluded `skipped`, and step 11, "Run mutation testing", concluded
+  `failure`. A skipped step is stronger than an absent one — it is the shared
+  workflow saying the input it declares arrived empty. Recorded because the job
+  log itself fetched as 0 bytes, so the step table is the primary evidence
+  rather than a fallback.
 - [x] (2026-10-12 15:35Z) **ETXTBSY audit complete, read-only.** No defect
   found; no helper changed; no retry added. See EP-M3 for the full chain.
 - [ ] Milestone 3: full local gates, worker dispatch, linker-selection
@@ -328,21 +346,53 @@ Record every significant decision made while working on the plan.
   (`ETXTBSY`), and add no retry. Rationale: the audit found the write handle
   provably closed before the mode change and before any spawn —
   `std::fs::write` returns `io::Result<()>` and so cannot leak a handle — and
-  the code is byte-identical to the revision that ran on 18 September. A
-  change without a reproduction would be a guess, and a retry would mask the
-  next real occurrence. The issue itself calls the earlier `ETXTBSY` "separate
-  from the demonstrated missing-mold failure". Date/Author: 2026-10-12,
-  implementer.
+  the code is byte-identical to the revision that ran on 18 September. A change
+  without a reproduction would be a guess, and a retry would mask the next real
+  occurrence. The issue itself calls the earlier `ETXTBSY` "separate from the
+  demonstrated missing-mold failure". Date/Author: 2026-10-12, implementer.
 
 - **Decision:** probe a mold-free `PATH` with a full mirror minus `mold`,
   and verify the probe before using it. Rationale: the first two attempts
-  produced results that looked meaningful and were not —
-  `PATH="/usr/bin:/bin"` still found `/usr/bin/mold`, and a hand-picked subset
-  of symlinks omitted `grep`, failing inside
-  `scripts/build-tools-common.sh` for an unrelated reason. Impact: the
-  recorded evidence names the probe's construction and the checks that it was
-  sound, because a negative control that cannot fail is worse than none.
-  Date/Author: 2026-10-12, implementer.
+  produced results that looked meaningful and were not — `PATH="/usr/bin:/bin"`
+  still found `/usr/bin/mold`, and a hand-picked subset of symlinks omitted
+  `grep`, failing inside `scripts/build-tools-common.sh` for an unrelated
+  reason. Impact: the recorded evidence names the probe's construction and the
+  checks that it was sound, because a negative control that cannot fail is
+  worse than none. Date/Author: 2026-10-12, implementer.
+
+- **Decision:** pass `install-mold` alone and no version, because the pinned
+  revision declares no mold-version input. Rationale: the pin's full
+  `workflow_call.inputs` table is `paths`, `extra-crate-dirs`, `exclude-globs`,
+  `window-hours`, `base-ref`, `timeout-multiplier`, `timeout-minutes`,
+  `shard-count`, `cargo-mutants-version`, `extra-args`, `allow-no-mutants`,
+  `setup-commands` (`type: string`, `default: ""`) and `install-mold`
+  (`type: string`, `default: 'false'`). Nothing names a mold version, so there
+  is no value to pass and no "if a mold-version input exists" branch to take;
+  the version stays owned by `tools/mold/VERSION`, which `check-build-tools`
+  reads. Impact: the plan's Task 1 conditional resolves to its negative arm,
+  and the version-equality test the task made conditional is not written —
+  `make test-workflow-contracts` would otherwise assert an input the shared
+  workflow rejects. Date/Author: 2026-10-12, implementer.
+
+- **Decision:** leave the caller's `setup-commands` to run *after* the mold
+  install without any ordering guard. Rationale: in the pinned revision the
+  mutants job installs mold inside "Setup Rust" (the `setup-rust` action is
+  given `install-mold: ${{ inputs.install-mold }}`), and "Run setup commands"
+  is a later step, so the preflight cannot observe a worker that has not yet
+  had its chance to install the linker. Impact: the two inputs are genuinely a
+  pair, which is what the contract test asserts; a future reordering upstream
+  would make the preflight fail loudly rather than silently pass. Date/Author:
+  2026-10-12, implementer.
+
+- **Decision:** evaluate "runner, cache and concurrency unchanged"
+  mechanically by parsing both revisions and comparing the fields, not by
+  reading the diff. Rationale: a comment-only edit and a settings edit look
+  identical in `git diff`, and the plan's acceptance criterion is about
+  settings. Impact: triggers (`on`), top-level and job `permissions`,
+  `concurrency`, the `uses` pin, `runs-on` and `env` compare equal between the
+  merge base `c65ad970` and `HEAD`, while `with:` differs by exactly the two
+  added keys. No cache key exists in either revision, so there is none to
+  preserve. Date/Author: 2026-10-12, implementer.
 
 ## Outcomes & retrospective
 
@@ -658,24 +708,25 @@ fixture. The audit traced every writer on that path and found no defect:
   permission change is not a write, so it cannot hold the file busy either.
 - The two fake-Ninja writers that reach this primitive —
   `test_support/src/lib.rs::write_fake_ninja` (writes `ninja`, or `ninja.cmd`
-  on Windows) and `test_support/src/check_ninja/mod.rs::
-  write_fake_ninja_script_in_dir` (writes `ninja`) — each return a `TempDir`
-  *and* the path, so the directory outlives the write and is kept alive by the
-  caller across the spawn. That is the correct ownership shape.
+  on Windows) and
+  `test_support/src/check_ninja/mod.rs:: write_fake_ninja_script_in_dir` (writes
+  `ninja`) — each return a `TempDir` *and* the path, so the directory outlives
+  the write and is kept alive by the caller across the spawn. That is the
+  correct ownership shape.
 - `git log -S 'write_fake_ninja'` and `git log -S 'write_exec_with_content'`
   place both helpers before the September run, and `git show` of
-  `test_support/src/exec.rs` and `test_support/src/fs.rs` at
-  `1e60fb18` (the 18 September revision) shows the write path byte-identical
-  to today's. There is no earlier revision in which a handle escaped.
+  `test_support/src/exec.rs` and `test_support/src/fs.rs` at `1e60fb18` (the 18
+  September revision) shows the write path byte-identical to today's. There is
+  no earlier revision in which a handle escaped.
 - `git log --all -i --grep='ETXTBSY\|text file busy'` returns nothing: the
   repository has never recorded a fix for this, consistent with it being
   environmental rather than a fixture defect.
 
 Conclusion: **no reproduction and no defect — no helper is changed, and no
-retry is added.** The observed `Text file busy` is consistent with an
-external writer still holding the file open (an antivirus/indexer, or a
-container overlay mid-copy), not with this repository's write path. It remains
-distinct from the demonstrated missing-mold failure, as the issue states.
+retry is added.** The observed `Text file busy` is consistent with an external
+writer still holding the file open (an antivirus/indexer, or a container
+overlay mid-copy), not with this repository's write path. It remains distinct
+from the demonstrated missing-mold failure, as the issue states.
 
 **Acceptance evidence:** the run URL, the `check-build-tools` line, the two
 test names in the baseline output, the mutant count, and the printed flag
