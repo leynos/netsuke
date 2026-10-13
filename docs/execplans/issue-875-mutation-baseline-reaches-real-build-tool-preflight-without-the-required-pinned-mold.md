@@ -501,8 +501,36 @@ Every stopping point is documented here. Timestamps are UTC.
   misquoting the runner. Committed as `5460bd89`. `make markdownlint` (which
   includes `make spelling`) and `mdtablefix --check` both pass locally
   afterwards.
-- [ ] Milestone 3 remainder: re-run `make test` at the current revision once
-  host load permits. `make test-workflow-contracts` is discharged above.
+- [x] (2026-10-13 02:10Z) **The named rustdoc tests pass under the real gate,
+      and
+  the remaining `make test` failures are a second environmental cause with a
+  one-line diagnostic.** A re-run with `--no-fail-fast` (so a single admission
+  failure cannot truncate the suite) advanced from `1479/3914` to **`3901/3914`
+  ** with **3897 `PASS` and 0 `FAIL`**, and the four `TIMEOUT`s are all
+  nested-Cargo fixture compiles
+  (`build_module_slice_ui_tests::production_build_module_slice_has_expected_boundary`
+  and three `command_env_ui_tests::*_fixture_compiles`). The two tests this
+  branch exists to fix are green, as is the property test's full 16-case run:
+
+  ```plaintext
+  PASS [0.261s] (2679/3914) makefile_test_target rustdocflags::behavioural_doctest_passes_shell_sensitive_overrides_only_as_rustdocflags::case_1
+  PASS [0.155s] (2683/3914) makefile_test_target rustdocflags::behavioural_doctest_passes_shell_sensitive_overrides_only_as_rustdocflags::case_2
+  PASS [5.805s] (3268/3914) makefile_test_target rustdocflags::property_doctest_preserves_rustdoc_override_values
+  ```
+
+  The timeouts are attributable to a cold compile cache, not to load and not to
+  this branch: the same document-only diff produced **1**
+  `sccache server is unreachable; compiling without the cache` message in the
+  earlier run (those tests passed) and **573** in this one, and
+  `sccache --show-stats` then reported `Compile requests 0`, i.e. a reset
+  server rather than an idle one. The nested-cargo tests carry the profile's
+  own 300 s cap; the `nested-cargo-builds` group serializes them but does not
+  widen it. So the diagnostic for this family is a count, not a test name. The
+  doctest half still has not run to completion, because the nextest half
+  aborted first both times.
+- [ ] Milestone 3 remainder: run the doctest half (`make doctest`) at the
+  current revision. `make test-workflow-contracts` is discharged above, and the
+  nextest half's remaining failures are the cold-cache timeouts recorded here.
 - [ ] Milestone 4: ExecPlan finalized, `coderabbit review --agent` clean, CI
   green, PR marked ready.
 
