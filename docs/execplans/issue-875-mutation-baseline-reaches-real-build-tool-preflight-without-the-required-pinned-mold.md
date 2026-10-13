@@ -752,6 +752,65 @@ Every stopping point is documented here. Timestamps are UTC.
   measurement, and a measurement re-derived from a summary instead of from the
   source is a transcription. Reading the key *names* out, rather than counting
   lines that look like keys, makes the off-by-two impossible to miss.
+- [x] (2026-10-14 01:45Z) **The first CodeRabbit pass produced one genuine
+  defect in this plan, and it was in the plan's own evidence procedure.**
+  CodeRabbit's finding at the M2 conformance check was correct and is now
+  fixed: the check required `make test-nextest` to pass *with mold absent*, and
+  that target declares `check-build-tools` as a prerequisite (`Makefile:228`)
+  whose script returns non-zero when `command -v mold` fails
+  (`scripts/check-build-tools.sh:24-25`). The plan was asking for a command
+  that can only fail — while its own procedure a few paragraphs above already
+  described the sound form. The check now names the compiled test *binary*
+  under the mold-free `PATH`, which is what the surrounding procedure does and
+  what the property under test actually is. The sentence contradicted the
+  plan's own findings, which is worth recording: a conformance check is a claim
+  about what evidence is obtainable, and this one had drifted from the
+  procedure it was meant to summarize.
+
+  Two smaller items from the same review were also actioned: `_require_str` in
+  `mutation_testing_test.py` replaces the two empty `case str() as value: pass`
+  branches the module had grown, and "the mold install" at `:1139` became "the
+  mold installation". That last finding's own anchor (`:63`) was wrong — line
+  63 is a `rustup` sentence with no such phrase — so the correction was applied
+  where the text actually is, which is the general rule for a finding whose
+  location and claim disagree.
+
+  Fixing the Python helper surfaced a gate lesson: the helper needed a NumPy
+  `Returns` section for Ruff's `DOC201`, and the ExecPlan edit needed
+  mdtablefix's canonical wrap (`make fmt`), because hand-wrapping Markdown fails
+  `make check-fmt` even when `make markdownlint` passes. Both were caught by
+  the gate runner and both are mechanical. Recorded because `DOC201` fires on
+  any `-> str` helper carrying a prose-only docstring, which is the shape the
+  two emptied branches were replaced with.
+- [x] (2026-10-14 02:05Z) **The two red gates in the binding re-run are
+  environmental, and each was settled by measurement rather than assertion.**
+  Neither failing file appears anywhere in this branch's diff from the merge
+  base `c65ad970`, and the complete delta from the fully-green `3d761c8d` is
+  two non-Rust files.
+
+  1. `local_reference_property_test.py::test_coverage_matches_oracle_independent_of_reference_order`
+     failed with `DeadlineExceeded: Test took 694.92ms, which exceeds the
+     deadline of 200.00ms`, reported by Hypothesis as `FlakyFailure` ("Failed
+     on the first call but did not on a subsequent one"). Re-run in isolation
+     at load average 44 — while four compile slots were held and a peer
+     worktree queued 117 seconds deep — it **passed in 2.50s**. A 200 ms
+     deadline under a load-44 box is the failure mode, not the suite.
+  2. `netsuke-build::packaging_smoke_tests::packaged_manifest_retains_build_script_sources`
+     was terminated by nextest at `TIMEOUT [300.013s]`. This one is a **known
+     local property with no timeout headroom**, not a branch finding: it
+     cold-builds through `cargo publish --dry-run` by design, and this host is
+     roughly 3× slower than CI for it. CI on this exact revision is the stable
+     oracle — job `115213351527` in run `38372699508` at `35473e8e` shows
+     `PASS [ 176.613s] (3930/3930)` and `3930 tests run: 3930 passed (1 slow),
+     6 skipped`. **No local re-run is needed to read a verdict CI has already
+     given for the same bytes**, and a widened local allowance would not be a
+     fix for a test whose isolated local cost sits at 288s of a 300s cap.
+
+  Both failures aborted their suites partway, so the two halves that never ran
+  were run separately and both are green: `make doctest` (39 passed, 0 failed,
+  plus the `88`/`2` distributed results) and stage 3 of
+  `make test-workflow-contracts` (`27 passed in 13.21s`). The remaining stages
+  of each suite had already passed in the same run.
 - [ ] Milestone 4: ExecPlan finalized, `coderabbit review --agent` clean, CI
   green, PR marked ready. **`coderabbit review --agent` cannot be reported
   clean while the fourth acceptance criterion is unmet:** every pass re-raises
@@ -775,6 +834,10 @@ Every stopping point is documented here. Timestamps are UTC.
   `build-test`, `kani-smoke`, `Windows / build-test-windows`,
   `Windows / lint-windows` and `Windows / windows-msi-upgrade` — are each
   `completed success`.
+
+  **Still green on `35473e8e`**, the head as of this entry: `CI` `38372699508`,
+  `Netsukefile Build Test` `38372699186`, `Release Dry Run` `38372700780`, all
+  `completed success`, with `CI`'s five jobs each `completed success`.
 
   The remaining gate is clearing the draft flag, which itself suppresses
   CodeRabbit's GitHub review
@@ -1140,8 +1203,8 @@ Record every significant decision made while working on the plan.
   workflow rejects. Date/Author: 2026-10-12, implementer.
 
 - **Decision:** leave the caller's `setup-commands` to run *after* the mold
-  install without any ordering guard. Rationale: in the pinned revision the
-  mutants job installs mold inside "Setup Rust" (the `setup-rust` action is
+  installation without any ordering guard. Rationale: in the pinned revision
+  the mutants job installs mold inside "Setup Rust" (the `setup-rust` action is
   given `install-mold: ${{ inputs.install-mold }}`), and "Run setup commands"
   is a later step, so the preflight cannot observe a worker that has not yet
   had its chance to install the linker. Impact: the two inputs are genuinely a
@@ -1510,11 +1573,22 @@ fake Cargo's `>` redirection on every invocation, so the 16 cases · 2 sources =
 not gain `mold`, `rustup`, or `cargo`. The fake Cargo is a shell script using
 only `printf` (a shell builtin) and `:`, so no utility is added.
 
-**Conformance check.** Does `make test-nextest` still pass with `mold` present
-*and* with it absent? The first proves nothing regressed on a capable machine;
-the second proves the injection works. Both are required.
+**Conformance check.** Does `make test-nextest` still pass with `mold` present,
+and does the compiled test *binary* still pass with `mold` absent from `PATH`?
+The first proves nothing regressed on a capable machine; the second proves the
+injection works. Both are required.
 
-**Acceptance evidence:** the focused nextest output under both `PATH`s, and the
+The mold-free leg cannot be `make test-nextest`: that target declares
+`check-build-tools` as a prerequisite (`Makefile:228`), and the preflight
+returns non-zero when `command -v mold` fails
+(`scripts/check-build-tools.sh:24-25`). Asking the *target* to pass without
+mold is asking it to fail, so the leg is run against the already-built binary
+instead — exactly as the procedure above does. The binary links at build time,
+when mold is present; the test run then passes `PATH=/tmp/nomold/bin` to its
+children, which is the property under test.
+
+**Acceptance evidence:** the focused nextest output on a capable machine, the
+compiled binary's output under `PATH=/tmp/nomold/bin`, and the
 `make test-workflow-contracts` output unchanged from EP-M1.
 
 **Recovery:** `git revert` the M2 commit; `build_tools_check_tests.rs` and the

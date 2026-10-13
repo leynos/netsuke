@@ -190,6 +190,39 @@ def _mutation_with_block() -> dict[str, object]:
     )
 
 
+def _require_str(value: object, description: str, consequence: str = "") -> str:
+    """Return ``value`` as a string, failing the test when it is not one.
+
+    The caller supplies the consequence rather than this helper, because
+    only the caller knows *why* the type matters: for ``install-mold`` a
+    YAML boolean is an argument-type error at workflow-call time, whereas
+    for ``setup-commands`` any non-string is simply the wrong shape.
+
+    Parameters
+    ----------
+    value
+        The parsed YAML value to narrow.
+    description
+        How to name the value in a failure, e.g. the caller's dotted path.
+    consequence
+        A clause appended to the failure message explaining why the type
+        matters. Empty when the wrong shape is self-evidently wrong.
+
+    Returns
+    -------
+    str
+        ``value`` itself, narrowed to ``str``.
+    """
+    match value:
+        case str() as text:
+            return text
+        case other:
+            pytest.fail(
+                f"{description} must be a string, got {other!r} "
+                f"({type(other).__name__}){consequence}"
+            )
+
+
 def test_with_block_carries_the_caller_configuration() -> None:
     """The caller passes exactly the documented configuration."""
     with_block = _mutation_with_block()
@@ -211,16 +244,12 @@ def test_install_mold_is_enabled_in_the_type_the_shared_workflow_declares() -> N
     would be rejected, so the value's type is asserted and not just its
     truthiness.
     """
-    match _mutation_with_block().get(INSTALL_MOLD_INPUT):
-        case str() as value:
-            pass
-        case other:
-            pytest.fail(
-                f"jobs.mutation.with.{INSTALL_MOLD_INPUT} must be the string "
-                f"'true'; the shared workflow declares it type: string, and a "
-                f"YAML boolean would be rejected at workflow-call time. Got "
-                f"{other!r} ({type(other).__name__})"
-            )
+    value = _require_str(
+        _mutation_with_block().get(INSTALL_MOLD_INPUT),
+        f"jobs.mutation.with.{INSTALL_MOLD_INPUT}",
+        "; the shared workflow declares it type: string, and a YAML boolean "
+        "would be rejected at workflow-call time",
+    )
     assert value == "true", (
         f"jobs.mutation.with.{INSTALL_MOLD_INPUT} must enable the pinned "
         f"mold install, got {value!r}"
@@ -237,14 +266,10 @@ def test_setup_commands_verify_the_build_tool_pins_before_the_baseline() -> None
     printed variables are what the run log carries for the open question
     about which flag source selects the linker.
     """
-    match _mutation_with_block().get(SETUP_COMMANDS_INPUT):
-        case str() as value:
-            pass
-        case other:
-            pytest.fail(
-                f"jobs.mutation.with.{SETUP_COMMANDS_INPUT} must be a string, "
-                f"got {other!r} ({type(other).__name__})"
-            )
+    value = _require_str(
+        _mutation_with_block().get(SETUP_COMMANDS_INPUT),
+        f"jobs.mutation.with.{SETUP_COMMANDS_INPUT}",
+    )
     assert BUILD_TOOLS_TARGET in value, (
         f"jobs.mutation.with.{SETUP_COMMANDS_INPUT} must run "
         f"{BUILD_TOOLS_TARGET!r} so a missing or drifted tool stops the run "
