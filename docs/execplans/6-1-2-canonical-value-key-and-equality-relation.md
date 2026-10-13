@@ -383,6 +383,51 @@ under way; the invocation naming this plan supplies execution approval.
   hazard under Surprises. The `test` gate was stopped rather than allowed to
   finish, because it was running on bytes the repair was about to change and
   the shared compile queue is contended.
+- [x] (2026-10-13) The repaired candidate was re-gated. The eight applicable
+  targets are all green on the frozen tree, bound to content hash `2d7aadbd…`:
+  `check-fmt`, `lint` (233 s), `doc-coverage` (**5055/5112 = 98.88%** against
+  the 80% threshold), `markdownlint`, `spelling`, `nixie`, `test`, and
+  `test-workflow-contracts` (1264 passed, 3 skipped) — the last because the
+  Kani scope repair touched a workflow contract. `test` is green in both halves:
+  `test-nextest` at **3935/3935 passed** (6 skipped) and its `doctest`
+  prerequisite, which the first attempt never reached, run separately at RC=0
+  and 105 s. The first `make test` of this batch was red on a single
+  **timeout**, not a failure:
+  `packaging_smoke_tests::packaged_manifest_retains_build_script_sources` was
+  killed at `300.007 s` against the 300 s cap while the host was at load 17.6
+  on 24 cores, with zero assertion failures and the `nested-cargo-builds`
+  group's `max-threads = 1` making every member queue behind one another. The
+  identical bytes then **passed** at `290.107 s` on re-run. Both runs'
+  `test-nextest` phases carry the same **573**
+  `managed sccache server is unreachable` lines, and `packaging_smoke_tests.rs`
+  appears in no branch diff. So the verdict is load-determined, sitting ~10 s
+  inside a 300 s cap against a ~288 s isolated measurement, and the red does
+  not describe this candidate. The risk entry's earlier claim that the sccache
+  count discriminates a pass from a fail was measured false and corrected.
+  Widening the allowance remains out of scope here, for the membership-rot and
+  budget reasons the entry already gives. A check of `origin/main` then found
+  that `1a5fc57f` (PR #906) **has already widened this exact test's allowance
+  to 600 s**, so the timeout is a property of this branch's base rather than of
+  the candidate: it should not recur after a rebase onto current `main`. That
+  commit also edits `.config/nextest.toml`, which renumbers the two line
+  citations this plan makes against that file; both are flagged in the risk
+  entry for re-derivation after the rebase.
+- [x] (2026-10-13) EP-M2 close-out verified by a second, independent batch on
+  the frozen tree, bound to content hash `89beebdb…` (1488 files). All eight
+  targets exited 0 sequentially, and the harness's post-run `hashlines.after`
+  came out byte-identical to its pre-run `hashlines`, so no gate wrote to any
+  tracked or untracked non-ignored file. `test` ran **both** halves this time:
+  `test-nextest` at **3935/3935 passed** (6 skipped) in 421 s, and `doctest`
+  (95 + 2 + 39 passed) because its prerequisite was green rather than aborting
+  it. The load-sensitive packaging test passed at **245.656 s**, inside its 300
+  s cap, so neither environmental trap fired. The batch's `test-nextest` phase
+  carries **1034** `managed sccache server is unreachable` lines and still
+  passed — a third independent observation, and further evidence against the
+  retired claim that this count discriminates a verdict: it is not even stable
+  across runs (573, 573, 1034) and carries no information about the outcome.
+  The only delta after that batch is this entry's own prose, in this one file,
+  so the applicable re-gate is the Markdown-sensitive subset (`check-fmt`,
+  `markdownlint`, `spelling`, `nixie`) rather than the Rust suite.
 - [ ] Implement canonical keys/equality and stable deduplication; discharge
   property, BDD, runtime-boundary, and Verus obligations.
 - [ ] Update design and formal-verification guidance, run sequential gates, and
@@ -441,6 +486,21 @@ under way; the invocation naming this plan supplies execution approval.
   sampling needs do not belong in one test. The check that caught this was
   re-running the full set; a targeted re-run of the three previously-red gates
   would have missed it entirely.
+- Surprise (measured 2026-10-13, EP-M2 batch 4): **a diagnostic count that
+  separates two *historic* observations can still fail to separate two
+  *contemporaneous* ones.** The risk entry read the 573
+  `managed sccache server is unreachable` lines as decisive against an earlier
+  1-line pass, and that was true of the pair it compared. This batch then
+  produced a **TIMEOUT** at `300.007 s` and a **PASS** at `290.107 s` on
+  byte-identical bytes, **both** carrying 573 such lines. Impact: the count
+  establishes that the cache was down and that compiles ran cold; it carries no
+  information about which side of the cap a given run lands on, because the
+  verdict is set by host load during the test's window. The lesson is about the
+  shape of the inference, not the number: a discriminator validated against
+  *retrospective* pairs must be re-validated against a *prospective* pair
+  before it is used to exonerate or indict a candidate. Here the second sample
+  falsified it, and the plan's own earlier claim was corrected in place rather
+  than left standing next to contradicting evidence.
 - Observation: current `uniq` uses `IndexSet<Value>` and follows MiniJinja's
   equality; RFC 0006 defines canonical JSON equality for later set helpers.
   Evidence: `src/stdlib/collections.rs`, `uniq_filter`. Impact: 6.1.2 adds a
@@ -580,13 +640,19 @@ under way; the invocation naming this plan supplies execution approval.
   (`TIMEOUT [306.613s] … production_build_module_slice_has_expected_boundary`,
   summary
   `3896/3912 tests run: 3895 passed (16 slow), 1 timed out, 6 skipped` — zero
-  failures). The decisive measurement is a count, not the failure text: both
-  logs carry `the managed sccache server is unreachable` — **574** lines in
-  attempt 1, **573** in attempt 2 — against a previously measured threshold on
-  this branch where **1** such line accompanies a pass of exactly these
-  nested-Cargo tests. `sccache --show-stats` reports `Compile requests 0`, i.e.
-  the server was *reset*, not idle, so every nested compile ran from scratch
-  and the production dependency graph blew the 300 s cap on its own. Evidence:
+  failures). Both logs carry `the managed sccache server is unreachable` —
+  **574** lines in attempt 1, **573** in attempt 2. `sccache --show-stats`
+  reports `Compile requests 0`, i.e. the server was *reset*, not idle, so every
+  nested compile ran from scratch and the production dependency graph blew the
+  300 s cap on its own. **Correction (measured 2026-10-13, EP-M2 batch 4):**
+  this entry originally called that line count "the decisive measurement" and
+  contrasted it with a threshold of **1** such line for a pass. The count does
+  **not** discriminate. The same 573 lines appear in the `test-nextest` phase
+  of both a **TIMEOUT** (`300.007 s`) and a **PASS** (`290.107 s`), on
+  byte-identical bytes bound to content hash `2d7aadbd…`, differing only in
+  host load at the moment the test ran. The count identifies that the cache was
+  down; it does not predict the verdict, and a future timeout must not be read
+  as branch-introduced on the strength of it. Evidence:
   `/tmp/test-netsuke-6-1-2-…out` (attempt 2, RC=2, 700 s),
   `/tmp/batch2-65aba802-test-attempt1-netsuke-6-1-2-…out` (attempt 1, preserved
   byte-identical, 4860 lines), and `build-limits-status` reporting
@@ -614,6 +680,26 @@ under way; the invocation naming this plan supplies execution approval.
   done here: widening an allowance to turn a gate green is the move the budget
   question exists to prevent, and EP-M1 is a gate-verification milestone, not a
   test-infrastructure one.
+
+  **Superseded in part (measured 2026-10-13, EP-M2).** The widening deferred
+  above was performed on `main` by a commit this branch does not contain:
+  `1a5fc57f` ("Preserve project provenance across extends for
+  environment-access policy (#844) (#906)") splits the combined override and
+  gives `packaged_manifest_retains_build_script_sources` its own
+  `slow-timeout = { period = "60s", terminate-after = 10 }`, i.e. **600 s**.
+  That is the very test that timed out on this branch at `300.007 s`, so the
+  timeout recorded above is a *base* property and not a candidate defect — and
+  once this branch rebases, the timeout should stop recurring for that test.
+  Two consequences follow for the text above. The reasoning that an allowance
+  calibrated now "would rot as the group grows" is not falsified, but its
+  remedy has already been applied upstream for this member, and the
+  "deliberately not actioned" note describes a choice that `main` no longer
+  offers. The line citation `.config/nextest.toml:84-92`, and the `:66`
+  citation below it, are **base-relative and will shift** under that rebase: at
+  this branch's base, `:84-92` holds the "a margin of 38 s on a 300 s cap is
+  not a budget" comment the text quotes, while at `origin/main` the same range
+  holds the override's rationale. Re-derive both anchors after rebasing rather
+  than trusting the numbers.
 
 - Observation (measured 2026-10-13): **`doctest` is the second prerequisite of
   the documented `make test` (Makefile:226) and had never run at any revision
@@ -1305,3 +1391,13 @@ touching anything under `tests/workflow_contracts/`. That is what happened at
   assertions. The remaining obligations — the index-based Verus proof, the
   independent quadratic oracle, and the documentation delta — are planned as
   EP-M3 and EP-M4 and are **not** discharged by Stage A.
+
+- 2026-10-13: EP-M2 closed. A second milestone CLI review round raised three
+  findings across two presentational concerns, both repaired and both gated.
+  The milestone's own evidence then falsified a claim this plan had recorded:
+  the `sccache` line count does not discriminate a passing `make test` from a
+  timing-out one, demonstrated by a `TIMEOUT` and a `PASS` carrying the same
+  573 lines on byte-identical bytes. The risk entry was corrected in place, the
+  Progress and Surprises sections extended, and the candidate re-gated green
+  across all eight applicable targets. EP-M3 (Verus proof and oracle) and EP-M4
+  (documentation delta) remain outstanding.
