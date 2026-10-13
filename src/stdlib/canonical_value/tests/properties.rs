@@ -204,6 +204,11 @@ fn generated_values_reach_every_material_class() -> Result<()> {
 /// A rebuilt copy of the same content stands in for the independently built
 /// third value transitivity needs, and it is rebuilt again for the second
 /// relation in the chain, so no step reuses the first comparison's operands.
+///
+/// The chain states both premises and then their conclusion. Checking the
+/// premises alone would establish nothing about the endpoints: `value ≠ twice`
+/// is consistent with two true premises whenever the relation is not
+/// transitive, so the conclusion is asserted rather than inferred.
 fn check_laws(value: &Value, key: &CanonicalKey) -> Result<()> {
     let rebuilt = rebuild(value);
     let twice = rebuild(&rebuilt);
@@ -219,6 +224,10 @@ fn check_laws(value: &Value, key: &CanonicalKey) -> Result<()> {
     ensure!(
         canonical_eq(&rebuilt, &twice).context("a twice-rebuilt copy is admitted")?,
         "transitivity must hold across independent rebuilds",
+    );
+    ensure!(
+        canonical_eq(value, &twice).context("the twice-rebuilt copy is admitted")?,
+        "transitivity must conclude: both premises hold, so the endpoints compare equal",
     );
     ensure!(
         canonical_eq(&rebuilt, value).context("the rebuilt copy is admitted")?,

@@ -14,24 +14,20 @@
 //!
 //! The shapes EP-V3 names — empty, singleton, all-distinct, all-equal, repeated
 //! values at head, middle, and tail, interleaved duplicates, reordered-map
-//! duplicates, and order-distinct sequences — are covered twice. The
-//! handwritten witnesses below state them on authored inputs whose expected
-//! indices are written out, and the generated sweep repeats them at scale; the
-//! shape tally keeps that sweep honest by asserting the sample really contains
-//! all-distinct, all-equal, and mixed inputs rather than hoping a lucky draw
-//! supplies them. Duplicate-bearing sequences are constructed by duplicating a
-//! drawn element rather than by filtering for a repeat, so no wing can starve.
+//! duplicates, and order-distinct sequences — are stated here on authored
+//! inputs whose expected indices are written out. Each named witness drives
+//! [`check_against_the_oracle`] as well as the index expectation, so the
+//! production comparison runs on a written-down input with no sampling in the
+//! way, which is what the sibling `sweep` battery cannot offer: its inputs come
+//! from a strategy, so its coverage is a separate claim about that strategy.
 
-use std::cell::RefCell;
-use std::collections::{BTreeMap, HashSet};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::collections::HashSet;
 
 use anyhow::{Result, ensure};
 use minijinja::value::Value;
 use proptest::prelude::*;
 use rstest::rstest;
 
-use super::properties::{generated_values, law_runner};
 use super::*;
 
 /// Where a duplicated pair sits in an otherwise distinct sequence.
@@ -45,25 +41,13 @@ enum Placement {
     Tail,
 }
 
-/// The repeat structure of a generated input, so a tally can assert the sweep
-/// reached it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Shape {
-    /// No two elements share a canonical key.
-    Distinct,
-    /// Every element shares one canonical key.
-    Uniform,
-    /// Some key repeats and some other key appears too.
-    Mixed,
-}
-
 /// Assert the runtime retains the caller's own values at the oracle's indices.
 ///
 /// This is the whole claim under test: the same length, the same order, and
 /// the identical original value at each position. Pointer identity is checked
 /// with [`std::ptr::eq`], so a reconstruction of an equal value fails here even
 /// though it would pass a key comparison.
-fn check_against_the_oracle(input: &[Value]) -> std::result::Result<(), TestCaseError> {
+pub(super) fn check_against_the_oracle(input: &[Value]) -> std::result::Result<(), TestCaseError> {
     let expected = oracle_indices(input)
         .map_err(|error| TestCaseError::fail(format!("the oracle refused the input: {error:#}")))?;
     let retained = stable_deduplicate(input)
@@ -100,7 +84,7 @@ fn check_against_the_oracle(input: &[Value]) -> std::result::Result<(), TestCase
 ///
 /// Returns the refusal of the earliest inadmissible input value, so a witness
 /// carrying an unsupported value fails rather than being silently skipped.
-fn oracle_indices(input: &[Value]) -> Result<Vec<usize>> {
+pub(super) fn oracle_indices(input: &[Value]) -> Result<Vec<usize>> {
     let keys = input
         .iter()
         .map(|value| canonical_key(value).context("every witness value is admitted"))
@@ -114,7 +98,14 @@ fn oracle_indices(input: &[Value]) -> Result<Vec<usize>> {
         .collect())
 }
 
-/// Assert the oracle's indices cover each distinct input key exactly once.
+/// Assert the oracle's indices cover each distinct key once, and that the
+/// runtime agrees with them on this same input.
+///
+/// The two claims are checked together at every named witness, so a witness
+/// cannot assert an index expectation the production function happens not to
+/// meet: the comparison is the point of the witness, and the coverage check is
+/// what stops the index expectation from being satisfied by a degenerate
+/// answer.
 fn oracle_covers_each_key_once(input: &[Value]) -> Result<()> {
     let retained = oracle_indices(input)?;
     let distinct: HashSet<CanonicalKey> = input
@@ -140,7 +131,9 @@ fn oracle_covers_each_key_once(input: &[Value]) -> Result<()> {
         covered == distinct,
         "the oracle's indices must cover every distinct key, not merely the same count",
     );
-    Ok(())
+    check_against_the_oracle(input).map_err(|error| {
+        anyhow::anyhow!("the runtime must match the oracle on this witness: {error}")
+    })
 }
 
 /// Verify the oracle keeps the first representative for empty, singleton,
@@ -234,108 +227,6 @@ fn oracle_treats_order_distinct_sequences_as_distinct() -> Result<()> {
         "sequence order decides the key, got {indices:?}",
     );
     oracle_covers_each_key_once(&input)
-}
-
-/// Classify a sequence by how its keys repeat, refusing inadmissible values.
-fn shape_of(values: &[Value]) -> Result<Shape> {
-    let keys = keys_of(values)?;
-    if keys.len() <= 1 || !has_repeat(&keys) {
-        return Ok(Shape::Distinct);
-    }
-    if keys.iter().collect::<HashSet<&CanonicalKey>>().len() == 1 {
-        return Ok(Shape::Uniform);
-    }
-    Ok(Shape::Mixed)
-}
-
-/// Return the canonical keys of `values`, refusing inadmissible ones.
-fn keys_of(values: &[Value]) -> Result<Vec<CanonicalKey>> {
-    values
-        .iter()
-        .map(|value| canonical_key(value).context("generated values are admitted"))
-        .collect()
-}
-
-/// Report whether a slice of canonical keys holds a repeat.
-fn has_repeat(keys: &[CanonicalKey]) -> bool {
-    let distinct: HashSet<&CanonicalKey> = keys.iter().collect();
-    distinct.len() != keys.len()
-}
-
-/// Generate a sequence in which one drawn element is duplicated.
-///
-/// The repeat is built rather than filtered for: an element admitted once is
-/// admitted again by cloning it, so a duplicate is guaranteed whatever the
-/// generator's value pool does. A sweep that filtered for repeats instead would
-/// thin out exactly as the value pool widened.
-fn sequences_with_a_repeated_element() -> BoxedStrategy<Vec<Value>> {
-    prop::collection::vec(generated_values(), 1..7)
-        .prop_flat_map(|values| {
-            let positions = 0..values.len();
-            let insertions = 0..=values.len();
-            (positions, insertions, Just(values))
-        })
-        .prop_map(|(source, insert_at, mut values)| {
-            let twin = values.get(source).cloned().unwrap_or_default();
-            values.insert(insert_at, twin);
-            values
-        })
-        .boxed()
-}
-
-/// Generate either an ordinary generated sequence or one carrying a repeat.
-///
-/// The mixture is what makes the shape tally meaningful: ordinary sequences
-/// supply the all-distinct shape, duplicated ones guarantee a repeat, and the
-/// tally asserts both were reached on the frozen sample.
-fn sweep_sequences() -> BoxedStrategy<Vec<Value>> {
-    prop_oneof![
-        prop::collection::vec(generated_values(), 0..8),
-        sequences_with_a_repeated_element(),
-    ]
-    .boxed()
-}
-
-/// Check every generated sequence against the independent oracle.
-///
-/// Retained values must be the caller's own values at exactly the oracle's
-/// indices, in the oracle's order. That is stricter than the law case in
-/// `properties`, which counts distinct keys and so accepts an implementation
-/// that keeps a later representative or reorders the output. Each drawn input
-/// is classified as it is checked, so the tally below costs no extra sample and
-/// cannot drift away from the shapes this case really saw.
-#[test]
-fn deduplication_agrees_with_the_independent_oracle() -> Result<()> {
-    let counts: RefCell<BTreeMap<Shape, usize>> = RefCell::new(BTreeMap::new());
-    let dropped = AtomicUsize::new(0);
-    let mut runner = law_runner();
-    runner
-        .run(&sweep_sequences(), |values| {
-            let shape =
-                shape_of(&values).map_err(|error| TestCaseError::fail(format!("{error:#}")))?;
-            *counts.borrow_mut().entry(shape).or_insert(0) += 1;
-            let expected = oracle_indices(&values)
-                .map_err(|error| TestCaseError::fail(format!("{error:#}")))?;
-            if expected.len() < values.len() {
-                dropped.fetch_add(1, Ordering::Relaxed);
-            }
-            check_against_the_oracle(&values)
-        })
-        .map_err(|error| anyhow::anyhow!("{error}"))?;
-
-    let tally = counts.into_inner();
-    for shape in [Shape::Distinct, Shape::Uniform, Shape::Mixed] {
-        ensure!(
-            tally.get(&shape).copied().unwrap_or(0) > 0,
-            "shape {shape:?} was never generated in this sweep: {tally:?}",
-        );
-    }
-    ensure!(
-        dropped.load(Ordering::Relaxed) > 0,
-        "the sweep must contain an input with a repeated key, or the oracle's \
-         duplicate branch went untested",
-    );
-    Ok(())
 }
 
 /// Verify the oracle's first-wins answer differs from a last-wins answer.

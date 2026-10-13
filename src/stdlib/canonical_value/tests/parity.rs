@@ -65,6 +65,60 @@ fn finite_floats_match_the_canonicalizer() -> Result<()> {
     Ok(())
 }
 
+/// Verify RFC 8785's own Appendix B samples serialize exactly as specified.
+///
+/// The samples are given as IEEE-754 bit patterns, because the interesting rows
+/// are the ones no decimal literal can name: the minimum subnormal
+/// (`0x0000000000000001`, which renders as `5e-324`), the subnormal's negative
+/// twin, and the pairs either side of the two exponent thresholds. ECMAScript
+/// `Number::toString` — which RFC 8785 adopts — switches to exponential form at
+/// an exponent of 21 or -7, so `2^68` renders in full decimal while `1e21`
+/// renders exponentially, and `0.000001` renders in decimal while the value just
+/// below it renders exponentially. Both thresholds therefore need a value on
+/// each side, which only the bit patterns pin.
+#[rstest]
+fn rfc_8785_appendix_b_numbers_serialize_as_specified() -> Result<()> {
+    let samples: [(u64, &str); 24] = [
+        (0x0000_0000_0000_0000, "0"),
+        (0x8000_0000_0000_0000, "0"),
+        (0x0000_0000_0000_0001, "5e-324"),
+        (0x8000_0000_0000_0001, "-5e-324"),
+        (0x7fef_ffff_ffff_ffff, "1.7976931348623157e+308"),
+        (0xffef_ffff_ffff_ffff, "-1.7976931348623157e+308"),
+        (0x4340_0000_0000_0000, "9007199254740992"),
+        (0xc340_0000_0000_0000, "-9007199254740992"),
+        (0x4430_0000_0000_0000, "295147905179352830000"),
+        (0x44b5_2d02_c7e1_4af5, "9.999999999999997e+22"),
+        (0x44b5_2d02_c7e1_4af6, "1e+23"),
+        (0x44b5_2d02_c7e1_4af7, "1.0000000000000001e+23"),
+        (0x444b_1ae4_d6e2_ef4e, "999999999999999700000"),
+        (0x444b_1ae4_d6e2_ef4f, "999999999999999900000"),
+        (0x444b_1ae4_d6e2_ef50, "1e+21"),
+        (0x3eb0_c6f7_a0b5_ed8c, "9.999999999999997e-7"),
+        (0x3eb0_c6f7_a0b5_ed8d, "0.000001"),
+        (0x41b3_de43_5555_5553, "333333333.3333332"),
+        (0x41b3_de43_5555_5554, "333333333.33333325"),
+        (0x41b3_de43_5555_5555, "333333333.3333333"),
+        (0x41b3_de43_5555_5556, "333333333.3333334"),
+        (0x41b3_de43_5555_5557, "333333333.33333343"),
+        (0xbecb_f647_612f_3696, "-0.0000033333333333333333"),
+        (0x4314_3ff3_c1cb_0959, "1424953923781206.2"),
+    ];
+
+    for (bits, expected) in samples {
+        let number = f64::from_bits(bits);
+        ensure!(
+            key_bytes(&Value::from(number))? == expected.as_bytes(),
+            "{bits:#018x} ({number:e}) must render as {expected}",
+        );
+        ensure!(
+            key_bytes(&Value::from(number))? == serde_json_canonicalizer::to_vec(&number)?,
+            "{bits:#018x} must agree with the canonicalizer",
+        );
+    }
+    Ok(())
+}
+
 /// Verify the binary64 collapse RFC 8785 mandates, so the behaviour is pinned
 /// as specified rather than worked around.
 #[rstest]

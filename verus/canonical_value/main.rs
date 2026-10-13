@@ -8,19 +8,35 @@
 //!
 //! `least_indices` states the specification, whose five clauses
 //! `least_indices_position`, `least_indices_ordered_distinct`, and
-//! `least_indices_covers` derive and `contract_ok` collects.
+//! `least_indices_covers` derive and `contract_ok` collects. Collecting a
+//! contract is not the same as carrying one through a walk: the invariant is
+//! `state_ok`, and `contract_ok` is only the end-of-walk consequence
+//! `state_ok_contract` reads off it.
 //! `model_seen`/`model_retained` restate the algorithm as a left-to-right
 //! recursion whose `_contains` and `_is_least` lemmas carry the induction
 //! obligation: at processed index `i` the seen set is exactly the prefix's
 //! keys, and the retained sequence exactly that prefix's least occurrences in
-//! increasing order. `runtime_run` is the walk carrying that relation as its
+//! increasing order. `runtime_run` is the walk carrying `state_ok` as its
 //! invariant, so each append-or-skip branch is a proved transition, and
 //! `runtime_retention_matches_spec` ties the runtime's membership test to the
 //! specification's retention predicate.
 //!
+//! `runtime_run` is a `proof fn`: it returns no retained sequence and builds no
+//! collection. Its `retained` argument is the abstract sequence the invariant
+//! relates, and the function's only product is the proof that the clauses hold.
+//! The runtime's own output is what `stable_deduplicate` returns at run time,
+//! and the connection between the two is the structural correspondence the
+//! oracle checks, not anything Verus decides.
+//!
 //! The model's keys are an abstract sort, the runtime's `CanonicalKey` byte
 //! strings: nothing here proves the template-to-key conversion, `HashSet`'s
-//! internals, or the production adapter. The independent quadratic oracle in
+//! internals, or the production adapter. `Seq<u64>` is a stand-in whose only
+//! property this file uses is decidable equality, and it is not a genuinely
+//! unrestricted abstract key type: a theorem over arbitrary byte-key sequences
+//! would take an arbitrary key type, or supply a formal abstraction argument.
+//! What is unbounded here is the sequence length, not the key domain — the
+//! induction runs over every `keys` length, while `u64` caps the key domain at
+//! 2^64 values. The independent quadratic oracle in
 //! `src/stdlib/canonical_value/tests/oracle.rs` checks the implementation
 //! against this model on real values. No `assume`, `admit`, external body, or
 //! axiom beyond `vstd`'s own appears below.

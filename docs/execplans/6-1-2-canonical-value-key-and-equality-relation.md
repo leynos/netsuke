@@ -428,8 +428,52 @@ under way; the invocation naming this plan supplies execution approval.
   The only delta after that batch is this entry's own prose, in this one file,
   so the applicable re-gate is the Markdown-sensitive subset (`check-fmt`,
   `markdownlint`, `spelling`, `nixie`) rather than the Rust suite.
-- [ ] Implement canonical keys/equality and stable deduplication; discharge
-  property, BDD, runtime-boundary, and Verus obligations.
+- [x] (2026-10-13) Implement canonical keys/equality and stable deduplication;
+  discharge property, BDD, runtime-boundary, and Verus obligations.
+  **Reconciled after the hosted assessments below; the header stays
+  `IN PROGRESS` while review remains open, which is a separate matter from this
+  box and from the roadmap tick.**
+- [x] (2026-10-13) **Both hosted assessments answered, and every valid finding
+  repaired.** The completeness/correctness reply (`6155015347`) and the proof
+  reply (`6155046025`) are the two assessment outcomes quoted in the Surprises
+  and Decision-log entries below. Ten changes were made in response; each is
+  recorded here because two of them are test defects the previous milestone's
+  own evidence had missed. **Test defects.** (1)
+  `deduplication_agrees_with_the_independent_oracle` asserted all three shapes
+  after a free-seeded sample, which can fail with correct production code; the
+  shape assertion moved to the frozen-seed case
+  `the_sweep_reaches_every_shape_ep_v3_names` and the correctness case now
+  makes no claim about which shapes its sample contains. This required
+  splitting the oracle battery: the generated sweep moved to the new
+  `sweep.rs`, which also removed a second copy of the `Shape` enum that had
+  been declared in both files. (2) `check_laws` checked transitivity's two
+  premises and never its conclusion; `canonical_eq(value, &twice)` is now
+  asserted, because `value ≠ twice` is consistent with two true premises
+  whenever the relation is not transitive. **Missing witnesses.** (3)
+  `canonical_eq` operand admission, with left-error precedence and a swap
+  control. (4) Deterministic refusals across opposite host enumeration orders,
+  for `Bool` below `Number`, `Bytes` below `Seq`, and the lowest member name
+  deciding a value refusal. (5) A non-enumerable `Seq`, not only a
+  non-enumerable `Map`, since the refusal is reached through a different
+  collector for each. (6) The `Materialized::Renewed` fixture changed from
+  "rebuilt on each enumeration" to "content that differs per enumeration", so
+  the one-snapshot case can discriminate an adapter that re-reads the host: it
+  failed on its first run with `got [2,3,4]` because `fetch_add` returns the
+  pre-increment value, which is exactly the revision the fixture exists to
+  catch. (7) RFC 8785 Appendix B's numeric rows, as 24 `(bits, rendering)`
+  pairs. **Wording corrections.** (8) `state_ok` named as the invariant in the
+  proof module and the plan's proof-boundary prose; `contract_ok` is the
+  end-of-walk consequence `state_ok_contract` derives, not a carried-through
+  invariant. (9) `runtime_run` described as a `proof fn` walk returning no
+  retained sequence, and identity claims limited to source-index identity
+  rather than Rust reference identity. (10) `Seq<u64>` qualified as a
+  finite-key domain, not a genuinely unrestricted abstract sort, with sequence
+  length named as the unbounded dimension. **The `now()` case is now mandatory
+  rather than skipped:** `now_object()` injects `fixed_clock`, so the fixture
+  never reads the host clock and cannot vary with *when* the suite runs, and it
+  returns `Result` so a host that cannot build it reports an error instead of
+  leaving the assertion quietly untested. Focused battery: 36/36 green
+  (`cargo nextest run --lib canonical_value`).
 - [x] (2026-10-13) **EP-M3 artefacts written; the mandated Verus command is
   blocked by the pinned `prover-tools` revision, not by this proof.** Three
   artefacts landed uncommitted: `verus/canonical_value/main.rs` (398 lines),
@@ -840,6 +884,40 @@ under way; the invocation naming this plan supplies execution approval.
   the same text) so that a zero-violation result was not vacuously empty.
   Impact: the zero-findings result is corroborated by checks the supervisor did
   not perform, not merely asserted.
+- **Surprise (measured 2026-10-13, hosted assessment): the previous milestone's
+  own oracle battery contained the two defects the assessment found, and one of
+  them was demonstrated by the repair itself.** Both defects are
+  sampling-dependent or premise-only, which is why directed mutation controls
+  from EP-M3 did not see them: a mutation of the *implementation* fails an
+  assertion, while these defects survive every mutation of the implementation
+  because they weaken what is asserted about a *sample* or about a *chain*.
+  Specifically, the shape tally ran under the free-seeded runner, so it could
+  fail on correct code; and the transitivity chain asserted `a = b` and `b = c`
+  without asserting `a = c`, which is vacuous whenever the relation is
+  intransitive. The content-changing fixture immediately produced a third
+  instance: it failed on its first run —
+  `the snapshot must keep the values the
+  host yielded on its first enumeration, got [2,3,4]` —
+  because `AtomicUsize::fetch_add` returns the *pre*-increment value, which
+  was then used as a 1-based round. The fixture was correct in intent and wrong
+  in arithmetic, and the failure is direct evidence that a content-changing
+  fixture discriminates what a fixed-content one cannot. Impact: mutation
+  controls and sampling-dependent assertions are complementary, not
+  interchangeable; a passing mutation control says nothing about whether an
+  assertion would hold on a different draw.
+- **Surprise (measured 2026-10-13, hosted assessment): a proof's module doc can
+  name the wrong invariant while the proof itself is correct.** The assessment
+  read the kernel and stated plainly that `state_ok` is the invariant and
+  `contract_ok` is not. Both names are real, both are declared in the same
+  file, and the module doc said `contract_ok` "collects" the specification —
+  true of the lemmas and misleading about the walk, whose carried relation is
+  `state_ok` and which only reaches `contract_ok` through `state_ok_contract`
+  at the end. The same doc called `runtime_run` a walk without saying it is a
+  `proof fn` that returns no retained sequence and builds no collection, which
+  invited a reading in which Verus decides the production output's identity.
+  Impact: the prose was repaired in the proof file and at the plan's two
+  proof-claim sites; the kernel needed no change and its
+  `16 verified, 0 errors` result stands.
 
 ## Decision log
 
@@ -955,6 +1033,42 @@ under way; the invocation naming this plan supplies execution approval.
   commit was unpushed until this close-out; the failing step to watch is
   "Workflow contract tests" in the CI job. Date/Author: 2026-10-13,
   implementation.
+- Decision: the two hosted assessments' ten findings are repaired here, in the
+  implementation skill's scope, rather than deferred to the PR lifecycle. The
+  assessment replies are issue-comment conversations owned by `pr-babysitting`;
+  the repairs they request are code, so they belong to this plan, which then
+  re-gates and hands the candidate back. Rationale: the receiving skill's own
+  rule is that a valid finding must be repaired, pushed, and its affected
+  follow-up confirmed before readiness, so a repair that never lands blocks its
+  readiness gate. Date/Author: 2026-10-13, implementation.
+- Decision: `Seq<u64>` stays as the proof's key type and the claim is narrowed
+  in prose, rather than converting the kernel to an arbitrary key type.
+  Rationale: the assessment's own verdict is to keep the claim at abstract
+  algorithm refinement, and it states the `u64` qualification does not make the
+  proof a bounded enumeration — the sequence-length induction remains
+  unbounded. A generic key type would be a substantive redesign of a verified
+  kernel to close a gap the verdict already accepts, so the honest course is to
+  name the limit, which the module doc and the plan now do. Date/Author:
+  2026-10-13, implementation.
+- Decision: the `now()` refusal case becomes mandatory — the fixture injects
+  `fixed_clock` and returns `Result` — rather than being retained as explicitly
+  unverified, which the assessment offered as the alternative. Rationale:
+  retaining it as unverified was the option that required no work, and the
+  assessment's own framing makes repair preferable where the fixture is
+  buildable. It is buildable: the clock seam is already public
+  (`StdlibConfig::with_clock`, `crate::stdlib::fixed_clock`), so the
+  non-determinism the assessment objected to was never in the clock but in the
+  fixture's failure to inject one. Date/Author: 2026-10-13, implementation.
+- Decision: the `make verus` `PROVER_TOOLS_SOURCE` pin at `Makefile:201` is
+  **not** changed here, and the default invocation's failure stays open as an
+  invocation issue, which both assessment replies independently require. The
+  override run (`PROVER_TOOLS_SOURCE=…@2ba17da6…`, exit 0,
+  `16 verified, 0 errors`) is evidence of proof validity, not of the default
+  command succeeding. Rationale: the pin is repository-wide configuration, so
+  changing it under a feature branch widens this change's scope; it is recorded
+  as a known limitation in the PR body and as an open item in this plan. The
+  escalation of *whether* to bump it is with the user and is not decided here.
+  Date/Author: 2026-10-13, implementation.
 
 ## Outcomes & retrospective
 
@@ -966,7 +1080,13 @@ reconnaissance and the Pandalump/Wafflecat, Telefono/Doggylump, and Buzzy
 Bee/Dinolump review pairs are complete. Review changed the initial key-only
 proof into source-index refinement, made host-object preconditions explicit,
 fixed one-snapshot admission and numeric semantics, and required both
-formal-policy documents to be updated.
+formal-policy documents to be updated. The two hosted assessments then found
+what the local review could not: a sampling-dependent coverage assertion and a
+two-premise transitivity chain that never asserted its conclusion. Both were
+repaired, along with seven missing witnesses and the proof prose that named the
+wrong invariant, so the "proved" claim above is now bounded by the
+`state_ok`/`contract_ok` distinction and the finite-key-domain qualification
+recorded below.
 
 Closeout record, as this section required before the roadmap tick:
 
@@ -976,19 +1096,38 @@ Closeout record, as this section required before the roadmap tick:
   non-finite floats.
 - **Proof boundary:** `verus/canonical_value/main.rs` proves the runtime's
   first-index retention against an independent quadratic specification stated
-  over the input itself. The model's keys are an abstract sort and the
+  over the input itself. The invariant is `state_ok`; `contract_ok` is the
+  end-of-walk consequence `state_ok_contract` derives from it, not a
+  carried-through invariant. The model's keys are an abstract sort and the
   runtime's are `CanonicalKey` byte strings, so nothing there proves the
   template-to-key conversion, `HashSet`'s internals, or the production adapter;
   the quadratic oracle in `tests/oracle.rs` checks the implementation against
   the model on real values, and no `assume`, `admit`, external body, or
   non-`vstd` axiom appears in the kernel.
-- **Test evidence:** 32 cases, counted by `cargo nextest list` over
-  `stdlib::canonical_value` — `boundaries` 8, `examples` 4, `oracle` 12,
-  `parity` 5, `properties` 3 — plus the Rust BDD scenario. The runner's count
-  is the authoritative one because it expands each `rstest` case into its own
-  entry; counting source lines instead double-counts, since a parameterized
-  case carries both an attribute and a function. Discrimination was shown by
-  mutation rather than assumed.
+- **What the proof does not carry:** `runtime_run` is a `proof fn` walking an
+  abstract `keys` sequence, a `seen` set, and a `retained` index sequence. It
+  returns no retained sequence and builds no collection; its only product is
+  the proof that the clauses hold. The production connection is the structural
+  correspondence the oracle checks, not something Verus decides. The key domain
+  is `u64` rather than an arbitrary key type, so the theorem is
+  finite-key-domain and a fully general byte-key claim would need an arbitrary
+  key type or a formal abstraction argument; sequence length, not the key
+  domain, is what is unbounded here.
+- **Test evidence:** 36 cases, counted by `cargo nextest list` over
+  `stdlib::canonical_value` — `boundaries` 8, `examples` 4, `host_traversal` 2,
+  `oracle` 11, `parity` 6, `properties` 3, `sweep` 2 — plus the Rust BDD
+  scenario. The runner's count is the authoritative one because it expands each
+  `rstest` case into its own entry; counting source lines instead
+  double-counts, since a parameterized case carries both an attribute and a
+  function. Discrimination was shown by mutation rather than assumed. The
+  batteries are split by the kind of judgement each makes rather than by line
+  count: `host_traversal` holds the cases asking whether an in-domain host
+  object is read once per derivation, which is a different question from
+  `boundaries`'s refusals of out-of-domain values, and `sweep` holds the
+  generated-input cases whose correctness claim is separate from the shape
+  coverage asserted by its frozen-seed sibling. The 32 → 36 change is the
+  assessment repair round's witness additions plus the shape-coverage case
+  moving under its own runner.
 - **Documentation changes:** the design document gained the canonical
   foundation plus an explicit statement that `uniq` is unchanged and no filter
   was migrated; the developers' guide gained the re-use policy, the host-object
@@ -1086,7 +1225,10 @@ Statement: for admitted values, key equality is reflexive, symmetric, and
 transitive. Method: Proptest over recursively generated values plus named
 `rstest` cases. Domain: null, booleans, strings/Unicode, finite numbers, nested
 arrays/maps, insertion-order permutations, signed zero, and JCS numeric
-boundaries. Artefact: tests inside `src/stdlib/canonical_value/mod.rs`.
+boundaries. Artefact: the `properties` battery of
+`src/stdlib/canonical_value/tests/`, whose law case carries the relation and
+`check_laws` asserts the transitivity chain's conclusion rather than only its
+two premises.
 
 Evidence: `cargo nextest run --lib canonical_value` fails before implementation
 for absent behaviour, passes after it, then `make test` passes. The generator
@@ -1141,18 +1283,30 @@ The proof model processes `(index, key)` pairs left to right, maintains
 abstract seen keys and retained source indices, and proves that the final index
 sequence equals the specification's least-index sequence. Prove input-range,
 strict index ordering, key uniqueness, coverage, and minimality. Do not claim
-the proof establishes the MiniJinja-to-key conversion; the implementation must
-mirror the model's append-or-skip algorithm, while runtime tests compare
-returned reference identity with the independent source-index oracle.
+the proof establishes the MiniJinja-to-key conversion, or that it fixes the
+production output's identity: `runtime_run` walks the abstract `keys`, `seen`,
+and `retained` values and is a `proof fn` returning nothing, so the runtime's
+own sequence is connected to the model by the structural correspondence the
+oracle checks, not by the proof. The implementation must mirror the model's
+append-or-skip algorithm, while runtime tests compare returned source-index
+identity with the independent source-index oracle. That identity is
+source-index identity — position in the input slice — and not Rust reference
+identity, which the proof does not address at all.
 
 At processed index `i`, establish `seen = {K[j] | 0 <= j < i}` and that
 retained indices are exactly the least occurrences in that prefix, in
-increasing order. Prove that each membership-test append/skip branch preserves
-this representation relation and refines the independent least-index
-specification. The runtime loop must use those same state transitions; review
-that correspondence and test the actual Rust implementation. This is an
-abstract algorithm refinement proof, not a claim that Verus verifies Rust's
-`HashSet` internals or the entire production adapter.
+increasing order. That conjunction is the invariant `state_ok`, and it is what
+the walk carries; `contract_ok` is the end-of-walk consequence, not the
+invariant itself. Prove that each membership-test append/skip branch preserves
+`state_ok` and refines the independent least-index specification. The runtime
+loop must use those same state transitions; review that correspondence and test
+the actual Rust implementation. This is an abstract algorithm refinement proof,
+not a claim that Verus verifies Rust's `HashSet` internals, Rust reference
+identity, or the entire production adapter. The model's keys are `Seq<u64>`,
+which is not a genuinely unrestricted abstract key type: it is an abstract sort
+whose only used property is decidable equality, and a fully general byte-key
+theorem would take an arbitrary key type or a formal abstraction argument
+instead. Sequence length, not the key domain, is the unbounded dimension.
 
 Domain and witnesses: empty, singleton, all-distinct, all-equal, repeated
 values at head/middle/tail, interleaved duplicates, reordered map duplicates,

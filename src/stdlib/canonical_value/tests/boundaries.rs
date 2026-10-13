@@ -6,8 +6,6 @@
 //! so the adapter is never its own oracle — live in the sibling `parity`
 //! battery, which is a different kind of judgement from a refusal.
 
-use std::sync::atomic::Ordering;
-
 use anyhow::{Result, ensure};
 use minijinja::value::{Value, ValueKind};
 use rstest::rstest;
@@ -17,10 +15,6 @@ use super::*;
 /// Verify values outside the canonical-JSON domain are refused with a typed
 /// error naming the offending kind, before any coercion.
 #[rstest]
-#[expect(
-    clippy::print_stderr,
-    reason = "test harness: an unavailable fixture must be visible in the captured test output instead of passing silently"
-)]
 fn unsupported_values_are_refused_by_kind() -> Result<()> {
     let callable = Value::from_function(|| 0);
     let invalid = Value::from_serialize(AlwaysFails);
@@ -35,19 +29,17 @@ fn unsupported_values_are_refused_by_kind() -> Result<()> {
         "a keyless iterable",
     )?;
 
-    if let Some(now) = now_object() {
-        // Measured as a plain object, not an iterable one: `net::now()` is
-        // registered as a function carrying a clock, so the value it returns
-        // reports `Plain`. The property under test is that it is refused at
-        // all, and the kind is asserted from measurement rather than from the
-        // shape the RFC text suggests.
-        ensure_refused(&now, ValueKind::Plain, "the now() object")?;
-    } else {
-        // Say so rather than passing silently: a green run that quietly
-        // skipped its subject would hide the same regression on a host that
-        // can build the object.
-        eprintln!("skipped: this host cannot build a now() object");
-    }
+    // The refusal is part of the documented domain, so it is asserted rather
+    // than probed: a host where the fixture cannot be built reports its error
+    // here instead of leaving the case quietly untested. The object is measured
+    // as a plain one, not an iterable one — `now()` is registered as a function
+    // carrying a clock, so the value it returns reports `Plain`. The kind is
+    // asserted from that measurement rather than from the shape the RFC text
+    // suggests.
+    let now = now_object()?;
+    ensure_refused(&now, ValueKind::Plain, "the now() object")?;
+
+    ensure_refused(&nested_map(now), ValueKind::Plain, "a nested now() object")?;
     Ok(())
 }
 
@@ -142,6 +134,72 @@ fn non_string_keys_are_refused_at_any_depth() -> Result<()> {
     Ok(())
 }
 
+/// Verify a refusal is the same whichever order the host enumerates.
+///
+/// Two maps built from the same members in opposite orders must produce the
+/// same refusal, because the canonical form of a map is content-defined and a
+/// host's enumeration order is not part of the value. The kinds are also
+/// asserted explicitly, so a fixture that stopped discriminating would fail
+/// rather than agreeing with a degenerate expectation.
+#[rstest]
+fn refusals_are_independent_of_host_enumeration_order() -> Result<()> {
+    // Several non-string keys in one map: the lowest kind must decide, in
+    // either order. `Bool` sorts below `Number`, and `Bytes` below `Seq`.
+    let boolean_and_number = [
+        (Value::from(true), Value::from("yes")),
+        (Value::from(1), Value::from("one")),
+    ];
+    for members in [boolean_and_number.to_vec(), {
+        let mut reversed = boolean_and_number.to_vec();
+        reversed.reverse();
+        reversed
+    }] {
+        let (probe, _) = fixture(ObjectRepr::Map, Some(2), Materialized::Pairs(members));
+        let refusal = canonical_key(&probe).expect_err("a non-string key is refused");
+        ensure!(
+            refusal.kind() == Some(ValueKind::Bool),
+            "the lowest non-string kind must be reported in either order, got {refusal}",
+        );
+    }
+
+    let bytes_and_seq = [
+        (Value::from_bytes(vec![1]), Value::from("bytes key")),
+        (Value::from(vec![1]), Value::from("seq key")),
+    ];
+    for members in [bytes_and_seq.to_vec(), {
+        let mut reversed = bytes_and_seq.to_vec();
+        reversed.reverse();
+        reversed
+    }] {
+        let (probe, _) = fixture(ObjectRepr::Map, Some(2), Materialized::Pairs(members));
+        let refusal = canonical_key(&probe).expect_err("a non-string key is refused");
+        ensure!(
+            refusal.kind() == Some(ValueKind::Bytes),
+            "the lowest non-string kind must be reported in either order, got {refusal}",
+        );
+    }
+
+    // Two inadmissible *values* under admitted keys: the refusal must come from
+    // the first key the canonical order visits, not from the first enumerated.
+    let invalid_values = [
+        (Value::from("b"), Value::UNDEFINED),
+        (Value::from("a"), Value::from_bytes(vec![1])),
+    ];
+    for members in [invalid_values.to_vec(), {
+        let mut reversed = invalid_values.to_vec();
+        reversed.reverse();
+        reversed
+    }] {
+        let (probe, _) = fixture(ObjectRepr::Map, Some(2), Materialized::Pairs(members));
+        let refusal = canonical_key(&probe).expect_err("one member value is refused");
+        ensure!(
+            refusal.kind() == Some(ValueKind::Bytes),
+            "the refusal must come from the lowest member name, got {refusal}",
+        );
+    }
+    Ok(())
+}
+
 /// Verify a repeated member name has no canonical form, a map that cannot be
 /// traversed is refused rather than treated as empty, and a genuinely empty
 /// map still canonicalizes.
@@ -164,18 +222,23 @@ fn untraversable_and_duplicated_maps_are_refused() -> Result<()> {
         "expected an untraversable refusal, got {refusal}",
     );
 
-    let (empty, _) = fixture(ObjectRepr::Map, None, Materialized::NonEnumerable);
-    ensure!(
-        canonical_key(&empty).is_err(),
-        "a non-enumerable map must be refused, not treated as empty",
-    );
-    ensure!(
-        matches!(
-            canonical_key(&empty).expect_err("still refused"),
-            CanonicalValueError::IncompatibleRepresentation { .. }
-        ),
-        "a non-enumerable map is an untraversable representation",
-    );
+    // Both representations that an empty enumeration could be mistaken for an
+    // empty collection are checked, because the refusal is reached through a
+    // different collector for each.
+    for repr in [ObjectRepr::Map, ObjectRepr::Seq] {
+        let (unreachable, _) = fixture(repr, None, Materialized::NonEnumerable);
+        ensure!(
+            canonical_key(&unreachable).is_err(),
+            "a non-enumerable {repr:?} must be refused, not treated as empty",
+        );
+        ensure!(
+            matches!(
+                canonical_key(&unreachable).expect_err("still refused"),
+                CanonicalValueError::IncompatibleRepresentation { .. }
+            ),
+            "a non-enumerable {repr:?} is an untraversable representation",
+        );
+    }
 
     let empty_map = Value::from(std::collections::BTreeMap::<String, Value>::new());
     ensure!(
@@ -185,61 +248,47 @@ fn untraversable_and_duplicated_maps_are_refused() -> Result<()> {
     Ok(())
 }
 
-/// Verify a host object is traversed once per key derivation, so no snapshot
-/// can mix two readings of a value that enumerates differently each time.
+/// Verify `canonical_eq` admits both operands before it compares them.
 ///
-/// A well-behaved custom object is admitted alongside the renewed one, so this
-/// case shows the adapter accepts a host sequence that is not built in.
+/// The relation is byte-identity over canonical keys, so an operand outside the
+/// domain has no answer at all. A short-circuit that returned `false` on the
+/// first unadmitted operand would let a caller believe two values had been
+/// compared. The documented rule for two invalid operands is that the refusal
+/// names the left one, which is what makes the error reproducible rather than
+/// dependent on argument order in the caller's source.
 #[rstest]
-fn a_host_object_is_enumerated_once_per_derivation() -> Result<()> {
-    let (steady, calls) = fixture(
-        ObjectRepr::Seq,
-        Some(2),
-        Materialized::Values(vec![Value::from("a"), Value::from(true)]),
-    );
+fn equality_admits_both_operands_before_comparing() -> Result<()> {
+    let valid = Value::from(1);
+    let bytes = Value::from_bytes(vec![7]);
+    let undefined = Value::UNDEFINED;
+
     ensure!(
-        key_bytes(&steady)? == b"[\"a\",true]",
-        "a stable custom sequence must be admitted",
-    );
-    ensure!(
-        calls.load(Ordering::SeqCst) == 1,
-        "a steady object must still be read exactly once, saw {}",
-        calls.load(Ordering::SeqCst),
+        canonical_eq(&valid, &valid).context("an admitted operand is comparable")?,
+        "an admitted value must equal itself",
     );
 
-    let (renewed, renewals) = fixture(ObjectRepr::Seq, Some(3), Materialized::Renewed { count: 3 });
-    let first = key_bytes(&renewed)?;
+    let right_refusal =
+        canonical_eq(&valid, &bytes).expect_err("the right operand is not admitted");
     ensure!(
-        renewals.load(Ordering::SeqCst) == 1,
-        "one derivation must enumerate the host exactly once, saw {}",
-        renewals.load(Ordering::SeqCst),
-    );
-    let second = key_bytes(&renewed)?;
-    ensure!(
-        renewals.load(Ordering::SeqCst) == 2,
-        "a second derivation must add exactly one more enumeration, saw {}",
-        renewals.load(Ordering::SeqCst),
+        right_refusal.kind() == Some(ValueKind::Bytes),
+        "a valid left operand must not mask an invalid right operand, got {right_refusal}",
     );
     ensure!(
-        first == b"[1,2,3]",
-        "the snapshot must keep the values the host yielded, got {}",
-        String::from_utf8_lossy(&first),
+        canonical_eq(&bytes, &valid).is_err(),
+        "an invalid left operand must not be answered `false`",
     );
-    ensure!(first == second, "a stable host object must derive one key");
-    Ok(())
-}
 
-/// Verify a length that disagrees with what the host yields is refused.
-#[rstest]
-fn a_length_that_disagrees_with_the_enumeration_is_refused() -> Result<()> {
-    let (lying, _) = fixture(ObjectRepr::Seq, Some(5), Materialized::Seeded);
-    let refusal = canonical_key(&lying).expect_err("a lying length is refused");
+    let left_refusal = canonical_eq(&bytes, &undefined).expect_err("both operands are refused");
     ensure!(
-        matches!(
-            refusal,
-            CanonicalValueError::IncompatibleRepresentation { .. }
-        ),
-        "a length that disagrees with the enumeration must be refused, got {refusal}",
+        left_refusal.kind() == Some(ValueKind::Bytes),
+        "the left operand's refusal must be reported when both are invalid, got {left_refusal}",
+    );
+    ensure!(
+        left_refusal.kind()
+            != canonical_eq(&undefined, &bytes)
+                .expect_err("still refused")
+                .kind(),
+        "swapping two invalid operands must swap the refusal",
     );
     Ok(())
 }

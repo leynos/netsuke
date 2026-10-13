@@ -7,11 +7,14 @@
 //!
 //! The batteries are split by the kind of judgement each makes, not by line
 //! count. This module owns the host fixtures and the helpers every other
-//! battery builds on; `boundaries` owns the refusals; `parity` owns the checks
-//! that compare emitted bytes against the canonicalizer itself; `properties`
-//! owns the cases whose inputs come from a generator and the shared runners;
-//! `oracle` owns the independent quadratic first-index oracle and the cases
-//! that check `stable_deduplicate` against it; and `examples` owns the cases
+//! battery builds on; `boundaries` owns the refusals; `host_traversal` owns the
+//! contract a custom object must satisfy to be read at all; `parity` owns the
+//! checks that compare emitted bytes against the canonicalizer itself;
+//! `properties` owns the cases whose inputs come from a generator and the
+//! shared runners; `oracle` owns the independent quadratic first-index oracle
+//! and the named witnesses that check `stable_deduplicate` against it; `sweep`
+//! owns the generated inputs that check it against the same oracle at scale and
+//! the strategy-coverage claim those inputs make; and `examples` owns the cases
 //! whose inputs are written out by hand. A fixture lives here rather than
 //! beside its first caller so that a battery cannot quietly drift onto a
 //! private copy of it.
@@ -26,15 +29,18 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::{Context as _, Result, ensure};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::value::{Enumerator, Object, ObjectRepr, Value, ValueKind};
 
 use super::*;
 
 mod boundaries;
 mod examples;
+mod host_traversal;
 mod oracle;
 mod parity;
 mod properties;
+mod sweep;
 
 /// The material classes the generator must be seen to emit.
 const REQUIRED_CLASSES: [&str; 7] = ["null", "bool", "int", "float", "string", "seq", "map"];
@@ -117,8 +123,8 @@ pub(super) fn enumeration_order(value: &Value) -> Option<Vec<String>> {
 pub(super) enum Materialized {
     /// Yield these sequence items, again on every enumeration.
     Values(Vec<Value>),
-    /// Yield `count` freshly built items on each enumeration, so two
-    /// enumerations of one host object are distinguishable.
+    /// Yield `count` freshly built items on each enumeration, with content
+    /// that differs from the previous enumeration's.
     Renewed {
         /// How many items each enumeration yields.
         count: usize,
@@ -156,11 +162,22 @@ impl Object for FixtureObject {
     }
 
     fn enumerate(self: &Arc<Self>) -> Enumerator {
-        self.calls.fetch_add(1, Ordering::SeqCst);
+        // The pre-increment count is this enumeration's zero-based round, which
+        // only the renewed arm reads: it is what makes successive enumerations
+        // differ.
+        let round = self.calls.fetch_add(1, Ordering::SeqCst);
         match &self.materialized {
             Materialized::Values(items) => Enumerator::Values(items.clone()),
             Materialized::Renewed { count } => {
-                Enumerator::Iter(Box::new((0..*count).map(|index| Value::from(index + 1))))
+                // The content depends on which enumeration this is, so a
+                // snapshot that re-read the host would mix two readings. A
+                // fixture that merely rebuilt the same numbers could not
+                // discriminate that. `*count` is copied when the range is
+                // built, so the closure captures the length rather than the
+                // borrow of `self`, which the borrow checker would reject here.
+                Enumerator::Iter(Box::new(
+                    (0..*count).map(move |index| Value::from(index + 1 + round)),
+                ))
             }
             Materialized::Pairs(pairs) => {
                 Enumerator::KeyValueIter(Box::new(pairs.clone().into_iter()))
@@ -264,12 +281,50 @@ pub(super) fn nested_map(inner: Value) -> Value {
     })
 }
 
-/// Return the `now()` object, or `None` when the environment refuses it.
-pub(super) fn now_object() -> Option<Value> {
+/// Return the `now()` object as production builds it, failing rather than
+/// reporting absence.
+///
+/// The clock is injected, so the object is built without reading the host
+/// clock and the fixture is independent of *when* the suite runs. Registration
+/// still opens the working directory and resolves the current directory path,
+/// so this can fail on a host where that is impossible; such a host is reported
+/// as an error rather than skipping the case, because a runner that returned no
+/// object would leave the refusal assertion untested while appearing to pass.
+///
+/// # Errors
+///
+/// Returns the failure from stdlib registration or from evaluating the `now()`
+/// expression against the registered environment.
+pub(super) fn now_object() -> Result<Value> {
+    let instant = time::macros::datetime!(2026-06-08 12:00:00 UTC);
     let mut env = minijinja::Environment::new();
-    crate::stdlib::register(&mut env).ok()?;
-    let compiled = env.compile_expression("now()").ok()?;
-    compiled.eval(minijinja::context! {}).ok()
+    let _state = crate::stdlib::register_with_config(
+        &mut env,
+        crate::stdlib::StdlibConfig::new(workspace_root()?)?
+            .with_clock(crate::stdlib::fixed_clock(instant)),
+    )
+    .context("the stdlib must register")?;
+    let compiled = env
+        .compile_expression("now()")
+        .context("`now` is registered as a function")?;
+    compiled
+        .eval(minijinja::context! {})
+        .context("the injected instant makes `now()` evaluation infallible")
+}
+
+/// Open the current directory as the capability-scoped workspace root.
+///
+/// Mirrors what [`crate::stdlib::register`] does for a production render, so a
+/// fixture built here is registered exactly as production registers it rather
+/// than through a reduced stand-in.
+///
+/// # Errors
+///
+/// Returns the failure from opening the working directory with capability-based
+/// I/O.
+fn workspace_root() -> Result<Dir> {
+    Dir::open_ambient_dir(".", ambient_authority())
+        .context("the working directory must be openable as the workspace root")
 }
 
 /// Return the canonical bytes of `value`, failing on any refusal.
