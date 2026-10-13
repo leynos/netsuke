@@ -159,6 +159,20 @@ under way; the invocation naming this plan supplies execution approval.
   Severity: high. Likelihood: medium. Mitigation: preserve `uniq` and
   `group_by` registrations and behaviour; a later consumer migration needs its
   own accepted contract.
+- Risk: adding a module can break a **derived whole-crate contract** while every
+  file-scoped gate stays green. Severity: medium. Likelihood: high. Evidence:
+  `src/stdlib/canonical_value/` carries no Kani marker of its own, yet adding
+  `mod canonical_value;` to `src/stdlib/mod.rs` silently widened the Kani proof
+  scope, because the scope is a *transitive module closure* recomputed from
+  source by `tests/workflow_contracts/kani_proof_scope_test.py` rather than a
+  list anyone edited. The same shape is latent in
+  `tests/env_access_suppressions.rs`, which walks every workspace directory and
+  fails on reachable Rust source outside its scanned roots. Both classes are
+  invisible to `cargo test` on the touched file, to Clippy, and to formatting.
+  Mitigation: run `make test-workflow-contracts` unconditionally rather than by
+  change-detection, because the trigger is a *new file* whose effect is
+  computed rather than declared; and when such a contract fires, derive its
+  scope file from source instead of pattern-matching the failure message.
 
 ## Progress
 
@@ -370,29 +384,39 @@ under way; the invocation naming this plan supplies execution approval.
   `2^53 + 1` can share a key with `2^53`; negative and positive zero serialize
   alike. No arbitrary-precision integer-injectivity claim is valid.
 - Observation: the repo already delegates optional Verus execution through
-  `make verus`, but has no canonical-value proof file or `tools/verus/` pin
-  files. Evidence: `Makefile`,
-  `docs/formal-verification-methods-in-netsuke.md`, and the `tools/verus/`
-  inventory. Impact: implementation must choose and record the upstream Verus
-  release and add `tools/verus/VERSION` plus `tools/verus/SHA256SUMS` before
-  installation.
-- Correction (measured 2026-10-13, Stage A): the planning-time claim that the
-  pinned `prover-tools` invocation accepts `--repo-root` was **false**, and it
-  is withdrawn here. Reading the pinned source
-  (`leynos/rust-prover-tools@b07ef696`, `rust_prover_tools/verus/models.py:59`
-  and `:18`, `run.py:23`, `:117`) shows `repo_root` is not a CLI flag at all:
-  `VerusPaths.repo_root` is constructed as `Path.cwd()`, and the version and
-  checksum files are resolved beneath it by fixed relative path. `--proof-file`
-  **is** a real flag (`VerusOptions`/`VerusRunOptions`, `run.py:116-119`);
-  without it the runner falls back to `EXAMPLE_VERUS_PROOF_PATH` relative to
-  the same root. Consequence: the proof invocation must be run with the
-  worktree as the working directory and must not pass `--repo-root`, because
-  the flag does not exist and the command would abort. The documented command
-  has been corrected; no evidence gathered so far depended on the false claim,
-  since the install was performed with `--repo-root .` forwarded through
-  `VERUS_INSTALL_FLAGS` to `cyclopts`, which ignores unknown options for
-  options it does not declare — the install succeeded because the flag was
-  inert, not because it was consumed.
+  `make verus`, and the pin files this observation once listed as absent now
+  exist. Evidence: `Makefile`, `tools/verus/VERSION`, `tools/verus/SHA256SUMS`,
+  and a `git log` showing them added by `aa32c294` ("Pin Verus and stop its
+  install tree breaking the workspace scan"). Superseded in part: the
+  planning-time statement that implementation "must choose and record the
+  upstream Verus release and add `tools/verus/VERSION` plus
+  `tools/verus/SHA256SUMS` before installation" was true when written and has
+  since been discharged; see the Progress and Decision log entries for
+  `aa32c294`. **Do not** re-add or overwrite the pins on the strength of this
+  line — `VERSION` holds `0.2026.10.04.426d8b0` and the `SHA256SUMS` digest was
+  computed from three independent downloads and is not published upstream, so
+  overwriting it destroys work that cannot be recovered from the vendor.
+- Withdrawn (2026-10-13, Stage A): an intervening revision of this section
+  claimed the pinned `prover-tools` invocation does **not** accept
+  `--repo-root`, and withdrew the original planning-time claim as false. That
+  withdrawal was itself **false**, and it is withdrawn here in turn. The flag
+  **is** declared (`verus run --help` and `verus install --help` both list
+  `--repo-root PATH [env var: INPUT_REPO_ROOT]`), so forwarding it is supported
+  and the original planning-time note was right. The same revision asserted
+  that cyclopts "ignores unknown options for options it does not declare" and
+  that the earlier install "succeeded because the flag was inert, not because
+  it was consumed"; both are false —
+  `prover-tools verus run --this-flag-was-never-declared` prints
+  `Unknown option: --this-flag-was-never-declared`. The error came from reading
+  docstring fenced examples in `rust_prover_tools/verus/models.py` and
+  `run.py`, which show a Python caller constructing
+  `VerusPaths(repo_root=Path.cwd())` directly and so cannot witness what the
+  CLI declares. Two consequences hold. First, the proof invocation should be
+  run from the worktree root as planned; `--repo-root` is available but
+  unnecessary. Second, the method that produced the false correction is the
+  lesson: a claim about what a *command* accepts must be settled by probing the
+  command, and reading source that merely *uses* an underlying model type is
+  not evidence about its CLI surface.
 - Observation: MiniJinja's public object representation does not establish
   finiteness, purity, or cycle freedom. Evidence: MiniJinja `ObjectRepr`,
   `try_iter`, and `try_iter_pairs` APIs. Impact: explicitly document the host
@@ -873,13 +897,15 @@ make verus VERUS_FLAGS='--proof-file verus/canonical_value/main.rs'
 ```
 
 Run it from the worktree root. `--proof-file` is a real option of
-`prover-tools verus run`; `--repo-root` is **not** an option and must not be
-passed — the tool derives the repository root from the working directory. The
-planning-time note that both were accepted was wrong and is withdrawn above.
-Proof acceptance requires satisfiable witnesses, reviewed trusted assumptions,
-and no `assume`, `admit`, external body, contradiction, or theorem equivalent
-to an assumption. Verus is required for feature completion, but remains outside
-the ordinary gates.
+`prover-tools verus run`, and so is `--repo-root` (`verus run --help` lists
+`--repo-root PATH [env var: INPUT_REPO_ROOT]`); both were accepted as the
+planning-time note said, and the intervening claim that `--repo-root` did not
+exist is withdrawn above. Running from the worktree root remains the ordinary
+form because `repo_root` defaults to the working directory, which is where the
+pin files resolve from. Proof acceptance requires satisfiable witnesses,
+reviewed trusted assumptions, and no `assume`, `admit`, external body,
+contradiction, or theorem equivalent to an assumption. Verus is required for
+feature completion, but remains outside the ordinary gates.
 
 ### EP-V4 — public purity and ordering boundary
 
@@ -914,9 +940,13 @@ locked canonicalizer's serializer interface. Create an evidence-backed table of
 admitted/rejected cases. Confirm that one snapshot can preserve numeric scalar
 representations and avoid re-reading objects. Record that arbitrary custom
 objects are admitted only under the finite, stable, acyclic host precondition.
-Add `tools/verus/VERSION` and `tools/verus/SHA256SUMS` for a selected upstream
-release using the existing pinned `prover-tools` path; verify its checksum and
-the documented Make flags before proof work.
+**Already done — do not repeat.** `tools/verus/VERSION` and
+`tools/verus/SHA256SUMS` exist, added by `aa32c294` through the existing pinned
+`prover-tools` path; `VERSION` holds `0.2026.10.04.426d8b0`. This step
+originally read "add `tools/verus/VERSION` and `tools/verus/SHA256SUMS` for a
+selected upstream release … then verify its checksum", which was correct when
+planned and has since been discharged. Verify the pins match the tree and
+proceed; **do not** overwrite the digest.
 
 Go/no-go: proceed only if ordinary finite maps/sequences and JSON scalars have
 a deterministic non-coercive route to JCS, unsupported values fail before
