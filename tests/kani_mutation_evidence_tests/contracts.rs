@@ -119,9 +119,10 @@ fn supplemental_property_patches() -> Result<BTreeSet<String>> {
 #[test]
 fn supplemental_property_location_resolves_directory_and_file_modules() -> Result<()> {
     let staged = tempfile::tempdir().context("create synthetic source tree")?;
-    let staged_path = Utf8PathBuf::from_path_buf(staged.path().to_path_buf()).map_err(|invalid| {
-        anyhow::anyhow!("synthetic source tree {} is not UTF-8", invalid.display())
-    })?;
+    let staged_path =
+        Utf8PathBuf::from_path_buf(staged.path().to_path_buf()).map_err(|invalid| {
+            anyhow::anyhow!("synthetic source tree {} is not UTF-8", invalid.display())
+        })?;
     let root = Dir::open_ambient_dir(&staged_path, ambient_authority())
         .context("open synthetic source tree")?;
     root.create_dir_all("src/ninja_gen/property_tests")
@@ -139,14 +140,17 @@ fn supplemental_property_location_resolves_directory_and_file_modules() -> Resul
     )
     .context("write single-file module")?;
 
-    let resolved =
-        supplemental_property_location(&root, "ninja_gen__property_tests__emission_is_deterministic")?;
+    let resolved = supplemental_property_location(
+        &root,
+        "ninja_gen__property_tests__emission_is_deterministic",
+    )?;
     ensure!(
         resolved == Utf8Path::new("src/ninja_gen/property_tests/mod.rs"),
         "a ninja_gen-rooted patch must resolve to its directory module, got {resolved}",
     );
 
-    let resolved = supplemental_property_location(&root, "hex__property_tests__encoding_round_trips")?;
+    let resolved =
+        supplemental_property_location(&root, "hex__property_tests__encoding_round_trips")?;
     ensure!(
         resolved == Utf8Path::new("src/hex/property_tests.rs"),
         "a single-file property module must resolve to its own source, got {resolved}",

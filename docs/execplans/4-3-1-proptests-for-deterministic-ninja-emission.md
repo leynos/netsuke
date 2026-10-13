@@ -1992,13 +1992,15 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       than this tree being anomalous. The split target is unaffected: the file
       is now 33 lines and no file touched by this milestone exceeds 400 — the
       largest is `compile_guard.rs` at 390, which the split left untouched.
-
+- [x] (2026-10-10T00:00:00Z) Re-derived the `EP-M2` base against `origin/main`
       before implementing, and found the branch 44 commits behind. Recorded the
       `ninja_gen` directory-module migration, the layout-contract violation
       counts (66 and 27 here, 0 and 0 upstream), the two-suffix `make proptest`
       selector problem, the open question on selector anchoring, and the
       falsified collision premise behind the `supplemental_property_location`
-      generalization. No milestone or obligation changed.
+      generalization. No milestone or obligation changed. A `git merge-tree`
+      rehearsal of `HEAD` against `origin/main` reports zero conflicts, so the
+      rebase was the next step.
 - [x] (2026-10-10T00:00:00Z) Rehearsed the rebase in a throwaway clone rather
       than in this worktree. All 16 commits replay onto `e1df2ead` (the true
       remote `main`, resolved from the API — the bare repository's cached
@@ -2725,33 +2727,38 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   therefore the *last* segment, not the first: a `src/`-rooted selector
   `test(/^ninja_gen::property_tests($|::)/)` captures `property_tests`, and
   `test_filters_match_every_declared_test_they_name` then fails it, because
-  `declared_test_names()` scans only `tests/` (`TEST_SOURCE_ROOT =
-  REPO_ROOT / "tests"` in `nextest_rust_test_discovery.py`) and no `src/`-side
-  function is in that corpus. Measured, not inferred: appending that override
-  to a copy of the configuration and running the three contract checks gives
-  `FAIL test_filters_match_every_declared_test_they_name — filters name tests
-  that no Rust source declares: ['property_tests']`, while the control run on
-  the unmodified configuration passes all three. So **no** `src/`-rooted
-  selector can be written into the configuration, whatever its shape, because
-  the failure follows from the greedy capture and the `tests/`-only corpus
-  rather than from the spelling. Options considered: (a) write the selector
-  into the configuration and amend the contract; (b) write it into the
-  Makefile recipe. (b) was chosen because (a) would weaken a shipped contract
-  that is correct about the class of defect it polices (a filter naming a
-  nonexistent test selects nothing and looks enforced), and the plan's own
-  `Makefile:228` precedent already puts a selector in a recipe. The cost
-  accepted is the one `EP-M2` named: a Makefile `-E` argument is unverified by
-  construction, so the selector is discharged by the plan's stated procedure
-  instead — replaying it through real nextest and reading every testcase's
-  `filter-match.status`. Note the plan's **suggested spelling was wrong** and is
-  corrected here: `test(/^property_tests($|::)/) | test(/^proptests($|::)/)`
-  selects **0** of the 86 tests, because the `^` anchor names a leading segment
-  and the suites are reached through a module path
-  (`ir::cmd_interpolate::property_tests::…`). The corrected shape anchors the
-  *segment*: `test(/(^|::)[a-z0-9_]*proptests($|::)/) |
-  test(/(^|::)[a-z0-9_]*property_tests($|::)/)`. Affected identifiers:
-  `EP-M2`, `Constraint 4`, `Constraint 7`. Date/Author: 2026-10-13 /
-  implementing agent.
+  `declared_test_names()` scans only `tests/`
+  (`TEST_SOURCE_ROOT = REPO_ROOT / "tests"` in
+  `nextest_rust_test_discovery.py`) and no `src/`-side function is in that
+  corpus. Measured, not inferred: appending that override to a copy of the
+  configuration and running the three contract checks gives
+
+  ```plaintext
+  FAIL test_filters_match_every_declared_test_they_name —
+  filters name tests that no Rust source declares: ['property_tests']
+  ```
+
+  while the control run on the unmodified configuration passes all three. So
+  **no** `src/`-rooted selector can be written into the configuration, whatever
+  its shape, because the failure follows from the greedy capture and the
+  `tests/`-only corpus rather than from the spelling. Options considered: (a)
+  write the selector into the configuration and amend the contract; (b) write
+  it into the Makefile recipe. (b) was chosen because (a) would weaken a
+  shipped contract that is correct about the class of defect it polices (a
+  filter naming a nonexistent test selects nothing and looks enforced), and the
+  plan's own `Makefile:228` precedent already puts a selector in a recipe. The
+  cost accepted is the one `EP-M2` named: a Makefile `-E` argument is
+  unverified by construction, so the selector is discharged by the plan's
+  stated procedure instead — replaying it through real nextest and reading
+  every testcase's `filter-match.status`. Note the plan's **suggested spelling
+  was wrong** and is corrected here:
+  `test(/^property_tests($|::)/) | test(/^proptests($|::)/)` selects **0** of
+  the 86 tests, because the `^` anchor names a leading segment and the suites
+  are reached through a module path (`ir::cmd_interpolate::property_tests::…`).
+  The corrected shape anchors the *segment*:
+  `test(/(^|::)[a-z0-9_]*proptests($|::)/) | test(/(^|::)[a-z0-9_]*property_tests($|::)/)`.
+  Affected identifiers: `EP-M2`, `Constraint 4`, `Constraint 7`. Date/Author:
+  2026-10-13 / implementing agent.
 
 - Decision: record the `make proptest` selector's discharge **by
   `filter-match.status`, with `--no-tests fail` on the target**. Replayed
@@ -2760,18 +2767,17 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   `mismatch` for the remaining 3758, and the 90 are **set-equal** to the census
   of every test name carrying either suffix — no extras, no omissions. The 90
   split **86 in `netsuke-build`** and **4 in `test_support`**, and the suites
-  behind them are the eleven `netsuke-build` ones (`cli::discovery::
-  helper_proptests`, `cli::discovery::layers::property_tests`,
-  `cli::merge::logging_proptests`,
-  `cli_tests::merge_{diag,precedence,targets}_proptests`,
-  `hex::property_tests`, `ir::cmd_interpolate::property_tests`,
-  `ir::cycle::property_tests`, `ninja_gen::property_tests`,
-  `rfc_stdlib_coverage::markdown::property_tests`) plus `test_support`'s
-  `netsuke::locator::tests::locator_property_tests`. The `--workspace` flag is
-  not incidental: a `list` without it reports a corpus of 3807 and 86 matches,
-  and the recipe's own run reports 3924 and 90, so the discharge is performed
-  with the same flags the target uses. `make proptest` then ran 90/90 and
-  passed at exit 0 with 3834 skipped.
+  behind them are the eleven `netsuke-build` ones
+  (`cli::discovery:: helper_proptests`,
+  `cli::discovery::layers::property_tests`, `cli::merge::logging_proptests`,
+  `cli_tests::merge_{diag,precedence,targets}_proptests`, `hex::property_tests`,
+  `ir::cmd_interpolate::property_tests`, `ir::cycle::property_tests`,
+  `ninja_gen::property_tests`, `rfc_stdlib_coverage::markdown::property_tests`)
+  plus `test_support`'s `netsuke::locator::tests::locator_property_tests`. The
+  `--workspace` flag is not incidental: a `list` without it reports a corpus of
+  3807 and 86 matches, and the recipe's own run reports 3924 and 90, so the
+  discharge is performed with the same flags the target uses. `make proptest`
+  then ran 90/90 and passed at exit 0 with 3834 skipped.
 
   `--no-tests fail` is added because the plan's premise that "nextest exits 0
   even when a selector matches nothing" is **falsified on this nextest
@@ -2784,9 +2790,8 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   to `(::)` — deleting the branch that matches a bare suite name and leaving
   only in-submodule tests selected. The variable is spelled `$$|` and the
   expansion is now checked with `make -n proptest` before the recipe is
-  trusted. Affected identifiers: `EP-M2`. Date/Author: 2026-10-13 / implementing
-  agent.
-
+  trusted. Affected identifiers: `EP-M2`. Date/Author: 2026-10-13 /
+  implementing agent.
 
 - Decision: adjudicate `check-fmt` with the CI-pinned `mdtablefix` (0.6.1),
   installed to a scratch path and passed through the Makefile's `MDTABLEFIX`
