@@ -45,10 +45,5 @@ pub(crate) fn ordered_actions(graph: &BuildGraph) -> Vec<(&str, &Action)> {
 /// when the graph declares none, so callers can use the result to decide whether
 /// a `default` statement is emitted at all.
 pub(crate) fn ordered_default_targets(graph: &BuildGraph) -> Vec<Utf8PathBuf> {
-    graph
-        .default_targets
-        .iter()
-        .sorted()
-        .cloned()
-        .collect()
+    graph.default_targets.iter().sorted().cloned().collect()
 }

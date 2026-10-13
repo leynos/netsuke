@@ -4117,18 +4117,18 @@ A patch may instead back a Proptest property, which
 `ir__cmd_interpolate__property_tests__*.patch` do. Those properties exercise
 scanner and command-guard contracts that exceed the bounded Kani resource cap,
 so no harness can carry the evidence and a patch alone does. Such a patch is
-listed in `SUPPLEMENTAL_PROPERTY_PATCHES`, and
-`supplemental_property_location` resolves the source file that declares the
-named property rather than assuming a layout. A stem encodes the module path
-with `__` standing in for `::`, so `ir__cmd_interpolate__property_tests__x`
-names property `x` under `src/ir/cmd_interpolate/property_tests`. The leading
-segments name directories and the final segment is either a directory module's
-`mod.rs` or a single-file module, and both shapes are used under `src/`, so
-both candidates are tried. The root segment comes from the stem rather than a
-fixed list, which is why a patch rooted at `ninja_gen` or `hex` resolves with
-no change here. When neither candidate declares the property the failure names
-every candidate searched, so a module that moves is diagnosable from the
-message alone instead of arriving as an opaque read error.
+listed in `SUPPLEMENTAL_PROPERTY_PATCHES`, and `supplemental_property_location`
+resolves the source file that declares the named property rather than assuming
+a layout. A stem encodes the module path with `__` standing in for `::`, so
+`ir__cmd_interpolate__property_tests__x` names property `x` under
+`src/ir/cmd_interpolate/property_tests`. The leading segments name directories
+and the final segment is either a directory module's `mod.rs` or a single-file
+module, and both shapes are used under `src/`, so both candidates are tried.
+The root segment comes from the stem rather than a fixed list, which is why a
+patch rooted at `ninja_gen` or `hex` resolves with no change here. When neither
+candidate declares the property the failure names every candidate searched, so
+a module that moves is diagnosable from the message alone instead of arriving
+as an opaque read error.
 `supplemental_property_location_resolves_directory_and_file_modules` pins the
 two module shapes and that diagnostic against a synthetic tree, so the check
 does not depend on this revision happening to contain an absent property.

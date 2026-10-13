@@ -56,8 +56,7 @@ use crate::ir::{BuildEdge, BuildGraph};
 use crate::localization::{self, keys};
 use crate::ninja_gen::{
     NinjaGenError, RecipeShell, edge_requires_gates, graph_requires_dyndep, join,
-    ordered_default_targets, ordered_edges, reject_unsupported_path_characters,
-    write_action_rules,
+    ordered_default_targets, ordered_edges, reject_unsupported_path_characters, write_action_rules,
 };
 use camino::Utf8PathBuf;
 use sha2::{Digest, Sha256};

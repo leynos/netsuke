@@ -57,9 +57,9 @@ macro_rules! write_flag {
 mod display_edge;
 mod named_action;
 mod order;
+pub(crate) use display_edge::DisplayEdge;
 pub(crate) use named_action::NamedAction;
 use order::{ordered_actions, ordered_default_targets, ordered_edges};
-pub(crate) use display_edge::DisplayEdge;
 /// Generate a Ninja build file as a string.
 ///
 /// # Examples
@@ -204,9 +204,7 @@ pub(crate) fn write_action_rules<W: Write>(
     out: &mut W,
     shell: RecipeShell,
 ) -> Result<(), NinjaGenError> {
-    for (zero_based_action_index, (id, action)) in
-        ordered_actions(graph).into_iter().enumerate()
-    {
+    for (zero_based_action_index, (id, action)) in ordered_actions(graph).into_iter().enumerate() {
         if action.recipe.is_dependency_only() {
             continue;
         }

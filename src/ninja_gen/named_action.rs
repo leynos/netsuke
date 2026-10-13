@@ -5,11 +5,11 @@
 //! rendering out of the parent module leaves the graph-level emission order in
 //! `mod.rs` and the per-action text here.
 
+use super::RecipeShell;
 use super::command_list::{ActionId, CommandListEntry, command_list_entry};
 use super::error::NinjaGenError;
 use super::escape::{ShellText, escape_metadata_value};
 use super::recipe_shell::escape_posix_script;
-use super::RecipeShell;
 use crate::ast::{Recipe, StringOrList};
 use itertools::Itertools;
 use std::fmt::Write;
