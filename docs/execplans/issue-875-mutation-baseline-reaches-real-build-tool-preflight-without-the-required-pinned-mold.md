@@ -682,6 +682,42 @@ Every stopping point is documented here. Timestamps are UTC.
   disposition, because the finding's own prescribed remedy ("pin the fixing
   revision") has been measured to have nothing to pin; the plan records the
   probe rather than re-litigating it silently.
+- [x] (2026-10-13 08:15Z) **The full eight-gate set is green on `3d761c8d`,
+  and it supersedes the earlier nextest reading — including the diagnosis of
+  the nine timeouts.** The gate scope was widened rather than narrowed: the
+  non-Markdown source is byte-identical across `17e12e31`, `36a7f68c` and
+  `3d761c8d` (verified by `git diff --name-only <a> <b> -- . ':(exclude)*.md'`,
+  empty for every pair), so the full set was run instead of the
+  Markdown-sensitive subset. All eight exit 0: `check-fmt` 2 s, `lint` 2003 s,
+  `typecheck` 25 s, `doc-coverage` 111 s, `markdownlint` 16 s, `nixie` 2 s,
+  `test-workflow-contracts` 94 s, `test` 215 s. Each gate's `HEAD` was read
+  immediately before and after it. `make lint` ran with no stale-cache report
+  and zero `error`/`warning` lines; `doc-coverage` reproduced
+  `aggregate 4972/5029 98.87%`.
+
+  **`make test` now passes both halves with no timeouts.** nextest:
+  `3914 tests run: 3914 passed (1 slow), 6 skipped` in 142 s. Doctests:
+  `Doc-tests netsuke` `88 passed` and `2 passed`, `Doc-tests test_support`
+  `39 passed`, all `0 failed`, both `all doctests ran`. The doctest half that
+  the 05:50Z entry recorded as incomplete is therefore **now discharged**, and
+  the earlier three-hour hang is explained: an idle process held a `-j2`
+  build-limits slot, which is an environment condition rather than a property
+  of the code.
+
+  **The earlier reading's diagnosis does not survive, and that is worth
+  recording rather than quietly replacing the numbers.** The nine timeouts were
+  attributed to nested-Cargo fixture compiles on a host whose managed sccache
+  server was down, on the evidence of 573 `sccache server is unreachable`
+  lines. The clean run logged **1034** such lines and `build-limits-status`
+  still reported `sccache unreachable, compiling directly` — more, not fewer.
+  The degraded cache was present in both runs, so it cannot be what changed.
+  The most plausible difference is that `make lint` preceded `make test` in the
+  clean run and had already warmed `target/`, leaving the nested-Cargo fixture
+  compiles cheap enough to finish inside their deadlines. That is a hypothesis
+  consistent with the two logs, not something the run establishes; it is
+  recorded as a hypothesis. The lesson is to treat a correlation between an
+  environment diagnostic and a symptom as a hypothesis to test by counter-run,
+  which this run provided by accident.
 - [x] (2026-10-13 09:05Z) **Two numbers in the committed text were wrong, and
   re-deriving them from the source rather than from the plan's own summary
   caught both.** Neither was caught by a gate: `make check-fmt`,
@@ -1189,22 +1225,28 @@ two shards; the complete data showed two mechanisms and no such cap. Naming a
 cause from the first convenient sample is the failure mode to watch — the retry
 is recorded in `Risks` rather than quietly corrected. Third, a gate result is
 only as good as the environment it ran in: this host produced 4 and then 9
-timeouts on an unchanged diff, and the diagnostic that settles it is a count
-(`sccache server is unreachable`), not a test name.
+timeouts on an unchanged diff, and finally a clean run with none. The count of
+`sccache server is unreachable` lines looked like the diagnostic and was not —
+the clean run logged more of them than the failing one (1034 against 573) while
+passing. Correlation with an environment diagnostic is a hypothesis to test by
+counter-run, and the counter-run here arrived by accident.
 
-**Not claimed as evidence.** The doctest half never completed on this host —
-the run hung on an idle process holding a build-limits slot and was stopped —
-so it is recorded as incomplete rather than as a pass, and `make doctest` must
-still pass on a quiet host before the change is trusted. The two jobs that were
-red on `172dd4ff` (`build-test` and `Windows / lint-windows`) were confirmed
-repaired at `d8e03753`; because every commit after that one touches Markdown
-only, their re-run is a formality, and the standing requirement is that CI be
-green on the final head before the pull request leaves draft. CodeRabbit has
-run five passes over this branch. Four findings were prose or evidence defects
-and were fixed — first-person pronouns in this plan, a flag-precedence claim
-stated inaccurately, a reproduction recipe that could not work, and an
-acceptance line demanding evidence that was never obtainable. Two were
-load-bearing and both stand as recorded gaps: the mold-selection finding,
+**Now claimed as evidence, after being discharged.** An earlier doctest attempt
+never completed on this host — the run hung on an idle process holding a
+build-limits slot and was stopped — and this section previously recorded the
+half as incomplete rather than as a pass. The 08:15Z gate run now passes it:
+`Doc-tests netsuke` `88 passed` / `2 passed` and `Doc-tests test_support`
+`39 passed`, each `0 failed`, both `all doctests ran`. The earlier hang is
+therefore an environment condition, not a property of the change. The two jobs
+that were red on `172dd4ff` (`build-test` and `Windows / lint-windows`) were
+confirmed repaired at `d8e03753`; because every commit after that one touches
+Markdown only, their re-run is a formality, and the standing requirement is
+that CI be green on the final head before the pull request leaves draft.
+CodeRabbit has run five passes over this branch. Four findings were prose or
+evidence defects and were fixed — first-person pronouns in this plan, a
+flag-precedence claim stated inaccurately, a reproduction recipe that could not
+work, and an acceptance line demanding evidence that was never obtainable. Two
+were load-bearing and both stand as recorded gaps: the mold-selection finding,
 raised on every pass, which is confirmed as diagnosed and confirmed as not
 actionable from a caller; and the empty-`RUSTFLAGS` reading, which the plan now
 states correctly. A zero-finding review is not reachable while the fourth
