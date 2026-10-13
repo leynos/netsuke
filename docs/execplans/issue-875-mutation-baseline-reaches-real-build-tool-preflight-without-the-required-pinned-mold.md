@@ -641,6 +641,34 @@ Every stopping point is documented here. Timestamps are UTC.
   agents' crates queued). It was stopped, recovering the slot. The doctest half
   is therefore **not** evidence for this change either way, and Milestone 4
   should not treat it as a pass.
+- [x] (2026-10-13 07:20Z) **The "pin a revision that fixes the flag ownership"
+  half of the mold-selection finding is closed by measurement, not argument.**
+  CodeRabbit's second pass re-raised the finding in a form the first pass did
+  not: it asked to "resolve the shared workflow's flag ownership and pin a
+  revision that preserves the project linker flags". That is a different claim
+  from "mold is installed but unused", and it is testable. Three probes:
+
+  1. `shared-actions#544` is still `OPEN` with `closedAt: null`, **zero**
+     comments, and `updatedAt` of 2026-10-07 — three days before the pinned
+     revision was cut, so there is no fixing commit to pin.
+  2. `mutation-cargo.yml` at the pin declares fifteen `workflow_call` inputs
+     and **none** of them is `rustflags`; the same file at shared-actions
+     `HEAD` (`aea9c14c24b7`, 2026-10-12) still declares fifteen inputs and
+     still none. The only setup-rust call there is
+     `with: install-mold: ${{ inputs.install-mold }}`. So no revision of this
+     reusable workflow, at the pin or at its tip, exposes a flag-ownership
+     surface a caller could pin to.
+  3. `setup-rust`'s `rustflags` input still defaults to `'-D warnings'` at
+     shared-actions `HEAD` (`action.yml:85`), so the default that displaces
+     `.cargo/config.toml` is unchanged upstream.
+
+  The finding is therefore **confirmed as diagnosed and confirmed as not
+  actionable here**: it needs an upstream `rustflags` input, or a
+  `mutation-cargo.yml` that forwards one, before any pin can carry it. Adding a
+  local `RUSTFLAGS` override would violate the plan's own constraint and would
+  be the workaround the finding explicitly forbids ("do not override
+  `RUSTFLAGS` in this workflow caller"). No change made; the finding stands as
+  an upstream dependency against #544.
 - [ ] Milestone 4: ExecPlan finalized, `coderabbit review --agent` clean, CI
   green, PR marked ready.
 
