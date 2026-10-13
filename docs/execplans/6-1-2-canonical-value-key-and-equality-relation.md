@@ -211,6 +211,15 @@ under way; the invocation naming this plan supplies execution approval.
   `test-documentation-contracts` (no workflow, contract suite, or marked
   example changed), `test-coverage-artifact` (no `scripts/` validator changed),
   and `make verus` (no proof file exists until EP-M3).
+- (2026-10-13) The milestone CodeRabbit CLI review requested through the
+  scrutineer ran at the frozen revision
+  `0ce95e3189f91cc80da85139c09c7567a3558a17` and reported **zero findings**
+  (`RC=0`, 101 s, `{"type":"complete","status":"review_completed","findings":0}`).
+  The tree was clean before and after, and `reviewedFiles` is exactly the
+  branch's five-file diff against `b14bde20`, so the review's comparison base
+  is the PR base. This closes the EP-M1 review obligation. It is a **local**
+  assessment only: the hosted CodeRabbit assessment that appears on PR #912
+  belongs to `pr-babysitting` and remains outstanding.
 - [ ] Implement canonical keys/equality and stable deduplication; discharge
   property, BDD, runtime-boundary, and Verus obligations.
 - [ ] Update design and formal-verification guidance, run sequential gates, and
@@ -415,6 +424,34 @@ under way; the invocation naming this plan supplies execution approval.
   reported as a finding, because a previous run of this same target hung for
   three hours holding a slot after emitting only its first two crates, and a
   dead parent never reports.
+
+- **`coderabbit review --agent --committed` reviews the branch against its
+  base, not the tip commit — and the supervisor's wrong-base test was wrong.**
+  The scrutineer was briefed that a finding naming a `.rs` path would indicate a
+  review-base error, on the belief that the commit under review was a single
+  Markdown file. Measured: the tip commit is one file (`88 0` insertions and
+  deletions), while the branch diff against `b14bde20` is five files including
+  `tests/env_access_suppressions/roots.rs`, which carries a real
+  `22 insertions, 10 deletions` change from Stage A. A finding against that file
+  would therefore have been a **correct** finding about real code, not a base
+  error, and the briefing's rule would have suppressed it. The scrutineer
+  declined to apply the rule and said so. Impact: two statements must not be
+  used as tests — "no `.rs` path may be named" is not a wrong-base test (the
+  checkable identity is `comparisonBaseCommitId` equalling the PR base), and
+  "purely additive, 0 deletions" is a property of the **tip commit**, not of the
+  branch, whose diff carries 10 deletions. Both are recorded so a future
+  milestone does not re-import them as rules.
+- **The scrutineer verified the reviewed revision from two independent sources
+  rather than the tool's self-report**, and that precedent is worth keeping: the
+  review's own `git.json` (`head`, `baseCommitId`, `comparisonBaseCommitId`),
+  `internalState.json` (`reviewedCommitIds`, `crReviewed`), and
+  `.session-complete-v2` showing a finished rather than truncated review. It
+  also re-derived the `.verus` thirteen-file count, confirmed
+  `git check-ignore` resolves `.verus` to `.gitignore:21`, and ran the `-ize`
+  spelling scan **with a liveness control** (4 `-ize` forms present in the same
+  text) so that a zero-violation result was not vacuously empty. Impact: the
+  zero-findings result is corroborated by checks the supervisor did not
+  perform, not merely asserted.
 
 ## Decision log
 
@@ -856,6 +893,34 @@ both operands. Conformance: recursive one-time snapshot; no error localization
 or bounds pulled forward; no new dependency/registration; trace links current.
 Recovery: retain red tests and revert incoherent implementation changes.
 Remaining: stable dedup and proof. Compatibility: none.
+
+- (2026-10-13) Implementation landed under `src/stdlib/canonical_value/` behind
+  exactly five public names (`CanonicalKey`, `CanonicalValueError`,
+  `canonical_key`, `canonical_eq`, `stable_deduplicate`), wired into
+  `src/stdlib/mod.rs` by one `mod` line and one `pub use`. Focused reds were
+  observed before green: the first library run failed three cases on behaviour
+  (a test-index bug, generator starvation, and a mis-stated `now()` kind), and
+  no red in this packet was a compile error because the library compiled before
+  the test file did. A supplementary filtered doctest run found a real defect
+  the gates would not have: `context!` has no array arm, so the module example's
+  heterogeneous array failed to compile (E0308) and was corrected.
+- (2026-10-13) The filters were shown to discriminate behaviour rather than
+  merely pass: one surgical mutation to `stable_deduplicate` (retain every
+  value) turned the library filter red in 2 cases and the BDD filter red in 1,
+  and both were re-run green after the revert. The measured `now()` kind is
+  `Plain`, not `Iterable` as the RFC text's shape suggests; the test asserts the
+  measured kind and says so, because a kind-less reading of that fixture could
+  silently assert the wrong thing.
+- (2026-10-13) The test battery did **not** fit one file: a single `tests.rs`
+  reached 854 lines, 2.1x the 400-line `module_max_lines` cap, and the sibling
+  battery was 432. A census settled the shape — of the nine `.rs` files over 400
+  lines in this repo, all nine are `tests/*.rs` crate roots and no nested file
+  exceeds the cap — so the battery was split by *kind of judgement* into
+  `mod.rs` (fixtures and helpers), `boundaries.rs` (refusals), `parity.rs`
+  (canonicalizer parity), `properties.rs` (generated inputs), and `examples.rs`
+  (hand-written inputs). The 19 cases are unchanged, verified by identical
+  counts before and after. This is a house-shape decision, not a line-count
+  dodge: `src/stdlib/network/tests/` already nests a `mod.rs` beside siblings.
 
 ### EP-M3 — first-index dedup and Verus proof
 
