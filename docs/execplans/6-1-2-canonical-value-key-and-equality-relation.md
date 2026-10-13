@@ -5,7 +5,7 @@ This ExecPlan is a living document. Keep `Constraints`,
 `Surprises & discoveries`, `Decision log`, `Outcomes & retrospective`,
 `Conformance basis`, and `Verification plan` current as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -20,8 +20,8 @@ keep their current rendering behaviour; the observable result is a reusable,
 tested Rust contract for later helpers.
 
 This plan covers roadmap item 6.1.2 only. It targets a release after v0.1.0
-final and does not widen the issue #594 hardening release. Implementation must
-wait for explicit approval of this DRAFT.
+final and does not widen the issue #594 hardening release. Implementation is
+under way; the invocation naming this plan supplies execution approval.
 
 ## Constraints
 
@@ -125,6 +125,35 @@ wait for explicit approval of this DRAFT.
   canonicalization. Severity: medium. Likelihood: high. Mitigation: the plan's
   approved proof milestone explicitly amends that policy to add this narrow
   optional kernel while preserving its exclusion from default workflows.
+- Risk: installing Verus creates `.verus/<version>/` in the workspace root,
+  which holds 13 `.rs` files, is not covered by `.gitignore`, and is absent from
+  `MACHINE_LOCAL_DIRECTORIES`. Severity: high. Likelihood: high, because Stage
+  A has already performed the install on this machine. The
+  `every_rust_source_in_the_workspace_is_scanned` contract reports a Rust
+  source outside `COMPILED_SOURCE_ROOTS` rather than excusing it, so the gate's
+  verdict would depend on whether the operator had installed Verus — the exact
+  machine-dependent verdict that invariant exists to prevent. Mitigation:
+  falsify the failure first, then make the name honestly ignored by adding
+  `.verus/` to `.gitignore` beside `.uv-cache` and `.netsuke`, which is the
+  appeal `walk_tests.rs` requires every skipped name to satisfy. Do not add the
+  name to `MACHINE_LOCAL_DIRECTORIES` while `git check-ignore` declines it:
+  that is the defect that list's self-test was written to catch. Note the
+  ordering constraint — the skip-list self-test asks a scratch repository
+  seeded from the repository's `.gitignore`, so the `.gitignore` entry must
+  land in the same commit as any list change. Resolved in Stage A: the defect
+  was reproduced first (58 of 59 tests passed;
+  `every_rust_source_in_the_workspace_is_scanned` failed naming
+  `.verus/0.2026.10.04.426d8b0/verus/build/serde-5751747ce96f67e/
+  out/private.rs`
+  and twelve siblings), then both edits landed together, and the same suite
+  then passed 59 of 59. See the corresponding Progress and Decision log entries.
+- Risk: the plan's "Map/Seq iteration failure is a typed error" overstates what
+  MiniJinja exposes. Severity: low. Likelihood: high. A `NonEnumerable`
+  enumerator yields `None` rather than an error, and a mid-iteration failure is
+  not observable at all. Mitigation: map `None` to a typed rejection, document
+  that the residual case is covered by the host precondition, and test the
+  `NonEnumerable` shape explicitly so the wording is pinned to observed
+  behaviour rather than to an assumed API.
 - Risk: changing current `uniq` behaviour would alter existing manifests.
   Severity: high. Likelihood: medium. Mitigation: preserve `uniq` and
   `group_by` registrations and behaviour; a later consumer migration needs its
@@ -146,9 +175,30 @@ wait for explicit approval of this DRAFT.
   `make check-fmt`, `make markdownlint` (including spelling), and `make nixie`.
   No runtime code changed; Rust lint/test/doc-coverage and the future Verus
   proof have not been run for this documentation-only planning change.
-- [ ] Obtain explicit approval before implementation.
-- [ ] Characterize MiniJinja values and confirm the approved API against actual
-  constructors, iterator failures, numeric serializers, and pinned Verus tools.
+- [x] (2026-10-13) Obtain explicit approval before implementation. The
+  invocation
+  `use /sdlc-implementation 6-1-2-canonical-value-key-and-equality-relation`
+  names this plan and instructs implementation, which the skill's contract
+  records as execution approval; no separate approval was requested.
+- [x] (2026-10-13) Characterize MiniJinja values and confirm the approved API
+  against actual constructors, iterator failures, numeric serializers, and
+  pinned Verus tools. Characterization crate at `/tmp/canon-probe` (outside the
+  tracked tree) pinned `minijinja =2.24.0`, `serde_json =1.0.151`
+  (`preserve_order`), and `serde_json_canonicalizer =0.3.2`. Its full output is
+  reproduced in the Surprises & discoveries entries above; the admitted and
+  rejected matrices in the Verification plan record the conclusions.
+- [x] (2026-10-13) Pin the Verus toolchain and repair the gate its install
+  broke. Added `tools/verus/VERSION` (`0.2026.10.04.426d8b0`) and
+  `tools/verus/SHA256SUMS` (digest `6240186628…1a0` for
+  `verus-0.2026.10.04.426d8b0-x86-linux.zip`), then ran
+  `make install-verus VERUS_INSTALL_FLAGS='--repo-root .'`, which printed
+  `Installed Verus 0.2026.10.04.426d8b0`. The install wrote `.verus/<version>/`
+  into the workspace root, which broke
+  `every_rust_source_in_the_workspace_is_scanned`; the defect was reproduced
+  with `cargo nextest run --test env_access_suppressions` (59 run, 58 passed, 1
+  failed, naming thirteen `.verus/**/out/*.rs` paths) and then fixed by adding
+  `.verus/` to `.gitignore` in the same change as `".verus"` in
+  `MACHINE_LOCAL_DIRECTORIES`, after which the same suite passed 59 of 59.
 - [ ] Implement canonical keys/equality and stable deduplication; discharge
   property, BDD, runtime-boundary, and Verus obligations.
 - [ ] Update design and formal-verification guidance, run sequential gates, and
@@ -177,6 +227,84 @@ wait for explicit approval of this DRAFT.
   finiteness, purity, or cycle freedom. Evidence: MiniJinja `ObjectRepr`,
   `try_iter`, and `try_iter_pairs` APIs. Impact: explicitly document the host
   precondition; do not promise cycle detection or adapter-enforced bounds.
+- Observation (measured 2026-10-13, Stage A): `to_iter_pairs` is not reachable
+  from a `Value`. `Value::try_iter` exists and yields a `Result<ValueIter>` for
+  `none`/`undefined`, strings, and objects, but returns `Err(InvalidOperation)`
+  for every scalar; it yields a map's **keys**, never pairs. Pair iteration is
+  `ObjectExt::try_iter_pairs(&DynObject)` — reached as `value.as_object()`,
+  which is `None` for every non-object scalar. Evidence: MiniJinja 2.24.0
+  `src/value/mod.rs:1475-1495` and `src/value/object.rs:363-394`; probe output
+  `try_iter on Map -> ["a", "b"]` and `try_iter_pairs on Map -> ["k=7"]`.
+  Impact: the adapter must dispatch on `ValueKind` first and only then call
+  `as_object()`, using `repr()` to choose map vs sequence traversal. `try_iter`
+  alone cannot distinguish a map from a sequence, and for a map it silently
+  yields keys — so a naive `try_iter`-based snapshot would emit a map's keys as
+  a JSON array. This is the trap the developers' guide already documents at
+  line 221.
+- Observation (measured 2026-10-13, Stage A): a `Map`-represented object whose
+  enumerator is `NonEnumerable` serializes through the canonicalizer as `{}`,
+  and one whose `get_value` returns the key serializes as `{"1":"x"}` for an
+  integer-keyed map. Evidence: probe lines `failing map ... jcs={}` and
+  `int-keyed map ... jcs={"1":"x"}`. Impact: **the canonicalizer does not
+  reject non-string map keys**. `serde_json`'s `MapKeySerializer` coerces
+  integer keys to quoted strings and `JcsFormatter` writes them without the
+  `as f64` cast that its value-position `write_i64` applies. The plan's "reject
+  non-string mapping keys at any depth" is therefore load-bearing rather than
+  defensive, and cannot be delegated to the serializer.
+- Observation (measured 2026-10-13, Stage A): an object whose `enumerate`
+  reports `NonEnumerable` makes `try_iter`/`try_iter_pairs` return `None` — not
+  an error. Evidence: probe lines `PlainThing ... try_iter -> None` and
+  `FailingMap try_iter_pairs -> None (NonEnumerable)`. Impact: `None` means
+  "not enumerable", which the adapter maps to a typed rejection; it is not an
+  iteration failure. A genuine mid-iteration failure is not observable through
+  this API at all, so the plan's "Map/Seq iteration failure is a typed error"
+  must be read as covering the `NonEnumerable`/`None` case, and the host
+  precondition covers the rest.
+- Observation (measured 2026-10-13, Stage A): neither Rust's own `==` nor the
+  canonicalizer normalizes Unicode. Evidence: probe lines
+  `nfc == nfd (Rust) = false`, `nfc jcs = "café"`, `nfd jcs = "café"`
+  (byte-distinct). RFC 8785 §3.2.3 sorts property names as raw UTF-16 code
+  units with no normalization step and no NFC requirement. Impact: equality is
+  byte-identity over unnormalized JCS, so canonically equivalent-but-distinct
+  key spellings are distinct values. Record as an explicit non-goal; do not add
+  a normalization dependency.
+- Observation (measured 2026-10-13, Stage A): every MiniJinja numeric width
+  reaches JCS as a binary64. Evidence: probe lines
+  `i64 min … jcs=-9223372036854776000`, `u64 max … 18446744073709552000`,
+  `i128 pow53+1 … 9007199254740992`, `u128 max … 3.402823669209385e+38`,
+  `f64 -0.0 … 0`, and `i128::MAX -> 1.7014118346046923e+38`. Confirms the
+  pre-recorded risk rather than refuting it: `JcsFormatter::write_i128`/
+  `write_u128` cast through `as f64`, so the collapse is in the canonicalizer,
+  not in `serde_json::Value`. Widening the snapshot tree to `I128`/`U128`
+  preserves fidelity and keeps the door open for a future canonicalizer, but it
+  does **not** and cannot make keys injective over the integer domain.
+  `i64::MIN` already loses precision, so the collapse is not an `i128`-only
+  concern.
+- Observation (measured 2026-10-13, Stage A): the pinned Verus release is
+  `0.2026.10.04.426d8b0`, and `make install-verus` installs it reproducibly.
+  Evidence: `make install-verus VERUS_INSTALL_FLAGS='--repo-root .'` printed
+  `Installed Verus 0.2026.10.04.426d8b0 in .../.verus/0.2026.10.04.426d8b0/verus`.
+  The upstream release publishes **no** checksum file (confirmed via DeepWiki
+  against `verus-lang/verus`), so the digest in `tools/verus/SHA256SUMS` is
+  locally computed from three independent downloads that agreed. Reachable
+  commands are `prover-tools verus install` and `prover-tools verus run`; there
+  is no `install-verus` subcommand, so `make install-verus` is the supported
+  entry point and the Makefile forwards `VERUS_INSTALL_FLAGS`/`VERUS_FLAGS`.
+- Observation (measured 2026-10-13, Stage A): installing Verus writes a
+  `.verus/<version>/` tree into the workspace root. It is 1.6 GB and untracked,
+  and `git check-ignore -v .verus` exits 1, so git does not ignore it. It is
+  also absent from `MACHINE_LOCAL_DIRECTORIES`
+  (`tests/env_access_suppressions/roots.rs`), and it contains 13 `.rs` files
+  under `verus/build/*/out/`. Impact: the workspace-coverage contract test
+  fails on any machine where Verus has been installed, so the gate's verdict
+  turned on the operator rather than on the tree. Measured both ways: with the
+  directory present and unnamed,
+  `cargo nextest run --test env_access_suppressions` reported 59 run, 58
+  passed, 1 failed — `every_rust_source_in_the_workspace_is_scanned`, whose
+  message listed thirteen `.verus/**/out/*.rs` paths ahead of the fix — and
+  after adding `.verus/` to `.gitignore` and `".verus"` to
+  `MACHINE_LOCAL_DIRECTORIES` the same suite passed 59 of 59. See the risk
+  entry, the Progress entry, and the Decision log.
 
 ## Decision log
 
@@ -222,6 +350,53 @@ wait for explicit approval of this DRAFT.
   proof is part of this task's feature acceptance, while the existing project
   policy keeps Verus opt-in for normal workflows. Date/Author: 2026-10-13,
   planning draft.
+- Decision: pin Verus `0.2026.10.04.426d8b0` in `tools/verus/VERSION`, with the
+  `x86-linux` asset digest recorded in `tools/verus/SHA256SUMS`. Rationale: the
+  release is published and stable, `prover-tools` resolves both files by fixed
+  path, and the install was verified end to end. Upstream ships no checksum
+  file, so the recorded digest is locally computed from three agreeing
+  downloads and the file says so, rather than implying an upstream signature
+  that does not exist. Date/Author: 2026-10-13, implementation.
+- Decision: treat the canonicalizer's binary64 collapse as the accepted
+  contract, not a tolerance breach. The snapshot tree still carries `I128` and
+  `U128` variants so no precision is discarded on the way in, but the plan
+  makes **no** integer-injectivity claim, and the tests assert the collapse
+  explicitly (`2^53 + 1` shares a key with `2^53`; `i64::MIN` does not round
+  trip). Rationale: RFC 8785 §3.2.2.3 defines the number domain as IEEE-754
+  binary64 and RFC 0006 §6.7 adopts JCS verbatim, so the domain is correct as
+  specified. The tolerance trigger — "the supported domain must differ from RFC
+  0006 §6.7" — is not met: the domain is unchanged and only the previously
+  recorded risk is confirmed. Date/Author: 2026-10-13, implementation.
+- Decision: treat Unicode normalization as an explicit non-goal. Equality is
+  byte-identity over unnormalized JCS output, so NFC and NFD spellings of the
+  same grapheme are distinct values with distinct keys. Rationale: RFC 8785
+  §3.2.3 sorts raw property names as UTF-16 code units and specifies no
+  normalization step, so adding one would deviate from the adopted contract and
+  from RFC 0006 §6.7. MiniJinja and Rust likewise do not normalize, so no layer
+  silently introduces it. Documented rather than implemented. Date/Author:
+  2026-10-13, implementation.
+- Decision: dispatch on `ValueKind` and then `as_object()`/`ObjectRepr` in the
+  snapshot adapter; do not use `Value::try_iter` to discover container shape.
+  Rationale: `try_iter` is reachable for scalars only as an error, cannot
+  distinguish a map from a sequence, and for a map yields keys rather than
+  pairs, so a `try_iter`-driven snapshot would silently emit a map as an array
+  of its keys. Pair iteration requires `ObjectExt::try_iter_pairs` on the
+  `DynObject`, and `as_object()` is `None` for every scalar. Date/Author:
+  2026-10-13, implementation.
+- Decision: the adapter rejects non-string map keys itself, before snapshotting
+  values, and does not rely on the canonicalizer to reject them. Rationale:
+  measured behaviour shows an integer-keyed map reaching JCS as `{"1":"x"}` —
+  `serde_json`'s key serializer quotes numeric keys and `JcsFormatter` writes
+  them without the binary64 cast, so no layer raises an error. Date/Author:
+  2026-10-13, implementation.
+- Decision: ship the pinned Verus toolchain and the `.verus/` ignore/skip
+  repair as one commit with its ExecPlan record. Rationale: they are one
+  logical unit of work, not three — the pin files are what make
+  `make install-verus` reproducible, and the install they enable is what writes
+  the directory that broke a deterministic gate. Splitting them would leave a
+  published pin whose documented use breaks `make test` on the next machine,
+  which is a defect the pair exists to remove. Date/Author: 2026-10-13,
+  implementation.
 
 ## Outcomes & retrospective
 
