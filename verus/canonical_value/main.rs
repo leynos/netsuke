@@ -6,37 +6,27 @@
 //! when no earlier index carries an equal key — a quadratic condition stated
 //! over the input itself, not derived from any membership structure.
 //!
-//! `least_indices` states the specification, whose five clauses
-//! `least_indices_position`, `least_indices_ordered_distinct`, and
-//! `least_indices_covers` derive and `contract_ok` collects. Collecting a
-//! contract is not the same as carrying one through a walk: the invariant is
-//! `state_ok`, and `contract_ok` is only the end-of-walk consequence
-//! `state_ok_contract` reads off it.
-//! `model_seen`/`model_retained` restate the algorithm as a left-to-right
-//! recursion whose `_contains` and `_is_least` lemmas carry the induction
-//! obligation: at processed index `i` the seen set is exactly the prefix's
-//! keys, and the retained sequence exactly that prefix's least occurrences in
-//! increasing order. `runtime_run` is the walk carrying `state_ok` as its
-//! invariant, so each append-or-skip branch is a proved transition, and
-//! `runtime_retention_matches_spec` ties the runtime's membership test to the
-//! specification's retention predicate.
-//!
-//! `runtime_run` is a `proof fn`: it returns no retained sequence and builds no
-//! collection. Its `retained` argument is the abstract sequence the invariant
-//! relates, and the function's only product is the proof that the clauses hold.
-//! The runtime's own output is what `stable_deduplicate` returns at run time,
-//! and the connection between the two is the structural correspondence the
-//! oracle checks, not anything Verus decides.
+//! `least_indices` states the specification, whose five clauses the three
+//! `least_indices_*` lemmas derive and `contract_ok` collects. `state_ok` is
+//! the carried invariant; `contract_ok` is only the end-of-walk consequence
+//! `state_ok_contract` reads off it, so collecting a contract is not carrying
+//! one through a walk. `model_seen`/`model_retained` restate the algorithm
+//! recursively, and `runtime_retention_matches_spec` ties the runtime's
+//! membership test to the retention predicate. `runtime_run` is the `proof fn`
+//! walk carrying `state_ok`: it returns no retained sequence and builds no
+//! collection, its only product being that the clauses hold. The runtime's
+//! output is `stable_deduplicate`'s, connected to the model by the structural
+//! correspondence the oracle checks, not by Verus.
 //!
 //! The model's keys are an abstract sort, the runtime's `CanonicalKey` byte
 //! strings: nothing here proves the template-to-key conversion, `HashSet`'s
 //! internals, or the production adapter. `Seq<u64>` is a stand-in whose only
-//! property this file uses is decidable equality, and it is not a genuinely
-//! unrestricted abstract key type: a theorem over arbitrary byte-key sequences
-//! would take an arbitrary key type, or supply a formal abstraction argument.
-//! What is unbounded here is the sequence length, not the key domain — the
-//! induction runs over every `keys` length, while `u64` caps the key domain at
-//! 2^64 values. The independent quadratic oracle in
+//! used property is decidable equality, not a genuinely unrestricted abstract
+//! key type: a theorem over arbitrary byte-key sequences would take an
+//! arbitrary key type, or supply a formal abstraction argument. Sequence
+//! length is what is unbounded here, not the key domain — the induction runs
+//! over every `keys` length, while `u64` caps the key domain at 2^64 values.
+//! The independent quadratic oracle in
 //! `src/stdlib/canonical_value/tests/oracle.rs` checks the implementation
 //! against this model on real values. No `assume`, `admit`, external body, or
 //! axiom beyond `vstd`'s own appears below.
@@ -71,8 +61,7 @@ spec fn least_indices(keys: Seq<u64>, processed: int) -> Seq<int>
 
 /// The keys the kernel has seen after processing the first `processed` indices.
 ///
-/// Membership of the result is characterised by `model_seen_contains`, not by
-/// this recursion's shape.
+/// `model_seen_contains` characterises its membership, not this recursion.
 spec fn model_seen(keys: Seq<u64>, processed: int) -> Set<u64>
     decreases processed,
 {
@@ -88,7 +77,7 @@ spec fn model_seen(keys: Seq<u64>, processed: int) -> Set<u64>
 /// The source indices the kernel retains after processing `processed` indices.
 ///
 /// An index is appended exactly when the membership test reports its key as
-/// new: the algorithm's append-or-skip branch and nothing else.
+/// new: the append-or-skip branch and nothing else.
 spec fn model_retained(keys: Seq<u64>, processed: int) -> Seq<int>
     decreases processed,
 {
@@ -103,9 +92,7 @@ spec fn model_retained(keys: Seq<u64>, processed: int) -> Seq<int>
 
 /// Prove the kernel's seen-keys are exactly the keys of the processed prefix.
 ///
-/// The first half of the induction obligation: at processed index `i` the
-/// accumulated set has a member exactly when some `K[j]` with `0 <= j < i`
-/// equals that key.
+/// The first half of the induction obligation.
 proof fn model_seen_contains(keys: Seq<u64>, processed: int, key: u64)
     requires 0 <= processed,
     ensures model_seen(keys, processed).contains(key) <==> appears_before(keys, processed, key),
@@ -131,8 +118,7 @@ proof fn model_seen_contains(keys: Seq<u64>, processed: int, key: u64)
 
 /// Prove the kernel retains exactly the least occurrences of the prefix.
 ///
-/// The second half of the induction obligation: the retained sequence is
-/// `least_indices`, that prefix's least occurrences in increasing order.
+/// The second half of the induction obligation.
 proof fn model_retained_is_least(keys: Seq<u64>, processed: int)
     requires 0 <= processed <= keys.len(),
     ensures model_retained(keys, processed) == least_indices(keys, processed),

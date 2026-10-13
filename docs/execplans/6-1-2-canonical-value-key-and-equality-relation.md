@@ -465,22 +465,25 @@ under way; the invocation naming this plan supplies execution approval.
   proof module and the plan's proof-boundary prose; `contract_ok` is the
   end-of-walk consequence `state_ok_contract` derives, not a carried-through
   invariant. (9) `runtime_run` described as a `proof fn` walk returning no
-  retained sequence, and identity claims limited to source-index identity
-  rather than Rust reference identity. (10) `Seq<u64>` qualified as a
-  finite-key domain, not a genuinely unrestricted abstract sort, with sequence
-  length named as the unbounded dimension. **The `now()` case is now mandatory
-  rather than skipped:** `now_object()` injects `fixed_clock`, so the fixture
-  never reads the host clock and cannot vary with *when* the suite runs, and it
-  returns `Result` so a host that cannot build it reports an error instead of
-  leaving the assertion quietly untested. Focused battery: 36/36 green
-  (`cargo nextest run --lib canonical_value`).
+  retained sequence, with the proof's identity claim limited to abstract
+  source-index retention — the runtime tests are credited with checking
+  source-index selection, output order, and Rust reference identity
+  (`std::ptr::eq`), none of which the proof establishes. (10) `Seq<u64>`
+  qualified as a finite-key domain, not a genuinely unrestricted abstract sort,
+  with sequence length named as the unbounded dimension. **The `now()` case is
+  now mandatory rather than skipped:** `now_object()` injects `fixed_clock`, so
+  the fixture never reads the host clock and cannot vary with *when* the suite
+  runs, and it returns `Result` so a host that cannot build it reports an error
+  instead of leaving the assertion quietly untested. Focused battery: 36/36
+  green (`cargo nextest run --lib canonical_value`).
 - [x] (2026-10-13) **EP-M3 artefacts written; the mandated Verus command is
   blocked by the pinned `prover-tools` revision, not by this proof.** Three
-  artefacts landed uncommitted: `verus/canonical_value/main.rs` (398 lines),
-  the independent quadratic first-index oracle in
-  `src/stdlib/canonical_value/tests/oracle.rs` (379 lines) with its
-  `mod oracle;` wiring and rewritten module doc in `tests/mod.rs`, and the
-  `"verus"` entry widening `COMPILED_SOURCE_ROOTS` to `[&str; 7]` in
+  artefacts landed uncommitted: `verus/canonical_value/main.rs` (398 lines as
+  committed in `14f98156`; 400 after the repair below), the independent
+  quadratic first-index oracle in `src/stdlib/canonical_value/tests/oracle.rs`
+  (375 lines as committed; 266 after the repair below) with its `mod oracle;`
+  wiring and rewritten module doc in `tests/mod.rs`, and the `"verus"` entry
+  widening `COMPILED_SOURCE_ROOTS` to `[&str; 7]` in
   `tests/env_access_suppressions/roots.rs`. `stable_deduplicate` gained no
   edit; the two helper visibilities it needed (`law_runner`,
   `generated_values`) were widened to `pub(super)` in `properties.rs`, whose
@@ -554,6 +557,72 @@ under way; the invocation naming this plan supplies execution approval.
   quadratic oracle; and no public helper exposes a hash-map iteration order,
   because `stable_deduplicate` uses its `HashSet` for membership alone
   (`seen.insert(key)`) and builds output order by iterating the input slice.
+- [x] (2026-10-13) **Both follow-ups answered; the completeness assessment is
+  fully clear and one proof wording item was raised and repaired.** The
+  completeness follow-up (`6156217658`) discharged all four findings against
+  `625bc4e7` with no remaining in-scope gap. The proof follow-up (`6156261131`)
+  discharged the three wording corrections and both runtime-evidence changes,
+  and retained one documentation correction: the plan claimed the runtime tests
+  check source-index identity "and not Rust reference identity", which is false
+  — `check_against_the_oracle`
+  (`src/stdlib/canonical_value/tests/oracle.rs:68`) asserts `std::ptr::eq`
+  precisely so a reconstruction of an equal value fails. The claim had been
+  written as if the proof's boundary bounded the tests as well; the two are now
+  stated separately, in EP-V3 and in the Progress entry above. Both assessment
+  replies retained the open `make verus` invocation item as an invocation
+  issue, which stays open.
+- [x] (2026-10-14) **Final gate batch on the trimmed tree: nine of ten green,
+  and `make test` red on a timeout that this candidate cannot cause.** The
+  batch ran against content hash `24806bed…`, re-verified byte-identical before
+  and after, so no gate wrote to the tree. Green: `check-fmt`
+  (`181 files left unchanged`), `lint` (all five substages observed, no abort),
+  `doc-coverage` (**98.88%** against 80%), `markdownlint`
+  (`0 issues in 0 files`), `spelling`, `nixie`, `test-workflow-contracts`
+  (three stages: `cv005-contracts` clean, **1264 passed / 3 skipped**, then
+  **27 passed**), `test-documentation-contracts` (**14 passed / 42 skipped**),
+  and `doctest` run separately (**95 + 2 + 39 = 136 passed**, 32 ignored, 0
+  failed) because the composite's first half aborted it. Red: `make test` —
+  `TIMEOUT [300.041s]` on
+  `packaging_smoke_tests::packaged_manifest_retains_build_script_sources`,
+  `3951 tests run: 3950 passed (1 slow), 1 timed out, 6 skipped`, aborting at
+  `Makefile:229` with `Error 100`: **one timeout, zero failures**. This is the
+  third occurrence of the same environmental phenomenon this plan has already
+  diagnosed, and the resolution is already recorded above: `1a5fc57f` (PR #906)
+  gives this test a 600 s allowance on `main`, and
+  `git merge-base --is-ancestor 1a5fc57f HEAD` returns not-an-ancestor, so this
+  branch carries the 300 s profile default. **The cap is a property of the
+  base, not of this candidate.** Two supporting measurements and three
+  corrections: the timed-out test appears in no branch diff; **CI passed it on
+  this exact head** (`build-test` job `115562539629`, run `38474737483`,
+  `head_sha` = `625bc4e7…`, `PASS [194.258s]`, `3967 tests run: 3967 passed`);
+  and the sccache line count (573 here) does not discriminate a verdict, per
+  this plan's own earlier correction. Corrections to the figures first quoted
+  for this batch, each measured false and retracted: (a) the host load averages
+  39.56/38.82/34.07 and "41 competing processes" were sampled **after** the run
+  ended, not during it, and must not be stated as load-during-the-run; the
+  honest bracketing samples are 50.97/28.81/24.84 before and 31.94/40.82/37.81
+  after. (b) `test-workflow-contracts` is **not** "27 passed"; it is a
+  three-stage target whose middle stage reports 1264. (c)
+  `.config/nextest.toml:100`'s 600 s override belongs to the Kani **mutation**
+  compile gate and does not match this test — at this base only line 27's 300 s
+  governs it, which is why the timeout recurs. `make typecheck` was not in the
+  applicable set and was not run: unrun, not a pass. The verdict red is a
+  source-tree fact only if the tree changes; this entry is the last edit, and
+  it invalidates `24806bed…` for the ten gate verdicts above, which describe
+  the **pre-oracle-revision** content of this file and the unchanged kernel.
+- [x] (2026-10-14) **The kernel is re-verified directly, not through
+  `make verus`, whose pin is separately broken.** Two independent runs of
+  `.verus/0.2026.10.04.426d8b0/verus/verus verus/canonical_value/main.rs` on
+  the trimmed file both report `verification results:: 16 verified, 0 errors`
+  at exit 0, and the focused battery `cargo nextest run --lib canonical_value`
+  reports **36 tests run: 36 passed, 1471 skipped** — the census the PR
+  description quotes. The trim removed prose only, and every claim the hosted
+  proof assessment discharged is still stated: the induction obligations remain
+  **verbatim** on the lemmas that establish them (`model_seen_contains`: "Prove
+  the kernel's seen-keys are exactly the keys of the processed prefix";
+  `model_retained_is_least`: "Prove the kernel retains exactly the least
+  occurrences of the prefix"), and each lemma keeps a second line naming which
+  half of the obligation it carries.
 
 ## Surprises & discoveries
 
@@ -918,6 +987,22 @@ under way; the invocation naming this plan supplies execution approval.
   Impact: the prose was repaired in the proof file and at the plan's two
   proof-claim sites; the kernel needed no change and its
   `16 verified, 0 errors` result stands.
+- **Surprise (measured 2026-10-13, self-inflicted): a doc-only repair pushed
+  the proof file past the 400-line cap and nothing reported it.**
+  `verus/canonical_value/main.rs` was committed at 398 lines in `14f98156`
+  precisely to clear the cap; the repair in `625bc4e7` added 16 lines of module
+  prose and landed it at 414, in a file whose own Constraints section says
+  "keep Rust files under 400 lines". No gate fired, and none could count it:
+  `module_max_lines` is not configured in either `dylint.toml`, and `verus/` is
+  not a Cargo workspace member. `verus/` is not wholly unobserved — it is a
+  `COMPILED_SOURCE_ROOTS` entry (`tests/env_access_suppressions/roots.rs:45`),
+  so the suppression walk reads the file, for inner attributes rather than
+  length. Its size is observable only by measuring it. Impact: the cap is
+  unenforced for `verus/`, so a future edit there can breach it silently; the
+  file is trimmed back to exactly 400, comment-only, with the comment-stripped
+  body byte-identical to `625bc4e7`'s (`sha256 bc6551f5…`) and
+  `16 verified, 0 errors` reproduced on the trimmed file, so the assessed proof
+  surface is unchanged.
 
 ## Decision log
 
@@ -1069,6 +1154,33 @@ under way; the invocation naming this plan supplies execution approval.
   as a known limitation in the PR body and as an open item in this plan. The
   escalation of *whether* to bump it is with the user and is not decided here.
   Date/Author: 2026-10-13, implementation.
+- Decision: the identity sentence in this plan's EP-V3 is corrected to say the
+  runtime tests check Rust reference identity (`std::ptr::eq`), not that they
+  check only source-index identity. Rationale: the earlier wording asserted the
+  tests *do not* check reference identity, which is false —
+  `check_against_the_oracle` (`src/stdlib/canonical_value/tests/oracle.rs:68`)
+  asserts it explicitly so a reconstruction of an equal value fails. The error
+  came from writing the proof's boundary as if it bounded the tests too: the
+  proof establishes abstract source-index retention and no form of reference
+  identity, which is a claim about the model, while the tests check both
+  source-index selection and reference identity on the real runtime. The
+  correction separates the two rather than narrowing either. Date/Author:
+  2026-10-13, implementation.
+- Decision: the 400-line cap is honoured for `verus/canonical_value/main.rs` by
+  trimming module and item prose, not by splitting the kernel or by claiming an
+  exemption. Rationale: the repair in `625bc4e7` took the file from 398 to 414
+  lines, and the plan's own Constraints require every Rust file to stay under
+  400. No gate counts lines for `verus/`: `module_max_lines` is unconfigured
+  and the directory is not a Cargo workspace member, so trimming is the only
+  remedy that restores the invariant where it was broken, rather than
+  relabelling the breach. A split was rejected because
+  `docs/formal-verification-methods-in-netsuke.md` documents a single-file
+  kernel and `make verus` runs one proof file; adding a second file would
+  change the invoked artefact while the assessment verdict covers this one. The
+  trim is comment-only — the comment-stripped body hashes identically before
+  and after — so no proved statement, lemma, or clause moved, and the
+  `16 verified, 0 errors` result still describes the file. Date/Author:
+  2026-10-13, implementation.
 
 ## Outcomes & retrospective
 
@@ -1083,10 +1195,16 @@ fixed one-snapshot admission and numeric semantics, and required both
 formal-policy documents to be updated. The two hosted assessments then found
 what the local review could not: a sampling-dependent coverage assertion and a
 two-premise transitivity chain that never asserted its conclusion. Both were
-repaired, along with seven missing witnesses and the proof prose that named the
-wrong invariant, so the "proved" claim above is now bounded by the
-`state_ok`/`contract_ok` distinction and the finite-key-domain qualification
-recorded below.
+repaired, along with seven missing witnesses, the proof prose that named the
+wrong invariant, and a sentence that denied the runtime tests check Rust
+reference identity — which they do, by `std::ptr::eq` — so the "proved" claim
+above is now bounded by the `state_ok`/`contract_ok` distinction and the
+finite-key-domain qualification recorded below. Repairing the proof prose then
+took `verus/canonical_value/main.rs` from 398 to 414 lines, past the 400-line
+cap its own Constraints section sets; no gate counts lines in that directory,
+so the breach was invisible until measured, and the file is trimmed back to
+exactly 400 by comment-only edits that leave the comment-stripped body
+byte-identical and the `16 verified, 0 errors` result reproduced.
 
 Closeout record, as this section required before the roadmap tick:
 
@@ -1288,10 +1406,14 @@ production output's identity: `runtime_run` walks the abstract `keys`, `seen`,
 and `retained` values and is a `proof fn` returning nothing, so the runtime's
 own sequence is connected to the model by the structural correspondence the
 oracle checks, not by the proof. The implementation must mirror the model's
-append-or-skip algorithm, while runtime tests compare returned source-index
-identity with the independent source-index oracle. That identity is
-source-index identity — position in the input slice — and not Rust reference
-identity, which the proof does not address at all.
+append-or-skip algorithm, while runtime tests compare the returned references
+with the original input elements at the independent oracle's source indices.
+Those tests check source-index selection and output order on the real runtime,
+and they check Rust reference identity as well: `check_against_the_oracle`
+asserts `std::ptr::eq`, so a reconstruction of an equal value fails there even
+though it would satisfy a key comparison. The proof establishes abstract
+source-index retention for the model and addresses no form of reference
+identity at all.
 
 At processed index `i`, establish `seen = {K[j] | 0 <= j < i}` and that
 retained indices are exactly the least occurrences in that prefix, in
@@ -1529,7 +1651,9 @@ Remaining: stable dedup and proof. Compatibility: none.
   reached 854 lines, 2.1x the 400-line `module_max_lines` cap, and the sibling
   battery was 432. A census settled the shape — of the nine `.rs` files over
   400 lines in this repo, all nine are `tests/*.rs` crate roots and no nested
-  file exceeds the cap — so the battery was split by *kind of judgement* into
+  file exceeds the cap — a census that held at the time and holds again after
+  the EP-M3 trim below, though the proof file sat at 414 in between without any
+  gate reporting it — so the battery was split by *kind of judgement* into
   `mod.rs` (fixtures and helpers), `boundaries.rs` (refusals), `parity.rs`
   (canonicalizer parity), `properties.rs` (generated inputs), and `examples.rs`
   (handwritten inputs). The 19 cases are unchanged, verified by identical
