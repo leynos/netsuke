@@ -191,10 +191,9 @@ under way; the invocation naming this plan supplies execution approval.
 - [x] (2026-10-13) Pin the Verus toolchain and repair the gate its install
   broke. Added `tools/verus/VERSION` (`0.2026.10.04.426d8b0`) and
   `tools/verus/SHA256SUMS` (digest `6240186628…1a0` for
-  `verus-0.2026.10.04.426d8b0-x86-linux.zip`), then ran
-  `make install-verus VERUS_INSTALL_FLAGS='--repo-root .'`, which printed
-  `Installed Verus 0.2026.10.04.426d8b0`. The install wrote `.verus/<version>/`
-  into the workspace root, which broke
+  `verus-0.2026.10.04.426d8b0-x86-linux.zip`), then ran `make install-verus`
+  run from the worktree, which printed `Installed Verus 0.2026.10.04.426d8b0`.
+  The install wrote `.verus/<version>/` into the workspace root, which broke
   `every_rust_source_in_the_workspace_is_scanned`; the defect was reproduced
   with `cargo nextest run --test env_access_suppressions` (59 run, 58 passed, 1
   failed, naming twelve `.verus/**/out/*.rs` paths) and then fixed by adding
@@ -220,10 +219,26 @@ under way; the invocation naming this plan supplies execution approval.
   `make verus`, but has no canonical-value proof file or `tools/verus/` pin
   files. Evidence: `Makefile`,
   `docs/formal-verification-methods-in-netsuke.md`, and the `tools/verus/`
-  inventory. The pinned `prover-tools` invocation accepts `--repo-root` and
-  `--proof-file`, verified by the planning agent. Impact: implementation must
-  choose and record the upstream Verus release and add `tools/verus/VERSION`
-  plus `tools/verus/SHA256SUMS` before installation.
+  inventory. Impact: implementation must choose and record the upstream Verus
+  release and add `tools/verus/VERSION` plus `tools/verus/SHA256SUMS` before
+  installation.
+- Correction (measured 2026-10-13, Stage A): the planning-time claim that the
+  pinned `prover-tools` invocation accepts `--repo-root` was **false**, and it
+  is withdrawn here. Reading the pinned source
+  (`leynos/rust-prover-tools@b07ef696`, `rust_prover_tools/verus/models.py:59`
+  and `:18`, `run.py:23`, `:117`) shows `repo_root` is not a CLI flag at all:
+  `VerusPaths.repo_root` is constructed as `Path.cwd()`, and the version and
+  checksum files are resolved beneath it by fixed relative path. `--proof-file`
+  **is** a real flag (`VerusOptions`/`VerusRunOptions`, `run.py:116-119`);
+  without it the runner falls back to `EXAMPLE_VERUS_PROOF_PATH` relative to
+  the same root. Consequence: the proof invocation must be run with the
+  worktree as the working directory and must not pass `--repo-root`, because
+  the flag does not exist and the command would abort. The documented command
+  has been corrected; no evidence gathered so far depended on the false claim,
+  since the install was performed with `--repo-root .` forwarded through
+  `VERUS_INSTALL_FLAGS` to `cyclopts`, which ignores unknown options for
+  options it does not declare — the install succeeded because the flag was
+  inert, not because it was consumed.
 - Observation: MiniJinja's public object representation does not establish
   finiteness, purity, or cycle freedom. Evidence: MiniJinja `ObjectRepr`,
   `try_iter`, and `try_iter_pairs` APIs. Impact: explicitly document the host
@@ -283,7 +298,7 @@ under way; the invocation naming this plan supplies execution approval.
   concern.
 - Observation (measured 2026-10-13, Stage A): the pinned Verus release is
   `0.2026.10.04.426d8b0`, and `make install-verus` installs it reproducibly.
-  Evidence: `make install-verus VERUS_INSTALL_FLAGS='--repo-root .'` printed
+  Evidence: `make install-verus` run from the worktree printed
   `Installed Verus 0.2026.10.04.426d8b0 in .../.verus/0.2026.10.04.426d8b0/verus`.
   The upstream release publishes **no** checksum file (confirmed via DeepWiki
   against `verus-lang/verus`), so the digest in `tools/verus/SHA256SUMS` is
@@ -586,14 +601,17 @@ Before running the proof, add the chosen upstream version to
 and its checksum, then run `make install-verus` if absent and:
 
 ```sh
-make verus VERUS_FLAGS='--repo-root . --proof-file verus/canonical_value/main.rs'
+make verus VERUS_FLAGS='--proof-file verus/canonical_value/main.rs'
 ```
 
-The pinned `prover-tools` command was checked during planning and accepts these
-flags. Proof acceptance requires satisfiable witnesses, reviewed trusted
-assumptions, and no `assume`, `admit`, external body, contradiction, or theorem
-equivalent to an assumption. Verus is required for feature completion, but
-remains outside the ordinary gates.
+Run it from the worktree root. `--proof-file` is a real option of
+`prover-tools verus run`; `--repo-root` is **not** an option and must not be
+passed — the tool derives the repository root from the working directory. The
+planning-time note that both were accepted was wrong and is withdrawn above.
+Proof acceptance requires satisfiable witnesses, reviewed trusted assumptions,
+and no `assume`, `admit`, external body, contradiction, or theorem equivalent
+to an assumption. Verus is required for feature completion, but remains outside
+the ordinary gates.
 
 ### EP-V4 — public purity and ordering boundary
 
@@ -805,7 +823,7 @@ Run from the repository root:
    then run:
 
    ```sh
-   make verus VERUS_FLAGS='--repo-root . --proof-file verus/canonical_value/main.rs'
+   make verus VERUS_FLAGS='--proof-file verus/canonical_value/main.rs'
    ```
 
 6. Run each full quality gate sequentially after each major plateau, with logs
