@@ -864,6 +864,19 @@ under way; the invocation naming this plan supplies execution approval.
   the set now includes the target unconditionally instead of on a
   change-detection rule that has already been shown to under-approximate.
   Date/Author: 2026-10-13, implementation.
+- Decision: EP-M2 is closed at revision `cdea46aa` and the PR lifecycle passes
+  to the `pr-babysitting` skill, which owns hosted CI, the two hosted
+  CodeRabbit assessments, readiness, rebasing, and merge. This plan keeps
+  ownership of implementation, milestone validation, and plan maintenance, and
+  will supply a bounded repair if that skill requests one. Rationale: the
+  milestone's own local obligations are discharged — eight applicable targets
+  green on a frozen binding, plus the Markdown-sensitive subset re-run at the
+  final revision — and holding the branch here would not make hosted CI green
+  any sooner. The one substantive item the receiving skill should watch is that
+  CI has never yet seen the Kani proof-scope repair (`1c113e8f`), because that
+  commit was unpushed until this close-out; the failing step to watch is
+  "Workflow contract tests" in the CI job. Date/Author: 2026-10-13,
+  implementation.
 
 ## Outcomes & retrospective
 
