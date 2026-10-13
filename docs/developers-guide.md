@@ -4477,6 +4477,12 @@ governs the non-doctest pass only, and deliberately stays small:
 - **A conservative slow timeout** (warn after 60s, terminate after five
   warning periods) so a hung test surfaces without failing the legitimately
   slow documentation end-to-end suites, which shell out to real Ninja.
+- **A targeted cold-package allowance.**
+  `packaged_manifest_retains_build_script_sources` runs
+  `cargo publish --dry-run` into a fresh target directory. Its measured runtime
+  approaches the default 300s cap before shared-cache and compiler-queue
+  delays, so this test alone receives ten warning periods (600s). This does not
+  add retries or widen the allowance for unrelated tests.
 - **One serialized child-Cargo group.** Tests that spawn their own Cargo build
   join `nested-cargo-builds`, whose `max-threads = 1` stops four Nextest
   workers from each starting a four-job build on four vCPUs. Membership is

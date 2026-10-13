@@ -6,7 +6,7 @@ Accepted.
 
 ## Date
 
-2026-10-11
+2026-09-17
 
 ## Context and problem statement
 
@@ -37,10 +37,9 @@ unconditional.
 ## Decision
 
 Add `manifest::EnvAccessPolicy`, an exact-name allow and block policy for the
-manifest `env()` port and adopt it as the sole manifest environment grant
-surface. Quarantine `env_allow_var` from a project-scoped primary file and all
-occurrences reached through an automatically discovered project root before
-generic merging; keep project fetch-policy requests primary-file-scoped.
+manifest `env()` port. Adopt it as the sole manifest environment grant surface,
+and treat only the primary project `.netsuke.toml` as a project policy request
+before generic configuration merging.
 
 The policy itself:
 
@@ -61,16 +60,14 @@ The policy itself:
 
 Trust handling for the *grants*, following ADR-021's reconciliation shape:
 
-- Automatic discovery removes `env_allow_var` from the primary project file
-  and every file reached through that root's `extends` chain before generic
-  merging, so a checkout-controlled ancestor cannot widen the operator's
-  effective allowlist or activate default-deny.
+- Discovery preserves primary-file provenance and removes that layer's
+  `env_allow_var` field from the generic layer, so project allow entries cannot
+  widen the operator's effective allowlist or activate default-deny.
 - Project `env_block_var` entries stay in the ordinary merge and remain
   cumulative, so a lower-trust project can add a restriction but cannot remove
   one.
-- Operator chains retain their grants. An explicitly selected ancestor also
-  retains operator authority; a selected primary project file remains subject
-  to primary-file quarantine.
+- Files loaded through `extends` remain ordinary file layers by design. Only
+  the exact primary project path is quarantined.
 
 ### Addendum: preserve project-chain provenance (2026-10-11)
 

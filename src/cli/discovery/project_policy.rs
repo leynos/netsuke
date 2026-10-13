@@ -14,6 +14,7 @@ use std::sync::Arc;
 use super::super::validation::validation_error;
 use super::json::json_from_value;
 use super::paths::{PathNormalizer, comparison_key, project_scope_file};
+use super::trace::EnvGrantQuarantineTrace;
 use super::{ProjectFetchPolicyRequest, ProjectManifestBudgetRequest};
 
 /// Identify whether this occurrence is the primary project configuration.
@@ -116,6 +117,8 @@ pub(super) struct ResolvedFileLayers {
     pub(super) project_request: Option<ProjectFetchPolicyRequest>,
     /// Quarantined manifest-budget restrictions from project layers.
     pub(super) project_budget_request: ProjectManifestBudgetRequest,
+    /// Bounded summary of environment grants removed from project occurrences.
+    pub(super) env_grant_quarantine: EnvGrantQuarantineTrace,
     /// Original typed errors that prevent the generic merge from succeeding.
     pub(super) errors: Vec<Arc<OrthoError>>,
 }
@@ -141,7 +144,7 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
             resolved.json_preference = json;
         }
         if scope == FileScope::Project || project_chain {
-            quarantine_env_grants(&mut value, &mut resolved);
+            quarantine_env_grants(&mut value, project_chain, &mut resolved);
         }
         if project_chain {
             quarantine_manifest_budget(&mut value, &mut resolved);
@@ -168,14 +171,22 @@ fn quarantine_manifest_budget(value: &mut serde_json::Value, resolved: &mut Reso
 }
 
 /// Validate and remove environment grants from one untrusted occurrence.
-fn quarantine_env_grants(value: &mut serde_json::Value, resolved: &mut ResolvedFileLayers) {
+fn quarantine_env_grants(
+    value: &mut serde_json::Value,
+    project_chain: bool,
+    resolved: &mut ResolvedFileLayers,
+) {
     let Some(fields) = value.as_object_mut() else {
         return;
     };
     match parse_project_policy_field::<Vec<String>>(fields, "env_allow_var") {
-        Ok(_) => {
+        Ok(Some(grants)) => {
+            resolved
+                .env_grant_quarantine
+                .record(project_chain, grants.len());
             fields.remove("env_allow_var");
         }
+        Ok(None) => {}
         Err(error) => resolved.errors.push(error),
     }
 }
@@ -290,3 +301,7 @@ where
 #[cfg(test)]
 #[path = "project_policy/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "project_policy/properties.rs"]
+mod properties;

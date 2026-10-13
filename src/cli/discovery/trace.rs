@@ -13,6 +13,88 @@ use super::diagnostics::{
 use super::layers::ProjectScopeTrace;
 use super::selector::ConfigPathResolution;
 
+/// Track only the authority category and coarse count of removed grants.
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct EnvGrantQuarantineTrace {
+    /// Grants removed from an explicitly selected project primary layer.
+    project_primary: Option<GrantCountBucket>,
+    /// Grants removed from occurrences reached through automatic project discovery.
+    project_chain: Option<GrantCountBucket>,
+}
+
+impl EnvGrantQuarantineTrace {
+    /// Add one occurrence's grant count to its bounded provenance bucket.
+    pub(super) fn record(&mut self, project_chain: bool, grant_count: usize) {
+        let bucket = if project_chain {
+            &mut self.project_chain
+        } else {
+            &mut self.project_primary
+        };
+        *bucket = Some(bucket.map_or_else(
+            || GrantCountBucket::from_count(grant_count),
+            |current| current.add(grant_count),
+        ));
+    }
+
+    /// Emit one deferred event for each project provenance category present.
+    pub(super) fn emit(self) {
+        if let Some(grant_count) = self.project_primary {
+            tracing::debug!(
+                authority = "project_primary",
+                grant_count = grant_count.label(),
+                "quarantined project environment grants"
+            );
+        }
+        if let Some(grant_count) = self.project_chain {
+            tracing::debug!(
+                authority = "project_chain",
+                grant_count = grant_count.label(),
+                "quarantined project environment grants"
+            );
+        }
+    }
+}
+
+/// Bound removed-grant telemetry without retaining names or exact counts.
+#[derive(Clone, Copy, Debug)]
+enum GrantCountBucket {
+    /// A valid but empty grant list was removed.
+    Zero,
+    /// One grant was removed.
+    One,
+    /// Two or more grants were removed.
+    Multiple,
+}
+
+impl GrantCountBucket {
+    /// Map a grant count into a closed, bounded category.
+    const fn from_count(count: usize) -> Self {
+        match count {
+            0 => Self::Zero,
+            1 => Self::One,
+            _ => Self::Multiple,
+        }
+    }
+
+    /// Combine another occurrence's grant count without retaining exact totals.
+    const fn add(self, count: usize) -> Self {
+        match (self, count) {
+            (Self::Multiple, _) | (_, 2..) | (Self::One, 1) => Self::Multiple,
+            (Self::Zero, 0) => Self::Zero,
+            (Self::Zero, 1) | (Self::One, 0) => Self::One,
+        }
+    }
+
+    /// Return this bucket's stable telemetry label.
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Zero => "zero",
+            Self::One => "one",
+            Self::Multiple => "multiple",
+        }
+    }
+}
+
 /// Bounded selector and layer-branch diagnostics retained after discovery.
 #[derive(Clone, Debug)]
 pub(super) struct DiscoveryTrace {
@@ -116,23 +198,33 @@ pub(super) struct DiscoveryDiagnostics {
     trace: DiscoveryTrace,
     /// Warning to emit on replay when an explicit config load failed.
     load_warning: Option<ConfigLoadWarning>,
+    /// Bounded environment-grant quarantine summary retained from layer resolution.
+    env_grant_quarantine: EnvGrantQuarantineTrace,
 }
 
 impl DiscoveryDiagnostics {
     /// Combine bounded discovery events and any explicit-load warning.
-    pub(super) const fn new(
-        trace: DiscoveryTrace,
-        load_warning: Option<ConfigLoadWarning>,
-    ) -> Self {
+    pub(super) fn new(trace: DiscoveryTrace, load_warning: Option<ConfigLoadWarning>) -> Self {
         Self {
             trace,
             load_warning,
+            env_grant_quarantine: EnvGrantQuarantineTrace::default(),
         }
+    }
+
+    /// Retain bounded environment-grant quarantine telemetry for normal replay.
+    pub(super) const fn with_env_grant_quarantine(
+        mut self,
+        env_grant_quarantine: EnvGrantQuarantineTrace,
+    ) -> Self {
+        self.env_grant_quarantine = env_grant_quarantine;
+        self
     }
 
     /// Emit deferred diagnostics without querying the environment or filesystem.
     pub(super) fn emit(&self) {
         self.trace.emit();
+        self.env_grant_quarantine.emit();
         if let Some(warning) = &self.load_warning {
             warning.emit();
         }
