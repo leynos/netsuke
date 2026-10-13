@@ -62,8 +62,8 @@ use crate::ir::BuildEdge;
 use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
 use crate::ninja_gen::{
-    NinjaGenError, RecipeShell, graph_requires_dyndep, join, reject_unsupported_path_characters,
-    write_action_rules,
+    NinjaGenError, RecipeShell, graph_requires_dyndep, join, ordered_default_targets,
+    reject_unsupported_path_characters, write_action_rules,
 };
 use crate::recipe_shell::BashExecutable;
 use std::fmt::Write as _;
@@ -151,10 +151,9 @@ fn generate_bundle_inner(
     let localizer = localization::localizer();
     let dyndep_files = render_edges(graph, &mut out, localizer.as_ref())?;
 
-    if !graph.default_targets.is_empty() {
-        let mut defs = graph.default_targets.clone();
-        defs.sort();
-        writeln!(out, "default {}", join(&defs))?;
+    let defaults = ordered_default_targets(graph);
+    if !defaults.is_empty() {
+        writeln!(out, "default {}", join(&defaults))?;
     }
 
     Ok(GeneratedNinja {

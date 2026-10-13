@@ -10,7 +10,7 @@ use crate::ir::{BuildEdge, BuildGraph};
 use crate::ninja_gen::edge_metadata;
 use crate::ninja_gen::escape::NinjaValue;
 use crate::ninja_gen::{
-    DisplayEdge, NinjaGenError, edge_requires_gates, path_key, validated_ninja_path,
+    DisplayEdge, NinjaGenError, edge_requires_gates, ordered_edges, validated_ninja_path,
 };
 use camino::Utf8PathBuf;
 use sha2::{Digest, Sha256};
@@ -42,16 +42,13 @@ pub(super) fn render_edges(
     out: &mut String,
     localizer: &dyn ortho_config::Localizer,
 ) -> Result<Vec<GeneratedDyndep>, NinjaGenError> {
-    let mut edges: Vec<_> = graph.edges().collect();
-    edges.sort_by_key(|edge| path_key(&edge.explicit_outputs));
-
     let mut renderer = EdgeRenderer {
         graph,
         out,
         stages: SerialStages::default(),
         localizer,
     };
-    for edge in edges {
+    for edge in ordered_edges(graph) {
         renderer.render_edge(edge)?;
     }
     Ok(renderer.stages.dyndep_files)
