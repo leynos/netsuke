@@ -242,6 +242,27 @@ under way; the invocation naming this plan supplies execution approval.
   validated by re-running the whole applicable gate set rather than only the
   three that had been red: a subset re-run would leave the four earlier green
   results standing against a revision they no longer describe.
+- [x] (2026-10-13) The EP-M2 milestone CodeRabbit CLI review ran through the
+  scrutineer against the branch-versus-base diff (`coderabbit` 0.9.0, RC=0, 417
+  s, no rate limit) and reported six findings covering five distinct concerns.
+  All five were verified against current source before any repair;
+  `reviewedFiles` matched the branch's 19-path diff exactly.
+- [x] (2026-10-13) Those five concerns were disposed of as follows.
+  **Repaired:** `admit_mapping` cloned the member key only because
+  `&path.with_member(&key)` borrows it after the move, so the path is now built
+  first and the owned key inserted; the machine-local-directory comment said
+  the verifier's install tree was *unpinned* when `make install-verus` requires
+  the version file `aa32c294` added. **Refused, with rationale:** deleting the
+  non-string guard in `sort_members` on the grounds that
+  `refute_non_string_key` already rejects every key that guard would. The guard
+  is load-bearing for a different reason than the finding assumes — the outer
+  check reports the *lowest* non-string kind and is therefore
+  order-independent, while the inner guard reports whichever non-string key
+  sorts first; the two disagree whenever a non-string key is not the first
+  sorted member. **Tightened:** `distinct_count` no longer `.ok()`-filters
+  refusals away (which would have silently shrunk the expected count and
+  weakened the very property it guards), and the BDD order step now asserts the
+  whole retained tail rather than one element of it.
 - [ ] Implement canonical keys/equality and stable deduplication; discharge
   property, BDD, runtime-boundary, and Verus obligations.
 - [ ] Update design and formal-verification guidance, run sequential gates, and
@@ -1061,5 +1082,19 @@ done.
 - 2026-10-13: Final expert readback accepted the revised design. Recorded
   documentation-gate evidence, explicit prefix-state refinement, original-value
   identity assertions, module ownership, and existing BDD fixture/discovery
-  wiring. The plan remains DRAFT; these checks do not establish feature
-  implementation or discharge the future proof obligations.
+  wiring. That readback was design review only; it did not establish feature
+  implementation or discharge the proof obligations, and the status it recorded
+  is superseded by the entry below.
+
+- 2026-10-13: Moved to `IN PROGRESS` with the receipt of execution approval,
+  which the invocation naming this plan supplies. Stage A landed the
+  `CanonicalKey`, `CanonicalValueError`, `canonical_key`, `canonical_eq`, and
+  `stable_deduplicate` APIs with their admission layer and property tests; the
+  milestone CLI review then raised five distinct concerns, all verified against
+  source and disposed of at EP-M2. Two were repaired (`admit_mapping` no longer
+  clones the member key; the machine-local-directory comment says the verifier
+  is *pinned*), one was refused with rationale (the `sort_members` non-string
+  guard is load-bearing for order-independence), and two tightened weak
+  assertions. The remaining obligations — the index-based Verus proof, the
+  independent quadratic oracle, and the documentation delta — are planned as
+  EP-M3 and EP-M4 and are **not** discharged by Stage A.

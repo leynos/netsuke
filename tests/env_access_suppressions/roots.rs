@@ -235,7 +235,7 @@ pub(super) fn is_readable_source(name: &str) -> bool {
 /// That appeal to `.gitignore` is only sound while it holds for every name, so
 /// it is enforced rather than trusted. It did not hold three times: `.netsuke`
 /// is netsuke's own runtime state, `.ruff_cache` a tool cache, and `.verus`
-/// the unpinned verifier's install tree, but all three were skipped while the
+/// the pinned verifier's install tree, but all three were skipped while the
 /// repository's `.gitignore` declined them — every sibling cache is listed, and
 /// they were missed — so a `.rs` file placed under any of them would have been
 /// tracked, compiled, skipped by the walk, and reported by nobody. All three

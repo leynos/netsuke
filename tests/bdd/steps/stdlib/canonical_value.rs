@@ -235,8 +235,14 @@ pub(crate) fn first_values_in_order(world: &TestWorld) -> Result<()> {
         order.len() == indices.len(),
         "every retained index must have a rendered value",
     );
+
+    // The retained map at index 0 renders first, so the surviving strings are
+    // the rendered slice's tail: `zeta` from index 1, then `alpha` from index
+    // 3. Comparing the whole tail, rather than one element of it, is what makes
+    // the order claim mean something.
+    let surviving_strings: Vec<&str> = order.iter().skip(1).map(String::as_str).collect();
     ensure!(
-        order.get(1).is_some_and(|value| value == "zeta"),
+        surviving_strings == ["zeta", "alpha"],
         "the surviving string values must keep their first-appearance order, got {order:?}",
     );
     Ok(())

@@ -107,12 +107,21 @@ fn admit_sequence(value: &Value, path: &SnapshotPath) -> Result<SnapshotNode, Ca
 }
 
 /// Admit a mapping representation into a key-sorted snapshot of snapshots.
+///
+/// The outer [`refute_non_string_key`] is not redundant with the guard inside
+/// [`sort_members`], even though it rejects every key that guard would. It
+/// reports the *lowest* non-string kind rather than the first one encountered,
+/// so the refusal is independent of host enumeration order; the inner guard
+/// exists so `sort_members` refuses a non-string key on its own terms.
 fn admit_mapping(value: &Value, path: &SnapshotPath) -> Result<SnapshotNode, CanonicalValueError> {
     let members = collect_members(value, path)?;
     refute_non_string_key(&members, path)?;
     let mut nodes = BTreeMap::new();
     for (key, item) in sort_members(members, path)? {
-        nodes.insert(key.clone(), admit(&item, &path.with_member(&key))?);
+        // Build the member path first, so the key can be moved into the map
+        // rather than cloned to outlive the borrow.
+        let node = admit(&item, &path.with_member(&key))?;
+        nodes.insert(key, node);
     }
     Ok(SnapshotNode::Map(nodes))
 }

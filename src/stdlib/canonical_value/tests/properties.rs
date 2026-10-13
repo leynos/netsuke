@@ -237,9 +237,11 @@ fn deduplication_keeps_the_first_representative() -> Result<()> {
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             prop_assert!(distinct(&keys), "retained keys must be distinct");
+            let expected =
+                distinct_count(&values).map_err(|error| TestCaseError::fail(error.to_string()))?;
             prop_assert_eq!(
                 retained.len(),
-                distinct_count(&values),
+                expected,
                 "one representative per distinct key"
             );
             Ok(())
@@ -254,12 +256,16 @@ fn distinct(keys: &[CanonicalKey]) -> bool {
     seen.len() == keys.len()
 }
 
-/// Count distinct canonical keys in `values` without deduplicating them.
-fn distinct_count(values: &[Value]) -> usize {
-    values
+/// Count the distinct canonical keys in `values`, refusing any inadmissible value.
+///
+/// A refusal propagates rather than being filtered away. A count that dropped
+/// the values it could not key would compare the deduplicated length against a
+/// shrunken expectation, so a generator that started emitting refusals would
+/// weaken the property below instead of failing it.
+fn distinct_count(values: &[Value]) -> std::result::Result<usize, CanonicalValueError> {
+    let keys = values
         .iter()
-        .filter_map(|value| canonical_key(value).ok())
-        .map(|key| key.as_bytes().to_vec())
-        .collect::<std::collections::HashSet<Vec<u8>>>()
-        .len()
+        .map(canonical_key)
+        .collect::<std::result::Result<std::collections::HashSet<CanonicalKey>, _>>()?;
+    Ok(keys.len())
 }
