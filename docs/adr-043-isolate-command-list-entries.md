@@ -53,7 +53,7 @@ in Netsuke.
 
 - `CommandIsolation` belongs to `Recipe::Command`; rule resolution and
   interpolation preserve it without additional precedence rules.
-- `shared` is omitted from serialisation so legacy action hashes remain
+- `shared` is omitted from serialization so legacy action hashes remain
   unchanged. `isolated` participates in the action hash.
 - POSIX and Bash use a subshell around each existing entry wrapper. PowerShell
   starts a fresh `powershell.exe` for each entry, using the existing UTF-16LE
