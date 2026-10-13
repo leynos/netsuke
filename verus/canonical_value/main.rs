@@ -304,8 +304,7 @@ proof fn state_ok_skip(keys: Seq<u64>, seen: Set<u64>, retained: Seq<int>, proce
 
 /// Prove the append branch — the key is new — preserves the invariant.
 ///
-/// The branch inserts the key and appends the index, the two transitions
-/// `least_indices` makes for a least occurrence.
+/// Inserts the key and appends the index, `least_indices`'s transitions.
 proof fn state_ok_take(keys: Seq<u64>, seen: Set<u64>, retained: Seq<int>, processed: int)
     requires
         state_ok(keys, seen, retained, processed),

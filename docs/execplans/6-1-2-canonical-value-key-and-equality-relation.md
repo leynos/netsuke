@@ -479,11 +479,12 @@ under way; the invocation naming this plan supplies execution approval.
 - [x] (2026-10-13) **EP-M3 artefacts written; the mandated Verus command is
   blocked by the pinned `prover-tools` revision, not by this proof.** Three
   artefacts landed uncommitted: `verus/canonical_value/main.rs` (398 lines as
-  committed in `14f98156`; 400 after the repair below), the independent
-  quadratic first-index oracle in `src/stdlib/canonical_value/tests/oracle.rs`
-  (375 lines as committed; 266 after the repair below) with its `mod oracle;`
-  wiring and rewritten module doc in `tests/mod.rs`, and the `"verus"` entry
-  widening `COMPILED_SOURCE_ROOTS` to `[&str; 7]` in
+  committed in `14f98156`; 414 after the first repair, 399 after the
+  comment-only trim below), the independent quadratic first-index oracle in
+  `src/stdlib/canonical_value/tests/oracle.rs` (375 lines as committed; 266
+  after the repair below) with its `mod oracle;` wiring and rewritten module
+  doc in `tests/mod.rs`, and the `"verus"` entry widening
+  `COMPILED_SOURCE_ROOTS` to `[&str; 7]` in
   `tests/env_access_suppressions/roots.rs`. `stable_deduplicate` gained no
   edit; the two helper visibilities it needed (`law_runner`,
   `generated_values`) were widened to `pub(super)` in `properties.rs`, whose
@@ -591,18 +592,21 @@ under way; the invocation naming this plan supplies execution approval.
   gives this test a 600 s allowance on `main`, and
   `git merge-base --is-ancestor 1a5fc57f HEAD` returns not-an-ancestor, so this
   branch carries the 300 s profile default. **The cap is a property of the
-  base, not of this candidate.** Two supporting measurements and three
-  corrections: the timed-out test appears in no branch diff; **CI passed it on
-  this exact head** (`build-test` job `115562539629`, run `38474737483`,
-  `head_sha` = `625bc4e7…`, `PASS [194.258s]`, `3967 tests run: 3967 passed`);
-  and the sccache line count (573 here) does not discriminate a verdict, per
-  this plan's own earlier correction. Corrections to the figures first quoted
-  for this batch, each measured false and retracted: (a) the host load averages
-  39.56/38.82/34.07 and "41 competing processes" were sampled **after** the run
-  ended, not during it, and must not be stated as load-during-the-run; the
-  honest bracketing samples are 50.97/28.81/24.84 before and 31.94/40.82/37.81
-  after. (b) `test-workflow-contracts` is **not** "27 passed"; it is a
-  three-stage target whose middle stage reports 1264. (c)
+  base, not of this candidate.** Supporting measurements: the timed-out test
+  appears in no branch diff; **CI passed it on `625bc4e7…`, the branch head as
+  published when this batch ran** (`build-test` job `115562539629`, run
+  `38474737483`, `head_sha` = `625bc4e7…`, `PASS [194.258s]`,
+  `3967 tests run: 3967 passed`). That is **predecessor-head evidence, not
+  current-head evidence**: the head later moved to `f511e8fe…`, and no CI
+  result has been read for it. Do not restate this as having passed on the
+  current head. The sccache line count (573 here) does not discriminate a
+  verdict, per this plan's own earlier correction. Corrections to the figures
+  first quoted for this batch, each measured false and retracted: (a) the host
+  load averages 39.56/38.82/34.07 and "41 competing processes" were sampled
+  **after** the run ended, not during it, and must not be stated as
+  load-during-the-run; the honest bracketing samples are 50.97/28.81/24.84
+  before and 31.94/40.82/37.81 after. (b) `test-workflow-contracts` is **not**
+  "27 passed"; it is a three-stage target whose middle stage reports 1264. (c)
   `.config/nextest.toml:100`'s 600 s override belongs to the Kani **mutation**
   compile gate and does not match this test — at this base only line 27's 300 s
   governs it, which is why the timeout recurs. `make typecheck` was not in the
@@ -623,6 +627,37 @@ under way; the invocation naming this plan supplies execution approval.
   `model_retained_is_least`: "Prove the kernel retains exactly the least
   occurrences of the prefix"), and each lemma keeps a second line naming which
   half of the obligation it carries.
+- [x] (2026-10-14) **The third proof follow-up is discharged, and it produced
+  two findings that are repaired here.** The follow-up (`6157177103`) was
+  answered at `6157190499`, which **closed the identity finding**: "Treat the
+  identity correction as discharged at source level for `f511e8fe`", retaining
+  the earlier verdict that the proof is substantive within its declared
+  abstract-algorithm boundary. Two follow-ups were raised and both are valid:
+  - **The CI-head attribution was wrong.** The plan claimed CI passed the
+    timing-out test "on this exact head" while citing run `38474737483`, whose
+    `head_sha` is `625bc4e7…` — the *predecessor*, not the head at the time.
+    Corrected at the GATE7 entry to call it predecessor-head evidence
+    explicitly and to say that **no CI result has been read for `f511e8fe…`**.
+    The review added that the mismatch "repeats" in the PR description; that
+    part is **not** true and is not acted on — the PR body cites no CI run,
+    job, or SHA at all (`grep` for `38474737483`, `115562539629`, `head_sha`,
+    `194.258`, `3967`: no matches). The review was right about this plan and
+    wrong about the PR body; the claim was checked rather than copied.
+  - **The line cap was met under one reading and not the other.** AGENTS.md
+    forbids a file *longer than* 400; this plan's Constraints say *under* 400.
+    CodeRabbit accepted 400 against the repository rule but asked for the
+    discrepancy to be reconciled rather than left implicit. Resolved by
+    trimming one further comment-only line to **399**, satisfying both
+    readings, with the comment-stripped body still byte-identical
+    (`sha256 bc6551f5…`) — so no reconciliation by rewriting the constraint
+    was needed, and none was done. The Decision-log entry records the
+    two-readings analysis and why 399 was chosen over editing the constraint.
+  Neither finding touched the proof surface, and the identity sentence the
+  earlier round required is unchanged. The verifier reproduces
+  `16 verified, 0 errors` on the 399-line file, and the focused battery remains
+  36/36. **The head moved to a new revision purely to carry these repairs**, so
+  the GATE7 verdict recorded above describes `f511e8fe…` and neither of these
+  two comment-only edits invalidates it.
 
 ## Surprises & discoveries
 
@@ -995,12 +1030,12 @@ under way; the invocation naming this plan supplies execution approval.
   "keep Rust files under 400 lines". No gate fired, and none could count it:
   `module_max_lines` is not configured in either `dylint.toml`, and `verus/` is
   not a Cargo workspace member. `verus/` is not wholly unobserved — it is a
-  `COMPILED_SOURCE_ROOTS` entry (`tests/env_access_suppressions/roots.rs:45`),
-  so the suppression walk reads the file, for inner attributes rather than
-  length. Its size is observable only by measuring it. Impact: the cap is
-  unenforced for `verus/`, so a future edit there can breach it silently; the
-  file is trimmed back to exactly 400, comment-only, with the comment-stripped
-  body byte-identical to `625bc4e7`'s (`sha256 bc6551f5…`) and
+  `COMPILED_SOURCE_ROOTS` entry (`tests/env_access_suppressions/roots.rs:52`,
+  the `"verus"` entry), so the suppression walk reads the file, for inner
+  attributes rather than length. Its size is observable only by measuring it.
+  Impact: the cap is unenforced for `verus/`, so a future edit there can breach
+  it silently; the file is trimmed back to 399, comment-only, with the
+  comment-stripped body byte-identical to `625bc4e7`'s (`sha256 bc6551f5…`) and
   `16 verified, 0 errors` reproduced on the trimmed file, so the assessed proof
   surface is unchanged.
 
@@ -1166,21 +1201,30 @@ under way; the invocation naming this plan supplies execution approval.
   source-index selection and reference identity on the real runtime. The
   correction separates the two rather than narrowing either. Date/Author:
   2026-10-13, implementation.
-- Decision: the 400-line cap is honoured for `verus/canonical_value/main.rs` by
-  trimming module and item prose, not by splitting the kernel or by claiming an
-  exemption. Rationale: the repair in `625bc4e7` took the file from 398 to 414
-  lines, and the plan's own Constraints require every Rust file to stay under
-  400. No gate counts lines for `verus/`: `module_max_lines` is unconfigured
-  and the directory is not a Cargo workspace member, so trimming is the only
-  remedy that restores the invariant where it was broken, rather than
-  relabelling the breach. A split was rejected because
-  `docs/formal-verification-methods-in-netsuke.md` documents a single-file
-  kernel and `make verus` runs one proof file; adding a second file would
-  change the invoked artefact while the assessment verdict covers this one. The
-  trim is comment-only — the comment-stripped body hashes identically before
-  and after — so no proved statement, lemma, or clause moved, and the
+- Decision: the line cap is honoured for `verus/canonical_value/main.rs` by
+  trimming module and item prose, not by splitting the kernel, not by claiming
+  an exemption, and not by rewriting the constraint. Rationale: the repair in
+  `625bc4e7` took the file from 398 to 414 lines, and the plan's own
+  Constraints require every Rust file to stay under 400. Two statements of the
+  cap disagree by one line: AGENTS.md forbids a file *longer than* 400, so 400
+  is permitted, while this plan's Constraints say *under* 400, so 400 is not.
+  The file is trimmed to **399**, which satisfies both readings, so the
+  discrepancy cannot bite either way. Three sibling files sit at exactly 400
+  (`build_l10n_audit/scanner.rs`,
+  `src/manifest/expand/tests/condition_cases.rs`,
+  `src/manifest/render/tests.rs`), confirming 400 is how the repository rule is
+  read in practice; 399 clears the plan's stricter phrasing without needing to
+  argue that reading. No gate counts lines for `verus/`: `module_max_lines` is
+  unconfigured in both `dylint.toml` files and the directory is not a Cargo
+  workspace member, so trimming is the only remedy that restores the invariant
+  where it was broken, rather than relabelling the breach. A split was rejected
+  because `docs/formal-verification-methods-in-netsuke.md` documents a
+  single-file kernel and `make verus` runs one proof file; adding a second file
+  would change the invoked artefact while the assessment verdict covers this
+  one. The trim is comment-only — the comment-stripped body hashes identically
+  before and after — so no proved statement, lemma, or clause moved, and the
   `16 verified, 0 errors` result still describes the file. Date/Author:
-  2026-10-13, implementation.
+  2026-10-14, implementation.
 
 ## Outcomes & retrospective
 
@@ -1202,9 +1246,9 @@ above is now bounded by the `state_ok`/`contract_ok` distinction and the
 finite-key-domain qualification recorded below. Repairing the proof prose then
 took `verus/canonical_value/main.rs` from 398 to 414 lines, past the 400-line
 cap its own Constraints section sets; no gate counts lines in that directory,
-so the breach was invisible until measured, and the file is trimmed back to
-exactly 400 by comment-only edits that leave the comment-stripped body
-byte-identical and the `16 verified, 0 errors` result reproduced.
+so the breach was invisible until measured, and the file is trimmed back to 399
+by comment-only edits that leave the comment-stripped body byte-identical and
+the `16 verified, 0 errors` result reproduced.
 
 Closeout record, as this section required before the roadmap tick:
 
