@@ -184,8 +184,7 @@ under way; the invocation naming this plan supplies execution approval.
   gates. Findings are incorporated in this DRAFT; all six expert lenses
   completed final readback with no remaining blockers.
 - [x] (2026-10-13) Draft proof sketch, runtime bridge, test strategy,
-      milestones,
-  tolerances, and conformance trace. No implementation has begun.
+  milestones, tolerances, and conformance trace. No implementation has begun.
 - [x] (2026-10-13) Planning-document gates passed: `make fmt`,
   `make check-fmt`, `make markdownlint` (including spelling), and `make nixie`.
   No runtime code changed; Rust lint/test/doc-coverage and the future Verus
@@ -345,6 +344,45 @@ under way; the invocation naming this plan supplies execution approval.
   exactly those four files. The `tests/` subtree is deliberately absent, being
   a test-only module that `cargo kani` compiles out. The contract file then
   passed 7 of 7 in a focused re-run.
+- [x] (2026-10-13) The EP-M2 milestone CodeRabbit CLI review was **re-run**
+  against the current tip, because the first round's head-SHA binding had gone
+  stale: it reviewed `b27da3ed`, and the branch had since moved twice, for a
+  finding repair and a determinism repair. The re-review covered the committed
+  range `b14bde20...d0ac4283` with `reviewedFiles` matching the branch's
+  20-path diff exactly (`coderabbit` 0.9.0, RC=0, no rate limiting, tree clean
+  before and after). It reported three findings comprising **two distinct
+  concerns**, and both were verified against source before any repair.
+- [x] (2026-10-13) Both concerns were repaired. **First**, this plan's own
+  Progress list carried a continuation line indented six spaces where its
+  sibling uses two, holding a single word; the line count was surveyed, and it
+  was the only six-space continuation in the file. Joining the word into the
+  following line fixes it in a 77-column line, inside the 80-column rule. The
+  review's own suggested one-line join measured 81 columns and would have been
+  wrapped straight back by the formatter. **Second**,
+  `src/stdlib/canonical_value/tests/mod.rs` named a `get_value` parameter `key`
+  and then read it with a bare `let _ = key;` purely to silence the
+  unused-variable lint. The parameter is now `_key` and the artificial read is
+  gone. The rename is scoped to the one impl of nine that does not use the
+  parameter; the two other `get_value` impls in the same file do use it. The
+  `let _ =` precedents elsewhere in the tree were checked and are
+  `#[cfg]`-justified, which cannot apply here, as this file carries no `cfg`
+  attribute at all. Neither repair justifies re-opening the milestone: both are
+  presentational, neither changes an observable behaviour, and the second makes
+  a fixture's signature honest about what it ignores.
+- [x] (2026-10-13) The gate batch over the repaired candidate ran over the
+  frozen tree and reported four of six completed gates green — `check-fmt` (3
+  s), `lint` (305 s, the full cascade with no stage masked), `doc-coverage`
+  (424 s, aggregate **5055/5112 = 98.88%** against the 80% threshold), and
+  `nixie` (1 s). `markdownlint` and its `spelling` prerequisite were both red
+  (RC=2, 9 s each), and both named the *same* defect: this plan's own new prose
+  contained `mis-indented`, which the tokenizer split into a bare `mis` and
+  reported as a misspelling at `:381`. A supplementary unmasked probe of the
+  stage behind the red prerequisite returned `0 issues in 0 files` over 181
+  files, so the two reds were one defect observed twice rather than two
+  independent failures. The repair reworded to `over-indented` and recorded the
+  hazard under Surprises. The `test` gate was stopped rather than allowed to
+  finish, because it was running on bytes the repair was about to change and
+  the shared compile queue is contended.
 - [ ] Implement canonical keys/equality and stable deduplication; discharge
   property, BDD, runtime-boundary, and Verus obligations.
 - [ ] Update design and formal-verification guidance, run sequential gates, and
@@ -352,6 +390,35 @@ under way; the invocation naming this plan supplies execution approval.
 
 ## Surprises & discoveries
 
+- Surprise (measured 2026-10-13, EP-M2 review): an automated review's *stated
+  remedy* is evidence about the defect, not a patch. The review correctly
+  identified an over-indented continuation line in this plan and then proposed
+  joining it to its predecessor, which measures 81 columns and sits outside the
+  80-column prose rule this repository enforces. Applying the finding was
+  right; applying its remedy would have created a formatting failure. The
+  lesson generalizes: read a finding's *diagnosis* and derive the repair
+  locally against the local conventions, because the reviewer does not run the
+  local formatter. The same round showed the converse hazard on the review side
+  — a rebuttal of the finding asserted two premises about the offending line
+  (its indent, and its word count) that measurement showed to be false, so a
+  disposition cannot rest on a reviewer's or a rebutter's description of the
+  bytes either. Both directions are settled the same way: measure the line.
+- Surprise (measured 2026-10-13, EP-M2 repair): the hyphen-split spelling
+  hazard is not confined to the fixtures the earlier entry describes — it
+  recurs in *this plan's own prose*, in the very sentence that records the
+  earlier occurrence. Writing `mis-indented` here red the spelling gate, which
+  read the bare fragment `mis` and proposed `miss` or `mist` at `:381`. The
+  tokenizer strips the hyphen and reads the fragment as a standalone word,
+  because the prefix is one the dictionary does not carry. Measured: the
+  pre-edit plan held `mis-stated` at `:245` and passed, so the prefix is safe
+  or fatal depending only on whether the token is inside a code span. The
+  repair reworded to `over-indented` rather than extending `typos.local.toml`,
+  whose own comment reserves it for identifiers and quotations; the pre-existing
+  `mis-grouping` entry is domain vocabulary and is the exception that proves
+  the rule. The lesson for a plan author is narrow but bite-sized: a compound
+  whose first element is a short dictionary word can red a gate, and the
+  failure is invisible to `mdtablefix`, to the formatter, and to every local
+  check except the one that runs last.
 - Surprise (measured 2026-10-13, EP-M2): a new module can be outside the Kani
   proof scope without containing a single line of Kani, because the scope is a
   *transitive closure* and `src/stdlib/mod.rs` re-exports the new module's

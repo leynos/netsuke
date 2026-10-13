@@ -166,8 +166,7 @@ impl Object for FixtureObject {
         }
     }
 
-    fn get_value(self: &Arc<Self>, key: &Value) -> Option<Value> {
-        let _ = key;
+    fn get_value(self: &Arc<Self>, _key: &Value) -> Option<Value> {
         Some(self.member.clone())
     }
 
