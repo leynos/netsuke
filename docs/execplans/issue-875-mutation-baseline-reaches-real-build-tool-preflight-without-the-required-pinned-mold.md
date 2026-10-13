@@ -181,25 +181,40 @@ likelihood, and mitigation.
   `test_support::fs::write` → `set_mode`) and changes a helper only if a write
   handle can outlive a spawn. No retries are added.
 
-- **Risk:** a mutation shard can be reclaimed by GitHub before it finishes, so
-  the *run* concludes `failure` for an infrastructure reason and the shard
-  count is incomplete. Severity: medium (it does not affect the named tests,
-  and the baseline is already proven `ok`). Likelihood: **high — it is now the
-  observed norm, four occurrences across two runs and two shards in this one.**
-  Both occurrences here were at 59–65 minutes, so the pattern is consistent
-  with the platform limit rather than a cap this repository sets:
-  `mutation-cargo.yml` gives the job `timeout-minutes: 360`, the platform
-  maximum, and puts the caller's 300-minute budget on the *step* instead, so a
-  step timeout would still let the `always()` artefact upload run. Mitigation:
-  this risk is not mitigated by anything this branch can change — a shorter
-  matrix does not help, because each shard's work is a share of the same mutant
-  total. It is bounded instead by the evidence recorded in Progress: the
-  baseline is `ok` and mutants are evaluated and reported in the shard log,
-  which survives cancellation. Note for accuracy that reclaims are
-  **intermittent, not uniform**: run `35499357086` (20 September) concluded
-  `success` with its `mutants` job succeeding, so a shard can and does
-  complete. Report this to the pull request as an upstream observation, and do
-  not treat a reclaimed shard as a defect in this change.
+- **Risk:** a mutation shard can stop before it finishes, so the *run* concludes
+  `failure` and the mutant set is incomplete. Severity: medium — it affects
+  neither the named tests nor the baseline, both of which are already proven on
+  the worker. Likelihood: **high — every shard of the run recorded above ended
+  early, and four shards of the preceding run did too.** The complete per-shard
+  durations show **two distinct mechanisms**, and this entry is written from
+  the full data rather than the first two shards an earlier draft had:
+
+  - Shards 0, 1, 3 and 4 ended on the runner shutdown signal at 59, 65, 106 and
+    128 minutes — *not* clustered and *not* at a round number. Shards 0 and 1
+    were read directly: each log ends `ERROR interrupted` →
+    `##[error]The runner has received a shutdown signal…`.
+  - Shards 2 and 5 ended at **301 minutes**, which is the caller's
+    `timeout-minutes: 300` step budget, and are marked `cancelled` (a step
+    timeout) rather than `success`. The preceding run's shard 5 also ended at
+    **301 minutes**.
+
+  So there is no uniform platform cap, and the `timeout-minutes: 360` job
+  ceiling — the platform maximum — is not what ended these. Treat the early
+  shutdowns as unexplained intermittent infrastructure and the 301-minute ones
+  as the configured budget doing its job. Note a source of imprecision to carry
+  forward rather than paper over: the API's `started_at`/`completed_at` are
+  *runner* ENDED/STARTED events, not the step's own boundaries, so the "301
+  minutes" reading is consistent with, but not proof of, the step timeout.
+
+  Mitigation: none is available to this branch — a shorter matrix does not
+  shrink the mutant total, only redistributes it. The risk is bounded instead
+  by what survives a kill: the shard logs keep the baseline line and every
+  per-mutant outcome, and the `summarize` job aggregated them into
+  `mutation_summary_targets={"root": 111}` and `mutation_summary_mutants=1267`
+  and concluded `success`. Report this to the pull request as an upstream
+  observation, link `shared-actions#590`, and do not treat it as a defect in
+  this change. Reclaims are **intermittent, not uniform** — run `35499357086`
+  (20 September) concluded `success` with its `mutants` job succeeding.
 
 ## Progress
 
@@ -577,13 +592,18 @@ Every stopping point is documented here. Timestamps are UTC.
   `src/host/pattern.rs:200:19: replace += with *= … in 47s build + 135s test`) —
   so "a nonempty set of mutants executes" is discharged.
 
-  Shards 0 and 1 conclude `failure` with `step 11 Run mutation testing` =
-  `cancelled` after 59–65 min, each log ending `ERROR interrupted` →
+  The run finished with every shard ending early and `summarize`
+  **succeeding**, which aggregated the partial reports into
+  `mutation_summary_targets={"root": 111}` and `mutation_summary_mutants=1267`.
+  Shard durations were 59, 65, 106, 128, 301 and 301 minutes. Shards 0 and 1
+  conclude `failure` with `step 11 Run mutation testing` = `cancelled`, each
+  log ending `ERROR interrupted` →
   `##[error]The runner has received a shutdown signal…` →
-  `The operation was canceled.` The job ceiling is `timeout-minutes: 360`, the
-  platform maximum, so this is GitHub reclaiming runners rather than a cap this
-  repository sets — the same infrastructure event recorded in the 12 October
-  run.
+  `The operation was canceled.`; shards 2 and 5 ended at the 301 minutes that
+  is the caller's `timeout-minutes: 300` step budget. The job ceiling is
+  `timeout-minutes: 360`, the platform maximum, so neither mechanism is a cap
+  below what the caller asked for. The *Risk* above carries the full breakdown;
+  this entry states only what the logs show.
 
   On flag ownership, the chain is now evidenced end to end:
   `mutation-cargo.yml` calls `setup-rust` with **only** `install-mold`, and
