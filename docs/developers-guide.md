@@ -4090,11 +4090,12 @@ was validated by applying the patch and watching the harness fail under
 
 `tests/kani_mutation_evidence_tests.rs` keeps that evidence in lockstep with
 the harnesses. It is a crate root with four child modules beside it, each of
-which it declares through an explicit `#[path]`. A crate root resolves a bare
-`mod child;` against `tests/`, so the `#[path]` is what the layout requires
-rather than a convention; the repository's other directory-module test trees
-are rooted at a `tests/<name>/mod.rs`, which resolves its children normally and
-needs the attribute only for the one child that would otherwise collide.
+which it declares through an explicit `#[path]`. That is the house shape for a
+crate root holding a companion directory: 17 of the `tests/*.rs` crate roots
+reach their own `<stem>/` tree this way, because Cargo would otherwise resolve
+a bare `mod child;` against `tests/` itself. A bare `mod child;` at a crate
+root is reserved for the shared trees that genuinely live at
+`tests/<name>/mod.rs` — `support`, `fixtures`, and `common`.
 
 Three of its checks run as part of `make test`, and live in `contracts.rs`:
 

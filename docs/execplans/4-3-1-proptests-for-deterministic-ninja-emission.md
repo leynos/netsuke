@@ -1959,6 +1959,60 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
 
+- [x] (2026-10-13T00:00:00Z) Ran the first `EP-M2` gate pass and it failed
+      `make check-fmt` on **nine** rustfmt diffs and two `mdtablefix` reflows,
+      so the milestone had been committed unformatted. This is the concrete
+      cost of a milestone being written without running the gates before
+      committing — the four implementation commits were made with only
+      targeted test runs as evidence. Three remediation commits follow, and
+      the affected commit messages are amended to carry the required
+      attribution trailer.
+      The nine rustfmt diffs were mechanical, with one exception worth
+      recording: `use super::RecipeShell;` sorts *above*
+      `use super::command_list::…`, because byte order puts the capital `R`
+      before the lowercase `c` and rustfmt does not case-fold a grouped
+      import. A hand-written ordering that reads more naturally is still a
+      gate failure.
+      Of the two `markdownlint` failures, one was a real authoring defect
+      rather than a reflow. A `Progress` bullet inserted by a later commit had
+      orphaned the tail of the 2026-10-10 base-re-derivation entry: its head
+      was deleted, leaving a sentence beginning mid-thought at a six-space
+      indent, which CommonMark reads as an indented code block (MD046, the
+      documented list-continuation trap). The head is restored to what
+      `1a4862b3` wrote. The second, MD013 at 128 columns, was a `FAIL …`
+      transcript quoted inline; it is now a fenced `plaintext` block, matching
+      how the rest of this plan quotes command output.
+      Also corrected the `make proptest` comment's stale figures: it recorded
+      the *pre*-`--workspace` numbers, 86 selected of 3807, where the recipe's
+      own flags select 90 of 3848. The comment now states both, so the next
+      reader does not have to re-derive why they differ.
+- [x] (2026-10-14T00:00:00Z) Found and corrected a **false factual claim** in
+      `EP-M2`'s own prose, caught while re-reading the diff against the corpus
+      it describes. Both the crate-root comment in
+      `tests/kani_mutation_evidence_tests.rs` and the matching paragraph in
+      `docs/developers-guide.md` asserted a contrast between two layouts: that
+      a crate root spelling out every child with `#[path]` is unusual, and that
+      other directory-module test trees "are rooted at a `tests/<name>/mod.rs`,
+      which resolves its children normally and needs the attribute only for the
+      one child that would otherwise collide". The second half is false. A
+      census over `tests/*.rs` finds **17** crate roots that reach their own
+      `<stem>/` directory through `#[path]` — `ast_tests`, `std_filter_tests`,
+      `env_access_suppressions`, and 13 more — of which **16 have no `mod.rs`**
+      and so spell out every child, exactly as this file does. Only
+      `cli_tests` ships a `mod.rs`, and even it reaches that file by `#[path]`
+      rather than by a bare declaration. The `tests/<name>/mod.rs` shape
+      described is a *different* case: it is how a crate root reaches a
+      **shared** tree (`support`, `fixtures`, `common`) that genuinely lives
+      directly under `tests/`. So the `#[path]` here is the house shape rather
+      than a local quirk, and it is the bare `mod child;` that is the marked
+      form. Corrected in both files, and the count is stated as a census rather
+      than as an impression.
+      Recorded because it is the third instance in this milestone of the same
+      failure mode: a plausible-sounding structural claim written from
+      recollection and never measured. The first two were the `make proptest`
+      selector count and the `ninja_gen` line-count drift. Cheap to catch by
+      probe, expensive to leave for review — and a wrong *reason* is worse than
+      no reason, because the next author will trust it.
 - [x] (2026-10-13T00:00:00Z) Implemented all four `EP-M2` items on the working
       tree; gates and the milestone review are still to run, so this is
       implementation activity and not yet an accepted plateau.
