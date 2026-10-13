@@ -997,9 +997,57 @@ Record every significant decision made while working on the plan.
 
 ## Outcomes & retrospective
 
-To be completed at Milestone 4. The comparison is against
-`Purpose / big picture`, and no discovery may remain unreconciled with
-`Conformance basis`.
+Measured against `Purpose / big picture`, which asked for four things: a worker
+that has the pinned mold, rustdoc tests that stop depending on worker
+capability, the linked flag-ownership question recorded upstream rather than
+patched locally, and an ETXTBSY audit that changes nothing unless it reproduces.
+
+**All four are met.** The worker provisions mold — `build-tools: mold 2.41.0`
+matching `tools/mold/VERSION`, on `PATH` via `GITHUB_PATH`, with the
+`Run setup commands` step moving from `skipped` to `success`. The baseline then
+reports `ok Unmutated baseline in 122s build + 218s test` after
+`Found 636 mutants to test`, and mutants are evaluated and reported. The two
+named tests pass locally and run inside that baseline, because
+`tests/makefile_test_target.rs:347` declares `mod rustdocflags` and the
+mutation run passes no `--test` filter. The rustdoc tests now inject the
+build-tools boundary through the shared sandbox, so they measure `RUSTDOCFLAGS`
+propagation instead of host capability, while `build_tools_check_tests.rs`
+keeps the real prerequisite under test — including the new `doctest` case that
+reproduces the original failure. Flag ownership is recorded against
+shared-actions#544 with **no local workaround**, and the ETXTBSY audit was
+read-only with no helper changed and no retry added.
+
+**Three lessons worth carrying forward.** First, the issue's premise needed
+re-cutting: the reported symptom was accurate, but "the baseline reaches the
+preflight without mold" and "the rustdoc tests are non-hermetic" were two
+faults whose fixes belong in different files, and fixing only the CI half would
+have left the tests measuring the wrong thing. Second, an early Progress entry
+attributed the shard endings to a single ~60-minute platform cap after reading
+two shards; the complete data showed two mechanisms and no such cap. Naming a
+cause from the first convenient sample is the failure mode to watch — the retry
+is recorded in `Risks` rather than quietly corrected. Third, a gate result is
+only as good as the environment it ran in: this host produced 4 and then 9
+timeouts on an unchanged diff, and the diagnostic that settles it is a count
+(`sccache server is unreachable`), not a test name.
+
+**Not claimed as evidence.** The doctest half never completed on this host —
+the run hung on an idle process holding a build-limits slot and was stopped —
+so it is recorded as incomplete rather than as a pass, and `make doctest` must
+still pass on a quiet host before the change is trusted. The two jobs that were
+red on `172dd4ff` (`build-test` and `Windows / lint-windows`) were confirmed
+repaired at `d8e03753`; because every commit after that one touches Markdown
+only, their re-run is a formality, and the standing requirement is that CI be
+green on the final head before the pull request leaves draft. CodeRabbit
+returned three findings: two prose defects, both fixed, and one requiring mold
+selection to be restored before the preflight is accepted as proof,
+dispositioned as already documented and not actionable from a caller.
+
+**Upstream, unresolved by design.** shared-actions#544 remains open with no
+fixing revision, so a caller still cannot both request mold and keep the
+project's linker flag. shared-actions#590 covers the shard evidence, and
+shared-actions#591 the preflight consolidation. None of the three is
+reconcilable within this repository, and `Conformance basis` records them as
+external dependencies rather than gaps in this change.
 
 ## Context and orientation
 
@@ -1133,7 +1181,9 @@ green, with the new tests named in the run.
 
 **Recovery:** revert the two files; nothing depends on them yet.
 
-**Remaining gaps:** the worker has not actually been observed running this.
+**Remaining gaps:** at M1 close no worker had run this. **Closed at EP-M3:** run
+`38323348294` shows `Run setup commands` moving from `skipped` to `success`
+and logging `build-tools: mold 2.41.0`.
 
 ### EP-M2 — Make the rustdoc tests hermetic; keep real-preflight coverage
 
@@ -1256,7 +1306,11 @@ the second proves the injection works. Both are required.
 **Recovery:** `git revert` the M2 commit; `build_tools_check_tests.rs` and the
 sandbox module are untouched by it except for the added case.
 
-**Remaining gaps:** the worker has still not been observed.
+**Remaining gaps:** at M2 close the worker had still not been observed.
+**Closed at EP-M3:** the baseline is green on the worker
+(`ok Unmutated baseline in 122s build + 218s test`), and
+`tests/makefile_test_target.rs:347` declares `mod rustdocflags`, so the named
+tests run inside it.
 
 ### EP-M3 — Validate on the real worker, observe linker selection, audit ETXTBSY
 
