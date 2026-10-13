@@ -2254,7 +2254,7 @@ count is 49 at every revision of this branch, including `20e5f480` where the
 claim was first written, and the contract's `execplan_names` enumerates
 `read_dir("docs/execplans")` filtered to the `md` extension — the same 49. No
 plan has ever been deleted from the directory on any ref, so the figure was
-wrong when written rather than made stale by a later removal. The mis-count is
+wrong when written rather than made stale by a later removal. The miscount is
 the more instructive for being in a sentence whose whole purpose was to prove a
 claim by exhaustive enumeration: the replication was sound and its *headline
 number* was not derived from it.
@@ -2359,7 +2359,7 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   the first revision onward while the document beneath it recorded a passed
   approval gate, a delivered ADR, and three completed review rounds. The
   failure mode is specific: `Status:` is a *summary* of `Progress`, and a
-  summary maintained by hand drifts the moment the section it summarises moves.
+  summary maintained by hand drifts the moment the section it summarizes moves.
   The style guide resolves the disagreement in one direction only — "when the
   two disagree, the sections and the roadmap are correct, and the header is the
   defect" — so a stale header is not a cosmetic wart but a documented defect
@@ -2696,7 +2696,7 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 - Decision: move the header `Status:` from `DRAFT` to `IN PROGRESS`, and
   **decline** to mark roadmap item `4.3.1` complete. Rationale: the two are
   different claims and the evidence supports only the first. The header
-  summarises work done — the approval gate passed on 2026-09-27, `EP-M0` and
+  summarizes work done — the approval gate passed on 2026-09-27, `EP-M0` and
   `EP-M1` are complete, `ADR-030` is written and indexed, and three review
   rounds have been discharged — while the roadmap box asserts the *item's*
   deliverable, Proptest coverage for deterministic Ninja emission, which does
