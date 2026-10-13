@@ -528,6 +528,14 @@ Every stopping point is documented here. Timestamps are UTC.
   widen it. So the diagnostic for this family is a count, not a test name. The
   doctest half still has not run to completion, because the nextest half
   aborted first both times.
+- [x] (2026-10-13 02:25Z) **The markdown fix is confirmed by CI on both jobs
+  that were red.** At `d8e03753`, `build-test` concludes `success` in 18m14s
+  with the `Format` step green, where at `172dd4ff` the same job failed there;
+  `Windows / build-test-windows` passes; and `Windows / lint-windows` now clears
+  `Format` and `Lint (Clippy)`, which is as far as its earlier run got. So the
+  two red jobs were one defect, and it is repaired. A gate run of
+  `Test and Measure Coverage` inside `build-test` covers the Rust suite on the
+  merge path, independent of this host's cold sccache.
 - [ ] Milestone 3 remainder: run the doctest half (`make doctest`) at the
   current revision. `make test-workflow-contracts` is discharged above, and the
   nextest half's remaining failures are the cold-cache timeouts recorded here.
