@@ -62,10 +62,13 @@ After this change a manifest reader can observe that:
 2. The two rustdoc tests pass on a machine with **no host `mold` and no host
    `rustup`**, because they inject the build-tools boundary through the shared
    `Sandbox` helper exactly as `tests/build_tools_check_tests.rs` already does.
-   A reader can reproduce this: move `$HOME/.local/bin/mold` aside, run
-   `make test-nextest` restricted to the `makefile_test_target` binary, and see
-   the rustdoc tests pass while `build_tools_check_tests` still exercises the
-   real preflight.
+   A reader can reproduce this without disturbing the installed toolchain:
+   build the binary with `mold` present, then run the compiled
+   `makefile_test_target` binary under a `PATH` that mirrors the system
+   directories minus `mold`, as EP-M2 spells out. The rustdoc tests pass while
+   `build_tools_check_tests` still exercises the real preflight. Do **not**
+   move an installed `mold` aside: the build itself links with
+   `-Clink-arg=-fuse-ld=mold`, so that route cannot reach a compiled test.
 3. Real-preflight coverage of the `doctest` target does not disappear: it
    moves to `tests/build_tools_check_tests.rs`, where `doctest` joins the
    existing parameterized "targets stop when the check fails" table.
@@ -675,6 +678,21 @@ Every stopping point is documented here. Timestamps are UTC.
 ## Surprises & discoveries
 
 Unexpected findings during implementation that were not anticipated as risks.
+
+- **Observation:** an `RUSTFLAGS` that is *set to the empty string* is not the
+  same as one that is *unset*, and treating the two alike would have recorded a
+  false green on the linker question. Measured against a two-line test crate
+  whose `.cargo/config.toml` sets `-Clink-arg=-fuse-ld=mold`: with `RUSTFLAGS`
+  unset, the flag reached the `rustc` command-line; with `RUSTFLAGS=` (empty
+  but exported), it did not appear at all. Impact: the acceptance step reads "if
+  `RUSTFLAGS` is empty … the linker requirement is intact", which is wrong as
+  written — an empty value still displaces every `rustflags` table. The
+  requirement is that both variables be **unset**, and the check belongs on the
+  compiler arguments rather than on the environment. Mitigating factor found:
+  the caller's `printf "…%s\n" "${RUSTFLAGS-<unset>}"` already distinguishes
+  the three states — `<unset>`, an empty line, and a value — so no workflow
+  change is needed; only the reading rule was wrong. Raised by CodeRabbit's
+  third pass and confirmed by measurement rather than accepted on citation.
 
 - **Observation:** the repository already documents the exact bug this plan
   fixes, in the shared workflow's own guide. Evidence:
@@ -1368,9 +1386,17 @@ recorded in the pull request against `shared-actions#544`.
 **Linker selection.** Two outcomes are possible and both are recorded, neither
 is "fixed locally":
 
-- If `RUSTFLAGS` is empty or already contains `-Clink-arg=-fuse-ld=mold`, the
-  project configuration selects mold and the linker requirement is intact.
-  Record that as the observation.
+- Only if **both** `RUSTFLAGS` and `CARGO_ENCODED_RUSTFLAGS` are *unset* does
+  the project configuration select mold and the linker requirement count as
+  intact — and even then the record should be confirmed against the compiler
+  arguments, not the environment. An `RUSTFLAGS` that is set but **empty** is
+  *not* the same as an unset one: Cargo selects it ahead of every `rustflags`
+  table, so an empty value still displaces `.cargo/config.toml` and drops
+  `-Clink-arg=-fuse-ld=mold`. Measured on this host against a two-line test
+  crate: unset produced one `-Clink-arg=-fuse-ld=mold` on the `rustc`
+  command-line, an empty-but-set value produced zero. `setup-commands` prints
+  both variables with `<unset>` standing in for an unset one, which is why the
+  print distinguishes the cases rather than reporting an empty value.
 - If the shared workflow's `setup-rust` export displaces the project table, the
   worker will link with the platform linker. Add **no** local workaround; link
   the finding to `shared-actions#544` and pin a fixing shared revision only if
@@ -1507,8 +1533,9 @@ edits are pure test code with no side effects outside their temporary
 sandboxes. The local evidence runs create only `target/` and `~/.cache` state.
 The `PATH`-restricted runs use a sub-shell `PATH` assignment, so they cannot
 leak into the caller's environment. If a focused run is interrupted, re-running
-it is safe. The only destructive-sounding step, "move `mold` aside", is
-implemented as a `PATH` restriction and never moves a file.
+it is safe. Nothing on the path moves an installed tool: the mold-free runs use
+a mirrored `PATH` built from symlinks, so the host's `mold` is never touched
+and the build still links.
 
 ## Interfaces and dependencies
 
