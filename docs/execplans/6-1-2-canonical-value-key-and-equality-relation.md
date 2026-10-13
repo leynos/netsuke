@@ -263,6 +263,40 @@ under way; the invocation naming this plan supplies execution approval.
   refusals away (which would have silently shrunk the expected count and
   weakened the very property it guards), and the BDD order step now asserts the
   whole retained tail rather than one element of it.
+- [x] (2026-10-13) The full applicable gate set was re-run at `58bc8357`.
+  Six gates were green — `check-fmt`, `lint`, `doc-coverage` (98.88%),
+  `markdownlint` (181 files), `spelling`, and `nixie` — and `make test` was
+  **red**. The verdict is the red one, so the milestone did not pass.
+- [x] (2026-10-13) The red was diagnosed as a latent defect in EP-M2's own
+  test, not a regression from the finding repair and not a flake to retry.
+  Evidence: the same test binary at the same revision passed on attempts 1 and
+  2 and failed on attempt 3 with "class `bool` was never generated in 64 cases".
+  `git diff` from the pre-repair revision to `58bc8357` over `properties.rs`
+  shows the repair touched only `distinct_count` and its call site, so the
+  failing test and its generator are untouched by it. Root cause, read from the
+  pinned source: `Config::default()` sets `rng_seed: RngSeed::Random`, so
+  `TestRunner::new` seeds from the OS and the class-coverage assertion was
+  sampling-probabilistic. The module's own doc comment already claimed those
+  counts "are reproducible", which the code never delivered.
+- [x] (2026-10-13) That was repaired by splitting one fused test into two, on
+  the fault line the defect exposed: a **law** is worth checking against fresh
+  inputs, while **coverage** is a claim about the generator rather than about
+  one draw from it. `generated_values_obey_the_equivalence_relation` now runs
+  on a free-seeded runner and asserts only the laws;
+  `generated_values_reach_every_material_class` runs on a runner pinned to
+  `RngSeed::Fixed(0x612)` over 512 cases and reports the classification counts
+  EP-V1 requires. Neither obligation was weakened: the coverage gate now covers
+  eight times as many cases and its verdict no longer depends on the seed.
+- [x] (2026-10-13) The repair was validated by measurement, not by observing a
+  pass. The frozen sample reaches all seven classes with margin —
+  `{"bool":
+  38, "float": 74, "int": 38, "map": 97, "null": 33, "seq": 124, "string":
+  108}` —
+  and three consecutive runs reported a byte-identical tally. The negative
+  control is decisive: with the `bool` arm deleted from the generator, **both
+  law tests still passed** while the tripwire failed, naming the missing class.
+  That is the non-vacuity guarantee EP-V1 asks for, and the previously fused
+  test could not provide it.
 - [ ] Implement canonical keys/equality and stable deduplication; discharge
   property, BDD, runtime-boundary, and Verus obligations.
 - [ ] Update design and formal-verification guidance, run sequential gates, and
@@ -270,6 +304,16 @@ under way; the invocation naming this plan supplies execution approval.
 
 ## Surprises & discoveries
 
+- Surprise (measured 2026-10-13, EP-M2): a property test can be **latently
+  non-deterministic** and pass a whole green gate set before anyone sees it
+  fail. `TestRunner::new` seeds from the OS, so an assertion about the
+  generator's reach was really an assertion about one draw from it. Impact: the
+  lesson is not "seed the runner" but "classify the claim first" — a claim
+  about a generator must not be carried by a sample that varies, and a claim
+  about a law is best carried by one that does. Two claims with opposite
+  sampling needs do not belong in one test. The check that caught this was
+  re-running the full set; a targeted re-run of the three previously-red gates
+  would have missed it entirely.
 - Observation: current `uniq` uses `IndexSet<Value>` and follows MiniJinja's
   equality; RFC 0006 defines canonical JSON equality for later set helpers.
   Evidence: `src/stdlib/collections.rs`, `uniq_filter`. Impact: 6.1.2 adds a

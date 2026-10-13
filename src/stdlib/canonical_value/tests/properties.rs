@@ -8,25 +8,50 @@
 //! The properties run through [`TestRunner`] rather than the `proptest!` macro,
 //! because the macro cannot report per-class counts back to the caller and the
 //! generator's coverage has to be asserted rather than assumed.
+//!
+//! The batteries split by what they claim about the sample, and the two claims
+//! want opposite things from it. A law is worth checking against fresh inputs,
+//! so the law runners keep proptest's random seed. Coverage is a claim about
+//! the generator rather than about one draw from it, so its runner is pinned to
+//! a fixed seed: otherwise an unlucky seed could report a class as missing from
+//! a generator that still emits it, which is a defect in the test rather than
+//! in the generator. The two are separate tests for that reason.
 
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 use anyhow::{Result, ensure};
 use minijinja::value::{Value, ValueKind};
 use proptest::prelude::*;
-use proptest::test_runner::{Config, TestRunner};
+use proptest::test_runner::{Config, RngSeed, TestRunner};
 
 use super::*;
 
 /// Maximum nesting depth the recursive generator builds.
 const GENERATED_DEPTH: u32 = 3;
 
-/// Cases each property test runs.
+/// Cases each law battery runs.
 ///
-/// Pinned rather than left to the default so the classification counts below
-/// are reproducible across `PROPTEST_CASES` changes in the environment.
+/// Pinned rather than left to the default so the workload is the same whatever
+/// `PROPTEST_CASES` says in the environment. The sample itself still varies:
+/// the law batteries keep proptest's random seed, because a law is worth
+/// checking against inputs no earlier run has tried.
 const PROPERTY_CASES: u32 = 64;
+
+/// Cases the generator-coverage tripwire runs.
+///
+/// Set well above [`PROPERTY_CASES`] because the sample is fixed: a class that
+/// survives in the pool but becomes rare must still show up in the count, and
+/// there is no later run to catch what this sample misses.
+const COVERAGE_CASES: u32 = 512;
+
+/// Seed for the coverage tripwire's runner.
+///
+/// Arbitrary, and free to be changed: what matters is that it is fixed, so the
+/// verdict and the counts it reports are identical on every run. Its one
+/// obligation is that the sample it draws reaches all seven material classes,
+/// which the tripwire itself checks.
+const COVERAGE_SEED: u64 = 0x612;
 
 /// The exponent bits of an IEEE-754 binary64.
 const EXPONENT_MASK: u64 = 0x7ff0_0000_0000_0000;
@@ -44,10 +69,28 @@ const FINITE_EXPONENT: u64 = 0x3ff_u64 << 52;
 /// pool member reachable at the top level.
 const SCALAR_WEIGHT: u32 = 8;
 
-/// A `TestRunner` pinned to [`PROPERTY_CASES`] cases.
-fn runner() -> TestRunner {
+/// A `TestRunner` pinned to [`PROPERTY_CASES`] cases and a fresh random seed.
+///
+/// The seed is deliberately left free, so each run tries inputs no earlier run
+/// has tried. Only the case count is fixed.
+fn law_runner() -> TestRunner {
     TestRunner::new(Config {
         cases: PROPERTY_CASES,
+        ..Config::default()
+    })
+}
+
+/// A `TestRunner` pinned to [`COVERAGE_CASES`] cases and to a fixed seed.
+///
+/// The fixed seed is the point of this runner. A coverage assertion is a claim
+/// about the generator, not about one draw from it, so it must not be able to
+/// fail because an unlucky seed under-sampled a class. Freezing the sample
+/// makes the verdict and the reported counts identical on every run, which is
+/// what lets the counts be compared between runs at all.
+fn coverage_runner() -> TestRunner {
+    TestRunner::new(Config {
+        cases: COVERAGE_CASES,
+        rng_seed: RngSeed::Fixed(COVERAGE_SEED),
         ..Config::default()
     })
 }
@@ -101,34 +144,56 @@ fn generated_finite() -> BoxedStrategy<f64> {
         .boxed()
 }
 
-/// Verify the four equivalence-relation laws for generated values, and report
-/// the generator's coverage so a vacuous sample cannot pass.
+/// Verify the four equivalence-relation laws for generated values.
 ///
 /// Reflexivity, symmetry, and transitivity are checked, the last against
-/// independently rebuilt copies of the same content, and every material class
-/// of the generator is counted and asserted nonzero.
+/// independently rebuilt copies of the same content. Coverage of the generator
+/// is a separate claim with a separate test below: a law and a generator
+/// property want opposite things from the sample, so one test cannot carry
+/// both without making the coverage verdict depend on the draw.
 #[test]
 fn generated_values_obey_the_equivalence_relation() -> Result<()> {
-    let counts: Cell<BTreeMap<&'static str, usize>> = Cell::new(BTreeMap::new());
-    let mut runner = runner();
+    let mut runner = law_runner();
     runner
         .run(&generated_values(), |value| {
             let key = match canonical_key(&value) {
                 Ok(key) => key,
                 Err(error) => return Err(TestCaseError::fail(error.to_string())),
             };
-            let mut tally = counts.replace(BTreeMap::new());
-            *tally.entry(material_class(&value)).or_insert(0) += 1;
-            counts.set(tally);
             check_laws(&value, &key).map_err(|error| TestCaseError::fail(format!("{error:#}")))
         })
         .map_err(|error| anyhow::anyhow!("{error}"))?;
+    Ok(())
+}
 
-    let tally = counts.take();
+/// Assert the generator can still reach every material class, and report the
+/// classification counts.
+///
+/// This is the non-vacuity guard for the batteries above: a generator that
+/// stopped emitting, say, booleans would leave the law test passing over a
+/// sample it never made. It runs on its own frozen sample for that reason, and
+/// over more cases than the law battery, since a class that becomes rare must
+/// be caught here rather than hoped for there.
+#[test]
+fn generated_values_reach_every_material_class() -> Result<()> {
+    let counts: RefCell<BTreeMap<&'static str, usize>> = RefCell::new(BTreeMap::new());
+    let mut runner = coverage_runner();
+    runner
+        .run(&generated_values(), |value| {
+            *counts
+                .borrow_mut()
+                .entry(material_class(&value))
+                .or_insert(0) += 1;
+            Ok(())
+        })
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+
+    let tally = counts.into_inner();
     for class in REQUIRED_CLASSES {
         ensure!(
             tally.get(class).copied().unwrap_or(0) > 0,
-            "class `{class}` was never generated in {PROPERTY_CASES} cases: {tally:?}",
+            "class `{class}` was never generated in {COVERAGE_CASES} cases \
+             at seed {COVERAGE_SEED}: {tally:?}",
         );
     }
     Ok(())
@@ -225,7 +290,7 @@ fn rebuild(value: &Value) -> Value {
 /// in input order, for generated sequences.
 #[test]
 fn deduplication_keeps_the_first_representative() -> Result<()> {
-    let mut runner = runner();
+    let mut runner = law_runner();
     runner
         .run(&prop::collection::vec(generated_values(), 0..8), |values| {
             let retained = stable_deduplicate(&values)
