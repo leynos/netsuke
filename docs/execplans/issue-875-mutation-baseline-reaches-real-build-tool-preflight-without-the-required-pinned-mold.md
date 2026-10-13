@@ -767,14 +767,17 @@ Every stopping point is documented here. Timestamps are UTC.
   repository, and says the worker's results must be read with that caveat. The
   body also records the two corrected numbers and the review tally.
 
-  **The CI half is done.** All three workflows on head `36a7f68c` concluded
-  `success`: `CI` (`38361956641`), `Netsukefile Build Test` (`38361956431`) and
-  `Release Dry Run` (`38361956933`). `CI`'s five jobs — `build-test`,
-  `kani-smoke`, `Windows / build-test-windows`, `Windows / lint-windows` and
-  `Windows / windows-msi-upgrade` — are each `completed success`.
+  **The CI half is done.** All three workflows concluded `success` on every
+  head pushed after the fix: `36a7f68c` (`CI` `38361956641`,
+  `Netsukefile Build Test` `38361956431`, `Release Dry Run` `38361956933`) and
+  the final head `d2d1963f` (`CI` `38369104515`, `Netsukefile Build Test`
+  `38369104160`, `Release Dry Run` `38369104932`). `CI`'s five jobs —
+  `build-test`, `kani-smoke`, `Windows / build-test-windows`,
+  `Windows / lint-windows` and `Windows / windows-msi-upgrade` — are each
+  `completed success`.
 
-  The remaining gate is the local full-gate report and the draft flag being
-  cleared, which itself suppresses CodeRabbit's GitHub review
+  The remaining gate is clearing the draft flag, which itself suppresses
+  CodeRabbit's GitHub review
   (`success CodeRabbit Review skipped: draft pull request`).
 
 ## Surprises & discoveries
