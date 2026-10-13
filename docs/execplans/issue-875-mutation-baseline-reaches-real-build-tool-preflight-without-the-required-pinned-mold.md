@@ -724,6 +724,16 @@ Every stopping point is documented here. Timestamps are UTC.
   therefore gated on CI green and on the pull request stating the unmet
   criterion, not on a zero-finding review.
 
+  **The PR-description half is done.** PR #911's body now carries a section
+  headed "One acceptance criterion is unmet, and it is recorded rather than
+  claimed", which sets out the strict and no-regression readings, states that
+  the strict one is unmet and why the rectification is out of reach from this
+  repository, and says the worker's results must be read with that caveat. The
+  body also records the two corrected numbers and the review tally. The
+  remaining gate is CI green on `17e12e31` and the draft flag being cleared,
+  which itself suppresses CodeRabbit's GitHub review
+  (`success CodeRabbit Review skipped: draft pull request`).
+
 ## Surprises & discoveries
 
 Unexpected findings during implementation that were not anticipated as risks.
