@@ -6,9 +6,11 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
-Awaiting approval. This revision follows a design review and a rebase onto
+`EP-M0` and `EP-M1` are complete and `ADR-030` is written and indexed. The
+approval gate was passed on 2026-09-27. `EP-M2` is the next milestone and is
+not yet started. This revision follows a design review and a rebase onto
 `origin/main`.
 
 ## Purpose / big picture
@@ -2245,8 +2247,17 @@ each verified against the artefact rather than inferred:
    and the guide cannot drift silently.
 
 Replicating the contract's own `header_lines`/`header_status` logic over all
-**50** plans under `docs/execplans/` now reports every one in vocabulary, so
+**49** plans under `docs/execplans/` now reports every one in vocabulary, so
 this failure is discharged at the tree level and not only for this file.
+*Corrected on 2026-10-13:* this sentence previously read "**50** plans". The
+count is 49 at every revision of this branch, including `20e5f480` where the
+claim was first written, and the contract's `execplan_names` enumerates
+`read_dir("docs/execplans")` filtered to the `md` extension — the same 49. No
+plan has ever been deleted from the directory on any ref, so the figure was
+wrong when written rather than made stale by a later removal. The mis-count is
+the more instructive for being in a sentence whose whole purpose was to prove a
+claim by exhaustive enumeration: the replication was sound and its *headline
+number* was not derived from it.
 
 **Discharged in CI.** The fix was pushed as a fast-forward from `faef4e13` to
 `20e5f480` (verified through the Git refs API afterwards, because the local
@@ -2283,6 +2294,55 @@ with no crate segment (`ninja_gen::property_tests::dependency_only`,
 `^`-anchored selector therefore matches from the first module segment, which is
 what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 
+- [x] (2026-10-13T00:00:00Z) Confirmed CI run `38056865899` (workflow `CI`,
+  `pull_request`) **fully green at the branch tip `7ec291a9`**, which is the
+  revision previously unobserved. All five jobs report `success` — `kani-smoke`,
+  `build-test`, `Windows / windows-msi-upgrade`,
+  `Windows / build-test-windows`, `Windows / lint-windows` — and `build-test`
+  step 29 `Test and Measure Coverage` is `success`. The run log names the
+  specific contract test rather than leaving the step verdict to stand for it:
+  `PASS [0.009s] (2434/3917) netsuke-build::execplan_status_contract_tests
+  every_execplan_header_status_is_within_the_closed_set`.
+  Two sibling runs at the same revision are also green (`38056866031`
+  `Release Dry Run`, `38056865601` `Netsukefile Build Test`); the
+  `pull_request_target` run `38056864662` is `skipped`, which is its normal
+  disposition. **The `Status:` header defect is therefore discharged in CI at
+  the tip**, superseding the `20e5f480` evidence recorded above, and the green
+  result is now attributable to a commit whose tree contains every correction
+  made so far.
+- [x] (2026-10-13T00:00:00Z) Corrected the header `Status:` from `DRAFT` to
+  `IN PROGRESS`, and removed the stale "Awaiting approval" sentence. This is a
+  defect the style guide names explicitly: `DRAFT` means "written, not yet
+  approved for implementation", and `APPROVED` means "approved, implementation
+  not yet started". Neither holds — the approval gate was passed on 2026-09-27
+  and `EP-M1` has since **delivered** a tracked artefact,
+  `docs/adr-030-ninja-emission-determinism-contract.md`, indexed in
+  `docs/contents.md`. The header had read `DRAFT` in every revision since the
+  first, so the field had drifted eight revisions behind the `Progress` section
+  that is its authority.
+- [x] (2026-10-13T00:00:00Z) Recorded that `origin/main` has **moved again**,
+  from `e1df2ead` to `b14bde20`, leaving this branch 12 commits behind. The
+  movement does **not** disturb `EP-M2`'s base: re-deriving the seam shows
+  `src/ninja_gen/mod.rs` still at 386 lines,
+  `tests/kani_mutation_evidence_tests.rs` still at 390, the
+  `ensure!(*root == "ir", …)` assertion still at line 212, and no change to
+  `src/ninja_gen/` or `.config/nextest.toml`. The one relevant change is to
+  `Makefile`, which gains the shared CV-005 CodeScene contract checker and a
+  `CV005_CONTRACTS_REF` pin that `make test-workflow-contracts` now invokes
+  against `.github/cv005.toml` — a file this branch does not carry. **This is a
+  rebase hazard for a later point in this branch's life, not for `EP-M2`**: a
+  rebase must merge that Makefile hunk, and the `proptest` target `EP-M2` adds
+  must not displace it. No milestone or obligation changed.
+- [x] (2026-10-13T00:00:00Z) Confirmed the compile-admission pool has
+  **cleared**. `build-limits-status` reports
+  `capacity 4, held 4, healthy, sccache unreachable, compiling directly`, with
+  the longest wait at **16.0 s** against the **5593 s** seen while the pool was
+  wedged. The stuck tokens the earlier entries describe are gone and the
+  supervisor no longer reports `drain check failed`. The Rust gates are
+  therefore runnable locally again and `EP-M2`'s block on admission is lifted.
+  Note the separate `sccache unreachable` clause: builds now run uncached,
+  which is not a failure but does make the first `EP-M2` gate run a cold one.
+
 - [ ] `EP-M2`: file splits, mutation-evidence contract, ordering helpers,
       `make proptest`.
 - [ ] `EP-M3`: shared strategy and compact `Debug`.
@@ -2293,6 +2353,52 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 - [ ] `EP-M8`: `OBL-NINJA`, documentation, evidence sweep, roadmap.
 
 ## Surprises & discoveries
+
+- (2026-10-13) **An ExecPlan's header `Status:` is derived, not remembered, and
+  this plan's had been wrong for eight revisions.** The field read `DRAFT` from
+  the first revision onward while the document beneath it recorded a passed
+  approval gate, a delivered ADR, and three completed review rounds. The
+  failure mode is specific: `Status:` is a *summary* of `Progress`, and a
+  summary maintained by hand drifts the moment the section it summarises moves.
+  The style guide resolves the disagreement in one direction only — "when the
+  two disagree, the sections and the roadmap are correct, and the header is the
+  defect" — so a stale header is not a cosmetic wart but a documented defect
+  with a stated repair. The practical rule: **recompute the header from
+  `Progress` at the start of any revision, and never carry it forward.**
+
+- (2026-10-13) **The local `mdtablefix` is a version behind the gate's, and the
+  skew corrupts prose rather than merely reformatting it.** CI pins
+  `MDTABLEFIX_VERSION: '0.6.1'`; this host carries **0.6.0**. Running
+  `make fmt` under 0.6.0 rewrote a factual sentence in this plan's `Progress`
+  section — "the rebase replayed **18.** A content check confirms…" became
+  "replayed **1.** …" — because `--renumber` read the sentence-initial cardinal
+  as an ordered-list marker and renumbered it. The commit the edit was applied
+  to passes `check-fmt` under the CI pin (`1 file left unchanged`, exit 0), so
+  **0.6.1 accepts the "18." form and 0.6.0 is the one that is wrong**; the
+  corruption is invisible to a local `make fmt && make check-fmt` cycle, which
+  is self-consistent under whichever version happens to be installed. It was
+  caught only by diffing the formatter's output against the committed bytes and
+  asking which version adjudicates. Three further 0.6.0 rewraps in the same run
+  were reverted for the same reason. **The rule: derive the gate's verdict from
+  the gate's pinned tool, not the host's** — `grep -nE '_VERSION:'`
+  `.github/workflows/ci.yml` against `<tool> --version`, then run the pinned
+  binary from a scratch path via the Makefile's `?=` seam (`MDTABLEFIX=…`) so
+  no shared binary is replaced. A formatter is not a word processor: its
+  `--renumber` can change a *number* the document asserts, and a number is a
+  factual claim.
+
+- (2026-10-13) **A green run at a branch tip and a green run at its parent are
+  different claims, and only the second was in hand.** The earlier entry
+  recorded CI `38055325773` discharging the `Status:` defect, but that run's
+  head is `20e5f480` — the **parent** of the then-current tip `7ec291a9`. The
+  defect was discharged *one revision behind the tree*, and the tip's own run
+  had not been observed. It now has been (`38056865899`, fully green, with the
+  contract test named in the log), so the claim is finally attributed to the
+  tree it describes. The general hazard is that "CI is green" silently means
+  "CI is green for some revision in the neighbourhood" unless the head SHA is
+  read from the same response as the verdict. This is the same class as the
+  repository's existing rule that a gate log's filename suffix is not a
+  revision.
 
 - (2026-10-10) The plan's longest-standing open question — what a nextest
   `test(...)` selector is anchored against for a library-side suite — was not
@@ -2570,6 +2676,45 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 
 ## Decision log
 
+- Decision: adjudicate `check-fmt` with the CI-pinned `mdtablefix` (0.6.1),
+  installed to a scratch path and passed through the Makefile's `MDTABLEFIX`
+  seam, rather than with the host's 0.6.0. Rationale: the two versions have
+  different canonical wrap points, and here the difference is a **content**
+  change, not a cosmetic one — 0.6.0's `--renumber` rewrote the cardinal in
+  "the rebase replayed 18." to "1.", silently falsifying a sentence in this
+  plan's own `Progress`. The committed bytes pass under 0.6.1, which is the
+  version CI runs, so the host tool is the deviant one and its output must not
+  be committed. Options considered: (a) commit the host formatter's output and
+  let CI adjudicate; (b) pin the tool locally and revert the host's rewrite.
+  (b) was chosen because (a) publishes a false statement in the interim and CI
+  would then reject the *wrapping* while the *number* stayed wrong. Note the
+  failure is invisible to a local `make fmt && make check-fmt` cycle, which is
+  self-consistent under either version. Affected identifiers: none; this is a
+  tooling decision, recorded here because it changed what the plan asserts.
+  Date/Author: 2026-10-13 / implementing agent.
+
+- Decision: move the header `Status:` from `DRAFT` to `IN PROGRESS`, and
+  **decline** to mark roadmap item `4.3.1` complete. Rationale: the two are
+  different claims and the evidence supports only the first. The header
+  summarises work done — the approval gate passed on 2026-09-27, `EP-M0` and
+  `EP-M1` are complete, `ADR-030` is written and indexed, and three review
+  rounds have been discharged — while the roadmap box asserts the *item's*
+  deliverable, Proptest coverage for deterministic Ninja emission, which does
+  not exist. The branch diff against `origin/main` is four files —
+  `docs/adr-030-ninja-emission-determinism-contract.md`, `docs/contents.md`,
+  this plan, and `typos.toml` — with no Rust, no `Makefile`, and no
+  `.config/nextest.toml` change; `src/ninja_gen/named_action.rs` is absent on
+  every ref, `make proptest` is absent from the `Makefile`, and the roadmap's
+  three sub-items (insertion-order stability, `default` target ordering,
+  `path_key` invariance) are unproven. Checking the box would assert coverage
+  that does not exist — the exact defect class this plan has spent eight
+  revisions removing, including a retraction published in `3180ccd2`. Options
+  considered: (a) check the box on the strength of the plan being complete; (b)
+  leave it unchecked and record why. (b) was chosen because roadmap 4.3.1's own
+  text names Proptest coverage as the deliverable, not the plan. Affected
+  identifiers: none; no obligation, tolerance, or acceptance clause changed.
+  Date/Author: 2026-10-13 / implementing agent.
+
 - Decision: reconcile the base **before** implementing `EP-M2`, rather than
   implementing against this branch's tree. Rationale: the sixth revision's
   `EP-M2` seam described `src/ninja_gen/mod.rs` with `src/ninja_gen/` already
@@ -2606,7 +2751,10 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 
 - Decision: keep this ExecPlan pre-implementation and approval-gated.
   Rationale: the user stated the plan must be approved before implementation.
-  Date/Author: 2026-09-09 / planning agent.
+  Date/Author: 2026-09-09 / planning agent. **Superseded 2026-09-27**: the
+  approval gate was passed when the user directed implementation to proceed,
+  and the header status has since moved to `IN PROGRESS`. The entry is retained
+  as the record of the decision as it stood on its date.
 
 - Decision: state `P-1`'s non-empty-output clause as a **property-domain
   restriction** rather than a loader guarantee, and exclude empty target names
@@ -2918,6 +3066,34 @@ whether the `graph_view` strategy was successfully absorbed; and whether the
 generalized mutation-evidence contract held up.
 
 ## Revision note
+
+- 2026-10-13 (eighth revision, status reconciliation): **no milestone or
+  obligation changed**, and no design decision was revisited. Five inputs were
+  re-derived against the live repository. The header `Status:` moves from
+  `DRAFT` to `IN PROGRESS` after eight revisions of drift: the approval gate
+  passed on 2026-09-27 and `EP-M1` has since delivered `ADR-030`, so neither
+  `DRAFT` nor `APPROVED` described the document. The stale "Awaiting approval"
+  sentence beneath it is removed for the same reason. Roadmap `4.3.1` is
+  **deliberately left unchecked**: its deliverable is Proptest coverage, which
+  does not exist, and the branch diff against `origin/main` is four
+  documentation files. CI run `38056865899` is confirmed **fully green at the
+  branch tip `7ec291a9`**, superseding the earlier `20e5f480` evidence and
+  finally attributing the green result to the revision it describes. Finally,
+  `origin/main` has moved again to `b14bde20` (12 commits), and re-deriving the
+  seam shows `EP-M2` unaffected — `src/ninja_gen/mod.rs` is still 386 lines,
+  the mutation-evidence file still 390, and the `ir`-root assertion still at
+  line 212 — with one rebase hazard recorded for later: `main`'s `Makefile` now
+  runs the shared CV-005 contract checker and pins `CV005_CONTRACTS_REF`, so a
+  rebase must merge that hunk rather than let `EP-M2`'s new `proptest` target
+  displace it. The compile-admission pool has cleared (longest wait 16 s
+  against 5593 s), so the local Rust gates are runnable again. Two document
+  defects were corrected in passing: the `Progress` claim of "**50** plans" is
+  really **49** (the contract's `execplan_names` enumerates the same 49, and no
+  plan has ever been deleted), and the header field itself had drifted eight
+  revisions. One new hazard is recorded: the host's `mdtablefix` is **0.6.0**
+  while CI pins **0.6.1**, and the host version's `--renumber` silently rewrote
+  a factual "18." to "1." in this plan's prose — so `check-fmt` is now
+  adjudicated with the pinned binary.
 
 - 2026-10-10 (seventh revision, pre-`EP-M2` base reconciliation): no milestone
   or obligation changed. Three planning inputs were re-derived against the live
