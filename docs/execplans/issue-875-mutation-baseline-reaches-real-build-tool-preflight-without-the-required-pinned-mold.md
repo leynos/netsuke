@@ -623,9 +623,24 @@ Every stopping point is documented here. Timestamps are UTC.
   `git diff c65ad970 HEAD -- .github/workflows/` is `+39` lines, all inside
   `mutation-testing.yml`, with no `runs-on`, `concurrency`, `cache`,
   `permissions` or `on:` line touched.
-- [ ] Milestone 3 remainder: run the doctest half (`make doctest`) at the
-  current revision. `make test-workflow-contracts` is discharged above, and the
-  nextest half's remaining failures are the cold-cache timeouts recorded here.
+- [x] (2026-10-13 05:50Z) **The nextest half now reports zero failures on this
+  host: `3914 tests run: 3905 passed (3 slow), 9 timed out, 6 skipped` in 3399
+  s.** This supersedes the earlier `3897 PASS / 0 FAIL / 4 TIMEOUT` reading —
+  the same suite, a longer run, and the same environmental residue. All nine
+  `TIMEOUT`s are nested-Cargo fixture compiles (`command_env_ui_tests::*`,
+  `build_module_slice_ui_tests`, `locale_stub_ui_tests`,
+  `packaging_smoke_tests`), and the diagnostic is measured rather than
+  inferred: **573** `sccache server is unreachable` lines. Every other test
+  passed, including the three named ones.
+
+  The doctest half did **not** complete and is not claimed as evidence. It had
+  emitted only `Doc-tests netsuke` and `Doc-tests test_support` — all green,
+  `88`/`2`/`39` passed, 0 failed — before hanging for three hours on an idle
+  process holding a `-j2` build-limits slot (`build-limits-status` showed
+  `capacity 4, held 4`, `sccache unreachable, compiling directly`, while other
+  agents' crates queued). It was stopped, recovering the slot. The doctest half
+  is therefore **not** evidence for this change either way, and Milestone 4
+  should not treat it as a pass.
 - [ ] Milestone 4: ExecPlan finalized, `coderabbit review --agent` clean, CI
   green, PR marked ready.
 
