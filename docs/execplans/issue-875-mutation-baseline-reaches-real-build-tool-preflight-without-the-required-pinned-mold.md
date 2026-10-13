@@ -654,13 +654,13 @@ Every stopping point is documented here. Timestamps are UTC.
   1. `shared-actions#544` is still `OPEN` with `closedAt: null`, **zero**
      comments, and `updatedAt` of 2026-10-07 — three days before the pinned
      revision was cut, so there is no fixing commit to pin.
-  2. `mutation-cargo.yml` at the pin declares fifteen `workflow_call` inputs
-     and **none** of them is `rustflags`; the same file at shared-actions
-     `HEAD` (`aea9c14c24b7`, 2026-10-12) still declares fifteen inputs and
-     still none. The only setup-rust call there is
-     `with: install-mold: ${{ inputs.install-mold }}`. So no revision of this
-     reusable workflow, at the pin or at its tip, exposes a flag-ownership
-     surface a caller could pin to.
+  2. `mutation-cargo.yml` at the pin declares 13 `workflow_call` inputs and
+     **none** of them is `rustflags`; the same file at shared-actions `HEAD`
+     (`aea9c14c24b7`, 2026-10-12) declares 14 — the tip adds
+     `install-clang-lld` — and still none is `rustflags`. The only setup-rust
+     call there is `with: install-mold: ${{ inputs.install-mold }}`. So no
+     revision of this reusable workflow, at the pin or at its tip, exposes a
+     flag-ownership surface a caller could pin to.
   3. `setup-rust`'s `rustflags` input still defaults to `'-D warnings'` at
      shared-actions `HEAD` (`action.yml:85`), so the default that displaces
      `.cargo/config.toml` is unchanged upstream.
@@ -682,6 +682,40 @@ Every stopping point is documented here. Timestamps are UTC.
   disposition, because the finding's own prescribed remedy ("pin the fixing
   revision") has been measured to have nothing to pin; the plan records the
   probe rather than re-litigating it silently.
+- [x] (2026-10-13 09:05Z) **Two numbers in the committed text were wrong, and
+  re-deriving them from the source rather than from the plan's own summary
+  caught both.** Neither was caught by a gate: `make check-fmt`,
+  `make markdownlint` and `make test-workflow-contracts` all pass on a wrong
+  count. Recorded here because the same class of error will recur and the cheap
+  check is not obvious.
+
+  1. **The census run. A committed workflow comment cited run `38323348294` for
+     the 569-rustc-invocation flag census.** That run is the *verification*
+     dispatch at `a7769224`, where the census was not taken; the census is over
+     the `mutation-report-root-2` artefact, which
+     `gh api repos/leynos/netsuke/actions/jobs/114916843738` resolves to run
+     **`38280609203`** at `bc812986`. The two runs were being used in the same
+     document for different purposes, and the census's own provenance had been
+     written down once, correctly, in `Progress` — then transcribed wrongly
+     into the workflow comment. The plan's other citations of `38323348294`
+     (the `skipped` → `success` step transition) are correct and unchanged.
+  2. **The shared-workflow input count. "fifteen" was a miscount, and it had
+     propagated to the workflow comment, this plan, and the PR description.**
+     Measured properly — read the key names out of the `workflow_call.inputs`
+     block at each revision and compare the sets — `mutation-cargo.yml`
+     declares **13** inputs at the pin `0606ca89` and **14** at the tip
+     `aea9c14c24b7`, the tip's addition being `install-clang-lld`. Neither
+     declares `rustflags`, which is the load-bearing claim and is unaffected.
+     The over-count is exactly two, which is the signature of a loose
+     `grep -c "^      [a-z-]*:$"` inside an `on:`..`jobs:` span matching the
+     `workflow_call:` and `inputs:` lines as well as the input names. The
+     corrected numbers make the argument *stronger*, not weaker: the tip has
+     grown an input since the pin and it still is not `rustflags`.
+
+  The lesson is narrow and worth keeping: a count that appears in prose is a
+  measurement, and a measurement re-derived from a summary instead of from the
+  source is a transcription. Reading the key *names* out, rather than counting
+  lines that look like keys, makes the off-by-two impossible to miss.
 - [ ] Milestone 4: ExecPlan finalized, `coderabbit review --agent` clean, CI
   green, PR marked ready. **`coderabbit review --agent` cannot be reported
   clean while the fourth acceptance criterion is unmet:** every pass re-raises
@@ -693,6 +727,19 @@ Every stopping point is documented here. Timestamps are UTC.
 ## Surprises & discoveries
 
 Unexpected findings during implementation that were not anticipated as risks.
+
+- **Observation:** no gate can see a wrong number in prose, and the two numbers
+  that were wrong here had been re-derived from the plan's own summary rather
+  than from the source. Impact: a committed workflow comment cited the wrong
+  run id for the 569-invocation census, and "fifteen `workflow_call` inputs" —
+  a loose grep counting the `workflow_call:` and `inputs:` lines as keys — had
+  propagated to three files. The load-bearing claim (`rustflags` is absent at
+  every revision) survived both errors, so no conclusion changed, and that is
+  precisely why nothing caught them: `make check-fmt`, `make markdownlint` and
+  `make test-workflow-contracts` are all green on a false count. Corrected to
+  run `38280609203` and to 13 inputs at the pin / 14 at the tip. Recourse: when
+  a number in prose is a measurement, re-derive it from the artefact and read
+  the *names* out rather than counting lines that look like names.
 
 - **Observation:** an `RUSTFLAGS` that is *set to the empty string* is not the
   same as one that is *unset*, and treating the two alike would have recorded a
