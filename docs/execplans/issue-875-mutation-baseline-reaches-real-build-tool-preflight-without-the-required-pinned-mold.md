@@ -181,6 +181,26 @@ likelihood, and mitigation.
   `test_support::fs::write` → `set_mode`) and changes a helper only if a write
   handle can outlive a spawn. No retries are added.
 
+- **Risk:** a mutation shard can be reclaimed by GitHub before it finishes, so
+  the *run* concludes `failure` for an infrastructure reason and the shard
+  count is incomplete. Severity: medium (it does not affect the named tests,
+  and the baseline is already proven `ok`). Likelihood: **high — it is now the
+  observed norm, four occurrences across two runs and two shards in this one.**
+  Both occurrences here were at 59–65 minutes, so the pattern is consistent
+  with the platform limit rather than a cap this repository sets:
+  `mutation-cargo.yml` gives the job `timeout-minutes: 360`, the platform
+  maximum, and puts the caller's 300-minute budget on the *step* instead, so a
+  step timeout would still let the `always()` artefact upload run. Mitigation:
+  this risk is not mitigated by anything this branch can change — a shorter
+  matrix does not help, because each shard's work is a share of the same mutant
+  total. It is bounded instead by the evidence recorded in Progress: the
+  baseline is `ok` and mutants are evaluated and reported in the shard log,
+  which survives cancellation. Note for accuracy that reclaims are
+  **intermittent, not uniform**: run `35499357086` (20 September) concluded
+  `success` with its `mutants` job succeeding, so a shard can and does
+  complete. Report this to the pull request as an upstream observation, and do
+  not treat a reclaimed shard as a defect in this change.
+
 ## Progress
 
 Every stopping point is documented here. Timestamps are UTC.
@@ -536,6 +556,53 @@ Every stopping point is documented here. Timestamps are UTC.
   two red jobs were one defect, and it is repaired. A gate run of
   `Test and Measure Coverage` inside `build-test` covers the Rust suite on the
   merge path, independent of this host's cold sccache.
+- [x] (2026-10-13 00:55Z) **The worker evidence is complete, and both dead
+  shards are runner reclaims rather than test failures.** Run `38323348294` at
+  head `a7769224` logged, in the setup phase:
+
+  ```plaintext
+  build-tools: mold 2.41.0 at /opt/hostedtoolcache/mold/2.41.0-a3696680…/x86_64/bin/mold
+  build-tools: toolchain nightly-2026-08-23 available
+  RUSTFLAGS=-D warnings
+  CARGO_ENCODED_RUSTFLAGS=<unset>
+  Found 636 mutants to test
+  ok       Unmutated baseline in 122s build + 218s test
+  ```
+
+  `build-tools: mold 2.41.0` equals `tools/mold/VERSION`, and the install lands
+  on `PATH` because `setup-rust` writes `GITHUB_PATH`. The baseline is `ok`, so
+  the full unmodified suite passes on the worker with the named rustdoc tests
+  inside it. Mutants were then evaluated — shard 0 logged six `MISSED` lines
+  (e.g.
+  `src/host/pattern.rs:200:19: replace += with *= … in 47s build + 135s test`) —
+  so "a nonempty set of mutants executes" is discharged.
+
+  Shards 0 and 1 conclude `failure` with `step 11 Run mutation testing` =
+  `cancelled` after 59–65 min, each log ending `ERROR interrupted` →
+  `##[error]The runner has received a shutdown signal…` →
+  `The operation was canceled.` The job ceiling is `timeout-minutes: 360`, the
+  platform maximum, so this is GitHub reclaiming runners rather than a cap this
+  repository sets — the same infrastructure event recorded in the 12 October
+  run.
+
+  On flag ownership, the chain is now evidenced end to end:
+  `mutation-cargo.yml` calls `setup-rust` with **only** `install-mold`, and
+  `setup-rust`'s `rustflags` input defaults to `'-D warnings'`, whose own
+  description says a non-empty value is what stops `.cargo/config.toml`
+  applying. So mold is installed, on `PATH`, and asserted at the pin, while
+  `.cargo/config.toml`'s `cfg(target_os = "linux")` table — the one carrying
+  `-Clink-arg=-fuse-ld=mold` — is displaced. That is shared-actions#544, open
+  at 2026-10-07 with no fixing release (the newest `setup-rust` commit,
+  `3c0fa8e7` on 2026-10-10, is `(#583)`, unrelated). Per *Surprises*, the
+  response is **no local workaround**, with the finding linked from the pull
+  request. `ci.yml:279`'s own `RUSTFLAGS: -D warnings` is the *coverage*
+  exclusion from the build standard, so this repository's workflows stay
+  consistent with it.
+
+  Runner, cache and concurrency are unchanged:
+  `git diff c65ad970 HEAD -- .github/workflows/` is `+39` lines, all inside
+  `mutation-testing.yml`, with no `runs-on`, `concurrency`, `cache`,
+  `permissions` or `on:` line touched.
 - [ ] Milestone 3 remainder: run the doctest half (`make doctest`) at the
   current revision. `make test-workflow-contracts` is discharged above, and the
   nextest half's remaining failures are the cold-cache timeouts recorded here.
