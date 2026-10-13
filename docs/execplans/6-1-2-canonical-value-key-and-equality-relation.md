@@ -199,6 +199,18 @@ under way; the invocation naming this plan supplies execution approval.
   failed, naming twelve `.verus/**/out/*.rs` paths) and then fixed by adding
   `.verus/` to `.gitignore` in the same change as `".verus"` in
   `MACHINE_LOCAL_DIRECTORIES`, after which the same suite passed 59 of 59.
+- [x] (2026-10-13) EP-M1 gate batch 2 ran at the frozen revision
+  `65aba802f91b14a205ad8c399b6d7be59ccd13f6`, tree clean before and after every
+  gate. Six of seven green: `check-fmt` (RC=0, 4 s), `lint` (RC=0, 263 s),
+  `doc-coverage` (RC=0, 426 s, 98.87% against an 80% threshold), `markdownlint`
+  (RC=0, 33 s), `nixie` (RC=0, 3 s), `spelling` (RC=0, 21 s). `test` is red
+  (RC=2) for the environmental reason recorded under Surprises, and `doctest` —
+  the second prerequisite of `make test`, which the abort had never reached at
+  any revision — was run on its own and passed (RC=0, 100 s). Deliberately
+  excluded, with reasons: `test-workflow-contracts` and
+  `test-documentation-contracts` (no workflow, contract suite, or marked
+  example changed), `test-coverage-artifact` (no `scripts/` validator changed),
+  and `make verus` (no proof file exists until EP-M3).
 - [ ] Implement canonical keys/equality and stable deduplication; discharge
   property, BDD, runtime-boundary, and Verus obligations.
 - [ ] Update design and formal-verification guidance, run sequential gates, and
@@ -327,6 +339,82 @@ under way; the invocation naming this plan supplies execution approval.
   07:56:07 local) was written before the fix landed (07:57:56–07:58:13), so its
   binary was compiled from the unpatched tree. See the risk entry, the Progress
   entry, and the Decision log.
+- Observation (measured 2026-10-13, EP-M1 batch 2): **the `make test` failure at
+  `65aba802` is the down-`sccache` condition, not the per-test allowance.** Two
+  attempts against the same revision, same clean tree, one test, two different
+  signatures: attempt 1 **returned** a `launch-failed` spawn refusal at 141 s,
+  attempt 2 was **terminated** by nextest at 306.6 s
+  (`TIMEOUT [306.613s] … production_build_module_slice_has_expected_boundary`,
+  summary
+  `3896/3912 tests run: 3895 passed (16 slow), 1 timed out, 6 skipped` — zero
+  failures). The decisive measurement is a count, not the failure text: both
+  logs carry `the managed sccache server is unreachable` — **574** lines in
+  attempt 1, **573** in attempt 2 — against a previously measured threshold on
+  this branch where **1** such line accompanies a pass of exactly these
+  nested-Cargo tests. `sccache --show-stats` reports `Compile requests 0`, i.e.
+  the server was *reset*, not idle, so every nested compile ran from scratch
+  and the production dependency graph blew the 300 s cap on its own. Evidence:
+  `/tmp/test-netsuke-6-1-2-…out` (attempt 2, RC=2, 700 s),
+  `/tmp/batch2-65aba802-test-attempt1-netsuke-6-1-2-…out` (attempt 1, preserved
+  byte-identical, 4860 lines), and `build-limits-status` reporting
+  `sccache unreachable, compiling directly`. Impact: the tempting reading —
+  invited by the configuration's own comment at `.config/nextest.toml:84-92`
+  that "a margin of 38 s on a 300 s cap is not a budget" — is that the
+  allowance is too small. It is at best secondary: **a widened timeout would
+  not have saved either attempt while the cache was down.** Cache first, budget
+  second. The failing test is untouched by this branch
+  (`git diff --name-only origin/main...HEAD` does not include
+  `tests/build_module_slice_ui_tests.rs`), so no commit here can be the cause.
+
+- Observation (measured 2026-10-13):
+  `production_build_module_slice_has_expected_boundary`
+  (`tests/build_module_slice_ui_tests.rs:81`) is a named member of the
+  `nested-cargo-builds` test-group (`.config/nextest.toml:66`, whose
+  `max-threads = 1` serializes it), but that override sets only `test-group` and
+  `success-output` — **no `slow-timeout`** — so group members keep the
+  profile's 300 s while queueing behind one another. Impact: this is a real
+  finding and it is **deliberately not actioned in EP-M1**. EP-M2 and EP-M3 add
+  further nested-Cargo members to the same serialized group, so an allowance
+  calibrated now would be calibrated against today's membership and rot as the
+  group grows; the decision is deferred to EP-M4, where the full membership
+  exists and both halves can be measured together. A second reason it cannot be
+  done here: widening an allowance to turn a gate green is the move the budget
+  question exists to prevent, and EP-M1 is a gate-verification milestone, not a
+  test-infrastructure one.
+
+- Observation (measured 2026-10-13): **`doctest` is the second prerequisite of
+  the documented `make test` (Makefile:226) and had never run at any revision
+  across three attempts.** The pattern-safe check is
+  `grep -c 'Doc-tests ' <log>` → `0`, confirmed on both `make test` attempts;
+  the single `test result:` line in those logs belongs to a nextest child
+  process, not to rustdoc. Impact: `make test` could not be recorded as
+  exercised while half of it was unrun, so `make doctest` was run on its own at
+  the frozen revision and **passed**: `GATE=doctest RC=0 SECONDS=100`, tree
+  clean before and after, **two** targets (`Doc-tests netsuke`,
+  `Doc-tests test_support`) and **three** `test result:` blocks —
+  `88 + 2 + 39 = 129` passed, 0 failed, `26 + 0 + 6 = 32` ignored. The
+  `netsuke` target emits two blocks because it has a normal and a compile-fail
+  phase; the third block is the specific miscount this repository has made
+  before, so targets are counted with `grep -E 'Doc-tests '`, never by counting
+  result blocks. No warning was emitted, and `RC=0` under `-D warnings` is what
+  makes that a gate rather than an absence of evidence.
+
+- Observation (measured 2026-10-13): **the doctest pass's own work is trivial;
+  its wall-clock is compilation.** The accepted run reports
+  `all doctests ran in 1.38s` against 100 s of gate wall-clock, and a prior
+  netsuke doctest log (`/tmp/GATE6-issue-875-doctest.out`) showed the same
+  shape. Impact: the cost of `make doctest` tracks target warmth and `sccache`
+  availability, not the size of the doctest suite — which is why the run above
+  took 100 s on a warm tree, and why a cold, cache-down tree can turn it into a
+  multi-hour stall. A stall is distinguishable from slowness cheaply: read a
+  candidate process's tick counters in `/proc/<pid>/stat` (fields 14 + 15)
+  twice, about 20 s apart — roughly 1 tick across 20 s means idle-blocked on a
+  lock or a build-limits slot, not slow. Cross-check `build-limits-status` for
+  `held 4` with a queue behind it. The risk did not materialize here, and the
+  run was bounded to about 15 minutes before it would have been stopped and
+  reported as a finding, because a previous run of this same target hung for
+  three hours holding a slot after emitting only its first two crates, and a
+  dead parent never reports.
 
 ## Decision log
 
