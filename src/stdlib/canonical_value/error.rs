@@ -129,7 +129,7 @@ fn render_steps(steps: &[PathStep]) -> String {
 ///
 /// The enum is neither `PartialEq` nor `Clone`: [`Self::Serialization`] holds a
 /// [`serde_json::Error`], which implements none of `PartialEq`, `Eq`, or
-/// `Clone`, and a hand-written implementation would have to invent semantics
+/// `Clone`, and a handwritten implementation would have to invent semantics
 /// for a foreign error type. Tests compare the rendered message or match the
 /// variant instead.
 ///

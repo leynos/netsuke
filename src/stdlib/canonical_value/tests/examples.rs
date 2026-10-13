@@ -1,4 +1,4 @@
-//! Hand-written cases over the public canonical-value surface.
+//! Handwritten cases over the public canonical-value surface.
 //!
 //! Every input here is written out rather than generated, so each case
 //! states one property in a form a reader can check by inspection. The

@@ -1,4 +1,4 @@
-//! Shared fixtures and the hand-written cases for canonical value identity.
+//! Shared fixtures and the handwritten cases for canonical value identity.
 //!
 //! Every case in this subtree drives the public surface — `canonical_key`,
 //! `canonical_eq`, and `stable_deduplicate` — so a refusal reaches the real
