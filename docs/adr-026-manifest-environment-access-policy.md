@@ -69,6 +69,23 @@ Trust handling for the *grants*, following ADR-021's reconciliation shape:
 - Files loaded through `extends` remain ordinary file layers by design. Only
   the exact primary project path is quarantined.
 
+### Addendum: preserve project-chain provenance (2026-10-11)
+
+Issue #844 corrected an escape in the original implementation. Discovery had
+marked only the primary `.netsuke.toml` as project-scoped, so an inherited
+checkout-controlled file was treated as an operator layer and its appended
+`env_allow_var` entries survived quarantine.
+
+The environment grant rule now follows each occurrence reached through an
+automatically discovered project root. The chain-wide `project_chain` marker
+causes allow entries from the primary file and each ancestor to be validated
+and removed before generic merging. The marker does not classify a physical
+file globally: if an operator root and a project root both reach the same file,
+the operator occurrence retains its grants and the project occurrence loses
+them. An explicitly selected chain keeps operator authority for its ancestors.
+This addendum changes only environment grants; fetch-policy fields remain
+subject to their existing primary-only quarantine.
+
 Enforcement belongs at the registered `env()` call boundary, not at the reader.
 The registered closure delegates to `env_var_with`, which evaluates the
 requested name before invoking `manifest::EnvReader`, so a denied lookup cannot

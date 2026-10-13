@@ -4477,6 +4477,12 @@ governs the non-doctest pass only, and deliberately stays small:
 - **A conservative slow timeout** (warn after 60s, terminate after five
   warning periods) so a hung test surfaces without failing the legitimately
   slow documentation end-to-end suites, which shell out to real Ninja.
+- **A targeted cold-package allowance.**
+  `packaged_manifest_retains_build_script_sources` runs
+  `cargo publish --dry-run` into a fresh target directory. Its measured runtime
+  approaches the default 300s cap before shared-cache and compiler-queue
+  delays, so this test alone receives ten warning periods (600s). This does not
+  add retries or widen the allowance for unrelated tests.
 - **One serialized child-Cargo group.** Tests that spawn their own Cargo build
   join `nested-cargo-builds`, whose `max-threads = 1` stops four Nextest
   workers from each starting a four-job build on four vCPUs. Membership is
@@ -6464,10 +6470,12 @@ composition for callers that already hold an input string.
 
 The CLI composition root builds `EnvAccessPolicy` from the effective merged
 `env_allow_var` and `env_block_var` fields, then passes it into manifest
-loading. Primary-project allow entries are quarantined before this composition
-so an untrusted manifest cannot grant itself access or activate default-deny;
-primary-project block entries remain cumulative because they only restrict
-access.
+loading. Allow entries from the primary project file and every occurrence in
+its automatically discovered `extends` chain are quarantined before this
+composition, so checkout-controlled ancestors cannot widen the operator
+allowlist or activate default-deny. Block entries remain cumulative because
+they only restrict access. Operator chains and explicitly selected ancestor
+occurrences retain operator authority.
 
 Argument validation and policy enforcement are separate concerns, and the
 module boundary follows that split. `register_env_function` in
@@ -6775,13 +6783,22 @@ policies.
 
 Network-policy grants do not use the ordinary file-layer precedence contract.
 Discovery preserves provenance for the exact primary project `.netsuke.toml`.
-`FileScope::Operator` marks ordinary layers, including files loaded through
-`extends`; `FileScope::Project` marks only the primary project file. Discovery
-extracts that file's `fetch_default_deny`, `fetch_allow_scheme`,
-`fetch_allow_host`, and `trust_project_fetch_policy` fields into a project
-request before the generic merge. Those fields are removed only from the
-primary file; `fetch_block_host` remains in all layers so blocklists continue
-to accumulate.
+For fetch-policy quarantine, `FileScope::Operator` marks ordinary layers,
+including files loaded through `extends`; `FileScope::Project` marks only the
+primary project file. Discovery extracts that file's `fetch_default_deny`,
+`fetch_allow_scheme`, `fetch_allow_host`, and `trust_project_fetch_policy`
+fields into a project request before the generic merge. Those fields are
+removed only from the primary file; `fetch_block_host` remains in all layers so
+blocklists continue to accumulate.
+
+Environment grants follow a separate boundary. The `project_chain` provenance
+flag marks every occurrence reached through an automatically discovered project
+root. `retain_layers_and_resolve_json` removes and validates `env_allow_var`
+for those occurrences and for a selected primary project file. It leaves
+`env_block_var` in the ordinary merge. If a physical file is reached through
+both operator and project roots, each occurrence keeps its own authority: the
+operator occurrence retains its grants and the project occurrence loses them.
+An explicitly selected ancestor remains operator-scoped.
 
 `retain_layers_and_resolve_json` returns the retained layers, the JSON
 preference, and the optional primary project request together.
@@ -6793,10 +6810,12 @@ merge pass, and the primary project file cannot self-authorize the opt-in. If
 the same file is reached through operator and project roots, both occurrences
 retain their root authority: the operator occurrence remains an ordinary layer,
 while the primary project occurrence is quarantined. The `extends` chain
-remains outside this trust boundary. The internal quarantine helpers are
+remains outside the fetch-policy trust boundary, so inherited fetch fields keep
+their existing generic-merge behaviour. The internal quarantine helpers are
 discovery-only composition points: they preserve each occurrence's authority
-and accumulated validation errors while extracting primary-only fetch requests
-and chain-wide budget narrowing requests.
+and accumulated validation errors while extracting primary-only fetch requests,
+chain-wide environment-grant quarantine, and chain-wide budget narrowing
+requests.
 
 The network-policy domain module
 [`src/stdlib/network/policy/reconciliation/mod.rs`][reconciliation-module] owns
@@ -6831,9 +6850,10 @@ The final merge order is:
 4. **CLI flags** — values explicitly passed on the command line.
 
 This order describes ordinary configuration fields. Fetch-policy grants use the
-trust-aware reconciliation described above: only the primary project file is
-project-scoped, while its `extends` layers, system, user, environment, and CLI
-values remain subject to ordinary merging.
+primary-only trust-aware reconciliation described above. Environment grants use
+occurrence provenance: every file reached through an automatically discovered
+project root is quarantined, while operator roots and explicitly selected
+ancestor occurrences retain operator authority.
 
 ### Configuration merge helper functions
 
@@ -6886,9 +6906,10 @@ Configuration merge helpers:
   and typed loading errors. It scans every layer, including layers after a
   malformed request, and keeps the original invalid JSON beside the error so
   diagnostic JSON preference is preserved. It extracts and validates all
-  quarantined fetch-policy fields from the primary project file and every
-  `extends` layer before generic merging, avoiding complete layer or JSON-value
-  copies before the full merge.
+  `env_allow_var` from the primary project file and every automatically
+  discovered project-chain occurrence, plus fetch-policy fields from the
+  primary project file, before generic merging. It avoids complete layer or
+  JSON-value copies before the full merge.
 - `cli_overrides_from_matches(matches: &ArgMatches) -> OrthoValue` extracts
   CLI-supplied fields, stripping defaults and non-CLI sources.
 - `EnvironmentLayer` converts an injected snapshot of `NETSUKE_*` values into

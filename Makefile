@@ -136,8 +136,9 @@ CV005_CONTRACTS_REF ?= 3754876bc4e94dc65c83af3def37828934f8f65e
 CV005_CONTRACTS = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 	--from 'git+https://github.com/leynos/shared-actions@$(CV005_CONTRACTS_REF)\#subdirectory=packages/cv005-contracts' \
 	cv005-contracts
-# Public GitHub tool sources must not inherit workspace-specific URL rewrites.
-PUBLIC_GIT_SOURCE_ENV = GIT_CONFIG_COUNT=0
+# Public GitHub tool sources must not inherit URL rewrites or custom Git
+# helper paths from the invoking environment.
+PUBLIC_GIT_SOURCE_ENV = env -u GIT_EXEC_PATH GIT_CONFIG_COUNT=0
 # The Python baseline every uv-driven helper pins. Bump this alongside the
 # `target-version`/`py-version` settings in pyproject.toml and the
 # `python-version` inputs in .github/workflows/ci.yml, release.yml, and

@@ -25,6 +25,14 @@ fn write_project_policy(dir: &Dir, field: &str) -> Result<()> {
     Ok(())
 }
 
+/// Write a malformed grant in a project-selected ancestor layer.
+fn write_project_ancestor_policy(dir: &Dir, field: &str) -> Result<()> {
+    let malformed = format!("json = true\n{field} = \"true\"\n");
+    dir.write("base.toml", malformed)?;
+    dir.write(".netsuke.toml", "extends = \"base.toml\"\n")?;
+    Ok(())
+}
+
 #[rstest]
 #[case::default_deny("fetch_default_deny")]
 #[case::allow_scheme("fetch_allow_scheme")]
@@ -73,6 +81,41 @@ fn malformed_project_policy_preserves_json_and_validation_error(
     ensure!(
         matches!(error.as_ref(), OrthoError::Validation { key, .. } if key == field),
         "merge must return the typed validation error for {field}: {error:?}"
+    );
+    Ok(())
+}
+
+/// Preserve JSON mode and validation details for malformed inherited grants.
+#[test]
+fn malformed_project_ancestor_grant_preserves_json_and_validation_error() -> Result<()> {
+    let project = tempdir()?;
+    let config_dir = Dir::open_ambient_dir(project.path(), ambient_authority())?;
+    write_project_ancestor_policy(&config_dir, "env_allow_var")?;
+    let project_path = project.path().to_str().context("project path is UTF-8")?;
+    let args = ["netsuke", "--directory", project_path];
+    let cli = Cli::parse_from(args);
+    let matches = Cli::command().get_matches_from(args);
+    let env = TestEnv::default()
+        .with_var("HOME", project.path())
+        .with_var("XDG_CONFIG_HOME", project.path().join("user"))
+        .with_var("XDG_CONFIG_DIRS", project.path().join("system"));
+
+    let (json, outcome) = resolve_json_and_layers_outcome_with_env(&cli, &matches, &env);
+
+    ensure!(
+        json?,
+        "inherited file JSON preference must remain available"
+    );
+    ensure!(
+        matches!(outcome.first_error().map(AsRef::as_ref),
+            Some(OrthoError::Validation { key, .. }) if key == "env_allow_var"),
+        "discovery must retain the inherited grant validation error"
+    );
+    let error = merge_with_cached_file_layers(&cli, &matches, &env, outcome.into_layers())
+        .expect_err("cached merge must reject the malformed inherited grant");
+    ensure!(
+        matches!(error.as_ref(), OrthoError::Validation { key, .. } if key == "env_allow_var"),
+        "cached merge must return the inherited grant validation error: {error:?}"
     );
     Ok(())
 }

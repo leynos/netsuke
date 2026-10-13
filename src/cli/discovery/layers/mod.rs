@@ -262,6 +262,8 @@ fn project_scope_layers(project_file: Option<&Path>) -> OrthoResult<Vec<MergeLay
 #[cfg(test)]
 mod property_tests;
 #[cfg(test)]
+mod quarantine_trace_tests;
+#[cfg(test)]
 mod replay_tests;
 #[cfg(test)]
 mod selector_tests;

@@ -183,13 +183,15 @@ fn discover_file_layers_with_normalizer(
     let layers = match outcome {
         Ok(discovered_layers) => {
             let resolved = layers::retain_layers_and_resolve_json(discovered_layers);
+            let resolved_diagnostics =
+                diagnostics.with_env_grant_quarantine(resolved.env_grant_quarantine);
             DiscoveredLayers {
                 layers: resolved.layers,
                 json_preference: resolved.json_preference,
                 project_fetch_policy_request: resolved.project_request,
                 project_manifest_budget_request: resolved.project_budget_request,
                 errors: resolved.errors,
-                diagnostics,
+                diagnostics: resolved_diagnostics,
             }
         }
         Err(error) => DiscoveredLayers {
