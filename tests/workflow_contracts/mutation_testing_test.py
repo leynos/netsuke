@@ -33,6 +33,7 @@ the shared revision declares none and the repository's pin lives in
 Run via ``make test-workflow-contracts``.
 """
 
+import pytest
 from workflow_loading import (
     MUTATION_TESTING_WORKFLOW_PATH,
     load_workflow,
@@ -210,13 +211,16 @@ def test_install_mold_is_enabled_in_the_type_the_shared_workflow_declares() -> N
     would be rejected, so the value's type is asserted and not just its
     truthiness.
     """
-    value = _mutation_with_block().get(INSTALL_MOLD_INPUT)
-    assert isinstance(value, str), (
-        f"jobs.mutation.with.{INSTALL_MOLD_INPUT} must be the string "
-        f"'true'; the shared workflow declares it type: string, and a YAML "
-        f"boolean would be rejected at workflow-call time. Got {value!r} "
-        f"({type(value).__name__})"
-    )
+    match _mutation_with_block().get(INSTALL_MOLD_INPUT):
+        case str() as value:
+            pass
+        case other:
+            pytest.fail(
+                f"jobs.mutation.with.{INSTALL_MOLD_INPUT} must be the string "
+                f"'true'; the shared workflow declares it type: string, and a "
+                f"YAML boolean would be rejected at workflow-call time. Got "
+                f"{other!r} ({type(other).__name__})"
+            )
     assert value == "true", (
         f"jobs.mutation.with.{INSTALL_MOLD_INPUT} must enable the pinned "
         f"mold install, got {value!r}"
@@ -233,11 +237,14 @@ def test_setup_commands_verify_the_build_tool_pins_before_the_baseline() -> None
     printed variables are what the run log carries for the open question
     about which flag source selects the linker.
     """
-    value = _mutation_with_block().get(SETUP_COMMANDS_INPUT)
-    assert isinstance(value, str), (
-        f"jobs.mutation.with.{SETUP_COMMANDS_INPUT} must be a string, got "
-        f"{value!r} ({type(value).__name__})"
-    )
+    match _mutation_with_block().get(SETUP_COMMANDS_INPUT):
+        case str() as value:
+            pass
+        case other:
+            pytest.fail(
+                f"jobs.mutation.with.{SETUP_COMMANDS_INPUT} must be a string, "
+                f"got {other!r} ({type(other).__name__})"
+            )
     assert BUILD_TOOLS_TARGET in value, (
         f"jobs.mutation.with.{SETUP_COMMANDS_INPUT} must run "
         f"{BUILD_TOOLS_TARGET!r} so a missing or drifted tool stops the run "
