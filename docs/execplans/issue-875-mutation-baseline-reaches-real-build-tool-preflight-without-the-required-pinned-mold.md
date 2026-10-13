@@ -683,7 +683,12 @@ Every stopping point is documented here. Timestamps are UTC.
   revision") has been measured to have nothing to pin; the plan records the
   probe rather than re-litigating it silently.
 - [ ] Milestone 4: ExecPlan finalized, `coderabbit review --agent` clean, CI
-  green, PR marked ready.
+  green, PR marked ready. **`coderabbit review --agent` cannot be reported
+  clean while the fourth acceptance criterion is unmet:** every pass re-raises
+  the mold-selection finding as `major`, correctly, and four probes have
+  confirmed the underlying condition rather than resolved it. Milestone 4 is
+  therefore gated on CI green and on the pull request stating the unmet
+  criterion, not on a zero-finding review.
 
 ## Surprises & discoveries
 
@@ -1053,13 +1058,17 @@ Record every significant decision made while working on the plan.
 
 ## Outcomes & retrospective
 
-Measured against `Purpose / big picture`, which asked for four things: a worker
+Measured against `Purpose / big picture`, which asked for five things: a worker
 that has the pinned mold, rustdoc tests that stop depending on worker
-capability, the linked flag-ownership question recorded upstream rather than
-patched locally, and an ETXTBSY audit that changes nothing unless it reproduces.
+capability, the linker requirement kept intact, the flag-ownership question
+recorded upstream rather than patched locally, and an ETXTBSY audit that
+changes nothing unless it reproduces. The first, second, fourth and fifth are
+met. The third is met only under one of its two readings, and the split is set
+out below rather than averaged away.
 
-**All four are met.** The worker provisions mold — `build-tools: mold 2.41.0`
-matching `tools/mold/VERSION`, on `PATH` via `GITHUB_PATH`, with the
+**Three of the issue's four acceptance criteria are met, and the fourth is
+not.** The worker provisions mold — `build-tools: mold 2.41.0` matching
+`tools/mold/VERSION`, on `PATH` via `GITHUB_PATH`, with the
 `Run setup commands` step moving from `skipped` to `success`. The baseline then
 reports `ok Unmutated baseline in 122s build + 218s test` after
 `Found 636 mutants to test`, and mutants are evaluated and reported. The two
@@ -1072,6 +1081,39 @@ keeps the real prerequisite under test — including the new `doctest` case that
 reproduces the original failure. Flag ownership is recorded against
 shared-actions#544 with **no local workaround**, and the ETXTBSY audit was
 read-only with no helper changed and no retry added.
+
+**The fourth criterion, and the reading it turns on.** The issue's Acceptance
+asks that "required linker selection remains intact". That phrase has two
+readings and they disagree here, so both are stated.
+
+Under the **strict** reading — the worker's baseline is linked as the build
+standard requires — it is **not met**, and this change does not meet it. The
+census is unambiguous: `-Clink-arg=-fuse-ld=mold` appears on 0 of 569 rustc
+invocations while `RUSTFLAGS=-D warnings` appears on all 569, so the baseline
+compiles through the platform linker. `make check-build-tools` cannot close
+that gap, because it verifies the pin is *installed* rather than that Cargo
+*selects* it — which is why the preflight can be green on a worker whose
+baseline is not built to the standard.
+
+Under the **no-regression** reading — this change does not *remove* selection
+that was working — it is satisfied, and vacuously so: the 3 October worker had
+no mold at all, so it had no selection to lose. The change moves the worker
+from "no mold, no selection" to "mold installed, still no selection", which is
+the improvement the issue asked for but not the whole of it.
+
+The strict reading is the one to carry forward, because the no-regression
+reading is satisfied by doing nothing. The rectification is out of reach from
+this repository either way: it needs a `rustflags` input on
+`mutation-cargo.yml`, which neither the pinned revision nor its tip declares,
+or a fix upstream of #544, which has none. **A worker-scoped `RUSTFLAGS`
+override is the one remedy explicitly forbidden** — by the issue's own wording,
+by *Constraints*, and by CodeRabbit's finding — and it would displace the
+`.cargo/config.toml` state the build standard is defined by. So the strict
+criterion is left unmet and recorded rather than silently satisfied, and the
+mutation worker's results must be read with that caveat until an upstream input
+exists. This is the second finding on the branch that a green gate cannot
+settle; the first was that installing a linker on another job does not
+provision this one.
 
 **Three lessons worth carrying forward.** First, the issue's premise needed
 re-cutting: the reported symptom was accurate, but "the baseline reaches the
@@ -1093,10 +1135,17 @@ still pass on a quiet host before the change is trusted. The two jobs that were
 red on `172dd4ff` (`build-test` and `Windows / lint-windows`) were confirmed
 repaired at `d8e03753`; because every commit after that one touches Markdown
 only, their re-run is a formality, and the standing requirement is that CI be
-green on the final head before the pull request leaves draft. CodeRabbit
-returned three findings: two prose defects, both fixed, and one requiring mold
-selection to be restored before the preflight is accepted as proof,
-dispositioned as already documented and not actionable from a caller.
+green on the final head before the pull request leaves draft. CodeRabbit has
+run five passes over this branch. Four findings were prose or evidence defects
+and were fixed — first-person pronouns in this plan, a flag-precedence claim
+stated inaccurately, a reproduction recipe that could not work, and an
+acceptance line demanding evidence that was never obtainable. Two were
+load-bearing and both stand as recorded gaps: the mold-selection finding,
+raised on every pass, which is confirmed as diagnosed and confirmed as not
+actionable from a caller; and the empty-`RUSTFLAGS` reading, which the plan now
+states correctly. A zero-finding review is not reachable while the fourth
+criterion is unmet, and treating one as the exit condition would mean either
+deleting the finding or writing a workaround the issue forbids.
 
 **Upstream, unresolved by design.** shared-actions#544 remains open with no
 fixing revision, so a caller still cannot both request mold and keep the
