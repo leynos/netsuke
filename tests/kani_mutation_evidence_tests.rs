@@ -19,10 +19,11 @@
 //! half lives in [`compile_guard`], which is expensive enough to be gated.
 
 // This target is a crate root, so `mod child;` would resolve against
-// `tests/`; the children live beside this file. The repository's other
-// directory-module test trees select one child with `#[path]` and let the
-// rest resolve normally, which is available to them because their root is a
-// `mod.rs`. A crate root has no such subtree, so all four are spelled out.
+// `tests/`; the children live beside this file. That is why each is spelled
+// with `#[path]`, which is the house shape: 16 other `tests/*.rs` crate roots
+// reach their own `<stem>/` directory the same way, and a bare `mod` is
+// reserved for shared trees (`support`, `fixtures`, `common`) that really do
+// sit directly under `tests/`.
 #[path = "kani_mutation_evidence_tests/compile_guard.rs"]
 mod compile_guard;
 #[path = "kani_mutation_evidence_tests/contracts.rs"]
