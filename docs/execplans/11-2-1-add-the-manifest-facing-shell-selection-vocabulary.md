@@ -5,10 +5,11 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: BLOCKED
 
-This plan has been through an expert design review and revision. It awaits user
-approval; do not begin implementation until the user explicitly approves it.
+The user approved this plan on 2026-10-13. Stage A's untouched-tree baseline
+failed at `make test`, so implementation is stopped until that failure is
+resolved.
 
 ## Purpose / big picture
 
@@ -194,8 +195,15 @@ ExecPlan file itself.
       spellings in `ShellName` itself in this task. Added the ADR-019 addendum
       of 2026-09-24, aligned RFC 0011 sections 4.1, 5.2, and 11, and revised
       this plan (Decision D8).
-- [ ] User approval of the plan.
-- [ ] EP-M0: baseline gates recorded.
+- [x] (2026-10-13) User authorized implementation by asking to use the
+  `sdlc-implementation` skill for this plan.
+- [x] (2026-10-13) `make fmt` passed for the plan update after the Markdown
+  formatter's link-wrapping constraint was resolved with reference links.
+- [x] (2026-10-13) Final clean-environment EP-M0 run passed `make check-fmt`,
+  `make typecheck`, `make lint`, and `make doc-coverage`; `make test` failed on
+  a 300-second timeout in `cli_configuration_fixture_compiles`. See the
+  `-4.out` gate logs under `/tmp` and _Outcomes & retrospective_ below.
+- [ ] EP-M0: green baseline recorded; blocked by the timed-out test.
 - [ ] EP-M1: host family, built-in registry, and `ShellName` landed with
   tests.
 - [ ] EP-M2: `ShellSelection` codec, parity tests, properties, and behavioural
@@ -204,6 +212,22 @@ ExecPlan file itself.
 
 ## Surprises & discoveries
 
+- Observation: the untouched-tree test baseline timed out in a nested Cargo
+  fixture. Evidence: `tests/command_env_ui_tests.rs` gives
+  `cli_configuration_fixture_compiles` a dedicated
+  `target/cli-configuration-ui` directory; nextest timed it out at 300 seconds
+  with 3,348 of 3,364 tests passed. After termination, the target directory
+  contained 492 MB, and the build supervisor still showed three held slots and
+  queued requests. This supports, but does not prove, shared compile contention
+  as the cause. The log is
+  `/tmp/test-f900fc37-c6fe-4ed1-8700-ec572d9952c3-11-2-1-add-the-manifest-facing-shell-selection-vocabulary-4.out`.
+  Impact: Stage A requires stopping after any failed baseline gate, so no
+  product implementation has started.
+- Observation: the pinned Python lint dependency initially used Lody's Git
+  HTTPS helper even when `/usr/bin/git` was selected. Evidence: setting
+  `GIT_EXEC_PATH=/usr/libexec/git-core` in the clean command environment made
+  the public dependency fetch succeed; the final `make lint` passed. Impact:
+  later Git-backed gates must use the same command-scoped helper path.
 - Observation: manifests are not deserialized directly from YAML.
   Evidence: `evaluate_manifest` in `src/manifest/mod.rs` parses YAML into
   `ManifestValue` (`serde_json::Value`) with `serde_saphyr::from_str`, expands
@@ -236,6 +260,24 @@ ExecPlan file itself.
   `validate_recipe_shell_with(is_windows: bool, …)` in
   `src/runner/recipe_shell.rs`. Impact: Decision D2 introduces an injected
   host-family value so both host tables are tested on every platform.
+- Observation: upstream `serde-saphyr` 1.2.0 source confirms the plain,
+  untagged scalar path uses YAML 1.1 Boolean inference by default. Firecrawl
+  retrieved `parse_yaml11_bool` from `src/parse_scalars.rs`, the
+  `strict_booleans` default and documentation from `src/de/options.rs`, and the
+  dispatch from `deserialize_any` in `src/de/deserializer.rs` on 2026-10-13.
+  The parser trims and accepts ASCII case variants of `true`, `yes`, `y`, `on`,
+  `false`, `no`, `n`, and `off`; the default for `strict_booleans` is `false`,
+  and quoted scalars remain strings. This supports AXIOM-1 and the existing
+  plan boundary; no front-end change is needed here. Sources:
+  [parser][saphyr-parser], [options][saphyr-options], and
+  [untyped deserializer][saphyr-deserializer].
+
+[saphyr-parser]:
+  <https://docs.rs/crate/serde-saphyr/1.2.0/source/src/parse_scalars.rs>
+[saphyr-options]:
+  <https://docs.rs/crate/serde-saphyr/1.2.0/source/src/de/options.rs>
+[saphyr-deserializer]:
+  <https://docs.rs/crate/serde-saphyr/1.2.0/source/src/de/deserializer.rs>
 
 ## Decision log
 
@@ -420,8 +462,19 @@ ExecPlan file itself.
 
 ## Outcomes & retrospective
 
-Not yet started. On completion, record here the delivered API, the gate
-results, and these hand-offs:
+EP-M0 is blocked and implementation has not started. The final clean Git
+environment run passed `make check-fmt`, `make typecheck`, `make lint`, and
+`make doc-coverage` (98.81%, 4,728/4,785). Nextest reported 3,348 tests passed,
+one timeout, and five skipped; it also warned that 15 tests were not run after
+the failure.
+`netsuke-build::command_env_ui_tests::cli_configuration_fixture_compiles` timed
+out at 300 seconds. Doctests did not run. The failure evidence is in the
+`-4.out` logs under `/tmp`, especially the test log named in _Surprises &
+discoveries_. No product source changes were made. The plan's Stage A stop rule
+prevents EP-M1 until the baseline test issue is resolved.
+
+On completion, record here the delivered API, the gate results, and these
+hand-offs:
 
 - to 11.2.2: add `src/shell_selection/name.rs` to the build-script slice by
   `#[path]`, as `host_pattern` is, and confirm no inherent method is dead
@@ -1340,3 +1393,6 @@ executable path belongs to 11.2.3, and the IR's `ResolvedShell` belongs to
   Constraints, Risks, Conformance basis, O2, O7, O8, O10, O11, and O12, the
   behavioural examples, the interface sketch, and the acceptance criteria. The
   milestone structure is unchanged.
+- 2026-10-13: recorded the final EP-M0 gate results and stopped at Stage A
+  after the untouched-tree nextest timeout; status is `BLOCKED` pending its
+  resolution.
