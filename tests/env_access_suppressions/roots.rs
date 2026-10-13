@@ -32,13 +32,24 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 /// it fails if any Rust source anywhere in the workspace is outside these
 /// roots, so a root that is misspelled, or a target location nobody predicted,
 /// is caught rather than silently excusing its sources.
-pub(super) const COMPILED_SOURCE_ROOTS: [&str; 6] = [
+///
+/// `verus` is a scanned root for a different reason from its neighbours.
+/// Cargo neither discovers nor compiles it, so the clippy argument above does
+/// not apply; the directory holds tracked repository sources whose compiler is
+/// Verus, not rustc. It is listed because it is repository source rather than
+/// machine-local state, and the tie-break rule stated under
+/// [`MACHINE_LOCAL_DIRECTORIES`] decides it: an entry that should be here and
+/// is missing costs a false failure naming a real file, while an entry that
+/// should not be here can only hide a source. Do not remove it for failing the
+/// rationale its neighbours share.
+pub(super) const COMPILED_SOURCE_ROOTS: [&str; 7] = [
     "src",
     "build_l10n_audit",
     "test_support/src",
     "tests",
     "benches",
     "examples",
+    "verus",
 ];
 
 /// The fewest Rust sources the workspace can hold while the walk still works.

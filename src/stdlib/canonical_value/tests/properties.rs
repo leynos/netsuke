@@ -73,7 +73,7 @@ const SCALAR_WEIGHT: u32 = 8;
 ///
 /// The seed is deliberately left free, so each run tries inputs no earlier run
 /// has tried. Only the case count is fixed.
-fn law_runner() -> TestRunner {
+pub(super) fn law_runner() -> TestRunner {
     TestRunner::new(Config {
         cases: PROPERTY_CASES,
         ..Config::default()
@@ -87,7 +87,7 @@ fn law_runner() -> TestRunner {
 /// fail because an unlucky seed under-sampled a class. Freezing the sample
 /// makes the verdict and the reported counts identical on every run, which is
 /// what lets the counts be compared between runs at all.
-fn coverage_runner() -> TestRunner {
+pub(super) fn coverage_runner() -> TestRunner {
     TestRunner::new(Config {
         cases: COVERAGE_CASES,
         rng_seed: RngSeed::Fixed(COVERAGE_SEED),
@@ -106,7 +106,7 @@ fn coverage_runner() -> TestRunner {
 /// The scalar pool is boxed before recursing because its arms have eight
 /// different types, and `prop_recursive` requires one strategy for the base
 /// case rather than a union of them.
-fn generated_values() -> BoxedStrategy<Value> {
+pub(super) fn generated_values() -> BoxedStrategy<Value> {
     let scalar = prop_oneof![
         Just(Value::from(())),
         any::<bool>().prop_map(Value::from),
@@ -286,8 +286,14 @@ fn rebuild(value: &Value) -> Value {
     }
 }
 
-/// Property: deduplication keeps exactly one representative per canonical key,
-/// in input order, for generated sequences.
+/// Property: deduplication keeps exactly one representative per canonical key
+/// for generated sequences.
+///
+/// This case counts and de-duplicates; it says nothing about the order the
+/// representatives come back in, nor about which of two equal values was kept.
+/// Both are checked by the independent oracle in the sibling `oracle` battery,
+/// whose [`deduplication_agrees_with_the_independent_oracle`] fixes the retained
+/// values' identity and order against a quadratic first-index expectation.
 #[test]
 fn deduplication_keeps_the_first_representative() -> Result<()> {
     let mut runner = law_runner();
@@ -327,7 +333,7 @@ fn distinct(keys: &[CanonicalKey]) -> bool {
 /// the values it could not key would compare the deduplicated length against a
 /// shrunken expectation, so a generator that started emitting refusals would
 /// weaken the property below instead of failing it.
-fn distinct_count(values: &[Value]) -> std::result::Result<usize, CanonicalValueError> {
+pub(super) fn distinct_count(values: &[Value]) -> std::result::Result<usize, CanonicalValueError> {
     let keys = values
         .iter()
         .map(canonical_key)

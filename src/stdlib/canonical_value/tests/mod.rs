@@ -9,15 +9,18 @@
 //! count. This module owns the host fixtures and the helpers every other
 //! battery builds on; `boundaries` owns the refusals; `parity` owns the checks
 //! that compare emitted bytes against the canonicalizer itself; `properties`
-//! owns the cases whose inputs come from a generator; and `examples` owns the
-//! cases whose inputs are written out by hand. A fixture lives here rather
-//! than beside its first caller so that a battery cannot quietly drift onto a
+//! owns the cases whose inputs come from a generator and the shared runners;
+//! `oracle` owns the independent quadratic first-index oracle and the cases
+//! that check `stable_deduplicate` against it; and `examples` owns the cases
+//! whose inputs are written out by hand. A fixture lives here rather than
+//! beside its first caller so that a battery cannot quietly drift onto a
 //! private copy of it.
 //!
-//! EP-V3's independent quadratic first-index oracle, its standalone Verus
-//! proof over the abstract kernel, and the runtime correspondence test are
-//! deliberately absent: the next milestone owns the proof of
-//! `stable_deduplicate` and builds those against it.
+//! EP-V3's independent quadratic first-index oracle lives in `oracle`, and the
+//! standalone Verus proof over the abstract kernel lives in
+//! `verus/canonical_value/main.rs`: the oracle is the runtime correspondence
+//! test, checking retained values' identity and order against an expectation
+//! computed without calling `stable_deduplicate`.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -29,6 +32,7 @@ use super::*;
 
 mod boundaries;
 mod examples;
+mod oracle;
 mod parity;
 mod properties;
 

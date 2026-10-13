@@ -430,6 +430,53 @@ under way; the invocation naming this plan supplies execution approval.
   `markdownlint`, `spelling`, `nixie`) rather than the Rust suite.
 - [ ] Implement canonical keys/equality and stable deduplication; discharge
   property, BDD, runtime-boundary, and Verus obligations.
+- [x] (2026-10-13) **EP-M3 artefacts written; the mandated Verus command is
+  blocked by the pinned `prover-tools` revision, not by this proof.** Three
+  artefacts landed uncommitted: `verus/canonical_value/main.rs` (398 lines),
+  the independent quadratic first-index oracle in
+  `src/stdlib/canonical_value/tests/oracle.rs` (379 lines) with its
+  `mod oracle;` wiring and rewritten module doc in `tests/mod.rs`, and the
+  `"verus"` entry widening `COMPILED_SOURCE_ROOTS` to `[&str; 7]` in
+  `tests/env_access_suppressions/roots.rs`. `stable_deduplicate` gained no
+  edit; the two helper visibilities it needed (`law_runner`,
+  `generated_values`) were widened to `pub(super)` in `properties.rs`, whose
+  "in input order" doc claim now points at the oracle that discharges it. The
+  proof verifies:
+  `.verus/0.2026.10.04.426d8b0/verus/verus verus/canonical_value/main.rs` exits
+  **0** with `verification results:: 16 verified, 0 errors`, covering input
+  range, minimality, strict index ordering, key uniqueness, and coverage, plus
+  the plan's explicit induction obligation (`model_seen_contains`,
+  `model_retained_is_least`, `state_ok_skip`/`state_ok_take`). Focused suites
+  are green: `cargo nextest run --lib canonical_value` 32/32 and
+  `cargo nextest run --test bdd_tests canonical_value` 3/3. **The mandated
+  `make verus VERUS_FLAGS='--proof-file verus/canonical_value/main.rs'` exits 2
+  before compiling**: `PROVER_TOOLS_SOURCE` at `Makefile:201` pins
+  `rust-prover-tools@b07ef696…`, whose `TOOLCHAIN_LINE` regex is
+  `^Toolchain:[ \t]*(?P<toolchain>\S+)`, which cannot match the indented
+  `Toolchain:` line the pinned release prints, producing
+  `failed to parse Verus toolchain from output`. The trailing
+  `(overridden by environment variable RUSTUP_TOOLCHAIN)` suffix, including the
+  space that precedes it, is literal text compiled into the binary, so no
+  environment change removes it. Substituting only `PROVER_TOOLS_SOURCE` for
+  upstream `2ba17da6…` ("Accept indented Verus toolchain output (#108)") makes
+  the same `make verus` invocation exit **0** with the same 16/0, which is what
+  the file edit would achieve. That edit is outside this milestone's scope, so
+  it is reported rather than made. Both negative controls were demonstrated red
+  and reverted. A last-wins variant, `for value in values.iter().rev()` into
+  the same `HashSet`, fails the oracle at `oracle.rs:83`
+  (`position 0 must be the original at input index 0, not a copy`). A
+  membership-order variant, which keeps the first occurrence of each key and
+  then emits them in a pinned `HashSet<usize>` iteration order, fails the same
+  assertion — and the sibling count-based law,
+  `properties::deduplication_keeps_the_first_representative`, **passes** on the
+  same run (`31 passed, 1 failed`), which is the discrimination the oracle was
+  added for. A first attempt at the last-wins variant defined a `HashMap` that
+  `mod.rs` does not import and so failed to compile (exit 101) rather than
+  failing the assertion; it was rebuilt from the imported `HashSet` alone, and
+  only the compiling run is evidence. `mod.rs` is restored byte-for-byte (md5
+  `5a8be04816aaadcd6455e28e537c4619`, empty `git diff`), and the suite is 32/32
+  green again. Note for the closing run: `formal-pr` (`Makefile:469`) runs
+  **Kani only**.
 - [ ] Update design and formal-verification guidance, run sequential gates, and
   mark roadmap 6.1.2 done only after all feature acceptance evidence passes.
 
