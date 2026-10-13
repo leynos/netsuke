@@ -142,11 +142,12 @@ under way; the invocation naming this plan supplies execution approval.
   seeded from the repository's `.gitignore`, so the `.gitignore` entry must
   land in the same commit as any list change. Resolved in Stage A: the defect
   was reproduced first (58 of 59 tests passed;
-  `every_rust_source_in_the_workspace_is_scanned` failed naming
-  `.verus/0.2026.10.04.426d8b0/verus/build/serde-5751747ce96f67e/
-  out/private.rs`
-  and twelve siblings), then both edits landed together, and the same suite
-  then passed 59 of 59. See the corresponding Progress and Decision log entries.
+  `every_rust_source_in_the_workspace_is_scanned` failed naming twelve paths
+  beginning `.verus/0.2026.10.04.426d8b0/verus/build/*/out/`, one of them
+  `serde-c5751747ce96f67e/out/private.rs`; the thirteenth was not reported
+  because nextest cancels still-running tests on the first failure), then both
+  edits landed together, and the same suite then passed 59 of 59. See the
+  corresponding Progress and Decision log entries.
 - Risk: the plan's "Map/Seq iteration failure is a typed error" overstates what
   MiniJinja exposes. Severity: low. Likelihood: high. A `NonEnumerable`
   enumerator yields `None` rather than an error, and a mid-iteration failure is
@@ -196,7 +197,7 @@ under way; the invocation naming this plan supplies execution approval.
   into the workspace root, which broke
   `every_rust_source_in_the_workspace_is_scanned`; the defect was reproduced
   with `cargo nextest run --test env_access_suppressions` (59 run, 58 passed, 1
-  failed, naming thirteen `.verus/**/out/*.rs` paths) and then fixed by adding
+  failed, naming twelve `.verus/**/out/*.rs` paths) and then fixed by adding
   `.verus/` to `.gitignore` in the same change as `".verus"` in
   `MACHINE_LOCAL_DIRECTORIES`, after which the same suite passed 59 of 59.
 - [ ] Implement canonical keys/equality and stable deduplication; discharge
@@ -301,10 +302,16 @@ under way; the invocation naming this plan supplies execution approval.
   directory present and unnamed,
   `cargo nextest run --test env_access_suppressions` reported 59 run, 58
   passed, 1 failed — `every_rust_source_in_the_workspace_is_scanned`, whose
-  message listed thirteen `.verus/**/out/*.rs` paths ahead of the fix — and
-  after adding `.verus/` to `.gitignore` and `".verus"` to
-  `MACHINE_LOCAL_DIRECTORIES` the same suite passed 59 of 59. See the risk
-  entry, the Progress entry, and the Decision log.
+  message listed twelve `.verus/**/out/*.rs` paths ahead of the fix — and after
+  adding `.verus/` to `.gitignore` and `".verus"` to
+  `MACHINE_LOCAL_DIRECTORIES` the same suite passed 59 of 59. Attribution is a
+  controlled pair, not two unrelated runs: `.verus/` was present in both, the
+  machine and the test target were the same, and the only difference was the
+  two-file edit. The failing half was produced by a delegated falsification
+  experiment whose log (`/tmp/verus-hypothesis-1791870278.out`, finished
+  07:56:07 local) was written before the fix landed (07:57:56–07:58:13), so its
+  binary was compiled from the unpatched tree. See the risk entry, the Progress
+  entry, and the Decision log.
 
 ## Decision log
 
