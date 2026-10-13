@@ -729,9 +729,16 @@ Every stopping point is documented here. Timestamps are UTC.
   claimed", which sets out the strict and no-regression readings, states that
   the strict one is unmet and why the rectification is out of reach from this
   repository, and says the worker's results must be read with that caveat. The
-  body also records the two corrected numbers and the review tally. The
-  remaining gate is CI green on `17e12e31` and the draft flag being cleared,
-  which itself suppresses CodeRabbit's GitHub review
+  body also records the two corrected numbers and the review tally.
+
+  **The CI half is done.** All three workflows on head `36a7f68c` concluded
+  `success`: `CI` (`38361956641`), `Netsukefile Build Test` (`38361956431`) and
+  `Release Dry Run` (`38361956933`). `CI`'s five jobs — `build-test`,
+  `kani-smoke`, `Windows / build-test-windows`, `Windows / lint-windows` and
+  `Windows / windows-msi-upgrade` — are each `completed success`.
+
+  The remaining gate is the local full-gate report and the draft flag being
+  cleared, which itself suppresses CodeRabbit's GitHub review
   (`success CodeRabbit Review skipped: draft pull request`).
 
 ## Surprises & discoveries
