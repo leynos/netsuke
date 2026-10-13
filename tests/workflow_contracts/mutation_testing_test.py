@@ -64,11 +64,12 @@ BUILD_TOOLS_TARGET = "make check-build-tools"
 FLAG_VARIABLES = ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS")
 
 
-# Both variables are printed because `CARGO_ENCODED_RUSTFLAGS` is the one
-# Cargo actually honours, so a run where only one is set is visible in the
-# log. An unset variable is not an error: the shared workflow's guide
-# documents that `setup-rust` may leave `RUSTFLAGS` such that the project's
-# own Cargo configuration decides the linker.
+# Both variables are printed because Cargo gives `CARGO_ENCODED_RUSTFLAGS`
+# precedence and falls back to `RUSTFLAGS` only when the encoded form is unset,
+# so a run where just one is set is visible in the log. An unset variable is
+# not an error: the shared workflow's guide documents that `setup-rust` may
+# leave `RUSTFLAGS` such that the project's own Cargo configuration decides the
+# linker.
 def _flag_report_lines() -> str:
     """Return one setup command per linker-flag variable, for the run log."""
     return "".join(

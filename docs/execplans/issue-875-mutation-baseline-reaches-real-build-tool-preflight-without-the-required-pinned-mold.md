@@ -259,7 +259,7 @@ Every stopping point is documented here. Timestamps are UTC.
 - [x] (2026-10-12 16:35Z) Committed Milestone 2 as `b92dcbf4` ("Make the
   rustdoc override tests hermetic"), after fixing two defects a gate run found
   in the new code: a `clippy::shadow-reuse` violation on the fake-Cargo path
-  binding, and an unformatted expression at the same site. Both were mine;
+  binding, and an unformatted expression at the same site. Both were in the
   `cargo fmt --all -- --check` and a focused
   `cargo clippy --test makefile_test_target --all-features -- -D warnings
   -D clippy::shadow-reuse`
@@ -322,9 +322,9 @@ Every stopping point is documented here. Timestamps are UTC.
   itself is exactly as worth logging as one that does not — the next person
   reading the previous entry needs to know the 2.95 GB figure is historical,
   and that the ~117 GB of sibling `target/` directories still exist and are
-  still not ours to remove. Load average remains ~70 on 6 cores, so gates will
-  be slow; the sampled disk log is retained so an ENOSPC failure stays
-  distinguishable from a real one.
+  still not in this branch's remit to remove. Load average remains ~70 on 6
+  cores, so gates will be slow; the sampled disk log is retained so an ENOSPC
+  failure stays distinguishable from a real one.
 - [x] (2026-10-12 20:50Z) **The worker's `setup-commands` text is read, and
   the #544 observation is recorded.**
   `gh api repos/leynos/netsuke/actions/jobs/<id>/logs --allow-escape-sequences`
@@ -823,7 +823,7 @@ Unexpected findings during implementation that were not anticipated as risks.
   and on 3 Oct the same pattern holds — the artefact is what proved the phases'
   outcomes, and the step table alone would not have.
 
-  Retracted, same session: I first wrote here that
+  Retracted, same session: this entry first recorded that
   `manifest_structure_telemetry_carries_only_counts` had *also* failed in the
   local `make test` at this revision, making two independent modules with the
   same symptom. **That was false.** `/tmp/GATE3-issue-875-test.out` line 1469
