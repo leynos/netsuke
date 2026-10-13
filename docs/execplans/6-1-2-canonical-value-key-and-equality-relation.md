@@ -267,6 +267,10 @@ under way; the invocation naming this plan supplies execution approval.
   Six gates were green — `check-fmt`, `lint`, `doc-coverage` (98.88%),
   `markdownlint` (181 files), `spelling`, and `nixie` — and `make test` was
   **red**. The verdict is the red one, so the milestone did not pass.
+  `make test` also never reached its `doctest` prerequisite, because the target
+  is `test: test-nextest doctest` and the red `test-nextest` aborted it first:
+  the log holds 3 `make` invocations and 0 `Doc-tests` lines. The doctest half
+  is therefore **unverified**, not green.
 - [x] (2026-10-13) The red was diagnosed as a latent defect in EP-M2's own
   test, not a regression from the finding repair and not a flake to retry.
   Evidence: the same test binary at the same revision passed on attempts 1 and
@@ -297,6 +301,36 @@ under way; the invocation naming this plan supplies execution approval.
   law tests still passed** while the tripwire failed, naming the missing class.
   That is the non-vacuity guarantee EP-V1 asks for, and the previously fused
   test could not provide it.
+- [x] (2026-10-13) The full applicable gate set was re-run at `adbb8d61`. Six
+  were green — `check-fmt`, `lint`, `doc-coverage` (98.88%), `markdownlint`
+  (181 files), `spelling`, and `nixie` — and the doctest half of `make test`,
+  which the previous batch had left unverified, was checked directly and is
+  green: two `Doc-tests` targets, 136 passed, 0 failed, 32 ignored. One gate
+  timed out:
+  `packaging_smoke_tests::packaged_manifest_retains_build_script_sources` hit
+  its 300 s budget at 300.022 s with no assertion failure, under a host load of
+  24.40 on 24 cores. That test appears in no branch diff and has no
+  `slow-timeout` widening of its own, so it is an environmental timeout rather
+  than a branch defect, and this branch was deliberately not patched for it.
+- [x] (2026-10-13) A **seventh** red then surfaced that the directed gate set
+  had never covered, and it was deterministic and branch-introduced. CI run
+  `38396731593` at this same revision concluded `failure`, in the `build-test`
+  job's **Workflow contract tests** step — not the packaging test the batch had
+  suspected — which skipped the four steps after it, including "Test and
+  Measure Coverage". The assertion names four files the Kani harnesses reach but
+  `tools/kani/proof-scope.toml` did not list. It reproduced locally
+  byte-identically (`1 failed, 1263 passed, 3 skipped`).
+- [x] (2026-10-13) That red was repaired by extending the proof scope with
+  exactly the four files the closure reaches. The mechanism is that
+  `src/stdlib/canonical_value/` carries no Kani marker of its own, so it never
+  entered the scope when the crate was written, but `src/stdlib/mod.rs`
+  re-exports its five public names, so every harness that reaches the standard
+  library now reaches it transitively. The four entries were **computed**, not
+  copied from the failure text: a probe over the real module graph returned
+  twelve seeds and a reached set for `src/stdlib/canonical_value/` that is
+  exactly those four files. The `tests/` subtree is deliberately absent, being
+  a test-only module that `cargo kani` compiles out. The contract file then
+  passed 7 of 7 in a focused re-run.
 - [ ] Implement canonical keys/equality and stable deduplication; discharge
   property, BDD, runtime-boundary, and Verus obligations.
 - [ ] Update design and formal-verification guidance, run sequential gates, and
@@ -304,6 +338,18 @@ under way; the invocation naming this plan supplies execution approval.
 
 ## Surprises & discoveries
 
+- Surprise (measured 2026-10-13, EP-M2): a new module can be outside the Kani
+  proof scope without containing a single line of Kani, because the scope is a
+  *transitive closure* and `src/stdlib/mod.rs` re-exports the new module's
+  public names. Impact: the directed gate set for this milestone had excluded
+  `make test-workflow-contracts` on the reasonable-sounding ground that no
+  workflow or contract suite was changed — but "changed no contract test" and
+  "cannot affect a contract test" are different claims, and the second one is
+  false here. A gate whose subject is a *derived* property of the whole crate
+  cannot be scoped by asking which files were edited. The check that caught
+  this was CI, one full revision after a locally green gate set; the local
+  gates could only have caught it if the workflow-contract target had been in
+  the set. See `docs/adr-039-change-scoped-kani-gate.md`.
 - Surprise (measured 2026-10-13, EP-M2): a property test can be **latently
   non-deterministic** and pass a whole green gate set before anyone sees it
   fail. `TestRunner::new` seeds from the OS, so an assertion about the
@@ -631,6 +677,16 @@ under way; the invocation naming this plan supplies execution approval.
   published pin whose documented use breaks `make test` on the next machine,
   which is a defect the pair exists to remove. Date/Author: 2026-10-13,
   implementation.
+- Decision: `make test-workflow-contracts` joins the directed gate set for
+  every remaining batch on this branch, and the scope repair is committed on
+  its own rather than folded into the milestone. Rationale: the Kani
+  proof-scope contract is a *derived* whole-crate property, so it can be broken
+  by a change that edits no contract test at all — which is exactly what
+  happened, and the cost was a red CI run discovered one revision late. Scoping
+  the gate set by "which files did I edit" is the reasoning that missed it, so
+  the set now includes the target unconditionally instead of on a
+  change-detection rule that has already been shown to under-approximate.
+  Date/Author: 2026-10-13, implementation.
 
 ## Outcomes & retrospective
 
@@ -1114,6 +1170,16 @@ coercion; successful unbounded Verus proof; runtime tests against MiniJinja and
 the canonicalizer; unchanged template registrations; no public hash iteration
 order; and all required sequential gates passing. Only then mark roadmap 6.1.2
 done.
+
+The applicable set is the eight targets `check-fmt`, `lint`, `doc-coverage`,
+`markdownlint`, `spelling`, `nixie`, `test`, and `test-workflow-contracts`, plus
+`test-documentation-contracts` when a marked example changes,
+`test-coverage-artifact` when a validator under `scripts/` changes, and
+`make verus` once EP-M3's proof file exists. `test-workflow-contracts` is
+unconditional rather than change-scoped: its Kani proof-scope contract derives
+a whole-crate closure, so an edit to an unrelated module can break it without
+touching anything under `tests/workflow_contracts/`. That is what happened at
+`adbb8d61`, and a change-scoped rule would miss it again.
 
 ## Revision note
 
