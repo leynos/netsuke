@@ -4089,7 +4089,14 @@ was validated by applying the patch and watching the harness fail under
 `cargo kani --harness <name>`.
 
 `tests/kani_mutation_evidence_tests.rs` keeps that evidence in lockstep with
-the harnesses. Three of its checks run as part of `make test`:
+the harnesses. It is a crate root with four child modules beside it, each of
+which it declares through an explicit `#[path]`. A crate root resolves a bare
+`mod child;` against `tests/`, so the `#[path]` is what the layout requires
+rather than a convention; the repository's other directory-module test trees
+are rooted at a `tests/<name>/mod.rs`, which resolves its children normally and
+needs the attribute only for the one child that would otherwise collide.
+
+Three of its checks run as part of `make test`, and live in `contracts.rs`:
 
 - every patch must still apply cleanly to the current tree
   (`git apply --check`), catching silent rot when production code near a
@@ -4100,6 +4107,31 @@ the harnesses. Three of its checks run as part of `make test`:
 - every `#[kani::proof]` harness under `src/` must own a correspondingly
   named patch, or appear in the test's exemption list with a stated reason; and
 - every patch must correspond to a live harness, catching renames.
+
+`discovery.rs` owns the two walks those checks compare, so the naming rules sit
+beside the scan that produces the names they describe: harnesses are discovered
+by scanning `src/` for `#[kani::proof]`, and patches by listing
+`docs/verification/mutations/`.
+
+A patch may instead back a Proptest property, which
+`ir__cmd_interpolate__property_tests__*.patch` do. Those properties exercise
+scanner and command-guard contracts that exceed the bounded Kani resource cap,
+so no harness can carry the evidence and a patch alone does. Such a patch is
+listed in `SUPPLEMENTAL_PROPERTY_PATCHES`, and
+`supplemental_property_location` resolves the source file that declares the
+named property rather than assuming a layout. A stem encodes the module path
+with `__` standing in for `::`, so `ir__cmd_interpolate__property_tests__x`
+names property `x` under `src/ir/cmd_interpolate/property_tests`. The leading
+segments name directories and the final segment is either a directory module's
+`mod.rs` or a single-file module, and both shapes are used under `src/`, so
+both candidates are tried. The root segment comes from the stem rather than a
+fixed list, which is why a patch rooted at `ninja_gen` or `hex` resolves with
+no change here. When neither candidate declares the property the failure names
+every candidate searched, so a module that moves is diagnosable from the
+message alone instead of arriving as an opaque read error.
+`supplemental_property_location_resolves_directory_and_file_modules` pins the
+two module shapes and that diagnostic against a synthetic tree, so the check
+does not depend on this revision happening to contain an absent property.
 
 A fourth check is gated, because it costs one Kani codegen per patch:
 `compile_guard::every_patched_tree_compiles_under_denied_warnings` applies each
