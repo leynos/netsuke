@@ -4288,12 +4288,16 @@ environment mutation unless a guarded helper is already in place.
 
 Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
 Kani is the only supported and gated formal-verification tool today. Verus is
-optional, proof-kernel-only, and not installed or run by default; any first
-Verus work must stay outside ordinary Cargo and focus on a small cycle
-canonicalization model. Stateright is deferred entirely until Netsuke gains an
-accepted stateful concurrent subsystem such as a daemon, watch service,
-remote-execution coordinator, actor protocol, or internal scheduler with
-long-lived mutable control-plane state. See
+optional, proof-kernel-only, and not installed or run by default; any Verus
+work must stay outside ordinary Cargo and is limited to small, self-contained
+kernels. Two are accepted: the cycle canonicalization model derived from
+`src/ir/cycle/mod.rs`, and the canonical value key and equality relation
+(`src/stdlib/canonical_value/`, proved in `verus/canonical_value/main.rs`).
+Verus remains outside `formal-pr`, which runs Kani only, and outside every
+routine gate. Stateright is deferred entirely until Netsuke gains an accepted
+stateful concurrent subsystem such as a daemon, watch service, remote-execution
+coordinator, actor protocol, or internal scheduler with long-lived mutable
+control-plane state. See
 [`docs/formal-verification-methods-in-netsuke.md`](formal-verification-methods-in-netsuke.md)
 for the design rationale and re-entry criteria.
 
@@ -8012,6 +8016,44 @@ concatenation. That last property is what pins each byte's encoding as
 independent of its neighbours and its position — reversing the byte order
 leaves the per-byte sweep green but fails the round-trip and concatenation
 properties.
+
+## Canonical value identity for template helpers
+
+`src/stdlib/canonical_value/` owns one equality relation for `MiniJinja`
+values, so ordered-set helpers share a deterministic answer instead of each
+deriving their own. Two values are equal exactly when their RFC 8785
+canonical-JSON keys are byte-identical; `stable_deduplicate` retains the first
+representative of each key in input order.
+[RFC 0006 §6.7](rfcs/0006-ansible-inspired-template-standard-library.md#67-canonical-value-equality)
+specifies the relation and this module supplies it as a foundation. The public
+surface is five names re-exported from `src/stdlib`: `CanonicalKey`,
+`CanonicalValueError`, `canonical_key`, `canonical_eq`, and
+`stable_deduplicate`.
+
+**Re-use policy:** a new helper that needs value equality or deduplication
+calls these functions rather than comparing values itself or reaching into
+`MiniJinja`'s internal equality. Route the comparison through `canonical_eq`
+rather than comparing `CanonicalKey` values by hand, so the refusal behaviour
+stays uniform.
+
+**Host-object precondition.** The adapter traverses a host value exactly once
+and never re-reads it, so callers must supply values that are finite, stable,
+and acyclic. `MiniJinja` exposes no public object identity, so cycle detection
+is outside the enforceable contract: a host object that mutates between
+traversal steps, or that contains a cycle, is a caller error the module does
+not detect. This is a precondition on the caller, not a runtime check, and a
+new helper forwarding an arbitrary host value to this module inherits it.
+
+Refusals are errors, not `false`. Values outside the supported domain —
+undefined, invalid, bytes, plain objects, iterables, callables, non-string
+mapping keys at any depth, and non-finite floats — raise a typed
+`CanonicalValueError` before any coercion, so a value compared with itself is
+an error rather than unequal. Two consequences of RFC 8785 are deliberate and
+must not be treated as defects: numbers are rendered as IEEE-754 binary64, so
+`2^53 + 1` and `2^53` share a key and no integer-injectivity claim is made; and
+property names are ordered by raw UTF-16 code unit with no normalization, so
+canonical-equivalent spellings stay distinct. Map key order is normalized by
+canonicalization, while sequence order is significant.
 
 ### RustCrypto 0.11 constraint
 

@@ -22,18 +22,37 @@ The highest-return verification work is concentrated in the semantic core:
 
 ## Current repository state
 
-The repository currently has no formal-verification tooling. `Cargo.toml`
-contains unit-testing, behavioural-testing, snapshot-testing, and CLI-testing
-dependencies, but no `proptest`, `kani`, `verus`, or Stateright support.[^1]
-The top-level `Makefile` exposes build, test, lint, formatting, Markdown lint,
-and Mermaid validation targets only.[^2] The current `CI` workflow runs the
-same conventional checks across supported toolchains and does not define a
-separate proof or model-checking job.[^3]
+This section describes the tree as it stands on 2026-10-13. The rest of this
+document is a forward-looking plan, so its tenses read as design intent rather
+than as a description of what exists; this section is the one kept current.
 
-That absence is useful context. Netsuke does not need a new verification
-workspace as a first step. The strongest verification targets already live in
-production modules with clear semantic boundaries, so a lightweight,
-module-adjacent approach is the most proportionate fit.
+The plan below has largely been implemented. `Cargo.toml` carries `proptest`
+for generated testing, a `[package.metadata.kani.flags]` table, and a declared
+`cfg(kani)` expectation in `unexpected_cfgs`.[^1] Verus is pinned under
+`tools/verus/` and invocable through `make verus`, but remains outside the
+ordinary dependency set.
+
+The `Makefile` now exposes the formal-verification surface the "Repository
+integration plan" below describes: `install-kani`, `kani-check`, `kani-full`,
+`kani-ir`, `test-kani-mutations`, `test-kani-scope-wrapper`, `install-verus`,
+`verus`, and `formal-pr`, alongside the build, test, lint, formatting, Markdown
+lint, and Mermaid validation targets.[^2]
+
+The `CI` workflow does define a separate proof job. `kani-smoke` is a dedicated
+required job covering every harness on pushes to `main`, nightly schedules, and
+manual dispatches, and on pull requests it runs only when a proof input changes
+(see [ADR-039](adr-039-change-scoped-kani-gate.md)).[^3] The 15 harnesses live
+in three verification modules: `src/ir/cycle/verification.rs` (9),
+`src/ir/from_manifest/verification.rs` (4), and
+`src/ir/cmd_interpolate/verification.rs` (2). `src/ir/graph/kani_map.rs` is
+`cfg(kani)` support code those harnesses use, not a harness location.
+
+That earlier absence still shapes the design. Netsuke did not need a new
+verification workspace as a first step: the strongest verification targets
+already lived in production modules with clear semantic boundaries, so the
+lightweight, module-adjacent approach described below is what the repository
+adopted — harnesses colocated beside the helpers they exercise, and the Verus
+kernel kept outside ordinary Cargo.
 
 ## Recommended scope
 
@@ -184,6 +203,15 @@ The preferred first layout is intentionally lightweight:
 This layout keeps Kani harnesses close to the internal helpers they exercise,
 which avoids widening the public API solely for proofs. Verus can remain
 outside Cargo until it proves its value.
+
+The diagram is the shape this plan proposed, not an inventory of the tree as it
+stands; parts of it were never adopted. The `tools/` entries are real, and
+`tools/verus/VERSION` and `tools/verus/SHA256SUMS` are the pins that
+`make install-verus` and `make verus` read. The `verus/` filenames and the three
+`src/` harness modules are illustrative: the repository instead colocated its
+Kani harnesses beside the helpers they exercise, and its one Verus kernel is
+`verus/canonical_value/main.rs`. The `## Current repository state` section
+above records the actual layout.
 
 Kani and Verus installation and execution should be delegated to the
 `rust-prover-tools` CLI rather than repository-local shell scripts. Netsuke

@@ -129,9 +129,22 @@ fn emitted_bytes_match_the_canonicalizer_on_jcs_fixtures() -> Result<()> {
 /// Verify deduplication returns the caller's own first values, once each, in
 /// first-appearance order, for classes whose order is not lexical.
 ///
-/// The retained representatives are `zeta` then `alpha`, which is neither
-/// ascending nor descending, so an output order borrowed from the membership
-/// structure could not produce it.
+/// In this witness the retained values are the map at input index 0, then
+/// `zeta`, then `alpha`. The pointer identity of each retained value is the
+/// load-bearing assertion: it is what shows the survivor is the caller's own
+/// earlier value rather than a reconstruction of an equal one.
+///
+/// The order assertion is weaker than it looks, and the honest statement of its
+/// reach is worth recording. Ascending canonical-key order would be `alpha`,
+/// `zeta`, `map` — the map's key begins `{` (0x7b) and sorts after the two
+/// strings, whose keys begin `"` (0x22) — so ascending traversal is genuinely
+/// excluded. Descending key order, however, is `map`, `zeta`, `alpha`, which
+/// coincides exactly with what is retained here. On this witness, then,
+/// first-appearance order and descending-key order are the same sequence, so
+/// the order assertion does not distinguish them. The witness that separates
+/// them is the independent quadratic first-index oracle in `oracle.rs`. The one
+/// law neither this case nor a count of distinct keys can see — that survivors
+/// sit at increasing least-occurrence indices — is that oracle's subject.
 #[rstest]
 fn deduplication_returns_first_representatives_in_input_order() -> Result<()> {
     let first = ordered_map(&[("alpha", 1), ("beta", 2)]);

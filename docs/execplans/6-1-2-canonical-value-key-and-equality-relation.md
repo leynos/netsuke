@@ -477,8 +477,39 @@ under way; the invocation naming this plan supplies execution approval.
   `5a8be04816aaadcd6455e28e537c4619`, empty `git diff`), and the suite is 32/32
   green again. Note for the closing run: `formal-pr` (`Makefile:469`) runs
   **Kani only**.
-- [ ] Update design and formal-verification guidance, run sequential gates, and
+- [x] Update design and formal-verification guidance, run sequential gates, and
   mark roadmap 6.1.2 done only after all feature acceptance evidence passes.
+  **Edits applied (2026-10-13, EP-M4); the commit carrying this tick is gated,
+  so the item is complete only once that gate run is green.** Six edits across
+  four files: `docs/formal-verification-methods-in-netsuke.md` gained a measured
+  `## Current repository state` (the old section claimed no proptest, Kani,
+  Verus, or proof job, all now false) and a note distinguishing the Layout
+  tree's real `tools/` entries from its illustrative `verus/` and `src/`
+  filenames, five of which do not exist; `docs/developers-guide.md` had its
+  Verus policy amended to admit a second narrow kernel while preserving every
+  stated property, and gained a
+  `## Canonical value identity for template helpers` boundary section carrying
+  the re-use policy, the host-object precondition, and the deliberate RFC 8785
+  consequences; `docs/netsuke-design.md` gained the canonical foundation and an
+  explicit statement that `uniq` is unchanged and no filter was migrated; and a
+  doc comment in `src/stdlib/canonical_value/tests/parity.rs` was corrected
+  from a measured-false claim. That last correction is worth recording: the
+  comment said the retained order is "neither ascending nor descending", but
+  over canonical keys ascending is `alpha`, `zeta`, `map` and descending is
+  `map`, `zeta`, `alpha` — which is exactly what is retained — so the claim was
+  false in both directions and the proposed replacement ("no monotone rule
+  explains this") is false too. The corrected text points at `oracle.rs`.
+  Roadmap 6.1.2 **is** checked, in this same change: the repository ticks these
+  boxes within the delivering change, which is what `6.1.1` (`557966c8`, PR
+  #860) and `7.1.1` (`96aefc9c`) did, so deferring the tick to after merge
+  would break the established convention rather than honour it. All three of
+  its success clauses are verified: reflexivity, symmetry, and transitivity are
+  checked by `generated_values_obey_the_equivalence_relation`; first-appearance
+  preservation by `deduplication_keeps_the_first_representative`,
+  `deduplication_returns_first_representatives_in_input_order`, and the
+  quadratic oracle; and no public helper exposes a hash-map iteration order,
+  because `stable_deduplicate` uses its `HashSet` for membership alone
+  (`seen.insert(key)`) and builds output order by iterating the input slice.
 
 ## Surprises & discoveries
 
@@ -927,17 +958,48 @@ under way; the invocation naming this plan supplies execution approval.
 
 ## Outcomes & retrospective
 
-Draft outcome: this plan defines the canonical domain, concrete Rust API,
-first-wins semantics, host-object precondition, numerical limits, and
-proof/test responsibilities. It deliberately leaves `uniq` unchanged. No
-feature result is claimed yet. Wyvern reconnaissance and the
-Pandalump/Wafflecat, Telefono/Doggylump, and Buzzy Bee/Dinolump review pairs
-are complete. Review changed the initial key-only proof into source-index
-refinement, made host-object preconditions explicit, fixed one-snapshot
-admission and numeric semantics, and required both formal-policy documents to
-be updated. At implementation closeout, record actual supported kinds, proof
-boundary, test evidence, documentation changes, and residual resource risks;
-only then mark roadmap item 6.1.2 complete.
+Delivered outcome: the canonical domain, Rust API, first-wins semantics,
+host-object precondition, numerical limits, and proof/test responsibilities are
+implemented, documented, and proved, and roadmap item 6.1.2 is marked complete
+on that evidence. The work deliberately leaves `uniq` unchanged. Wyvern
+reconnaissance and the Pandalump/Wafflecat, Telefono/Doggylump, and Buzzy
+Bee/Dinolump review pairs are complete. Review changed the initial key-only
+proof into source-index refinement, made host-object preconditions explicit,
+fixed one-snapshot admission and numeric semantics, and required both
+formal-policy documents to be updated.
+
+Closeout record, as this section required before the roadmap tick:
+
+- **Supported kinds:** six admitted — `None`, `Bool`, `Number`, `String`,
+  `Seq`, `Map`. Everything else refuses: undefined, invalid, bytes, plain
+  objects, iterables, callables, non-string mapping keys at any depth, and
+  non-finite floats.
+- **Proof boundary:** `verus/canonical_value/main.rs` proves the runtime's
+  first-index retention against an independent quadratic specification stated
+  over the input itself. The model's keys are an abstract sort and the
+  runtime's are `CanonicalKey` byte strings, so nothing there proves the
+  template-to-key conversion, `HashSet`'s internals, or the production adapter;
+  the quadratic oracle in `tests/oracle.rs` checks the implementation against
+  the model on real values, and no `assume`, `admit`, external body, or
+  non-`vstd` axiom appears in the kernel.
+- **Test evidence:** 32 cases, counted by `cargo nextest list` over
+  `stdlib::canonical_value` — `boundaries` 8, `examples` 4, `oracle` 12,
+  `parity` 5, `properties` 3 — plus the Rust BDD scenario. The runner's count
+  is the authoritative one because it expands each `rstest` case into its own
+  entry; counting source lines instead double-counts, since a parameterized
+  case carries both an attribute and a function. Discrimination was shown by
+  mutation rather than assumed.
+- **Documentation changes:** the design document gained the canonical
+  foundation plus an explicit statement that `uniq` is unchanged and no filter
+  was migrated; the developers' guide gained the re-use policy, the host-object
+  precondition, and the deliberate RFC 8785 consequences, and its Verus policy
+  now admits a second narrow kernel; the formal-verification document's
+  current-state section was replaced with measured fact; and the parity doc
+  comment that was false in both directions was corrected.
+- **Residual resource risks:** `make verus` depends on a `PROVER_TOOLS_SOURCE`
+  pin that predates an upstream fix for indented toolchain output. That is
+  recorded as an open item rather than corrected here; see the plan's
+  Verification plan and the delivery ledger.
 
 ## Context and orientation
 
@@ -1104,6 +1166,17 @@ Before running the proof, add the chosen upstream version to
 `tools/verus/VERSION` and checksum data to `tools/verus/SHA256SUMS` according to
 `docs/formal-verification-methods-in-netsuke.md`. Verify the pinned verifier
 and its checksum, then run `make install-verus` if absent and:
+
+**Already discharged by `aa32c294` ("Pin Verus and stop its install tree
+breaking the workspace scan"), which is an ancestor of this branch.** The two
+files are tracked and current: `tools/verus/VERSION` selects Verus
+`0.2026.10.04.426d8b0`, and `tools/verus/SHA256SUMS` records the `x86-linux`
+asset digest. Do **not** re-pin or overwrite that digest: upstream publishes no
+checksum file, so the recorded value was computed locally from three
+independent downloads, and regenerating it would destroy that provenance
+without replacing it. The imperative above is retained as the record of what
+the milestone required, not as outstanding work. The installed tree is
+`.verus/0.2026.10.04.426d8b0/`.
 
 ```sh
 make verus VERUS_FLAGS='--proof-file verus/canonical_value/main.rs'
