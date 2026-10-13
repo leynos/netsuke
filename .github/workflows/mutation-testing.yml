@@ -74,6 +74,18 @@ jobs:
       # Nothing here sets or overrides either variable: overriding
       # RUSTFLAGS would displace the project configuration that the build
       # standard is defined by.
+      #
+      # So `check-build-tools` proves the pinned mold is *installed*, not
+      # that Cargo *selects* it. Two measurements bound the gap. A
+      # `--verbose` baseline log from run 38323348294 shows
+      # `-Clink-arg=-fuse-ld=mold` on 0 of 569 rustc invocations with
+      # `RUSTFLAGS=-D warnings` on all 569, so selection is absent on the
+      # worker. And no shared revision can supply it: the pinned
+      # mutation-cargo.yml and its tip (aea9c14c24b7) each declare fifteen
+      # `workflow_call` inputs and neither declares `rustflags`; #544 is
+      # open with no fixing commit. Restoring selection needs an upstream
+      # input, so there is nothing to pin and the gap stays recorded
+      # rather than worked around here.
       setup-commands: |
         make check-build-tools
         printf "RUSTFLAGS=%s\n" "${RUSTFLAGS-<unset>}"
