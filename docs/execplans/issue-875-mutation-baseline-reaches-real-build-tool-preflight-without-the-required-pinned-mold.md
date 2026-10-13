@@ -672,6 +672,16 @@ Every stopping point is documented here. Timestamps are UTC.
   be the workaround the finding explicitly forbids ("do not override
   `RUSTFLAGS` in this workflow caller"). No change made; the finding stands as
   an upstream dependency against #544.
+
+  **Recurrence.** The finding was raised a third time on 2026-10-13 with one
+  new clause: "verify a compiler invocation". That clause is already
+  discharged, and by the stronger method the finding asks for — the
+  569-invocation census above reads the `--verbose` baseline log's rustc argv
+  directly, which is why the count of `-Clink-arg=-fuse-ld=mold` is **0**
+  rather than a claim about the environment. A third raise does not change the
+  disposition, because the finding's own prescribed remedy ("pin the fixing
+  revision") has been measured to have nothing to pin; the plan records the
+  probe rather than re-litigating it silently.
 - [ ] Milestone 4: ExecPlan finalized, `coderabbit review --agent` clean, CI
   green, PR marked ready.
 
@@ -1437,9 +1447,13 @@ writer still holding the file open (an antivirus/indexer, or a container
 overlay mid-copy), not with this repository's write path. It remains distinct
 from the demonstrated missing-mold failure, as the issue states.
 
-**Acceptance evidence:** the run URL, the `check-build-tools` line, the two
-test names in the baseline output, the mutant count, and the printed flag
-values.
+**Acceptance evidence:** the run URL; the `check-build-tools` line; the
+`ok Unmutated baseline` line for the green shards; the named rustdoc test
+results **from the focused local run**, not from the worker's log, because the
+four green shards' per-target output is not in hand; the mutant count; and the
+printed flag values. The worker's contribution to "the named tests pass" is
+cargo's first-failure behaviour plus the 3 Oct ordering, as `Progress` states —
+the direct per-test evidence is the local run.
 
 **Recovery:** the workflow edit is reverted by a commit; the dispatch is
 informational and changes no state.
