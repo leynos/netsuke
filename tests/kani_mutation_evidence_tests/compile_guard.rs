@@ -47,11 +47,8 @@ use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
-use super::{MUTATIONS_DIR, is_git_work_tree, manifest_dir};
-
-mod sandbox;
-
-use sandbox::Sandbox;
+use super::discovery::{MUTATIONS_DIR, is_git_work_tree, manifest_dir};
+use super::sandbox::Sandbox;
 
 /// Target directory shared by every patched build in one run.
 ///
