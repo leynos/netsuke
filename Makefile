@@ -270,9 +270,21 @@ test-windows-msi-release-rank: ## Validate Windows MSI release-rank parsing
 test-release-admission: ## Validate the release-admission runtime contract
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with pytest==9.0.2 --with hypothesis==6.151.9 \
+		--with 'cmd-mox==0.2.0' --with 'cuprum==0.1.0' --with 'cyclopts==4.25.3' \
 		python -m pytest scripts/tests/test_release_admission_metrics.py \
 		scripts/tests/test_release_admission_metric_failures.py \
-		scripts/tests/test_release_admission_metric_boundedness.py -c /dev/null \
+		scripts/tests/test_release_admission_metric_boundedness.py \
+		scripts/tests/test_release_admission_process_bounds.py \
+		scripts/tests/test_release_admission_environment_contract.py \
+		scripts/tests/test_release_admission_configuration_resolution.py \
+		scripts/tests/test_release_admission_artefact_initialization.py \
+		scripts/tests/test_release_admission_artefact_truncation.py \
+		scripts/tests/test_release_admission_default_forms.py \
+		scripts/tests/test_release_admission_adapter_defaults.py \
+		scripts/tests/test_release_admission_status_translation.py \
+		scripts/tests/test_release_admission_runner_contract.py \
+		scripts/tests/test_release_admission_metric_degradation.py \
+		scripts/tests/test_release_admission_sink_persistence.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 
 test-coverage-artifact: ## Test hostile LCOV artefact validation

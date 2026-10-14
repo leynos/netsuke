@@ -1,10 +1,12 @@
-"""Provide fixed-record assertions shared by release-admission runtime tests."""
+"""Provide fixed-record assertions shared by release-admission runtime tests.
+
+The identifier-exclusion helpers live in
+:mod:`release_admission_test_exclusions`, which the support facade re-exports
+alongside this module's shape assertions.
+"""
 
 import math
 import typing as typ
-
-if typ.TYPE_CHECKING:
-    import collections.abc as cabc
 
 OPERATION_SEQUENCE = (
     "resolve_tag_commit",
@@ -14,93 +16,199 @@ OPERATION_SEQUENCE = (
     "verify_evidence",
 )
 
+#: The operation counter's metric name, as the gate renders it.
+OPERATION_METRIC = "netsuke_release_admission_operation_total"
+#: The gate counter's metric name. It is the run's final record, because the
+#: gate writes it in ``finish`` after the operation chain has stopped.
+GATE_METRIC = "netsuke_release_admission_gate_total"
+#: The duration metric's name, needed only to identify it when skipping.
+DURATION_METRIC = "netsuke_release_admission_operation_duration_seconds"
 
-def assert_identifiers_excluded_from_values(
-    values: cabc.Iterable[object], identifiers: set[str], message: str
-) -> None:
-    """Assert generated identifiers are absent from string values.
+#: The gate trace, which reports the *gate's* outcome rather than a success.
+GATE_TRACE = "gate_complete"
+#: The two delivery traces, which are always successful when the gate got this
+#: far: the first reports that the workflow outputs were written and the second
+#: that the traces were. Both are reached only after the gate trace.
+DELIVERY_TRACES = ("workflow_output_delivery", "trace_delivery")
 
-    Parameters
-    ----------
-    values
-        Metric-label or trace-field values to inspect; non-string values are ignored.
-    identifiers
-        Identifiers that must not occur as substrings of any value.
-    message
-        Failure message prefix retained in the assertion diagnostic.
+
+class RunShape(typ.NamedTuple):
+    """Name the records a gate run is expected to have emitted.
+
+    The shape separates the operations that ran from the outcome of the last
+    one, because "five operations ran" and "the fifth refused the evidence" are
+    independent claims and a failure should name which was wrong.
+    """
+
+    operations: tuple[str, ...]
+    outcome: str
+    error_category: str
+
+
+def _operations_and_labels(
+    metrics: list[dict[str, object]],
+) -> tuple[tuple[str, ...], dict[str, object]]:
+    """Return the operation counters' names and the last one's labels.
+
+    Returns
+    -------
+    tuple[tuple[str, ...], dict[str, object]]
+        Every operation name in emission order, and the labels of the last one.
 
     Notes
     -----
-    Use this helper for one metric-label or trace-field value collection at a
-    time so callers can retain field-specific failure messages.
-
-    Examples
-    --------
-    Ignore non-string values while checking labels and trace fields::
-
-        assert_identifiers_excluded_from_values(
-            ["fixed-label", 17], {"run-7"}, "identifier leaked"
-        )
+    An artefact carrying no operation counter at all is the vacuity this
+    module's shape assertion exists to refuse, so it is rejected with an
+    assertion rather than left to an ``IndexError`` on the last element: a
+    record-less run then fails naming that fact instead of reporting a
+    subscript fault.
     """
-    matches = [
-        (identifier, value)
-        for value in values
-        if isinstance(value, str)
-        for identifier in sorted(identifiers)
-        if identifier in value
+    counters = [
+        record
+        for record in metrics
+        if record["name"] == OPERATION_METRIC and isinstance(record["labels"], dict)
     ]
-    assert not matches, f"{message}; matching identifier/value pairs: {matches!r}"
+    assert counters, "the run must have emitted at least one operation counter"
+    operations = tuple(
+        str(typ.cast("dict[str, object]", counter["labels"])["operation"])
+        for counter in counters
+    )
+    return operations, typ.cast("dict[str, object]", counters[-1]["labels"])
 
 
-def assert_identifiers_excluded_from_records(
-    metrics: cabc.Iterable[dict[str, object]],
-    traces: cabc.Iterable[dict[str, object]],
-    identifiers: set[str],
-    subject: str,
+def _gate_labels(metrics: list[dict[str, object]]) -> dict[str, object]:
+    """Return the gate counter's labels, which are the run's own outcome.
+
+    Returns
+    -------
+    dict[str, object]
+        The ``outcome`` and ``error_category`` labels of the final record.
+
+    Notes
+    -----
+    The gate counter is the last record, so its labels are read off the end of
+    the artefact rather than searched for; a run whose final record is not the
+    gate counter is a shape fault this helper reports rather than silently
+    accepting.
+    """
+    assert metrics, "the run must have emitted at least one metric record"
+    assert metrics[-1]["name"] == GATE_METRIC, (
+        "the run's final record must be the gate counter"
+    )
+    labels = metrics[-1]["labels"]
+    assert isinstance(labels, dict), "the gate counter must retain labels"
+    return labels
+
+
+def describe_run_shape(metrics: list[dict[str, object]]) -> RunShape:
+    """Read the operations and outcome back out of a metric artefact.
+
+    The derivation is mechanical -- counter records carry ``outcome`` and
+    ``error_category`` labels -- so comparing it against an expected shape does
+    not restate production policy, and every duration record is ignored
+    deliberately. A clock reading outside the accepted number shape drops that
+    duration without touching the counter, so asserting a fixed count of eleven
+    records would be a claim about the host clock rather than about the gate.
+
+    The operation labels and the gate labels are cross-checked here rather than
+    in the caller, because they are two independent emissions of one outcome
+    and a run that disagreed between them would otherwise satisfy either check
+    on its own.
+
+    Returns
+    -------
+    RunShape
+        The operations in emission order, then the last one's outcome.
+    """
+    operations, last_operation_labels = _operations_and_labels(metrics)
+    gate_labels = _gate_labels(metrics)
+    final_outcome = str(last_operation_labels["outcome"])
+    final_category = str(last_operation_labels["error_category"])
+    assert (str(gate_labels["outcome"]), str(gate_labels["error_category"])) == (
+        final_outcome,
+        final_category,
+    ), "the gate counter must repeat the final operation's outcome and category"
+    return RunShape(
+        operations=operations,
+        outcome=final_outcome,
+        error_category=final_category,
+    )
+
+
+def assert_complete_records(
+    metrics: list[dict[str, object]],
+    traces: list[dict[str, object]],
+    shape: RunShape,
 ) -> None:
-    """Assert identifiers are absent from metric labels and trace fields.
+    """Assert a run's records match the shape *shape* names, before exclusion.
 
     Parameters
     ----------
     metrics
-        Parsed release-admission metric records to inspect.
+        Decoded metric records from one run.
     traces
-        Parsed release-admission trace records to inspect.
-    identifiers
-        Identifiers that must not occur as substrings in string values.
-    subject
-        Noun phrase used in metric-label and trace-field failure messages.
+        Decoded trace records from one run.
+    shape
+        The operations, final outcome, and final category the run must show.
 
     Notes
     -----
-    Keep record traversal and the metric-label shape check shared across the
-    release-admission runtime tests.
+    Call this **before**
+    :func:`release_admission_test_exclusions.assert_identifiers_excluded_from_records`
+    in any property. Both that helper and the shared validators accept an empty record
+    list, so an exclusion assertion made on its own is satisfied vacuously by a
+    gate that wrote nothing at all. Asserting the shape first establishes that
+    the records being searched exist.
 
-    Examples
-    --------
-    Check both telemetry channels in one call::
+    Both telemetry channels are covered: the metric artefact must carry the
+    operation counters *and* the gate counter the run finishes with, and the
+    trace artefact must carry the full hand-off sequence. A run that wrote
+    metrics but no traces, or traces but no metrics, fails here rather than
+    passing an exclusion check on one channel alone.
 
-        assert_identifiers_excluded_from_records(
-            [{"labels": {"operation": "resolve_tag_commit"}}],
-            [{"event": "operation_complete"}],
-            {"run-7"},
-            "generated identifiers",
-        )
+    The trace sequence is asserted exactly rather than by length: every
+    predecessor succeeded, the final operation reached *shape.outcome*, the gate
+    trace repeated that outcome, and the two delivery traces followed it
+    successfully. The gate trace carries the *gate's* result rather than a
+    per-operation one -- both are the final operation's here, because the gate
+    stops at the first failure -- and the delivery traces succeed because both
+    channels remain writable when the records are present at all.
+
+    This asserts the records *carry* the shape, not that the run emitted
+    nothing else; it is not an exact check of every metric emission. Duration
+    records are ignored (see :func:`describe_run_shape`), and a gate counter
+    before the run's final one would pass, because the labels are read off the
+    last record rather than by rejecting extras. Both are shape limits, not
+    gaps in the vacuity guard above, which is the failure mode this helper
+    exists to refuse.
     """
-    for record in metrics:
-        labels = record["labels"]
-        assert isinstance(labels, dict), "every emitted metric must retain labels"
-        assert_identifiers_excluded_from_values(
-            labels.values(),
-            identifiers,
-            f"{subject} must never become metric label values",
+    assert describe_run_shape(metrics) == shape, (
+        "the run's metric records must name the operations and outcome asserted"
+    )
+    final_operation = shape.operations[-1]
+    expected_traces = (
+        [
+            ("operation_complete", operation, "success", "none")
+            for operation in shape.operations[:-1]
+        ]
+        + [
+            (
+                "operation_complete",
+                final_operation,
+                shape.outcome,
+                shape.error_category,
+            ),
+            (GATE_TRACE, final_operation, shape.outcome, shape.error_category),
+        ]
+        + [(event, final_operation, "success", "none") for event in DELIVERY_TRACES]
+    )
+    assert [
+        tuple(
+            trace[field]
+            for field in ("event", "operation", "outcome", "error_category")
         )
-    for trace in traces:
-        assert_identifiers_excluded_from_values(
-            trace.values(),
-            identifiers,
-            f"{subject} must never become trace field values",
-        )
+        for trace in traces
+    ] == expected_traces, "every bounded trace hand-off must be present exactly once"
 
 
 def assert_failure_trace_sequence(
