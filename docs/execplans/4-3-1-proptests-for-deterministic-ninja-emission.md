@@ -11,9 +11,14 @@ Status: IN PROGRESS
 `EP-M0` and `EP-M1` are complete and `ADR-030` is written and indexed. The
 approval gate was passed on 2026-09-27. `EP-M2` is complete and gate-verified:
 its four changes are committed and eleven of twelve applicable gates pass
-against its revision, with the twelfth blocked by an environmental timeout that
-no source edit can fix. `EP-M3` is the next milestone and is not yet started.
-This revision follows a design review and a rebase onto `origin/main`.
+against its revision, with the twelfth blocked locally by an environmental
+timeout. CI has since resolved that question — the timed-out test passes there
+in 26.7 s against a 300 s budget, so the local exhaustion was the
+sccache-unreachable environment rather than a budget that was too small. CI
+also caught a Windows-only defect in this branch's own test, now fixed in
+`1e1508ca`; the Linux gates could not have seen it. `EP-M3` is the next
+milestone and is not yet started. This revision follows a design review, a
+rebase onto `origin/main`, and that Windows repair.
 
 ## Purpose / big picture
 
@@ -2549,6 +2554,37 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   `proptest` target. `origin/main` still carries the array at length **5**
   while this branch carries **6**, so the fix is branch-local and the rebase
   must preserve it.
+- [x] (2026-10-14T00:00:00Z) **The CI oracle answered the deferred timeout
+  question, and the deferral was correct.** CI run `38504829270` on `8fc7a2fa`:
+  `build-test` (Linux) **PASSED**, and the log shows
+  `production_build_module_slice_has_expected_boundary` **PASS [26.669s]
+  (3422/3929)** — the very test that exhausted the 300 s cap locally. 26.7 s
+  against a 300 s budget is a factor of eleven of headroom, so the local
+  exhaustion was entirely the sccache-unreachable, queue-contended environment
+  and **not** a budget that was too small. Widening the allowance would have
+  masked the environmental cause and bought nothing. Four other jobs passed:
+  `kani-smoke`, `Windows / lint-windows`, `Windows / windows-msi-upgrade`, and
+  the whole `Release Dry Run` run (`38504829410`). One job failed:
+  `Windows / build-test-windows`, over a defect no Linux gate could see —
+  recorded below.
+- [x] (2026-10-14T00:00:00Z) **CI caught a genuine Windows-only defect in this
+  branch's own test, and it is fixed.** `Windows / build-test-windows` failed on
+  `8fc7a2fa` with
+  `Summary [121.009s] 2307/3501 tests run: 2306 passed, 1 failed` — the single
+  failure being this branch's
+  `contracts::supplemental_property_location_resolves_directory_and_file_modules`
+  (`FAIL [0.078s]`). The test asserted `/`-joined substrings against a message
+  the helper rendered with `{candidates:?}`, and a `Debug` rendering of a path
+  **escapes each backslash** — so Windows produced
+  `["src\\ninja_gen\\property_tests\\mod.rs", …]` and the assertion could never
+  match. Fixed in `1e1508ca` by rendering the candidates through `Display`
+  instead, so the diagnostic carries the raw platform separator, **and**
+  normalizing the separator in the assertion. The two halves are interdependent:
+  `replace('\\', "/")` over a `Debug` rendering turns each escaped pair into
+  two slashes and *still* fails, which a standalone probe confirmed before and
+  after the change. The lesson is that a Linux-only local gate run cannot
+  discharge a cross-platform assertion, and the local focused run passing (4/4)
+  was never evidence that the Windows case would pass — only CI was.
 - [ ] `EP-M2`: file splits, mutation-evidence contract, ordering helpers,
       `make proptest`. **Implementation complete and gate-verified as of
       `55da63ed`; awaiting milestone CodeRabbit review and publication.**
@@ -2560,6 +2596,27 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 - [ ] `EP-M8`: `OBL-NINJA`, documentation, evidence sweep, roadmap.
 
 ## Surprises & discoveries
+
+- (2026-10-14) **A path rendered with `Debug` does not contain the path.** A
+  first repair of the Windows failure assumed `{candidates:?}` over
+  `[Utf8PathBuf; 2]` produced `src\ninja_gen\...` with single separators, so
+  `replace('\\', "/")` would normalize it. That is wrong: `Debug` for a path
+  forwards to `str`'s `Debug`, which **escapes** the backslash, so the message
+  carries `src\\ninja_gen\\...` and normalization yields `src//ninja_gen//...`,
+  which still fails to match. Two independent probes settled it — a standalone
+  Rust rendering of both forms, and the raw bytes of the saved CI log, which
+  hold `["src\\ninja_gen\\property_tests\\mod.rs", …]` with five doubled
+  separators. The durable fix is to stop rendering a path through `Debug` when
+  the message is read by a human or matched by an assertion: use `Display`, or
+  `as_str()`, and normalize only the platform separator that genuinely remains.
+
+- (2026-10-14) **A `Utf8Path` equality check is separator-insensitive; a
+  substring check on its rendering is not.** In the same test, the two
+  assertions comparing `resolved == Utf8Path::new("src/…")` were correct on
+  Windows and needed no change, because `Utf8Path` compares by component. Only
+  the third assertion — which string-matched a rendered candidate list — broke.
+  The asymmetry is easy to miss when writing a test: the same literal
+  `"src/a/b.rs"` is right in one comparison and wrong in the next.
 
 - (2026-10-14) **Seven path citations in this plan had gone stale, and every one
   of them pointed at code the reader is instructed to *go and read*.** `main`'s
