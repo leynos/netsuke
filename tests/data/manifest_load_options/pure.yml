@@ -1,0 +1,8 @@
+# The baseline fixture: it calls no helper that reads or acts on the host, so
+# any loader can render it and any difference between two loaders is a
+# difference in the loader rather than in what the manifest asked for.
+netsuke_version: "1.0.0"
+targets:
+  - name: pure
+    description: "joined {{ ['a', 'b'] | join('-') }}"
+    command: "echo pure"
