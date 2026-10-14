@@ -162,6 +162,19 @@ def test_an_unwritable_summary_fails_the_step_after_the_files_are_written(
     hide a broken report for as long as it stayed broken.
     """
     summary.chmod(0o444)
+    # Probe the precondition rather than assume it: the mode bits are what this
+    # test needs, and root -- or a filesystem that does not enforce them --
+    # would let the append succeed, so the step would exit 0 and the assertions
+    # below would fail for a reason that has nothing to do with the script.
+    # `os.access` cannot stand in here, because it reports no write permission
+    # for root while root can still write.
+    try:
+        with summary.open("a", encoding="utf-8"):
+            pass
+    except PermissionError:
+        pass
+    else:
+        pytest.skip("file permissions are not enforced for this user")
     _sccache(cmd_mox)
 
     exit_code = invoke(script.app)

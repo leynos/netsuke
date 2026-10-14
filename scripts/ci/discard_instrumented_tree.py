@@ -101,10 +101,18 @@ def _child_of(target_dir: pathlib.Path, name: str) -> pathlib.Path:
 def discard(target_dir: pathlib.Path, subtrees: tuple[str, ...]) -> list[pathlib.Path]:
     """Remove each existing subtree under ``target_dir`` and return them.
 
-    Each name is validated by :func:`_child_of` before anything is touched, so
-    the removal cannot reach outside ``target_dir``; a name that is not a
-    single plain path component therefore propagates that function's
-    ``CiScriptError`` before any removal happens.
+    Every name is validated by :func:`_child_of` before anything is touched, so
+    the removal cannot reach outside ``target_dir``: a name that is not a
+    single plain path component raises :class:`CiScriptError` while every
+    named tree is still in place. The validation is hoisted into its own pass
+    for that second property: validating inside the removal loop would remove
+    the trees named before the bad one and then raise, so a caller passing
+    ``("llvm-cov", "..")`` would lose ``llvm-cov`` and be told the step failed.
+    Resolving the whole list first makes the all-or-nothing claim true rather
+    than merely intended.
+
+    The exception is documented here rather than under a ``Raises`` heading
+    because it is raised by :func:`_child_of`, not by this function's own body.
 
     Returns
     -------
@@ -112,9 +120,9 @@ def discard(target_dir: pathlib.Path, subtrees: tuple[str, ...]) -> list[pathlib
         The paths that were removed, in ``subtrees`` order. A name with
         nothing at it is skipped rather than reported.
     """
+    trees = [_child_of(target_dir, name) for name in subtrees]
     removed = []
-    for name in subtrees:
-        tree = _child_of(target_dir, name)
+    for tree in trees:
         if tree.is_symlink() or tree.is_file():
             tree.unlink()
             removed.append(tree)
