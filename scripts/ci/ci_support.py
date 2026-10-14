@@ -263,16 +263,30 @@ def extract_members(
         opened = OpenArchive(
             archive, tar, {member.name: member for member in tar.getmembers()}
         )
-        return [_extract_one(opened, destination, name) for name in members]
+        extracted = []
+        for name in members:
+            member = opened.members.get(name)
+            if member is None:
+                message = f"{opened.path.name} has no member {name!r}"
+                raise CiScriptError(message)
+            if not member.isfile():
+                message = f"{opened.path.name} member {name!r} is not a regular file"
+                raise CiScriptError(message)
+            extracted.append(_write_member(opened, destination, name, member))
+        return extracted
 
 
-def _extract_one(
-    opened: OpenArchive, destination: pathlib.Path, name: str
+def _write_member(
+    opened: OpenArchive,
+    destination: pathlib.Path,
+    name: str,
+    member: tarfile.TarInfo,
 ) -> pathlib.Path:
-    """Extract the single member ``name`` from ``opened`` as an executable.
+    """Write the already-validated member ``name`` into ``destination``.
 
-    A member naming a directory or a link is refused before anything is
-    written, so a hostile archive cannot use one to escape ``destination``.
+    Validation happens in :func:`extract_members`, which refuses a member
+    naming a directory or a link before anything is written, so a hostile
+    archive cannot use one to escape ``destination``.
 
     Returns
     -------
@@ -282,15 +296,8 @@ def _extract_one(
     Raises
     ------
     CiScriptError
-        If ``name`` is absent from ``opened.members`` or is not a regular file.
+        If the member's stream cannot be read.
     """
-    member = opened.members.get(name)
-    if member is None:
-        message = f"{opened.path.name} has no member {name!r}"
-        raise CiScriptError(message)
-    if not member.isfile():
-        message = f"{opened.path.name} member {name!r} is not a regular file"
-        raise CiScriptError(message)
     source = opened.tar.extractfile(member)
     if source is None:  # pragma: no cover - isfile() guarantees a stream
         message = f"{opened.path.name} member {name!r} could not be read"
