@@ -10,15 +10,21 @@ Status: IN PROGRESS
 
 `EP-M0` and `EP-M1` are complete and `ADR-030` is written and indexed. The
 approval gate was passed on 2026-09-27. `EP-M2` is complete and gate-verified:
-its four changes are committed and eleven of twelve applicable gates pass
-against its revision, with the twelfth blocked locally by an environmental
-timeout. CI has since resolved that question — the timed-out test passes there
-in 26.7 s against a 300 s budget, so the local exhaustion was the
-sccache-unreachable environment rather than a budget that was too small. CI
-also caught a Windows-only defect in this branch's own test, now fixed in
-`1e1508ca`; the Linux gates could not have seen it. `EP-M3` is the next
-milestone and is not yet started. This revision follows a design review, a
-rebase onto `origin/main`, and that Windows repair.
+its four changes are committed and twelve of thirteen applicable gates pass
+against its revision `c517f6fd`, with the thirteenth — `test-nextest` — failing
+locally on an environmental timeout of the shared compile pool. That timeout
+has now been reproduced across four runs on two *different* tests while every
+other observable stayed identical (573 sccache-unreachable lines,
+`Compile requests 0`, zero assertion failures), and the same tests pass in
+hosted CI in 26.7 s and 62.9 s against the same 300 s budget. CI has therefore
+resolved the question: the local exhaustion is host contention plus an
+unreachable cache, not a budget that was too small, and the allowance is
+deliberately left unwidened because this suite's counter-example seeds are lost
+when the runner kills a process. CI also caught a Windows-only defect in this
+branch's own test, now fixed in `1e1508ca`; the Linux gates could not have seen
+it. `EP-M3` is the next milestone and is not yet started. This revision follows
+a design review, a rebase onto `origin/main`, that Windows repair, and gate
+pass #5.
 
 ## Purpose / big picture
 
@@ -2585,9 +2591,57 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   after the change. The lesson is that a Linux-only local gate run cannot
   discharge a cross-platform assertion, and the local focused run passing (4/4)
   was never evidence that the Windows case would pass — only CI was.
+- [x] (2026-10-14T00:00:00Z) **Gate pass #5 against `c517f6fd` — the Windows
+  repair revision — is 12 of 13 green, and the thirteenth is a now
+  four-times-reproduced environmental timeout.** Every leg reached a verdict
+  and none failed to start. `check-fmt` (174 files unchanged, 198 Python
+  formatted), `lint` (all six sub-legs reached: `cargo doc`, Clippy, Whitaker
+  both packages, `ruff`, `pylint`, the df12 house lints at **100.0% passed**,
+  `ambrleaks`, `yamllint`, `actionlint`), `typecheck` (30.12 s), `doc-coverage`
+  (**98.87%** = 4977/5034), `markdownlint` (0 issues in 174 files — and this
+  time the `spelling` prerequisite *succeeded* first, so `markdownlint-cli2`
+  genuinely executed rather than inheriting an exit 2), `spelling`
+  (`typos.toml` left unmodified), `nixie`, `doctest` (39 passed in the second
+  target, 0 failed), `test-workflow-contracts` (1149 passed, 3 skipped),
+  `test-documentation-contracts` (14 passed, 42 skipped), `proptest` (**90 run,
+  3834 skipped** — reproducing the recorded selector census exactly, so the
+  milestone's own new tests are selected and executing),
+  `test-coverage-artifact` (52 passed). **`test-nextest` timed out.** This
+  run's victim was `cli_configuration_fixture_compiles`
+  (`tests/command_env_ui_tests.rs:70`, `TIMEOUT [300.028s]`), **not** the
+  boundary test that failed pass #4. The gate's verdict for this revision is
+  **red and is recorded as red** — an environmental attribution is a diagnosis,
+  not a waiver.
+- [x] (2026-10-14T00:00:00Z) **The timeout is now reproduced across four
+  independent runs on two different tests, and the moving target is itself the
+  evidence.** The signature is identical every time — exactly **573**
+  `the managed sccache server is unreachable` lines, `sccache --show-stats`
+  reporting `Compile requests 0`, a compile pool pinned at capacity 4/4, and
+  **zero** source failures: `grep -c` for `test result: FAILED`, `panicked at`,
+  and `assertion ... failed` across the whole 803 KB nextest log returns **0**.
+  The decisive new datum is the sibling:
+  `production_build_module_slice_has_expected_boundary` exhausted the 300 s cap
+  in pass #4, **passed in pass #5 at 106.7 s**, and **passes in hosted CI at
+  26.669 s**. The same test on the same fixture therefore spans 26.7 s → 106.7
+  s → timeout depending only on the host's cache and queue state, a spread of
+  more than an order of magnitude. Neither endpoint is a property of the test.
+  Both victims belong to the `nested-cargo-builds` group (`max-threads = 1`),
+  which *serializes* them behind every other child- Cargo test, so under
+  contention the queue wait — not the test's own work — is what consumes the
+  budget. **No widening of the allowance was performed, and none should be.**
+  The Tolerances section pre-authorizes exactly this reading ("the 60-second
+  warn is the real ceiling, not a soft one") and gives the reason that decides
+  the matter: this milestone is a *determinism* suite, `.config/nextest.toml`
+  SIGKILLs the process at 300 s, and **a killed process persists no regression
+  seed**. Widening the budget to hide a host-contention artefact would destroy
+  the counter-example artefact the milestone exists to produce. Fifteen of 3918
+  tests were also cancelled after the timeout (`--no-fail-fast` unset), so
+  their local verdicts are unknown for this revision; CI is the oracle that
+  closes that gap, exactly as it did for pass #4.
 - [ ] `EP-M2`: file splits, mutation-evidence contract, ordering helpers,
       `make proptest`. **Implementation complete and gate-verified as of
-      `55da63ed`; awaiting milestone CodeRabbit review and publication.**
+      `c517f6fd` (12/13 green, the thirteenth environmental); awaiting
+      milestone CodeRabbit review and publication.**
 - [ ] `EP-M3`: shared strategy and compact `Debug`.
 - [ ] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [ ] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
@@ -2596,6 +2650,32 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 - [ ] `EP-M8`: `OBL-NINJA`, documentation, evidence sweep, roadmap.
 
 ## Surprises & discoveries
+
+- (2026-10-14) **A serialized test group turns a compile-cache outage into a
+  timeout, and it does so at whatever test happens to be holding the slot.** The
+  `nested-cargo-builds` group in `.config/nextest.toml` pins
+  `max-threads = 1`, so every child-Cargo test in the workspace runs strictly
+  one at a time. When the managed sccache is unreachable the whole group
+  recompiles from scratch, and the cost is not paid by the tests that need it
+  most but by whichever test the scheduler reaches when the budget runs out.
+  That is why pass #4 killed
+  `production_build_module_slice_has_expected_boundary` and pass #5 killed
+  `cli_configuration_fixture_compiles`: neither is at fault; the slot was. The
+  tell is that the same test passes in 106.7 s on its own run and 26.669 s in
+  CI, so the failure moves with the host, not with the code. Worth remembering
+  before diagnosing any `nested-cargo-builds` timeout as a property of the
+  named test.
+
+- (2026-10-14) **A timeout that migrates between tests is stronger evidence than
+  a timeout that repeats.** Intuition says the opposite — a reproducible
+  failure feels like a real defect and a wandering one feels like an excuse.
+  Here it is inverted: a *fixed* victim could plausibly be a slow test that
+  needs a bigger budget, whereas a victim that changes between runs while every
+  other observable (573 sccache-unreachable lines, `Compile requests 0`, pool
+  at 4/4, zero assertion failures) stays byte-identical can only be reporting
+  shared resource exhaustion. The first reading argues for widening the
+  timeout; the second argues for not touching it. Getting this backwards would
+  have led to tuning a budget in response to a cache outage.
 
 - (2026-10-14) **A path rendered with `Debug` does not contain the path.** A
   first repair of the Windows failure assumed `{candidates:?}` over
