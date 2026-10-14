@@ -203,6 +203,8 @@ pub(crate) fn generate_into_with_shell<W: Write>(
 }
 
 #[cfg(test)]
+mod determinism;
+#[cfg(test)]
 mod property_tests;
 #[cfg(test)]
 mod test_support;
