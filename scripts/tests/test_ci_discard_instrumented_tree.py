@@ -26,6 +26,7 @@ def target(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> pathlib.P
 
 
 def _df(cmd_mox: CmdMox, *, exit_code: int = 0) -> None:
+    """Mock the ``df -h .`` free-space pre-flight the script runs twice."""
     cmd_mox.mock("df").with_args("-h", ".").returns(
         stdout="Filesystem 1%\n", exit_code=exit_code
     ).times(2)
