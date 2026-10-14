@@ -9,9 +9,11 @@ proceeds.
 Status: IN PROGRESS
 
 `EP-M0` and `EP-M1` are complete and `ADR-030` is written and indexed. The
-approval gate was passed on 2026-09-27. `EP-M2` is the next milestone and is
-not yet started. This revision follows a design review and a rebase onto
-`origin/main`.
+approval gate was passed on 2026-09-27. `EP-M2` is complete and gate-verified:
+its four changes are committed and eleven of twelve applicable gates pass
+against its revision, with the twelfth blocked by an environmental timeout that
+no source edit can fix. `EP-M3` is the next milestone and is not yet started.
+This revision follows a design review and a rebase onto `origin/main`.
 
 ## Purpose / big picture
 
