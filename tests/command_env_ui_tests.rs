@@ -6,8 +6,9 @@
 //! embedder would, so a visibility or signature regression fails this suite
 //! rather than only the crate's own tests.
 //! The cached CLI configuration fixture exercises the equivalent public
-//! boundary for `ConfigEnvProvider` and `DiscoveredLayers` through Cargo,
-//! which resolves the identical implementation expected by Netsuke.
+//! boundary for `ConfigEnvProvider` and `DiscoveredLayers` through the same
+//! artefact-reuse harness, avoiding a separate dependency resolution and build
+//! inside the timed test.
 //!
 //! There is deliberately no compile-fail case for the removed APIs
 //! (`EnvMut`, `PathGuard`, `prepend_dir_to_path`, `override_ninja_env`): the
@@ -32,12 +33,13 @@ mod cargo_features;
 #[path = "support/rustc_response_file.rs"]
 mod rustc_response_file;
 
+use rstest::rstest;
 use std::{
+    ffi::OsString,
     io,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
-use test_support::fs as test_fs;
 
 /// The embedder fixture type-checks against the public API.
 #[test]
@@ -65,37 +67,16 @@ fn policy_from_str_embedder_fixture_compiles_without_clap() -> io::Result<()> {
         "the policy FromStr fixture should compile without Clap",
     )
 }
-/// The CLI configuration fixture type-checks against the public cache API.
-#[test]
-fn cli_configuration_fixture_compiles() -> io::Result<()> {
-    let target_dir = manifest_dir().join("target");
-    test_fs::create_dir_all(&target_dir)?;
-    let temporary_root = tempfile::tempdir_in(target_dir)?;
-    let fixture_dir = temporary_root.path().join("cli_configuration_pass");
-    test_fs::create_dir_all(fixture_dir.join("src"))?;
-    test_fs::copy(
-        manifest_dir().join("tests/ui/cli_configuration_pass/Cargo.toml"),
-        fixture_dir.join("Cargo.toml"),
-    )?;
-    test_fs::copy(
-        manifest_dir().join("tests/ui/cli_configuration_pass/src/main.rs"),
-        fixture_dir.join("src/main.rs"),
-    )?;
-
-    let manifest = fixture_dir.join("Cargo.toml");
-    let output = Command::new(cargo())
-        .arg("check")
-        .arg("--manifest-path")
-        .arg(manifest)
-        .env(
-            "CARGO_TARGET_DIR",
-            manifest_dir().join("target/cli-configuration-ui"),
-        )
-        .output()?;
-
-    if !output.status.success() {
+/// Type-check the public cache API only when the Netsuke library is supplied.
+#[rstest]
+#[case::public_api(true)]
+#[case::missing_library(false)]
+fn cli_configuration_fixture_compiles(#[case] has_netsuke_extern: bool) -> io::Result<()> {
+    let library = NetsukeRlib::build()?;
+    let output = library.compile("tests/ui/cli_configuration_pass.rs", has_netsuke_extern)?;
+    if output.status.success() != has_netsuke_extern {
         return Err(io::Error::other(format!(
-            "the CLI configuration fixture should compile against the public API:\n{}",
+            "the CLI configuration fixture must compile exactly when Netsuke is supplied:\n{}",
             stderr(&output),
         )));
     }
@@ -179,7 +160,7 @@ struct NetsukeRlib {
 }
 
 impl NetsukeRlib {
-    /// Build the `netsuke` library with Cargo and locate the resulting rlib.
+    /// Reuse the gate's Cargo target graph and locate the `netsuke` library.
     ///
     /// Cargo inherits the ambient `RUSTFLAGS` and the pinned toolchain, so the
     /// rlib is borrow-checked exactly as the rest of the suite is. The package
@@ -187,12 +168,11 @@ impl NetsukeRlib {
     /// `--extern` name — is `netsuke`.
     fn build() -> io::Result<Self> {
         let output = Command::new(cargo())
-            .arg("build")
-            .arg("--lib")
+            .arg("test")
             .arg("--manifest-path")
             .arg(manifest_dir().join("Cargo.toml"))
             .arg("--message-format=json")
-            .args(cargo_features::GATE_FEATURE_ARGUMENTS)
+            .args(cargo_features::GATE_BUILD_ARGUMENTS)
             .output()?;
         if !output.status.success() {
             return Err(io::Error::other(format!(
@@ -278,7 +258,7 @@ impl NetsukeRlib {
         let response = rustc_response_file::write(output_dir.path(), "command-env-ui.args", &args)?;
         // `output_dir` owns the response file and stays in scope across the
         // call below, so the file still exists when `rustc` opens it at spawn.
-        Command::new(rustc()).arg(response).output()
+        rustc().arg(response).output()
     }
 }
 fn manifest_dir() -> PathBuf {
@@ -293,12 +273,58 @@ fn cargo() -> PathBuf {
     std::env::var_os("CARGO").map_or_else(|| Path::new("cargo").to_path_buf(), PathBuf::from)
 }
 
+/// Construct the fixture compiler command from Cargo's toolchain environment.
 #[expect(
     clippy::disallowed_methods,
-    reason = "locating build tools Cargo reports through the environment; there is no seam to inject and no process state to isolate"
+    reason = "thin adapter reads Cargo's toolchain environment; command construction is tested with injected values"
 )]
-fn rustc() -> PathBuf {
-    std::env::var_os("RUSTC").map_or_else(|| Path::new("rustc").to_path_buf(), PathBuf::from)
+fn rustc() -> Command {
+    rustc_command_with(|key| std::env::var_os(key))
+}
+
+/// Construct a compiler command from injected toolchain environment values.
+///
+/// For `RUSTC=chosen-rustc` and `RUSTC_WRAPPER=build-limits-rustc`, the command
+/// starts with `build-limits-rustc chosen-rustc`. An empty wrapper disables
+/// wrapping, matching Cargo's convention. Only this harness's adapter and
+/// command-construction tests may call this helper.
+fn rustc_command_with(get_env: impl Fn(&str) -> Option<OsString>) -> Command {
+    let compiler = get_env("RUSTC").unwrap_or_else(|| OsString::from("rustc"));
+    let wrapper = get_env("RUSTC_WRAPPER").filter(|path| !path.is_empty());
+    if let Some(wrapper_path) = wrapper {
+        let mut command = Command::new(wrapper_path);
+        command.arg(compiler);
+        command
+    } else {
+        Command::new(compiler)
+    }
+}
+
+#[rstest]
+#[case::default_compiler(None, None, ("rustc", vec![]))]
+#[case::selected_compiler(Some("chosen rustc"), None, ("chosen rustc", vec![]))]
+#[case::wrapper(Some("chosen rustc"), Some("build-limits-rustc"), ("build-limits-rustc", vec!["chosen rustc"]))]
+#[case::wrapper_with_default_compiler(None, Some("build-limits-rustc"), ("build-limits-rustc", vec!["rustc"]))]
+#[case::empty_wrapper(Some("chosen rustc"), Some(""), ("chosen rustc", vec![]))]
+fn fixture_compiler_command_honors_cargo_wrapper(
+    #[case] compiler: Option<&str>,
+    #[case] wrapper: Option<&str>,
+    #[case] expected: (&str, Vec<&str>),
+) {
+    let command = rustc_command_with(|key| match key {
+        "RUSTC" => compiler.map(OsString::from),
+        "RUSTC_WRAPPER" => wrapper.map(OsString::from),
+        _ => None,
+    });
+    assert_eq!(command.get_program(), Path::new(expected.0).as_os_str());
+    assert_eq!(
+        command.get_args().map(OsString::from).collect::<Vec<_>>(),
+        expected
+            .1
+            .into_iter()
+            .map(OsString::from)
+            .collect::<Vec<_>>(),
+    );
 }
 
 fn stderr(output: &Output) -> String {

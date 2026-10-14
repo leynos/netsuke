@@ -58,10 +58,9 @@ def test_nested_cargo_group_serializes_build_capable_tests() -> None:
         f"nested Cargo build tests missing from {CHILD_CARGO_GROUP}: "
         f"{sorted(set(NESTED_CARGO_BUILD_TESTS) - grouped)!r}"
     )
-    assert {
-        "cli_configuration_fixture_compiles",
-        "packaged_manifest_retains_build_script_sources",
-    } <= grouped, "the two isolated nested Cargo tests must be serialized"
+    assert "packaged_manifest_retains_build_script_sources" in grouped, (
+        "the isolated packaging build must be serialized"
+    )
     immediate = [
         override
         for override in all_overrides(config)
@@ -71,6 +70,18 @@ def test_nested_cargo_group_serializes_build_capable_tests() -> None:
     assert all(
         override.get("success-output") == "immediate" for override in immediate
     ), "nested Cargo build diagnostics must remain immediate"
+
+
+def test_completion_readers_share_the_nested_build_group() -> None:
+    """Prevent readers from observing completions truncated by nested builds.
+
+    Cargo preparation can regenerate completions in the shared target/profile
+    directory. The completion contract must share the writers' exclusive group
+    so every parameterized reader waits for a complete generated file.
+    """
+    assert "generated_completion_exposes_the_clap_command_tree" in grouped_test_names(
+        nextest_config()
+    ), "generated completion readers must be serialized with nested Cargo builds"
 
 
 def test_nested_cargo_group_covers_discovered_build_commands() -> None:
@@ -166,6 +177,19 @@ fn new_fixture_compiles() {
 """
     assert build_capable_test_names(source) == {"new_fixture_compiles"}, (
         "the discovery contract must classify direct Cargo build commands"
+    )
+
+
+def test_child_cargo_test_preparation_requires_group_policy() -> None:
+    """Discover Cargo test preparation as a build-capable child command."""
+    source = """
+#[test]
+fn prepared_fixture_compiles() {
+    Command::new(cargo()).arg("test").arg("--no-run");
+}
+"""
+    assert build_capable_test_names(source) == {"prepared_fixture_compiles"}, (
+        "Cargo test preparation must retain the nested-build group policy"
     )
 
 

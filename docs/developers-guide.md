@@ -6564,15 +6564,16 @@ when a fixture must compile against `test_support`; a harness for the
 production crate, or one needing no crate, must use its own narrow support code.
 
 `TestSupportRlib::build` builds `test_support` with
-`cargo build --message-format=json --all-features`. The shared feature
-arguments in `tests/support/cargo_features.rs` match `make test-nextest`;
-`test_support` forwards `legacy-digests` to `netsuke-build`, allowing Cargo to
-reuse the gate's matching artefacts. It parses Cargo's `compiler-artifact`
-messages, locating the uplifted metadata artefact and every dependency
-directory from the paths Cargo actually reports. This avoids assuming
-dependencies live beside the final `test_support` rlib when Cargo's
-`build.build-dir` setting separates intermediate artefacts, or when the Cargo
-shipped with the 1.99 nightlies gives each crate its own directory.
+`cargo test --no-run --workspace --all-targets --all-features --message-format=json`
+from the workspace root manifest. The shared target and feature arguments in
+`tests/support/cargo_features.rs` match `make test-nextest`; `test_support`
+forwards `legacy-digests` to `netsuke-build`, allowing Cargo to reuse the
+gate's matching artefacts. It parses Cargo's `compiler-artifact` messages,
+locating the uplifted metadata artefact and every dependency directory from the
+paths Cargo actually reports. This avoids assuming dependencies live beside the
+final `test_support` rlib when Cargo's `build.build-dir` setting separates
+intermediate artefacts, or when the Cargo shipped with the 1.99 nightlies gives
+each crate its own directory.
 
 `TestSupportRlib::compile` then invokes the workspace `rustc` directly with the
 discovered artefact as `--extern test_support=…`, every discovered
@@ -6592,6 +6593,62 @@ has its own directory, a filtered-out proc macro is simply absent from the
 search path and its dependents fail with `E0463`. The same rule and the same
 reasoning apply to `tests/command_env_ui_tests.rs`, which builds the `netsuke`
 rlib and derives its search path the same way.
+
+The cached CLI configuration fixture uses that same `NetsukeRlib` harness. It
+type-checks `ConfigEnvProvider`, `DiscoveredLayers`, diagnostic emission, and
+cached-layer merging as an external crate against the gate-built library. A
+companion case omits `--extern netsuke` and must fail, ensuring the positive
+check depends on the public library. These checks cover API visibility and
+composition; package verification retains the separate default-feature build
+boundary.
+
+Public API checks must not select their own `CARGO_TARGET_DIR`. The previous
+CLI fixture created an unlocked standalone Cargo project, resolved a different
+dependency graph, and rebuilt it inside Nextest. The current harness prepares
+the workspace test graph with the workspace lockfile, gate target and feature
+selection, and ambient target directory, then reuses the gate-built library.
+Its preparation uses the same
+`cargo test --no-run --workspace --all-targets --all-features` arguments as the
+test gate. The CLI fixture remains in the serialized child-Cargo group, but
+uses the ordinary 300-second allowance; it no longer has a separate cold-graph
+timeout. The workflow contract rejects isolated target-directory overrides in
+these ambient UI harnesses.
+
+Those ambient builds must also select the gate's entire workspace and all
+targets. Merely passing `--all-features` to a library-only build omits
+development-dependency features, as explained by
+[Cargo's feature resolver][cargo-feature-resolver]. The build-module boundary
+fixture then recompiles dependency variants inside its timer, despite using the
+same target directory. `GATE_BUILD_ARGUMENTS` in the existing `cargo_features`
+support module owns this complete selection for the three ambient harnesses;
+their workflow contract pins the arguments, command mode, and root manifest.
+Preparation uses `cargo test --no-run`, matching Nextest's test build mode. The
+`--no-run` flag is mandatory: the child must prepare artefacts without
+launching the suite recursively. The child-command scanner recognizes this
+Cargo mode as build-capable and requires the same exclusive group policy.
+
+Generated completion contract tests share the `nested-cargo-builds` group with
+the preparations that may regenerate their target/profile staging files.
+`clap_complete::generate_to` writes those final files in place, so a concurrent
+reader can observe empty content. Grouping the readers and writers makes the
+standard Nextest run wait for complete generation; it preserves the original
+test assertions and timeout policy.
+
+[cargo-feature-resolver]:
+  https://doc.rust-lang.org/cargo/reference/resolver.html#feature-resolver-version-2
+
+The private `rustc_command_with` constructor belongs only to
+`tests/command_env_ui_tests.rs`: its environment-reading adapter and its
+command-construction tests are the permitted callers. It composes the selected
+compiler with `RUSTC_WRAPPER`, passing the compiler as the wrapper's first
+argument; an empty wrapper disables wrapping, following
+[Cargo's wrapper convention][cargo-compiler-wrapper]. This keeps the small
+fixture compilation inside managed compiler admission when that wrapper is
+configured. Tests inject toolchain values into the constructor rather than
+changing process-wide environment.
+
+[cargo-compiler-wrapper]:
+  https://doc.rust-lang.org/cargo/reference/environment-variables.html
 
 `TestSupportRlib` composes `tests/support/cargo_artifacts.rs`, which parses
 Cargo `compiler-artifact` messages, with
@@ -9351,12 +9408,12 @@ fed back upstream.
 
 All four tiers are set here.
 
-| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                                                           |
-| ------------------------ | ---------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation; 720 s production-module check; 900 s CLI fixture, split-build, and packaging smoke tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally                                                                                       |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step                                                                           |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                                                                                                   |
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                                                                |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation; 720 s production-module check; 900 s stub-environment, split-build, and packaging smoke tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally                                                                                            |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step                                                                                |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                                                                                                        |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
@@ -9380,23 +9437,24 @@ which is almost all of them. The mutation compile gate gets ten periods, 600 s;
 it compiles all 18 patched trees through the Kani frontend into a target
 directory no cache restores.
 `production_build_module_slice_has_expected_boundary` gets twelve periods, 720
-s. `cli_configuration_fixture_compiles`, `stub_env_default_does_not_compile`,
+s. `stub_env_default_does_not_compile`,
 `split_build_fixture_compiles_through_the_direct_rustc_harness`, and the
 packaging smoke test each get fifteen periods, 900 s. Their nested Cargo builds
 use isolated target directories, so they do not inherit completed artefacts
-from the workspace `target/`. A whole-run budget has to sit above the largest
-allowance in the file, so 900 s is the figure the ordering below is written
-against, not the 300 s most tests get.
+from the workspace `target/`. The CLI configuration fixture uses the workspace
+test graph and target, and retains the 300 s default. A whole-run budget has to
+sit above the largest allowance in the file, so 900 s is the figure the
+ordering below is written against, not the 300 s most tests get.
 
-The longer cold-build allowances are scoped to four fixtures. The CLI
-configuration fixture's nested `cargo check` spent 300 s waiting for the shared
-package-cache lock in the latest full-suite run, so Nextest terminated it at
-the profile's default cap before the build could finish. Earlier runs completed
-in 171.4 s on a quiet host and measured 709.2 s on a cold per-run tree. Fifteen
-periods give it 900 s, about 191 s above that cold measurement and below the
-960 s CI whole-run cap. The split-build fixture also timed out at 720 s while
-waiting on the shared package-cache lock; its allowance now matches the CLI
-fixture and packaging smoke test.
+The CLI configuration fixture's earlier nested `cargo check` spent 300 s
+waiting for the shared package-cache lock; earlier runs completed in 171.4 s on
+a quiet host and measured 709.2 s on a cold per-run tree. That separate graph
+was removed: the current fixture prepares against the workspace lockfile,
+features, and target, reusing the gate-built library. The historic timing
+explains the original timeout but no longer justifies a CLI-specific allowance.
+The split-build fixture also timed out at 720 s while waiting on the shared
+package-cache lock; its allowance is now 900 s, matching the stub-environment
+and packaging checks.
 
 `stub_env_default_does_not_compile` builds the `test_support` rlib with Cargo
 before invoking rustc through its direct-compile harness. The full suite
@@ -9422,12 +9480,13 @@ reached the 300.017 s cap during concurrent Cargo work, confirming that its
 timing varies with host load. The latest cold-target run reached 600 s while
 compiler admission was saturated. The candidate gives this test fifteen warning
 periods, 900 s, which remains strictly below the 960 s whole-run budget. The
-production-module check retains its twelve-period, 720 s allowance; the CLI
-configuration fixture, stub-environment compile-fail fixture, split-build
-fixture, and packaging smoke test share the 900 s tier. Each override binds
-only because its filter carries the test's module path; earlier passing runs
-did not prove the wider allowance was in force because the test completed
-inside the 300 s default. See "nextest configuration" for the rule.
+production-module check retains its twelve-period, 720 s allowance; the
+stub-environment compile-fail fixture, split-build fixture, and packaging smoke
+test share the 900 s tier. The CLI fixture uses the 300 s default after reusing
+the gate-built workspace graph. Each override binds only because its filter
+carries the test's module path; earlier passing runs did not prove the wider
+allowance was in force because the test completed inside the 300 s default. See
+"nextest configuration" for the rule.
 
 ### The whole-run budget, and how 16 minutes was arrived at
 

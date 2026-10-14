@@ -120,15 +120,14 @@ struct BuildSliceDependencies {
 }
 
 impl BuildSliceDependencies {
-    /// Build the crate and collect the artefacts required by the UI fixtures.
+    /// Reuse the gate's target graph and collect the UI fixture dependencies.
     fn build() -> io::Result<Self> {
         let output = Command::new(cargo())
-            .arg("build")
-            .arg("--lib")
+            .arg("test")
             .arg("--manifest-path")
             .arg(manifest_dir().join("Cargo.toml"))
             .arg("--message-format=json")
-            .args(cargo_features::GATE_FEATURE_ARGUMENTS)
+            .args(cargo_features::GATE_BUILD_ARGUMENTS)
             .output()?;
         if !output.status.success() {
             return Err(io::Error::other(format!(

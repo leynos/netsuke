@@ -21,8 +21,8 @@
 #
 # This is the profile's own allowance, and it governs every test no override
 # matches. The mutation compile gate widens it to ten periods; the production
-# module-slice check gets twelve; and the CLI configuration, stub-environment,
-# split-build, and cold package-publish checks get fifteen. The largest
+# module-slice check gets twelve; and the stub-environment, split-build,
+# and cold package-publish checks get fifteen. The largest
 # allowance is 900 s.
 slow-timeout = { period = "60s", terminate-after = 5 }
 
@@ -51,23 +51,6 @@ max-threads = 1
 # through `filter` and no `test-group`, the same field carrying the same defect,
 # and a guard reading only the group's filters could not see it.
 [[profile.default.overrides]]
-# This test spawns an isolated Cargo build. Serializing it prevents four
-# Nextest workers from each starting a four-job Cargo build on four vCPUs.
-filter = 'test(/^cli_configuration_fixture_compiles($|::)/)'
-test-group = "nested-cargo-builds"
-success-output = "immediate"
-# Its child `cargo check` runs in the same four-slot compiler-admission pool as
-# every build on the host, and the child is awaited with `.output()` inside the
-# test body. The shared package-cache and compiler queues therefore count
-# towards this test's wall clock. It completed in 171.4 s on a quiet run and
-# took 709.2 s on a cold per-run tree; this candidate also timed out at the
-# default 300 s while the child waited for Cargo's package-cache lock. Fifteen
-# periods leave about 191 s above the measured cold run and fit below the
-# 960 s CI whole-run cap. The dedicated test group still serializes child Cargo
-# jobs without widening the allowance for unrelated tests.
-slow-timeout = { period = "60s", terminate-after = 15 }
-
-[[profile.default.overrides]]
 # `cargo publish --dry-run` builds into a fresh target directory. Allow fifteen
 # periods for shared-cache and compiler-queue delays without widening unrelated
 # tests or adding retries.
@@ -84,7 +67,7 @@ success-output = "immediate"
 slow-timeout = { period = "60s", terminate-after = 15 }
 
 [[profile.default.overrides]]
-filter = 'test(/^command_env_embedder_fixture_compiles($|::)/) | test(/^manifest_environment_embedder_fixture_compiles($|::)/) | test(/^policy_from_str_embedder_fixture_compiles_without_clap($|::)/) | test(/^command_list_public_api_fixture_compiles($|::)/) | test(/^ir_gen_error_public_api_fixture_compiles($|::)/) | test(/^legacy_recipe_telemetry_public_api_fixture_compiles($|::)/) | test(/^config_cached_discovery_embedder_fixture_compiles($|::)/) | test(/^verbose_timing_reporter_embedder_fixture_compiles($|::)/)'
+filter = 'test(/^command_env_embedder_fixture_compiles($|::)/) | test(/^manifest_environment_embedder_fixture_compiles($|::)/) | test(/^policy_from_str_embedder_fixture_compiles_without_clap($|::)/) | test(/^cli_configuration_fixture_compiles($|::)/) | test(/^command_list_public_api_fixture_compiles($|::)/) | test(/^ir_gen_error_public_api_fixture_compiles($|::)/) | test(/^legacy_recipe_telemetry_public_api_fixture_compiles($|::)/) | test(/^config_cached_discovery_embedder_fixture_compiles($|::)/) | test(/^verbose_timing_reporter_embedder_fixture_compiles($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
 
@@ -94,7 +77,7 @@ test-group = "nested-cargo-builds"
 success-output = "immediate"
 
 [[profile.default.overrides]]
-# This direct-rustc fixture runs a nested `cargo build --lib` before checking
+# This direct-rustc fixture prepares the workspace test graph before checking
 # the production module boundary. It hit the default 300 s cap in the full
 # gate while compiler admission was saturated, so widen only this test to
 # twelve periods (720 s), below the 960 s CI whole-run cap.
@@ -156,6 +139,13 @@ slow-timeout = { period = "60s", terminate-after = 10 }
 filter = 'test(/^coverage_map_status_is_reported($|::)/)'
 success-output = "immediate"
 
+[[profile.default.overrides]]
+# These readers inspect the shared target/profile completion files that nested
+# Cargo preparations can regenerate. Keep readers and writers mutually exclusive.
+filter = 'test(/^generated_completion_exposes_the_clap_command_tree($|::)/)'
+test-group = "nested-cargo-builds"
+success-output = "immediate"
+
 [profile.ci]
 # The CI-only profile. It exists solely to carry the whole-run budget, and
 # inherits everything else from `default`, including that profile's
@@ -184,7 +174,7 @@ success-output = "immediate"
 #
 # The 16-minute global timeout is above the 900s largest per-test allowance.
 # The mutation compile gate keeps its 600s budget, the production module-slice
-# check keeps 720s, and the CLI configuration, stub-environment compile-fail,
+# check keeps 720s, and the stub-environment compile-fail,
 # split-build, and cold package-publish checks get 900s. Both comparisons hold:
 #
 #   global-timeout > largest per-test allowance

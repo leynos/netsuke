@@ -37,15 +37,15 @@ pub struct TestSupportRlib {
 }
 
 impl TestSupportRlib {
-    /// Build `test_support` with Cargo and locate the resulting rlib.
+    /// Reuse the gate's Cargo target graph and locate the `test_support` rlib.
     pub fn build() -> io::Result<Self> {
         let mut command = Command::new(cargo());
         command
-            .arg("build")
+            .arg("test")
             .arg("--manifest-path")
-            .arg(manifest_dir().join("test_support/Cargo.toml"))
+            .arg(manifest_dir().join("Cargo.toml"))
             .arg("--message-format=json")
-            .args(cargo_features::GATE_FEATURE_ARGUMENTS);
+            .args(cargo_features::GATE_BUILD_ARGUMENTS);
         let started_at = Instant::now();
         let output = command.output()?;
         tracing::info!(
