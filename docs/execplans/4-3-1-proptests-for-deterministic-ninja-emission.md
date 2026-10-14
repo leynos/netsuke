@@ -2659,6 +2659,24 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   [>
   60.000s]` in CI** at 66.986 s. The test is genuinely expensive everywhere; what differs is only the headroom the host has. CI leaves it 4.5x, a contended host with an unreachable cache leaves it none — so local timeouts on this fixture should be *expected* to recur, and CI stays the standing oracle rather than a one-time tiebreak. A direct probe recorded separately confirms the mechanism: given a 1500 s allowance the same test passes in **977 s wall**, split as 4 m 28 s to compile the binary plus **709 s inside the test body**, where it spawns a child `cargo
   check` against a `target/.tmp…/` tree that is **cold on every run** and then queues behind 20+ peer crates for the same four-slot admission pool.
+- [x] (2026-10-14T00:00:00Z) **A second CI run, at the tip, is green too — and
+  the spread across three revisions is itself the finding.** Runs `38509361585`
+  (`CI`), `38509361371` (`Release Dry Run`) and `38509361348`
+  (`Netsukefile Build Test`) all concluded **success** at head `bc101f4c`. From
+  `build-test` (job `115674067408`, log `/tmp/ci-build-test-bc101f4c.log`):
+
+  | Test                                                  | `8fc7a2fa`   | `c517f6fd`   | `bc101f4c`   | best local           |
+  | ----------------------------------------------------- | ------------ | ------------ | ------------ | -------------------- |
+  | `cli_configuration_fixture_compiles`                  | —            | PASS 66.986s | PASS 36.103s | **TIMEOUT 300.028s** |
+  | `production_build_module_slice_has_expected_boundary` | PASS 26.669s | PASS 37.893s | PASS 19.224s | TIMEOUT, then 106.7s |
+
+  Four CI observations, four passes; best CI figure 19.224 s against a best
+  local figure of a timeout. CI's own range on one test spans 19.2 s to 67.0 s,
+  a factor of 3.5 between runs of the same code, which is why a single number
+  for this fixture is meaningless and why the (compile, body, queue) split is
+  the honest report. CI at the tip is green across every job including
+  `Windows / build-test-windows`, so the oracle covers the current revision and
+  not merely its predecessor.
 - [x] (2026-10-14T00:00:00Z) **The Windows repair is CI-verified, at
       `c517f6fd`.**
   Both `CI` (`38507025014`) and `Release Dry Run` (`38507024993`) concluded
