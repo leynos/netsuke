@@ -18,10 +18,10 @@ evidence producer is connected. Operators need to distinguish the failed
 operation and its latency without turning revisions, run IDs, paths, URLs, or
 workflow content into metric dimensions.
 
-The gate is a short-lived shell process rather than a service with a scrape
-endpoint. Its observability therefore needs a durable hand-off to the workflow
-run, with a small and reviewable contract that tests can validate independently
-of a metrics backend.
+The gate is a short-lived process rather than a service with a scrape endpoint.
+Its observability therefore needs a durable hand-off to the workflow run, with
+a small and reviewable contract that tests can validate independently of a
+metrics backend.
 
 ## Decision
 
@@ -73,7 +73,7 @@ or repository artefact-retention policy governs how long the JSONL artefact is
 available. This contract does not define or imply a Prometheus, OTLP, or statsd
 endpoint.
 
-The script keeps its fallible boundaries behind explicit Bash adapters:
+The gate keeps its fallible boundaries behind explicit adapters:
 `NETSUKE_RELEASE_ADMISSION_GH_ADAPTER` for GitHub API requests,
 `NETSUKE_RELEASE_ADMISSION_GIT_ADAPTER` for Git fetches,
 `NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER` for monotonic clock readings,
@@ -197,15 +197,18 @@ safe and diagnosable.
 
 ## Implementation references
 
-- Admission script:
-  [`require-release-admission-canaries.sh`](../.github/scripts/require-release-admission-canaries.sh)
+- Admission gate:
+  [`release_admission.py`](../.github/scripts/release_admission.py) and its
+  implementation package under
+  [`_release_admission/`](../.github/scripts/_release_admission/)
 - Release workflow and artefact export:
   [`release.yml`](../.github/workflows/release.yml)
 - Metric allowlist and JSONL validation:
   [`release_admission_metrics.py`](../tests/workflow_contracts/release_admission_metrics.py)
 - Script and workflow contract tests:
-  [`test_release_admission_metrics.py`](../scripts/tests/test_release_admission_metrics.py)
-  and
+  [`test_release_admission_metrics.py`](../scripts/tests/test_release_admission_metrics.py),
+  the rest of the runtime modules beside it under
+  [`scripts/tests/`](../scripts/tests/), and
   [`release_admission_metrics_test.py`](../tests/workflow_contracts/release_admission_metrics_test.py)
 - Operator guidance:
   [`developers-guide.md`](developers-guide.md#release-admission-observability)
@@ -232,3 +235,31 @@ exits non-zero for those results. An evidence-state value such as `fresh` does
 not substitute for a real evidence producer or enable enforcement. Publication
 must remain independent of the scaffold until that producer and its validation
 are available.
+
+## Addendum (2026-10-11): The bound, the streams, and the statuses
+
+The accepted decision above is unchanged. Three execution properties are now
+contractual rather than incidental.
+
+**The bound reaches a process group.** A command that outlives its operation
+timeout is signalled as a group, `SIGTERM` first and `SIGKILL` after a
+one-second grace, which is the escalation GNU `timeout --kill-after=1s` gave.
+The direct child is reaped within the timeout plus that grace. Two descendants
+can survive, both shared with GNU `timeout`: one that leaves the group with its
+own `setsid()`, and one that ignores `SIGTERM` after the direct child has
+already exited, because `SIGKILL` is sent only while the direct child is
+unreaped. The limits are recorded in full in the developers' guide.
+
+**The streams follow the shell's redirections.** A command whose output the
+gate parses has that stream captured in a pipe the gate reads to end-of-file,
+and its standard error inherited, so only the parsed stream is private. A
+command whose output is only reported, and a sink adapter, have both streams
+inherited. The clock adapter runs with no bound at all, as the shell left it
+unwrapped.
+
+**Statuses are reported in Bash's convention.** A child killed by a signal is
+reported as `128` plus the signal, and a launch the operating system refuses
+keeps the shell's statuses: `127` when the program does not exist, `126` for
+any other refusal. Neither translation changes a published `error_category`;
+they keep it, because a timed-out operation is identified by the statuses the
+shell produced rather than the negative numbers Python reports.

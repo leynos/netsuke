@@ -1291,14 +1291,17 @@ providing a secure bridge to the underlying system.
   `manifest::EnvAccessPolicy`, an exact-name allow and block policy the
   operator configures through `env_allow_var` and `env_block_var`; the policy
   is evaluated at the `env()` registration boundary before the reader runs, so
-  a denied name never obtains a process value. Each lookup, including a
-  refusal, is counted once on the bounded `netsuke_manifest_env_lookups_total`
-  series recorded by [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md),
-  which carries only the `outcome` label and never the name or its value. A
-  `default=` keyword argument supplies the value to use when the variable is
-  absent, which keeps `PATH`-style optional configuration out of the manifest's
-  control flow; it is accepted only as a string, and a non-string default
-  raises the `manifest.env.default_not_string` detail under the
+  a denied name never obtains a process value. Automatic project discovery
+  quarantines allow entries throughout the selected `.netsuke.toml` `extends`
+  chain, while each shared file occurrence retains the authority of the root
+  that reached it. Each lookup, including a refusal, is counted once on the
+  bounded `netsuke_manifest_env_lookups_total` series. The counter is recorded
+  by [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md), which carries
+  only the `outcome` label and never the name or its value. A `default=`
+  keyword argument supplies the value to use when the variable is absent, which
+  keeps `PATH`-style optional configuration out of the manifest's control flow;
+  it is accepted only as a string, and a non-string default raises the
+  `manifest.env.default_not_string` detail under the
   `[netsuke::jinja::env::args]` code rather than stringifying the value. The
   default is consulted for a *missing* variable only. An undecodable value is
   still an error, because substituting there would hide a host fault the author

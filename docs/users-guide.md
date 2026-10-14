@@ -1183,11 +1183,14 @@ fields present only in the winner remain available.
 Fetch-policy fields are the security-sensitive exception to this ordinary
 precedence. Only the exact primary project file is a project request, so its
 grants remain below operator policy unless the operator enables
-`trust_project_fetch_policy`. Primary-project environment allow rules are also
-an exception: `env_allow_var` entries from the primary project file are removed
-before policy composition rather than merged, so they cannot widen the
-allowlist or activate default-deny. Files loaded through `extends` retain
-ordinary file-layer semantics.
+`trust_project_fetch_policy`. Environment allow rules use a different boundary:
+automatic discovery removes `env_allow_var` from the primary project file and
+every file reached through its `extends` chain before policy composition. An
+explicit `--config` selector bypasses automatic project discovery; its ancestor
+occurrences retain operator authority, while a selected primary project file
+remains subject to primary-file quarantine. `env_block_var` remains cumulative
+because it only restricts access. This environment rule does not change the
+primary-only fetch-policy boundary.
 
 An explicit selector bypasses automatic discovery. Selectors are checked in
 this order:
@@ -1658,8 +1661,9 @@ By default, project configuration may only narrow the operator policy. A project
 Project `fetch_block_host` entries accumulate with entries from the other
 layers, and a block always wins over an allow. Project `fetch_allow_scheme` and
 `fetch_allow_host` entries are ignored by default; the project cannot enable
-them by setting `trust_project_fetch_policy` itself. Configuration loaded
-through `extends` is not quarantined and retains ordinary file-layer precedence.
+them by setting `trust_project_fetch_policy` itself. Inherited fetch-policy
+fields keep their ordinary file-layer merge behaviour; this is separate from
+the chain-wide environment-grant quarantine described below.
 
 An operator who deliberately trusts a checkout can set
 `trust_project_fetch_policy = true` in system or user configuration, set
@@ -1712,12 +1716,14 @@ compatibility. Adding at least one effective `env_allow_var` entry makes the
 allowlist restrictive: only listed names may resolve. An `env_block_var` list
 without an allowlist blocks only its listed names. A blocklist entry always
 overrides an allowlist entry. Every entry is one exact variable name; this
-policy has no glob or pattern matching. Primary-project `env_allow_var` entries
-are removed before policy composition, so a manifest cannot grant itself access
-to inherited environment variables or activate default-deny alone.
-Primary-project `env_block_var` entries remain cumulative because they can only
-restrict access. Configuration loaded through `extends` retains ordinary
-file-layer precedence.
+policy has no glob or pattern matching. `env_allow_var` entries from the
+primary project file and every file reached through `extends` in an
+automatically discovered project chain are removed before policy composition.
+This prevents a checkout-controlled ancestor from widening the operator
+allowlist or activating default-deny. `env_block_var` entries remain cumulative
+because they only restrict access. Operator chains retain their grants, and
+ancestors in an explicitly selected configuration chain retain operator
+authority; a selected primary project file remains quarantined.
 
 This policy reduces secret ingress into rendered manifest fields. It does not
 make rendered manifest contents safe to log: allowed values still require the

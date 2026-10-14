@@ -1807,7 +1807,26 @@ result. An environment value such as `fresh` is not evidence and must never
 substitute for a real evidence producer. Any other mode value is an invalid
 configuration and fails closed as an unknown gate result.
 
-The script keeps fallible boundaries behind explicit Bash adapters. Set
+The gate logic is Python, per the estate rule in
+[scripting standards](scripting-standards.md), not shell.
+`.github/scripts/release_admission.py` is the PEP 723 entry point the workflow
+runs with `uv run --script`, which resolves its declared dependencies at
+invocation. Its implementation is split across
+`.github/scripts/_release_admission/`: `policy` owns the pure bounded
+classifications, `records` owns the metric and trace shapes, `delivery` owns
+the metric, output, and trace sinks, `bounding` owns the process-group command
+bound and the stream wiring, `commands` owns the bounded external command
+runner, `statuses` translates an exit status, an elapsed bound, or a refused
+launch into the gate's own command result, `telemetry` owns the emitted records,
+`environment` reads a variable in one of Bash's two default forms,
+`filesystem` performs the two start-up effects that create the artefact parents
+and truncate the artefacts, `configuration` resolves the environment the gate
+is told, and `gate` composes the operations and reporting. The workflow's
+`astral-sh/setup-uv` step provisions the interpreter; `uv` reads the entry
+point's own `requires-python` and dependency pins rather than the workflow
+restating them.
+
+The gate keeps fallible boundaries behind explicit adapters. Set
 `NETSUKE_RELEASE_ADMISSION_GH_ADAPTER` for GitHub API requests,
 `NETSUKE_RELEASE_ADMISSION_GIT_ADAPTER` for Git fetches,
 `NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER` for monotonic clock readings,
@@ -1817,12 +1836,99 @@ The script keeps fallible boundaries behind explicit Bash adapters. Set
 `git`, `python3`, and direct file or output appends. Adapters must retain the
 fixed, bounded contracts; they must not add identifiers or raw data.
 
-The internal script boundaries are deliberately narrow:
-`require-release-admission-canaries.sh` is the composition and reporting entry
-point, `release-admission-adapters.sh` owns external-effect adapters, and
-`release-admission-policy.sh` owns pure bounded classifications. These scripts
-are internal implementation details and are sourced only by the gate entry
-point.
+The bounded commands run through `commands` and `bounding`. Cuprum still builds
+each argument vector from the configured adapter names, so the allowlist
+decides which executables may run, but the gate spawns the child itself with
+`start_new_session=True`. A command that outlives its bound is signalled as a
+*process group*: `SIGTERM` first, then `SIGKILL` after the same one-second grace
+`timeout --kill-after=1s` gave. Every descendant still in that group is
+signalled with it, and the direct child is reaped within the bound plus that
+grace. A descendant can outlast the signal in two ways — by leaving the group
+with its own `setsid()`, which is GNU `timeout`'s hole as well and the same
+limitation the [Kani scope wrapper](#kani-scope-wrapper) records, or by holding
+the captured pipe past its parent's exit; the timeout paragraph above records
+both.
+
+The streams follow the shell's redirections rather than one rule. A command
+whose output the gate *parses* — the GitHub and clock adapters — has its
+standard output captured in a pipe the gate reads to end-of-file, and its
+standard error inherited, so only the parsed stream is private. A command whose
+output is only *reported* — the `git` fetch — has both streams inherited, as
+does a sink adapter, which the shell ran as an ordinary command in a pipeline
+rather than in a command substitution. The clock adapter alone runs with no
+bound at all, exactly as the shell left it unwrapped.
+
+Statuses are normalized to Bash's convention before anything classifies them.
+Python reports a signal death as the negation of the signal where a shell
+reports `128 + signal`, and `statuses` reads only `124` and `137` as a timeout.
+Without translation, a completed command independently terminated by
+`SIGKILL` — reported as `-9` — would keep its operation's own category, so an
+`api_error` or `fetch_error` would be published where the preserved policy says
+`timeout`. Translation maps `-9` to `137`, which the policy classifies as a
+timeout. The bound's own expiry is not that case and does not depend on which
+signal ended the command: it reports `None` even after escalating to `SIGKILL`,
+even though that escalation discarded the child's status, so every elapsed
+bound is `124`. `SIGTERM` is translated for the same reason and is a different
+case again: `143` is not a timeout status, so an adapter killed by `SIGTERM`
+keeps its operation's own category. A refused launch keeps the shell's statuses
+— `127` for a program that does not exist and `126` for any other refusal — and
+a failed in-process append reports `1`, which is what the shell's `>>` failure
+produced.
+
+Both artefact paths are handled in the spelling the operator supplied. The
+shell passed its own string to a sink adapter and published it in the
+`metrics-file` and `trace-file` workflow outputs, and the port reaches all of
+those boundaries with the same string. Neither creation step normalizes it
+either: the truncation opens the configured spelling, because
+`Path("metrics.jsonl/")` drops the slash and would create the regular file the
+shell's redirection refused, and `mkdir` is given the parent that
+`configuration._directory_name` derives from the configured string, which
+reproduces coreutils `dirname(1)` — the operand the shell's
+`$(dirname "$file")` produced. The path's `Path.parent` is not that operand:
+`Path("reports/.")` normalizes the trailing `/.` away and its parent is `.`,
+where `dirname(1)` answers `reports`. The port carries both forms in an
+`OutputPath`. Creation is still two-phase: both parent directories are made
+before either file is truncated, so a refused trace parent leaves the metrics
+file untouched, and a filesystem refusal prints one bounded diagnostic rather
+than escaping as an uncaught traceback.
+
+Start-up is four steps behind one seam, and the seam is what makes the claim
+above testable. `configuration.resolve_destination` and
+`configuration.resolve_configuration` are pure: they read the mapping they are
+handed and write nothing, so `test_release_admission_configuration_resolution`
+can prove that resolution performs no writes rather than inferring it from a
+surviving file. `configuration.prepare_destination` is the only step that
+touches a filesystem, and it is handed a `filesystem.FileSystem` rather than
+looking one up, so `test_release_admission_artefact_initialization` drives it
+with a recording port and asserts the effect order and operands directly.
+`configuration.require_workflow_output` performs the one required-variable
+refusal that belongs after both artefacts exist. The entry point calls the four
+in the shell's order, and each refusal's position is part of the contract.
+
+The internal module boundaries are deliberately narrow: `gate` is the
+composition and reporting entry point, `delivery` and `commands` own the
+external-effect adapters, and `policy` owns the pure bounded classifications.
+These modules are internal implementation details, imported only by the gate
+entry point and its tests.
+
+Two conventions inside those modules are worth stating, because both exist to
+keep an answer in one place:
+
+- Each fixed vocabulary is a `policy.Vocabulary` subclass, and membership is
+  asked through `Vocabulary.contains` rather than through a per-vocabulary
+  `is_*` predicate. The five predicates that used to answer the same question
+  five times were flagged as duplication by CodeScene; `contains` is a provided
+  class method on the base, so a new vocabulary inherits the answer and cannot
+  bring its own copy. `is_metric_value` stays a function, because a rendered
+  number is a regex rather than an enumeration member.
+- Bash's two default forms have one helper each, and the choice between them is
+  never incidental. `environment.optional` is `${VAR:-default}` and substitutes
+  for an unset *or empty* value; `environment.defaulted_only_when_unset` is
+  `${VAR-default}` and substitutes only when the variable is unset. The
+  enforcement mode uses the latter, so an exported empty value reaches the
+  gate's own mode check and is refused there rather than silently becoming
+  observation mode. Both live in the `environment` module, which owns every
+  form the shell's expansions used.
 
 The metric contract is deliberately closed. The only label names are `canary`,
 `operation`, `outcome`, and `error_category`, and the only values are:
@@ -1843,11 +1949,27 @@ and metric classification remains fail-closed.
 
 Each operation has a 30-second timeout by default. Set
 `NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS` only to an integer from 1
-through 300 seconds, inclusive. The timeout terminates the command and gives
-descendants a one-second termination grace period. A timed-out operation emits
-`outcome=failure` with `error_category=timeout`; invalid timeout configuration
-fails closed as `outcome=failure` with `error_category=unknown` before any
-admission operation runs.
+through 300 seconds, inclusive. The timeout signals the command's whole process
+group, and it gives the group a one-second termination grace period. A
+timed-out operation emits `outcome=failure` with `error_category=timeout`;
+invalid timeout configuration fails closed as `outcome=failure` with
+`error_category=unknown` before any admission operation runs.
+
+The termination has limits worth knowing before trusting it as an upper bound
+on a call. A descendant that leaves the group with its own `setsid()` is never
+signalled. A descendant that outlives its direct parent while holding a
+*captured* standard-output pipe keeps that pipe open, so the drain waits past
+the bound even after the group has been signalled — and a descendant that
+inherited `SIGTERM` as ignored survives the group signal whenever the direct
+child has already exited, because the escalation to `SIGKILL` is armed only by
+the direct child still being unreaped. The pipe case is GNU `timeout`'s
+exposure as well — the shell's command substitution read the same pipe — so it
+is a preserved limitation rather than a regression. A command whose streams are
+inherited rather than captured cannot be held open by a survivor this way,
+because there is no pipe for it to hold open; it is bounded by its child's exit
+alone. The group-escalation limitation is not escaped by inheriting the
+streams, because it turns on when the direct child exited rather than on who
+holds the pipe.
 
 Instruments emitted by the gate are:
 
@@ -2838,19 +2960,71 @@ leave Ruff's real-implementation docstring rule enabled.
 ### Release-admission runtime tests
 
 `make test-release-admission` is the runtime gate for the release-admission
-shell script. It uses the repository's Python 3.14 baseline and provisions
-`pytest==9.0.2` and `hypothesis==6.151.9` explicitly. The target runs the three
-runtime modules with `python -m pytest`, `-c /dev/null`, `--rootdir=.`, and
-`-p no:cacheprovider`, so the test run is isolated from repository-local pytest
-configuration and cache state:
+Python gate. It uses the repository's Python 3.14 baseline and provisions
+`pytest==9.0.2` and `hypothesis==6.151.9` explicitly, alongside
+`cmd-mox==0.2.0` for the command doubles and `cuprum==0.1.0` and
+`cyclopts==4.25.3` for the entry point the tests import. The target runs the
+fourteen runtime modules with `python -m pytest`, `-c /dev/null`,
+`--rootdir=.`, and `-p no:cacheprovider`, so the test run is isolated from
+repository-local pytest configuration and cache state:
 
 - `scripts/tests/test_release_admission_metrics.py`
 - `scripts/tests/test_release_admission_metric_failures.py`
 - `scripts/tests/test_release_admission_metric_boundedness.py`
+- `scripts/tests/test_release_admission_process_bounds.py`
+- `scripts/tests/test_release_admission_environment_contract.py`
+- `scripts/tests/test_release_admission_configuration_resolution.py`
+- `scripts/tests/test_release_admission_artefact_initialization.py`
+- `scripts/tests/test_release_admission_artefact_truncation.py`
+- `scripts/tests/test_release_admission_default_forms.py`
+- `scripts/tests/test_release_admission_adapter_defaults.py`
+- `scripts/tests/test_release_admission_status_translation.py`
+- `scripts/tests/test_release_admission_runner_contract.py`
+- `scripts/tests/test_release_admission_metric_degradation.py`
+- `scripts/tests/test_release_admission_sink_persistence.py`
+
+Three of these reach past the doubles. `..._process_bounds.py` holds the
+bound's own regression cases: a child and a descendant it starts, both trapping
+`SIGTERM`, asserting that the child is escalated to `SIGKILL`, that the
+descendant is reaped, and that the call returns within the bound plus the
+cancel grace rather than overrunning on a pipe the descendant holds open.
+`..._runner_contract.py` pins the private-versus-inherited stream contract
+against a real child, which a shim cannot show: only the process owning the
+file descriptor can observe an inherited stream. `..._status_translation.py`
+calls `statuses.as_bash_status` and `statuses.launch_failure_status` directly
+and drives real sink processes, so a signal death and a refused launch are
+observed rather than fabricated.
+
+The runtime modules drive the gate as a real process and intercept its external
+commands with cmd-mox doubles registered under the gate's own adapter names.
+Two conventions follow from that, and a new test must respect both. `python3`
+is never registered as a double: a cmd-mox shim is a symlink to
+`cmd_mox/shim.py` whose shebang resolves `python3` through the child's `PATH`,
+so a shim named `python3` would resolve its own interpreter back to itself. The
+clock therefore runs as the real interpreter unless a case points
+`NETSUKE_RELEASE_ADMISSION_CLOCK_ADAPTER` at a shim named something else. The
+doubles are spies, and every count or ordering assertion is a direct comparison
+against the recorded calls: cmd-mox verifies count expectations for mocks only,
+so a spy's own `times_called` sets an expectation nothing reads, and
+`in_order()` on a spy makes `verify()` fail unless every ordered expectation is
+consumed.
 
 The test-only `release_admission_test_support.py` module is the support and
-export facade for these runtime modules. `release_admission_test_records.py`
-owns their fixed-record assertions. Its
+export facade for these runtime modules, `release_admission_test_harness.py`
+owns the subprocess boundary, `release_admission_test_doubles.py` owns the
+cmd-mox registration and inspection surface,
+`release_admission_test_scenarios.py` owns the wrappers each case composes, and
+`release_admission_test_cases.py` owns the case table and its RFC 0005 mapping.
+`release_admission_test_records.py` owns their fixed-record shape assertions,
+and `release_admission_test_exclusions.py` owns the identifier-exclusion
+helpers — the split is by the kind of claim each makes, shape versus leakage,
+and it exists because the combined module reached the 400-line file ceiling.
+`release_admission_test_boundedness.py` owns the boundedness property's
+mechanism — the generator strategies, the doubled answer to the workflow-run
+query, the run itself, and the four helpers that each state one claim about it
+— leaving the test module's two tests and the argument for each where a reader
+looks for them; that split exists for the same file-ceiling reason. The
+`release_admission_test_exclusions.py` module's
 `assert_identifiers_excluded_from_values` helper ignores non-string values and
 checks for each identifier as a substring of every string, reporting matching
 identifier/value pairs on failure. The shared
@@ -2861,15 +3035,54 @@ boundedness metric modules use it. Keep these helpers within the
 release-admission runtime suite rather than treating them as general test
 utilities.
 
+Two of those helpers exist because the exclusion assertions accept an empty
+list. `assert_complete_records` asserts the run's record shape — the operation
+counters in emission order, the final outcome and category, the gate counter
+repeating that outcome, and the exact trace sequence — before anything is
+searched, so a property whose exclusion claim holds vacuously over a gate that
+wrote nothing cannot pass. It reads both telemetry channels: a run that wrote
+metrics but no traces, or traces but no metrics, fails there rather than
+satisfying an exclusion check on one channel alone.
+`assert_identifiers_excluded_from_diagnostics` applies the same substring rule
+to the child's standard error, which is retained with the release and therefore
+carries the same cardinality hazard as a label. It is not redundant with the
+record check: the gate's own diagnostics are fixed sentences, but an adapter's
+message reaches that stream through the inherited stderr.
+
 The isolated subprocess uses `GITHUB_REPOSITORY` as the fixed repository value
-at its fake GitHub boundary. The boundedness property generates canonical
+at its doubled GitHub boundary. The boundedness property generates canonical
 lowercase hexadecimal Git object IDs of 40 or 64 characters so execution
 reaches the commit and workflow-run requests. Arbitrary Unicode values remain
-probes for telemetry-only identifiers, which do not construct requests;
-malformed newline revisions are covered by deterministic failure tests.
+probes for identifiers that reach telemetry through paths other than request
+construction — the workflow-run identifier and two environment-only values;
+malformed newline revisions are covered by deterministic failure tests. Those
+generated identifiers carry a marker character at **both ends** that no emitted
+label value contains, so an exclusion failure means an identifier leaked rather
+than that a short identifier happened to be a substring of the gate's own
+vocabulary. A length bound alone would not do it: `none` and `failure` are both
+labels. The trailing marker does a second job — see the note on
+`_status_and_output` below.
+
+The property generates a workflow-run identifier and makes the doubled API
+**answer with it**, so the value reaches the gate's own result through
+`github_find_workflow_run` rather than through an environment variable
+production ignores. `_status_and_output` strips every trailing newline from
+that answer, so the property carries the identifier both as generated and as
+stored, and its generator ends every value in a marker character that a newline
+strip cannot remove. That is a safety property in the ordinary sense. The
+stored identifier does reach a consumer — `gate._dispatch` passes it as the
+`workflow_run_id` argument of `classify_evidence` — but `classify_evidence`
+only ever *evaluates* it on a path this run does not reach: for `fresh` its
+disjunction satisfies on the first operand, and every non-fresh state stops
+earlier still, at `check_scan_freshness`. Argument delivery and truthiness
+evaluation are different boundaries. A change that copies the stored identifier
+into telemetry is exactly what the case detects. The two environment-only values
+(`NETSUKE_RELEASE_ADMISSION_SCENARIO_PATH` and `..._URL`) make the weaker
+claim and are labelled as such: they establish transport only, because no
+consumer reads either name anywhere under `.github/scripts`.
 
 Pull-request CI invokes this target separately from the workflow-contract
-tests. Keep both gates: the runtime suite exercises the Bash boundary, while
+tests. Keep both gates: the runtime suite exercises the process boundary, while
 the workflow suite validates YAML and delivery structure.
 
 Lint and typecheck suppressions are a last resort, tightly scoped, and every
@@ -4508,6 +4721,12 @@ governs the non-doctest pass only, and deliberately stays small:
 - **A conservative slow timeout** (warn after 60s, terminate after five
   warning periods) so a hung test surfaces without failing the legitimately
   slow documentation end-to-end suites, which shell out to real Ninja.
+- **A targeted cold-package allowance.**
+  `packaged_manifest_retains_build_script_sources` runs
+  `cargo publish --dry-run` into a fresh target directory. Its measured runtime
+  approaches the default 300s cap before shared-cache and compiler-queue
+  delays, so this test alone receives ten warning periods (600s). This does not
+  add retries or widen the allowance for unrelated tests.
 - **One serialized child-Cargo group.** Tests that spawn their own Cargo build
   join `nested-cargo-builds`, whose `max-threads = 1` stops four Nextest
   workers from each starting a four-job build on four vCPUs. Membership is
@@ -6495,10 +6714,12 @@ composition for callers that already hold an input string.
 
 The CLI composition root builds `EnvAccessPolicy` from the effective merged
 `env_allow_var` and `env_block_var` fields, then passes it into manifest
-loading. Primary-project allow entries are quarantined before this composition
-so an untrusted manifest cannot grant itself access or activate default-deny;
-primary-project block entries remain cumulative because they only restrict
-access.
+loading. Allow entries from the primary project file and every occurrence in
+its automatically discovered `extends` chain are quarantined before this
+composition, so checkout-controlled ancestors cannot widen the operator
+allowlist or activate default-deny. Block entries remain cumulative because
+they only restrict access. Operator chains and explicitly selected ancestor
+occurrences retain operator authority.
 
 Argument validation and policy enforcement are separate concerns, and the
 module boundary follows that split. `register_env_function` in
@@ -6806,13 +7027,22 @@ policies.
 
 Network-policy grants do not use the ordinary file-layer precedence contract.
 Discovery preserves provenance for the exact primary project `.netsuke.toml`.
-`FileScope::Operator` marks ordinary layers, including files loaded through
-`extends`; `FileScope::Project` marks only the primary project file. Discovery
-extracts that file's `fetch_default_deny`, `fetch_allow_scheme`,
-`fetch_allow_host`, and `trust_project_fetch_policy` fields into a project
-request before the generic merge. Those fields are removed only from the
-primary file; `fetch_block_host` remains in all layers so blocklists continue
-to accumulate.
+For fetch-policy quarantine, `FileScope::Operator` marks ordinary layers,
+including files loaded through `extends`; `FileScope::Project` marks only the
+primary project file. Discovery extracts that file's `fetch_default_deny`,
+`fetch_allow_scheme`, `fetch_allow_host`, and `trust_project_fetch_policy`
+fields into a project request before the generic merge. Those fields are
+removed only from the primary file; `fetch_block_host` remains in all layers so
+blocklists continue to accumulate.
+
+Environment grants follow a separate boundary. The `project_chain` provenance
+flag marks every occurrence reached through an automatically discovered project
+root. `retain_layers_and_resolve_json` removes and validates `env_allow_var`
+for those occurrences and for a selected primary project file. It leaves
+`env_block_var` in the ordinary merge. If a physical file is reached through
+both operator and project roots, each occurrence keeps its own authority: the
+operator occurrence retains its grants and the project occurrence loses them.
+An explicitly selected ancestor remains operator-scoped.
 
 `retain_layers_and_resolve_json` returns the retained layers, the JSON
 preference, and the optional primary project request together.
@@ -6824,10 +7054,12 @@ merge pass, and the primary project file cannot self-authorize the opt-in. If
 the same file is reached through operator and project roots, both occurrences
 retain their root authority: the operator occurrence remains an ordinary layer,
 while the primary project occurrence is quarantined. The `extends` chain
-remains outside this trust boundary. The internal quarantine helpers are
+remains outside the fetch-policy trust boundary, so inherited fetch fields keep
+their existing generic-merge behaviour. The internal quarantine helpers are
 discovery-only composition points: they preserve each occurrence's authority
-and accumulated validation errors while extracting primary-only fetch requests
-and chain-wide budget narrowing requests.
+and accumulated validation errors while extracting primary-only fetch requests,
+chain-wide environment-grant quarantine, and chain-wide budget narrowing
+requests.
 
 The network-policy domain module
 [`src/stdlib/network/policy/reconciliation/mod.rs`][reconciliation-module] owns
@@ -6862,9 +7094,10 @@ The final merge order is:
 4. **CLI flags** — values explicitly passed on the command line.
 
 This order describes ordinary configuration fields. Fetch-policy grants use the
-trust-aware reconciliation described above: only the primary project file is
-project-scoped, while its `extends` layers, system, user, environment, and CLI
-values remain subject to ordinary merging.
+primary-only trust-aware reconciliation described above. Environment grants use
+occurrence provenance: every file reached through an automatically discovered
+project root is quarantined, while operator roots and explicitly selected
+ancestor occurrences retain operator authority.
 
 ### Configuration merge helper functions
 
@@ -6917,9 +7150,10 @@ Configuration merge helpers:
   and typed loading errors. It scans every layer, including layers after a
   malformed request, and keeps the original invalid JSON beside the error so
   diagnostic JSON preference is preserved. It extracts and validates all
-  quarantined fetch-policy fields from the primary project file and every
-  `extends` layer before generic merging, avoiding complete layer or JSON-value
-  copies before the full merge.
+  `env_allow_var` from the primary project file and every automatically
+  discovered project-chain occurrence, plus fetch-policy fields from the
+  primary project file, before generic merging. It avoids complete layer or
+  JSON-value copies before the full merge.
 - `cli_overrides_from_matches(matches: &ArgMatches) -> OrthoValue` extracts
   CLI-supplied fields, stripping defaults and non-CLI sources.
 - `EnvironmentLayer` converts an injected snapshot of `NETSUKE_*` values into
