@@ -1082,6 +1082,7 @@ let ast = NetsukeManifest {
         name: StringOrList::String("hello".into()),
         recipe: Recipe::Command {
             command: "echo hi".into(),
+            isolation: CommandIsolation::Shared,
         },
         sources: StringOrList::Empty,
         deps: StringOrList::Empty,
