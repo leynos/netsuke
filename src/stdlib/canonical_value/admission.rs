@@ -28,7 +28,7 @@
 
 use std::collections::BTreeMap;
 
-use minijinja::value::{Value, ValueKind};
+use minijinja::value::{DynObject, Value, ValueKind};
 
 use super::error::{CanonicalValueError, SnapshotPath};
 use super::node::SnapshotNode;
@@ -128,48 +128,48 @@ fn admit_mapping(value: &Value, path: &SnapshotPath) -> Result<SnapshotNode, Can
 
 /// Collect the members of a mapping representation exactly once.
 ///
-/// The host enumerator is consulted once and its self-reported length is
-/// checked against what it actually yielded. A length that disagrees means the
-/// host object is not stable, which the caller's precondition excludes. A
-/// mapping needs this check for the same reason a sequence does: a canonical
-/// key derived from one reading of a host that would enumerate differently the
-/// second time is not a key for its value.
+/// A mapping needs the stability check a sequence gets, for the same reason: a
+/// canonical key derived from one reading of a host that would enumerate
+/// differently the second time is not a key for its value. The check itself is
+/// shared through [`collect_stably`], so the two cannot drift apart.
 fn collect_members(
     value: &Value,
     path: &SnapshotPath,
 ) -> Result<Vec<(Value, Value)>, CanonicalValueError> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| CanonicalValueError::invalid_traversal(path))?;
-    let members = object
-        .try_iter_pairs()
-        .ok_or_else(|| CanonicalValueError::invalid_traversal(path))?;
-    let collected: Vec<(Value, Value)> = members.collect();
-    if has_stable_length(value, collected.len()) {
-        Ok(collected)
-    } else {
-        Err(CanonicalValueError::invalid_traversal(path))
-    }
+    collect_stably(value, path, DynObject::try_iter_pairs)
 }
 
 /// Collect the items of a sequence representation exactly once.
 ///
-/// The host enumerator is consulted once and its self-reported length is
-/// checked against what it actually yielded. A length that disagrees means the
-/// host object is not stable, which the caller's precondition excludes.
+/// A sequence's items are its values; [`DynObject::try_iter`] is the only part
+/// of this shape that differs from a mapping's, and the traversal and stability
+/// rule are shared with it through [`collect_stably`].
 fn collect_items(value: &Value, path: &SnapshotPath) -> Result<Vec<Value>, CanonicalValueError> {
+    collect_stably(value, path, DynObject::try_iter)
+}
+
+/// Collect one representation's enumeration exactly once, checking its length.
+///
+/// This is the single traversal-and-check path, so the stability rule cannot
+/// drift between the two representations that need it: `enumerate` selects the
+/// representation's own iterator and the length comparison happens here for
+/// both. A canonical key derived from one reading of a host that would
+/// enumerate differently the second time is not a key for its value, and that
+/// argument does not mention sequences or mappings at all.
+fn collect_stably<T>(
+    value: &Value,
+    path: &SnapshotPath,
+    enumerate: fn(&DynObject) -> Option<Box<dyn Iterator<Item = T> + Send + Sync>>,
+) -> Result<Vec<T>, CanonicalValueError> {
     let object = value
         .as_object()
         .ok_or_else(|| CanonicalValueError::invalid_traversal(path))?;
-    let items = object
-        .try_iter()
-        .ok_or_else(|| CanonicalValueError::invalid_traversal(path))?;
-    let collected: Vec<Value> = items.collect();
-    if has_stable_length(value, collected.len()) {
-        Ok(collected)
-    } else {
-        Err(CanonicalValueError::invalid_traversal(path))
-    }
+    let enumerated =
+        enumerate(object).ok_or_else(|| CanonicalValueError::invalid_traversal(path))?;
+    let collected: Vec<T> = enumerated.collect();
+    has_stable_length(value, collected.len())
+        .then_some(collected)
+        .ok_or_else(|| CanonicalValueError::invalid_traversal(path))
 }
 
 /// Report whether the host's self-reported length matches what it enumerated.
