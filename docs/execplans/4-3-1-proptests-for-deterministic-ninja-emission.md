@@ -2493,8 +2493,63 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   Note the separate `sccache unreachable` clause: builds now run uncached,
   which is not a failure but does make the first `EP-M2` gate run a cold one.
 
+- [x] (2026-10-14T00:00:00Z) **Gate pass #4: eleven of twelve gates pass, and
+  the four gates that had never run on this branch are all green.** Revision
+  `55da63ed`, working tree clean at start and finish, HEAD unchanged across the
+  whole pass, 40m13s wall clock. `check-fmt` (174 files unchanged), `lint`
+  (exit 0, every sub-leg reached — Clippy did **not** abort, so Whitaker,
+  `lint-python`, `interrogate`, yamllint and actionlint all actually ran),
+  `typecheck`, `doc-coverage` (98.87%, 4977/5034), `markdownlint`
+  (v0.23.2/v0.41.1, "0 issues in 0 files" over 174 files), `spelling` (which
+  left `typos.toml` unmodified), `nixie`, `test-workflow-contracts` (27 passed),
+  `test-documentation-contracts` (14 passed, 42 skipped), `proptest` (**90
+  passed, 3834 skipped**), `test-coverage-artifact` (52 passed). The `proptest`
+  figure independently reproduces the selector counts this plan records, so
+  `make proptest` is confirmed to select real work rather than passing
+  vacuously.
+- [x] (2026-10-14T00:00:00Z) Closed the doctest evidence gap. `make test` is
+  `test-nextest doctest`, and pass #4 aborted inside `test-nextest`, so
+  `grep -c "cargo test --workspace --doc"` over that log returns **0** — the
+  gate's second half had never executed on this branch. Ran `make doctest`
+  alone: **88 + 2 + 39 passed, 0 failed, 6 ignored, 26 ignored**, exit 0. The
+  `make test` verdict for `55da63ed` is therefore one environmental timeout
+  plus a fully green doctest leg, not a gate-wide failure.
+- [x] (2026-10-14T00:00:00Z) Diagnosed and **declined to repair** the
+  `make test` timeout, on measured grounds rather than reflex.
+  `production_build_module_slice_has_expected_boundary` timed out at 300.008s —
+  its second consecutive occurrence, the previous pass having hit 300.073s.
+  Three facts together rule out a source defect: this branch touches **zero**
+  files in that test's dependency set (an empty `git diff --name-only` across
+  `tests/build_module_slice_ui_tests.rs`, `tests/ui/`, `build.rs`,
+  `src/cli/merge.rs` and `.config/nextest.toml`); the log carries **573**
+  `sccache server is unreachable` lines, the exact count previously measured
+  alongside timeouts with zero source failures; and `sccache --show-stats`
+  reports `Compile requests 0`, meaning the server was *reset* rather than
+  idle, so every nested compile ran from scratch. `build-limits-status` at
+  diagnosis time read
+  `capacity 4, held 4, healthy, sccache unreachable, compiling directly` with
+  25 crates queued behind other agents' work. **A widened allowance was
+  considered and rejected.** `origin/main` has since split
+  `packaged_manifest_retains_build_script_sources` into its own override with
+  `terminate-after = 10`, commented "Allow ten periods for shared-cache and
+  compiler-queue delays without widening unrelated tests or adding retries" —
+  superficially the same repair. It is not the same case here: that widening
+  was a measured decision for a *different* test, and a from-scratch production
+  graph exhausted 300s on its own before any queue delay, so ten periods would
+  have bought delay tolerance without addressing the cause. Recorded guidance
+  for this fixture is explicit — "do not tune an allowance to turn a gate green
+  inside a gate-verification milestone" and "cache first, budget second". The
+  budget decision is deferred to a milestone where the group's membership is
+  final; **CI is the oracle** for this SHA.
+- [x] (2026-10-14T00:00:00Z) Independently confirmed the `NEXTEST_TARGETS`
+  repair. `behavioural_nextest_targets_forward_both_worker_bounds` PASSES in
+  0.013s, where the previous pass failed it in 0.037s over the undeclared
+  `proptest` target. `origin/main` still carries the array at length **5**
+  while this branch carries **6**, so the fix is branch-local and the rebase
+  must preserve it.
 - [ ] `EP-M2`: file splits, mutation-evidence contract, ordering helpers,
-      `make proptest`.
+      `make proptest`. **Implementation complete and gate-verified as of
+      `55da63ed`; awaiting milestone CodeRabbit review and publication.**
 - [ ] `EP-M3`: shared strategy and compact `Debug`.
 - [ ] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [ ] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
