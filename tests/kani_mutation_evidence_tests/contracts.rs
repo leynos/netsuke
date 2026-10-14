@@ -86,9 +86,18 @@ fn supplemental_property_location(root: &Dir, patch_stem: &str) -> Result<Utf8Pa
             return Ok(candidate.clone());
         }
     }
+    // Render the candidates with `Display` rather than `Debug`. A `Debug`
+    // rendering of a path escapes the Windows separator as `\\`, which makes
+    // the message say less about where the search actually looked, so the
+    // diagnostic names each candidate plainly instead.
+    let searched = candidates
+        .iter()
+        .map(|candidate| candidate.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
     bail!(
         "supplemental patch {patch_stem} names property {property_name}, which \
-         none of the candidate sources declare; searched: {candidates:?}",
+         none of the candidate sources declare; searched: {searched}",
     )
 }
 
@@ -160,7 +169,13 @@ fn supplemental_property_location_resolves_directory_and_file_modules() -> Resul
 
     let missing = supplemental_property_location(&root, "ninja_gen__property_tests__absent")
         .expect_err("a property no candidate declares must be rejected");
-    let message = missing.to_string();
+    // The diagnostic names the candidates it searched with the platform
+    // separator, so a Windows build reports `src\ninja_gen\...` and this
+    // assertion would fail there while passing everywhere else. Normalize
+    // before matching. The two equality checks above need no such care: they
+    // compare `Utf8Path` values, which match by component and are therefore
+    // separator-insensitive.
+    let message = missing.to_string().replace('\\', "/");
     ensure!(
         message.contains("src/ninja_gen/property_tests/mod.rs")
             && message.contains("src/ninja_gen/property_tests.rs"),
