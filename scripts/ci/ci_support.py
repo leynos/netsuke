@@ -17,6 +17,7 @@ import os
 import pathlib
 import shutil
 import tarfile
+import typing as typ
 import urllib.parse
 import urllib.request
 
@@ -28,6 +29,9 @@ from cuprum import (
     ProjectSettings,
     sh,
 )
+
+if typ.TYPE_CHECKING:
+    import http.client
 
 PROJECT_NAME = "netsuke-ci"
 DOCUMENTATION = ("docs/developers-guide.md",)
@@ -147,6 +151,51 @@ def is_executable_file(path: pathlib.Path) -> bool:
     return path.is_file() and os.access(path, os.X_OK)
 
 
+class _SchemeCheckedRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Refuse a redirect whose target leaves ``ALLOWED_URL_SCHEMES``.
+
+    ``urllib`` opens the redirect target itself, so a check on the finished
+    response would run after the request has already gone out. CPython's own
+    guard only rejects schemes outside ``http``, ``https`` and ``ftp``, which
+    would let an ``https://`` release URL be redirected to plain ``http`` or
+    ``ftp``; this handler applies the same allowlist as the initial URL.
+    """
+
+    @typ.override
+    # The stdlib fixes this signature, so an override cannot narrow its arity.
+    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: typ.IO[bytes],
+        code: int,
+        msg: str,
+        headers: http.client.HTTPMessage,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        """Reject a redirect target outside the allowed schemes.
+
+        Returns
+        -------
+        urllib.request.Request | None
+            Whatever ``super()`` builds for ``newurl``; ``None`` when it
+            declines to follow the redirect at all.
+
+        Raises
+        ------
+        CiScriptError
+            If ``newurl`` uses a scheme the downloader does not permit.
+        """
+        scheme = urllib.parse.urlsplit(newurl).scheme
+        if scheme not in ALLOWED_URL_SCHEMES:
+            message = (
+                f"{req.full_url} redirected to {newurl!r}, whose scheme "
+                f"{scheme!r} is not one of {sorted(ALLOWED_URL_SCHEMES)}"
+            )
+            raise CiScriptError(message)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def download(url: str, destination: pathlib.Path) -> None:
     """Download ``url`` to ``destination``.
 
@@ -160,7 +209,8 @@ def download(url: str, destination: pathlib.Path) -> None:
     Raises
     ------
     CiScriptError
-        If the URL scheme is not allowed or the download fails.
+        If the URL scheme is not allowed, a redirect leaves the allowlist, or
+        the download fails.
     """
     scheme = urllib.parse.urlsplit(url).scheme
     if scheme not in ALLOWED_URL_SCHEMES:
@@ -170,9 +220,11 @@ def download(url: str, destination: pathlib.Path) -> None:
         )
         raise CiScriptError(message)
     try:
-        # The scheme is allowlisted just above; `file://` serves test fixtures.
+        # The scheme is allowlisted just above, and every redirect target is
+        # allowlisted by the handler; `file://` serves test fixtures.
+        opener = urllib.request.build_opener(_SchemeCheckedRedirectHandler)
         with (
-            urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response,  # ruff: ignore[suspicious-url-open-usage] - scheme allowlisted above
+            opener.open(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response,
             destination.open("wb") as handle,
         ):
             shutil.copyfileobj(response, handle)

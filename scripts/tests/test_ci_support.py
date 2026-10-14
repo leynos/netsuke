@@ -1,18 +1,64 @@
 """Exercise the helpers shared by the CI helper scripts."""
 
+import contextlib
 import hashlib
+import http.server
 import os
+import threading
 import typing as typ
 
 import pytest
 from ci_script_support import file_url, load_ci_script, write_executable, write_tarball
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
     import pathlib
 
     from cmd_mox import CmdMox
 
 support = load_ci_script("ci_support")
+
+REDIRECTING_BODY = b"redirected-payload"
+
+
+@contextlib.contextmanager
+def redirecting_server(location: str) -> cabc.Iterator[str]:
+    """Serve a 302 to ``location`` at ``/redirect`` and a body at ``/target``.
+
+    Yields
+    ------
+    str
+        The ``http://`` base URL. A real socket is the only way to exercise
+        the redirect path: ``urllib`` decides whether to follow before
+        :func:`download` sees a response, so a mocked opener would test the
+        mock.
+    """
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        """Answer ``/redirect`` with the 302 and everything else with a body."""
+
+        def do_GET(self) -> None:
+            """Answer the redirect, or the payload the redirect points at."""
+            if self.path == "/redirect":
+                self.send_response(302)
+                self.send_header("Location", location)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(REDIRECTING_BODY)))
+            self.end_headers()
+            self.wfile.write(REDIRECTING_BODY)
+
+        def log_message(self, format: str, *args: object) -> None:  # ruff: ignore[builtin-argument-shadowing] - http.server's parameter name
+            """Stay silent; the test's own assertions are the output."""
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_run_returns_captured_output_for_an_allowlisted_program(
@@ -151,6 +197,43 @@ def test_download_reports_a_missing_source(tmp_path: pathlib.Path) -> None:
     url = file_url(tmp_path / "absent.bin")
     with pytest.raises(support.CiScriptError, match=r"downloading .* failed"):
         support.download(url, tmp_path / "dest.bin")
+
+
+def test_download_refuses_a_redirect_outside_the_allowed_schemes(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A redirect target is allowlisted too, not only the URL asked for.
+
+    CPython's own guard admits ``http``, ``https`` and ``ftp``, so on its own
+    it would let a release URL be answered with a redirect to plain ``ftp://``
+    and the archive would be fetched from there. The scheme set is narrowed
+    here only so the loopback server below can be the origin.
+    """
+    monkeypatch.setattr(support, "ALLOWED_URL_SCHEMES", frozenset({"http", "file"}))
+
+    with (
+        redirecting_server("ftp://example.invalid/archive.tar.gz") as base,
+        pytest.raises(support.CiScriptError, match="redirected to"),
+    ):
+        support.download(f"{base}/redirect", tmp_path / "dest.bin")
+
+    assert not (tmp_path / "dest.bin").exists(), (
+        "expected: not (tmp_path / 'dest.bin').exists()"
+    )
+
+
+def test_download_follows_a_redirect_within_the_allowed_schemes(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The redirect check admits an ordinary in-scheme redirect."""
+    monkeypatch.setattr(support, "ALLOWED_URL_SCHEMES", frozenset({"http", "file"}))
+
+    with redirecting_server("/target") as base:
+        support.download(f"{base}/redirect", tmp_path / "dest.bin")
+
+    assert (tmp_path / "dest.bin").read_bytes() == REDIRECTING_BODY, (
+        "expected: (tmp_path / 'dest.bin').read_bytes() == REDIRECTING_BODY"
+    )
 
 
 def test_verify_sha256_accepts_the_matching_digest(tmp_path: pathlib.Path) -> None:
