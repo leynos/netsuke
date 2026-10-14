@@ -913,15 +913,27 @@ Every stopping point is documented here. Timestamps are UTC.
   hash read before the first gate and after the last and identical at both
   points, and `git status --porcelain` empty at both.
 
-  **The commit that carries this entry is the freeze head, and its gate
-  evidence belongs in the pull request description rather than in this
+  **The commit that carries this entry, `8c0490eb`, is the freeze head, and its
+  gate evidence belongs in the pull request description rather than in this
   document.** The reason is a regress that this entry exists to stop: editing
   the document produces a new head, and a new head needs its own gate run to
   record, which edits the document again. The terminating move is to put the
-  remaining evidence on a surface that does not move the revision. So this
-  entry is the last plan edit unless a review finding requires one, and the
+  remaining evidence on a surface that does not move the revision. So the
   freeze head's gate logs are cited by path from the PR description, with the
   logs themselves under `/tmp`.
+
+  **The freeze was then broken once, deliberately, and the carve-out above is
+  why.** Closing Milestone 4 uncovered a contradiction rather than a cosmetic
+  defect: the milestone line named "PR marked ready" as its final gate, while
+  the brief asked for a *draft* pull request and this plan's own *Outcomes*
+  records the fourth acceptance criterion as unmet. Leaving that would have
+  made the plan's terminal instruction point the opposite way from its
+  evidence. The correction landed in the commit that closes Milestone 4, and no
+  later head is named here on purpose: naming one would be falsified by the
+  next edit, which is the regress itself. Every head after `8c0490eb` is
+  docs-only on top of the green `52084776` and is gated accordingly, which is
+  the stable way to state it and the reason the PR description cites the
+  invariant rather than a SHA.
 
   **Two citation errors were made in the `009cbf02` version of the entry above
   and fixed in the `df475f2e` commit.** That version cited "the delta rule in
@@ -1470,19 +1482,20 @@ that were red on `172dd4ff` (`build-test` and `Windows / lint-windows`) were
 confirmed repaired at `d8e03753`; because every commit after that one touches
 Markdown only, their re-run is a formality, and the standing requirement is
 that CI be green on every head, including the draft pull request's final one.
-That requirement is met on the freeze head `8c0490eb`. CodeRabbit has run seven
-passes over this branch. Five findings were prose or evidence defects and were
-fixed — first-person pronouns in this plan, a flag-precedence claim stated
-inaccurately, a reproduction recipe that could not work, an acceptance line
-demanding evidence that was never obtainable, and a conformance check naming
-`.github/actions/...` where the caller pins
-`.github/workflows/mutation-cargo.yml`. Two were load-bearing and both stand as
-recorded gaps: the mold-selection finding, raised on every pass that finds
-anything, which is confirmed as diagnosed and confirmed as not actionable from
-a caller; and the empty-`RUSTFLAGS` reading, which the plan now states
-correctly. A zero-finding review is not reachable while the fourth criterion is
-unmet, and treating one as the exit condition would mean either deleting the
-finding or writing a workaround the issue forbids.
+That requirement is met on `8c0490eb` and on every head after it, each of which
+is docs-only on top of the byte-identical non-Markdown tree of the green
+`52084776`. CodeRabbit has run seven passes over this branch. Five findings
+were prose or evidence defects and were fixed — first-person pronouns in this
+plan, a flag-precedence claim stated inaccurately, a reproduction recipe that
+could not work, an acceptance line demanding evidence that was never
+obtainable, and a conformance check naming `.github/actions/...` where the
+caller pins `.github/workflows/mutation-cargo.yml`. Two were load-bearing and
+both stand as recorded gaps: the mold-selection finding, raised on every pass
+that finds anything, which is confirmed as diagnosed and confirmed as not
+actionable from a caller; and the empty-`RUSTFLAGS` reading, which the plan now
+states correctly. A zero-finding review is not reachable while the fourth
+criterion is unmet, and treating one as the exit condition would mean either
+deleting the finding or writing a workaround the issue forbids.
 
 Two of those seven passes were run back to back over the identical frozen
 revision `52084776`, and they returned **0 and 2** findings. That is the
@@ -2002,9 +2015,17 @@ gates plus `test-workflow-contracts`.
 
 Revisions, 2026-10-14 (final). Consolidated the plan onto its instructed end
 state. Milestone 4 is closed: the draft pull request #911 is the deliverable,
-CI is green on the freeze head `8c0490eb`, and the review outcome is a
-disposition per finding rather than a clean count. Corrected a Milestone 4 line
-that named "PR marked ready" as a gate — the brief asked for a *draft* pull
-request, and a ready one would contradict this plan's own recorded gap — and
-the three sentences elsewhere that had inherited the same assumption. The plan
-stops editing itself at the commit carrying this note.
+CI is green on `8c0490eb` and on the later docs-only heads, and the review
+outcome is a disposition per finding rather than a clean count. Corrected a
+Milestone 4 line that named "PR marked ready" as a gate — the brief asked for a
+*draft* pull request, and a ready one would contradict this plan's own recorded
+gap — and the three sentences elsewhere that had inherited the same assumption.
+
+This section deliberately does not say the plan stops editing here, because
+that sentence is falsified by whatever commit carries it. The operative
+statement is narrower and stays true: every head after `8c0490eb` changes this
+document and nothing else, so each is gated by the three Markdown-sensitive
+targets plus `test-workflow-contracts`, with the Rust-bearing gates carried by
+the byte-identical non-Markdown tree of the green `52084776`. A reader who
+needs the gate evidence for a specific head should read it from the pull
+request description, which states that invariant rather than a SHA.
