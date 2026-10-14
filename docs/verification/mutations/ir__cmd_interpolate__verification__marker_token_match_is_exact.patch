@@ -1,10 +1,14 @@
 diff --git a/src/ir/cmd_interpolate/mod.rs b/src/ir/cmd_interpolate/mod.rs
+index 040f21cc..305b2e51 100644
 --- a/src/ir/cmd_interpolate/mod.rs
 +++ b/src/ir/cmd_interpolate/mod.rs
-@@ -254,6 +254,6 @@ fn try_match_token<'a>(
+@@ -309,8 +309,8 @@ fn try_match_token(
+     }
+ 
      let mut matched_len = 0;
-     for (i, token_ch) in token.chars().enumerate() {
+-    for (i, token_ch) in token.chars().enumerate() {
 -        if chars.get(pos + i) != Some(&token_ch) {
++    for (_i, token_ch) in token.chars().enumerate() {
 +        if chars.get(pos) != Some(&token_ch) {
              return None;
          }

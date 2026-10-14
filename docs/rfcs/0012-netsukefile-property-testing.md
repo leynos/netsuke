@@ -98,8 +98,8 @@ adopts:
   - Give assertions a structured, host-independent view of every build
     edge's command invocation and constructed environment.
   - Let a test case quantify over a bounded, declaratively specified
-    family of inputs, with deterministic default execution and seed-based
-    replay of failures.
+    family of inputs, with deterministic default execution and exact replay
+    of a failure from its reported seed and tuple inputs.
   - Provide built-in metamorphic relations for the generator's structural
     invariants: determinism, order invariance, locality, and rename
     isomorphism.
@@ -149,6 +149,24 @@ quoting belong to the escaping seam's own tests, not to Netsukefile authors.
 The view carries helpers mirroring the graph view's surface: `action(target)`,
 `actions_for_rule(name)`, and `has_action(target)`.
 
+The projections use a canonical order. `result.actions` sorts first by the
+primary key `target`, then by `rule`, and finally by the RFC 8785 canonical
+JSON form of `argv`, `env`, `cwd`, `inputs`, `outputs`, `pool`, `depfile`, and
+`dyndep` as tie-breakers. `actions_for_rule(name)` applies the same ordering to
+its filtered entries, with `target` as its primary key and the same canonical
+JSON form as its tie-breaker. Identical manifests therefore produce identical
+ordered projections regardless of declaration order or IR iteration order, and
+quantified-action results use that same order.
+
+That canonical form is the canonical value contract of
+[RFC 0006 §6.7](0006-ansible-inspired-template-standard-library.md#67-canonical-value-equality),
+already produced in Netsuke by the `serde_json_canonicalizer` dependency.
+Encoding it settles the representation of every field kind: optional fields are
+omitted when absent, scalars and paths take their RFC 8785 lexical form, arrays
+compare order-sensitively, and map keys sort lexicographically. Two projections
+are byte-identical exactly when their encodings are, so the tie-break order is
+total and unambiguous.
+
 Because the result views are additive-only, this projection introduces no
 compatibility burden on existing tests, and internal IR types remain unexposed.
 
@@ -165,6 +183,20 @@ A failing quantified assertion reports the binding that falsified it, alongside
 the substituted actual values, using the FAIL versus ERROR taxonomy of UX
 design §11.3 unchanged.
 
+Environment data has two representations, separated by a redaction boundary.
+Assertion evaluation reads the constructed environment map carried by
+`result.actions.env` in full: its keys and values remain available to
+MiniJinja, so a property can name a variable and compare two environment values
+semantically. Every copy that crosses an external boundary is redacted on the
+way out, replacing environment keys with stable opaque key tokens and
+environment values with the fixed `<redacted>` marker. The redacted form is
+what reaches failure reports, diagnostics, rendered action views, and persisted
+regression artefacts. Redaction happens only as data leaves the runner, never
+in the projection that assertions read, so it cannot change whether a case is a
+FAIL or an ERROR. This is
+[ADR-009](../adr-009-bounded-redacted-manifest-telemetry.md)'s
+redact-at-the-boundary rule applied to the actions projection.
+
 ### 3. The `forall` block
 
 A test case may declare a `forall` mapping from binding names to domain
@@ -177,6 +209,8 @@ draws a target name and a flag ordering, builds the graph, and asserts
 environment closure and source uniqueness over every generated action.
 
 ```yaml
+netsuke_test_version: "1.1"
+
 test_command_env_is_closed_over_declared_vars:
   description: Generated invocations never leak ambient environment.
   forall:
@@ -185,6 +219,7 @@ test_command_env_is_closed_over_declared_vars:
   steps:
     - given:
         let:
+          declared_env: []
           name: "{{ target_name }}"
           flags: "{{ flag_order }}"
     - when: build_graph
@@ -211,10 +246,12 @@ _Table 2: Initial `forall` domain constructors._
 Expansion is deterministic. When the Cartesian product of the declared domains
 is at most the expansion ceiling, the family is enumerated exhaustively. Above
 the ceiling, the runner samples with a pseudo-random number generator seeded
-from a fixed default; the seed appears verbatim in every failure report, and
-`netsuke test --seed <n>` replays it. This mirrors the `derandomize=True` and
-pinned-`@example` convention of the workflow contract suites and the
-`proptest-regressions/` replay convention.
+with the fixed default seed `0`; the seed appears verbatim in every failure
+report. `netsuke test --seed <n>` selects the reported seed, but replays the
+reported case only when the generated tuple inputs persisted with that report
+are also available. A seed without the tuple inputs is insufficient for replay.
+This mirrors the `derandomize=True` and pinned-`@example` convention of the
+workflow contract suites and the `proptest-regressions/` replay convention.
 
 On failure, the runner delta-reduces the drawn tuple towards domain minima and
 reports the smallest falsifying binding set it finds, then persists the seed
@@ -247,6 +284,8 @@ generated build script is invariant under declaration reordering and locally
 unaffected by unrelated additions.
 
 ```yaml
+netsuke_test_version: "1.1"
+
 test_generation_is_order_invariant:
   description: Declaration order never changes the generated script.
   subject:
@@ -296,8 +335,12 @@ drifting past it. The lint is advisory by default and promoted to a failure with
   per entry and report the falsifying binding on failure.
 - `forall` accepts the closed domain vocabulary of Table 2, expands
   exhaustively at or below the ceiling, and samples deterministically above it.
-- Failure reports name the seed and the minimized drawn tuple;
-  `netsuke test --seed` replays a reported failure exactly.
+- Failure reports name both the seed and the minimized drawn tuple.
+- `netsuke test --seed <n>` replays a reported failure exactly only when the
+  generated tuple inputs persisted with that report are also available; the
+  seed selects the reported case, and the tuple inputs constrain what is drawn.
+  A seed whose tuple inputs are missing does not replay: the run samples the
+  case freshly from that seed and is not a replay of the reported failure.
 - Regression tuples persist under the test tree and replay before fresh
   generation.
 - The `mutations` vocabulary of Table 3 derives the mutated manifest,
@@ -384,9 +427,6 @@ is tracked separately by [RFC 0008](0008-code-health.md).
 - Should the `result.actions` view land inside RFC 0007's phase 7.5.4
   result-view task rather than waiting for this extension? Landing it early
   would let example-based tests use it immediately.
-- Does the environment projection need redaction alignment with
-  [ADR-009](../adr-009-bounded-redacted-manifest-telemetry.md) when failure
-  reports print constructed environments?
 - Is delta reduction over the drawn tuple sufficient minimization in
   practice, or do sampled list domains need element-wise shrinking?
 

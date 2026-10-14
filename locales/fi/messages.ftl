@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Sallitut isäntänimet, kun oletusesto on käyt
 cli.flag.fetch_block_host.help = Isäntänimet, jotka estetään aina, vaikka ne sallittaisiin muualla.
 cli.flag.fetch_default_deny.help = Estä kaikki isännät oletuksena; salli vain määritelty luettelo.
 cli.flag.trust_project_fetch_policy.help = Salli projektin määritysten laajentaa fetch-käytännön myönnettyjä oikeuksia.
+
+cli.flag.manifest_evaluation_fuel.help = Rajoita MiniJinjan ohjeiden määrää kussakin manifestin arvioinnissa.
+cli.flag.manifest_fuel.help = Rajoita MiniJinjan ohjeiden määrää yhden manifestin aikana.
+cli.flag.manifest_rendered_value_bytes.help = Rajoita yhteen manifestiarvoon tuotettujen tavujen määrää.
+cli.flag.manifest_rendered_manifest_bytes.help = Rajoita yhden manifestin aikana tuotettujen tavujen kokonaismäärää.
+cli.flag.manifest_source_bytes.help = Rajoita manifestikohtaisesti kulutettujen malline- ja makrolähteiden tavujen määrää.
+cli.flag.manifest_foreach_cardinality.help = Rajoita yhden foreach-laajennuksen käsittelemien arvojen määrää.
+cli.flag.manifest_expanded_entries.help = Rajoita yhdestä manifestista laajennettujen kohteiden ja toimintojen määrää.
 cli.flag.json.help = Tuota koneluettavaa JSON-tulostetta.
 cli.flag.no_input.help = Älä koskaan lue vuorovaikutteista syötettä.
 cli.flag.color.help = Väritulosteen käytäntö (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = YAML-tunnus on virheellinen tai odottamaton.
 manifest.yaml.hint.escape = Suojaa kenoviivat tai poista virheelliset ohjausmerkkijonot.
 manifest.env.missing = Vaadittua ympäristömuuttujaa ei ole asetettu.
 manifest.env.invalid_utf8 = Ympäristömuuttuja sisältää virheellistä UTF-8:aa.
+manifest.env.blocked = Ympäristömuuttujan käyttö on estetty.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = default env-funktiossa on oltava merkkijono, vastaanotettiin { $kind }.
 manifest.vars.not_object = Manifestin `vars` on oltava kuvaus tai objekti.
 manifest.vars.reserved_name = Manifestin `vars`-avain '{ $name }' on varattu sisäänrakennetulle mallineapufunktiolle; nimeä muuttuja uudelleen.
 manifest.read_failed = Manifestia ei voitu lukea polusta { $path }.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = virtaus
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote odotti merkkijonoa, mutta sai { $kind }.
+stdlib.shell.quote.control_character = Arvoa, joka sisältää nollatavun, vaunupalautuksen tai rivinvaihdon, ei voi lainausmerkitä.
+stdlib.shell.dialect_invalid = Tuntematon komentotulkin murre { $dialect }; odotettiin jotakin joukosta { $accepted }.
+stdlib.shell.dialect_not_string = dialect-valinnan shell-funktiossa on oltava merkkijono, vastaanotettiin { $kind }.
+stdlib.shell.join.not_sequence = shell_join odotti jonoa, mutta sai { $kind }.
+stdlib.shell.join.item_not_string = Kohteen { $index } tyyppi shell_join-kutsussa on { $kind }, ei merkkijono.
+stdlib.shell.positional_option = { $filter } ottaa valitsimensa avainsanoina; kirjoita { $example }.
+
 # Polkuapurin diagnostiikka.
 stdlib.path.io.failed = { $action } epäonnistui polun { $path } käsittelyssä ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } epäonnistui polun { $path } käsittelyssä: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Tiivistealgoritmia ”{ $algorit
 
 # Kokoelma-apurien diagnostiikka.
 stdlib.collections.flatten.expected_sequence = flatten odotti jonon alkioita, mutta löysi { $kind }.
+stdlib.collections.compact.not_sequence = compact odotti jonoa, mutta löysi { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by vaatii määritteen, joka ei ole tyhjä.
 stdlib.collections.group_by.unresolved = group_by ei löytänyt määritettä ”{ $attr }” tyypin { $kind } alkiosta.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = nanosekuntia
 
 # which-apurin diagnostiikka.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] komentoa ”{ $command }” ei löytynyt, kun { $count } PATH-merkintää oli tarkistettu. Esikatselu: { $preview }
-stdlib.which.not_found.hint.cwd_auto = PATH-muuttujan tyhjät osat ohitetaan; käytä cwd_mode="auto" sisällyttääksesi työhakemiston.
-stdlib.which.not_found.hint.cwd_always = Aseta cwd_mode="always" sisällyttääksesi nykyisen hakemiston.
+stdlib.which.not_found.hint.cwd_auto = auto-tila hakee vain PATH-muuttujaan nimenomaisesti määritetyistä hakemistoista.
+stdlib.which.not_found.hint.cwd_always = always-tila hakee ensin nykyisestä hakemistosta ja sen jälkeen PATH-muuttujassa nimenomaisesti määritetyistä hakemistoista.
+stdlib.which.not_found.hint.workspace = Jos haluat hakea työtilapuusta rekursiivisesti, käytä cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] komento ”{ $command }” polussa ”{ $path }” puuttuu tai ei ole suoritettava.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <tyhjä>
 stdlib.which.path_entry.non_utf8 = PATH-merkintä nro { $index } sisältää merkkejä, jotka eivät ole UTF-8:aa; Netsuke vaatii UTF-8-polkuja.
 stdlib.which.command.empty = which vaatii merkkijonon, joka ei ole tyhjä.
-stdlib.which.cwd_mode.invalid = cwd_mode-arvon on oltava ”auto”, ”always” tai ”never”, mutta saatiin ”{ $mode }”.
+stdlib.which.cwd_mode.invalid = cwd_mode-arvon on oltava 'auto', 'always', 'never' tai 'workspace-recursive'; saatiin '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Nykyistä hakemistoa ei voitu selvittää: { $details }.
 stdlib.which.cwd.non_utf8 = Nykyinen hakemisto sisältää osia, jotka eivät ole UTF-8:aa.
 stdlib.which.canonicalize_failed = Polkua ”{ $path }” ei voitu kanonisoida: { $details }.
@@ -429,3 +453,7 @@ example.errors_found = { $count ->
     [one] Löytyi { $count } virhe.
    *[other] Löytyi { $count } virhettä.
 }
+manifest.budget.exceeded = Manifestin resurssibudjetti loppui vaiheen { $stage } aikana, kun saavutettiin { $limit }.
+
+cli.flag.env_allow_var.help = Manifestin env()-avustajalle sallittu ympäristömuuttuja.
+cli.flag.env_block_var.help = Manifestin env()-avustajalta estetty ympäristömuuttuja.

@@ -1,0 +1,160 @@
+"""Reading the timers that can end a test run.
+
+The contract in :mod:`timeout_ordering_test` compares budgets written
+down in three different files.
+
+The values live here and the reading of `.config/nextest.toml` lives in
+``nextest_budgets``, so neither module carries the whole contract and
+neither outgrows the 400-line limit the lint gate enforces.
+
+See "Test timeouts: the tiers this repository sets" in
+``docs/developers-guide.md``.
+"""
+
+import fractions
+import typing as typ
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
+from workflow_loading import REPO_ROOT
+
+#: The environment variable the shared coverage action reads for its
+#: wall-clock cap on one `cargo` invocation.
+WATCHDOG_VARIABLE: typ.Final[str] = "RUN_RUST_CARGO_WAIT_TIMEOUT"
+
+#: The action whose steps run under that watchdog.
+COVERAGE_ACTION: typ.Final[str] = (
+    "leynos/shared-actions/.github/actions/generate-coverage"
+)
+
+#: The environment variable nextest reads to select a profile. The
+#: shared coverage action takes no profile input, so this is the only
+#: lever a lane has over which profile's budgets apply to it.
+NEXTEST_PROFILE_VARIABLE: typ.Final[str] = "NEXTEST_PROFILE"
+
+#: The profile carrying the whole-run budget. It is not `default`, and
+#: the difference is the point: `default` is what every local `make
+#: test` runs under, on hosts whose contention CI never sees, so a
+#: whole-run cap sized from CI logs would end a local run against a
+#: figure that had nothing to say about it. See "The whole-run budget"
+#: in `docs/developers-guide.md`.
+CAPPED_PROFILE: typ.Final[str] = "ci"
+
+# Every constant below is a term of a tier comparison, so each is an
+# exact `Fraction` rather than a `float`. A sum is exact only if every
+# term is, and one float among them converts the whole sum back
+# silently: at the magnitudes humantime admits, that turns an ordering
+# between two budgets a second apart into a comparison of equals. The
+# values themselves are whole numbers of seconds and always will be;
+# the type is about what they are added to, not about what they are.
+
+#: Everything in a coverage job that is not the `cargo` invocation the
+#: watchdog bounds: checkout, toolchain setup, cache restore, linting, and
+#: whatever follows the coverage step. The job timer covers it; the
+#: watchdog does not.
+#:
+#: Measured from the worst of many runs rather than one, and across runs
+#: of every conclusion. Across the last 59 `ci.yml` runs on 2026-09-15 the
+#: widest gap between the coverage step and its job was 648 s on run
+#: 34920593696, whose coverage step did not run at all; across the last 59
+#: of `coverage-main.yml` it was 119 s on run 33411190301. Fifteen minutes
+#: covers the worse of those with 252 s to spare, and none of those runs
+#: was genuinely cold.
+OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(
+    15 * 60
+)
+
+#: Build time inside the `cargo` invocation, before nextest starts its own
+#: clock. The watchdog covers it as well as the whole-run budget, so the
+#: requirement derived from a `global-timeout` carries it as a term.
+#:
+#: Measured from the coverage-step logs of the ten longest runs in each
+#: lane on 2026-09-15, timed from `cargo llvm-cov`'s first line to
+#: nextest's "Starting N tests": the longest was 242 s on run 34920593593,
+#: and every one of those runs recompiled the dependency graph from
+#: scratch. All of them read a warm sccache, so ten minutes is the
+#: allowance for the case none of them measured, an empty one.
+COLD_BUILD_ALLOWANCE_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(
+    10 * 60
+)
+
+#: How far a ceiling must sit above the sum it contains, rather than
+#: merely reaching it. A ceiling equal to that sum cancels the job at
+#: the moment the watchdog would have reported the overrun, and the
+#: report is the only thing that makes an overrun actionable.
+CEILING_MARGIN_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(15 * 60)
+
+#: What nextest allows a test between `SIGTERM` and `SIGKILL` when the
+#: configuration names no `grace-period`, as this one does not.
+NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS: typ.Final[fractions.Fraction] = (
+    fractions.Fraction(10)
+)
+
+#: Added to that grace period to cover the teardown and report writing
+#: that follow it. A separate term rather than a floor over the two, so
+#: raising a grace period raises the requirement instead of vanishing
+#: into it.
+#:
+#: This covers what nextest does after a *cancellation*. It is not the
+#: report-phase term below, which covers what `cargo llvm-cov` does
+#: after a *normal* nextest run; the two are different phases of
+#: different programs and neither subsumes the other.
+TERMINATION_SAFETY_MARGIN_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(
+    60
+)
+
+#: What `cargo llvm-cov` spends after nextest's clock stops, merging
+#: the profile data it collected and writing the report out. An
+#: instrumented run does not end when nextest says it does: on run
+#: 34914144521 nextest started its clock at 00:52:41 and reported
+#: 452.422 s, so its clock stopped at 01:00:13, and `Finished report
+#: saved to lcov.info` was printed at 01:04:47 -- 274 s later. The two
+#: next-longest runs measured 91 s and 86 s the same way.
+#:
+#: The watchdog has to cover this phase, because it runs inside the same
+#: `cargo` invocation the watchdog bounds and the watchdog is still on
+#: the clock throughout. The whole-run budget does not cover it: that
+#: budget bounds nextest alone, and nextest has already stopped. So a
+#: watchdog requirement derived from a `global-timeout` carries this
+#: term, while `required_ceiling` does not.
+#:
+#: This is not `TERMINATION_SAFETY_MARGIN_SECONDS`. That one covers
+#: nextest's own teardown and report after a *cancellation*; this one
+#: covers a different program's work after a *normal* finish. A run can
+#: do one, the other, or both, so neither term subsumes the other.
+REPORT_PHASE_ALLOWANCE_SECONDS: typ.Final[fractions.Fraction] = fractions.Fraction(
+    5 * 60
+)
+
+NEXTEST_CONFIG = REPO_ROOT / ".config" / "nextest.toml"
+WORKFLOWS_DIRECTORY = REPO_ROOT / ".github" / "workflows"
+
+
+def required_ceiling(
+    budgets: cabc.Sequence[fractions.Fraction],
+) -> fractions.Fraction:
+    """Return the smallest acceptable ceiling for one job, in seconds.
+
+    Three terms. Each coverage step may legitimately spend its whole
+    watchdog, so the sum is the floor. The measured work outside those
+    windows is added because the job timer covers it and the watchdogs
+    do not. The margin is added because a ceiling equal to that sum
+    cancels the job at the moment the watchdog would have reported the
+    overrun, and the report is the only thing that makes an overrun
+    actionable.
+
+    Parameters
+    ----------
+    budgets : cabc.Sequence[fractions.Fraction]
+        One watchdog budget per window the job's coverage steps arm, so
+        two for a step asking the action for the doctest pass.
+
+    Returns
+    -------
+    fractions.Fraction
+        The smallest acceptable ceiling, in seconds, exactly. The sum
+        is exact only if every term is, which is why the two allowances
+        it adds are exact as well.
+    """
+    return sum(budgets) + OUTSIDE_WATCHDOG_ALLOWANCE_SECONDS + CEILING_MARGIN_SECONDS

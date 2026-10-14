@@ -62,7 +62,7 @@ Netsuke nécessite actuellement :
 
 ### Installation
 
-La dernière préversion publiée est Netsuke v0.1.0-beta3, disponible sur
+La dernière préversion publiée est Netsuke v0.1.0-beta4, disponible sur
 crates.io. Lorsque
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) est
 disponible, préférez-le : il récupère un binaire de version prêt à l'emploi et
@@ -82,7 +82,7 @@ cargo +nightly-2026-08-23 install netsuke-build
 ```
 
 Des installateurs prêts à l'emploi sont disponibles depuis la version GitHub
-[v0.1.0-beta3](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3) :
+[v0.1.0-beta4](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta4) :
 
 | Plateforme | Architectures                       | Paquets                         |
 | ---------- | ----------------------------------- | ------------------------------- |
@@ -96,7 +96,7 @@ l'utilisation de l'installateur macOS ou Windows. Le MSI Windows s'installe dans
 `C:\Program Files\netsuke` et ne met pas à jour `PATH`. Des fichiers de somme
 de contrôle SHA-256 accompagnent les binaires autonomes ainsi que les fichiers
 d'aide et de licence intégrés. Les paquets d'installation n'ont pas de fichiers
-de somme de contrôle associés dans la v0.1.0-beta3. Consultez le
+de somme de contrôle associés dans la v0.1.0-beta4. Consultez le
 [guide de l'utilisateur](docs/users-guide.md#install-netsuke) pour les
 commandes spécifiques à chaque plateforme et la configuration sous Windows.
 
@@ -141,7 +141,7 @@ ______________________________________________________________________
 
 ## Ce qui fonctionne aujourd'hui
 
-Le compilateur de système de build principal de Netsuke v0.1.0-beta3 fournit :
+Le compilateur de système de build principal de Netsuke v0.1.0-beta4 fournit :
 
 - l'analyse de manifestes YAML 1.2 avec validation des clés en double et du
   schéma ;
@@ -163,18 +163,146 @@ Le compilateur de système de build principal de Netsuke v0.1.0-beta3 fournit :
 - une configuration en couches, une sortie localisée, des préférences
   d'accessibilité, un suivi de progression, la mesure du temps par étape, et
   des résultats ou diagnostics JSON versionnés ;
+- une évaluation bornée des manifestes, des politiques d'accès au réseau et à
+  `env()` contrôlées par l'opérateur, et des filtres de lecture de fichiers
+  bornés ;
 - une couverture de tests unitaires, comportementaux, d'intégration, par
   propriétés, par snapshot, et une couverture initiale de vérification Kani.
 
-La version beta3 prend également en charge les agrégats d'actions et de cibles
-ne comportant que des dépendances : les nœuds dotés d'une liste `deps` non vide
-peuvent omettre une recette.
+Depuis la beta3, Netsuke prend également en charge les agrégats d'actions et de
+cibles ne comportant que des dépendances : les nœuds dotés d'une liste `deps`
+non vide peuvent omettre une recette.
+
+______________________________________________________________________
+
+## Sécurité et interpolation des commandes
+
+Un `Netsukefile` exécute des commandes et peut utiliser des assistants de
+modèle impurs. Traitez-le avec la même prudence qu'un `Makefile`: examinez les
+manifestes non fiables avant de les exécuter. Netsuke réduit certaines erreurs
+de guillemets ; ce n'est pas un bac à sable. Sur les voies shell POSIX, le
+shell exécute les paires d'accents graves que vous avez écrites lorsqu'elles
+servent de substitution de commande.
+
+**Ce contre quoi Netsuke ne protège pas.** Les accents graves écrits à la main
+et `$( … )` peuvent exécuter des commandes. Sous Unix, Ninja transmet le texte
+de commande à `sh -c`; Netsuke ne nettoie pas ce texte.
+
+**Les valeurs interpolées ne sont pas protégées par des guillemets.** Les
+valeurs Jinja arbitraires, les blocs `raw` et les fragments shell écrits à la
+main deviennent du texte ordinaire de recette. N'interpolez pas de valeurs non
+fiables dans des commandes shell : les guillemets des marqueurs de chemin ne
+protègent pas ces valeurs.
+
+**Ce que Netsuke réécrit.** Seuls `{{ ins }}` et `{{ outs }}` sont des
+marqueurs Netsuke. L'ensemble est identique dans les recettes `command:` et
+`script:`. Toutes les formes avec dollar ci-dessous, ainsi que `$PATH`, restent
+des variables shell dans les deux types de recette. Netsuke double leurs signes
+dollar pour Ninja afin que le shell choisi les reçoive sans changement ; il
+n'expose pas les variables de règle Ninja `$in` et `$out`.
+
+Tableau 1 : formes réécrites en chemins d'entrée ou de sortie (`yes` signifie
+que la forme est réécrite dans le texte actif de la recette ; voir la note
+ci-dessous).
+
+| Forme                                               | `command:`  | `script:`   |
+| --------------------------------------------------- | ----------- | ----------- |
+| `{{ ins }}`                                         | yes[^inert] | yes[^inert] |
+| `{{ outs }}`                                        | yes[^inert] | yes[^inert] |
+| `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output` | no          | no          |
+
+[^inert]: Sur les routes POSIX et Bash, Netsuke copie les marqueurs présents
+    dans les commentaires et le corps des heredocs comme des jetons internes, sans
+    les développer ; les marqueurs des délimiteurs de heredoc sont développés. Les
+    recettes `script:` utilisent le même analyseur compatible POSIX, y compris avec
+    PowerShell, tandis que les recettes `command:` de PowerShell suivent des règles
+    d'interpolation distinctes. N'utilisez pas de marqueurs dans les commentaires
+    ni dans les corps des heredocs : les jetons internes peuvent rester dans la
+    recette générée.
+
+Si `input.txt` existe, ce manifeste POSIX copie son contenu dans `output.txt`
+et vérifie que le `PATH` du shell n'est pas vide :
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input.txt
+    command: 'cat {{ ins }} > {{ outs }} && test -n "$PATH"'
+defaults: [output.txt]
+```
+
+**Ce que Netsuke protège par des guillemets.** Seules ses propres substitutions
+de chemin bénéficient automatiquement de la protection shell par des
+guillemets. POSIX et Bash utilisent `shell-quote` et un encodage adapté au
+contexte ; PowerShell utilise son propre encodage littéral et rejette les
+marqueurs dans les zones entre guillemets. Si `input file.txt` existe, cet
+exemple POSIX transmet le chemin en un seul argument et produit `output.txt`:
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input file.txt
+    command: 'cat {{ ins }} > {{ outs }}'
+defaults: [output.txt]
+```
+
+**Accents graves et substitution de commande.** Netsuke rejette les marqueurs
+dans les substitutions de commande entre accents graves sous POSIX et Bash,
+ainsi que dans `$( … )` sur toutes les voies shell, dans les deux types de
+recette. PowerShell utilise les accents graves comme caractères d'échappement :
+il échappe donc à la restriction sur les accents graves, mais rejette toujours
+les marqueurs dans `$( … )`. Cette limite des marqueurs est un invariant promis.
+
+À part cela, les recettes `command:` POSIX et Bash rejettent actuellement tout
+nombre total impair d'accents graves après substitution. Ce comptage prudent
+inclut les accents graves entre apostrophes ; ce n'est pas un analyseur shell.
+Les recettes `script:` et PowerShell ignorent ce comptage. Une future version
+pourra accepter davantage de cas sans changement incompatible. Les
+substitutions équilibrées écrites par l'auteur restent actives.
+
+Ce manifeste POSIX est rejeté avant l'exécution de Ninja. Lancez
+`netsuke --json --locale en-GB` pour voir la cause :
+`Invalid command interpolation:`, suivi de l'extrait concerné ; la sortie
+lisible par défaut peut ne montrer que l'échec global de construction du graphe
+:
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input.txt
+    command: 'echo `cat {{ ins }}` > {{ outs }}'
+defaults: [output.txt]
+```
+
+**La garde `shlex`.** Les recettes `command:` POSIX et Bash doivent réussir
+`shlex::split` après substitution, sinon elles reçoivent le même diagnostic
+localisé pendant la conversion en représentation intermédiaire. Les recettes
+`script:` et PowerShell contournent cette garde. Netsuke n'exécute pas les
+jetons renvoyés. `shlex` n'effectue aucune expansion et traite les accents
+graves comme des caractères ordinaires : réussir la garde ne rend pas une
+commande sûre. Ne l'utilisez pas pour vérifier l'absence d'injection.
+
+Le rejet fait partie du contrat observable, mais l'ensemble précis des entrées
+acceptées n'est pas une garantie de stabilité : il dépend de la version de
+`shlex` résolue lors de la compilation de Netsuke. Une version future qui
+accepte du texte auparavant rejeté n'est pas incompatible ; rejeter du texte
+auparavant accepté est un défaut à consigner dans le journal des modifications,
+pas un changement de politique.
+
+**Stabilité et références.** Netsuke est antérieur à la version 1.0 ; les
+interfaces peuvent encore changer. Ces garanties limitées ne rendent pas sûres
+les recettes arbitraires. Consultez les mécanismes des voies shell dans la
+[limite de sécurité du guide de l'utilisateur](docs/users-guide.md#review-the-safety-boundary)
+et les décisions dans [ADR-027](docs/adr-027-command-placeholder-contract.md).
 
 ______________________________________________________________________
 
 ## État de la version et du développement
 
-La version v0.1.0-beta3 constitue un aperçu utile pour les premiers
+La version v0.1.0-beta4 constitue un aperçu utile pour les premiers
 utilisateurs, et non une déclaration selon laquelle Netsuke serait achevé ou
 que chaque interface serait stable. Le pipeline du compilateur et le flux de
 build local ordinaire sont substantiels ; l'interface en ligne de commande, le
@@ -184,7 +312,7 @@ vocabulaire de configuration et le modèle de recette avancé restent pré-stabl
 que certains noms de commandes, options, schémas de diagnostic et détails de
 manifeste changent avant la version 1.0.
 
-Les limitations suivantes s'appliquent à la beta3.
+Les limitations suivantes s'appliquent à la beta4.
 
 Les limitations connues comprennent :
 
@@ -208,11 +336,15 @@ La version beta3 corrige la limitation du dollar shell de la beta2 grâce à un
 ordinaires peuvent être écrites normalement. Les manifestes beta2 utilisant des
 expressions littérales de dollar shell nécessitent une migration ; voir la
 [limite de sécurité du guide de l'utilisateur](docs/users-guide.md#review-the-safety-boundary).
+La beta4 applique le même traitement à `$in` et `$out` dans les recettes
+`script:`; les manifestes beta3 qui s'en servaient pour substituer des chemins
+doivent utiliser `{{ ins }}` et `{{ outs }}` à la place ; voir le
+[guide de migration](docs/v0-1-0-migration-guide.md).
 
-Un `Netsukefile` peut exécuter des commandes et utiliser des assistants de
-modèle impurs. Traitez-le avec la même prudence qu'un `Makefile`: examinez les
-manifestes non fiables avant de les exécuter. Netsuke met entre guillemets les
-substitutions de chemin prises en charge, mais ce n'est pas un bac à sable.
+Consultez
+[sécurité et interpolation des commandes](#sécurité-et-interpolation-des-commandes)
+et la
+[limite de sécurité du guide de l'utilisateur](docs/users-guide.md#review-the-safety-boundary).
 
 ______________________________________________________________________
 

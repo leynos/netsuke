@@ -248,9 +248,13 @@ def test_failed_bundle_setup_is_reported(
 
 def test_urls_follow_the_release_layouts() -> None:
     """Both archive URLs are the versioned release paths for the target."""
-    assert script.frontend_url("https://q.invalid", "1.0.0", "t") == (
-        "https://q.invalid/releases/download/kani-verifier-1.0.0/kani-verifier-1.0.0-t.tar.gz"
-    ), "expected: script.frontend_url('https://q.invalid', '1.0.0', 't') ==..."
-    assert script.bundle_url("https://u.invalid", "1.0.0", "t") == (
+    frontend = script.Payload("kani-verifier", "https://q.invalid", "0" * 64)
+    bundle = script.Payload("kani", "https://u.invalid", "0" * 64)
+
+    assert frontend.url("1.0.0", "t") == (
+        "https://q.invalid/releases/download/kani-verifier-1.0.0/"
+        "kani-verifier-1.0.0-t.tar.gz"
+    ), frontend.url("1.0.0", "t")
+    assert bundle.url("1.0.0", "t") == (
         "https://u.invalid/releases/download/kani-1.0.0/kani-1.0.0-t.tar.gz"
-    ), "expected: script.bundle_url('https://u.invalid', '1.0.0', 't') == (..."
+    ), bundle.url("1.0.0", "t")

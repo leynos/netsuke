@@ -93,9 +93,8 @@ fn assert_target_paths(
         .build_graph
         .with_ref(|graph| {
             graph
-                .targets
-                .get(&Utf8PathBuf::from(target))
-                .map(|edge| field.paths(edge).to_vec())
+                .target_for_output(Utf8PathBuf::from(target).as_path())
+                .map(|(_, edge)| field.paths(edge).to_vec())
         })
         .context("build graph should be available")?
         .with_context(|| format!("target {target} should be present"))?;
@@ -157,7 +156,7 @@ fn remove_action(world: &TestWorld) -> Result<()> {
         .take_value()
         .ok_or_else(|| anyhow!("build graph should be available"))?;
 
-    let first_action = graph.targets.values().next().map(|e| e.action_id.clone());
+    let first_action = graph.edges().next().map(|edge| edge.action_id.clone());
 
     if let Some(id) = first_action {
         graph.actions.remove(&id);
@@ -180,7 +179,7 @@ fn graph_actions(world: &TestWorld, count: usize) -> Result<()> {
 
 #[then("the graph has {count:usize} targets")]
 fn graph_targets(world: &TestWorld, count: usize) -> Result<()> {
-    assert_graph_collection_count(world, count, |g| g.targets.len(), "targets")
+    assert_graph_collection_count(world, count, BuildGraph::output_count, "targets")
 }
 
 #[then("the graph has {count:usize} default targets")]
@@ -228,10 +227,14 @@ fn compile_manifest_impl(world: &TestWorld, path: &str) {
     // Match the manifest steps' injected-environment flow so IR compilation sees
     // scenario values rather than the host environment.
     let env_reader = manifest_env_reader(world);
-    let outcome = netsuke::manifest::from_path_with_policy_and_env(
+    let environment = netsuke::manifest::ManifestEnvironment::new(
+        &env_reader,
+        world.manifest_env_access_policy.borrow().clone(),
+    );
+    let outcome = netsuke::manifest::from_path_with_policy_and_environment(
         &resolved,
         NetworkPolicy::default(),
-        &env_reader,
+        &environment,
         None,
     )
     .and_then(|m| {

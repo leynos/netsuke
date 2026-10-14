@@ -51,6 +51,26 @@ Feature: Manifest Parsing
     When the manifest is checked
     Then the first target command is "echo world"
 
+  Scenario: Parsing rejects a compact output loop at the manifest budget
+    Given the manifest budget uses small test limits
+    And the manifest file "tests/data/manifest_budget_loop.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "Manifest resource budget exhausted"
+
+  Scenario: Parsing stops foreach at the manifest budget
+    Given the manifest budget uses small test limits
+    And the manifest file "tests/data/manifest_budget_foreach.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "Manifest resource budget exhausted"
+
+  Scenario: Ordinary manifests retain their rendered behaviour below the budget
+    Given the manifest budget uses small test limits
+    And the manifest file "tests/data/manifest_budget_ordinary.yml" is parsed
+    When the manifest is checked
+    Then the first target command is "echo unchanged"
+
   Scenario: Parsing fails when a Jinja variable is undefined
     Given the manifest file "tests/data/jinja_undefined.yml" is parsed
     When the parsing result is checked
@@ -61,6 +81,14 @@ Feature: Manifest Parsing
     And the manifest file "tests/data/jinja_env.yml" is parsed
     When the manifest is checked
     Then the first target command is "echo world"
+
+  Scenario: Blocking environment variables in a manifest
+    Given the environment variable "NETSUKE_TEST_ENV" is set to "secret"
+    And the manifest environment variable "NETSUKE_TEST_ENV" is blocked
+    And the manifest file "tests/data/jinja_env.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the blocked environment error omits "NETSUKE_TEST_ENV"
 
   Scenario: Rendering manifest macros
     Given the manifest file "tests/data/jinja_macros.yml" is parsed
@@ -82,6 +110,25 @@ Feature: Manifest Parsing
     And the manifest file "tests/data/jinja_env_missing.yml" is parsed
     When the parsing result is checked
     Then parsing the manifest fails
+
+  Scenario: An absent environment variable falls back to its default
+    Given the environment variable "NETSUKE_UNDEFINED_ENV" is unset
+    And the manifest file "tests/data/jinja_env_default.yml" is parsed
+    When the manifest is checked
+    Then the first target command is "echo fallback"
+
+  Scenario: A present environment variable ignores its default
+    Given the environment variable "NETSUKE_TEST_ENV" is set to "world"
+    And the manifest file "tests/data/jinja_env_present_with_default.yml" is parsed
+    When the manifest is checked
+    Then the first target command is "echo world"
+
+  Scenario: A non-string default is rejected rather than stringified
+    Given the environment variable "NETSUKE_TEST_ENV" is set to "world"
+    And the manifest file "tests/data/jinja_env_default_non_string.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "netsuke::jinja::env::args"
 
   Scenario: Parsing fails when a macro is missing its signature
     Given the manifest file "tests/data/jinja_macro_invalid.yml" is parsed

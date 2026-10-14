@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = نام میزبان‌هایی که هنگام 
 cli.flag.fetch_block_host.help = نام میزبان‌هایی که همیشه مسدودند، حتی اگر جای دیگری مجاز باشند.
 cli.flag.fetch_default_deny.help = ردّ همهٔ میزبان‌ها به‌صورت پیش‌فرض؛ تنها فهرست اعلام‌شده مجاز است.
 cli.flag.trust_project_fetch_policy.help = اجازه دهید پیکربندی پروژه مجوزهای سیاست fetch را گسترش دهد.
+
+cli.flag.manifest_evaluation_fuel.help = ‏محدود کردن دستورهای MiniJinja برای هر ارزیابی مانیفست.
+cli.flag.manifest_fuel.help = ‏محدود کردن دستورهای MiniJinja در یک مانیفست.
+cli.flag.manifest_rendered_value_bytes.help = ‏محدود کردن بایت‌های رندرشده در یک مقدار مانیفست.
+cli.flag.manifest_rendered_manifest_bytes.help = ‏محدود کردن مجموع بایت‌های رندرشده در یک مانیفست.
+cli.flag.manifest_source_bytes.help = ‏محدود کردن بایت‌های منبع قالب و ماکروهای مصرف‌شده برای هر مانیفست.
+cli.flag.manifest_foreach_cardinality.help = ‏محدود کردن مقادیر پردازش‌شده در یک گسترش foreach.
+cli.flag.manifest_expanded_entries.help = ‏محدود کردن هدف‌ها و کنش‌های گسترش‌یافته از یک مانیفست.
 cli.flag.json.help = خروجی JSON خوانا برای ماشین تولید کن.
 cli.flag.no_input.help = هرگز ورودی تعاملی نخوان.
 cli.flag.color.help = سیاست خروجی رنگی (auto، always، never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = نشانهٔ YAML نامعتبر یا ناب�
 manifest.yaml.hint.escape = ممیزهای وارونه را بگریزانید یا دنباله‌های گریز نامعتبر را بردارید.
 manifest.env.missing = یک متغیر محیطی الزامی تنظیم نشده است.
 manifest.env.invalid_utf8 = یک متغیر محیطی دربردارندهٔ UTF-8 نامعتبر است.
+manifest.env.blocked = دسترسی به یک متغیر محیطی مسدود شده است.
+manifest.env.args_error = ‏[netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = مقدار default در env باید رشته باشد، اما { $kind } دریافت شد.
 manifest.vars.not_object = ‏`vars` در مانیفست باید نگاشت یا شیء باشد.
 manifest.vars.reserved_name = کلید `vars` با نام '{ $name }' در مانیفست برای یک کمک‌کننده داخلی قالب رزرو شده است؛ نام متغیر را تغییر دهید.
 manifest.read_failed = خواندن مانیفست از { $path } ممکن نشد.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = جریان
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = ‏[netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = ‏[netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = ‏shell_quote یک رشته انتظار داشت اما { $kind } دریافت کرد.
+stdlib.shell.quote.control_character = مقداری که شامل بایت صفر، بازگشت به ابتدای خط یا شکست سطر باشد را نمی‌توان میان گیومه گذاشت.
+stdlib.shell.dialect_invalid = لهجهٔ پوستهٔ ناشناخته { $dialect }؛ یکی از { $accepted } انتظار می‌رفت.
+stdlib.shell.dialect_not_string = گزینه dialect در shell باید رشته باشد، اما { $kind } دریافت شد.
+stdlib.shell.join.not_sequence = ‏shell_join یک دنباله انتظار داشت اما { $kind } دریافت کرد.
+stdlib.shell.join.item_not_string = آیتم { $index } در shell_join از نوع { $kind } است، نه رشته.
+stdlib.shell.positional_option = ‏{ $filter } گزینه‌های خود را به‌صورت کلیدواژه می‌گیرد؛ { $example } بنویسید.
+
 # تشخیص‌های یاور مسیرها.
 stdlib.path.io.failed = کنش «{ $action }» برای { $path } ناکام ماند ({ $label }).
 stdlib.path.io.failed_with_detail = کنش «{ $action }» برای { $path } ناکام ماند: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = الگوریتم درهم‌سا
 
 # تشخیص‌های یاورهای گردایه‌ها.
 stdlib.collections.flatten.expected_sequence = ‏flatten عضوهای یک دنباله را انتظار داشت اما { $kind } یافت.
+stdlib.collections.compact.not_sequence = ‏compact یک دنباله را انتظار داشت اما { $kind } یافت.
 stdlib.collections.group_by.empty_attribute = ‏group_by به ویژگی‌ای ناتهی نیاز دارد.
 stdlib.collections.group_by.unresolved = ‏group_by نتوانست «{ $attr }» را روی عضوی از گونهٔ { $kind } بیابد.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = نانوثانیه
 
 # تشخیص‌های یاور which.
 stdlib.which.not_found = ‏[netsuke::jinja::which::not_found] فرمان «{ $command }» پس از بررسی { $count } مدخل PATH یافت نشد. پیش‌نمایش: { $preview }
-stdlib.which.not_found.hint.cwd_auto = بخش‌های تهی PATH نادیده گرفته می‌شوند؛ برای دربرگرفتن شاخهٔ کاری از cwd_mode="auto" استفاده کنید.
-stdlib.which.not_found.hint.cwd_always = برای دربرگرفتن شاخهٔ کنونی، cwd_mode="always" را تنظیم کنید.
+stdlib.which.not_found.hint.cwd_auto = ‏حالت auto فقط در پوشه‌هایی جست‌وجو می‌کند که صراحتاً در PATH نام برده شده‌اند.
+stdlib.which.not_found.hint.cwd_always = ‏حالت always فقط پیش از پوشه‌های نام‌برده در PATH، پوشهٔ فعلی را جست‌وجو می‌کند.
+stdlib.which.not_found.hint.workspace = ‏برای جست‌وجوی بازگشتی در درخت فضای کار، از cwd_mode="workspace-recursive" استفاده کنید.
 stdlib.which.direct_not_found = ‏[netsuke::jinja::which::not_found] فرمان «{ $command }» در «{ $path }» وجود ندارد یا اجراشدنی نیست.
 stdlib.which.args_error = ‏[netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = ‏<تهی>
 stdlib.which.path_entry.non_utf8 = مدخل شمارهٔ { $index } در PATH نویسه‌هایی دارد که UTF-8 نیستند؛ ‏Netsuke به مسیرهای UTF-8 نیاز دارد.
 stdlib.which.command.empty = ‏which به رشته‌ای ناتهی نیاز دارد.
-stdlib.which.cwd_mode.invalid = ‏cwd_mode باید «auto»، «always» یا «never» باشد، اما «{ $mode }» به دست آمد.
+stdlib.which.cwd_mode.invalid = ‏cwd_mode باید 'auto'، 'always'، 'never' یا 'workspace-recursive' باشد؛ مقدار '{ $mode }' دریافت شد.
 stdlib.which.cwd.resolve_failed = تعیین شاخهٔ کنونی ممکن نشد: { $details }.
 stdlib.which.cwd.non_utf8 = شاخهٔ کنونی بخش‌هایی دارد که UTF-8 نیستند.
 stdlib.which.canonicalize_failed = متعارف‌سازی «{ $path }» ممکن نشد: { $details }.
@@ -427,3 +451,7 @@ example.errors_found = { $count ->
     [one] ‏{ $count } خطا یافت شد.
    *[other] ‏{ $count } خطا یافت شد.
 }
+manifest.budget.exceeded = ‏بودجهٔ منابع مانیفست هنگام { $stage } پس از رسیدن به { $limit } به پایان رسید.
+
+cli.flag.env_allow_var.help = متغیر محیطی مجاز برای دستیار env() مانیفست.
+cli.flag.env_block_var.help = متغیر محیطی مسدودشده برای دستیار env() مانیفست.

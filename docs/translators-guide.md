@@ -28,7 +28,7 @@ After the configuration merge, for diagnostics, progress, and status output:
 5. Fallback to `en-US`
 
 `startup_localizer` in `src/main.rs` performs the first and `configure_runtime`
-the second; both resolve through `src/locale_resolution.rs`.
+the second; both resolve through `src/locale/resolution.rs`.
 
 `en-US` is the source locale: it defines the key set every other catalogue must
 match, and it renders any message a translation has not yet covered.
@@ -49,7 +49,7 @@ Table 1: Locales Netsuke ships, by script family
 
 ## 2. The locale registry
 
-`src/locale_catalogues.rs` owns the list of locales. Its `define_locales!`
+`src/locale/catalogues.rs` owns the list of locales. Its `define_locales!`
 macro both declares the supported tags and embeds each catalogue, so a tag
 without a catalogue on disk fails to compile. Everything downstream reads the
 registry rather than keeping its own list: the build-time audit, the
@@ -68,7 +68,7 @@ added or dropped by accident, since it would just be confirming the registry
 agrees with itself.
 
 Adding a locale means creating `locales/<tag>/messages.ftl`, adding the tag to
-`define_locales!` in `src/locale_catalogues.rs`, adding it to that `Cargo.toml`
+`define_locales!` in `src/locale/catalogues.rs`, adding it to that `Cargo.toml`
 array, and adding it to `EXPECTED_SHIPPED_TAGS`. When the language already
 ships one or more catalogues — currently `en`, `es`, `pt`, and `zh` — it also
 means extending its `LANGUAGE_FALLBACKS` rule so every relevant region and
@@ -355,7 +355,7 @@ Leave Netsuke's own identifiers untranslated — users type them. That covers
 
 Add the tag to the three lists that name it:
 
-1. `define_locales!` in `src/locale_catalogues.rs`, in tag order.
+1. `define_locales!` in `src/locale/catalogues.rs`, in tag order.
 2. `package.metadata.ortho_config.locales` in `Cargo.toml`, in the same order.
 3. `EXPECTED_SHIPPED_TAGS` in `tests/locale_registry_tests.rs`, the
    independent test oracle, in the same order.

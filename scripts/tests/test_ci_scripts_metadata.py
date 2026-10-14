@@ -39,8 +39,7 @@ def test_script_pins_the_makefile_dependency_versions(path: pathlib.Path) -> Non
     """Each PEP 723 block pins cyclopts and cuprum at the Makefile's pins."""
     text = path.read_text(encoding="utf-8")
     cyclopts = _makefile_variable("CYCLOPTS_VERSION")
-    cuprum_ref = _makefile_variable("CUPRUM_REF")
-    cuprum = f"cuprum @ git+https://github.com/leynos/cuprum@{cuprum_ref}"
+    cuprum = _makefile_variable("CUPRUM_VERSION")
     header, _, _ = text.partition('# ///\n"""')
     assert header.startswith("#!/usr/bin/env -S uv run --script\n# /// script\n"), (
         path.name
@@ -49,8 +48,8 @@ def test_script_pins_the_makefile_dependency_versions(path: pathlib.Path) -> Non
     assert f'"cyclopts=={cyclopts}"' in header, (
         f"{path.name} must pin cyclopts=={cyclopts}, the Makefile CYCLOPTS_VERSION"
     )
-    assert f'"{cuprum}"' in header, (
-        f"{path.name} must pin {cuprum!r}, the Makefile CUPRUM_REF"
+    assert f'"cuprum=={cuprum}"' in header, (
+        f"{path.name} must pin cuprum=={cuprum}, the Makefile CUPRUM_VERSION"
     )
 
 

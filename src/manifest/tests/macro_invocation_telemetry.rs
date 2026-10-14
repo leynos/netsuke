@@ -1,6 +1,6 @@
 //! Bounded-telemetry assertions for the macro-invocation boundary.
 //!
-//! Sibling to `macros_telemetry`, which covers `render_template`. These tests
+//! Sibling to `macros::telemetry`, which covers `render_template`. These tests
 //! pin the compiled-expression fallback built by `make_macro_fn`: without them
 //! the span and metrics could be deleted and the suite would still pass.
 //!

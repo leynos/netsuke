@@ -521,6 +521,47 @@ guidance rather than embedding that material in the developer's guide.
 - Update the layout document when the repository structure changes enough that
   a contributor could otherwise follow outdated guidance.
 
+### ExecPlan
+
+Use an ExecPlan, canonically a file under `docs/execplans/`, to record the
+living execution plan for one scoped task. An ExecPlan is a handoff document:
+someone picking it up cold must be able to tell what was intended, what was
+done, and what remains.
+
+- Open the header with the mandatory living sections, then a `Status:` line.
+- Close it with the revision note required when editing an ExecPlan.
+- Keep the plan's own `Progress`, `Surprises & discoveries`, `Decision log`,
+  and `Outcomes & retrospective` sections current as work proceeds.
+
+The header carries exactly one `Status:` line, and its value is drawn from a
+closed set:
+
+| Value       | Meaning                                             |
+| ----------- | --------------------------------------------------- |
+| DRAFT       | Written, not yet approved for implementation.       |
+| APPROVED    | Approved, implementation not yet started.           |
+| IN PROGRESS | Implementation underway.                            |
+| BLOCKED     | Cannot proceed without an external decision or fix. |
+| COMPLETE    | Delivered, validated, and any review concluded.     |
+
+Table: the closed set of ExecPlan header status values.
+
+- Write the bare value. `Status: COMPLETE`, not `Status: COMPLETED`,
+  `Status: DONE`, `Status: IMPLEMENTED`, or `Status: COMPLETE (extra note)`.
+- Put qualifiers such as dates, descoped stages, or a review caveat in a short
+  sentence beneath the header, not on the status line. The status line stays
+  greppable; the prose beneath it carries the nuance.
+- Do not repeat the field elsewhere in the document as a second `Status:`
+  line. Dated entries in a revision note may describe the status as it stood on
+  that date, provided the newest entry and the header agree.
+
+**Authority.** An ExecPlan's authoritative state is its `Progress` and
+`Outcomes & retrospective` sections together with its roadmap checkbox. The
+header status line is a summary of that state, kept in step with it; when the
+two disagree, the sections and the roadmap are correct, and the header is the
+defect. Reserve `COMPLETE` for a plan whose work is delivered and whose review
+has concluded, not for work merely handed off for review.
+
 ## Example snippet
 
 ```rust,no_run

@@ -1,12 +1,20 @@
 //! Tests for injected environment access through the manifest `env()` helper.
+//!
+//! The `default` keyword argument's own cases are split across
+//! `tests/manifest_env_tests/` so no file exceeds the repository's 400-line
+//! limit; this file keeps the shared rendering helpers, the access-policy
+//! coverage, and the diagnostic snapshots.
 
 use anyhow::{Context, Result, anyhow, ensure};
 use netsuke::{
     ast::Recipe,
-    manifest::{self, EnvReadError, EnvReader},
+    manifest::{self, EnvAccessPolicy, EnvReadError, EnvReader},
 };
 use rstest::rstest;
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use test_support::{
     EnLocalizer, en_localizer, fluent::normalize_fluent_isolates, manifest::manifest_yaml,
 };
@@ -28,9 +36,17 @@ fn reader_yielding_rejects_unexpected_keys() {
     assert_eq!(reader("WRONG_KEY"), Err(EnvReadError::NotPresent));
 }
 fn rendered_command(value: Result<String, EnvReadError>) -> Result<String> {
+    let policy = EnvAccessPolicy::default();
+    rendered_command_with_policy(value, &policy)
+}
+
+fn rendered_command_with_policy(
+    value: Result<String, EnvReadError>,
+    policy: &EnvAccessPolicy,
+) -> Result<String> {
     let yaml =
         manifest_yaml("targets:\n  - name: hello\n    command: \"echo {{ env('PROFILE') }}\"\n");
-    let manifest = manifest::from_str_with_env(&yaml, &reader_yielding(value))?;
+    let manifest = manifest::from_str_with_env_and_policy(&yaml, &reader_yielding(value), policy)?;
     let target = manifest
         .targets
         .first()
@@ -42,6 +58,93 @@ fn rendered_command(value: Result<String, EnvReadError>) -> Result<String> {
         .as_single()
         .map(str::to_owned)
         .context("command should be a scalar")
+}
+
+#[rstest]
+fn allowlisted_lookup_resolves_successfully() -> Result<()> {
+    let command = rendered_command_with_policy(
+        Ok(String::from("permitted")),
+        &EnvAccessPolicy::default().allow_var("PROFILE"),
+    )?;
+    ensure!(command == "echo permitted");
+    Ok(())
+}
+
+/// Assert that a denied lookup cannot reach or disclose an injected reader.
+///
+/// `argument` is appended verbatim inside the `env(...)` call, so `""`
+/// exercises the bare form and `", default='fallback'"` exercises the form
+/// that must not become an access-policy bypass. The fallback text is checked
+/// for leakage here for the same reason the value is: the diagnostic is
+/// user-visible, so neither may appear in it.
+fn denied_lookup_is_value_and_name_free(
+    policy: &EnvAccessPolicy,
+    variable_name: &str,
+    variable_value: &str,
+    argument: &str,
+) -> Result<()> {
+    let yaml = manifest_yaml(&format!(
+        "targets:\n  - name: hello\n    command: \"echo {{{{ env('{variable_name}'{argument}) }}}}\"\n"
+    ));
+    let reader_was_called = Arc::new(AtomicBool::new(false));
+    let invocation_recorder = Arc::clone(&reader_was_called);
+    let reader_value = variable_value.to_owned();
+    let reader: EnvReader = Arc::new(move |_| {
+        invocation_recorder.store(true, Ordering::Relaxed);
+        Ok(reader_value.clone())
+    });
+    let Err(error) = manifest::from_str_with_env_and_policy(&yaml, &reader, policy) else {
+        return Err(anyhow!("a denied environment variable must fail"));
+    };
+    let diagnostic = format!("{error:#}");
+    ensure!(diagnostic.contains("Access to an environment variable is blocked."));
+    ensure!(
+        !reader_was_called.load(Ordering::Relaxed),
+        "a denied lookup must not call the reader"
+    );
+    ensure!(!diagnostic.contains(variable_name));
+    ensure!(!diagnostic.contains(variable_value));
+    ensure!(
+        !diagnostic.contains("fallback"),
+        "the default must not appear in the diagnostic: {diagnostic}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn blocked_lookup_is_value_and_name_free() -> Result<()> {
+    denied_lookup_is_value_and_name_free(
+        &EnvAccessPolicy::default().block_var("CREDENTIAL_LIKE_VARIABLE"),
+        "CREDENTIAL_LIKE_VARIABLE",
+        "credential-like-value",
+        "",
+    )
+}
+
+/// A `default` must not become an access-policy bypass.
+///
+/// `env('BLOCKED', default='x')` fails for the same reason `env('BLOCKED')`
+/// does. The policy is evaluated before the reader, so the block cannot be
+/// downgraded into a successful read by supplying a fallback — which is what a
+/// naive "resolve, then substitute on absence" implementation would do.
+#[test]
+fn a_blocked_lookup_still_fails_when_a_default_is_supplied() -> Result<()> {
+    denied_lookup_is_value_and_name_free(
+        &EnvAccessPolicy::default().block_var("CREDENTIAL_LIKE_VARIABLE"),
+        "CREDENTIAL_LIKE_VARIABLE",
+        "credential-like-value",
+        ", default='fallback'",
+    )
+}
+
+#[rstest]
+fn unlisted_allowlist_lookup_is_value_and_name_free() -> Result<()> {
+    denied_lookup_is_value_and_name_free(
+        &EnvAccessPolicy::default().allow_var("ANOTHER_VARIABLE"),
+        "UNLISTED_CREDENTIAL_LIKE_VARIABLE",
+        "unlisted-credential-like-value",
+        "",
+    )
 }
 
 #[rstest]
@@ -88,7 +191,7 @@ fn lookup_failures_are_diagnostic(
         error
             .chain()
             .any(|cause| cause.to_string().to_lowercase().contains(expected)),
-        "unexpected error: {error}"
+        "unexpected error: {error:#}"
     );
     Ok(())
 }
@@ -120,3 +223,24 @@ fn non_unicode_lookup_diagnostic_snapshot(en_localizer: EnLocalizer) -> Result<(
     insta::assert_snapshot!(message, @"invalid operation: An environment variable contains invalid UTF-8. (in <string>:1)");
     Ok(())
 }
+
+#[rstest]
+fn blocked_lookup_diagnostic_snapshot(en_localizer: EnLocalizer) -> Result<()> {
+    let _en = en_localizer;
+    let error = rendered_command_with_policy(
+        Ok(String::from("must-not-render")),
+        &EnvAccessPolicy::default().block_var("PROFILE"),
+    )
+    .expect_err("blocked environment variable must fail");
+    let message = error
+        .chain()
+        .map(ToString::to_string)
+        .find(|message| message.contains("environment variable"))
+        .context("blocked lookup should contain its localized environment diagnostic")?;
+    let normalized_message = normalize_fluent_isolates(&message);
+    insta::assert_snapshot!(normalized_message, @"invalid operation: Access to an environment variable is blocked. (in <string>:1)");
+    Ok(())
+}
+
+#[path = "manifest_env_tests/default_argument.rs"]
+mod default_argument;

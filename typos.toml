@@ -1,5 +1,5 @@
 # Generated from the shared en-GB-oxendict dictionary.
-# Regenerate with scripts/generate_typos_config.py; do not edit by hand.
+# Regenerate with typos-config-builder; do not edit by hand.
 
 [files]
 extend-exclude = [
@@ -27,7 +27,6 @@ extend-exclude = [
     "node_modules",
     "package-lock.json",
     "pnpm-lock.yaml",
-    "scripts/tests/test_typos_rollout_hardening.py",
     "target",
     "typos.local.toml",
     "typos.toml",
@@ -56,15 +55,31 @@ extend-ignore-re = [
     "(?m)^      should_upload_workflow_artifacts: \\$\\{\\{ steps\\.release_modes\\.outputs\\['should-upload-workflow-artifacts'\\] \\}\\}$",
     "(?m)^      should_upload_workflow_artifacts:$",
     "(?s)```.*?```",
+    "--[A-Za-z0-9_-]*color(?:ed|s|ing|ize[ds]?|izing)?(?:\\b|_)",
+    "Azure\\s+Architecture\\s+Center\\s*\\|\\s*Microsoft\\s+Learn\\b",
+    "GitHub\\s+Flavored\\s+Markdown\\b(?:\\s\\(GFM\\))?",
+    "HashiCorp",
+    "How to organise your Rust tests",
     "NETSUKE_COLOR",
+    "\\b(?:background|theme)_color\\b",
+    "\\b(?:carousel|dropdown|footer|indicator|items|navbar|toast)-center\\b",
+    "\\bAppFactory<Ser\\b",
     "\\bNETSUKE_COLOR\\b",
+    "\\bartifact-(?:name|server-path)\\b",
     "\\bartifact-dir\\b",
     "\\bartifact-name\\b",
     "\\bartifact-suffix\\b",
+    "\\bcolor-(?:mix|contrast)\\b",
+    "\\bflavor = ",
     "\\blocalisation\\b",
     "\\brust-analyzer\\b",
+    "\\{COLOR\\}",
+    "\\{color\\}",
     "`[^`\\n]+`",
+    "`color`",
+    "`var\\.iamge_id` instead of `var\\.image_id`",
     "align=\"center\"",
+    "currentColor",
     "mis-grouping",
 ]
 

@@ -1,6 +1,5 @@
 """Provide shared dynamic-import fixtures for script test modules."""
 
-import importlib
 import importlib.util
 import pathlib
 import sys
@@ -12,18 +11,6 @@ if typ.TYPE_CHECKING:
     import types
 
 SCRIPT_DIRECTORY = pathlib.Path(__file__).resolve().parents[1]
-
-
-@pytest.fixture(name="rollout_modules")
-def rollout_modules_fixture(
-    monkeypatch: pytest.MonkeyPatch,
-) -> tuple[types.ModuleType, types.ModuleType, types.ModuleType]:
-    """Import spelling-rollout scripts through their runtime module paths."""
-    monkeypatch.syspath_prepend(str(SCRIPT_DIRECTORY))
-    names = ("typos_rollout_cache", "typos_rollout", "generate_typos_config")
-    importlib.invalidate_caches()
-    cache, rollout, generator = (importlib.import_module(name) for name in names)
-    return cache, rollout, generator
 
 
 def load_script_module(module_name: str, file_name: str) -> types.ModuleType:

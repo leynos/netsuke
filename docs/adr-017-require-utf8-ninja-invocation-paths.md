@@ -24,7 +24,7 @@ adapter owns command construction. Existing error-wrapping conventions also
 distinguish encoding failures at their boundary, including `ResolveError`, the
 `RUNNER_*_UTF8` keys and the `MANIFEST_*_NON_UTF8` keys.
 
-`src/cli/discovery_paths.rs` is a deliberate `std::path` carve-out. It must
+`src/cli/discovery/paths.rs` is a deliberate `std::path` carve-out. It must
 inspect host-provided discovery paths, whose encoding Netsuke cannot constrain.
 Child-process environment payloads likewise remain `OsStr` and `OsString`
 because environment-variable values genuinely need not be UTF-8.
@@ -88,4 +88,4 @@ already-removed `prepend_dir_to_path` helper, so it requires no migration.
 - CLI boundary: [`src/cli/`](../src/cli/)
 - Ninja process adapter: [`src/runner/process/`](../src/runner/process/)
 - Runner adapter:
-  [`src/runner/ninja_process_adapter.rs`](../src/runner/ninja_process_adapter.rs)
+  [`src/runner/ninja/process_adapter.rs`](../src/runner/ninja/process_adapter.rs)

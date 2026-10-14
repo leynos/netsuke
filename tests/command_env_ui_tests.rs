@@ -27,6 +27,8 @@
 
 #[path = "support/cargo_artifacts.rs"]
 mod cargo_artifacts;
+#[path = "support/cargo_features.rs"]
+mod cargo_features;
 #[path = "support/rustc_response_file.rs"]
 mod rustc_response_file;
 
@@ -43,6 +45,15 @@ fn command_env_embedder_fixture_compiles() -> io::Result<()> {
     compile_public_api_fixture(
         "tests/ui/command_env_embedder_pass.rs",
         "the embedder fixture should compile against the public API",
+    )
+}
+
+/// The manifest-environment fixture type-checks against the public API.
+#[test]
+fn manifest_environment_embedder_fixture_compiles() -> io::Result<()> {
+    compile_public_api_fixture(
+        "tests/ui/manifest_environment_embedder_pass.rs",
+        "the manifest-environment fixture should compile against the public API",
     )
 }
 
@@ -181,6 +192,7 @@ impl NetsukeRlib {
             .arg("--manifest-path")
             .arg(manifest_dir().join("Cargo.toml"))
             .arg("--message-format=json")
+            .args(cargo_features::GATE_FEATURE_ARGUMENTS)
             .output()?;
         if !output.status.success() {
             return Err(io::Error::other(format!(

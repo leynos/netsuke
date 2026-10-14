@@ -9,8 +9,10 @@ use netsuke::cli::ReleaseHelpCli;
 use ortho_config::OrthoConfigDocs;
 use serde::Serialize;
 
-const APPEND_MERGE_FIELDS: [&str; 4] = [
+const APPEND_MERGE_FIELDS: [&str; 6] = [
     "fetch_allow_scheme",
+    "env_allow_var",
+    "env_block_var",
     "fetch_allow_host",
     "fetch_block_host",
     "default_targets",

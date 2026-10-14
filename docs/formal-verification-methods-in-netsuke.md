@@ -54,7 +54,7 @@ The first Kani harnesses should cover these properties:
 - Acyclic bounded graphs (same size limits) are never rejected as cyclic.
 - Missing dependencies are recorded without creating false cycles.
 
-`src/ir/cycle.rs` is the strongest narrow proof candidate in the current
+`src/ir/cycle/mod.rs` is the strongest narrow proof candidate in the current
 repository. `canonicalize_cycle` has a crisp normalization contract that is
 small enough for Kani immediately and remains a plausible later Verus kernel if
 stronger proof obligations become worthwhile.[^7]
@@ -63,11 +63,13 @@ stronger proof obligations become worthwhile.[^7]
 
 `src/ir/cmd_interpolate/mod.rs` is another high-value target because it is
 compact, load-bearing, and security-sensitive. It recognizes only the internal
-`INS_TOKEN` and `OUTS_TOKEN` markers emitted by manifest rendering; literal
-`$in` and `$out` remain shell variables. POSIX-compatible routes reject markers
-inside backticks and reject commands when backticks are unmatched or the
-interpolated result fails the current `shlex` guard. PowerShell treats
-backticks as native escapes rather than protected regions.[^8]
+`INS_TOKEN` and `OUTS_TOKEN` tokens emitted by manifest rendering, identically
+in both recipe kinds; `$in`, `$out`, `$ins`, and `$outs` are all literal shell
+variables. On POSIX-compatible routes both recipe kinds reject markers inside
+backticks; `command:` text additionally rejects unmatched backticks and a
+substituted result that fails the current `shlex` guard, while scripts are
+exempt from those two checks. PowerShell treats backticks as native escapes
+rather than protected regions.[^8]
 
 Kani proves two allocation-free kernels. An eight-character symbolic window
 with a symbolic offset proves that literal `$in` and `$out` prefixes never
@@ -120,7 +122,7 @@ as part of the phase-1 boundary.
 
 Verus is not the correct first tool for the manifest or command-interpolation
 layers. The only current entry point worth preserving for later evaluation is a
-cycle canonicalization model related to `src/ir/cycle.rs`. That model is
+cycle canonicalization model related to `src/ir/cycle/mod.rs`. That model is
 appropriate because `canonicalize_cycle` exposes a clear mathematical contract:
 
 - output length is preserved,
@@ -243,16 +245,26 @@ Formal verification should not be folded into the existing `build-test` job.
 The current `CI` workflow already performs formatting, linting, tests, and
 coverage, and those checks should remain intact.[^3]
 
-The `kani-smoke` job is a dedicated, pull-request-only job (it runs only when
-`github.event_name == 'pull_request'`) that:
+The `kani-smoke` job is a dedicated, required job that runs on every trigger.
+It verifies every harness on each push to `main`, nightly, and on a manual
+dispatch; on a pull request it runs them only when the pull request changes a
+proof input (see [ADR-039](adr-039-change-scoped-kani-gate.md)). When the
+proofs run, it:
 
-- installs `uv` and then installs the pinned Kani toolchain through
-  `make install-kani`,
-- runs `make kani-check` and then the bounded harness suite through
-  `make kani-ir` (15 harnesses across the manifest, cycle, and
-  command-interpolation verification modules),
+- installs the pinned Kani front-end and release bundle from checksummed
+  archives, then checks the reported version against `tools/kani/VERSION`,
+- runs the bounded harness suite through `make kani-ir` (15 harnesses across
+  the manifest, cycle, and command-interpolation verification modules), then
+  `make install-build-tools` and the mutation patch compile gate through
+  `make test-kani-mutations`,
 - caches tool downloads separately from the ordinary Rust build artefacts, and
-- is bounded by a 20-minute job timeout (`timeout-minutes: 20`).
+- is bounded by a 30-minute job timeout (`timeout-minutes: 30`).
+
+The dispatch trigger exists for the cache: a dispatch cannot publish a
+generation, because the save gates on a push to `main`, so what it measures is
+a warm restore. The compile gate is the reason the ceiling moved from 20
+minutes, since it builds the whole dependency graph through the Kani frontend
+into a `CARGO_TARGET_DIR` no cache restores.
 
 Any later Verus job should be added only after a stable proof kernel exists.
 
@@ -262,20 +274,38 @@ Three contracts should be documented before proofs become gating checks.
 
 ### Command placeholder contract
 
-The interpolation layer currently recognizes only the internal `INS_TOKEN` and
-`OUTS_TOKEN` markers emitted by manifest rendering. Literal `$in` and `$out`
-remain shell variables. On POSIX-compatible routes, markers inside backticks
-are rejected, as are commands with unmatched backticks or a substituted result
-that fails the current `shlex` guard.[^8] PowerShell treats a backtick as an
-escape. This contract should be documented in the README under a new "Security
-and command interpolation" section, as it is a user-facing guarantee that
-affects manifest authoring. The project documentation should state whether:
+The interpolation layer recognizes only the internal `INS_TOKEN` and
+`OUTS_TOKEN` tokens emitted by manifest rendering, identically in both recipe
+kinds. `$in`, `$out`, `$ins`, and `$outs` are all literal shell variables,
+following [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md). On
+POSIX-compatible routes, markers inside backticks are rejected in both recipe
+kinds. The two further checks — unmatched backticks and a substituted result
+that fails the current `shlex` guard — run only on `command:` text; scripts may
+legitimately contain heredocs and other syntax `shlex` cannot model.[^8]
+PowerShell treats a backtick as an escape.
 
-- those are the only supported placeholders,
-- POSIX backtick rejection and PowerShell escape handling are the full contract
-  or a temporary subset of shell command-substitution handling, and
-- `shlex::split` is part of the semantic acceptance contract or only a guard
-  against obviously malformed commands.
+**Settled.** Roadmap item 4.4.1 documents this contract for users in the
+[README](../README.md#security-and-command-interpolation) and all six
+translated editions under *Security and command interpolation*. The decisions
+are recorded in [ADR-027](adr-027-command-placeholder-contract.md). The three
+questions this section raised are now answered:
+
+- The supported placeholder set is `{{ ins }}` and `{{ outs }}`, and nothing
+  else, identically in both recipe kinds. Every dollar-prefixed form is a shell
+  variable. [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md)
+  settled this by removing the former `script:`-only lowering of `$in` and
+  `$out`; ADR-027 states the resulting contract.
+- Backtick handling is two mechanisms at two strengths. Rejecting a marker
+  inside a backtick or `$( … )` region is a promised invariant. Rejecting a
+  `command:` whose substituted text contains an odd backtick count is a
+  conservative whole-string parity check that is *not* promised and may widen
+  without a breaking change. Netsuke leaves author-written backticks untouched.
+  On POSIX routes, active backticks can trigger shell command substitution;
+  backticks inside single quotes remain literal.
+- `shlex::split` is part of the acceptance contract — its rejection is stable
+  and localized — but **not** a stability commitment about the precise accepted
+  set, because `Cargo.toml` carries a caret requirement rather than a version
+  pin.
 
 ### Cycle-participation contract
 
@@ -322,15 +352,16 @@ into a proof-first shape that its current architecture does not need.
   current continuous integration workflow.
 [^4]: [`README.md`](../README.md) describes Netsuke as a compiler from YAML and
   Jinja to Ninja, with deterministic graph generation and Ninja execution.
-[^5]: [`src/ir/from_manifest.rs`](../src/ir/from_manifest.rs) defines
+[^5]: [`src/ir/from_manifest/mod.rs`](../src/ir/from_manifest/mod.rs) defines
   `BuildGraph::from_manifest`, duplicate-output rejection, rule resolution, and
   cycle reporting.
-[^6]: [`src/ninja_gen.rs`](../src/ninja_gen.rs) sorts actions, edges, and
+[^6]: [`src/ninja_gen/mod.rs`](../src/ninja_gen/mod.rs) sorts actions, edges,
+      and
   default targets to keep emitted Ninja text deterministic.
-[^7]: [`src/ir/cycle.rs`](../src/ir/cycle.rs) defines cycle analysis and
+[^7]: [`src/ir/cycle/mod.rs`](../src/ir/cycle/mod.rs) defines cycle analysis and
   `canonicalize_cycle`.
-[^8]: [`src/ir/cmd_interpolate.rs`](../src/ir/cmd_interpolate.rs) defines
-  placeholder substitution and command validation.
+[^8]: [`src/ir/cmd_interpolate/mod.rs`](../src/ir/cmd_interpolate/mod.rs)
+  defines placeholder substitution and command validation.
 [^9]: [`src/manifest/mod.rs`](../src/manifest/mod.rs) describes the YAML-first
   manifest pipeline and re-exports expansion and rendering helpers.
 [^10]: [`src/runner/mod.rs`](../src/runner/mod.rs) generates the Ninja manifest

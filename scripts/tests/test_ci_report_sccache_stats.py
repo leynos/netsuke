@@ -98,3 +98,42 @@ def test_summary_section_terminates_unterminated_text() -> None:
 
     assert section.startswith("### sccache\n\n```text\n"), section
     assert section.endswith("hits 1\n```\n"), "the fence must close on its own line"
+
+
+def test_names_the_backend_the_lane_selected(
+    cmd_mox: CmdMox, summary: pathlib.Path, tmp_path: pathlib.Path, monkeypatch
+) -> None:
+    """`SCCACHE_BACKEND` puts a backend line above the statistics.
+
+    The statistics' own ``Cache location`` cannot stand in for it: that reads
+    ``ghac`` for the Ubicloud cache proxy and for GitHub's own service alike.
+    """
+    monkeypatch.setenv("SCCACHE_BACKEND", "ubicloud")
+    _sccache(cmd_mox)
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 0, "expected: exit_code == 0"
+    assert summary.read_text(encoding="utf-8") == (
+        "## Earlier\n### sccache\n\n- backend: ubicloud\n\n```text\n"
+        + TEXT_STATS
+        + "```\n"
+    )
+
+
+def test_a_lane_without_a_backend_gets_no_backend_line(
+    cmd_mox: CmdMox, summary: pathlib.Path
+) -> None:
+    """A lane that wires its own cache reports statistics and no backend.
+
+    `SCCACHE_BACKEND` is unset there, so the summary keeps the shape those
+    lanes had before the script took the report over.
+    """
+    _sccache(cmd_mox)
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 0, "expected: exit_code == 0"
+    assert "- backend:" not in summary.read_text(encoding="utf-8"), (
+        "an empty backend must add no line, not an empty one"
+    )

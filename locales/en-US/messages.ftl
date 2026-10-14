@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Hostnames that are permitted when default deny 
 cli.flag.fetch_block_host.help = Hostnames that are always blocked, even when allowed elsewhere.
 cli.flag.fetch_default_deny.help = Deny all hosts by default; only allow the declared allowlist.
 cli.flag.trust_project_fetch_policy.help = Allow project configuration to widen fetch-policy grants.
+
+cli.flag.manifest_evaluation_fuel.help = Limit MiniJinja instructions for each manifest evaluation.
+cli.flag.manifest_fuel.help = Limit MiniJinja instructions across one manifest.
+cli.flag.manifest_rendered_value_bytes.help = Limit bytes rendered into one manifest value.
+cli.flag.manifest_rendered_manifest_bytes.help = Limit total bytes rendered across one manifest.
+cli.flag.manifest_source_bytes.help = Limit template and macro source bytes consumed per manifest.
+cli.flag.manifest_foreach_cardinality.help = Limit values processed by one foreach expansion.
+cli.flag.manifest_expanded_entries.help = Limit targets and actions expanded from one manifest.
 cli.flag.json.help = Emit machine-readable JSON output.
 cli.flag.no_input.help = Never read interactive input.
 cli.flag.color.help = Colour output policy (auto, always, never).
@@ -118,6 +126,7 @@ runner.io.dyndep.temp_collisions = Failed to create a unique temporary dyndep fi
 runner.io.dyndep.too_large = Generated dyndep file at { $path } exceeds the { $limit }-byte verification limit.
 
 # Manifest diagnostics.
+manifest.budget.exceeded = Manifest resource budget exhausted during { $stage } after reaching { $limit }.
 manifest.parse = Manifest parse failed.
 manifest.structure_error = Manifest structure error in { $name }: { $details }
 manifest.yaml.parse = YAML parse error at line { $line }, column { $column }: { $details }
@@ -130,6 +139,9 @@ manifest.yaml.hint.invalid_token = YAML token is invalid or unexpected.
 manifest.yaml.hint.escape = Escape backslashes or remove invalid escape sequences.
 manifest.env.missing = A required environment variable is not set.
 manifest.env.invalid_utf8 = An environment variable contains invalid UTF-8.
+manifest.env.blocked = Access to an environment variable is blocked.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env default must be a string, received { $kind }.
 manifest.vars.not_object = Manifest `vars` must be a map/object.
 manifest.vars.reserved_name = Manifest `vars` key '{ $name }' is reserved for a built-in template helper; rename the variable.
 manifest.read_failed = Failed to read manifest at { $path }.
@@ -276,6 +288,17 @@ stdlib.command.output.mode.streaming = streaming
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote expects a string, received { $kind }.
+stdlib.shell.quote.control_character = A value containing a null byte, carriage return, or line feed cannot be quoted.
+stdlib.shell.dialect_invalid = Unknown shell dialect { $dialect }; expected one of { $accepted }.
+stdlib.shell.dialect_not_string = The shell dialect option must be a string, received { $kind }.
+stdlib.shell.join.not_sequence = shell_join expects a sequence, received { $kind }.
+stdlib.shell.join.item_not_string = shell_join item { $index } is { $kind }, not a string.
+stdlib.shell.positional_option = { $filter } takes its options by keyword; write { $example }.
+
 # Path helper diagnostics.
 stdlib.path.io.failed = { $action } failed for { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } failed for { $path }: { $detail }.
@@ -331,6 +354,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Unsupported hash algorithm '{ $a
 
 # Collection helper diagnostics.
 stdlib.collections.flatten.expected_sequence = Flatten expected sequence items but found { $kind }.
+stdlib.collections.compact.not_sequence = compact expects a sequence, received { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by requires a non-empty attribute.
 stdlib.collections.group_by.unresolved = group_by could not resolve '{ $attr }' on item of kind { $kind }.
 
@@ -348,14 +372,15 @@ stdlib.time.label.nanoseconds = nanoseconds
 
 # Which helper diagnostics.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] command '{ $command }' not found after checking { $count } PATH entries. Preview: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Empty PATH segments are ignored; use cwd_mode="auto" to include the working directory.
-stdlib.which.not_found.hint.cwd_always = Set cwd_mode="always" to include the current directory.
+stdlib.which.not_found.hint.cwd_auto = Automatic mode searches only directories explicitly named by PATH.
+stdlib.which.not_found.hint.cwd_always = Always mode searches only the current directory before directories named by PATH.
+stdlib.which.not_found.hint.workspace = To recursively search the workspace tree, use cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] command '{ $command }' at '{ $path }' is missing or not executable.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <empty>
 stdlib.which.path_entry.non_utf8 = PATH entry #{ $index } contains non-UTF-8 characters; Netsuke requires UTF-8 paths.
 stdlib.which.command.empty = which requires a non-empty string.
-stdlib.which.cwd_mode.invalid = cwd_mode must be 'auto', 'always', or 'never', got '{ $mode }'.
+stdlib.which.cwd_mode.invalid = cwd_mode must be 'auto', 'always', 'never', or 'workspace-recursive', got '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Failed to resolve current directory: { $details }.
 stdlib.which.cwd.non_utf8 = Current directory contains non-UTF-8 components.
 stdlib.which.canonicalize_failed = Failed to canonicalize '{ $path }': { $details }.
@@ -432,3 +457,6 @@ example.errors_found = { $count ->
     [one] { $count } error found.
    *[other] { $count } errors found.
 }
+
+cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper.
+cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper.

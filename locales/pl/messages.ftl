@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Nazwy hostów dozwolone, gdy włączona jest do
 cli.flag.fetch_block_host.help = Nazwy hostów zawsze blokowane, nawet jeśli są dozwolone gdzie indziej.
 cli.flag.fetch_default_deny.help = Odmawiaj domyślnie wszystkim hostom; zezwalaj tylko na zadeklarowaną listę.
 cli.flag.trust_project_fetch_policy.help = Zezwól konfiguracji projektu rozszerzać uprawnienia zasad fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Ogranicz liczbę instrukcji MiniJinja dla każdej ewaluacji manifestu.
+cli.flag.manifest_fuel.help = Ogranicz liczbę instrukcji MiniJinja w jednym manifeście.
+cli.flag.manifest_rendered_value_bytes.help = Ogranicz liczbę bajtów renderowanych do jednej wartości manifestu.
+cli.flag.manifest_rendered_manifest_bytes.help = Ogranicz łączną liczbę bajtów renderowanych w jednym manifeście.
+cli.flag.manifest_source_bytes.help = Ogranicz liczbę bajtów źródeł szablonów i makr zużywanych na manifest.
+cli.flag.manifest_foreach_cardinality.help = Ogranicz liczbę wartości przetwarzanych przez jedno rozwinięcie foreach.
+cli.flag.manifest_expanded_entries.help = Ogranicz liczbę celów i akcji rozwijanych z jednego manifestu.
 cli.flag.json.help = Wypisuj dane wyjściowe JSON czytelne dla maszyn.
 cli.flag.no_input.help = Nigdy nie czytaj danych wprowadzanych interaktywnie.
 cli.flag.color.help = Zasada kolorowania wyjścia (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = Token YAML jest nieprawidłowy lub nieoczekiw
 manifest.yaml.hint.escape = Poprzedź ukośniki odwrotne znakiem ucieczki albo usuń nieprawidłowe sekwencje.
 manifest.env.missing = Wymagana zmienna środowiskowa nie jest ustawiona.
 manifest.env.invalid_utf8 = Zmienna środowiskowa zawiera nieprawidłowy UTF-8.
+manifest.env.blocked = Dostęp do zmiennej środowiskowej jest zablokowany.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Wartość default w env musi być łańcuchem znaków; typ otrzymanej wartości: { $kind }.
 manifest.vars.not_object = Pole `vars` manifestu musi być odwzorowaniem lub obiektem.
 manifest.vars.reserved_name = Klucz `vars` '{ $name }' w manifeście jest zarezerwowany dla wbudowanej funkcji pomocniczej szablonów; zmień nazwę zmiennej.
 manifest.read_failed = Nie udało się odczytać manifestu z { $path }.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = strumieniowanie
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote oczekiwał ciągu, ale otrzymał { $kind }.
+stdlib.shell.quote.control_character = Wartości zawierającej bajt zerowy, powrót karetki lub znak nowego wiersza nie można ująć w cudzysłów.
+stdlib.shell.dialect_invalid = Nieznany dialekt powłoki { $dialect }; oczekiwano jednego z { $accepted }.
+stdlib.shell.dialect_not_string = Opcja dialect w shell musi być łańcuchem znaków; typ otrzymanej wartości: { $kind }.
+stdlib.shell.join.not_sequence = shell_join oczekiwał sekwencji, ale otrzymał { $kind }.
+stdlib.shell.join.item_not_string = Element { $index } w shell_join ma typ { $kind }, a nie ciąg.
+stdlib.shell.positional_option = { $filter } przyjmuje opcje jako słowa kluczowe; zapisz { $example }.
+
 # Diagnostyka pomocnika ścieżek.
 stdlib.path.io.failed = Operacja „{ $action }” nie powiodła się dla { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Operacja „{ $action }” nie powiodła się dla { $path }: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nieobsługiwany algorytm skrótu
 
 # Diagnostyka pomocników kolekcji.
 stdlib.collections.flatten.expected_sequence = flatten oczekiwał elementów sekwencji, ale napotkał { $kind }.
+stdlib.collections.compact.not_sequence = compact oczekiwał sekwencji; typ otrzymanej wartości: { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by wymaga niepustego atrybutu.
 stdlib.collections.group_by.unresolved = group_by nie zdołał odnaleźć „{ $attr }” w elemencie typu { $kind }.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = nanosekundy
 
 # Diagnostyka pomocnika which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] nie znaleziono polecenia „{ $command }” po sprawdzeniu { $count } wpisów zmiennej PATH. Podgląd: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Puste segmenty zmiennej PATH są pomijane; użyj cwd_mode="auto", aby uwzględnić katalog roboczy.
-stdlib.which.not_found.hint.cwd_always = Ustaw cwd_mode="always", aby uwzględnić bieżący katalog.
+stdlib.which.not_found.hint.cwd_auto = Tryb auto przeszukuje tylko katalogi wyraźnie wskazane w PATH.
+stdlib.which.not_found.hint.cwd_always = Tryb always przeszukuje tylko bieżący katalog przed katalogami wskazanymi w PATH.
+stdlib.which.not_found.hint.workspace = Aby rekursywnie przeszukać drzewo obszaru roboczego, użyj cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] polecenia „{ $command }” w „{ $path }” brakuje albo nie jest wykonywalne.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <puste>
 stdlib.which.path_entry.non_utf8 = Wpis nr { $index } zmiennej PATH zawiera znaki inne niż UTF-8; Netsuke wymaga ścieżek w UTF-8.
 stdlib.which.command.empty = which wymaga niepustego łańcucha znaków.
-stdlib.which.cwd_mode.invalid = cwd_mode musi mieć wartość „auto”, „always” albo „never”, otrzymano „{ $mode }”.
+stdlib.which.cwd_mode.invalid = cwd_mode musi mieć wartość 'auto', 'always', 'never' lub 'workspace-recursive'; otrzymano '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Nie udało się ustalić bieżącego katalogu: { $details }.
 stdlib.which.cwd.non_utf8 = Bieżący katalog zawiera elementy inne niż UTF-8.
 stdlib.which.canonicalize_failed = Nie udało się skanonizować „{ $path }”: { $details }.
@@ -433,3 +457,7 @@ example.errors_found = { $count ->
     [many] Znaleziono { $count } błędów.
    *[other] Znaleziono { $count } błędu.
 }
+manifest.budget.exceeded = Budżet zasobów manifestu został wyczerpany. Etap: { $stage }. Osiągnięta wartość limitu: { $limit }.
+
+cli.flag.env_allow_var.help = Zmienna środowiskowa dozwolona dla pomocnika env() manifestu.
+cli.flag.env_block_var.help = Zmienna środowiskowa zablokowana dla pomocnika env() manifestu.

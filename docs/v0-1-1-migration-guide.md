@@ -31,3 +31,21 @@ work of its own to perform. See the
 contract and
 [serial dependency ordering](users-guide.md#run-direct-dependencies-serially)
 for ordered aggregates.
+
+## Update fixed-label queries for the `which` counters
+
+The two `which` resolver counters keep their names, but each now carries an
+extra `cwd_mode` label. `netsuke_stdlib_which_cache_total` and
+`netsuke_stdlib_which_resolution_total` therefore report new series, and a
+scraper, recording rule, dashboard, alert, or saved query that matched either
+metric by a fixed label set must be updated.
+
+The label is drawn from a closed vocabulary of `auto`, `always`, `never`, and
+`workspace_recursive`. A manifest writes `cwd_mode="workspace-recursive"`, with
+the hyphen, while the label value is the underscore spelling
+`workspace_recursive`. Querying the hyphenated spelling matches nothing.
+
+See the [users' guide](users-guide.md#which-resolver-observability) for the
+counter and label reference and
+[ADR-024](adr-024-require-explicit-recursive-workspace-which-search.md) for the
+decision that added the label.

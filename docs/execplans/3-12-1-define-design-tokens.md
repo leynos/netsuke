@@ -201,7 +201,7 @@ Observable success means:
 
 ## Outcomes & retrospective
 
-Status: Complete (2026-03-21)
+Completed 2026-03-21.
 
 Implementation achieved:
 

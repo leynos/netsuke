@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = ชื่อโฮสต์ที่อนุ�
 cli.flag.fetch_block_host.help = ชื่อโฮสต์ที่ถูกปิดกั้นเสมอ แม้จะได้รับอนุญาตจากที่อื่น
 cli.flag.fetch_default_deny.help = ปฏิเสธโฮสต์ทั้งหมดโดยค่าเริ่มต้น อนุญาตเฉพาะรายการที่ประกาศไว้
 cli.flag.trust_project_fetch_policy.help = อนุญาตให้การกำหนดค่าโครงการขยายสิทธิ์ของนโยบาย fetch
+
+cli.flag.manifest_evaluation_fuel.help = จำกัดจำนวนคำสั่ง MiniJinja สำหรับการประเมิน manifest แต่ละครั้ง
+cli.flag.manifest_fuel.help = จำกัดจำนวนคำสั่ง MiniJinja ตลอดทั้ง manifest หนึ่งรายการ
+cli.flag.manifest_rendered_value_bytes.help = จำกัดจำนวนไบต์ที่เรนเดอร์ลงในค่าของ manifest หนึ่งค่า
+cli.flag.manifest_rendered_manifest_bytes.help = จำกัดจำนวนไบต์ทั้งหมดที่เรนเดอร์ใน manifest หนึ่งรายการ
+cli.flag.manifest_source_bytes.help = จำกัดจำนวนไบต์ของแหล่งที่มาของเทมเพลตและแมโครที่ใช้ต่อ manifest
+cli.flag.manifest_foreach_cardinality.help = จำกัดจำนวนค่าที่ประมวลผลโดยการขยาย foreach หนึ่งครั้ง
+cli.flag.manifest_expanded_entries.help = จำกัดจำนวนเป้าหมายและการกระทำที่ขยายจาก manifest หนึ่งรายการ
 cli.flag.json.help = แสดงผลเป็น JSON ที่เครื่องอ่านได้
 cli.flag.no_input.help = ไม่อ่านข้อมูลนำเข้าแบบโต้ตอบเลย
 cli.flag.color.help = นโยบายการแสดงผลแบบมีสี (auto, always, never)
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = โทเคนของ YAML ไม่ถู
 manifest.yaml.hint.escape = โปรดหลีกอักขระแบ็กสแลช หรือลบลำดับหลีกที่ไม่ถูกต้องออก
 manifest.env.missing = ยังไม่ได้ตั้งค่าตัวแปรสภาพแวดล้อมที่จำเป็น
 manifest.env.invalid_utf8 = ตัวแปรสภาพแวดล้อมมี UTF-8 ที่ไม่ถูกต้อง
+manifest.env.blocked = การเข้าถึงตัวแปรสภาพแวดล้อมถูกบล็อก
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = ค่า default ของ env ต้องเป็นสายอักขระ แต่ได้รับ { $kind }
 manifest.vars.not_object = `vars` ของไฟล์รายการต้องเป็นการจับคู่หรือวัตถุ
 manifest.vars.reserved_name = คีย์ `vars` '{ $name }' ของมานิเฟสต์ถูกสงวนไว้สำหรับฟังก์ชันช่วยเทมเพลตในตัว โปรดเปลี่ยนชื่อตัวแปร
 manifest.read_failed = อ่านไฟล์รายการที่ { $path } ไม่สำเร็จ
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = การส่งเป็นสาย�
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote คาดหวังสตริง แต่ได้รับ { $kind }
+stdlib.shell.quote.control_character = ค่าที่มีไบต์ศูนย์ ปัดแคร่ หรือขึ้นบรรทัดใหม่ไม่สามารถใส่เครื่องหมายอัญประกาศได้
+stdlib.shell.dialect_invalid = ไม่รู้จักไดอาเล็กต์ของเชลล์ { $dialect } คาดว่าจะเป็นหนึ่งใน { $accepted }
+stdlib.shell.dialect_not_string = ออปชัน dialect ของ shell ต้องเป็นสายอักขระ แต่ได้รับ { $kind }
+stdlib.shell.join.not_sequence = shell_join คาดหวังลำดับ แต่ได้รับ { $kind }
+stdlib.shell.join.item_not_string = รายการ { $index } ของ shell_join เป็น { $kind } ไม่ใช่สตริง
+stdlib.shell.positional_option = { $filter } รับตัวเลือกเป็นคีย์เวิร์ด เขียน { $example }
+
 # การวินิจฉัยของตัวช่วยด้านเส้นทาง
 stdlib.path.io.failed = การกระทำ “{ $action }” ล้มเหลวสำหรับ { $path } ({ $label })
 stdlib.path.io.failed_with_detail = การกระทำ “{ $action }” ล้มเหลวสำหรับ { $path }: { $detail }
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = ไม่รองรับข�
 
 # การวินิจฉัยของตัวช่วยด้านคอลเลกชัน
 stdlib.collections.flatten.expected_sequence = flatten คาดว่าจะพบสมาชิกของลำดับ แต่พบ { $kind }
+stdlib.collections.compact.not_sequence = compact คาดว่าจะพบลำดับ แต่พบ { $kind }
 stdlib.collections.group_by.empty_attribute = group_by ต้องมีแอตทริบิวต์ที่ไม่ว่างเปล่า
 stdlib.collections.group_by.unresolved = group_by หา “{ $attr }” ในสมาชิกชนิด { $kind } ไม่พบ
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = นาโนวินาที
 
 # การวินิจฉัยของตัวช่วย which
 stdlib.which.not_found = [netsuke::jinja::which::not_found] ไม่พบคำสั่ง “{ $command }” หลังตรวจรายการใน PATH แล้ว { $count } รายการ ตัวอย่าง: { $preview }
-stdlib.which.not_found.hint.cwd_auto = ส่วนที่ว่างเปล่าใน PATH จะถูกละเว้น หากต้องการรวมไดเรกทอรีทำงาน ให้ใช้ cwd_mode="auto"
-stdlib.which.not_found.hint.cwd_always = หากต้องการรวมไดเรกทอรีปัจจุบัน ให้ตั้งค่า cwd_mode="always"
+stdlib.which.not_found.hint.cwd_auto = โหมด auto ค้นหาเฉพาะไดเรกทอรีที่ระบุไว้อย่างชัดเจนใน PATH
+stdlib.which.not_found.hint.cwd_always = โหมด always ค้นหาเฉพาะไดเรกทอรีปัจจุบันก่อนไดเรกทอรีที่ระบุใน PATH
+stdlib.which.not_found.hint.workspace = หากต้องการค้นหาแบบเรียกซ้ำในโครงสร้างพื้นที่ทำงาน ให้ใช้ cwd_mode="workspace-recursive"
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] คำสั่ง “{ $command }” ที่ “{ $path }” ไม่มีอยู่หรือเรียกใช้ไม่ได้
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <ว่างเปล่า>
 stdlib.which.path_entry.non_utf8 = รายการที่ { $index } ใน PATH มีอักขระที่ไม่ใช่ UTF-8 Netsuke ต้องใช้เส้นทางแบบ UTF-8
 stdlib.which.command.empty = which ต้องใช้สายอักขระที่ไม่ว่างเปล่า
-stdlib.which.cwd_mode.invalid = cwd_mode ต้องเป็น “auto” “always” หรือ “never” แต่ได้ “{ $mode }”
+stdlib.which.cwd_mode.invalid = cwd_mode ต้องเป็น 'auto', 'always', 'never' หรือ 'workspace-recursive' แต่ได้รับ '{ $mode }'
 stdlib.which.cwd.resolve_failed = ระบุไดเรกทอรีปัจจุบันไม่สำเร็จ: { $details }
 stdlib.which.cwd.non_utf8 = ไดเรกทอรีปัจจุบันมีส่วนที่ไม่ใช่ UTF-8
 stdlib.which.canonicalize_failed = ทำให้ “{ $path }” เป็นรูปแบบมาตรฐานไม่สำเร็จ: { $details }
@@ -425,3 +449,7 @@ example.errors_found = { $count ->
     [0] ไม่พบข้อผิดพลาด
    *[other] พบข้อผิดพลาด { $count } รายการ
 }
+manifest.budget.exceeded = ใช้งบประมาณทรัพยากรของ manifest หมดระหว่าง { $stage } หลังจากถึง { $limit }
+
+cli.flag.env_allow_var.help = ตัวแปรสภาพแวดล้อมที่ได้รับอนุญาตสำหรับตัวช่วย env() ของแมนิเฟสต์
+cli.flag.env_block_var.help = ตัวแปรสภาพแวดล้อมที่ถูกบล็อกสำหรับตัวช่วย env() ของแมนิเฟสต์

@@ -1,5 +1,7 @@
 # Issue 83: Support overriding the Ninja executable
 
+Status: COMPLETE
+
 ## Purpose
 
 This plan records the implementation status for issue #83, which lets users

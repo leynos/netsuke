@@ -282,7 +282,7 @@ shebang nor changes a script item's interpreter.
 ## Implementation references
 
 - Legacy recipe shell value: [`src/recipe_shell.rs`](../src/recipe_shell.rs)
-- CLI configuration: [`src/cli/config.rs`](../src/cli/config.rs)
+- CLI configuration: [`src/cli/config/mod.rs`](../src/cli/config/mod.rs)
 - Executable lookup: [`src/stdlib/which/`](../src/stdlib/which/)
 - Structured command contract:
   [RFC 0001](rfcs/0001-structured-command-blocks.md)

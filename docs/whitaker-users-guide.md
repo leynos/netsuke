@@ -4,7 +4,7 @@ Whitaker is a collection of opinionated Dylint lints for Rust. This guide
 explains how to integrate the lints into a project and configure them.
 
 For contributors who want to develop new lints or work on Whitaker itself, see
-the [Developer's Guide](developers-guide.md).
+the [Developer's Guide][whitaker-developers-guide].
 
 ## Quick Setup
 
@@ -15,6 +15,15 @@ Install `cargo-dylint` and `dylint-link`:
 ```sh
 cargo install cargo-dylint dylint-link
 ```
+
+The published `whitaker-installer` crate requires Rust 1.85 or newer. This is
+the first stable compiler that supports the Rust 2024 edition used by the
+installer.
+
+Published x86_64 GNU/Linux installer, dependency, and lint artefacts target the
+Ubuntu 22.04 `GLIBC_2.35` baseline and do not require a newer glibc version. On
+an incompatible system, build Whitaker and its dependencies from source instead
+of using the published Linux artefacts.
 
 ### Standalone installation (recommended)
 
@@ -75,6 +84,11 @@ environment-variable workaround.
 - `--skip-wrapper` — Skip wrapper script generation (prints
   `DYLINT_LIBRARY_PATH` instructions instead)
 - `--no-update` — Don't update existing repository clone
+- `--suite-version REF` (alias `--suite-ref`) — Build the lint suite from a
+  given tag, branch or commit rather than from the default branch tip. See
+  [Pinning the lint suite](#pinning-the-lint-suite)
+- `--no-source-fallback` — Fail rather than build from source when a published
+  artefact is absent. See [Refusing a source build](#refusing-a-source-build)
 
 ### Adding Whitaker to a project
 
@@ -93,9 +107,49 @@ Then run the lints:
 cargo dylint --all
 ```
 
-### Version pinning
+### Pinning the lint suite
 
-For reproducible builds, pin to a specific release tag or commit:
+The installer builds the suite from a Whitaker checkout. Without a pin it uses
+whatever is at the default branch tip, so a change to that branch alters lint
+results with no commit in the consuming repository: a gate can turn red on a
+branch that has not been touched. `--suite-version` names the reference to
+build from instead, so a suite change arrives as a reviewed bump.
+
+```sh
+whitaker-installer --suite-version v0.2.7
+```
+
+It accepts a tag, a branch or a commit, and the installer hands it to `git` to
+resolve.
+
+Two consequences are worth knowing before pinning.
+
+**A pinned suite is built from source.** Prebuilt lint libraries are published
+only for the branch tip, under the `rolling` tag, so a pin can never be served
+from them; the installer does not attempt the download at all when a pin is
+set, and compiles the suite locally instead. Pinning trades install time for
+reproducibility, and that is the whole of the trade: a pinned lane is slower on
+a cold cache and does not change what it produces.
+
+The prebuilt path would not help a pin even if artefacts existed for every tag.
+A lint library must be built with the exact toolchain that will load it, and
+artefacts are named for the toolchain they were built with, so a pin held
+against a newer `rust-toolchain.toml` misses and builds from source anyway. The
+guarantee a pin buys is reproducibility, not speed.
+
+**A pin cannot be applied from inside a Whitaker checkout.** Checking out a
+reference there would move the working tree, so the installer refuses and says
+so. Run it from another directory, where it manages its own clone, or check out
+the reference directly.
+
+Pinning the installer and pinning the suite are separate decisions. The
+installer's version selects the tool; `--suite-version` selects the lints it
+builds.
+
+### Version pinning through Cargo metadata
+
+When Dylint is driven directly rather than through the installer, pin to a
+specific release tag or commit:
 
 ```toml
 [workspace.metadata.dylint]
@@ -117,11 +171,19 @@ libraries = [
 > Netsuke does not pin the lint libraries and carries no
 > `[workspace.metadata.dylint]` block. It installs them at Whitaker HEAD
 > through `whitaker-installer`, deliberately, so the suite's improvements
-> arrive without a version bump. `WHITAKER_INSTALLER_VERSION` in
-> `.github/workflows/ci.yml` pins the installer binary, which is a different
-> artefact from the libraries this section pins — the installer's version says
-> nothing about which lints get staged. Adopting the form above would reverse a
-> standing decision; see "Quality gates" in `docs/developers-guide.md`.
+> arrive without a version bump. The shared Install Whitaker action's
+> `installer-version` input in `.github/workflows/ci.yml` and
+> `.github/workflows/ci-windows.yml` pins the installer binary, a different
+> artefact from the libraries this section pins — it says nothing about which
+> lints get staged. `tests/whitaker_boundary_contract.rs`
+> asserts the block's absence. Adopting the form above would reverse a standing
+> decision; see "Quality gates" in `docs/developers-guide.md`.
+
+The preceding sections are not the same decision. `--suite-version` and the
+`[workspace.metadata.dylint]` block both name a revision, but the first pins a
+one-off installation and the second pins every Dylint invocation. Netsuke takes
+neither: it re-stages the suite from the default branch tip and lets the lints
+move.
 
 ### Rolling release downloads
 
@@ -144,6 +206,55 @@ that the required target archive exists before proceeding. Treat missing
 archives as an expected condition for rolling releases rather than assuming the
 artefact set is complete.
 
+### Refusing a source build
+
+The installer prefers published binaries and falls back to building from source
+when one is missing: a prebuilt lint library becomes a local compilation, and a
+Dylint tool archive becomes `cargo install`. Both succeed, which is the
+difficulty. A run that took either reports success while having built something
+nobody pinned, and the only sign is a line in the log.
+
+`--no-source-fallback`, or `WHITAKER_NO_SOURCE_FALLBACK` in the environment for
+callers that cannot easily add a flag, turns each fallback into an error naming
+the artefact and why it could not be fetched:
+
+```sh
+whitaker-installer --no-source-fallback
+```
+
+Any value other than an empty string, `0` or `false` enables the rule. The
+comparison ignores case and surrounding whitespace, so `FALSE` and ` false `
+also turn it off. Exporting the variable at all expresses an intention, and
+reading an unrecognized value as off would quietly remove a protection; a value
+that is not valid text enables the rule for the same reason.
+
+The flag is rejected alongside `--build-only`, `--experimental` and
+`--suite-version`. Each of those requires a source build, so combining them is
+a contradiction rather than a preference, and the installer says so instead of
+silently preferring one.
+
+Each installation that selects a suite source prints the path it took on
+standard output. A dry run selects none, so it prints nothing:
+
+```text
+whitaker-installer: suite-source=prebuilt
+```
+
+The value is `prebuilt` or `source`. It reports where the suite came from and
+adds to the existing checks rather than replacing them: `install-whitaker`
+still scans the installer's standard error for the fallback notice and fails an
+unapproved source build on what it finds there. Reading only the marker would
+let a source build the marker missed pass as `prebuilt`.
+
+The streams are separate on purpose. The marker is the only thing on standard
+output, so it can be parsed; the fallback notice and every other diagnostic go
+to standard error.
+
+The rolling release is the reason this exists. It is republished on every push
+to `main`, and a consumer whose install starts during a republish can miss an
+archive that is present moments later. In CI a source build is a defect rather
+than a degraded mode, so fail and retry rather than proceeding.
+
 ### Selecting individual lints
 
 To load specific lints instead of the full suite, specify each lint explicitly:
@@ -155,6 +266,15 @@ libraries = [
   { git = "https://github.com/leynos/whitaker", pattern = "crates/no_expect_outside_tests" }
 ]
 ```
+
+> **Netsuke deviation from upstream — preserve when re-importing this guide.**
+> The form above takes over lint-library resolution and is not how Netsuke
+> selects lints. Do not add a per-lint `pattern` here. Netsuke loads the whole
+> suite deliberately, so a lint added upstream starts reporting without a
+> change to this repository; a `pattern` list would exclude it silently. An
+> unhelpful lint is answered with a documented `dylint.toml` entry, never by
+> dropping it from the load set. See "Quality gates" in
+> `docs/developers-guide.md`.
 
 ### Standard vs Experimental Lints
 
@@ -653,21 +773,26 @@ policy.
 > package names (hyphens). For example, use `my_cli_app` rather than
 > `my-cli-app`, and `my_app::legacy_io` rather than `my-app::legacy_io`.
 >
-> **Tip:** For an ad hoc, single-site exemption that travels with the code, an
-> item-level lint attribute also works, since the lint honours Rust's
-> lint-level attributes.
+> **Note:** In-source `#[allow]` and `#[expect]` attributes are **not**
+> honoured by this lint
+> ([issue #270](https://github.com/leynos/whitaker/issues/270)). Annotating an
+> item with `#[allow(no_std_fs_operations)]` leaves the diagnostic in place,
+> and using `#[expect]` additionally reports an unfulfilled lint expectation
+> for the same site. The lint emits through
+> `LintContext::emit_span_lint`, which resolves the lint level at the
+> visitor's current lint node rather than at the node that owns the offending
+> code. Scope a suppression through `excluded_paths` instead; for a
+> `which`-style PATH resolver, a single entry such as `my_app::paths` confines
+> the exemption to the module that probes the system PATH.
 >
-> **Netsuke deviation from upstream — preserve when re-importing this guide.**
-> In the Whitaker build this repository pins, neither
-> `#[allow(no_std_fs_operations)]` nor
-> `#[expect(no_std_fs_operations, reason = "…")]` suppresses this lint, so the
-> Tip above does not apply here; `#[expect(...)]` additionally fails the build
-> with an unfulfilled-lint-expectation error under `-D warnings`. This
-> repository also denies `clippy::allow_attributes`, so
-> `#[allow(no_std_fs_operations)]` will not even compile. The only sanctioned
-> mechanism is a `dylint.toml` entry: a narrowly scoped `excluded_paths` entry
-> for a bounded module, or an `excluded_crates` entry where the ambient access
-> lives at the crate root.
+> **Note:** A malformed `excluded_paths` entry is discarded rather than
+> repaired, and a warning naming the rejected entry is logged under the
+> `no_std_fs_operations` target. Malformed means an empty string, a bare
+> `::`, or an entry with leading, trailing, or repeated separators. Rejection
+> matters most for a trailing separator: `my_app::` would otherwise collapse
+> to the crate-root prefix `my_app` and disable the lint across the whole
+> crate, which is the opposite of the narrow, module-scoped exemption the
+> entry was meant to express.
 
 **How to fix:** Replace `std::fs` with `cap_std`:
 
@@ -768,5 +893,59 @@ to roadmap item 7.3.2. This release builds and exposes the AST substrate only;
 it does not score clones or emit AST-based SARIF results.
 
 Contributors maintaining the pinned parser should follow the
-[`ra_ap_syntax` re-pinning runbook](developers-guide.md#ra_ap_syntax-re-pinning-runbook)
-in the Developer's Guide.
+[`ra_ap_syntax` re-pinning runbook][whitaker-ra-ap-syntax-runbook] in the
+Developer's Guide.
+
+## Agent skills
+
+Whitaker ships an agent-facing skill under
+[`skills/addressing-whitaker-findings/`][whitaker-addressing-findings-skill].
+It distils the remediation patterns from adopting the suite across more than
+forty repositories: what each lint expects, which fixes hold up under review,
+when an exclusion is legitimate, and the traps that cost earlier adopters
+rework. The skill is written for an agent rather than a human reader, and it
+covers the lints described in [Available Lints](#available-lints).
+
+The skill lives in the repository rather than in a separate package, so it
+tracks the suite as the lints change.
+
+A skill is a directory holding a `SKILL.md` whose YAML frontmatter is an Agent
+Skills manifest. The manifest `name` is the discovery name a strict loader
+uses, so a manifest that omits it leaves the skill undiscoverable. Every
+shipped skill directory matches its manifest `name`, so one identifier names
+the skill both on disk and at the point of discovery.
+
+Making the skill available means copying its directory into the skills
+directory that an agent tool reads. For Claude Code that directory is
+`~/.claude/skills/`; other tools that consume Agent Skills use their own:
+
+```sh
+git clone --depth 1 https://github.com/leynos/whitaker.git /tmp/whitaker
+mkdir -p ~/.claude/skills/
+cp -R /tmp/whitaker/skills/addressing-whitaker-findings ~/.claude/skills/
+```
+
+The repository gates every shipped manifest, so a malformed one cannot reach a
+copy taken from it: `make lint` runs `skill-frontmatter-lint`,
+`skill-manifest-validate`, and `skill-metadata-check` over each manifest. The
+[Developer's Guide][whitaker-skill-manifest-checks] records how those targets
+behave and when to run them alone.
+
+> **Netsuke deviation from upstream — preserve when re-importing this guide.**
+> None of this section is actioned here. Netsuke consumes the suite rather than
+> developing it, so it vendors no Whitaker skill, and the `make lint` targets
+> named above do not exist in this repository — the commands are upstream's,
+> not ours. Follow them as written only if you want the skill installed into
+> your own agent. Netsuke's own planned `skills/` tree (`netsuke skill-path`,
+> `docs/skills/netsuke/SKILL.md`, item 5.1.3 in `docs/roadmap.md`) documents
+> this project rather than the suite, and is unimplemented.
+
+<!-- Link definitions. Absolute URLs are used deliberately: this file is a
+     verbatim import, so its relative links would otherwise resolve against
+     this repository's `docs/` directory and 404. Point any refresh of this
+     guide at the upstream repository. -->
+
+[whitaker-developers-guide]: https://github.com/leynos/whitaker/blob/main/docs/developers-guide.md
+[whitaker-ra-ap-syntax-runbook]: https://github.com/leynos/whitaker/blob/main/docs/developers-guide.md#ra_ap_syntax-re-pinning-runbook
+[whitaker-skill-manifest-checks]: https://github.com/leynos/whitaker/blob/main/docs/developers-guide.md#skill-manifest-checks
+[whitaker-addressing-findings-skill]: https://github.com/leynos/whitaker/blob/main/skills/addressing-whitaker-findings/SKILL.md

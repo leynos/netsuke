@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Værtsnavne, der tillades, når standardafvisni
 cli.flag.fetch_block_host.help = Værtsnavne, der altid blokeres, også hvis de er tilladt andetsteds.
 cli.flag.fetch_default_deny.help = Afvis alle værter som standard; tillad kun den erklærede liste.
 cli.flag.trust_project_fetch_policy.help = Tillad projektkonfigurationen at udvide tilladelserne i fetch-politikken.
+
+cli.flag.manifest_evaluation_fuel.help = Begræns MiniJinja-instruktioner for hver manifest-evaluering.
+cli.flag.manifest_fuel.help = Begræns MiniJinja-instruktioner i ét manifest.
+cli.flag.manifest_rendered_value_bytes.help = Begræns antallet af bytes, der gengives i én manifestværdi.
+cli.flag.manifest_rendered_manifest_bytes.help = Begræns det samlede antal bytes, der gengives i ét manifest.
+cli.flag.manifest_source_bytes.help = Begræns bytes fra skabelon- og makrokilde, der forbruges pr. manifest.
+cli.flag.manifest_foreach_cardinality.help = Begræns værdier, der behandles af én foreach-udvidelse.
+cli.flag.manifest_expanded_entries.help = Begræns mål og handlinger, der udvides fra ét manifest.
 cli.flag.json.help = Udskriv maskinlæsbart JSON.
 cli.flag.no_input.help = Læs aldrig interaktivt input.
 cli.flag.color.help = Politik for farvet output (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = YAML-symbolet er ugyldigt eller uventet.
 manifest.yaml.hint.escape = Escape omvendte skråstreger, eller fjern ugyldige escape-sekvenser.
 manifest.env.missing = En påkrævet miljøvariabel er ikke sat.
 manifest.env.invalid_utf8 = En miljøvariabel indeholder ugyldig UTF-8.
+manifest.env.blocked = Adgang til en miljøvariabel er blokeret.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = default i env skal være en streng, modtog { $kind }.
 manifest.vars.not_object = Manifestets `vars` skal være en tilknytning eller et objekt.
 manifest.vars.reserved_name = Manifestets `vars`-nøgle '{ $name }' er reserveret til en indbygget skabelonhjælper; omdøb variablen.
 manifest.read_failed = Manifestet i { $path } kunne ikke læses.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = strømning
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote forventede en streng, men fik { $kind }.
+stdlib.shell.quote.control_character = En værdi med nulbyte, vognretur eller linjeskift kan ikke sættes i anførselstegn.
+stdlib.shell.dialect_invalid = Ukendt shell-dialekt { $dialect }; forventede en af { $accepted }.
+stdlib.shell.dialect_not_string = dialect-indstillingen i shell skal være en streng, modtog { $kind }.
+stdlib.shell.join.not_sequence = shell_join forventede en følge, men fik { $kind }.
+stdlib.shell.join.item_not_string = Element { $index } i shell_join er { $kind }, ikke en streng.
+stdlib.shell.positional_option = { $filter } tager sine valgmuligheder som nøgleord; skriv { $example }.
+
 # Diagnostik for stihjælperen.
 stdlib.path.io.failed = { $action } mislykkedes for { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } mislykkedes for { $path }: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Hash-algoritmen "{ $algorithm }"
 
 # Diagnostik for samlingshjælpere.
 stdlib.collections.flatten.expected_sequence = flatten forventede elementer fra en følge, men fandt { $kind }.
+stdlib.collections.compact.not_sequence = compact forventede en følge, men fik { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by kræver en attribut, der ikke er tom.
 stdlib.collections.group_by.unresolved = group_by kunne ikke slå "{ $attr }" op på et element af typen { $kind }.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = nanosekunder
 
 # Diagnostik for which-hjælperen.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] kommandoen "{ $command }" blev ikke fundet efter gennemgang af { $count } PATH-opslag. Uddrag: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Tomme dele af PATH ignoreres; brug cwd_mode="auto" for at medtage arbejdsmappen.
-stdlib.which.not_found.hint.cwd_always = Sæt cwd_mode="always" for at medtage den aktuelle mappe.
+stdlib.which.not_found.hint.cwd_auto = Tilstanden auto søger kun i mapper, der udtrykkeligt er angivet i PATH.
+stdlib.which.not_found.hint.cwd_always = Tilstanden always søger kun i den aktuelle mappe før mapper, der er angivet i PATH.
+stdlib.which.not_found.hint.workspace = Brug cwd_mode="workspace-recursive" for at søge rekursivt i arbejdsområdets træ.
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] kommandoen "{ $command }" i "{ $path }" mangler eller kan ikke køres.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <tom>
 stdlib.which.path_entry.non_utf8 = PATH-opslag nr. { $index } indeholder tegn, der ikke er UTF-8; Netsuke kræver UTF-8-stier.
 stdlib.which.command.empty = which kræver en streng, der ikke er tom.
-stdlib.which.cwd_mode.invalid = cwd_mode skal være "auto", "always" eller "never", men gav "{ $mode }".
+stdlib.which.cwd_mode.invalid = cwd_mode skal være 'auto', 'always', 'never' eller 'workspace-recursive', men er '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Den aktuelle mappe kunne ikke bestemmes: { $details }.
 stdlib.which.cwd.non_utf8 = Den aktuelle mappe indeholder dele, der ikke er UTF-8.
 stdlib.which.canonicalize_failed = "{ $path }" kunne ikke kanoniseres: { $details }.
@@ -427,3 +451,7 @@ example.errors_found = { $count ->
     [one] { $count } fejl fundet.
    *[other] { $count } fejl fundet.
 }
+manifest.budget.exceeded = Manifestets ressourcebudget blev opbrugt under { $stage } efter at have nået { $limit }.
+
+cli.flag.env_allow_var.help = Miljøvariabel tilladt for manifestets env()-hjælper.
+cli.flag.env_block_var.help = Miljøvariabel blokeret for manifestets env()-hjælper.

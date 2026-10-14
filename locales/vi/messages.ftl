@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Tên máy chủ được phép khi bật chế 
 cli.flag.fetch_block_host.help = Tên máy chủ luôn bị chặn, kể cả khi được phép ở nơi khác.
 cli.flag.fetch_default_deny.help = Mặc định từ chối mọi máy chủ; chỉ cho phép danh sách đã khai báo.
 cli.flag.trust_project_fetch_policy.help = Cho phép cấu hình dự án mở rộng các quyền được cấp trong chính sách fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Giới hạn số lệnh MiniJinja cho mỗi lần đánh giá manifest.
+cli.flag.manifest_fuel.help = Giới hạn số lệnh MiniJinja trong một manifest.
+cli.flag.manifest_rendered_value_bytes.help = Giới hạn số byte được render vào một giá trị manifest.
+cli.flag.manifest_rendered_manifest_bytes.help = Giới hạn tổng số byte được render trong một manifest.
+cli.flag.manifest_source_bytes.help = Giới hạn số byte mã nguồn template và macro được sử dụng cho mỗi manifest.
+cli.flag.manifest_foreach_cardinality.help = Giới hạn số giá trị được xử lý bởi một lần mở rộng foreach.
+cli.flag.manifest_expanded_entries.help = Giới hạn số mục tiêu và hành động được mở rộng từ một manifest.
 cli.flag.json.help = Xuất dữ liệu JSON máy đọc được.
 cli.flag.no_input.help = Không bao giờ đọc dữ liệu nhập tương tác.
 cli.flag.color.help = Chính sách xuất màu (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = Thẻ từ YAML không hợp lệ hoặc bấ
 manifest.yaml.hint.escape = Hãy thoát dấu gạch chéo ngược hoặc bỏ các chuỗi thoát không hợp lệ.
 manifest.env.missing = Một biến môi trường bắt buộc chưa được đặt.
 manifest.env.invalid_utf8 = Một biến môi trường chứa UTF-8 không hợp lệ.
+manifest.env.blocked = Quyền truy cập vào biến môi trường đã bị chặn.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Giá trị default của env phải là chuỗi, nhưng nhận được { $kind }.
 manifest.vars.not_object = Trường `vars` của tệp kê khai phải là ánh xạ hoặc đối tượng.
 manifest.vars.reserved_name = Khóa `vars` '{ $name }' của tệp kê khai được dành riêng cho hàm trợ giúp mẫu tích hợp; hãy đổi tên biến.
 manifest.read_failed = Không đọc được tệp kê khai tại { $path }.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = truyền luồng
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote mong đợi một chuỗi nhưng lại nhận { $kind }.
+stdlib.shell.quote.control_character = Giá trị chứa byte null, ký tự về đầu dòng hoặc xuống dòng không thể đặt trong dấu nháy.
+stdlib.shell.dialect_invalid = Phương ngữ shell không xác định { $dialect }; mong đợi một trong { $accepted }.
+stdlib.shell.dialect_not_string = Tùy chọn dialect của shell phải là chuỗi, nhưng nhận được { $kind }.
+stdlib.shell.join.not_sequence = shell_join mong đợi một dãy nhưng lại nhận { $kind }.
+stdlib.shell.join.item_not_string = Phần tử { $index } của shell_join có kiểu { $kind }, không phải chuỗi.
+stdlib.shell.positional_option = { $filter } nhận tùy chọn theo từ khóa; hãy viết { $example }.
+
 # Chẩn đoán của hàm trợ giúp đường dẫn.
 stdlib.path.io.failed = Hành động “{ $action }” thất bại với { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Hành động “{ $action }” thất bại với { $path }: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Thuật toán băm không đư�
 
 # Chẩn đoán của các hàm trợ giúp tập hợp.
 stdlib.collections.flatten.expected_sequence = flatten mong đợi các phần tử của một dãy nhưng lại gặp { $kind }.
+stdlib.collections.compact.not_sequence = compact mong đợi một dãy nhưng lại gặp { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by cần một thuộc tính không rỗng.
 stdlib.collections.group_by.unresolved = group_by không tìm được “{ $attr }” trên phần tử kiểu { $kind }.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = nano giây
 
 # Chẩn đoán của hàm trợ giúp which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] không tìm thấy lệnh “{ $command }” sau khi kiểm tra { $count } mục PATH. Xem trước: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Các đoạn rỗng trong PATH bị bỏ qua; dùng cwd_mode="auto" để tính cả thư mục làm việc.
-stdlib.which.not_found.hint.cwd_always = Đặt cwd_mode="always" để tính cả thư mục hiện tại.
+stdlib.which.not_found.hint.cwd_auto = Chế độ auto chỉ tìm kiếm trong các thư mục được nêu rõ trong PATH.
+stdlib.which.not_found.hint.cwd_always = Chế độ always tìm kiếm thư mục hiện tại trước, rồi đến các thư mục được nêu trong PATH.
+stdlib.which.not_found.hint.workspace = Để tìm kiếm đệ quy trong cây không gian làm việc, hãy dùng cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] lệnh “{ $command }” tại “{ $path }” không tồn tại hoặc không thực thi được.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <trống>
 stdlib.which.path_entry.non_utf8 = Mục PATH số { $index } chứa ký tự không phải UTF-8; Netsuke yêu cầu đường dẫn UTF-8.
 stdlib.which.command.empty = which cần một chuỗi không rỗng.
-stdlib.which.cwd_mode.invalid = cwd_mode phải là “auto”, “always” hoặc “never”, nhưng nhận được “{ $mode }”.
+stdlib.which.cwd_mode.invalid = cwd_mode phải là 'auto', 'always', 'never' hoặc 'workspace-recursive'; nhận được '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Không xác định được thư mục hiện tại: { $details }.
 stdlib.which.cwd.non_utf8 = Thư mục hiện tại chứa phần không phải UTF-8.
 stdlib.which.canonicalize_failed = Không chuẩn hoá được “{ $path }”: { $details }.
@@ -425,3 +449,7 @@ example.errors_found = { $count ->
     [0] Không tìm thấy lỗi nào.
    *[other] Tìm thấy { $count } lỗi.
 }
+manifest.budget.exceeded = Đã dùng hết ngân sách tài nguyên của manifest trong { $stage } sau khi đạt { $limit }.
+
+cli.flag.env_allow_var.help = Biến môi trường mà hàm trợ giúp env() của tệp kê khai được phép sử dụng.
+cli.flag.env_block_var.help = Biến môi trường mà hàm trợ giúp env() của tệp kê khai không được phép sử dụng.

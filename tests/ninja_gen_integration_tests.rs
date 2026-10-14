@@ -158,7 +158,7 @@ fn ninja_integration_tests(
     }
     let mut graph = BuildGraph::default();
     graph.actions.insert(edge.action_id.clone(), action);
-    graph.targets.insert(output.clone(), edge);
+    graph.insert_edge(edge)?;
     graph.default_targets.push(output);
 
     let ninja = generate(&graph)?;
@@ -217,7 +217,9 @@ fn errors_when_action_missing() -> Result<()> {
         phony: false,
         always: false,
     };
-    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+    graph
+        .insert_edge(edge)
+        .expect("test graph output aliases must be unique");
     let Err(err) = generate(&graph) else {
         bail!("expected missing action to error");
     };
@@ -262,7 +264,9 @@ fn generate_format_error() -> Result<()> {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+    graph
+        .insert_edge(edge)
+        .expect("test graph output aliases must be unique");
 
     let mut writer = FailWriter;
     let Err(err) = generate_into(&graph, &mut writer) else {
@@ -275,7 +279,7 @@ fn generate_format_error() -> Result<()> {
     Ok(())
 }
 
-fn serial_graph(command: &str, dependencies: &[&str]) -> BuildGraph {
+fn serial_graph(command: &str, dependencies: &[&str]) -> Result<BuildGraph> {
     let action = Action {
         recipe: Recipe::Command {
             command: command.into(),
@@ -299,12 +303,12 @@ fn serial_graph(command: &str, dependencies: &[&str]) -> BuildGraph {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("all"), edge);
-    graph
+    graph.insert_edge(edge)?;
+    Ok(graph)
 }
 #[rstest]
 fn serial_graph_rejected_by_string_only_generation() -> Result<()> {
-    let graph = serial_graph("echo done", &["dep1", "dep2"]);
+    let graph = serial_graph("echo done", &["dep1", "dep2"])?;
 
     let mut out = String::new();
     let err = generate_into(&graph, &mut out)
@@ -323,7 +327,7 @@ fn serial_graph_rejected_by_string_only_generation() -> Result<()> {
 
 #[rstest]
 fn bundle_generation_for_serial_graph_materializes_sidecars() -> Result<()> {
-    let graph = serial_graph("echo done", &["check-fmt", "test"]);
+    let graph = serial_graph("echo done", &["check-fmt", "test"])?;
 
     let bundle = netsuke::ninja_gen::generate_bundle(&graph)?;
     ensure!(

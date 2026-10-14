@@ -11,6 +11,7 @@ download and extraction of release archives.
 Every function here is exercised by ``scripts/tests/test_ci_support.py``.
 """
 
+import dataclasses
 import hashlib
 import os
 import pathlib
@@ -25,7 +26,6 @@ from cuprum import (
     Program,
     ProgramCatalogue,
     ProjectSettings,
-    RunOutputOptions,
     sh,
 )
 
@@ -68,28 +68,36 @@ def catalogue(*programs: str) -> ProgramCatalogue:
     )
 
 
-def run(
-    program: str,
-    *args: str,
-    allowed: ProgramCatalogue,
-    env: dict[str, str] | None = None,
-    echo: bool = True,
-) -> CommandResult:
+@dataclasses.dataclass(frozen=True, slots=True)
+class RunSpec:
+    """How one command invocation should behave, separate from what it runs.
+
+    The program and its arguments are positional, so they read as the command
+    being run; these are the two things about the *invocation* a caller
+    sometimes needs to change. Grouping them keeps a call site from growing a
+    parameter per concern, and a script that never changes one simply omits
+    the group.
+    """
+
+    allowed: ProgramCatalogue
+    echo: bool = True
+    env: dict[str, str] | None = None
+
+
+def run(program: str, *args: str, spec: RunSpec) -> CommandResult:
     """Run one allowlisted program synchronously and return its result.
 
     Parameters
     ----------
     program
-        The program to run; it must be in ``allowed``.
+        The program to run; it must be in ``spec.allowed``.
     args
         Arguments passed verbatim, never through a shell.
-    allowed
-        The catalogue that permits ``program``.
-    env
-        Variables overlaid on the live environment for this run only.
-    echo
-        Whether to mirror the child's output to this process's streams as
-        well as capturing it, so the CI log shows what happened.
+    spec
+        The catalogue permitting ``program``, whether to mirror the child's
+        output to this process's streams as well as capturing it, and any
+        environment variables overlaid on the live environment for this run
+        only.
 
     Returns
     -------
@@ -97,10 +105,10 @@ def run(
         The exit code and captured output; a non-zero exit is returned, not
         raised, so callers decide what it means.
     """
-    command = sh.make(Program(program), catalogue=allowed)(*args)
+    command = sh.make(Program(program), catalogue=spec.allowed)(*args)
     return command.run_sync(
-        output=RunOutputOptions(capture=True, echo=echo),
-        context=ExecutionContext(env=env),
+        echo=spec.echo,
+        context=ExecutionContext(env=spec.env),
     )
 
 
@@ -208,6 +216,20 @@ def verify_sha256(path: pathlib.Path, expected: str) -> None:
         raise CiScriptError(message)
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class OpenArchive:
+    """A checksum-verified tarball, held open with its members indexed.
+
+    The index is built once so each named member is a dictionary lookup rather
+    than a scan, and so a per-member check needs the archive's name and stream
+    without carrying both through the call separately.
+    """
+
+    path: pathlib.Path
+    tar: tarfile.TarFile
+    members: dict[str, tarfile.TarInfo]
+
+
 def extract_members(
     archive: pathlib.Path,
     destination: pathlib.Path,
@@ -237,24 +259,44 @@ def extract_members(
     CiScriptError
         If a member is missing or is not a regular file.
     """
-    extracted = []
     with tarfile.open(archive, "r:gz") as tar:
-        available = {member.name: member for member in tar.getmembers()}
-        for name in members:
-            member = available.get(name)
-            if member is None:
-                message = f"{archive.name} has no member {name!r}"
-                raise CiScriptError(message)
-            if not member.isfile():
-                message = f"{archive.name} member {name!r} is not a regular file"
-                raise CiScriptError(message)
-            source = tar.extractfile(member)
-            if source is None:  # pragma: no cover - isfile() guarantees a stream
-                message = f"{archive.name} member {name!r} could not be read"
-                raise CiScriptError(message)
-            target = destination / pathlib.PurePosixPath(name).name
-            with source, target.open("wb") as handle:
-                shutil.copyfileobj(source, handle)
-            target.chmod(EXECUTABLE_MODE)
-            extracted.append(target)
-    return extracted
+        opened = OpenArchive(
+            archive, tar, {member.name: member for member in tar.getmembers()}
+        )
+        return [_extract_one(opened, destination, name) for name in members]
+
+
+def _extract_one(
+    opened: OpenArchive, destination: pathlib.Path, name: str
+) -> pathlib.Path:
+    """Extract the single member ``name`` from ``opened`` as an executable.
+
+    A member naming a directory or a link is refused before anything is
+    written, so a hostile archive cannot use one to escape ``destination``.
+
+    Returns
+    -------
+    pathlib.Path
+        The extracted executable, under its own base name in ``destination``.
+
+    Raises
+    ------
+    CiScriptError
+        If ``name`` is absent from ``opened.members`` or is not a regular file.
+    """
+    member = opened.members.get(name)
+    if member is None:
+        message = f"{opened.path.name} has no member {name!r}"
+        raise CiScriptError(message)
+    if not member.isfile():
+        message = f"{opened.path.name} member {name!r} is not a regular file"
+        raise CiScriptError(message)
+    source = opened.tar.extractfile(member)
+    if source is None:  # pragma: no cover - isfile() guarantees a stream
+        message = f"{opened.path.name} member {name!r} could not be read"
+        raise CiScriptError(message)
+    target = destination / pathlib.PurePosixPath(name).name
+    with source, target.open("wb") as handle:
+        shutil.copyfileobj(source, handle)
+    target.chmod(EXECUTABLE_MODE)
+    return target

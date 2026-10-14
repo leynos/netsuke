@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = 기본 거부가 켜져 있을 때 허용할 �
 cli.flag.fetch_block_host.help = 다른 곳에서 허용되더라도 항상 차단할 호스트 이름입니다.
 cli.flag.fetch_default_deny.help = 기본적으로 모든 호스트를 거부하고 선언한 허용 목록만 통과시킵니다.
 cli.flag.trust_project_fetch_policy.help = 프로젝트 설정이 fetch 정책의 허용 권한을 확대하도록 허용합니다.
+
+cli.flag.manifest_evaluation_fuel.help = 각 매니페스트 평가에서 사용할 MiniJinja 명령어 수를 제한합니다.
+cli.flag.manifest_fuel.help = 하나의 매니페스트 전체에서 사용할 MiniJinja 명령어 수를 제한합니다.
+cli.flag.manifest_rendered_value_bytes.help = 하나의 매니페스트 값으로 렌더링되는 바이트 수를 제한합니다.
+cli.flag.manifest_rendered_manifest_bytes.help = 하나의 매니페스트 전체로 렌더링되는 총 바이트 수를 제한합니다.
+cli.flag.manifest_source_bytes.help = 매니페스트마다 소비되는 템플릿 및 매크로 소스 바이트 수를 제한합니다.
+cli.flag.manifest_foreach_cardinality.help = 하나의 foreach 확장에서 처리하는 값의 수를 제한합니다.
+cli.flag.manifest_expanded_entries.help = 하나의 매니페스트에서 확장되는 대상과 작업의 수를 제한합니다.
 cli.flag.json.help = 기계가 읽을 수 있는 JSON을 출력합니다.
 cli.flag.no_input.help = 대화형 입력을 절대 읽지 않습니다.
 cli.flag.color.help = 색상 출력 정책(auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = YAML 토큰이 잘못되었거나 예상 밖�
 manifest.yaml.hint.escape = 역슬래시를 이스케이프하거나 잘못된 이스케이프 시퀀스를 제거하세요.
 manifest.env.missing = 필수 환경 변수가 설정되지 않았습니다.
 manifest.env.invalid_utf8 = 환경 변수에 잘못된 UTF-8이 들어 있습니다.
+manifest.env.blocked = 환경 변수에 대한 접근이 차단되었습니다.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env의 default는 문자열이어야 합니다. { $kind }을(를) 받았습니다.
 manifest.vars.not_object = 매니페스트의 `vars`는 매핑이나 객체여야 합니다.
 manifest.vars.reserved_name = 매니페스트의 `vars` 키 '{ $name }'은(는) 내장 템플릿 헬퍼용으로 예약되어 있습니다. 변수 이름을 바꾸십시오.
 manifest.read_failed = { $path }의 매니페스트를 읽지 못했습니다.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = 스트리밍
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote은(는) 문자열을 기대했지만 { $kind }을(를) 받았습니다.
+stdlib.shell.quote.control_character = 널 바이트, 캐리지 리턴 또는 줄바꿈이 포함된 값은 따옴표로 감싸 수 없습니다.
+stdlib.shell.dialect_invalid = 알 수 없는 셸 방언 { $dialect }입니다. { $accepted } 중 하나여야 합니다.
+stdlib.shell.dialect_not_string = shell의 dialect 옵션은 문자열이어야 합니다. { $kind }을(를) 받았습니다.
+stdlib.shell.join.not_sequence = shell_join은(는) 열을 기대했지만 { $kind }을(를) 받았습니다.
+stdlib.shell.join.item_not_string = shell_join의 { $index }번째 항목은 { $kind }이며 문자열이 아닙니다.
+stdlib.shell.positional_option = { $filter }은(는) 옵션을 키워드로 받습니다. { $example } 형식으로 작성하세요.
+
 # 경로 도우미 진단.
 stdlib.path.io.failed = { $path }에 대한 '{ $action }'에 실패했습니다({ $label }).
 stdlib.path.io.failed_with_detail = { $path }에 대한 '{ $action }'에 실패했습니다: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = 지원하지 않는 해시 알�
 
 # 컬렉션 도우미 진단.
 stdlib.collections.flatten.expected_sequence = flatten은 열의 항목을 기대했지만 { $kind }을(를) 발견했습니다.
+stdlib.collections.compact.not_sequence = compact는 열을 기대했지만 { $kind }을(를) 발견했습니다.
 stdlib.collections.group_by.empty_attribute = group_by에는 비어 있지 않은 속성이 필요합니다.
 stdlib.collections.group_by.unresolved = group_by가 { $kind } 형식의 항목에서 '{ $attr }'을(를) 찾지 못했습니다.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = 나노초
 
 # which 도우미 진단.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] PATH 항목 { $count }개를 확인했지만 명령 '{ $command }'을(를) 찾지 못했습니다. 미리 보기: { $preview }
-stdlib.which.not_found.hint.cwd_auto = PATH의 빈 구간은 무시됩니다. 작업 디렉터리를 포함하려면 cwd_mode="auto"를 사용하세요.
-stdlib.which.not_found.hint.cwd_always = 현재 디렉터리를 포함하려면 cwd_mode="always"로 설정하세요.
+stdlib.which.not_found.hint.cwd_auto = auto 모드는 PATH에 명시적으로 지정된 디렉터리만 검색합니다.
+stdlib.which.not_found.hint.cwd_always = always 모드는 PATH에 지정된 디렉터리보다 먼저 현재 디렉터리만 검색합니다.
+stdlib.which.not_found.hint.workspace = 작업 공간 트리를 재귀적으로 검색하려면 cwd_mode="workspace-recursive"를 사용하세요.
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] '{ $path }'의 명령 '{ $command }'이(가) 없거나 실행할 수 없습니다.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <비어 있음>
 stdlib.which.path_entry.non_utf8 = PATH의 { $index }번째 항목에 UTF-8이 아닌 문자가 있습니다. Netsuke는 UTF-8 경로가 필요합니다.
 stdlib.which.command.empty = which에는 비어 있지 않은 문자열이 필요합니다.
-stdlib.which.cwd_mode.invalid = cwd_mode는 'auto', 'always', 'never' 중 하나여야 하지만 '{ $mode }'이(가) 나왔습니다.
+stdlib.which.cwd_mode.invalid = cwd_mode는 'auto', 'always', 'never' 또는 'workspace-recursive'여야 합니다. '{ $mode }'가 지정되었습니다.
 stdlib.which.cwd.resolve_failed = 현재 디렉터리를 확인하지 못했습니다: { $details }.
 stdlib.which.cwd.non_utf8 = 현재 디렉터리에 UTF-8이 아닌 부분이 있습니다.
 stdlib.which.canonicalize_failed = '{ $path }'을(를) 정규화하지 못했습니다: { $details }.
@@ -425,3 +449,7 @@ example.errors_found = { $count ->
     [0] 오류를 찾지 못했습니다.
    *[other] 오류 { $count }개를 찾았습니다.
 }
+manifest.budget.exceeded = { $stage } 중 매니페스트 리소스 예산이 소진되었습니다. { $limit }에 도달했습니다.
+
+cli.flag.env_allow_var.help = 매니페스트 env() 도우미에 허용되는 환경 변수.
+cli.flag.env_block_var.help = 매니페스트 env() 도우미에서 차단되는 환경 변수.

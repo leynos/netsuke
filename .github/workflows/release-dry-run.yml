@@ -5,9 +5,20 @@ name: Release Dry Run
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
+# A newer push to a pull request cancels the run it supersedes. Other events
+# never cancel: each `main` push, dispatch or schedule falls back to its own
+# run identifier, so no run replaces another that is still pending. See
+# tests/workflow_contracts/pr_concurrency_test.py.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   release:
     uses: ./.github/workflows/release.yml
+    # This workflow runs on pull requests, so it forwards no secrets. The
+    # release workflow reads only `secrets.GITHUB_TOKEN`, which a called
+    # workflow receives without forwarding, so `secrets: inherit` would
+    # only widen what a pull request can reach.
     with:
       dry-run: true
-    secrets: inherit

@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Engedélyezett gépnevek, ha az alapértelmezet
 cli.flag.fetch_block_host.help = Mindig letiltott gépnevek, akkor is, ha máshol engedélyezettek.
 cli.flag.fetch_default_deny.help = Alapértelmezés szerint minden gép tiltása; csak a megadott lista engedélyezése.
 cli.flag.trust_project_fetch_policy.help = Engedélyezze, hogy a projekt konfigurációja kibővítse a fetch-házirend engedélyeit.
+
+cli.flag.manifest_evaluation_fuel.help = A MiniJinja-utasítások korlátozása minden jegyzékkiértékeléshez.
+cli.flag.manifest_fuel.help = A MiniJinja-utasítások korlátozása egy jegyzéken belül.
+cli.flag.manifest_rendered_value_bytes.help = Egy jegyzékértékbe renderelt bájtok számának korlátozása.
+cli.flag.manifest_rendered_manifest_bytes.help = Egy jegyzékbe renderelt bájtok teljes számának korlátozása.
+cli.flag.manifest_source_bytes.help = A jegyzékenként felhasznált sablon- és makróforrás-bájtok korlátozása.
+cli.flag.manifest_foreach_cardinality.help = Egy foreach-bővítés által feldolgozott értékek korlátozása.
+cli.flag.manifest_expanded_entries.help = Egy jegyzékből kibővített célok és műveletek korlátozása.
 cli.flag.json.help = Géppel olvasható JSON kimenet előállítása.
 cli.flag.no_input.help = Soha ne olvasson interaktív bemenetet.
 cli.flag.color.help = A színes kimenet szabálya (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = A YAML-token érvénytelen vagy váratlan.
 manifest.yaml.hint.escape = Escape-elje a fordított perjeleket, vagy távolítsa el az érvénytelen escape-szekvenciákat.
 manifest.env.missing = Egy kötelező környezeti változó nincs beállítva.
 manifest.env.invalid_utf8 = Egy környezeti változó érvénytelen UTF-8 kódolást tartalmaz.
+manifest.env.blocked = Egy környezeti változóhoz való hozzáférés le van tiltva.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Az env default értékének karakterláncnak kell lennie, ezt kaptuk: { $kind }.
 manifest.vars.not_object = A jegyzék `vars` mezőjének leképezésnek vagy objektumnak kell lennie.
 manifest.vars.reserved_name = A manifest `vars` kulcsa, '{ $name }', egy beépített sablonsegéd számára fenntartott; nevezze át a változót.
 manifest.read_failed = A jegyzéket nem sikerült beolvasni innen: { $path }.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = folyamatos átvitel
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = A shell_quote sztringet várt, de ezt kapta: { $kind }.
+stdlib.shell.quote.control_character = Nullabájtot, kocsivisszát vagy soremelést tartalmazó érték nem idézőjelezhető.
+stdlib.shell.dialect_invalid = Ismeretlen shell-dialektus: { $dialect }; a várt értékek: { $accepted }.
+stdlib.shell.dialect_not_string = A shell dialect beállításának karakterláncnak kell lennie, ezt kaptuk: { $kind }.
+stdlib.shell.join.not_sequence = A shell_join sorozatot várt, de ezt kapta: { $kind }.
+stdlib.shell.join.item_not_string = A(z) { $index }. shell_join-elem típusa { $kind }, nem sztring.
+stdlib.shell.positional_option = A(z) { $filter } a beállításait kulcsszóként várja; írja ezt: { $example }.
+
 # Az útvonalakat kezelő segédfüggvény diagnosztikája.
 stdlib.path.io.failed = A(z) „{ $action }” művelet sikertelen ehhez: { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = A(z) „{ $action }” művelet sikertelen ehhez: { $path }: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nem támogatott kivonatoló algo
 
 # A gyűjteményeket kezelő segédfüggvények diagnosztikája.
 stdlib.collections.flatten.expected_sequence = A flatten sorozatelemeket várt, de ezt találta: { $kind }.
+stdlib.collections.compact.not_sequence = A compact sorozatot várt, de ezt találta: { $kind }.
 stdlib.collections.group_by.empty_attribute = A group_by nem üres attribútumot igényel.
 stdlib.collections.group_by.unresolved = A group_by nem találta a(z) „{ $attr }” attribútumot a(z) { $kind } típusú elemen.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = nanomásodperc
 
 # A which segédfüggvény diagnosztikája.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] a(z) „{ $command }” parancs nem található { $count } PATH-bejegyzés ellenőrzése után. Előnézet: { $preview }
-stdlib.which.not_found.hint.cwd_auto = A PATH üres szakaszait a rendszer figyelmen kívül hagyja; a munkakönyvtár bevonásához használja a cwd_mode="auto" beállítást.
-stdlib.which.not_found.hint.cwd_always = Az aktuális könyvtár bevonásához állítsa be a cwd_mode="always" értéket.
+stdlib.which.not_found.hint.cwd_auto = Az auto mód csak a PATH változóban kifejezetten megadott könyvtárakban keres.
+stdlib.which.not_found.hint.cwd_always = Az always mód a PATH változóban megadott könyvtárak előtt csak az aktuális könyvtárban keres.
+stdlib.which.not_found.hint.workspace = A munkaterület-fában való rekurzív kereséshez használja a cwd_mode="workspace-recursive" beállítást.
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] a(z) „{ $command }” parancs itt: „{ $path }” hiányzik, vagy nem futtatható.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <üres>
 stdlib.which.path_entry.non_utf8 = A(z) { $index }. PATH-bejegyzés nem UTF-8 karaktereket tartalmaz; a Netsuke UTF-8 útvonalakat igényel.
 stdlib.which.command.empty = A which nem üres karakterláncot igényel.
-stdlib.which.cwd_mode.invalid = A cwd_mode értéke „auto”, „always” vagy „never” lehet, de ez érkezett: „{ $mode }”.
+stdlib.which.cwd_mode.invalid = A cwd_mode értéke 'auto', 'always', 'never' vagy 'workspace-recursive' kell legyen; a kapott érték: '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Az aktuális könyvtárat nem sikerült meghatározni: { $details }.
 stdlib.which.cwd.non_utf8 = Az aktuális könyvtár nem UTF-8 részeket tartalmaz.
 stdlib.which.canonicalize_failed = A(z) „{ $path }” kanonizálása sikertelen: { $details }.
@@ -429,3 +453,7 @@ example.errors_found = { $count ->
     [one] { $count } hiba található.
    *[other] { $count } hiba található.
 }
+manifest.budget.exceeded = A jegyzék erőforrás-kerete kimerült a(z) { $stage } szakaszban, miután elérte ezt: { $limit }.
+
+cli.flag.env_allow_var.help = A manifest env() segédje számára engedélyezett környezeti változó.
+cli.flag.env_block_var.help = A manifest env() segédje számára tiltott környezeti változó.

@@ -22,7 +22,7 @@ pub(super) fn clone_validated_ninja_path(path: &str) -> String {
 
 /// Reject graph paths that Ninja cannot represent.
 pub(crate) fn reject_unsupported_path_characters(graph: &BuildGraph) -> Result<(), NinjaGenError> {
-    for edge in graph.targets.values() {
+    for edge in graph.edges() {
         for path in edge
             .explicit_outputs
             .iter()

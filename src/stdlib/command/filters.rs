@@ -9,10 +9,10 @@ use minijinja::{
 #[cfg(windows)]
 use super::execution::run_program;
 use super::{
+    child_argument::quote_child_argument,
     context::{CommandContext, GrepCall},
     error::command_error,
     execution::run_command,
-    quote::quote,
     result::StdoutResult,
     value_from_bytes,
 };
@@ -134,7 +134,7 @@ fn format_command(base: &str, args: &[String]) -> Result<String, Error> {
     let mut command = String::from(base);
     for arg in args {
         command.push(' ');
-        let quoted = quote(arg).map_err(|err| {
+        let quoted = quote_child_argument(arg).map_err(|err| {
             Error::new(
                 ErrorKind::InvalidOperation,
                 localization::message(keys::COMMAND_QUOTE_INVALID)

@@ -6,10 +6,10 @@
 //! network requests, cache writes, or command execution.
 
 use super::{
-    EnvReader, ExpansionReportObserver, ManifestLoadStage, ManifestName, ManifestParse,
-    NetsukeManifest, StdlibConfig, StdlibRegistration, env_reader::disabled_env_reader,
-    from_str_named, loading::trace_expansion_report, notify_stage,
-    workspace::open_manifest_workspace,
+    EnvAccessPolicy, ExpansionReportObserver, ManifestBudgetLimits, ManifestEnvironment,
+    ManifestLoadStage, ManifestName, ManifestParse, NetsukeManifest, StdlibConfig,
+    StdlibRegistration, env::disabled_env_reader, from_str_named, loading::trace_expansion_report,
+    notify_stage, workspace::open_manifest_workspace,
 };
 use crate::{localization, localization::keys, stdlib::NetworkPolicy};
 use anyhow::{Context, Result};
@@ -21,59 +21,125 @@ use std::path::Path;
 ///
 /// Returns an error if the manifest cannot be read, rendered, or parsed, or if
 /// it invokes an impure template helper.
+#[cfg(test)]
 pub(crate) fn from_path_for_manifest_query(
     path: impl AsRef<Path>,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
-    let env_reader = disabled_env_reader();
-    from_path_with_registration(path, &env_reader, on_stage, ManifestLoadMode::ManifestQuery)
+    from_path_for_manifest_query_with_limits(path, ManifestBudgetLimits::default(), on_stage)
 }
 
-/// Load a manifest with the full stdlib and an explicit network policy.
-pub(super) fn from_path_with_policy_and_env(
+/// Load a manifest query with caller-controlled resource ceilings.
+pub(crate) fn from_path_for_manifest_query_with_limits(
     path: impl AsRef<Path>,
-    policy: NetworkPolicy,
-    env_reader: &EnvReader,
+    budget_limits: ManifestBudgetLimits,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
-    from_path_with_registration(path, env_reader, on_stage, ManifestLoadMode::Full(policy))
+    let env_reader = disabled_env_reader();
+    let environment = ManifestEnvironment::new(&env_reader, EnvAccessPolicy::default());
+    from_path_with_registration(ManifestLoadRequest {
+        path: path.as_ref(),
+        environment: &environment,
+        budget_limits,
+        on_stage,
+        mode: ManifestLoadMode::ManifestQuery,
+    })
+}
+
+/// Load a full manifest with explicit policy, environment inputs, and
+/// resource ceilings.
+///
+/// `recipe_shell` is the interpreter the runner resolved; the template
+/// filters and IR lowering must agree on it, so it is threaded here rather
+/// than re-derived from the environment.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "This compatibility entry point keeps the established policy, environment, budget, shell, and stage-observer seams explicit."
+)]
+pub(super) fn from_path_with_policy_and_environment_and_limits(
+    path: impl AsRef<Path>,
+    policy: NetworkPolicy,
+    environment: &ManifestEnvironment<'_>,
+    budget_limits: ManifestBudgetLimits,
+    recipe_shell: crate::recipe_shell::RecipeShell,
+    on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
+) -> Result<NetsukeManifest> {
+    from_path_with_registration(ManifestLoadRequest {
+        path: path.as_ref(),
+        environment,
+        budget_limits,
+        on_stage,
+        mode: ManifestLoadMode::Full {
+            policy,
+            recipe_shell,
+        },
+    })
 }
 
 /// Select the standard-library boundary for a manifest load.
 enum ManifestLoadMode {
-    /// A normal build load with a configured network policy.
-    Full(NetworkPolicy),
+    /// A normal build load with a configured network policy and the
+    /// interpreter the runner resolved.
+    Full {
+        /// Network grant ceiling applied to fetch helpers.
+        policy: NetworkPolicy,
+        /// Interpreter whose quoting rules the template filters follow.
+        recipe_shell: crate::recipe_shell::RecipeShell,
+    },
     /// A metadata-only load that must not construct an ambient stdlib config.
+    ///
+    /// The query surface quotes recipe text for the host default interpreter
+    /// rather than for the shell the build will resolve. **This divergence is
+    /// deliberate**: `resolve_recipe_shell` sits behind the runner's command
+    /// dispatch, and reaching it from here would make `netsuke help targets`
+    /// fail on a host whose `NETSUKE_WINDOWS_SHELL` is malformed — turning a
+    /// metadata query into a command that can error on configuration it never
+    /// uses. `tests/stdlib_manifest_query_tests.rs` pins the divergence so it
+    /// stays a decision rather than becoming a surprise.
     ManifestQuery,
+}
+
+/// Hold the dependencies needed to load one manifest from a workspace path.
+struct ManifestLoadRequest<'path, 'env, 'stage> {
+    /// Identifies the manifest file on the capability-scoped workspace boundary.
+    path: &'path Path,
+    /// Reads environment variables and carries the policy for `env()` lookups.
+    environment: &'env ManifestEnvironment<'env>,
+    /// Supplies immutable resource ceilings for this parse.
+    budget_limits: ManifestBudgetLimits,
+    /// Observes load phases without changing parsing behaviour.
+    on_stage: Option<&'stage mut dyn FnMut(ManifestLoadStage)>,
+    /// Selects full or metadata-only standard-library registration.
+    mode: ManifestLoadMode,
 }
 
 /// Read a manifest and render it with the selected stdlib registration.
 fn from_path_with_registration(
-    path: impl AsRef<Path>,
-    env_reader: &EnvReader,
-    mut on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
-    mode: ManifestLoadMode,
+    mut request: ManifestLoadRequest<'_, '_, '_>,
 ) -> Result<NetsukeManifest> {
-    notify_stage(&mut on_stage, ManifestLoadStage::ManifestIngestion);
-    let path_ref = path.as_ref();
-    let workspace = open_manifest_workspace(path_ref, None)?;
+    notify_stage(&mut request.on_stage, ManifestLoadStage::ManifestIngestion);
+    let workspace = open_manifest_workspace(request.path, None)?;
     let data = workspace
         .dir
         .read_to_string(&workspace.manifest_file)
         .with_context(|| {
             localization::message(keys::MANIFEST_READ_FAILED)
-                .with_arg("path", path_ref.display().to_string())
+                .with_arg("path", request.path.display().to_string())
         })?;
-    let name = ManifestName::new(path_ref.display().to_string());
+    let name = ManifestName::new(request.path.display().to_string());
     let (stdlib_registration, expansion_report_observer): (
         StdlibRegistration,
         Option<ExpansionReportObserver>,
-    ) = match mode {
-        ManifestLoadMode::Full(policy) => (
+    ) = match request.mode {
+        ManifestLoadMode::Full {
+            policy,
+            recipe_shell,
+        } => (
             StdlibRegistration::Full(Box::new(
                 StdlibConfig::new(workspace.dir)?
                     .with_workspace_root_path(&workspace.root)?
-                    .with_network_policy(policy),
+                    .with_network_policy(policy)
+                    .with_recipe_shell(recipe_shell),
             )),
             Some(trace_expansion_report),
         ),
@@ -85,10 +151,12 @@ fn from_path_with_registration(
         ManifestParse {
             name: &name,
             stdlib_registration: Some(stdlib_registration),
-            env_reader,
+            env_reader: request.environment.reader(),
+            env_access_policy: request.environment.access_policy(),
             manifest_root,
             expansion_report_observer,
+            budget_limits: request.budget_limits,
         },
-        &mut on_stage,
+        &mut request.on_stage,
     )
 }

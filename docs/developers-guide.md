@@ -4,7 +4,8 @@ This guide describes the day-to-day engineering workflow for Netsuke, with a
 focus on writing and maintaining tests. It is the source of truth for how the
 test suite is expected to be used by contributors. The normative architecture
 reference for bounded release-admission observability is
-[ADR-020](adr-020-release-admission-observability.md).
+[ADR-020](adr-020-release-admission-observability.md). It also records the
+release-operation observability decision.
 
 ## Command-line interface architecture
 
@@ -27,7 +28,7 @@ tracks sequencing only; it must not replace ADR-003 or the CLI design document
 as the durable architecture record.
 
 [adr-003-cli]: adr-003-agent-consistent-human-first-cli.md
-[reconciliation-module]: ../src/stdlib/network/policy/reconciliation.rs
+[reconciliation-module]: ../src/stdlib/network/policy/reconciliation/mod.rs
 
 ### CLI parsing and command-composition boundary
 
@@ -39,7 +40,7 @@ help; it does not make domain policy types depend on Clap.
 
 Only the CLI command-composition path may construct `LocalizedValueParser`.
 Production construction currently belongs to
-`src/cli/parser.rs::configure_validation_parsers`, which attaches the
+`src/cli/parser/mod.rs::configure_validation_parsers`, which attaches the
 localization-aware validators and their policy metadata to one command tree.
 The shared command factory is the composition path for runtime parsing, help,
 man pages, and shell completions: it starts with `Cli::command()`, applies
@@ -56,7 +57,7 @@ the configured command before `parse_with_localizer_from` calls
 parse errors and keeps possible-value metadata on every rendered command tree.
 The `src/cli/parsing.rs` helpers and the domain policy types remain
 Clap-independent. Do not move Clap types or `TypedValueParser` implementations
-into domain configuration types. The `src/cli/policy_values.rs` module owns the
+into domain configuration types. The `src/cli/policy/values.rs` module owns the
 Clap-only conversion from the canonical policy definitions to `PossibleValue`
 metadata; it must not become a second source of policy names or descriptions.
 
@@ -107,22 +108,31 @@ request types. Keep environment selection at this process boundary: do not add
 process-wide environment mutation to callers or tests.
 
 `netsuke help targets` is deliberately a different runner path. The dispatch
-layer routes `HelpTopic::Targets` to `src/runner/help.rs`, which resolves and
-runs the manifest loading, expansion, and rendering stages, then always builds
-and validates a `BuildGraph` before rendering the deterministic
+layer routes `HelpTopic::Targets` to `src/runner/help/mod.rs`, which resolves
+and runs the manifest loading, expansion, and rendering stages, then always
+builds and validates a `BuildGraph` before rendering the deterministic
 action-then-target catalogue. An invalid graph aborts before the catalogue is
 rendered. It must not generate a Ninja file, call a Ninja subprocess, execute a
 recipe, or create build outputs. Its Jinja environment is a restricted,
 side-effect-free query surface. It allowlists only the lexical path filters
 `basename`, `dirname`, `with_suffix`, and `relative_to`, the collection filters
-`uniq`, `flatten`, and `group_by`, and the clock-independent `timedelta`
-function. It rejects `env()` and `glob()`, file tests, filesystem metadata
-filters such as `size` and `linecount`, `hash`, `digest`, `contents`,
+`uniq`, `flatten`, `compact`, and `group_by`, and the clock-independent
+`timedelta` function. It rejects `env()` and `glob()`, file tests, filesystem
+metadata filters such as `size` and `linecount`, `hash`, `digest`, `contents`,
 `realpath`, and `expanduser`, executable discovery through `which` and
 `command_available`, network and command helpers (`fetch`, `shell`, and
 `grep`), and the clock-dependent `now()` function. Normal build manifest
 rendering still registers the full standard library; this restriction applies
 only to query rendering.
+
+The rejection is total: every query-context `env()` call fails, and an
+`env(name, default=value)` call reports the same query-disabled marker as a bare
+`env(name)` rather than an arity error. The stub accepts a keyword-argument
+parameter precisely so a defaulted call reaches the deliberate rejection;
+without it, MiniJinja would fail the call as `too many arguments`, naming
+neither the helper nor the remedy. `tests/stdlib_manifest_query_tests.rs`
+asserts both the marker and the absence of the arity text, with a negative
+control proving the same template renders under the full stdlib.
 
 The query allowlist has one owner: `register_manifest_query`. Query loading
 does not construct `StdlibConfig`; the registration function composes the
@@ -133,6 +143,42 @@ assess and record any future allowlist change here. The no-topic and
 named-command help paths render clap help directly and do not load a manifest.
 Keep future help topics within this boundary rather than coupling read-only
 inspection to `runner::process`.
+
+The recipe-text quoting filters `shell_quote` and `shell_join` are on that
+shared query path, registered by `recipe_text::register_filters` alongside the
+collection filters. They take a `dialect` keyword argument, and with it given
+they read no host state at all, so a query that names its dialect is fully
+deterministic. With `dialect` omitted they resolve through
+`RecipeShell::host_default`, which is the value `register_query_helpers` passes.
+
+The two surfaces agree on an explicitly named dialect, on every host, and that
+is what `tests/stdlib_manifest_query_tests.rs` pins. Their *defaults* are a
+different matter, and the difference is wider than "the same value reached
+twice". The query surface takes `host_default()`; the build surface takes the
+shell the runner resolves, which on Windows honours `NETSUKE_WINDOWS_SHELL`. So
+a Windows host configured for Bash renders `sh` quoting for the build and
+PowerShell quoting for `help targets` from the same manifest expression — the
+divergence `register_query_helpers` and `ManifestLoadMode::ManifestQuery` each
+document as deliberate. What keeps that divergence unobservable today is only
+that `execute_help` returns before `resolve_recipe_shell()` is reached
+(`src/runner/mod.rs:149-153`); it is masked, not absent. On a non-Windows host
+`resolve_recipe_shell_with` returns `Posix` before it reads the environment at
+all, so the two defaults genuinely coincide there.
+
+Keep the masked divergence rather than closing it. Threading the resolution
+through would mean hoisting a fallible environment read above that early
+return, where a malformed `NETSUKE_WINDOWS_SHELL` would start failing a
+metadata query that never uses it — and the query renders discovery metadata
+that is never executed. A resolved shell is also not query-reachable for the
+metadata-only load, which does not construct `StdlibConfig` at all.
+
+The explicit-dialect agreement is pinned twice over. A probe that *names* its
+dialect is the case the keyword overrides the registration's default, so it can
+never catch a wrong default in `register_query_helpers` — the dialect-omitting
+probes do that, comparing each against the twin `host_default_field` selects
+for this host rather than against a hardcoded `sh`, because the file runs on
+Windows too. `assert_full_stdlib_renders` is the negative control on the
+explicit comparison: without it, two identical failures would satisfy it.
 
 Manifest rendering has two caller-selected modes. Full rendering evaluates all
 manifest fields, including recipe bodies, for build, generate, and manifest
@@ -147,6 +193,40 @@ preserves the historical lowercase `true` and `false` spelling when a Boolean
 helper result is interpolated into a string field, while delegating all
 non-Boolean values to MiniJinja's `escape_formatter`. Keep this as one
 registration-wide policy: do not add per-helper or per-call formatter variants.
+
+Add a new helper to **both** registration surfaces.
+`register_read_only_helpers` serves the build, and `register_query_helpers`
+serves manifest discovery; the shared sub-registrations they call —
+`collections::register_filters`, `path::register_filters`,
+`path::register_query_filters`, and `recipe_text::register_filters` — are what
+make a helper reach both, so a helper registered privately to one surface is
+reachable from a build but invisible to `netsuke help targets`, or the reverse.
+Where the two surfaces must differ, the difference is a deliberate decision to
+record here rather than an accident of which function happened to be edited:
+the recipe-text dialect default above is the one live example, and
+`register_disabled_query_helpers` is the mechanism for a helper the query
+surface must *refuse* rather than serve.
+
+Argument style follows the shape of the options, not the author's taste. A
+trailing sequence of `Option<T>` parameters, as in
+`contents(raw, encoding, kwargs)`, `hash(raw, alg, kwargs)`, and
+`digest(raw, len, alg, kwargs)` (`src/stdlib/path/filters.rs`), is for options
+that read naturally in a fixed order and that a caller would plausibly give
+positionally. `Kwargs` alone, as in `linecount`, `now`, `timedelta`, `fetch`,
+`which`, and `command_available`, is for independent named options and for any
+enumerated value set expected to widen. Always terminate with `kwargs: Kwargs`
+and call `kwargs.assert_all_used()` so an unrecognized keyword is an error
+rather than a silent no-op.
+
+`Value::try_iter()` is **not** a sequence check, and must not be used as one
+(decision D8). It succeeds on a map, yielding its keys, and on a string,
+yielding its characters, so a filter that guards with it alone would quietly
+return the wrong thing rather than fail: `{{ my_map | compact }}` would render
+the map's keys. Guard on `Value::kind()` against `ValueKind::Seq | Iterable`
+first, as `compact_filter` does (`src/stdlib/collections.rs`), and raise a
+localized error naming the received kind. The same confusion awaits any helper
+that appears to accept both `none` and a sequence: `is_blank` in that module is
+the worked example of drawing the line deliberately rather than by truthiness.
 
 Helpers excluded from the query allowlist are registered as deliberate
 query-disabled stubs by the standard-library adapter. The stubs return a
@@ -165,13 +245,13 @@ which recipe a normal build executes.
 
 ### Help-target query telemetry
 
-`src/runner/help_telemetry.rs` is the observability boundary around the pure
-manifest and catalogue query within `netsuke help targets`.
+`src/runner/help/telemetry/mod.rs` is the observability boundary around the
+pure manifest and catalogue query within `netsuke help targets`.
 `instrument_help_targets` wraps that query and records the fixed metrics
 `netsuke_runner_help_targets_total` and
 `netsuke_runner_help_targets_duration_seconds`. It also opens the
 `runner.help_targets` span and emits a bounded `Completed help targets query`
-event when the query finishes. The command boundary in `src/runner/help.rs`
+event when the query finishes. The command boundary in `src/runner/help/mod.rs`
 owns status reporting and rendering after the query succeeds.
 
 Telemetry labels use only the fixed `outcome` values `success` and `error`, and
@@ -186,10 +266,278 @@ capture helper. They assert the counter, duration sample, and completion event
 for a successful fixture query, a missing-manifest failure, and an invalid
 manifest failure classified as the non-`RunnerError` `other` category.
 
+## Unstable Rust API for embedders
+
+The [users' guide](users-guide.md) documents Netsuke's user interface: the
+Netsukefile manifest format and the command-line interface. Rust code examples
+and the Rust API surfaces below belong here instead.
+
+Netsuke is a build tool, not a library: the Netsukefile format and the graph
+export are the only surfaces it commits to, and every Rust API named in this
+section is private in intent and unstable, liable to change or disappear in any
+beta release. It is documented here for the benefit of anyone who calls it
+anyway, with that caveat understood.
+
+### Environment reader for manifest parsing
+
+`env()` does not read `std::env::var` directly. Manifest parsing goes through
+an injectable `EnvReader` seam, so callers that need deterministic `env()`
+results — test suites, and any program driving Netsuke's unstable Rust API —
+can supply their own reader instead of mutating the process environment.
+
+- `netsuke::manifest::from_str` parses a manifest using the live process
+  environment.
+- `netsuke::manifest::from_str_with_env` takes an explicit `EnvReader`,
+  letting the caller control every value `env()` returns.
+- `netsuke::manifest::process_env_reader` builds the process-backed reader
+  that `from_str` uses by default.
+
+A missing variable still fails the parse with a Jinja "undefined" error, and a
+non-Unicode value still fails with an "invalid operation" error; only the
+source of the values changes.
+
+<!-- tested-example: devguide-env-reader-snippet -->
+
+```rust
+use netsuke::manifest::{EnvReader, from_str_with_env};
+use std::sync::Arc;
+
+let reader: EnvReader = Arc::new(|_| Ok(String::from("release")));
+let yaml = concat!(
+    "netsuke_version: \"1.0.0\"\n",
+    "targets:\n",
+    "  - name: \"{{ env('PROFILE') }}\"\n",
+    "    command: echo hi\n",
+);
+let manifest = from_str_with_env(yaml, &reader).expect("parse");
+assert!(format!("{:?}", manifest.targets[0].name).contains("release"));
+```
+
+This snippet mirrors the executable doctest on `from_str_with_env` in the API
+documentation.
+
+### Ninja invocation with an explicit environment
+
+A program calling Netsuke's Rust API can invoke Ninja without touching its own
+process environment. `netsuke::runner::CommandEnv` carries child environment
+overrides as data — `inherit()` changes nothing, `with_var` and `with_path` set
+variables for the spawned command only — and the explicit request forms
+`run_ninja_with` and `run_ninja_tool_with` accept a request naming the program,
+build file, targets or tool, that environment, and a `stderr_mode: StderrMode`
+policy routing the child's standard streams: `Suppress` drains both streams
+(keeping JSON diagnostics machine-readable), while `Forward` relays them to the
+caller. The convenience wrappers `run_ninja` and `run_ninja_tool` behave
+identically with an inherited environment, deriving the policy from the CLI's
+JSON setting. Overrides are additive: variables not named are inherited from
+the calling process, and the injected `PATH` governs what commands Ninja
+launches will see. Relative program names remain valid and resolve through that
+child `PATH`; supply an absolute or otherwise resolved `program` only when
+executable selection must stay isolated from the injected `PATH`.
+
+The request itself is a named type: `netsuke::runner::NinjaBuildRequest` for a
+build and `netsuke::runner::NinjaToolRequest` for `ninja -t <tool>`. Both
+borrow their fields, so one `CommandEnv` and one `NinjaProcessOptions` can
+serve several invocations. The
+[v0.1.0 migration guide](v0-1-0-migration-guide.md) summarizes these additions
+and explains the path-type change. The `program` and `build_file` fields are
+borrowed `&Utf8Path`; `NinjaProcessOptions::working_dir` is an
+`Option<Utf8PathBuf>`.
+
+The `options: &options` field and associated `NinjaProcessOptions` shape shown
+here are beta3 additions. Published beta2 request types use `cli: &cli`
+instead, so beta2 callers must not assume this API shape is available in that
+release.
+
+<!-- tested-example: devguide-ninja-request-snippet -->
+
+```rust
+use netsuke::runner::{
+    BuildTargets, CommandEnv, NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest,
+    StderrMode, run_ninja_tool_with, run_ninja_with,
+};
+use camino::Utf8Path;
+
+let options = NinjaProcessOptions::default();
+let targets = BuildTargets::default();
+// `with_path` replaces the child's `PATH` outright, so compose the whole
+// value first. The calling process is never modified.
+let path = std::env::join_paths(["/opt/toolchain/bin", "/usr/bin"])
+    .expect("separator-free entries always join");
+let env = CommandEnv::inherit()
+    .with_var("NINJA_STATUS", "[%f/%t] ")
+    .with_path(&path);
+
+let build = NinjaBuildRequest {
+    program: Utf8Path::new("/usr/bin/ninja"),
+    options: &options,
+    build_file: Utf8Path::new("build.ninja"),
+    targets: &targets,
+    env: &env,
+    // `Suppress` in JSON diagnostics mode keeps the child's output out of
+    // the machine-readable streams; `Forward` relays it to the caller.
+    stderr_mode: StderrMode::Forward,
+};
+let clean = NinjaToolRequest {
+    program: Utf8Path::new("/usr/bin/ninja"),
+    options: &options,
+    build_file: Utf8Path::new("build.ninja"),
+    tool: "clean",
+    env: &env,
+    stderr_mode: StderrMode::Forward,
+};
+
+if std::env::var_os("NETSUKE_GUIDE_RUN").is_some() {
+    run_ninja_with(&build).expect("run ninja");
+    run_ninja_tool_with(&clean).expect("run ninja -t clean");
+}
+```
+
+The convenience wrappers `run_ninja` and `run_ninja_tool` keep their child
+environment behaviour, but their `program` and `build_file` parameters now use
+`&Utf8Path`; `run_with_ninja_program` accepts the same path type. The request
+bundles use `options: &options` instead of `cli: &cli` and gained the required
+`stderr_mode` field, so a caller that constructs `NinjaBuildRequest`/
+`NinjaToolRequest` directly must supply both. Each release records such
+additions in [`CHANGELOG.md`](../CHANGELOG.md), which is where Netsuke
+signposts Rust API changes — with no stability promise attached to them ahead
+of 1.0.
+
+### Verbose timing sink
+
+Rust callers that wrap a `StatusReporter` can send verbose timing summaries to
+an owned sink with `VerboseTimingReporter::with_writer`:
+
+The writer/completion behaviour described here is a beta3 addition. Published
+beta2 callers must not assume this timing-writer behaviour;
+`VerboseTimingReporter::new` remains the stderr-writing default.
+
+<!-- tested-example: devguide-verbose-timing-reporter -->
+
+```rust
+use netsuke::output_prefs::resolve;
+use netsuke::status::{SilentReporter, VerboseTimingReporter};
+
+let reporter = VerboseTimingReporter::with_writer(
+    Box::new(SilentReporter),
+    resolve(None),
+    Vec::<u8>::new(),
+);
+```
+
+The generic writer must implement `Write + Send` and is owned by the timing
+reporter. `VerboseTimingReporter::new` remains the default API and writes to
+`io::Stderr`. On the first completion, the wrapped reporter receives its
+completion event before the timing summary is written synchronously to the
+sink. A blocking sink therefore blocks only that completion call; later stage,
+progress, and completion events remain suppressed. Re-entrant calls observe the
+completed state, and summary lines retain their rendered order. Write errors
+are ignored, matching the existing accessible reporter contract; applications
+can observe them through the bounded timing sink telemetry emitted by their
+configured metrics and tracing backends.
+
+### Clock provider for `now()`
+
+The clock seam serves the forthcoming testing framework. It is not yet a
+user-facing feature, so the users' guide does not describe it.
+
+`now()` does not read the host clock directly. It reads through an injectable
+`ClockProvider` seam held by `StdlibConfig`, so tests and other callers can pin
+the instant instead of racing a real clock. The default remains the ambient
+host clock, so existing templates and manifests are unaffected.
+
+- `StdlibConfig::with_clock` accepts a `ClockProvider`, replacing the wall-clock
+  source that `now()` reads.
+- `fixed_clock(instant)` builds a provider that always reports `instant`.
+- `system_clock()` builds the host-backed provider that the default
+  configuration uses.
+- `ClockInstant` re-exports the provider's timestamp type, so a caller can name
+  that type without adding its own `time` dependency.
+
+Registration captures the adapter that holds the provider, and each `now()`
+call invokes it to read the instant afresh, so a provider that yields a
+different instant on each call is observed by successive `now()` evaluations.
+Readings are normalized to UTC, and an explicit `offset=` argument re-expresses
+the same instant in the requested offset rather than changing it.
+
+Manifest-query registration still refuses `now()`, so the seam does not widen
+what a manifest query may evaluate.
+
+<!-- tested-example: devguide-clock-snippet -->
+
+```rust
+use minijinja::Environment;
+use netsuke::stdlib::{self, StdlibConfig, fixed_clock};
+use time::macros::datetime;
+
+let instant = datetime!(2026-06-08 12:00:00 UTC);
+let config = StdlibConfig::from_current_dir()
+    .expect("open workspace")
+    .with_clock(fixed_clock(instant));
+
+let mut env = Environment::new();
+stdlib::register_with_config(&mut env, config).expect("register stdlib");
+let rendered = env.render_str("{{ now() }}", ()).expect("render");
+assert_eq!(rendered, "2026-06-08T12:00:00Z");
+```
+
+This snippet mirrors the executable doctest on `with_clock` in the API
+documentation.
+
+### Canonical build graph
+
+`BuildGraph` stores each logical build edge once. Every output alias, explicit
+or implicit, resolves through the graph's output index to that one edge, so a
+multi-output target is not copied once per output.
+
+Callers add edges with `BuildGraph::insert_edge`, which rejects a duplicate
+output with `IrGenError::DuplicateOutput` before mutating the graph. Callers
+read edges with `edges()` and resolve a path with `edge_id_for_output` or
+`target_for_output`.
+
+Code that previously read or wrote the graph's target map directly must move to
+those methods. Like every Rust API named here, this surface is unstable and
+carries no stability promise.
+
+### Cached configuration merge
+
+Programs using Netsuke's unstable Rust API can retain the layers from one
+discovery pass and observe the subsequent merge. Construct
+`CachedMergeInput::new(cli, matches, env, discovered)` with the parsed CLI
+values, an injected `ConfigEnvProvider`, and `DiscoveryOutcome::into_layers()`;
+then pass it to `cli::merge_with_cached_file_layers_with_observer(input)`. The
+function returns the merge result alongside bounded events; replay those events
+through `MergeObserver`, such as `TracingMergeObserver`. Another caller can
+provide its own `MergeObserver` implementation. Observers receive bounded
+`MergeEvent` values: layer application and failure states, file `path_hash` and
+layer counts, CLI override leaf keys, and validation `key`/`reason` fields.
+Configuration values and raw paths are never included. Ordinary
+`merge_with_config*` and `merge_with_cached_file_layers` calls discard their
+collected events and do not emit merge tracing.
+
+The observer-based cached discovery and merge flow described here is a beta3
+improvement. Published beta2 already provides `merge_with_cached_file_layers`,
+but not this observer-based flow.
+
+### Glob path query
+
+`manifest::glob_paths(pattern, base)` returns matching UTF-8 file paths without
+the shell-safety validation that the Jinja `glob()` helper applies. Each caller
+must validate or escape matched paths before passing them to a command sink.
+`Some(&Utf8Path)` anchors relative patterns and strips that base from results;
+absolute patterns ignore the base, while `None` resolves relative patterns
+against the process working directory.
+
+### File-read budget
+
+The `contents`, `linecount`, `hash`, and `digest` filters share an 8 MiB
+default byte budget per read. Hosts embedding Netsuke can raise or lower it with
+`StdlibConfig::with_file_max_read_bytes` before registering the standard
+library; a per-call `max_bytes` argument can only narrow that budget.
+
 ## Localization
 
-`src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.
-It sits at the crate root, not under `localization/`, because `localization`
+`src/locale/catalogues.rs` is the authoritative registry of shipped catalogues.
+It sits under `src/locale/`, not under `localization/`, because `localization`
 builds its default localizer through `cli_localization`, and `cli_localization`
 reads the registry; a registry inside `localization` would close that into a
 module cycle. `localization::locales` re-exports it, so the older path still
@@ -256,7 +604,7 @@ Locale resolution happens before the command line is parsed, so a fallback
 warning can be emitted before the effective diagnostic mode — human or JSON —
 is known, yet the JSON diagnostic document is also written to stderr: an
 eagerly emitted warning could corrupt it. `StartupWriter` in
-`src/startup_tracing.rs` closes that window. It implements
+`src/startup_tracing/mod.rs` closes that window. It implements
 `tracing_subscriber`'s `MakeWriter` and is installed by `init_tracing` in
 `src/main.rs` before locale resolution runs, so every startup event is held
 rather than written. The buffer is bounded at `MAX_BUFFERED_BYTES` (64 KiB): it
@@ -273,7 +621,7 @@ the paths where `clap` calls `Error::exit` and never returns —
 `parse_cli_or_exit` — settlement happens first, because nothing after that call
 would otherwise run.
 
-Unit tests in `src/main_tests.rs` drive `startup_filter` and the real
+Unit tests in `src/tests.rs` drive `startup_filter` and the real
 `startup_localizer` to check the buffered warning and the level it is gated by.
 `tests/startup_diagnostics_tests.rs` runs the built binary end to end,
 including the configuration-driven JSON path, because the behaviour under test
@@ -289,11 +637,21 @@ Every user-facing string is a Fluent message keyed from
 `src/localization/keys.rs`. Adding one means adding the constant, adding the
 message to all 35 catalogues, and keeping its `{ $variables }` identical across
 them: the build audit rejects a missing key, an orphaned key, or a variable set
-that differs from `en-US`. The audit lives in `build_l10n_audit/`, split into
-`keys.rs` and `scanner.rs` (the `define_keys!` scanner, with `byte_index.rs`
-for its byte-position bookkeeping), `ftl.rs` (catalogues), `metadata.rs` (the
-Cargo metadata), and `compare.rs` (the rules). Because build scripts are not
-test targets, those modules are included by path from four test files:
+that differs from `en-US`.
+
+A *diagnostic* message whose text carries a bracketed code such as
+`[netsuke::jinja::shell::args]` must have that code copied **verbatim** into
+every catalogue. The code is part of the message text rather than a field, so a
+translator who rewords, translates, or re-punctuates the bracket is not
+producing a translation — the code is an identifier a reader greps for, and the
+localized catalogues assert on the exact spelling. Copy the bracketed span
+unchanged and translate only the prose around it.
+
+The audit lives in `build_l10n_audit/`, split into `keys.rs` and `scanner.rs`
+(the `define_keys!` scanner, with `byte_index.rs` for its byte-position
+bookkeeping), `ftl.rs` (catalogues), `metadata.rs` (the Cargo metadata), and
+`compare.rs` (the rules). Because build scripts are not test targets, those
+modules are included by path from four test files:
 `tests/build_l10n_keys_tests.rs` exercises the `define_keys!` scanner
 (`keys.rs`, `scanner.rs`, `byte_index.rs`); `tests/build_l10n_parser_tests.rs`
 exercises the catalogue and metadata parsers (`ftl.rs`, `metadata.rs`);
@@ -309,20 +667,21 @@ domain projection lives in [`src/graph_view`](../src/graph_view) and follows
 the hexagonal port/adapter pattern:
 
 - [`GraphView`](../src/graph_view/mod.rs) is the deterministic projection of
-  [`BuildGraph`](../src/ir/graph.rs). It is constructed once, sorts every
+  [`BuildGraph`](../src/ir/graph/mod.rs). It is constructed once, sorts every
   collection (nodes, edges, default targets), and is invariant under `HashMap`
   insertion order. The shuffled-insertion proptest in
-  [`src/graph_view/tests.rs`](../src/graph_view/tests.rs) covers this invariant.
+  [`src/graph_view/tests/mod.rs`](../src/graph_view/tests/mod.rs) covers this
+  invariant.
 - `NodePathRegistry` owns graph-path deduplication. Its borrowed `entry_ref`
   lookup avoids cloning existing paths; conversion to `BTreeMap` at the
   projection boundary restores deterministic ordering. This registry is
   internal to graph projection and must not become a general application map.
-- [`GraphRenderer`](../src/graph_view/render.rs) is the trait every renderer
+- [`GraphRenderer`](../src/graph_view/render/mod.rs) is the trait every renderer
   adapter implements. The contract is intentionally minimal:
   `render(&self, view: &GraphView, sink: &mut dyn io::Write) -> Result<(), GraphRenderError>`.
   Adapters consume `GraphView` only — they never touch `BuildGraph` directly.
-- [`DotRenderer`](../src/graph_view/render_dot.rs) emits Graphviz DOT.
-- [`HtmlRenderer`](../src/graph_view/render_html/mod.rs) emits a self-contained
+- [`DotRenderer`](../src/graph_view/render/dot.rs) emits Graphviz DOT.
+- [`HtmlRenderer`](../src/graph_view/render/html/mod.rs) emits a self-contained
   HTML page (server-rendered SVG, accessible textual outline, and a
   `<noscript>` fallback containing the DOT source verbatim).
 
@@ -343,8 +702,8 @@ order-only stroke (no rebuild trigger) and the dotted implicit-output stroke
 (auxiliary output side).
 
 A new renderer — for example the `--json` view planned for roadmap item
-`3.15.6` — should be added as a sibling module under `src/graph_view/` that
-implements `GraphRenderer`. The runner dispatch in
+`3.15.6` — should be added as a sibling module under `src/graph_view/render/`
+that implements `GraphRenderer`. The runner dispatch in
 [`src/runner/mod.rs`](../src/runner/mod.rs) picks the appropriate renderer
 based on `GraphArgs` and writes through the shared `write_text_file`/
 `write_text_stdout` sink helpers. The `-` sentinel for `--output` is recognized
@@ -386,19 +745,22 @@ dependency-only aggregate does not need a synthetic `command: ":"` recipe.
 
 The lowering stages have deliberately separate responsibilities:
 
-- `src/manifest/render.rs` renders a scalar or each list entry independently.
-  Every entry sees the same cloned recipe context, including target variables
-  and delayed `ins`/`outs` markers. A rendering error for a list includes its
-  one-based entry position.
-- `src/ir/from_manifest_support.rs` prepares one shell-quoted input/output
+- `src/manifest/render/mod.rs` renders a scalar or each list entry
+  independently. Every entry sees the same cloned recipe context, including
+  target variables and delayed `ins`/`outs` markers. A rendering error for a
+  list includes its one-based entry position.
+- `src/ir/from_manifest/support/mod.rs` prepares one shell-quoted input/output
   binding set for the recipe, then interpolates every scalar or list entry with
-  that set. Only `{{ ins }}` and `{{ outs }}` markers are resolved per entry.
-  Literal `$ins` and `$outs` remain shell variables and are escaped for Ninja
+  that set. Both recipe kinds recognize the same `{{ ins }}` and `{{ outs }}`
+  markers; POSIX lexical scanning can preserve their internal tokens in
+  comments and heredoc bodies rather than resolving them. Literal `$in`, `$out`,
+  `$ins`, and `$outs` remain shell variables and are escaped for Ninja
   pass-through. POSIX lowering tracks unquoted, single-quoted, and
   double-quoted text, and rejects markers within command substitutions because
-  it cannot lower them safely; scripts therefore retain heredocs and comments
-  without accepting an unsafe marker context. The resulting action contains
-  ordinary command text and no Ninja placeholders.
+  it cannot lower them safely. Script recipes therefore retain heredocs and
+  comments without accepting an unsafe marker context. The resulting action
+  contains lowered command text and no Ninja rule variables; an inert region
+  may still retain an internal Netsuke marker token.
 - `src/ninja_gen/mod.rs` delegates completed recipe text to
   `src/ninja_gen_recipe_shell.rs`. On Unix, and for the explicit Windows Bash
   compatibility route, a scalar remains POSIX shell text. A list puts each
@@ -444,16 +806,51 @@ failed subcommand's stderr on its own stdout, build runs retain only a fixed
 512-byte stdout tail and use its parsed marker only after a non-zero exit.
 Ordinary child stdout streams forward directly and must not use this tail.
 
-The lowest-layer POSIX shell-word quoting used for input/output paths during IR
-lowering is `shell_quote::QuoteRefExt::quoted(Sh)`. It performs minimal,
-fragmented shell quoting, which is appropriate for a literal shell word but not
-for the command-list `eval` payload. That renderer requires a canonical
-single-quoted payload so existing generated Ninja list text remains
+The lowest-layer shell-word quoting used for input/output paths during IR
+lowering, and for the `shell_quote` and `shell_join` template filters, is
+[`src/shell_word.rs`](../src/shell_word.rs). `quote_word` is its one entry
+point, and `is_recipe_admissible` is a separate predicate: encoding is total,
+while which inputs a recipe may carry is a question the caller owns and asks
+separately, a split `quote_path` depends on to keep its existing total
+behaviour. It is the single encoding of a recipe shell word, and a constraint
+test holds the delegation to one call site per layer rather than to convention.
+It performs minimal, fragmented shell quoting — `shell-quote`'s `Sh` encoder
+leaves the longest safe prefix bare and quotes only the remainder, so `a b`
+encodes as `a' b'` and not `'a b'` — which is appropriate for a literal shell
+word but not for the command-list `eval` payload. That renderer requires a
+canonical single-quoted payload so existing generated Ninja list text remains
 byte-for-byte stable, and the delimiter/boundary tests continue to hold. Keep
 that quoting in the deliberately local `shell_single_quote` function; it is not
-a general-purpose helper. Neither quoting path is the platform-specific
-`src/stdlib/command/quote.rs` implementation behind the `command.quote`
-template wrapper, which must retain its `cmd.exe` quoting behaviour on Windows.
+a general-purpose helper, and it is the one remaining quoter outside
+`src/shell_word.rs`.
+
+The third path is the platform-specific `src/stdlib/command/child_argument.rs`
+implementation behind the `command.quote` template wrapper. That file was named
+`quote.rs` before this milestone; the rename records that it answers a narrower
+question than the other two — how one argument is spelled for the interpreter a
+structured command will run under, including `cmd.exe` on Windows — and is
+therefore deliberately distinct from the recipe-shell word encoding.
+
+`quote_word` takes a `ShellDialect`, the two-variant enum `Sh` and `PowerShell`
+declared in `src/shell_word.rs` with `as_str`, `telemetry_name`, and `parse`
+accessors. `parse` deliberately rejects the string `"bash"` (decision D3):
+`RecipeShell::Bash` maps to `Sh` because `Sh` output is valid Bash, but the
+`shell-quote` crate's `Bash` encoder emits a different `$'...'` form that
+Netsuke does not compile in, so accepting the name now would lock in a meaning
+a real `bash` dialect would have to break. `RecipeShell::dialect()` is the
+three-to-two surjection onto that enum, and has no inverse by design — an
+inverse would have to pick one of `Posix` or `Bash` arbitrarily:
+
+- `Posix | Bash => ShellDialect::Sh`
+- `PowerShell => ShellDialect::PowerShell`
+
+`StdlibConfig::with_recipe_shell` stores only the dialect, not the interpreter,
+for that same reason: `Posix` and `Bash` quote identically, so keeping the
+wider type would leave a `recipe_shell()` accessor inviting a question the
+configuration cannot answer honestly. The closed `sh`/`powershell` label set
+that [Recipe-text dialect telemetry](#recipe-text-dialect-telemetry) admits is
+exactly the `ShellDialect` spelling, so the surjection above is what keeps a
+build's quoting reachable from the telemetry vocabulary.
 
 Attributed list failures emit the bounded tracing fields `command_list_action`
 (a fixed-width action fingerprint) and `command_list_entry` (the one-based
@@ -477,10 +874,11 @@ compose a completed command and hand it to the selected renderer. POSIX and
 Bash routes convert `ShellText` through `escape_ninja_value`; the encoded
 PowerShell transport returns a private `NinjaValue` without exposing its
 payload to Ninja parsing. No IR or manifest lowering may call either route.
-Descriptions, `depfile`, `deps`, and `pool` retain their existing raw emission
-semantics because they are not shell text, although metadata is still checked
-for control characters. Add a separate, explicitly documented conversion for
-any new Ninja grammar position rather than reusing command escaping.
+Descriptions, `depfile`, `deps`, and `pool` keep their backend-neutral IR text
+and are converted only at their Ninja emission boundary, where literal dollars
+are doubled and newline, carriage-return, and NUL characters are rejected. Add
+a separate, explicitly documented conversion for any new Ninja grammar position
+rather than reusing command escaping.
 
 ## Package and target naming
 
@@ -552,17 +950,26 @@ that restates it is a build that can silently drop it. A contract test
 every checkout consumer — plain Cargo invocations, rust-analyzer, Clippy, and
 Whitaker — without any Cargo configuration. `cargo kani setup` is a separate
 boundary: Kani 0.67.0 installs and uses its bundled `nightly-2025-11-21`
-toolchain rather than the checkout toolchain. The repository has no
-`.cargo/config.toml`; carrying the flag was that file's only purpose, and it
-was deleted when the pin moved past 2026-08-04.
+toolchain rather than the checkout toolchain. `.cargo/config.toml` carried the
+Polonius flag until the pin moved past 2026-08-04; that file was deleted then
+and has since returned for the build standard alone, so look to *The build
+standard* above for what it holds now.
 
-Makefile recipes still set `RUSTFLAGS`, but only to deny warnings. Each builds
-the value as `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings"`; the
-`$${RUSTFLAGS:+$$RUSTFLAGS }` expansion prepends any `RUSTFLAGS` already set by
-the caller (for example a CI wrapper), so those flags survive rather than being
-silently discarded. `make kani-full` and the binary-build recipe set no
-`RUSTFLAGS` at all: Kani compiles third-party crates the workspace lint policy
-does not govern, and a plain binary build is not a lint gate.
+Makefile recipes set `RUSTFLAGS` through a small set of named variables rather
+than spelling a value out, and the variable a recipe composes states its policy.
+`GATE_RUSTFLAGS` appends `-D warnings` and the standard's flags, and every
+lint or test gate takes it. `DEBUG_RUSTFLAGS` takes the standard but leaves the
+caller's warning policy alone, so `make build` is not a gate. `KANI_RUSTFLAGS`
+denies warnings but takes none of the standard: Kani drives `rustc` through
+`kani-compiler` on its own bundled toolchain, where neither flag applies.
+`RELEASE_RUSTFLAGS` assigns an empty inherited value, which is what holds the
+config file's `rustflags` tables off a shipped artefact; see *Exclusions* under
+*The build standard*. Every one of them builds its value as
+`RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }…"`, whose `$${RUSTFLAGS:+$$RUSTFLAGS }`
+expansion prepends any `RUSTFLAGS` already set by the caller (for example a CI
+wrapper), so those flags survive rather than being silently discarded.
+`tests/makefile_test_target/rustflags.rs` holds all four to that composition
+and to their individual policies.
 
 [ADR-006](adr-006-adopt-polonius-nightly-toolchain.md) records the policy
 decision, and the [polonius migration notes](polonius.md) track every site
@@ -631,7 +1038,146 @@ as workflow-level `env`. Each pin is still declared once at workflow scope in
 value. `tests/workflow_contracts/ci_windows_job_test.py` holds the caller's
 literals equal to those pins, so the two copies cannot drift.
 
-### Why the Windows gate is two jobs
+### Release workflow helpers
+
+The release workflows keep non-trivial shell behaviour in tested Python
+helpers. Each script declares `requires-python = ">=3.14"` and its dependencies
+in PEP 723 metadata, and the workflow invokes it with `uv run` on Python 3.14.
+Cyclopts reads the inputs from `INPUT_*` environment variables supplied through
+the step's `env:`. Keep this wiring aligned with the script when changing
+either side.
+
+- `release.yml` owns `ensure_draft_release.py`. It receives `INPUT_TAG` from
+  `github.ref_name`; `GITHUB_TOKEN` and `GH_TOKEN` stay in the process
+  environment for `gh`. It depends on Cyclopts `>=4.25.3,<5` and Cuprum
+  `>=0.1.0,<0.2.0`; see `scripts/tests/test_ensure_draft_release.py`.
+- `build-and-package.yml` owns `install_orthohelp.py`. `INPUT_VERSION` selects
+  the pinned tool, and `GITHUB_TOKEN` stays in the process environment for
+  `cargo binstall`. It depends on Cyclopts `>=4.25.3,<5` and Cuprum
+  `>=0.1.0,<0.2.0`; see `scripts/tests/test_install_orthohelp.py`.
+- `build-and-package.yml` owns `report_glibc_floor.py`. `INPUT_TARGET` and
+  `INPUT_BIN_NAME` select the binary, and `GITHUB_STEP_SUMMARY` identifies the
+  summary file. It depends on Cyclopts `>=4.25.3,<5` and Cuprum
+  `>=0.1.0,<0.2.0`; see `scripts/tests/test_report_glibc_floor.py`.
+- `release.yml` owns `resolve_wix_extension_version.py`.
+  `INPUT_WIX_EXTENSION_VERSION` carries the requested version, and
+  `GITHUB_OUTPUT` identifies the output file. The workflow supplies `7` for an
+  omitted or blank value. The Python resolver rejects an unexpectedly blank
+  input and rejects carriage returns or line feeds before writing the resolved
+  version. Its only dependency is Cyclopts `>=4.25.3,<5`; see
+  `scripts/tests/test_resolve_wix_extension_version.py`.
+
+### Linux glibc floor
+
+A Linux release binary's highest required GLIBC symbol version is its
+portability floor, and it follows the image the binary was linked on.
+v0.1.0-beta3 measured GLIBC_2.39 for x86_64, which builds natively on Ubuntu
+24.04, and GLIBC_2.18 for aarch64, which builds through `cross`. A native
+aarch64 trial on Ubuntu 24.04 measured GLIBC_2.39 for both targets. The
+`Report the glibc floor` step in `build-and-package.yml` writes each Linux
+binary's floor to the job summary after the build, reading it with
+`readelf --version-info`, which reads the aarch64 binary on the x64 runner
+without a multi-architecture binutils. Only the version-needs section counts:
+`--version-info` also prints the symbol and definition sections, and a GLIBC
+version the binary defines is not one it requires. So a change to either image
+shows up in the release run rather than in a user's bug report.
+`tests/workflow_contracts/release_glibc_floor_test.py` holds the step's Linux
+gate, its place after the build, the binary it reads, and the summary it
+writes. It also runs the step's own script over two fixed `readelf` outputs,
+`tests/data/readelf-version-info.txt` and
+`tests/data/readelf-version-info-aarch64.txt`, whose floors differ, and asserts
+the floor each reports.
+
+### Linux package metadata
+
+Linux package metadata comes from the active Cargo manifest, not a second set
+of workflow literals. `scripts/cargo_package_metadata.py` reads the first
+`[package].authors` entry as the maintainer and reads `homepage`, `license`, and
+`description` from `[package]`. It trims surrounding whitespace and rejects
+missing, empty, non-string, or values containing Unicode categories `Cc`, `Zl`,
+or `Zp` (control, line, or paragraph separators) before writing the four
+`key=value` entries to `GITHUB_OUTPUT`. The release metadata job exposes them as
+`package_maintainer`, `package_homepage`, `package_license`, and
+`package_description`, and `build-and-package.yml` forwards them to the Linux
+packaging action.
+
+Before upload, `scripts/validate_linux_package_metadata.py` checks the built
+packages against the same manifest. Its required arguments are `--dist`,
+`--manifest`, `--package-name`, and `--license-file`. The Debian check compares
+`Maintainer`, `Homepage`, and the first line of `Description`; Debian has no
+license control field here, so the check extracts
+`usr/share/doc/<package-name>/copyright` and compares its bytes with the
+specified licence file. The RPM check compares `PACKAGER`, `URL`, `LICENSE`,
+`SUMMARY`, and `DESCRIPTION`. A missing or differing field fails the Linux
+packaging job before artefact upload. Run `make test-linux-package-metadata`
+for the focused reader and package-validator tests.
+
+### Windows MSI packaging and upgrade validation
+
+The Windows packaging workflow passes the repository-owned authoring file as
+`wxs-path: installer/Package.wxs` to the pinned
+`leynos/shared-actions/.github/actions/windows-package` action. Keep that input
+when changing the packaging action: the caller owns the WiX v4 authoring and
+the shared action passes it to the pinned WiX compiler unchanged.
+
+Callers of `.github/workflows/release.yml` may set the `wix-extension-version`
+`workflow_call` input to select the `WixToolset.UI.wixext` version. The input
+defaults to `7`, and the workflow expression supplies `7` when the value is
+omitted or empty. The Python resolver rejects an unexpectedly empty value and
+values containing carriage returns or line feeds. The metadata job exposes the
+resolved value as `wix_extension_version`; `build-windows` passes that output to
+`build-and-package.yml` as `wix-extension-version`.
+
+The merge gate's dedicated `windows-msi-upgrade` job runs on `windows-latest`.
+It uses the local `.github/actions/windows-msi-upgrade-validation` adapter for
+fixture creation, package builds, and the install-transition checks. Keep the
+adapter scoped to this repository's deterministic MSI fixtures; it must not
+replace or rewrite caller-provided WiX authoring.
+
+The MSI `UpgradeCode` in `installer/Package.wxs` is a stable upgrade-family
+identifier and must not change between releases. The `ProductCode` is not
+authored explicitly; WiX generates a new product identity for each package
+build. This combination lets Windows Installer treat a new package as a major
+upgrade while retaining one upgrade family.
+
+The packaging workflow derives `NETSUKE_RELEASE_RANK` with the repository's
+release-rank helper before invoking the action. The accepted version formats are
+`MAJOR.MINOR.PATCH` for a final release and `MAJOR.MINOR.PATCH-betaN` for a
+beta release. Beta sequence `N` is an integer in `1..=65534`; the final release
+has rank `65535`. Empty, non-numeric, zero, and out-of-range beta sequences,
+malformed numeric versions, and unsupported prerelease suffixes are rejected
+before an MSI is built.
+
+The rank preserves release ordering that MSI's numeric version comparison
+cannot represent when prerelease suffixes share the same numeric version. A
+later beta replaces an earlier beta, and the final release replaces betas in
+the same release line. An older beta is rejected after a later beta or the
+final release has been installed. The stable `UpgradeCode`, generated
+`ProductCode`, `MajorUpgrade` metadata, and release-rank launch condition are
+one contract; change them together and update the tests.
+
+Validation has deliberately separate responsibilities:
+
+- `tests/installer_package_wxs_tests.rs` parses the XML and checks the stable
+  WiX structure and upgrade metadata. XML parsing does not validate WiX schema
+  compatibility.
+- The release-rank example and property tests execute the repository-owned
+  parser without GitHub Actions or Windows environment state.
+- The `windows-msi-upgrade` job and its local adapter compile
+  `installer/Package.wxs` with the pinned WiX CLI and UI extension while
+  building beta1, beta2, and final fixtures. They use temporary executable and
+  RTF fixtures and do not compile the Rust application, so WiX schema or
+  extension incompatibilities fail the merge gate.
+- The same adapter then uses quiet `msiexec` installs and preserved logs to
+  verify replacement, registry `ReleaseRank`, product identity, and refused
+  downgrades. An unconditional cleanup step removes every fixture installation,
+  including the final release.
+
+Only the `msiexec` phase exercises Windows Installer's actual install,
+replacement, and downgrade behaviour; passing the XML and compiler checks alone
+does not prove the upgrade path.
+
+### Why the two Windows Rust/cache jobs are split
 
 `lint-windows` and `build-test-windows` run concurrently on `windows-latest`.
 They used to be one job, in which formatting, Clippy and Whitaker ran in series
@@ -689,6 +1235,79 @@ Table: CI lane runner shapes and concurrency settings.
 | `release.yml` `build-linux`           | `ubicloud-standard-2-ubuntu-2404` | caller-selected packaging runner; no sccache                                     |
 | `ci-windows.yml` `lint-windows`       | `windows-latest`                  | `BUILD_JOBS=-j 4`, `NEXTEST_BUILD_JOBS=--build-jobs 4`, `NEXTEST_TEST_JOBS=-j 4` |
 | `ci-windows.yml` `build-test-windows` | `windows-latest`                  | `BUILD_JOBS=-j 4`, `NEXTEST_BUILD_JOBS=--build-jobs 4`, `NEXTEST_TEST_JOBS=-j 4` |
+
+#### The fork arm on the pull-request lanes
+
+A pull request from a fork cannot obtain a Ubicloud runner, so the three lanes
+that serve pull requests, `build-test`, `kani-smoke`, and `netsukefile`, name
+their runner through an expression rather than a label:
+
+```yaml
+runs-on: >-
+  ${{ github.event.pull_request.head.repo.fork
+  && 'ubuntu-latest' || 'ubicloud-standard-4-ubuntu-2404' }}
+```
+
+Without the arm the lane never starts on a fork's pull request, and the branch
+ruleset waits on a required check that will not report. It presents as a pull
+request stuck on a pending check rather than as a placement fault.
+
+Two of those lanes also serve `push`. No second condition is needed: on a push
+the pull-request context is null, so the expression takes the Ubicloud arm.
+
+The fork arm is pinned per lane rather than shared, and `FORK_FALLBACK_RUNNERS`
+in `tests/workflow_contracts/fork_fallback.py` records which label each takes.
+`build-test` and `kani-smoke` fall back to `ubuntu-latest`; `netsukefile` falls
+back to `ubuntu-22.04`, because that lane exists for Ubuntu 22.04's older glibc
+and keeps `NETSUKE_RUNNER_IMAGE: ubuntu2204`. A fork's pull request sent to
+`ubuntu-latest` would run on a newer image, so the one regression the lane
+exists to catch would pass the required check and appear only after merge. The
+mapping is proved by a mutation that sends `netsukefile` to `ubuntu-latest`:
+hosted, Linux, and the right answer for every other lane, so nothing but a
+per-lane expectation separates it.
+
+The compiler cache follows the same arm without a guard of its own.
+`setup-rust` selects sccache's backend from the runner the job landed on, so a
+fork's run on a GitHub-hosted runner gets local disk and a run on Ubicloud gets
+the cache proxy. The two lanes with a fork arm, `build-test` and `netsukefile`,
+therefore pass `expect-cache: any`, and `coverage-upload`, which has no fork
+arm, passes `expect-cache: ubicloud`, so a missing proxy fails it rather than
+letting it compile cold. `setup_rust_sccache_test.py` derives each lane's value
+from its placement, so moving `coverage-upload` onto a fork arm fails the
+contract until its value moves too.
+
+The pin is `6cec89ba` (shared-actions #546), which gives the sccache server a
+60 s startup timeout and makes a start that still fails fall back to an
+uncached build, reporting `sccache-status` as `fallback` (a `sccache-fallback`
+annotation and a summary line accompany it). A server that never started has no
+statistics; with no server `sccache --show-stats` prints empty defaults rather
+than starting one, which would read as a broken integration. So the
+`Show sccache statistics` step in `ci.yml`, `coverage-main.yml` and
+`netsukefile-test.yml` runs under
+`always() && steps.setup-rust.outputs.sccache-status != 'fallback'`.
+`setup_rust_sccache_test.py` holds that condition's text on each, and
+`sccache_statistics_condition_test.py` evaluates it the way a runner would for
+a fallback, a started server and no status, each with the job green and with an
+earlier step failed: a fallback skips the report in both states, and every
+other case runs it.
+
+Every other Ubicloud lane keeps its plain label, and the contract asserts that
+too, so the expression does not spread by imitation. `coverage-upload` is push
+and dispatch only. Both jobs in `coverage-pr-submit.yml` trigger on
+`workflow_run`, which runs in this repository's context whatever the
+originating pull request was, so no fork ever selects their runner.
+`release.yml` `build-linux` is called rather than triggered.
+
+The table above records the runner this repository's own branches get. Every
+rule that sizes a lane reads that arm, through `owned_runner` in
+`tests/workflow_contracts/fork_fallback.py`: a fork's run is a GitHub-hosted
+fallback whose shape the worker bounds deliberately do not govern.
+
+Keep the continuation at the same indent as the first line. A more-indented
+line inside a folded scalar keeps its break, so the expression arrives with a
+newline inside it. GitHub evaluates it anyway and the lane runs, which is why a
+green run is not evidence that the declaration is well-formed;
+`test_no_runs_on_declaration_carries_a_line_break` is what reads it.
 
 `build-test` and `coverage-upload` are the two instrumented lanes and both run
 on `ubicloud-standard-4-ubuntu-2404`, declaring `LINUX_LANE_VCPUS: '4'`. The
@@ -818,76 +1437,86 @@ Cargo download store would break the single-owner rule. The coverage job does
 not cache its uv stores, because they live under `~/.local/share`, which the
 merge gate's Whitaker cache owns.
 
-The compiler cache is sccache 0.16.0, installed as a checksum-verified prebuilt
-binary through the pinned `taiki-e/install-action` with `fallback: none`,
-including on the packaging lane: a `RUSTC_WRAPPER` naming a binary nobody
-installed is what produced "sccache: error: failed to spawn Command" there.
+The compiler cache is sccache. On the Linux lanes, `build-test`, `netsukefile`
+and `coverage-upload`, it belongs to `setup-rust`, as
+[ADR 0005 in `leynos/shared-actions`][sa-adr-0005] decides. The action names
+the wrapper, starts and zeroes the server, and selects the backend from the
+runner. On Ubicloud it exports the cache-proxy credentials and clears
+`ACTIONS_CACHE_SERVICE_V2`, which sccache would otherwise read as a request for
+GitHub's v2 service; the proxy serves v1. Every compilation then reads and
+writes Ubicloud's store directly, with no archive. Each lane's statistics
+report prints the action's `cache-backend` output, because `Cache location`
+reads `ghac` for the proxy and GitHub's own service alike.
 
-The Ubicloud and macOS lanes use sccache's GitHub Actions backend, which needs
-no archive of its own. The GitHub-hosted Windows lanes do not: on that backend
-the Windows gate recorded 643 failed writes out of 643, and the packaging build
-68, which is GitHub rate limiting. Those lanes keep `SCCACHE_DIR` in a
-workspace directory that the cache action owns, under a rolling key with a
-prefix restore-key, and set no `SCCACHE_GHA_ENABLED` at all. On a Ubicloud
-runner those objects land in Ubicloud's own store, confirmed on 2026-09-03 by
-finding `sccache/...` keys from another repository's Ubicloud run in the
-console listing; an earlier reading that the backend wrote to GitHub was a
-misattribution of a Windows lane's objects. Setting the repository variable
-`NETSUKE_SCCACHE_LOCAL_DIR` to `true` switches the Linux gate to the
-local-directory backend and enables cache step B instead. Exactly one backend
-is ever active. `SCCACHE_CACHE_SIZE` is 4 GB rather than the usual 2 GB,
-because one store now holds two build shapes.
+That retired a hand-rolled arrangement with five parts, and each would now
+override the action's choice without a word: a job-level `RUSTC_WRAPPER`,
+`SCCACHE_GHA_ENABLED`, `SCCACHE_DIR` and `SCCACHE_CACHE_SIZE`; a local
+`sccache-gha-credentials` action run straight after checkout; a pinned
+`taiki-e/install-action` sccache install; `use-sccache: false` on `setup-rust`,
+because its `mozilla-actions/sccache-action` step re-exported
+`ACTIONS_CACHE_SERVICE_V2` and GitHub's results address as its last act and
+sent the server past the proxy; and a local-directory fallback behind the
+repository variable `NETSUKE_SCCACHE_LOCAL_DIR`, archived by the Linux gate
+cache. `setup-rust` now clears the switch itself and restores the cleared value
+after that step runs, so the clobber cannot recur, and the fallback is the
+action's own hosted arm. `setup_rust_sccache_test.py` holds all of it: each
+Linux lane calls a pinned `setup-rust` once with sccache on, the id
+`setup-rust` and the `expect-cache` its placement allows; no retired piece
+survives in those lanes or in the Linux gate cache; and the statistics report
+follows the last compile under `if: always()` and names the backend. Fixtures
+prove the retired-piece reader both catches each form and leaves the report and
+other tool installs alone.
 
-Every lane on the GitHub Actions backend exports `ACTIONS_RESULTS_URL` and
-`ACTIONS_RUNTIME_TOKEN` through
-[`sccache-gha-credentials`](../.github/actions/sccache-gha-credentials)
-immediately after checkout. `use-sccache: false` stops the shared Rust setup
-action that would otherwise publish them: `mozilla-actions/sccache-action`
-re-exports `ACTIONS_CACHE_SERVICE_V2` and GitHub's own results address to
-`GITHUB_ENV` as its last act, clobbering this export and sending the server
-past Ubicloud's proxy to GitHub, where writes are rate-limited. A composite
-`run` step does see the reserved variables; an earlier reading that the runner
-withholds them from shell steps was a misattribution, corrected against
-shared-actions runs 33854048777 and 33854213968. The ordering matters as much
-as the export: `--zero-stats`, `--start-server`, and the first wrapped `rustc`
-all start the server, and a server started without those variables stays in
-local-disk mode for the whole job and reports zero compile requests. That
-symptom has bitten this repository before, so a contract test asserts the
-export runs immediately after checkout and before anything that could start the
-server.
+The GitHub-hosted Windows lanes keep their own arrangement. On sccache's GitHub
+Actions backend the Windows gate recorded 643 failed writes out of 643, and the
+packaging build 68, which is GitHub rate limiting, so those lanes keep
+`SCCACHE_DIR` in a workspace directory that `windows-gate-cache` owns, under a
+rolling key with a prefix restore-key, install sccache through the pinned
+`taiki-e/install-action` with `fallback: none`, and set no
+`SCCACHE_GHA_ENABLED`. `setup-rust`'s hosted arm would do the same, but it owns
+the directory only when it owns the job's other caches too
+(`cache-provider: github`), and `windows-gate-cache` owns those here, so the
+Windows lanes pass `use-sccache: false` and keep the local arm
+`sccache_contract_test.py` describes. `SCCACHE_CACHE_SIZE` is 4 GB there rather
+than the usual 2 GB, because one store holds two build shapes.
 
 Both instrumented lanes set `RUN_RUST_CARGO_WAIT_TIMEOUT` to `1800`. The shared
-coverage action wraps `cargo llvm-cov nextest` in a watchdog that defaults to
-600 seconds, a budget sized against a lane that restored a `target` archive and
-so never paid for a cold compile. Nothing here archives a build tree, so a cold
-sccache store leaves the whole instrumented build to do inside that budget. The
-first trunk run after the Ubicloud migration failed exactly there: all 2,790
-tests passed, taking about 512 seconds at 19.42% sccache hits, and the watchdog
-killed cargo 88 seconds later during report generation.
+coverage action wraps `cargo llvm-cov nextest` in a watchdog which defaulted to
+600 seconds when this was written, a budget sized against a lane that restored a
+`target` archive and so never paid for a cold compile. That default is now
+1,800 seconds, the same figure these lanes set, which makes writing it down
+more important rather than less: an accidental deletion would change nothing
+observable until the run it killed. Nothing here archives a build tree, so a
+cold sccache store leaves the whole instrumented build to do inside that
+budget. The first trunk run after the Ubicloud migration failed exactly there:
+all 2,790 tests passed, taking about 512 seconds at 19.42% sccache hits, and
+the watchdog killed cargo 88 seconds later during report generation.
 
 The value is roughly three times the observed cold cost and still far inside
-each job's `timeout-minutes` of 60, so a genuine hang is caught long before the
-runner is abandoned. Keep the two lanes equal: `build-test` runs the same
-action on pull requests and meets the same wall whenever its store is cold,
-which is the case a green trunk run hides.
+each job's `timeout-minutes`, which is 90 on both instrumented lanes, so a
+genuine hang is caught long before the runner is abandoned. Keep the two lanes
+equal: `build-test` runs the same action on pull requests and meets the same
+wall whenever its store is cold, which is the case a green trunk run hides.
 `tests/workflow_contracts/test_execution_coverage_test.py` holds both to the
 same value, parametrized over `COVERAGE_PRODUCERS`, so a producer added there
 is covered without being listed again. The upstream default is reported as
 [leynos/shared-actions#451](https://github.com/leynos/shared-actions/issues/451).
 
-Every merge-gate job that compiles Rust sets `RUSTC_WRAPPER=sccache`, including
-the coverage job and the Netsukefile compatibility build. The release packaging
-lanes are the exception and run uncached, for two independent reasons: on
-Windows sccache re-spawns rustc with the aarch64 target's `--extern` and `-L`
-list and exceeds the operating system's command-line limit, and elsewhere the
-lane's server would be started inside the nested setup action, which is exactly
-the clobber described above. Reproducing the gate's export, install and
-run-step start sequence for a lane that runs only on tag pushes and the dry run
-would not pay back. That lane must therefore stay free of `RUSTC_WRAPPER`,
-`SCCACHE_GHA_ENABLED` and `SCCACHE_DIR` entirely, and
+Every merge-gate job that compiles Rust reaches the compiler cache: the Linux
+lanes through `setup-rust`, the Windows lanes through `RUSTC_WRAPPER=sccache`.
+The release packaging lanes are the exception and run uncached. On Windows
+sccache re-spawns rustc with the aarch64 target's `--extern` and `-L` list and
+exceeds the operating system's command-line limit, which nothing here can
+shorten. On the other platforms the nested `setup-rust` inside
+`rust-build-release`, now at the same pin as the gate, would select the backend
+correctly, so the reason there is cost rather than correctness: the lane runs
+only on tag pushes and the release dry run, and a compiler cache it reads so
+rarely would not pay back its setup. That lane must therefore stay free of
+`RUSTC_WRAPPER`, `SCCACHE_GHA_ENABLED` and `SCCACHE_DIR` entirely, and
 `tests/workflow_contracts/sccache_contract_test.py` requires all three to be
 absent rather than merely empty. Every compiling job that does use the compiler
-cache resets the counters with `sccache --zero-stats` before building and emits
+cache starts from zeroed counters, which `setup-rust` provides on the Linux
+lanes and an explicit `sccache --zero-stats` on the Windows lanes, and emits
 both human-readable and JSON statistics afterwards under `if: always()`; zero
 compile requests is a failed integration, not a quiet no-op. Kani is the one
 exception, because its verifier bundle ships prebuilt.
@@ -897,7 +1526,12 @@ than GitHub with `ubi gh leynos/netsuke list-cache-entries`. That command only
 works once the Ubicloud GitHub App covers this repository; see "GitHub Actions
 runner placement" for that prerequisite.
 
-Most `leynos/shared-actions` references are pinned to
+`setup-rust` is pinned to `6cec89bac47a21cf756d68d638a9a510998e57f8`, the merge
+of leynos/shared-actions#546, which sits on #523 (it makes `setup-rust` choose
+sccache's backend from the runner) and adds a 60 s server startup timeout with
+a fail-open start; every `setup-rust` reference, including the one
+`rust-build-release` nests, holds that one pin. Most other
+`leynos/shared-actions` references are pinned to
 `e041cb75c35c3524201a32d5e57c87408fbd5874`. That revision introduces
 `cache-provider: external`; installs `whitaker-installer` and `cargo-nextest`
 from checksum-verified official releases with no source fallback; adds the
@@ -913,11 +1547,13 @@ gate work on a GitHub-hosted runner (leynos/shared-actions#446); and restores
 the cache service variables that `mozilla-actions/sccache-action` overwrites.
 
 `generate-coverage` is deliberately ahead, at
-`77ea10341249024e22ec5d9069e3caa7596e0d4f`. From that revision the ratchet
-baseline is published only on a push to `refs/heads/main`; before it every run
-that reached the save step published, so each pull request advanced the
-baseline it was then measured against, and a warm-run dispatch of
-`coverage-main.yml` replaced the generation it was measuring. A contract in
+`a5765019912a8ab6882b12db049c7cde635f3a85`. From an earlier revision the
+ratchet baseline is published only on a push to `refs/heads/main`; before that
+every run that reached the save step published, so each pull request advanced
+the baseline it was then measured against, and a warm-run dispatch of
+`coverage-main.yml` replaced the generation it was measuring. The revision
+above adds the `publish-artefact` input the pull-request lane uses to suppress
+the action's own archive. A contract in
 `tests/workflow_contracts/ratchet_publication_test.py` asserts that pin by
 value, so a bump that moved it backwards would fail rather than quietly
 returning the old behaviour.
@@ -968,12 +1604,15 @@ set is empty, so reinstating an exception is a deliberate policy change rather
 than an edit; it lists both retired tools in `FORBIDDEN_SOURCE_BUILDS`, checked
 by name because a count of permitted builds is satisfied by adding a tool back
 as a newly permitted entry; and it rejects `cargo install` anywhere in any
-workflow or composite action. `tests/workflow_orthohelp_install.rs` requires
-the release lane to disable binstall's compile strategy, and
+workflow or composite action. `tests/workflow_orthohelp_install.rs` verifies
+release-lane delegation and workflow-level source-install prevention.
+`scripts/tests/test_install_orthohelp.py` asserts that the installer passes
+`--disable-strategies compile` to `cargo binstall`, and
 `tests/workflow_contracts/ci_mdtablefix_installer_test.py` requires both
-formatter lanes to use the shared action at a version no earlier than 0.5.1,
-and the retired local action and its build directory to be absent rather than
-merely unused.
+formatter lanes to use the shared action at a version no earlier than 0.6.0
+(the first with the `--check --git` modes `make check-fmt` runs), and the
+retired local action and its build directory to be absent rather than merely
+unused.
 
 The detector behind both parses the command rather than matching its shape. An
 option's value is indistinguishable from a crate name without knowing which
@@ -1014,8 +1653,8 @@ enforces all five callers. For each one it asserts:
 The same test carries the two toolchain-level assertions: that the pinned
 channel is a dated nightly at or after 2026-08-04, the first nightly on which
 Polonius is the default analysis, and that no build configuration — the
-Makefile, a Cargo configuration fragment, a workflow, or a recreated
-`.cargo/config.toml` — passes a `-Zpolonius` directive.
+Makefile, the committed `.cargo/config.toml`, a workflow, or a helper script —
+passes a `-Zpolonius` directive.
 
 Run it with:
 
@@ -1026,6 +1665,16 @@ cargo nextest run --test polonius_toolchain_contract
 Keep this section and the [Polonius migration notes](polonius.md) in step: both
 describe the same no-directive, pinned-toolchain contract, and the notes record
 the remaining harness consequences of that policy.
+
+### Windows MSI authoring validation
+
+`installer/Package.wxs` uses WiX v4 authoring. The installer contract tests
+parse it as XML, which verifies structure and attributes as text but cannot
+detect WiX schema errors such as an attribute that the compiler no longer
+supports. The `build-test-windows` job therefore performs compiler-backed
+validation with disposable executable and licence fixtures through the same
+SHA-pinned `windows-package` action and WiX/UI-extension versions used by
+release packaging. This validation does not build the Rust application.
 
 ### Windows native recipe smoke workflow
 
@@ -1080,6 +1729,50 @@ script, and `tests/data/windows-recipe-smoke.yml` fixture. The smoke job builds
 the tagged source itself; the release publication job separately requires both
 this smoke job and the platform package jobs in its `needs` list. Consequently,
 release publication cannot proceed unless the native Windows smoke test passes.
+
+The pull-request dry run (`release-dry-run.yml`, which calls `release.yml` with
+`dry-run: true`) skips this smoke job for events that `ci.yml` also answers.
+The same pull request's `ci.yml` already runs the identical build and smoke in
+`build-test-windows`. The rerun bought no evidence and cost no money, since
+GitHub-hosted runners are free here. What it did cost was a slot in the
+account's pool of concurrent GitHub-hosted runners. The gating
+`build-test-windows` queues for that pool alongside the dry run's own Windows
+and macOS builds, and Ubicloud has no Windows runners to move either to.
+
+The dry run still enters the `release` job to rehearse staging. The package
+jobs upload their packages as workflow artefacts under
+`should_upload_package_artifacts`; the release job downloads them, hoists and
+validates the cargo-binstall archive pairs, then asks `upload-release-assets`
+to validate the upload plan. Its `dry-run` input prevents any release upload,
+and the draft-creation step is publish-only. Build diagnostic artefacts remain
+behind `should_upload_workflow_artifacts`, which stays false during dry runs.
+
+Both staging and publication write an always-run outcome to
+`GITHUB_STEP_SUMMARY`. The staging job does not upload diagnostic artefacts;
+its JSONL telemetry file remains on the runner. Publication uploads a per-job
+artefact named `release-operation-observability-${{ github.job }}`. It contains
+`release-operation-observability.jsonl` with bounded operation and phase
+counters, duration samples, and phase start/completion events. If cancellation
+interrupts a phase before its end marker, it records a phase interruption event
+named `release_phase_interrupted`. The summary records job and phase outcomes
+with a fixed error category. The publication artefact uses the repository's
+default GitHub Actions retention policy. These records omit release tags,
+filenames, raw error text, and secrets.
+
+The skip applies only to events that `ci.yml` also answers. The dry run answers
+`ready_for_review` and `ci.yml` does not, so a draft marked ready after its
+base moved has a new merge ref and no gate run. For that event the smoke runs:
+`if: needs.metadata.outputs.dry_run != 'true' || github.event.action == 'ready_for_review'`.
+The disjunct can only make the job run more often.
+
+`tests/workflow_contracts/release_dry_run_smoke_test.py` holds four things. The
+condition is compared whole, so a tagged release still runs the job. `release`
+still needs it. The pull-request gate runs the same smoke, with the same
+invocation token for token. `ci.yml` calls the Windows gate on every event but
+the nightly Kani schedule (ADR-039), so the contract admits exactly
+`if: github.event_name != 'schedule'` on that call, which is true on every pull
+request, and refuses any other condition. And the dry run's event types outside
+`ci.yml`'s set are exactly the ones the condition exempts.
 
 ## Release-admission observability
 
@@ -1323,6 +2016,72 @@ Placement lives in `runner_placement_test.py` and the shapes jobs are sized to
 in `runner_shape_test.py`, which also holds the memory measurement that lets an
 escalation be reviewed.
 
+### Cancelling superseded pull-request runs
+
+Every push to a pull request starts a fresh run of each gate, and the run
+already in flight is answering a question about a commit nobody will merge. The
+three workflows a pull request starts, `ci.yml`, `netsukefile-test.yml` and
+`release-dry-run.yml`, therefore carry one concurrency block:
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+```
+
+A newer push to the same pull request lands in its predecessor's group and
+cancels it. Cancellation is conditioned on the event, so a push to `main`, a
+dispatch or a schedule never cancels anything, and without a pull-request
+number the group falls back to `github.run_id`, so no such run shares a group
+with another either. A `github.ref` fallback would put two trunk pushes in one
+group, where a third push replaces the pending second and that commit never
+gets CI. `ci-windows.yml` is called from `ci.yml` and runs inside the caller's
+group. The dry run calls `release.yml`, whose own group evaluates in the
+caller's context; the caller's block cancels the whole superseded dry run,
+called jobs included.
+
+No other workflow cancels a run in progress. `coverage-main.yml` publishes the
+trunk's coverage, `mutation-testing.yml` serializes per ref, and `release.yml`
+queues rather than cancels, because a second push of the same tag would
+otherwise abandon a half-published release. The group keeps GitHub's default
+`queue: single`, so at most one run waits: a third push of the tag replaces the
+second while it is pending, and the newest push is the one that publishes.
+`queue: max` would publish every intermediate push in turn, which nothing needs.
+`release.yml` cancelled until September 2026; that change is behavioural, and
+for pull requests it changes nothing, since the dry run's caller-level group
+already supersedes the older run. The `pull_request_target` Dependabot merge
+workflow is out of scope: cancelling a merge mid-flight is a hazard with no
+minutes to win.
+
+`tests/workflow_contracts/pr_concurrency_test.py` holds the rule. It reads
+every workflow at test setup through `workflow_loading.py`, which refuses a
+repeated key, and takes as in scope each workflow that `declares_trigger` reads
+as starting on `pull_request`, with a floor of the three above so discovery
+cannot empty into a vacuous pass. Rather than search each group's text, it
+renders the group with `pr_concurrency_groups.py` for a set of run contexts:
+two pushes to one pull request must render one group, and that pull request, a
+fork's pull request from a branch of the same name, two trunk pushes, two
+dispatches and two scheduled runs must all render different groups. Groups are
+compared casefolded, because GitHub treats group names case-insensitively. The
+run identifier may appear only as the fallback behind the pull-request number;
+no two workflows may render one group for a pull request; each group must also
+differ under two synthetic workflow names; and `cancel-in-progress` must be
+exactly the event-conditioned expression. `pr_concurrency_groups_test.py`
+drives the renderer with the shapes the rules refuse, and an expression it does
+not model is refused rather than guessed at.
+
+Each clause was proved by mutation, and every mutation fails the suite: the
+cancel line removed, a literal `true`, a group from `run_id` alone, a constant
+group, a `head_ref` group, a `format()` group, a `ref` fallback, `run_number`
+as the fallback, the run identifier ahead of the number, the block removed, the
+trigger renamed to `pull_request_target`, a duplicated block, a quoted `on`
+beside the unquoted key, the `github.workflow` prefix dropped, and the casefold
+removed from the comparison. `cancel-in-progress: true` restored on
+`release.yml` fails `test_no_other_workflow_cancels_a_run`. That clause reads a
+missing `cancel-in-progress` as not cancelling, so
+`test_the_release_lane_queues_rather_than_cancels` also pins `release.yml`'s
+block exactly; deleting the block fails it.
+
 ## Quality gates
 
 Run these commands before finalizing any change:
@@ -1333,26 +2092,36 @@ Run these commands before finalizing any change:
 - `make doc-coverage`
 - `make test`
 
-When the change touches the coverage artefact validators under `scripts/` or
-the trusted coverage workflow (`.github/workflows/coverage-pr-submit.yml`),
-also run:
+`make test` runs the Rust suite only, and `make lint` lints the Python sources
+without executing them, so neither gate runs the suites in
+`tests/workflow_contracts/` or under `scripts/tests/`. Two further targets
+cover them, and neither runs the other:
 
-- `make test-coverage-artifact`
-- `make validate-coverage-artifact`
+- `make test-workflow-contracts` — when the change touches a workflow or a
+  workflow-contract suite. It holds the workflows under `.github/` to the
+  contracts the repository depends on and is the only gate that runs those
+  suites. It passes `--doctest-modules`, so the examples in those modules are
+  executed rather than read.
+- `make test-coverage-artifact` — when the change touches the coverage artefact
+  validators under `scripts/`. It runs the pytest modules
+  `test_validate_coverage_artifact.py` and `test_validate_coverage_archive.py`
+  under `scripts/tests/`, so a validator change is untested unless it runs.
 
-This suite is the pytest module under `scripts/tests/`; `make test` runs only
-the Rust suite and never executes it, so a validator change is untested unless
-these commands run. Two entry points form the boundary.
+`make validate-coverage-artifact` is separate from both, and is not a test: it
+is the operator-run entry point for validating a downloaded artefact, and it
+needs `COVERAGE_ARTIFACT_DIR` to name an existing directory. Run it when
+inspecting an artefact by hand, not as part of the commit set.
+
+Two entry points form the coverage-artefact boundary.
 `scripts/validate_coverage_artifact.py` owns the outer-directory checks and the
 recognized-LCOV text contract, and exposes its own narrow command line.
-`scripts/validate_coverage_archive.py` is the composition entry point that the
-trusted submission path loads; it runs those outer checks and then validates
-ZIP metadata before materializing the sole `lcov.info` member.
-`make validate-coverage-artifact` runs that composition entry point over the
-raw ZIP the trusted workflow downloads, with `COVERAGE_ARTIFACT_DIR` selecting
-the download directory and `validated-coverage` receiving the output. It treats
-the archive as hostile data and does not execute, import, or resolve paths
-recorded in the report.
+`scripts/validate_coverage_archive.py` is the composition entry point; it runs
+those outer checks and then validates ZIP metadata before materializing the sole
+`lcov.info` member. `make validate-coverage-artifact` runs that composition
+entry point over the raw ZIP under inspection, with `COVERAGE_ARTIFACT_DIR`
+selecting the input directory and `validated-coverage` receiving the output. It
+treats the archive as hostile data and does not execute, import, or resolve
+paths recorded in the report.
 
 When the change touches any Markdown file — documentation, ADRs, execplans, or
 the README — also run:
@@ -1386,78 +2155,211 @@ The workflow contract suites share the YAML 1.2-aware loader and common
 workflow, job, and step helpers in
 `tests/workflow_contracts/workflow_loading.py`. Each suite keeps its own
 workflow-specific projections and assertions, so parsing and structural
-validation remain consistent across the workflows under test.
+validation remain consistent across the workflows under test. Scans that must
+see every string in a parsed workflow, mapping keys included, share
+`iter_strings` in `tests/workflow_contracts/yaml_strings.py` rather than
+walking the value themselves.
 
-### PR coverage trust boundary
+`tests/workflow_contracts/release_publish_path_contract.py` is a test-only,
+pure checker shared by the release staging and mutation contracts. Keep
+workflow-specific parsing and assertions in each suite; production code must
+not import this checker.
 
-The accepted architecture for this boundary is recorded in
-[ADR-022](adr-022-pr-coverage-trust-boundary.md). The workflow details below
-are the implementation guidance for that decision.
+`local_reference_inventory.py` inventories local composite actions and regular
+`.sh`, `.bash`, `.py`, and `.ps1` scripts recursively under `scripts/`, as well
+as regular files identified as scripts by executable bits or a shebang. It
+excludes Python package markers, bytecode caches, data files, and symlinks;
+unclassified top-level entries fail closed unless they have a non-blank,
+reasoned exemption. `local_references.py` resolves references from workflow,
+Makefile, test, action, and script sources. It uses
+`local_reference_sources.py` to retain each workflow run command's effective
+working directory, resolve static relative script paths against it, and strip
+comments from reached scripts and root test sources according to their source
+language before matching references. `local_reference_test_trees.py` reads test
+sources while retaining their suffix for Python-import matching. The contract
+also strips full-line Makefile comments. Covered action manifests and scripts
+extend reachability to a fixed point; an item cannot establish its own
+reference. A Hypothesis property test compares this closure with an independent
+reachability walk over generated script graphs, including cycles, reordered
+references, and disconnected scripts. Keep these helpers private to the
+workflow-contract suite, and add synthetic regression cases when changing their
+source boundaries or matching rules. Both test source roots must exist; binary
+or undecodable test fixtures are skipped, while unreadable Makefiles, selected
+test sources, and reached scripts report `RepositoryFileError` with the failing
+path. Inventory classification and fail-closed exemption checks live in
+`local_reference_inventory_test.py`; coverage assertions live in
+`local_reference_coverage_test.py`, and adversarial matching cases live in
+`local_reference_edge_cases_test.py`; comment masking cases live in
+`local_reference_comments_test.py`. These suites use the private workspace
+writer in `local_reference_test_support.py`. The path-to-reason `EXEMPTIONS`
+map in `local_reference_coverage_test.py` must stay limited to inventory items
+with a documented reason; exemptions for covered or removed paths are rejected.
 
-The pull-request CI job is deliberately unprivileged. It builds, tests, and
-generates `lcov.info`, then uploads only that file as the short-lived
-`pr-coverage-lcov` artefact. It does not receive `CS_ACCESS_TOKEN`. This
-matters because PR-controlled commands can persist `BASH_ENV`, `GITHUB_PATH`,
-and other state for later steps on their own runner.
+### Coverage ratchet and CodeScene publication
 
-[`coverage-pr-submit.yml`](../.github/workflows/coverage-pr-submit.yml) is a
-separate `workflow_run` workflow whose definition comes from the default
-branch. After a successful same-repository `pull_request` CI run, it starts a
-fresh runner, and `actions/checkout` retrieves the full trusted default-branch
-tree. The workflow executes only the needed checked-in validation and
-submission commands, then downloads the artefact as a raw ZIP into
-`coverage-artifact/` with decompression disabled. It never checks out or
-executes the PR tree or artefact contents. Before the CodeScene action can see
-the secret, `scripts/validate_coverage_archive.py` requires exactly one
-regular, non-symbolic archive file inside that directory, checks the ZIP
-metadata for a single safe relative `lcov.info` member with a bounded
-cumulative uncompressed size and no directory or symbolic-link entry, and only
-then reads the bounded member bytes, validates UTF-8 and recognized LCOV
-records, and writes `validated-coverage/lcov.info`. Archive metadata is
-therefore authoritative before any member data is read.
+The accepted architecture is recorded in
+[ADR-025](adr-025-main-owned-coverage-publication.md), which supersedes the
+trusted pull-request submission design in
+[ADR-022](adr-022-pr-coverage-trust-boundary.md).
 
-Eligibility is enforced by the trusted workflow definition, its successful
-pull-request and same-repository-head guards, and the step-local
-`CS_ACCESS_TOKEN` presence guard. Fork PRs still receive the complete
-unprivileged CI result but do not enter the secret-bearing submission job. The
-repository or organization Actions policy must continue to restrict the
-CodeScene credential to this trusted phase. A protected environment with
-independent reviewers is an optional stronger control for organizations that
-need explicit human approval before any coverage submission.
+Pull-request CI generates `lcov.info` and runs the shared coverage action with
+ratchet mode enabled. The ratchet compares changed-line coverage with the
+baseline written from `main`. Pull requests do not upload the report as an
+artefact, receive `CS_ACCESS_TOKEN`, invoke CodeScene, or create a CodeScene
+Check Run. The pull-request lane also tells the action not to archive its own
+report, by passing `publish-artefact: 'false'`; the main workflow leaves that
+input unset, so the archive its upload reads is still produced.
 
-The trusted workflow creates the `CodeScene coverage` Check Run against the
-originating PR `head_sha`. It reports `neutral` only when artefact download and
-validation both succeeded and the submission skipped solely because no token is
-available; a failed or skipped download or validation publishes a failing
-check, so a hostile artefact can never produce a non-failing gate. Workflow
-concurrency serializes publications for one originating workflow-run ID. The
-publisher uses that ID as the Check Run `external_id`, finds an existing
-matching run for the originating commit and fixed name, and updates it;
-otherwise it creates the run. This keeps repeated trusted notifications
-idempotent without accepting arbitrary pull-request identifiers.
-Branch-protection configuration may therefore need an organization-level update
-to require this Check Run name instead of the former in-job coverage step.
-`tests/workflow_contracts/trust_boundary_test.py` and its Hypothesis companion
-prevent the secret from returning to a pull-request workflow, a trusted
-checkout from drifting to PR content, a raw secret expression from reaching a
-step's `run` or `with` surfaces, or the validator from being skipped. The pure
-`.github/scripts/coverage_pr_reporting.py` helper is owned by the trusted
-coverage submission path: only `coverage_pr_submission.py` may call it. It
-performs no environment access or I/O and only composes already-bounded values
-for the Check Run and workflow summary. The
-`.github/scripts/coverage_pr_check_runs.py` adapter is likewise owned by
-`coverage_pr_submission.py` and is the sole production GitHub Check Run API
-boundary. It accepts only already-bounded payloads; tests inject a fake
-publisher at that boundary.
+The `coverage-main.yml` workflow owns persistent coverage data. A push to
+`main` runs the same coverage workload, advances the ratchet baseline, and
+uploads that run's LCOV report to CodeScene. The upload therefore describes the
+branch and commit that CodeScene analyses. Manual dispatches are warm-run
+diagnostics: the coverage action saves the ratchet baseline only on a push to
+`refs/heads/main`, and the upload step is guarded on
+`github.ref == 'refs/heads/main'` as well as on the token. So a dispatch from a
+feature branch neither replaces the baseline nor uploads to CodeScene, while a
+dispatch from `main` uploads that commit's report, as a push would. The ref
+clause is not redundant with the push trigger's `branches` list, because that
+list constrains only the push trigger, and the upload action does not check the
+ref itself.
 
-The trusted job also writes bounded JSONL metrics and traces to runner-local
-files and uploads them as the fixed `codescene-pr-coverage-metrics` and
-`codescene-pr-coverage-traces` artefacts. Metrics use fixed operation, outcome,
-and error-category labels with count and duration values. Traces use fixed
-event, operation, outcome, error-category, and duration fields, together with
-the originating workflow-run ID and commit SHA. These exports are observability
-artefacts, not a Prometheus, OpenTelemetry Protocol (OTLP), or statsd endpoint.
-They contain no PR text, coverage content, filesystem paths, or credentials.
+The token itself never enters an `env` on the publisher job. A
+`Check CodeScene token availability` step (id `codescene_token`) publishes only
+`available=${{ secrets.CS_ACCESS_TOKEN != '' }}` to its outputs. The upload's
+condition reads `steps.codescene_token.outputs.available == 'true'`, and the
+upload takes `access-token: ${{ secrets.CS_ACCESS_TOKEN }}` directly. The
+upload is a composite action, and a composite action's nested steps inherit the
+calling step's environment, so a token in the step's `env` reached every one of
+them. The shared CV-005 checker (`make test-workflow-contracts`) holds the
+shape. Its positive half requires the token to be named exactly in the check's
+command and the upload's input, because deleting the token would otherwise pass
+for keeping it out of an `env`.
+
+The upload step passes no checksum input. The pinned upload action verifies the
+CodeScene CLI archive against its own committed `cli-manifest.json` on every
+run, so a value supplied from here could only repeat the manifest's own digest,
+and any other value is refused. The retired `installer-checksum` is rejected
+outright — a non-empty value fails the action's own validation rather than
+being ignored — and `archive-checksum`, its replacement, is not passed either.
+No workflow reads the `CODESCENE_CLI_SHA256` repository variable that once fed
+the retired input.
+`tests/workflow_contracts/codescene_uploader_checksum_test.py` scans every
+workflow for the retired input and the variable and holds the uploader to the
+one approved revision, while
+`tests/workflow_contracts/codescene_upload_invariants.py` refuses either
+checksum input by name on the upload step, so a reintroduction is caught rather
+than run.
+
+Publishers queue on the concurrency group `coverage-main-${{ github.ref }}` with
+`cancel-in-progress: false`, which the shared CV-005 checker asserts whole
+(`publisher.concurrency`) alongside the upload job's `codescene` environment
+(`environment.placement`). Two runs writing at once would race, and cancelling
+one would abandon its work half done. Runs in the group never overlap, and a
+newer trigger replaces an older pending run. GitHub does not promise to start
+runs in trigger order, so the workflow makes no commit-order promise either.
+The coverage action saves the ratchet baseline only on a push, under a cache
+key naming the run. A dispatch therefore uploads coverage but leaves the
+baseline where the last completed push left it, and how far that trails `main`
+depends on how many pushes were replaced while runs waited. A merge made by the
+Dependabot automerge workflow's token fires no push event at all (see
+[shared-actions issue 518](https://github.com/leynos/shared-actions/issues/518)).
+A dispatch from `main` uploads that merge's coverage, but does not save a
+baseline for it; only the next push does. A manual "Re-run jobs" on an older
+`main` run keeps its run ID, so it republishes that commit's coverage but
+replaces no baseline already saved under that run's key. Only a later push to
+`main` publishes a newer baseline.
+
+The shared CV-005 checker holds that guard. `is_trunk_only_upload` refuses any
+unquoted `||`, at any depth, through `contains_unquoted_or`, the helper
+`is_trunk_only_save` uses for cache saves: `&&` binds tighter than `||`, so one
+disjunct authorizes the upload alone however complete the rest is. It then
+splits the condition on `&&` and requires each guard clause as a whole
+conjunct, so a negated clause or one quoted inside another does not count. The
+disjunction cases keep both clauses whole, so only the `||` refusal can reject
+them. That is how the case proves the refusal rather than the split.
+
+The CodeScene analysis schedule and the setting that suppresses its coverage
+gate when data is unavailable live in CodeScene's project configuration, not in
+this repository. A main upload can appear in CodeScene only after the service
+analyses that commit; re-running a pull-request workflow is neither a baseline
+refresh nor a substitute for that analysis.
+
+The trunk lane validates the report as data before it uploads it.
+`coverage-main.yml` stages `lcov.info` into a directory of its own and runs
+`scripts/validate_coverage_artifact.py` over that directory, because the
+generation action reports success for an empty report and the upload checks
+only that the file exists. Naming the directory is not enough on its own: the
+step must also copy the report into it, because a directory that is staged and
+never filled holds nothing the validator can read. The step must sit after the
+report is written and before the upload that sends it. It must also sit before
+`Show sccache statistics`: `tests/workflow_contracts/sccache_contract_test.py`
+requires that step to follow every compile step in the lane, so a check parked
+between the last compile and the statistics report would break the
+compiler-cache observability contract rather than merely reorder the lane.
+`make test-coverage-artifact` covers the validator directly;
+`tests/workflow_contracts/codescene_validation_step_test.py` covers the script
+the lane runs it through, and
+`tests/workflow_contracts/codescene_upload_contract_test.py` covers the lane
+that step sits in.
+
+`make test-workflow-contracts` also runs `cv005-contracts check`, the shared
+CV-005 contract library in `leynos/shared-actions`, from the full commit named
+by `CV005_CONTRACTS_REF` in the Makefile, before the local contracts. A fix to
+a rule reaches this repository as a pin bump. `.github/cv005.toml` holds the
+repository's parameters and the pull-request lane's pairing with the publisher,
+including the three environment keys the two legs legitimately differ on.
+`tests/workflow_contracts/cv005_wiring_test.py` holds the local wiring, and
+[ADR-042](adr-042-run-the-shared-cv005-contract-checker.md) records the
+decision.
+
+Workflow contract tests keep the boundary explicit: the pull-request coverage
+step must retain ratchet mode and pass the publication opt-out, the artefact
+upload and privileged submission workflow must remain absent, and the main
+workflow must upload the report generated earlier in its job without setting
+that opt-out. They also hold the upload's `if` gate to naming the credential as
+an identifier — read from the `env` namespace the condition is evaluated
+against, so a longer unset name such as `NOT_CS_ACCESS_TOKEN` cannot satisfy it
+by containment. The hostile-artefact validators under `scripts/` remain
+available for maintenance use, and the trunk lane now runs the outer one over
+the report it generated itself; no active workflow downloads pull-request
+coverage.
+
+The workflows those prohibitions read are a closure, not a trigger list. A
+workflow declaring only `workflow_call` runs on a pull request whenever a
+pull-request workflow calls it, and `secrets: inherit` hands it every secret, so
+`pull_request_lane` in
+`tests/workflow_contracts/ci_coverage_wiring_invariants.py` starts from the
+workflows declaring either pull-request trigger and follows job-level `uses:`
+calls transitively. `tests/workflow_contracts/workflow_call_closure.py` owns
+that traversal. It reads a call as local when the reference, less one of the
+two same-repository prefixes GitHub documents, `./` or the self-repository `$/`
+that GitHub.com recommends, names a file directly under `.github/workflows/`.
+It refuses a reference naming that directory with neither prefix, follows no
+cross-repository call, and fails the reading when a local call names a workflow
+it did not read. Any future contract that asks what a pull request runs should
+take its lane from `pull_request_lane` rather than filtering triggers again.
+
+Two clauses exist because a workflow can reach CodeScene without naming the
+action or the credential. Any mention of `codescene.io`, matched
+case-insensitively because DNS names are case-insensitive, is refused, since a
+step can curl the project API directly. And `secrets: inherit` on a call to
+another repository's workflow is refused, because that callee's content is not
+in this tree. The coverage-surface clauses read a local callee and hold it to
+every clause, so they do not refuse forwarding to one themselves. A separate
+contract,
+`test_no_pull_request_workflow_in_this_repository_forwards_every_secret` in
+`pull_request_closure_test.py`, refuses `secrets: inherit` on any call a pull
+request makes, local or not: a pull request should be handed no secret it does
+not need. `release-dry-run.yml` calls `release.yml` and forwards none, because
+`release.yml` reads only `secrets.GITHUB_TOKEN`, which a called workflow has
+without being forwarded it.
+
+Every contract reads workflows through `_WorkflowLoader` in
+`tests/workflow_contracts/workflow_loading.py`. It refuses a mapping that
+repeats a key, rather than keeping the last value as PyYAML does. A job that
+declared `runs-on` twice would otherwise read as whichever label came second,
+and a paid label in the first half would escape every placement contract.
+GitHub rejects such a workflow anyway, so the refusal costs nothing.
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the
@@ -1473,10 +2375,11 @@ cargo binstall --no-confirm --locked \
 ```
 
 `make check-fmt` verifies Markdown formatting as well as Rust formatting, and
-needs `mdtablefix` on `PATH`. CI pins the version in `MDTABLEFIX_VERSION` in
-`.github/workflows/ci.yml`. Install that same version locally, so local runs
-match CI; read the pin from the workflow rather than copying the number, so the
-two cannot drift:
+needs `mdtablefix` 0.6.0 or later on `PATH`, because it runs the `--check` and
+`--git` modes that release introduced. CI pins the version in
+`MDTABLEFIX_VERSION` in `.github/workflows/ci.yml`. Install that same version
+locally, so local runs match CI; read the pin from the workflow rather than
+copying the number, so the two cannot drift:
 
 ```bash
 MDTABLEFIX_VERSION="$(sed -n "s/.*MDTABLEFIX_VERSION: '\(.*\)'.*/\1/p" \
@@ -1493,7 +2396,7 @@ Install the separately versioned Whitaker installer with:
 
 CI installs Whitaker through the SHA-pinned
 `leynos/shared-actions/.github/actions/install-whitaker` action. Two jobs
-invoke it, and each passes its required `installer-version: '0.2.7'` input:
+invoke it, and each passes its required `installer-version: '0.2.9'` input:
 `build-test` in `ci.yml`, and `lint-windows` in `ci-windows.yml`.
 `build-test-windows` neither installs nor runs Whitaker; it compiles, tests,
 and runs the native Windows recipe smoke steps. There is no
@@ -1501,7 +2404,7 @@ and runs the native Windows recipe smoke steps. There is no
 installing locally so the local installer matches CI:
 
 ```bash
-INSTALLER_VERSION='0.2.7' # Read from the Install Whitaker action input in CI.
+INSTALLER_VERSION='0.2.9' # Read from the Install Whitaker action input in CI.
 cargo binstall --no-confirm --locked \
   "whitaker-installer@$INSTALLER_VERSION"
 ```
@@ -1569,7 +2472,7 @@ narrowly excluded because `std::fs::canonicalize` preserves the absolute
 comparison keys and cross-directory symlink behaviour that `cap_std` rejects.
 For ordinary man-page and completion generation, the build script compiles its
 inline `cli` facade: the four-file slice containing `src/cli/command.rs`,
-`src/cli/config.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`. The
+`src/cli/config/mod.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`. The
 `command.rs` module owns the Clap command schema and default-command behaviour,
 including `Cli::with_default_command()`, while runtime discovery remains
 deliberately outside the slice. The broader `netsuke::cli::discovery` module
@@ -1618,9 +2521,10 @@ set -o pipefail
 make test 2>&1 | tee /tmp/netsuke-make-test.log
 ```
 
-These gates always use the repository toolchain and the default codegen
-backend. For a faster inner loop between gate runs, see
-[local build acceleration](#local-build-acceleration).
+These gates run on the repository toolchain and on the codegen backend, linker,
+and frontend the repository has chosen as its defaults; there is no separate
+faster path to switch to. See [the build standard](#the-build-standard) for
+what they apply and why release and coverage builds are held out of it.
 
 For documentation changes, also run `make fmt`, `make markdownlint`, and
 `make nixie`.
@@ -1660,17 +2564,22 @@ extraction of release archives. Downloads accept `https://` and `file://` URLs
 only; the tests serve release fixtures over `file://` so the real download,
 verification, and extraction path runs without a network.
 
-`make test-ci-scripts` runs their suite, `scripts/tests/test_ci_*.py`, with
-pytest and [cmd-mox](https://github.com/leynos/cmd-mox), which shims the
-external programs (`sudo`, `sccache`, `df`, `cargo`) so each script's happy
-path and failure modes are exercised at the process boundary. CI runs the same
+`make test-ci-scripts` runs their suite, the `test_ci_*.py` modules under
+`scripts/tests/`, with pytest and
+[cmd-mox](https://github.com/leynos/cmd-mox), which shims the external programs
+(`sudo`, `sccache`, `df`, `cargo`) so each script's happy path and failure modes
+are exercised at the process boundary. The target names those modules one by
+one rather than by glob, so the local-reference contract sees each as
+reachable. CI runs the same
 target before `make check-fmt`. The scripts pin `cyclopts` and `cuprum` in
-their PEP 723 blocks at the Makefile's `CYCLOPTS_VERSION` and `CUPRUM_REF`,
+their PEP 723 blocks at the Makefile's `CYCLOPTS_VERSION` and `CUPRUM_VERSION`,
 held equal by `scripts/tests/test_ci_scripts_metadata.py`, and
 `make typecheck-python` checks them with ty alongside the rest of the Python
-sources. `CUPRUM_REF` is a `leynos/cuprum` commit rather than a PyPI release
-until 0.2.0 ships the `RunOutputOptions` runtime the scripts use; bump it to
-the release pin then.
+sources. `CUPRUM_VERSION` names a PyPI release rather than a `leynos/cuprum`
+commit: the helpers under `scripts/` share one `run_sync` signature with the
+scripts under `scripts/ci`, and `make typecheck-python` resolves a single
+cuprum for the whole tree, so a git pin would leave that one resolution unable
+to satisfy both call shapes.
 
 ### GitHub Actions validation
 
@@ -1690,7 +2599,22 @@ which reuses the gate-cached binary when it reports the pinned version and
 otherwise downloads the Linux `x86_64` release archive, verifies its SHA-256
 against the pin, and extracts the single `actionlint` member. The same command
 reproduces that setup locally; the pins are the two `INPUT_*` values beside the
-step in `.github/workflows/ci.yml`:
+step in `.github/workflows/ci.yml`.
+
+The Makefile resolves `actionlint` in the recipe shell, using the `PATH` it
+curates for its recipes, which includes the Go tool directory: `$GOBIN` when
+set, otherwise the `bin` subdirectory of the first `$GOPATH` entry (`GOPATH`
+entries are `;`-separated on Windows and `:` elsewhere), otherwise
+`$HOME/go/bin`. Nothing is resolved while Make parses the file, so the curated
+`PATH`, not the caller's, decides which binary runs, and a failed lookup names
+both the configured `ACTIONLINT` value and `$GO_BIN/actionlint` on standard
+error. A binary installed with `go install` therefore needs no further setup,
+and the same curated `PATH` carries `~/.cargo/bin`, `~/.local/bin`, and
+`~/.bun/bin` regardless of the calling shell. Override `GO_BIN` to name a
+different directory, or pass `ACTIONLINT=/path/to/actionlint` to use a binary
+elsewhere; CI does exactly that with its checked-out copy, which the installer
+writes into the working directory:
+
 
 ```bash
 INPUT_ACTIONLINT_VERSION='1.7.12' \
@@ -1736,7 +2660,7 @@ cache restoration, archive verification, and the delegated Makefile checks.
 
 CI installs Whitaker through the SHA-pinned
 `leynos/shared-actions/.github/actions/install-whitaker` action. Two jobs
-invoke it, and each passes its required `installer-version: '0.2.7'` input:
+invoke it, and each passes its required `installer-version: '0.2.9'` input:
 `build-test` in `ci.yml`, and `lint-windows` in `ci-windows.yml`.
 `build-test-windows` neither installs nor runs Whitaker; it compiles, tests,
 and runs the native Windows recipe smoke steps. There is no
@@ -1744,7 +2668,7 @@ and runs the native Windows recipe smoke steps. There is no
 installing locally so the local installer matches CI:
 
 ```bash
-INSTALLER_VERSION='0.2.7' # Read from the Install Whitaker action input in CI.
+INSTALLER_VERSION='0.2.9' # Read from the Install Whitaker action input in CI.
 cargo install --locked whitaker-installer \
   --version "$INSTALLER_VERSION"
 ```
@@ -1827,7 +2751,7 @@ changelog entry instead.
 
 The `rust-toolchain` ecosystem block updates the checked-in Rust toolchain
 declaration in `rust-toolchain.toml`. It targets the repository root (`/`),
-runs weekly, permits five open pull requests, and applies the `dependencies` and
+runs daily, permits five open pull requests, and applies the `dependencies` and
 `rust-toolchain` labels. The declaration remains pinned to a dated nightly;
 each Dependabot pull request still requires normal human review and the
 repository quality gates. Kani's separately managed toolchain is outside this
@@ -1852,9 +2776,29 @@ The Python gates run inside the ordinary quality-gate targets:
 - `make check-fmt` runs `ruff format --check` over the Python sources.
 - `make fmt` applies `ruff format` and Ruff's import sorting.
 - `make lint` runs `make lint-python`: `ruff check`, a Pylint pass, the
-  df12 house lints, and the `ambrleaks` snapshot scanner.
+  df12 house lints, the `ambrleaks` snapshot scanner, and Interrogate docstring
+  coverage. Interrogate runs through `uv tool run --python $(PYTHON_BASELINE)`
+  so local tool environments parse the same supported Python syntax as CI. It
+  also runs `make lint-workflow-scripts`, which loads every trusted module under
+  `.github/scripts` on the baseline. That loader catches definition-time
+  failures, but under PEP 649 it does **not** catch an annotation naming a
+  `TYPE_CHECKING`-only import, because deferred evaluation means the annotation
+  is never resolved at load time. The claim that it did held under 3.12 and
+  outlived the baseline change.
 - `make typecheck` runs `make typecheck-python`: the
   [ty](https://github.com/astral-sh/ty) typechecker over the Python sources.
+  Its temporary environment includes the runtime dependencies declared by
+  standalone scripts in PEP 723 metadata, because `ty` does not read those
+  blocks when resolving imports.
+
+Because PEP 649 defers annotation evaluation, the contract modules under
+`tests/workflow_contracts/` import cleanly while their annotations still name
+`TYPE_CHECKING`-only imports, and resolving those annotations at runtime raises
+`NameError`. The repository does not support runtime annotation introspection
+on those modules; `ty` reads them statically and pytest executes them, and
+neither resolves annotations. See
+[ADR-038](adr-038-runtime-annotation-introspection-in-workflow-contracts.md)
+for the decision, the measured scope, and the gate that reopens it.
 
 The Makefile's `PYTHON_SOURCES` includes `.github/scripts`, so the normal
 formatting, lint, and type-check targets cover the trusted workflow helpers as
@@ -1865,27 +2809,31 @@ overridden for a downloaded artefact in another directory.
 The configuration in `pyproject.toml` mirrors the df12 estate policy in
 [episodic](https://github.com/leynos/episodic); only path-shaped settings are
 local. The file deliberately declares no `[project]` table, so `uv` never
-treats this Rust workspace as a Python project. The Pylint command from
-`pylint-pypy-shim` runs on CPython 3.14 so it parses every repository-owned
-source, with the message set enabled in `pyproject.toml`; the
+treats this Rust workspace as a Python project. A pinned Pylint
+(`PYLINT_VERSION`) runs through `uv tool run --managed-python` on CPython 3.14,
+the Python baseline, so it parses every repository-owned source, with the
+message set enabled in `pyproject.toml` and `syntax-error` left enabled so a
+module it cannot parse fails the lint; the
 [df12-python-lints](https://github.com/leynos/df12-python-lints) messages
 (structural pattern matching, assert messages, suppression hygiene, snapshot
 discipline, and the baseline-gated R9112/C9112 checks) need CPython 3.14 and
 run as a second pass pinned to `DF12_PYTHON_LINTS_REF`.
 
 Tool versions are pinned twice by design: the Makefile defaults (`RUFF_VERSION`,
-`TY_VERSION`, `PYTHON_BASELINE`) drive local runs, and the `env` block of
-`.github/workflows/ci.yml` re-declares the same values, which override the
-Makefile's `?=` assignments in CI.
-`tests/workflow_contracts/python_toolchain_sync_test.py` asserts the pairs
-agree — without asserting any specific version — so a bump must land in both
-files in the same commit.
+`INTERROGATE_VERSION`, `TY_VERSION`, `PYTHON_BASELINE`) drive local runs, and
+the `env` block of `.github/workflows/ci.yml` re-declares the same values,
+which override the Makefile's `?=` assignments in CI. CI runs Interrogate
+through that same pinned Makefile command rather than carrying a second
+workflow-only pin. `tests/workflow_contracts/python_toolchain_sync_test.py`
+asserts the pairs agree — without asserting any specific version — so a bump
+must land in both files in the same commit.
 
-The shared spelling-policy rollout helpers (`scripts/generate_typos_config.py`
-and the `typos_rollout*` modules and tests) are estate-synchronized and keep
-their own pinned, isolated Ruff policy enforced by `make spelling-helper-test`;
-they are excluded from the repository-wide Ruff and Pylint configuration so the
-two policies cannot disagree about the same file.
+Interrogate measures every definition under `PYTHON_SOURCES` (`.github/scripts`,
+`scripts`, and `tests/workflow_contracts`) at 100%; no path or nested-function
+exemption applies. There are no `typ.overload` stubs in this scope. If one is
+introduced, add a targeted `--ignore-regex` for that stub only because
+Interrogate 1.7.0 cannot recognize the configured `typ.overload` spelling;
+leave Ruff's real-implementation docstring rule enabled.
 
 ### Release-admission runtime tests
 
@@ -1899,6 +2847,26 @@ configuration and cache state:
 - `scripts/tests/test_release_admission_metrics.py`
 - `scripts/tests/test_release_admission_metric_failures.py`
 - `scripts/tests/test_release_admission_metric_boundedness.py`
+
+The test-only `release_admission_test_support.py` module is the support and
+export facade for these runtime modules. `release_admission_test_records.py`
+owns their fixed-record assertions. Its
+`assert_identifiers_excluded_from_values` helper ignores non-string values and
+checks for each identifier as a substring of every string, reporting matching
+identifier/value pairs on failure. The shared
+`assert_identifiers_excluded_from_records` helper traverses metric labels and
+trace fields, checks that each metric's `labels` field is a dictionary, then
+delegates substring checks to the values helper. Only the failure and
+boundedness metric modules use it. Keep these helpers within the
+release-admission runtime suite rather than treating them as general test
+utilities.
+
+The isolated subprocess uses `GITHUB_REPOSITORY` as the fixed repository value
+at its fake GitHub boundary. The boundedness property generates canonical
+lowercase hexadecimal Git object IDs of 40 or 64 characters so execution
+reaches the commit and workflow-run requests. Arbitrary Unicode values remain
+probes for telemetry-only identifiers, which do not construct requests;
+malformed newline revisions are covered by deterministic failure tests.
 
 Pull-request CI invokes this target separately from the workflow-contract
 tests. Keep both gates: the runtime suite exercises the Bash boundary, while
@@ -1929,8 +2897,8 @@ select a branch in that control to exercise a feature branch.
 
 The caller passes two configuration inputs, each carrying intent:
 
-- `exclude-globs` — `src/ir/cycle_verification.rs`,
-  `src/ir/from_manifest_verification.rs`, `src/ir/graph_kani_map.rs`, and
+- `exclude-globs` — `src/ir/cycle/verification.rs`,
+  `src/ir/from_manifest/verification.rs`, `src/ir/graph/kani_map.rs`, and
   `src/ir/cmd_interpolate/verification.rs`: modules gated behind
   `#[cfg(kani)] mod` declarations. `cargo-mutants` does not evaluate that cfg,
   so mutants inserted there would compile to nothing and survive as noise
@@ -1984,18 +2952,80 @@ every command in this completion checklist:
 
 ## Markdown formatting and table alignment
 
-`make fmt` runs `mdformat-all`, which runs `mdtablefix` (with
-`--wrap --renumber --breaks --ellipsis --fences --in-place`) and then
-`markdownlint-cli2 --fix`. `mdtablefix` owns table padding and paragraph
-wrapping; `make markdownlint` then verifies the result.
+`make fmt` calls both Markdown tools directly. It first runs
+`mdtablefix --in-place --git --include-untracked` with the rule flags
+`--wrap --renumber --breaks --ellipsis --fences`, and then
+`markdownlint-cli2 --fix "**/*.md"`. `mdtablefix` owns table padding and
+paragraph wrapping; `make markdownlint` then verifies the result. `--git`
+selects the Markdown files in Git's index and `--include-untracked` adds the
+untracked files Git does not ignore, so a new document is formatted before it
+is staged and `.gitignore` is respected exactly as Git respects it. Symbolic
+links are skipped, so `CRUSH.md` (a link to `AGENTS.md`) is never rewritten
+twice. The Makefile declares the selection in `MDTABLEFIX_SELECT` and the rules
+in `MDTABLEFIX_RULES`, and `tests/workflow_contracts/markdown_gates_test.py`
+holds both recipes to them.
 
-`make check-fmt` runs the Rust and Python formatter checks, then passes tracked
-Markdown files to `scripts/check-markdown-format.sh`. The wrapper skips the
-Markdown check when the file list is empty, so the command remains portable
-across hosts. The checker requires `mdtablefix` version `0.5.1`, the version
-pinned by `MDTABLEFIX_VERSION` in the CI workflow; verify an installation with
-`mdtablefix --version`. Run `make test-markdown-format` to exercise the
-checker, including its empty-input behaviour, before changing the wrapper.
+`make check-fmt` runs the Rust and Python formatter checks, then
+`mdtablefix --check` over the same selection and rules. `--check` is read-only:
+it names each file that would be reformatted with its line delta and exits `1`
+when the tree drifts, and `2` when a file cannot be read, so a usage or I/O
+failure is never mistaken for drift. Selecting nothing is a success, so the
+command remains portable across hosts. Both recipes require `mdtablefix` 0.6.0
+or later, the version pinned by `MDTABLEFIX_VERSION` in the CI workflow; verify
+an installation with `mdtablefix --version`.
+
+In CI, Markdown linting runs through the SHA-pinned upstream
+`DavidAnson/markdownlint-cli2-action` step in `ci.yml` rather than through
+`make markdownlint`. The action's release carries the linter's whole dependency
+graph, so nothing is resolved from the registry at run time, and Dependabot
+manages the pin alongside the other actions. It reads
+`.markdownlint-cli2.jsonc` from the workspace and lints the same `**/*.md`
+globs as the Makefile, so the local and CI gates agree on rules and coverage.
+Spelling stays in `make spelling`, which CI runs as its own step.
+
+### Markdown lint ignore baseline
+
+`.markdownlint-cli2.jsonc` is JSONC, and it is the single configuration both
+`make markdownlint` and the SHA-pinned `DavidAnson/markdownlint-cli2-action`
+step read, so the two agree on rules and ignores. Its `ignores` list must
+retain eight baseline globs, present verbatim:
+
+```text
+**/.venv/**
+.vtcode/**
+**/node_modules/**
+**/target/**
+.terraform/**
+.uv-cache/**
+memories/**
+CRUSH.md
+```
+
+Those globs mirror the estate's canonical baseline,
+`platform-standards/canon/lint/markdown/.markdownlint-cli2.jsonc` in the
+`leynos/concordat` repository. The baseline is a floor rather than the whole
+list: a repository may ignore more, and this one does. Only the absence of a
+baseline entry is a failure; an extra entry is not.
+
+`make test-workflow-contracts` enforces the floor:
+`test_the_linter_configuration_keeps_every_baseline_ignore` in
+`tests/workflow_contracts/markdown_gates_test.py` fails when any baseline glob
+is missing.
+
+The list is written out in the test rather than fetched, because a contract
+that read the canon over the network would be a gate on somebody else's
+availability. The cost is that a canon change needs this list changed with it,
+and that cost is the point at which somebody decides whether to adopt the
+change.
+
+`.uv-cache/**` is the entry this repository had narrowed rather than lost: it
+carried `**/.uv-cache/**` alone, and the canon form was simply absent. The two
+forms differ in scope, and the doubled-star form is the wider of them, since
+`**/` matches zero directories as readily as several and so also covers a cache
+at the repository root. Restoring the canon entry is therefore a conformance
+fix, not a coverage fix: dropping it again changes nothing about which files
+`markdownlint-cli2` lints, as verified against markdownlint-cli2 0.22.1 by
+measuring the linted file set with each form in place.
 
 markdownlint's `MD060` (table-column-style) checks that table pipes align using
 a display-width model that treats CJK characters and emoji as double-width.
@@ -2013,7 +3043,7 @@ Contributors should prefer a file-scoped `markdownlint-disable-file` directive
 (or a narrower `markdownlint-disable-next-line`) over disabling a rule
 repository-wide, and should record the reason in a comment beside the directive.
 
-Note that `mdformat-all` rewraps every Markdown file it finds, not only the
+Note that `make fmt` rewraps every Markdown file Git selects, not only the
 files a change touches. Revert the unrelated reflow before committing so a
 change stays reviewable.
 
@@ -2022,43 +3052,34 @@ change stays reviewable.
 `make markdownlint` enforces en-GB-oxendict (Oxford) spelling over the
 repository's Markdown prose with [`typos`](https://github.com/crate-ci/typos),
 as required by the [documentation style guide](documentation-style-guide.md).
-The repository-root `typos.toml` is deterministically generated output
-assembled from two policy layers:
+The repository-root `typos.toml` is deterministically generated output. The
+shared `typos-config-builder` gate rebuilds it on every run from two policy
+layers:
 
-1. The shared estate dictionary in `leynos/agent-helper-scripts` supplies
+1. The live shared estate dictionary in `leynos/agent-helper-scripts` supplies
    generally valid Oxford forms, accepted technical terms, corrections, and
-   exclusions. The generator conditionally refreshes this authority into an
-   untracked local cache and reuses a valid cache when working offline.
+   exclusions. The gate conditionally refreshes this authority into an
+   untracked local cache, reuses a valid cache when the authority is
+   unreachable, and falls back to its bundled snapshot when no cache exists.
 2. `typos.local.toml` contains only Netsuke-specific names, identifiers,
    fixtures, and exclusions. It cannot replace a conflicting shared correction.
 
-`scripts/typos_rollout_http.py` owns shared-cache freshness, HTTPS transport
-security and persistence coordination. Only `scripts/typos_rollout.py` may
-compose it with dictionary validation; application and release code must not
-reuse these spelling-policy internals.
-
-The `RemoteResponse` protocol is a context-managed response boundary: callers
-read the body within the context and exit it to release the underlying response.
-`atomic_write` writes complete content to a temporary file beside the
-destination, atomically replaces the destination on the same filesystem, and
-removes the temporary file when writing or replacement fails. The existing
-destination is therefore left intact unless replacement succeeds.
-
-Pull-request CI restores the untracked dictionary and metadata before the
-spelling gate. The helper still performs a conditional freshness check, then
-saves refreshed state for later runs; a transient outage can therefore reuse a
-validated stale cache.
+Because the dictionary is live, `typos.toml` regenerates on every run and must
+never be drift checked in continuous integration. A word added to the shared
+dictionary therefore needs no change here.
 
 The generated policy sets the `en-gb` locale to correct American spellings
 (`color` to `colour`, `behavior` to `behaviour`, `analyzed` to `analysed`). It
 also restores Oxford spelling through generated entries that accept `-ize`
 inflections and correct their plain-British `-ise` equivalents. Stems taking
-`-yse` (`analyse`, `paralyse`) remain governed by the locale.
+`-yse` (`analyse`, `paralyse`) remain governed by the locale. The gate also
+rejects the prohibited phrases the shared dictionary lists, across every
+tracked text file.
 
-Never edit `typos.toml` by hand. Change `typos.local.toml` and regenerate:
+Never edit `typos.toml` by hand. Change `typos.local.toml` and rerun the gate:
 
 ```bash
-uv run scripts/generate_typos_config.py
+make spelling
 ```
 
 If a legitimate Oxford form is missing estate-wide, update the shared
@@ -2066,24 +3087,21 @@ dictionary rather than duplicating it locally. Keep proper names and deliberate
 fixtures in `typos.local.toml`. Quoted APIs keep upstream spelling, so put them
 in backticks rather than adding accepted words.
 
-`make markdownlint` runs the gate with `--force-exclude`, so the `typos.toml`
-excludes also apply to explicitly passed paths. To fix findings mechanically,
-rerun `typos` with `--write-changes` at the pinned version printed by
-`make markdownlint`:
+The gate runs Typos with `--force-exclude`, so the `typos.toml` excludes also
+apply to explicitly passed paths. To fix findings mechanically, rerun `typos`
+over the generated configuration with `--write-changes`:
 
 ```bash
-uv tool run typos@<TYPOS_VERSION> --config typos.toml --force-exclude \
-  --write-changes <files>
+uv tool run typos --config typos.toml --force-exclude --write-changes <files>
 ```
 
 Review automated rewrites before committing; spelling corrections must not
 touch code samples, API names, or quoted material.
 
-The `typos` version is pinned once in the Makefile `TYPOS_VERSION` variable and
-run through `uv tool run typos@$(TYPOS_VERSION)`, so the local gate and CI
-cannot drift. `make spelling` validates the helper implementation, regenerates
-the policy, rejects tracked drift, and scans every tracked Markdown file.
-`make test-typos-config` remains an alias for the focused helper tests.
+The builder is pinned once in the Makefile `TYPOS_CONFIG_BUILDER_VERSION`
+variable, so the local gate and CI cannot drift. `make spelling` regenerates
+the policy, scans every tracked Markdown file, and runs the prohibited-phrase
+check.
 
 ## Release help tooling
 
@@ -2097,46 +3115,32 @@ configuration fields; `Cli::command()` supplies parser-only flags such as
 configuration fields and adds parser-only help metadata without adding an
 environment or file source. It omits the structural `cmds` container. Keep
 `--config` selector precedence and fail-closed loading in
-`src/cli/discovery.rs`, as required by [ADR 004]. Keep `-C/--directory`
+`src/cli/discovery/mod.rs`, as required by [ADR 004]. Keep `-C/--directory`
 project-discovery rooting and manifest lookup in that discovery boundary, as
 required by [ADR 014]. During ordinary Cargo builds, `build.rs` generates the
 local manual page and shell completions, and audits the localization keys.
-Release automation installs the pinned tool in two stages, neither of which can
-compile it.
+Release automation delegates installation to
+[`install_orthohelp.py`](../scripts/install_orthohelp.py), with the pinned
+version supplied as `INPUT_VERSION`. The helper probes the cached binary and,
+on a miss, runs `cargo binstall` with `--disable-strategies compile`; the
+workflow does not fall back to compiling the tool from source. The cache entry
+owns `~/.cargo/bin`, and its key includes the tool version and pinned
+`rust-build-release` revision because that action provisions `cargo-binstall`
+there. Only cargo-orthohelp 0.9.1 and later publish the required assets; see
+[leynos/ortho-config#479][ortho-config-479],
+[leynos/ortho-config#480][ortho-config-480].
 
-The lane first probes for an already-installed tool at the pinned version,
-which is the warm path: the `cargo-orthohelp` cache entry owns `~/.cargo/bin`,
-and an install refuses to overwrite a binary that is already present, so a warm
-run must not reach the installer.
-
-```bash
-cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.9\.1([[:space:]]|$)'
-```
-
-On a miss it installs the published archive:
-
-```bash
-cargo binstall --no-confirm --locked \
-  --disable-strategies compile cargo-orthohelp@0.9.1
-```
-
-`--disable-strategies compile` is what makes the no-source-build rule
-structural here rather than hopeful. This lane once carried a documented
-exception: `ortho-config` published no binaries until 0.9.1 (
-[leynos/ortho-config#479][ortho-config-479]), so the step listed the
-binary-only strategies it preferred and fell through to `cargo install` when
-they missed. 0.9.1 ships five checksum-verified archives with working binstall
-metadata ([leynos/ortho-config#480][ortho-config-480]), so the fallback is gone
-and the tool cannot be compiled at all. A release that stopped publishing
-assets would now fail the lane rather than quietly building from source, which
-is the behaviour worth having. **Only 0.9.1 and later carry assets**, so
-pinning below that reintroduces the compile.
-
-Three contracts hold this: `workflow_orthohelp_install.rs` requires the
-disabling flag and rejects any `cargo install` naming the tool,
-`cache_ownership_test.py` lists `cargo-orthohelp` in `FORBIDDEN_SOURCE_BUILDS`
-so a retired exception cannot return as a new one, and
-`sccache_contract_test.py` holds the probe before the installer.
+Three workflow and cache contracts hold this boundary. The Rust
+`workflow_orthohelp_install.rs` contract verifies the thin script invocation,
+pinned `INPUT_VERSION` and scoped token, ordering after tool provisioning,
+source-install ban, and release-help argument wiring. The
+`sccache_contract_test.py` contract separately requires delegation to the
+tested script and rejects inline `cargo binstall`; `cache_ownership_test.py`
+lists `cargo-orthohelp` in `FORBIDDEN_SOURCE_BUILDS` so a retired exception
+cannot return as a new one. Installer behaviour belongs to
+`scripts/tests/test_install_orthohelp.py`, which covers cache hits, cache
+misses, a missing probe executable, the `cargo binstall` flags, and its exit
+status.
 
 The version is then validated unconditionally, so a stale binary restored from
 the cache cannot pass as the pinned one. The cache key carries both the tool
@@ -2178,7 +3182,7 @@ when adding, renaming, or removing user-facing options. Changes to CLI
 documentation metadata should be covered by `rstest` workflow/script contract
 tests, plain `#[rstest]` parametrized cases for exhaustive state-enumeration
 unit tests, and `rstest-bdd` release-help scenarios.
-`src/cli/config_path_precedence_tests.rs` is the canonical exhaustive
+`src/cli/discovery/path_precedence_tests.rs` is the canonical exhaustive
 state-enumeration example.
 
 When a future parser-only flag needs generated help, inject it through
@@ -2214,22 +3218,25 @@ When release-validation requirements or documentation paths change, update
 `cli::Cli::command()` for man-page generation and the key registry in
 `src/localization/keys.rs` for the Fluent audit. Rather than declaring
 `src/cli/mod.rs` and inheriting the whole subtree, it declares an inline `cli`
-module naming exactly four files — `src/cli/command.rs`, `src/cli/config.rs`,
-`src/cli/help.rs`, and `src/cli/validation.rs`.
+module naming exactly four files — `src/cli/command.rs`,
+`src/cli/config/mod.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`.
 
 That slice is a maintained boundary, not an accident:
 
 - `src/cli/command.rs` holds the Clap command schema and default-command
   behaviour, including `Cli::with_default_command()`. Runtime behaviour on
   `Cli` belongs in `src/cli/preferences.rs`, and the localisation-aware parsing
-  entry point belongs in `src/cli/parser.rs`.
+  entry point belongs in `src/cli/parser/mod.rs`.
+- `src/cli/config/no_input.rs` owns the existing `NoInput` configuration value;
+  `src/cli/config/mod.rs` re-exports it so the public configuration shape and
+  the build-script schema remain unchanged.
 - `src/cli/validation.rs` holds the shared limits and error constructor that
-  `src/cli/config.rs` needs, so neither file has to reach up into
+  `src/cli/config/mod.rs` needs, so neither file has to reach up into
   `src/cli/mod.rs`.
 - `src/cli/help.rs` holds the `help` subcommand's data types, which are part of
   the Clap schema but do not need the runtime help renderer.
-- `src/host_pattern.rs` covers pattern syntax; matching a concrete hostname
-  against a parsed pattern lives in `src/host_matching.rs`, which the build
+- `src/host/pattern.rs` covers pattern syntax; matching a concrete hostname
+  against a parsed pattern lives in `src/host/matching.rs`, which the build
   script does not compile.
 
 Keeping the slice narrow is what lets rustc's unused-item analysis run normally
@@ -2237,12 +3244,23 @@ inside the build-script crate. Widening it — for example by making
 `src/cli/command.rs` depend on the merge or discovery layers — reintroduces
 unreachable items and, with them, the module-wide `#[expect(dead_code)]`
 suppressions that issue #513 removed. Those suppressions also masked genuinely
-dead code: an unused `pub` item in `src/cli/config.rs` is reported by the
+dead code: an unused `pub` item in `src/cli/config/mod.rs` is reported by the
 build-script crate but not by the library because the library exports that
 module publicly.
 
 A dependency added outside the slice surfaces as a build-script compile error.
 Prefer moving the new code into a sibling module over widening the slice.
+
+Manifest resource-budget code remains on the runtime side of this boundary.
+`src/cli/command.rs` and the private `config::budget` submodule included through
+`src/cli/config/mod.rs` contribute the CLI schema, defaults, and validation
+needed by the build script's generated help artefacts. `build.rs` directly
+declares only the four root files named above; the budget-config path is an
+included submodule of `config/mod.rs`, not a fifth directly declared
+build-script source. The runtime `ManifestBudgetLimits`, `ManifestBudget`, and
+manifest-loading adapters are library code and are deliberately not imported by
+`build.rs`; adding a runtime budget dependency must not widen the build
+script's module slice.
 
 `tests/build_module_slice_ui_tests.rs` makes that boundary a direct-`rustc`
 contract. Its fixtures compile the production module paths selected by
@@ -2250,236 +3268,539 @@ contract. Its fixtures compile the production module paths selected by
 negative fixture imports `cli::discovery` and must fail with an unresolved
 module diagnostic. Update the fixtures whenever the build-script slice changes.
 
-## Local build acceleration
+## The build standard
 
-Debug builds and tests can optionally use the [`mold`] linker and the Cranelift
-`rustc` codegen backend to shorten the local edit-compile-test loop. This is a
-developer convenience only. It is opt-in, it is never used for release
-artefacts, and it changes nothing about what CI builds.
+The [`mold`] linker and the parallel `rustc` frontend (`-Zthreads=8`) are the
+**defaults** for development, test, lint, and typecheck builds. They are
+committed to `.cargo/config.toml`, which Cargo auto-discovers, so a bare
+`cargo build` in the repository gets them as well as every Make target. Release
+and coverage builds are excluded, and the exclusions are enforced rather than
+assumed; see *Exclusions* below.
+
+The Cranelift codegen backend is deliberately **not** part of the standard, and
+a contract refuses one. See *Why Cranelift is not part of the standard* below
+for the evidence.
+
+The decision, the exclusions it carries, and the evidence behind the Cranelift
+refusal are recorded in
+[ADR-029](adr-029-mold-and-parallel-frontend-as-build-defaults.md). This
+section is the working reference; that record is why the standard takes this
+shape.
 
 [`mold`]: https://github.com/rui314/mold
 
 The canonical commands are:
 
 ```bash
-make install-dev-fast   # install the pinned mold release and Cranelift backend
-make dev-fast-check     # verify the prerequisites are present
-make dev-build          # debug binary via Cranelift and mold
-make dev-test           # the nextest pass via Cranelift and mold
+make install-build-tools  # install the pinned mold release and the toolchain
+make check-build-tools    # verify the prerequisites are present
+make build                # debug binary on the standard
+make test                 # the full gate on the standard
 ```
 
-`make dev-build` and `make dev-test` both depend on `make dev-fast-check`, so a
-missing tool reports an installation hint before Cargo is invoked rather than
-surfacing as an opaque codegen-backend or linker error.
+`make build`, `make test-nextest`, `make doctest`, `make lint-clippy`,
+`make lint-whitaker`, and `make typecheck` all depend on
+`make check-build-tools`, so a missing tool reports an installation hint before
+Cargo is invoked rather than surfacing as an opaque codegen-backend or linker
+error. There is no separate accelerated target: `make build`, `make test`,
+`make lint`, and `make typecheck` are the build targets, and every one of them
+runs on the standard.
 
-`DEV_FAST_CONFIG` defaults to `tools/dev-fast/config.toml` and may be
-overridden for a local experiment, for example
-`make DEV_FAST_CONFIG=tools/dev-fast/config.local.toml dev-build`. The Makefile
-passes the selected path explicitly with Cargo's `--config` option; keep the
-fragment out of `.cargo/config.toml` so it cannot affect ordinary, release,
-coverage, or verification builds.
+Every lane in continuous integration whose builds take the linker flag runs
+`make install-build-tools` before its first build. The Windows jobs do not:
+`mold` is Linux-only, so the `cfg` gate leaves the flag inert there and an
+install step would provision nothing. A contract test asserts that command lane
+by lane, and names the Windows omission as intended rather than missing.
 
 `CARGO_LOCKED` defaults to empty. Set `CARGO_LOCKED=--locked` to enable
-repository lockfile verification for `dev-build` and `dev-test`, for example
-`make CARGO_LOCKED=--locked dev-test`.
+repository lockfile verification.
+
+### Why the flags are written down twice
+
+Cargo selects a single `rustflags` source rather than merging them. A matching
+`[target.*]` table replaces `[build] rustflags` outright, and an externally set
+`RUSTFLAGS` environment variable replaces both. Every gate recipe assigns
+`RUSTFLAGS` to deny warnings, and CI's `setup-rust` action exports the same
+value for a whole job, so a repository that named the flags only in
+`.cargo/config.toml` would link with the platform linker and a single-threaded
+frontend during exactly the builds it most wanted accelerated — and report
+success while doing it.
+
+The flags are therefore restated in the Makefile, in `STANDARD_THREADS_FLAG` and
+`STANDARD_MOLD_FLAG`, and composed into the `RUSTFLAGS` each gate builds.
+`tests/build_tools_make_target_tests.rs` and
+`tests/build_tools_cargo_config_tests.rs` hold the sources equal in both
+directions: a flag the Makefile passes but the configuration omits fails one
+test, and a flag named in `[build] rustflags` but missing from the Linux table
+fails another. Do not consolidate them.
+
+Whether a build actually linked with `mold` is checkable after the fact, not
+only inferable from the command line:
+
+```console
+$ strings target/debug/netsuke | grep '^mold '
+mold 2.41.0 (7c4c0addcb833120bf41cc3db7b2652694e0d814; compatible with GNU ld)
+```
+
+The linker writes its own version into the artefact, so a build that silently
+fell back to the platform linker carries no such line. That is worth checking
+after any change to how `RUSTFLAGS` is composed, because the fallback is
+otherwise completely silent.
 
 ### Toolchain contract
 
 Two pins fix the linker; the toolchain is not pinned separately. Change the
 pins together, never individually.
 
-The scripts locate these files relative to their own path, so `make dev-*`, a
-direct `scripts/dev-fast-check.sh`, and a run from any working directory all
-resolve the same committed pins. Setting `MOLD_VERSION_FILE`,
+The scripts locate these files relative to their own path, so the Make targets,
+a direct `scripts/check-build-tools.sh`, and a run from any working directory
+all resolve the same committed pins. Setting `MOLD_VERSION_FILE`,
 `MOLD_SHA256SUMS_FILE`, or `RUST_TOOLCHAIN_FILE` overrides the corresponding
 default; the tests use that to point the scripts at fixtures. Either way a
-missing or empty file is reported as `dev-fast: missing version pin: <path>`
+missing or empty file is reported as `build-tools: missing version pin: <path>`
 rather than silently becoming an empty version.
 
-- `rust-toolchain.toml` supplies the toolchain. dev-fast deliberately shares
-  the repository's own dated nightly rather than pinning a second one, keeping
-  the accelerated loop and the gates on the same toolchain. The
-  `make install-dev-fast` target adds `rustc-codegen-cranelift-preview` to that
-  toolchain.
+- `rust-toolchain.toml` supplies the toolchain. The build standard deliberately
+  shares the repository's own dated nightly rather than pinning a second one,
+  keeping the accelerated loop and the gates on the same toolchain.
+  `make install-build-tools` installs that toolchain and adds no component to
+  it: the standard needs none, because it names no codegen backend.
 - `tools/mold/VERSION` holds the `mold` release tag.
 - `tools/mold/SHA256SUMS` holds the SHA-256 checksum of each supported `mold`
-  release artefact. `make install-dev-fast` refuses to install an artefact that
-  is absent from this file or whose checksum does not match.
+  release artefact. `make install-build-tools` refuses to install an artefact
+  that is absent from this file or whose checksum does not match.
 
-`make install-dev-fast` unpacks `mold` under `~/.local` by default; override
-the location with `DEV_FAST_PREFIX`. Every `dev-*` recipe prepends
-`$(DEV_FAST_PREFIX)/bin` to `PATH`, so an overridden prefix is the one actually
-selected — `-fuse-ld=mold` resolves by `PATH` order, and the Makefile otherwise
-puts `~/.local/bin` first unconditionally. Invoking the scripts directly rather
-than through `make` means arranging that `PATH` order manually.
+`make install-build-tools` unpacks `mold` under `~/.local` by default; override
+the location with `BUILD_TOOLS_PREFIX`. The Makefile prepends
+`$(BUILD_TOOLS_PREFIX)/bin` to `PATH`, so an overridden prefix is the one
+actually selected — `-fuse-ld=mold` resolves by `PATH` order, and the Makefile
+otherwise puts `~/.local/bin` first unconditionally. Invoking the scripts
+directly rather than through `make` means arranging that `PATH` order manually.
 
-`make dev-fast-check` prints the resolved `mold` path alongside its version, so
-an unexpected pick is visible. A version that differs from the pin fails the
+`make check-build-tools` prints the resolved `mold` path alongside its version,
+so an unexpected pick is visible. A version that differs from the pin fails the
 check, as does a missing `mold` or one that cannot report its version; run
-`make install-dev-fast` to install the pinned release ahead of any distribution
-`mold` on `PATH`. An advisory pin is not a pin: tolerating drift would let the
-linker actually in use stop matching what the repository claims.
+`make install-build-tools` to install the pinned release ahead of any
+distribution `mold` on `PATH`. An advisory pin is not a pin: tolerating drift
+would let the linker actually in use stop matching what the repository claims.
 
-For screen readers: the following flowchart traces `make install-dev-fast` from
-start to exit. It reads the pinned linker version, then branches on the host
-platform. On Linux it selects the architecture, downloads the release tarball,
-verifies its checksum, unpacks it into the install prefix, and reports the
-`PATH` requirement; on other platforms it skips the linker entirely and falls
-back to the platform default. Both branches then converge on the toolchain
-half, which reads the pinned nightly, fails early if `rustup` is absent, and
-otherwise installs the toolchain and the Cranelift backend component before
-printing a readiness message.
+For screen readers: the following flowchart traces `make install-build-tools`
+from start to exit. It reads the pinned linker version, then branches on the
+host platform. On Linux it selects the architecture, downloads the release
+tarball, verifies its checksum, unpacks it into the install prefix, and reports
+the `PATH` requirement; on other platforms it skips the linker entirely and
+falls back to the platform default. Both branches then converge on the
+toolchain half, which reads the pinned nightly, fails early if `rustup` is
+absent, and otherwise installs the toolchain before printing a readiness
+message.
 
 ```mermaid
 flowchart TD
-  A["Start install-dev-fast.sh"] --> B["Source dev-fast-common.sh"]
+  A["Start install-build-tools.sh"] --> B["Source build-tools-common.sh"]
   B --> C["mold_version"]
   C --> D{"is_linux"}
   D -- No --> E["Skip linker installation<br/>Fall back to platform linker"]
   D -- Yes --> F["mold_arch"]
   F --> G["Download tarball from MOLD_RELEASE_BASE_URL"]
   G --> H["verify_mold_archive"]
-  H --> I["tar extract into DEV_FAST_PREFIX"]
-  I --> J["Report DEV_FAST_PREFIX/bin PATH requirement"]
+  H --> I["tar extract into BUILD_TOOLS_PREFIX"]
+  I --> J["Report BUILD_TOOLS_PREFIX/bin PATH requirement"]
 
-  E --> K["cranelift_toolchain"]
+  E --> K["install_toolchain"]
   J --> K
   K --> L{"rustup on PATH?"}
   L -- No --> M["fail: install rustup"]
   L -- Yes --> N["rustup toolchain install pinned nightly --profile minimal"]
-  N --> O["rustup component add rustc-codegen-cranelift-preview"]
-  O --> P["Print ready; verify with make dev-fast-check"]
+  N --> P["Print ready; verify with make check-build-tools"]
   M --> Q["Exit"]
   P --> Q
 ```
 
-**Figure**: `make install-dev-fast` control flow. The `is_linux` branch is what
-keeps macOS and Windows on the platform linker while still installing
-Cranelift, and `verify_mold_archive` is the point at which an artefact absent
+**Figure**: `make install-build-tools` control flow. The `is_linux` branch is
+what keeps macOS and Windows on the platform linker while still installing the
+toolchain, and `verify_mold_archive` is the point at which an artefact absent
 from `tools/mold/SHA256SUMS`, or one whose checksum does not match, aborts the
 installation. The final node only reports the `PATH` requirement for direct
-script invocation; the `dev-*` recipes prepend `$(DEV_FAST_PREFIX)/bin`
-themselves.
+script invocation; the Makefile prepends `$(BUILD_TOOLS_PREFIX)/bin` itself.
 
 ### Ownership boundary
 
-The accelerated configuration lives in `tools/dev-fast/config.toml`, which is
-deliberately *not* `.cargo/config.toml`. Cargo auto-discovers the latter, so
-placing Cranelift and the Linux-only `mold` linker there would silently apply
-them to every build in the repository, including release, packaging, coverage,
-and formal-verification builds. The fragment is instead passed explicitly with
-`cargo --config tools/dev-fast/config.toml` from the `make dev-*` targets, and
-must not be sourced from any target that CI invokes.
+The configuration lives in `.cargo/config.toml`, the file Cargo auto-discovers.
+That placement is the mechanism: the standard applies to every build in the
+repository whether or not it went through a Make target, which is what makes it
+a default rather than an opt-in.
 
-No repository-root `.cargo/config.toml` exists any more. It once carried the
-Polonius flag, and was deleted when the pinned nightly began enabling the
-analysis by default. The rule is about what would belong in that file if it
-returned, not about whether it may exist: settings needed everywhere may go
-there; settings that are only safe for the accelerated dev loop must not.
+The file carries two settings and nothing else:
 
-The fragment sets the `codegen-backend` unstable flag,
-`codegen-backend = "cranelift"` on the `dev` profile, and a
-`cfg(target_os = "linux")`-gated rustflags list carrying
-`-Clink-arg=-fuse-ld=mold`.
+- `-Zthreads=8` in `[build] rustflags`;
+- the same flag repeated in a `cfg(target_os = "linux")` table, beside
+  `-Clink-arg=-fuse-ld=mold`. The repetition is required, not redundant: see
+  *Why the flags are written down twice* above.
+
+It names no codegen backend, for any profile, and a contract refuses one. That
+is a refusal rather than an omission; see *Why Cranelift is not part of the
+standard* below.
+
+Adding anything else to that file applies it to release and coverage builds
+too. A setting that is only safe for the development loop does not belong
+there; put it in the Makefile's composed `RUSTFLAGS` instead, where a target
+chooses whether to take it.
+
+The file once carried the Polonius flag and was deleted when the pinned nightly
+began enabling the analysis by default. It must not carry one now: the analysis
+still comes from the pin, and `tests/polonius_toolchain_contract.rs` reads this
+file among others to keep the directive from returning.
+
+### Exclusions
+
+Two build shapes are excluded from the standard, and each exclusion works by a
+different mechanism.
+
+**Release and packaging.** A `[target.*]` table applies to every profile, so
+`make release` assigns `RUSTFLAGS` — to the caller's inherited value, or to
+nothing — because *assigning it at all* is what displaces the configuration's
+tables. A recipe that left the variable unset would ship an artefact built with
+the parallel frontend and `mold`. On CI the release lanes are already covered,
+because `setup-rust` exports `RUSTFLAGS` for the whole job.
+
+**Coverage.** A build whose output is a measurement is a reproducibility claim,
+so it takes neither the parallel frontend nor the linker change. Both coverage
+steps assign `RUSTFLAGS` at the step itself rather than inheriting it from the
+toolchain action, so the exclusion is visible where it applies and a contract
+has something to read. `tests/workflow_contracts/build_standard_wiring_test.py`
+asserts the assignment and, separately, that no excluded flag appears; the two
+fail to different edits.
+
+The coverage lanes install the pinned `mold` all the same, with
+`make install-build-tools` ahead of the coverage step. The measured build never
+links with it, but the suite does not only build: its tests drive `make`
+recipes gated on `check-build-tools`, which refuses to run without the pinned
+`mold` on `PATH`. The rule is general. Every Linux job that runs the nextest
+suite, whether through the coverage action, `cargo nextest run`, or a Make goal
+whose recipe reaches it, runs `make install-build-tools` in a step of its own
+before the suite. That step carries no `if:` unless every suite step in the job
+carries the identical one, so the install runs whenever the suite does.
+`kani-smoke` is the case this admits: its proof-scope decision gates every
+later step alike (ADR-039). `tests/workflow_contracts/nextest_lane_rules.py`
+derives those jobs from the workflows and the Makefile rather than listing
+them, and `tests/workflow_contracts/nextest_lane_mold_test.py` proves each
+clause by mutation.
+
+### Why Cranelift is not part of the standard
+
+The Cranelift codegen backend is the obvious third member of this set, and it
+is deliberately absent. The reason is not a preference: this repository's own
+suite does not pass under it. Six tests fail, and the cause in five of them is
+that a Cranelift-compiled panic does not find the unwind handler it should. The
+wording matters, because a probe that only checks whether a panic unwinds at
+all reads as a pass: what fails is every handler other than the outermost one.
+
+The measurement that decides this is the whole suite rather than a probe, and
+it is the one to re-run on a toolchain bump. It is recorded under *The suite
+under Cranelift* below.
+
+Measured on 2026-09-18 on `nightly-2026-08-23`, whose Cranelift is
+`librustc_codegen_cranelift-1.100.0-nightly.so`, in a crate with no
+dependencies at all, with `[profile.dev] codegen-backend = "cranelift"` and the
+standard's `-Zthreads=8` and `mold` flags:
+
+```rust
+/// A panic raised on the main thread, caught by `catch_unwind`.
+#[test]
+fn main_thread_catch_unwind() {
+    let caught = std::panic::catch_unwind(|| panic!("boom"));
+    assert!(caught.is_err(), "catch_unwind should report the panic");
+}
+
+/// A panic raised on a thread this test spawned.
+#[test]
+fn spawned_thread_panic_unwinds() {
+    let handle = std::thread::spawn(|| panic!("boom"));
+    assert!(handle.join().is_err());
+}
+
+/// A panic raised on the test's own thread, caught by libtest.
+#[test]
+#[should_panic(expected = "boom")]
+fn should_panic_attribute() {
+    panic!("boom");
+}
+```
+
+```sh
+cargo test --lib -- --nocapture --test-threads=1
+```
+
+Table: panic behaviour under the Cranelift backend and under LLVM.
+
+| Case                      | Cranelift                  | LLVM control |
+| ------------------------- | -------------------------- | ------------ |
+| `#[should_panic]`         | passes                     | passes       |
+| `catch_unwind`            | does not catch; test fails | passes       |
+| Panic on a spawned thread | aborts the process         | passes       |
+
+The control is the same crate and the same flags with the backend key removed;
+it passes all three, so the backend is the cause and neither the linker nor the
+parallel frontend is.
+
+The `#[should_panic]` row is why the reason has to be stated this narrowly. It
+passes because libtest's own outermost handler catches the panic, and nothing
+between the panic and that handler has to work for it to do so. `catch_unwind`
+sits between, and the unwinder walks straight past it. A spawned thread has no
+handler above it at all, so the unwinder reaches the end of the stack:
+
+```text
+fatal runtime error: failed to initiate panic, error 5, aborting
+```
+
+Error 5 is exactly that, the end of the stack with no handler found, and the
+process leaves on SIGABRT. The reach is therefore every `catch_unwind` in the
+tree, every test that asserts a spawned thread panicked, and a debug binary
+that would abort with 134 where it now exits 101 — but not, on this nightly, a
+bare `#[should_panic]`.
+
+What was ruled out, each by its own run: it is not the linker, because it
+aborts with the platform linker too; not the parallel frontend, because LLVM
+with `-Zthreads=8` passes; not a compiler-cache wrapper, because it aborts with
+`RUSTC_WRAPPER` unset; and not a missing flag, because
+`-Cforce-unwind-tables=yes` and an explicit `-Cpanic=unwind` both still abort.
+It is not the pinned toolchain either: the same crate aborts on the newest
+upstream nightly, where the LLVM control passes.
+
+Scoping it to a profile does not rescue it.
+`[profile.test] codegen-backend = "llvm"` makes the suite pass, but reading the
+compiler invocations of a clean `cargo test` under that setting shows every
+crate built on LLVM, dependencies included. `cargo check` and Clippy generate
+no code, so `make typecheck` and `make lint` would gain nothing either. That
+leaves `make build` as the only beneficiary — the one artefact that would then
+abort on a panic and so behave differently from the binary the tests exercise.
+
+`tests/build_tools_cargo_config_tests.rs` therefore refuses a backend by every
+route the configuration file offers: a `codegen-backend` key on a profile or on
+a package override beneath one, the same flag inside either form of a
+`rustflags` value, and the `[unstable] codegen-backend` key that permits the
+profile key in the first place. The environment override
+`CARGO_PROFILE_DEV_CODEGEN_BACKEND` remains available for a single scoped
+experiment, and is the route that needs no edit to a committed file.
+
+#### The suite under Cranelift
+
+The probe above explains the mechanism. What decides the question is whether
+netsuke's own suite runs, so it was run: `make test` on `main` at `00f48f77`,
+on the pinned `nightly-2026-08-23`, with the configuration below added to
+`.cargo/config.toml` and nothing else changed. The control is the same commit
+and the same command with that fragment removed. Each arm had its own empty
+`CARGO_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR`, so neither warmed the other,
+and the one-minute load stayed between 1 and 12 throughout.
+
+Repeating this on a toolchain bump needs one adjustment, or it can never come
+back clean. Adding the fragment makes
+`the_configuration_names_no_codegen_backend` fail by design, because that
+contract refuses exactly what the fragment adds. Exclude it, so that a green
+run means what it says. The procedure is for Linux, where the measurement was
+taken:
+
+```sh
+RUSTFLAGS="-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
+  cargo nextest run --workspace --all-targets --all-features --no-fail-fast \
+  -E 'not test(the_configuration_names_no_codegen_backend)'
+RUSTDOCFLAGS="--cfg docsrs -D warnings" \
+RUSTFLAGS="-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
+  cargo test --workspace --doc --all-features
+```
+
+Those `RUSTFLAGS` and `RUSTDOCFLAGS` are the gate's own, composed as the
+Makefile composes them on Linux, so the pair is the gate's own `make test`
+minus that one contract. On macOS or Windows the Makefile drops
+`-Clink-arg=-fuse-ld=mold`, because `mold` ships for Linux only, and a re-test
+there would have to drop it too; it would also be a different measurement from
+the one recorded here. `--no-fail-fast` is what turns the first abort into a
+list. Both commands are needed because nextest does not run doctests:
+`make test` runs them as a separate pass, and a nextest run alone would report
+success while saying nothing about the 39 the control passed. The doctest pass
+needs no filter, because the contract that has to be excluded is not a doctest.
+
+The question is shelved rather than settled, and issue #764 is the reminder:
+Cranelift is not revisited here before 2027-03-21, and that issue carries this
+procedure and these counts so a re-test does not have to rediscover them. A
+toolchain bump before then does not oblige anyone to run it; the measurement
+above is simply stale from the moment the pin moves past `nightly-2026-08-23`,
+and says so.
+
+```toml
+[unstable]
+codegen-backend = true
+
+[profile.dev]
+codegen-backend = "cranelift"
+```
+
+Table: `make test` on 2026-09-21, by backend.
+
+| Arm                     | Result | Counts                                               |
+| ----------------------- | ------ | ---------------------------------------------------- |
+| LLVM control            | passes | 3309 run, 3309 passed, 5 skipped; 39 doctests passed |
+| Cranelift               | fails  | stops at 1372 of 3309 on the first abort             |
+| Cranelift, no fail-fast | fails  | 3309 run, 3302 passed, 6 failed, 1 timed out         |
+
+The gate is the fail-fast run: it stops at the first failure, so the abort
+arrives after 1372 tests. The third row exists only to enumerate the rest.
+
+Table: the tests that do not pass under Cranelift, and why.
+
+| Test                                                                       | Kind      | Cause                         |
+| -------------------------------------------------------------------------- | --------- | ----------------------------- |
+| `test_tracing_capture::tests::snapshot_recovers_from_a_poisoned_lock`      | SIGABRT   | panic on a spawned thread     |
+| the same test in the `netsuke` binary's own target                         | SIGABRT   | panic on a spawned thread     |
+| `localizer::tests::en_localizer_recovers_from_a_poisoned_lock`             | SIGABRT   | panic on a spawned thread     |
+| `properties::the_last_declaration_wins_over_any_sequence`                  | fails     | `catch_unwind` does not catch |
+| `http::tests::accept_connection_respects_accept_timeout`                   | fails     | `catch_unwind` does not catch |
+| `repeated_generate_bounds_sidecars_and_keeps_the_latest_manifest_loadable` | times out | slower Cranelift-built binary |
+
+Neither `catch_unwind` failure is an incidental use of it. Each of those two
+tests has a panic as its subject: one reads an undeclared key and asserts the
+read panicked, the other asserts `accept_connection` panics at its deadline.
+Under Cranelift the panic walks past the handler, so the assertion never runs.
+The three poisoned-lock tests reach the same defect from the other side: each
+poisons a lock by panicking on a thread it spawned, and a spawned thread has no
+handler above it at all.
+
+The timeout is a different effect and was attributed rather than assumed. That
+test runs the built `netsuke` binary once per retained sidecar and then a Ninja
+probe; it compiles nothing. Run alone it passes under both backends, at 109 s
+on LLVM and 140 s on Cranelift, so what crosses the 300 s per-test allowance is
+the Cranelift-built binary being slower, under the suite's own concurrency. A
+quieter host might not show it, and the remedy if it ever mattered would be
+about that binary rather than about a build. The timing-shaped failure above
+was checked the same way and is not a flake: it fails under Cranelift run alone
+and passes under LLVM run alone.
+
+Two counts of six appear above and they are not the same six. The runner's "6
+failed" includes `the_configuration_names_no_codegen_backend`, which fails in
+the Cranelift arm because the configuration names a backend — which is what
+that contract refuses, so it is evidence the contract works rather than
+evidence about the backend. Setting it aside leaves five failures and one
+timeout: the six rows in the table above, all six caused by Cranelift.
+
+None of this says Cranelift is unusable elsewhere, and other repositories on
+this estate do use it. Five of those six outcomes are tests about a panic
+crossing a boundary, and a repository without such tests would meet none of
+them.
 
 ### Composition rules
 
-- **Quality gates.** `make check-fmt`, `make lint`, `make lint-clippy`,
-  `make test`, and `make typecheck` are unchanged and remain on the
-  repository's pinned nightly toolchain from `rust-toolchain.toml` with the
-  default LLVM backend. The `dev-*` targets are not part of `make test`,
-  `make lint`, `make check-fmt`, or `make all`, mirroring the Kani boundary
-  described below. Run the ordinary gates before proposing a change;
-  `make dev-test` is a faster inner-loop proxy, not a substitute.
+- **Quality gates.** `make lint`, `make lint-clippy`, `make lint-whitaker`,
+  `make test`, and `make typecheck` run on the standard, on the repository's
+  pinned nightly from `rust-toolchain.toml`. They are gated on
+  `make check-build-tools`, so they stop with an installation hint rather than
+  a codegen-backend error. `make check-fmt` compiles nothing and is unaffected.
 - **`RUSTFLAGS`.** `make test-nextest`, `make doctest`, `make typecheck`, and
-  the rustdoc stage of `make lint` append `-D warnings` to any flags inherited
-  from the caller. An externally set `RUSTFLAGS` overrides the `[target.*]`
-  `rustflags` in a Cargo configuration file, so the `dev-*` targets
-  deliberately do not set it. Exporting `RUSTFLAGS` in the shell silently
-  disables `mold` for these targets.
+  the rustdoc and Clippy stages of `make lint` append `-D warnings` *and* the
+  standard's flags to whatever the caller set. An externally set `RUSTFLAGS`
+  overrides every `rustflags` table in a Cargo configuration file, which is
+  precisely why the Makefile restates the flags rather than relying on the
+  file. Exporting `RUSTFLAGS` in the shell no longer silences the linker for
+  these targets, because they compose rather than replace; it does still
+  silence it for a bare `cargo build`.
 - **`RUSTDOC_FLAGS`.** Make defaults this caller-overridable variable to
   `--cfg docsrs -D warnings` and exports it as Cargo's supported `RUSTDOCFLAGS`
   environment variable for `make doctest`, the rustdoc stage of
   `make lint-clippy`, and `make doc-coverage`. The unsupported `RUSTDOC_FLAGS`
   name is not exported, so Cargo cannot warn about it. Caller overrides retain
   their literal contents, including quotes in Rust `--cfg` values.
-- **Release and packaging.** `make release` and everything under
-  `.github/workflows/build-and-package.yml` use the release profile, the LLVM
-  backend, and the platform linker. Cranelift is applied to the `dev` profile
-  only, so it cannot reach a shipped artefact even if the fragment were loaded.
-  `make build` produces a debug binary, but through the default backend and
-  linker; `make dev-build` is the accelerated counterpart.
-- **Coverage.** Coverage is generated through LLVM source-based instrumentation
-  in `.github/workflows/ci.yml` and `coverage-main.yml`. Cranelift does not
-  emit that instrumentation. Never combine the `dev-fast` fragment with a
-  coverage run.
+- **Release, packaging, and coverage.** See *Exclusions* above. These are the
+  two shapes the standard must not reach, and each is held out by a different
+  mechanism.
 - **Formal verification.** Kani manages its own supporting nightly toolchain
-  during `cargo kani setup`. That nightly is unrelated to the repository's
-  Polonius nightly and must not be conflated with it; verification must run on
-  Kani's own toolchain and the LLVM backend. The same applies to Verus.
-- **Test runner.** `make dev-test` is the accelerated counterpart of
-  `make test-nextest`, not of `make test`: it runs the same
-  `cargo nextest run --workspace --all-targets --all-features`, and so is
-  governed by the same [`.config/nextest.toml`](#nextest-configuration). It
-  omits the `doctest` pass, because `cargo test --doc` is a separate and
-  comparatively quick runner; run `make test` before proposing a change. The
-  acceleration is applied through `RUSTUP_TOOLCHAIN` and `cargo --config`, both
-  Cargo-level rather than runner-level, which is why they compose with nextest
-  unchanged. Note the target uses `NEXTEST_BUILD_JOBS`, not `BUILD_JOBS`:
-  nextest reserves `-j` for test concurrency, so a Cargo-shaped `-j` would
-  silently become a thread count.
+  during `cargo kani setup`, and drives `rustc` through `kani-compiler`.
+  Reading the compiler invocations a `cargo kani` run produces shows
+  `-Zthreads` never reaching `kani-compiler`, so the harnesses need no override
+  and none is added; CI's `kani-smoke` job runs `make kani-ir` on every push to
+  `main`, nightly, and on each pull request that changes a proof input, which
+  is where that continues to be checked. Verus drives its own toolchain the
+  same way. If a proof tool ever does inherit a flag it cannot take, the remedy
+  is an override scoped to that one target with the reason recorded, not a
+  change to the shared configuration.
+- **Dylint and Whitaker.** `make lint-whitaker` execs `cargo dylint`, which
+  re-invokes Cargo under Whitaker's own pinned nightly with a driver as
+  `RUSTC_WORKSPACE_WRAPPER`. That older Cargo reads this configuration without
+  complaint, and dylint drives `cargo check`, so nothing here reaches code
+  generation. It would only need revisiting if dylint moved to a
+  codegen-producing command.
+- **Test runner.** The standard is applied at the Cargo level, through
+  `RUSTFLAGS` and the profile, rather than at the runner level, which is why it
+  composes with nextest unchanged; `make test-nextest` is governed by the same
+  [`.config/nextest.toml`](#nextest-configuration) as before. Note the target
+  uses `NEXTEST_BUILD_JOBS`, not `BUILD_JOBS`: nextest reserves `-j` for test
+  concurrency, so a Cargo-shaped `-j` would silently become a thread count.
 - **rust-analyzer.** No rust-analyzer configuration is committed, so the
-  language server uses the repository toolchain and the default backend. Opting
-  rust-analyzer into Cranelift is a personal, machine-local choice; it needs a
-  separate target directory to avoid thrashing the cache shared with
-  `make test`.
-- **Polonius.** The analysis comes from the pinned nightly (ADR-006), and the
-  `dev-*` targets use that same toolchain, so the fragment needs no
-  Polonius-specific cooperation and must not add a `-Zpolonius` directive.
-  Cargo does still pick a single rustflags source rather than merging them, so
-  anything the fragment's `[target.*]` table must carry has to be named there
-  in full.
+  language server picks up `.cargo/config.toml` like any other Cargo caller and
+  takes the standard. Give it a separate target directory to avoid thrashing
+  the cache shared with `make test`.
+- **Polonius.** The analysis comes from the pinned nightly (ADR-006), so the
+  configuration needs no Polonius-specific cooperation and must not add a
+  `-Zpolonius` directive; `tests/polonius_toolchain_contract.rs` reads
+  `.cargo/config.toml` to keep it out.
 
 ### Fallback behaviour
 
 - **Non-Linux hosts.** `mold` ships for Linux only, so on macOS and Windows
-  `make install-dev-fast` skips the linker installation, the
-  `cfg(target_os = "linux")` gate keeps the link argument inert, and
-  `make dev-fast-check` prints the fallback to the platform linker explicitly.
-  Cranelift still applies.
-- **Unsupported architecture.** `make install-dev-fast` fails with a clear
+  `make install-build-tools` skips the linker installation, the
+  `cfg(target_os = "linux")` gate keeps the link argument inert, the Makefile
+  omits it from the composed `RUSTFLAGS`, and `make check-build-tools` prints
+  the fallback to the platform linker explicitly. The parallel frontend still
+  applies on every platform, being a compiler flag rather than a tool that has
+  to be installed.
+- **Unsupported architecture.** `make install-build-tools` fails with a clear
   message rather than guessing when `uname -m` is not one of the architectures
   recorded in `tools/mold/SHA256SUMS`.
-- **Missing tools.** `make dev-fast-check` names the absent component — `mold`,
-  `rustup`, the pinned toolchain, or the Cranelift backend — and points at
-  `make install-dev-fast`. It exits non-zero, so `make dev-build` and
-  `make dev-test` stop before Cargo runs.
+- **Missing tools.** `make check-build-tools` names the absent component —
+  `mold`, `rustup`, or the pinned toolchain — and points at
+  `make install-build-tools`. It exits non-zero, so `make build`, `make test`,
+  `make lint`, and `make typecheck` stop before Cargo runs.
 
 ### Testing the tooling
 
-Six suites cover the tooling's observable behaviour. All are hermetic — no
+Eight suites cover the tooling's observable behaviour. All are hermetic — no
 network, and no real `mold`, `rustup`, or Cargo — so they run as part of
 `make test` on any Linux host.
 
-- `tests/dev_fast_check_tests.rs`: the capability gate. Which diagnostic each
-  failure mode emits, exit status, pin resolution, and refusal of a malformed
-  pin.
-- `tests/dev_fast_install_tests.rs`: the installer's happy path and its
-  refusals, plus the benchmark script's Markdown output.
-- `tests/dev_fast_checksum_tests.rs`: property coverage for checksum
+- `tests/build_tools_check_tests.rs`: the capability gate. Which diagnostic each
+  failure mode emits, exit status, and the non-Linux path, where the linker is
+  skipped and the toolchain half still runs `rustup toolchain install`.
+- `tests/build_tools_pin_tests.rs`: pin resolution. Which file each pin is read
+  from, that boundary whitespace is trimmed, that an explicit override wins,
+  that the committed pins are the fallback rather than an empty string, and
+  that a malformed pin is refused rather than rewritten.
+- `tests/build_tools_install_tests.rs`: the installer's happy path and its
+  refusals, `make install-build-tools` forwarding, and the benchmark script's
+  Markdown output.
+- `tests/build_tools_checksum_tests.rs`: property coverage for checksum
   verification against a model.
-- `tests/dev_fast_make_target_tests.rs`: the Make recipes. Toolchain and
-  fragment selection; that a failed gate reaches zero Cargo invocations
-  (`dev-build` and `dev-test` stop before Cargo runs); the fragment's contents;
-  and `install-dev-fast` forwarding.
-- `tests/dev_fast_bench_tests.rs`: `make bench-build`. Per-variant target
-  directories, the clean/incremental cycle, and both variant rows.
-- `tests/dev_fast_bench_lock_tests.rs`: the benchmark's exclusion lock. That a
-  held lock rejects a second run before it mutates anything, that the lock is
+- `tests/build_tools_make_target_tests.rs`: the Make recipes. That each gate
+  composes the standard's flags *and* the warning policy into `RUSTFLAGS`, that
+  the debug build takes the standard without the warning policy, that the
+  release build assigns `RUSTFLAGS` and carries neither flag, and that a failed
+  capability check reaches zero Cargo invocations.
+- `tests/build_tools_cargo_config_tests.rs`: the committed `.cargo/config.toml`.
+  That both `rustflags` sources repeat the shared flags, that no profile names
+  a codegen backend, that no `rustflags` source carries one either — in the
+  array form or the space-separated string form Cargo reads identically — and
+  that Cargo itself resolves the keys — `cargo config get` reports Cargo's own
+  view, so a key nested under the wrong table shows up as a missing value
+  rather than parsing cleanly and being ignored.
+- `tests/build_tools_bench_tests.rs`: `make bench-build`. Per-variant target
+  directories, the clean/incremental cycle, all three variant rows, and that
+  every pass clears both compiler wrappers so a measurement cannot be a cache
+  read. Its `order_cases` module holds the cases about the order the variants
+  ran in: that the draw is shuffled rather than walked straight through, that
+  one seed replays one order, and that a repeat count below two is refused.
+- `tests/build_tools_bench_lock_tests.rs`: the benchmark's exclusion lock. That
+  a held lock rejects a second run before it mutates anything, that the lock is
   released however a run ends, and that a later run can take it after an
   aborted one.
 
-The fixtures live in `test_support::dev_fast`:
+The fixtures live in `test_support::build_tools`:
 
 - `Sandbox` builds `PATH` from nothing — an explicit allowlist of ordinary
   utilities symlinked into a temporary directory, plus whichever fakes a case
@@ -2501,14 +3822,17 @@ The fixtures live in `test_support::dev_fast`:
   checksum verification, and strip depth. Each release owns its version, so no
   caller threads a version string around.
 - `RecordingCargo` is a fake `cargo` that logs the arguments,
-  `RUSTUP_TOOLCHAIN`, and `PATH` of every invocation, turning a recipe's
-  command line into a checkable fact. It also records the target directory and
-  whether that directory already existed, which makes a benchmark's
-  clean-then-incremental cycle observable: the clean pass sees
-  `TargetState::Absent` because the harness wiped the directory, and the
-  incremental pass that follows sees `Present`. Seed a stale target directory
-  before asserting on that, or the wipe is indistinguishable from doing
-  nothing. It records the benchmark touch file's timestamp too, compared
+  `RUSTUP_TOOLCHAIN`, `PATH`, and `RUSTFLAGS` of every invocation, turning a
+  recipe's command line and environment into checkable facts. It records whether
+  `RUSTFLAGS` was assigned separately from its value, because unset and empty
+  are different facts: an empty assignment still displaces the configuration
+  file's tables, which is exactly what the release exclusion relies on. It also
+  records the target directory and whether that directory already existed,
+  which makes a benchmark's clean-then-incremental cycle observable: the clean
+  pass sees `TargetState::Absent` because the harness wiped the directory, and
+  the incremental pass that follows sees `Present`. Seed a stale target
+  directory before asserting on that, or the wipe is indistinguishable from
+  doing nothing. It records the benchmark touch file's timestamp too, compared
   against a backdated baseline rather than between passes so the assertion does
   not depend on filesystem timestamp granularity.
 - `PinOverrides` selects whether a script run supplies the pin-file variables.
@@ -2517,21 +3841,21 @@ The fixtures live in `test_support::dev_fast`:
   entries are kept apart deliberately: a command-line variable outranks a `?=`
   default, whereas an environment entry is the only channel for a setting a
   script reads without the Makefile naming it.
-- `test_support::dev_fast::scenario` builds on the fixtures above to assemble
-  two starting points. `BuildScenario` is a sandbox where `make dev-fast-check`
-  passes — pinned `mold` on the install prefix, a `rustup` reporting the
-  Cranelift component, and a `RecordingCargo` installed — and is shared by the
-  Make-target and benchmark suites. `BuildScenario::run(target)` returns the
-  single Cargo invocation a target must produce. The scenario is shared by both
-  suites so each can inspect that invocation without relying on process-global
-  state. `InstallerScenario` is a sandbox with a published `FakeRelease` and a
-  usable `rustup`, letting a test concentrate on the linker half of the
-  installer; the installer and checksum suites share it. The module also exports
-  `TEST_MOLD_VERSION`, deliberately not a real `mold` version so a test that
-  accidentally reaches the network fails rather than silently succeeding
-  against an upstream artefact, and `WRONG_SHA256`. `InstallerFixture` groups
-  the installer's pin path, checksum path, and release URL, and renders them via
-  `script_env()`.
+- `test_support::build_tools::scenario` builds on the fixtures above to assemble
+  two starting points. `BuildScenario` is a sandbox where
+  `make check-build-tools` passes — pinned `mold` on the install prefix, a
+  `rustup` reporting the pinned toolchain, and a `RecordingCargo` installed —
+  and is shared by the Make-target and benchmark suites.
+  `BuildScenario::run(target)` returns the single Cargo invocation a target
+  must produce. The scenario is shared by both suites so each can inspect that
+  invocation without relying on process-global state. `InstallerScenario` is a
+  sandbox with a published `FakeRelease` and a usable `rustup`, letting a test
+  concentrate on the linker half of the installer; the installer and checksum
+  suites share it. The module also exports `TEST_MOLD_VERSION`, deliberately
+  not a real `mold` version so a test that accidentally reaches the network
+  fails rather than silently succeeding against an upstream artefact, and
+  `WRONG_SHA256`. `InstallerFixture` groups the installer's pin path, checksum
+  path, and release URL, and renders them via `script_env()`.
 
 A scenario earns its place here once a second suite needs it, and not before;
 suite-specific conveniences stay with their suite — the installer tests keep
@@ -2570,17 +3894,48 @@ the corpus small and the strategy structural.
 `test_support` is a workspace member, so `make test` (whose nextest command uses
 `--workspace`), rustdoc, Clippy, and Whitaker visit its unit tests and library
 code. Keep fixture tests beside the fixture when they exercise a local
-invariant; use the `tests/dev_fast_*.rs` integration crates when the assertion
-spans the application-facing sandbox or Makefile contract.
+invariant; use the `tests/build_tools_*.rs` integration crates when the
+assertion spans the application-facing sandbox or Makefile contract.
 
 ### Benchmark evidence
 
-`make bench-build` measures both paths with one repeatable command. It builds
-the `netsuke` binary from an empty target directory, touches `src/main.rs`, and
-rebuilds. Each variant uses its own target directory under `target/bench/`, so
-neither warms the other's cache nor disturbs the working `target/` tree. The
-timer reads `EPOCHREALTIME`, so this target needs Bash 5.0 or newer; it fails
-with a named prerequisite on older shells rather than reporting zeroes.
+`make bench-build` measures three build shapes with one repeatable command: the
+platform-linker baseline, the repository's `mold` default, and that default
+with the parallel frontend added. The linker and the frontend get a row each
+because they pay off at different points in a build, and one row for both would
+hide which of them is earning its keep. Each variant builds the `netsuke`
+binary from an empty target directory, touches `src/main.rs`, and rebuilds.
+Each uses its own target directory under `target/bench/`, so none warms
+another's cache nor disturbs the working `target/` tree. The timer reads
+`EPOCHREALTIME`, so this target needs Bash 5.0 or newer; it fails with a named
+prerequisite on older shells rather than reporting zeroes.
+
+`mold` is Linux-only, so the benchmark drops its row elsewhere. On a non-Linux
+host the threaded row keeps the parallel frontend and loses the linker flag,
+and its caption reads "Platform linker, parallel frontend" so the table never
+names a linker change it did not make. The capability check tolerates a
+non-Linux host rather than aborting, which is what makes this path reachable.
+
+Every measured build runs with `RUSTC_WRAPPER` and `RUSTC_WORKSPACE_WRAPPER`
+assigned empty. This is not tidiness. A developer shell commonly exports a
+compiler wrapper chaining to `sccache`, and with one in force a variant's first
+clean pass fills the cache while every later pass reads it back, so the table
+times cache retrieval under variant labels and the row order decides the
+winner. The flags are part of the cache key, so the variants warm each other
+unevenly and nothing in the output reveals it. Both variables are named because
+Cargo honours them independently, and both are *assigned* rather than unset,
+because only an assignment displaces an exported value.
+
+`CARGO_ENCODED_RUSTFLAGS` is *removed* instead — `env -u`, not an empty
+assignment. Cargo consults it before `RUSTFLAGS` and uses the first source it
+finds, so an inherited value would leave every variant compiling with the same
+flags while the table still showed three rows, and an empty encoded list is
+still a source that would displace every variant's own `RUSTFLAGS`. Only
+removing the variable leaves `RUSTFLAGS` to decide the build. A developer with
+that variable exported — `cargo nextest` sets it, as do some wrapper setups —
+would otherwise get a table that compares nothing. Removing it is an extension
+to `env` rather than POSIX, but it is present in both GNU coreutils and the BSD
+`env` the benchmark can reach on macOS.
 
 `BENCH_ROOT` and `BENCH_TOUCH_FILE` default to the shared `target/bench`
 directory and the tracked `src/main.rs`, so two runs in one checkout would
@@ -2594,12 +3949,53 @@ run ends, including on interrupt. To benchmark two things at once, override
 `BENCH_ROOT`, so distinct roots do not contend. If a killed run ever leaves the
 directory behind, remove it.
 
-Results below were recorded on a 24-core x86_64 Linux host, with both variants
-on the repository's then-pinned `nightly-2026-06-25` supplying Cranelift
-0.132.0, and `mold` 2.41.0. Regenerate the table verbatim with
-`make bench-build`. Absolute figures move with machine load, so the ratio
-between the two rows is the durable signal, not the seconds; the run below is
-representative of three consecutive runs that agreed to within 0.4 s.
+The variants are measured in a shuffled order, redrawn for each of
+`BENCH_REPEATS` samples (`2` by default). Separate target directories isolate
+build artefacts and nothing else: page-cache warmth and other tenants on a
+shared host are not isolated by any directory, and they are where the ordering
+bias lives. Drawing a fresh order per sample spreads that bias across the
+variants instead of pinning it to whichever ran first, and repeating turns it
+into visible spread rather than one number. The script prints `order sample N:`
+for each draw and `order measured:` for the run as a whole, because a shuffle
+is not reconstructible after the fact — without the record, a table disagreeing
+with an earlier one cannot be told apart from a run that measured the variants
+in a different order, which is the exact confusion the shuffle exists to
+remove. Paste that record with any table recorded here, so the next reader can
+tell which it was.
+
+The draw is an input rather than ambient state. `BENCH_SEED` seeds it, the run
+prints `order seed: N` before it measures anything, and passing that value back
+replays the same order. An unseeded run draws a seed and prints it, so a table
+somebody has already taken can still be replayed. `BENCH_REPEATS` below two is
+refused rather than clamped: nought prints an empty table and exits nought, and
+one prints a table indistinguishable in shape from a valid one while carrying
+exactly the single-sample bias the repeats exist to spread. Neither failure is
+visible in the output a reader pastes here, which is why the script names it
+instead.
+
+No table is recorded here yet, and the reason is worth keeping. The figures
+this section used to carry were taken before the wrapper defect above was
+found, so they timed a mixture of compilation and cache retrieval. The attempt
+to replace them on 2026-09-17 ran on a shared host whose load went from 0.7 to
+117 during the round: across three runs the same variant's clean build ranged
+from 37 s to 154 s, and reversing the row order reversed the verdict twice. A
+number produced under those conditions is not a slower or faster reading of the
+truth; it is a reading of the host.
+
+A run worth recording therefore needs all of: a host doing nothing else, the
+load average quoted beside the table, and samples that agree. Regenerate with
+`make bench-build` and paste the table verbatim. Until then, treat the standard
+as justified by what it does rather than by a figure — `mold` and the parallel
+frontend cost nothing at runtime and are trivially reversible — and measure a
+representative workload before concluding the acceleration is or is not worth
+the setup.
+
+Two limits bound whatever that run reports. The benchmark builds only
+`--bin netsuke`, the smallest useful target, so it under-represents what
+`make test` sees, where every test binary's link is also on the linker. And the
+incremental row rebuilds a single crate and links once, which on any host is a
+couple of seconds dominated by that link, so it discriminates far less between
+variants than the clean row does.
 
 `make bench-glob-expansion` measures `glob_paths("**/*.txt", Some(base))`
 against its equivalent absolute, unbased pattern. Its deterministic fixture is
@@ -2608,23 +4004,6 @@ the benchmark measures expansion rather than fixture construction or an
 optimized-away query. Use it when changing glob-base preparation, path
 rebasing, or separator formatting; compare the two cases on the same machine,
 not their absolute timings across hosts.
-
-| Variant                         | Clean build (s) | Incremental build (s) |
-| ------------------------------- | --------------- | --------------------- |
-| Default (LLVM, platform linker) | 11.6            | 0.8                   |
-| dev-fast (Cranelift, `mold`)    | 10.7            | 0.6                   |
-
-Table: Debug build wall-clock time for the default and accelerated paths.
-
-Be realistic about the size of this: roughly 8% off a clean build and a quarter
-off an incremental one, which on this host is a few hundred milliseconds. Two
-things bound it. Both variants now share one nightly, so the comparison
-isolates Cranelift and `mold` rather than also capturing a toolchain change —
-earlier figures in this document did not, and overstated the gain. And the
-benchmark builds only `--bin netsuke`, the smallest useful target, so it
-under-represents what `make dev-test` sees, where Cranelift has every test
-binary's codegen to save on. Measure the actual workload before concluding the
-acceleration is or is not worth the setup.
 
 ## Formal-verification tooling
 
@@ -2679,6 +4058,87 @@ Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`, or
 `[package.metadata.kani.flags] default-unwind = "6"`; both settings are part of
 the harness contract and must move in lockstep with new Kani-only modules.
 
+### Kani scope wrapper
+
+Never run Kani bare on a developer machine. Uncapped local runs have OOM-killed
+the machine, so every local `cargo kani` and `make kani-ir` invocation runs
+inside a `systemd-run --user --scope` wrapper that places the verifier in its
+own control group and caps what it may consume. Composed in full, the wrapper
+around `make kani-ir` is:
+
+```bash
+systemd-run \
+    --user \
+    --scope \
+    --expand-environment=no \
+    -p RuntimeMaxSec=8m \
+    -p TimeoutStopSec=20s \
+    -p CPUQuota=200% \
+    -p MemoryMax=8G \
+    -p MemorySwapMax=0 \
+    -p TasksMax=96 \
+    -p IOWeight=20 \
+    /usr/bin/nice -n 15 \
+    bash -c 'set -o pipefail; \
+      env LD_LIBRARY_PATH="$HOME/.kani/kani-0.67.0/toolchain/lib:$HOME/.kani/kani-0.67.0/lib" \
+      make kani-ir 2>&1 \
+      | tee /tmp/kani-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out'
+```
+
+`RuntimeMaxSec=8m` is the runtime cap and `TimeoutStopSec=20s` the stop grace
+that follows it; `CPUQuota`, `MemoryMax`, `MemorySwapMax`, `TasksMax` and
+`IOWeight` are the resource properties; and `/usr/bin/nice -n 15` keeps the
+verifier from crowding the rest of the machine. The explicit `LD_LIBRARY_PATH`
+points at the pinned Kani toolchain and is not optional: without it
+`cargo kani` and Cargo build scripts fail to load `libLLVM` with an opaque
+linker error, and that is the most common way to lose an hour on a Kani task.
+
+The bound is the pair, not `RuntimeMaxSec` alone. Reaching `RuntimeMaxSec` puts
+the scope into a failure state and starts the stop: systemd sends `SIGTERM`,
+escalating to `SIGKILL` only once `TimeoutStopSec` expires. The effective bound
+is therefore `RuntimeMaxSec` plus `TimeoutStopSec` — 8m20s with the documented
+figures. Leaving `TimeoutStopSec` unpinned hands that decision to the host
+default, 90 seconds on the reference host, and a payload that ignores `SIGTERM`
+can then overrun the nominal cap by that much: one sleeping for 200 seconds
+under `RuntimeMaxSec=3s` alone was killed at 93 seconds, and at 23 seconds once
+`TimeoutStopSec=20s` was pinned.
+
+`tee` sits inside the scope, and that is deliberate. The pipeline travels as
+the scope's payload, so the captured file is exactly the output the cap
+governs: a run stopped by `RuntimeMaxSec` leaves a capture that ends where the
+budget ran out, rather than one the scope can no longer reach.
+`set -o pipefail` is set in that same shell, because a pipeline written outside
+the scope cannot carry it in. A pipeline's status is otherwise `tee`'s, zero
+whenever the capture succeeded, so a failing verifier would be masked by a
+successful capture.
+
+The wrapper has host prerequisites. Its effective systemd minimum is 254:
+`RuntimeMaxSec` on a scope needs 244 and `--expand-environment=no` needs 254,
+so the higher floor binds; the reference host reports 257. It also needs a
+running per-user systemd manager with delegated cgroup support, which is what
+`--user --scope` delegates the scope's control group to and what a `--user`
+login session provides on the reference host. Without such a manager the
+command fails before any unit is created, reporting
+`Failed to connect to user scope bus via local transport`.
+
+Do not reintroduce a `timeout` prefix in place of `RuntimeMaxSec`. The prefix
+does reach a payload that stays in its process group: GNU `timeout` signals the
+supervised command's group rather than only its immediate child, and under
+`--scope` the payload's parent is the `timeout` process itself, so the two
+share one. Two other limits still make it the worse bound. The `--kill-after=`
+grace is added to the deadline rather than nested inside it, so a workload that
+ignores the first signal is bounded by the sum of the two figures. And a
+descendant that changes its process-group membership, by `setsid()` or
+`setpgid()`, escapes a process-group signal altogether, while the scope's
+cgroup stop does not depend on signal propagation. A double fork alone does not
+escape it: the descendant keeps the group it inherited, so the signal still
+reaches it.
+
+The wrapper's own end-to-end suite is `tests/kani_scope_wrapper_e2e_tests.rs`,
+run by `make test-kani-scope-wrapper`; it exercises the documented shape at
+test-sized limits. The probe evidence behind the figures above is recorded in
+the 4.2.2 and 4.2.3 ExecPlans under `docs/execplans/`.
+
 ### Kani harness inventory
 
 The IR harnesses are declared by the modules they verify, under
@@ -2696,7 +4156,7 @@ private production-owned `canonicalize_cycle_by` kernel over `u8` cycles for
 N=2, N=3, and N=4, plus one direct adapter harness that checks
 `canonicalize_cycle(Vec<Utf8PathBuf>)` agrees with that kernel for a two-node
 path cycle. Larger path-bearing canonicalization coverage remains owned by the
-`cycle_property_tests.rs` Proptest suite.
+`src/ir/cycle/property_tests/mod.rs` Proptest suite.
 
 Command-interpolation Kani proofs drive the allocation-free marker-matching
 helper, not the full scanner. The helper operates on the scanner's private
@@ -2710,23 +4170,23 @@ Table: Kani harnesses for Netsuke's intermediate-representation invariants.
 
 | Harness                                                     | Module                                   | Property                                                                                                | Bound                 | Notes                                                                                                                                                                     |
 | ----------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `duplicate_output_always_rejected`                          | `src/ir/from_manifest_verification.rs`   | A duplicate path in one target is detected and the reported duplicate path is preserved.                | `#[kani::unwind(12)]` | Drives production `find_duplicates` with symbolic duplicate names. Full manifest lowering reaches action hashing before duplicate assertions become tractable under Kani. |
-| `empty_rule_shape_is_rejected`                              | `src/ir/from_manifest_verification.rs`   | An empty rule selector reaches `IrGenError::EmptyRule` and preserves the target name.                   | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with a symbolic target name and a minimal rule map.                                                                                      |
-| `multiple_rule_shape_is_rejected`                           | `src/ir/from_manifest_verification.rs`   | A multi-rule selector reaches `IrGenError::MultipleRules` and preserves sorted rule names.              | `#[kani::unwind(8)]`  | Drives production `resolve_rule` with symbolic rule ordering over short bounded names.                                                                                    |
-| `missing_rule_shape_is_rejected`                            | `src/ir/from_manifest_verification.rs`   | A missing single rule reaches `IrGenError::RuleNotFound` and preserves target and rule names.           | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with symbolic target and rule names and an empty rule map.                                                                               |
+| `duplicate_output_always_rejected`                          | `src/ir/from_manifest/verification.rs`   | A duplicate path in one target is detected and the reported duplicate path is preserved.                | `#[kani::unwind(12)]` | Drives production `find_duplicates` with symbolic duplicate names. Full manifest lowering reaches action hashing before duplicate assertions become tractable under Kani. |
+| `empty_rule_shape_is_rejected`                              | `src/ir/from_manifest/verification.rs`   | An empty rule selector reaches `IrGenError::EmptyRule` and preserves the target name.                   | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with a symbolic target name and a minimal rule map.                                                                                      |
+| `multiple_rule_shape_is_rejected`                           | `src/ir/from_manifest/verification.rs`   | A multi-rule selector reaches `IrGenError::MultipleRules` and preserves sorted rule names.              | `#[kani::unwind(8)]`  | Drives production `resolve_rule` with symbolic rule ordering over short bounded names.                                                                                    |
+| `missing_rule_shape_is_rejected`                            | `src/ir/from_manifest/verification.rs`   | A missing single rule reaches `IrGenError::RuleNotFound` and preserves target and rule names.           | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with symbolic target and rule names and an empty rule map.                                                                               |
 | `shell_variable_prefix_does_not_match`                      | `src/ir/cmd_interpolate/verification.rs` | Literal `$in` and `$out` prefixes remain shell text rather than selecting a Netsuke marker.             | `#[kani::unwind(32)]` | Covers every symbolic `$` position in the bounded window, including truncated starts.                                                                                     |
 | `marker_token_match_is_exact`                               | `src/ir/cmd_interpolate/verification.rs` | The real `INS_TOKEN` and `OUTS_TOKEN` match exact text, irrespective of adjacent identifier characters. | `#[kani::unwind(34)]` | Drives both concrete marker constants through `find_substitution`, including prefix, suffix, near-miss, and truncation cases.                                             |
-| `self_dependency_reports_cycle`                             | `src/ir/cycle_verification.rs`           | A self-dependency is reported as a cycle by production traversal.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`, which reuses `CycleDetector::visit` in boolean mode.                                                                                  |
-| `two_node_cycle_reports_cycle_a_first`                      | `src/ir/cycle_verification.rs`           | A two-node cycle is reported when the `a` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; the separate insertion-order harnesses cover deterministic map-entry traversal under the Kani map.                                    |
-| `two_node_cycle_reports_cycle_b_first`                      | `src/ir/cycle_verification.rs`           | A two-node cycle is reported when the `b` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; this complements the `a`-first harness, so the proof is not tied to one insertion order.                                              |
-| `direct_missing_dependency_does_not_report_cycle`           | `src/ir/cycle_verification.rs`           | A single target with an absent dependency is not reported as a cycle.                                   | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that a missing direct dependency does not enter the cycle branch.                                                           |
-| `transitive_missing_dependency_does_not_report_cycle`       | `src/ir/cycle_verification.rs`           | A two-target chain whose deeper dependency is absent is not reported as a cycle.                        | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that an absent dependency below another target does not synthesize a false cycle.                                           |
-| `canonicalize_two_node_cycle_is_canonical`                  | `src/ir/cycle_verification.rs`           | Two-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.   | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs. Direct `Utf8PathBuf` proof attempts exceeded the local 8 GiB cap.             |
-| `canonicalize_three_node_cycle_is_canonical`                | `src/ir/cycle_verification.rs`           | Three-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation. | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                               |
-| `canonicalize_four_node_cycle_is_canonical`                 | `src/ir/cycle_verification.rs`           | Four-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.  | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                               |
-| `canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes` | `src/ir/cycle_verification.rs`           | The path-bearing wrapper agrees with the `u8` kernel for both two-node path orderings.                  | `#[kani::unwind(6)]`  | Drives production `canonicalize_cycle(Vec<Utf8PathBuf>)` once per concrete two-node ordering and compares the result with the kernel's `u8` output.                       |
+| `self_dependency_reports_cycle`                             | `src/ir/cycle/verification.rs`           | A self-dependency is reported as a cycle by production traversal.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`, which reuses `CycleDetector::visit` in boolean mode.                                                                                  |
+| `two_node_cycle_reports_cycle_a_first`                      | `src/ir/cycle/verification.rs`           | A two-node cycle is reported when the `a` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; the separate insertion-order harnesses cover deterministic map-entry traversal under the Kani map.                                    |
+| `two_node_cycle_reports_cycle_b_first`                      | `src/ir/cycle/verification.rs`           | A two-node cycle is reported when the `b` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; this complements the `a`-first harness, so the proof is not tied to one insertion order.                                              |
+| `direct_missing_dependency_does_not_report_cycle`           | `src/ir/cycle/verification.rs`           | A single target with an absent dependency is not reported as a cycle.                                   | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that a missing direct dependency does not enter the cycle branch.                                                           |
+| `transitive_missing_dependency_does_not_report_cycle`       | `src/ir/cycle/verification.rs`           | A two-target chain whose deeper dependency is absent is not reported as a cycle.                        | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that an absent dependency below another target does not synthesize a false cycle.                                           |
+| `canonicalize_two_node_cycle_is_canonical`                  | `src/ir/cycle/verification.rs`           | Two-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.   | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs. Direct `Utf8PathBuf` proof attempts exceeded the local 8 GiB cap.             |
+| `canonicalize_three_node_cycle_is_canonical`                | `src/ir/cycle/verification.rs`           | Three-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation. | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                               |
+| `canonicalize_four_node_cycle_is_canonical`                 | `src/ir/cycle/verification.rs`           | Four-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.  | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs.                                                                               |
+| `canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes` | `src/ir/cycle/verification.rs`           | The path-bearing wrapper agrees with the `u8` kernel for both two-node path orderings.                  | `#[kani::unwind(6)]`  | Drives production `canonicalize_cycle(Vec<Utf8PathBuf>)` once per concrete two-node ordering and compares the result with the kernel's `u8` output.                       |
 
-Under `cfg(kani)`, `src/ir/graph.rs::IrHashMap` is a fixed-capacity
+Under `cfg(kani)`, `src/ir/graph/mod.rs::IrHashMap` is a fixed-capacity
 deterministic compatibility layer used by production IR code under proof. Under
 ordinary builds it is a type alias to `std::collections::HashMap`, so the public
 `netsuke::ir` API remains unchanged.
@@ -2740,7 +4200,7 @@ was validated by applying the patch and watching the harness fail under
 `cargo kani --harness <name>`.
 
 `tests/kani_mutation_evidence_tests.rs` keeps that evidence in lockstep with
-the harnesses as part of `make test`:
+the harnesses. Three of its checks run as part of `make test`:
 
 - every patch must still apply cleanly to the current tree
   (`git apply --check`), catching silent rot when production code near a
@@ -2752,9 +4212,91 @@ the harnesses as part of `make test`:
   named patch, or appear in the test's exemption list with a stated reason; and
 - every patch must correspond to a live harness, catching renames.
 
-When the gate reports a rotted patch, regenerate it against the moved
-production code and re-validate it by applying the patch and running its
-harness under the mutation before committing the regenerated file.
+A fourth check is gated, because it costs one Kani codegen per patch:
+`compile_guard::every_patched_tree_compiles_under_denied_warnings` applies each
+patch, compiles the patched tree under `-D warnings`, and reverts it through a
+fallible `revert()` whose failure is aggregated and reported, so a failed
+reverse cannot pass quietly as a green run with a mutation still applied. A
+`Drop` guard remains as the unwind fallback for an assertion failure mid-patch.
+Run it with `make test-kani-mutations`, which drives nextest with
+`--run-ignored ignored-only`; `kani-smoke` runs the same target on every pull
+request. Applying cleanly is not enough on its own: `make kani-full` denies
+warnings, so a patch that seeds its fault by leaving a binding or helper unused
+is a hard compile error, `cargo kani` never reaches the harness, and the patch
+contributes no evidence while still looking healthy to `git apply --check`.
+
+The tree it patches is not the checkout it runs in. `sandbox.rs` exports the
+current revision with `git archive` into `target/kani-mutation-sandbox/`, and
+both the `git apply` and the `cargo kani` run there. That is what makes the
+revert a tidiness step rather than a safety one: nextest terminates a timed-out
+test by signalling its process group, so `Drop` cannot run, and a mutation
+seeded into the working checkout would survive the run as a change nobody made.
+An isolated copy is simply discarded, so termination cannot leave one behind.
+`GIT_CEILING_DIRECTORIES` is pinned to the sandbox root, because the sandbox
+sits inside the checkout and an unceiled `git` would walk up into the real
+repository; the gate asserts that the sandbox resolves no repository before it
+applies anything. The revision is the working tree captured with
+`git stash create`, not `HEAD`, so an uncommitted patch edit is what gets
+compiled — compiling `HEAD` would report a committed patch healthy while the
+developer was editing it, the same shape as the dead override below. On CI the
+tree is clean and the capture resolves to `HEAD`.
+
+One consequence of reading a captured revision rather than the working tree: a
+patch that is untracked cannot be compiled, because the capture holds tracked
+content only. The gate refuses that state rather than ignoring it, so `git add`
+a new patch before running `make test-kani-mutations`. A patch that is both
+untracked and ignored is not reported — an ignored file is not evidence the
+gate was asked to read.
+
+The gate compiles through the Kani frontend (`cargo kani --only-codegen`)
+rather than `cargo check`, and it runs in `kani-smoke` rather than
+`build-test`, for one reason: only Kani parses `#[cfg(kani)]` code.
+`cargo check` leaves that surface unparsed, so a patch that seeds its fault
+inside a Kani-gated item is invisible to it — measured on
+`ir__cycle__verification__self_dependency_reports_cycle`, whose only changed
+line is a `cfg(kani)` match arm, `cargo check --lib --all-features` exits 0 and
+reports the tree healthy while `cargo kani` rejects that same tree with
+`variant Present is never constructed`. `--only-codegen` is a full compile under
+`cfg(kani)` with verification skipped, so it subsumes the check it replaced
+rather than joining it.
+
+It carries its own `slow-timeout` in `.config/nextest.toml`, ten 60-second
+periods rather than the profile's five, because the default allowance is too
+small for it rather than merely tight. The test compiles into
+`target/kani-mutation-compile`, which no cache restores — `kani-cache` holds
+the Kani payloads, not a build tree — so every run pays a cold build of the
+whole dependency graph plus 18 incremental recompiles, and how long that takes
+is the host's to decide. Two CI runs passed at 257.7 s and 261.5 s; a third
+failed at 300.008 s on a head whose only difference was eight lines of
+Markdown. A 38 s margin is not a budget but the difference between two runners,
+and the failure then names nextest's cap rather than the patch that was slow.
+The widened allowance is bounded from above by the whole-run budget, though not
+tightly: what the ordering requires is `global-timeout` strictly above the
+largest per-test allowance, and at 60 s periods 780 s admits up to twelve of
+them, 720 s. The 600 s is therefore a chosen allowance with 180 s of margin
+above it rather than the ceiling itself. Raising it to 780 s is what the
+ordering forbids: the test's allowance would then equal the whole-run budget it
+must stay below, and the run would end before the test could use it. So 720 s
+is the last value the ordering admits, and 780 s is where the two tiers meet.
+
+That widening was inert when it first landed, which is why the override is
+worth reading as a worked example of the trap above. Its filter named the bare
+test name, and the test is declared in a submodule, so the anchor never matched
+and the override applied to nothing: the 600 s was never in force, and the two
+passing CI runs at 257.7 s and 261.5 s cannot show otherwise, because both sit
+inside the 300 s default an inert override predicts. The filter now carries the
+`compile_guard::` prefix. The general rule is that a filter for a test in a
+submodule must name the module path Nextest prefixes onto the qualified name it
+matches against; `cargo nextest show-config test-groups` is the cheap way to
+see whether an override binds, since a filter selecting nothing leaves its
+override out of that listing entirely.
+
+Regenerate a rotted patch *in place*: swap an operator, comparator, index, or
+literal rather than deleting a statement or redirecting a call. Deleting the
+only use of a helper, or the only reassignment of a `mut` binding, is what
+turns the mutation into a compile error under denied warnings. Then re-validate
+the regenerated file by applying the patch, confirming the patched tree
+compiles, and watching the harness fail under the mutation before committing.
 
 ### Kani cfg compile-time checks
 
@@ -2787,12 +4329,72 @@ long-lived mutable control-plane state. See
 for the design rationale and re-entry criteria.
 
 Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
-`build-test` job. The job installs the pinned, checksummed `cargo-kani`
-front-end and Kani release bundle, checks the reported version, and then runs
-the bounded harness suite through `make kani-ir` under a 20-minute job timeout;
-it does not run `make verus`, coverage, CodeScene upload, or the normal build
-matrix. Its cache entry owns the job-local Kani Cargo, support-file, and Rust
-toolchain homes separately from ordinary Cargo build artefacts.
+`build-test` job. When the proofs run, the job installs the pinned, checksummed
+`cargo-kani` front-end and Kani release bundle, checks the reported version,
+and then runs the bounded harness suite through `make kani-ir` and the mutation
+compile gate through `make test-kani-mutations`, both under a 30-minute job
+timeout; it does not run `make verus`, coverage, CodeScene upload, or the
+normal build matrix. Its cache entry owns the job-local Kani Cargo,
+support-file, and Rust toolchain homes separately from ordinary Cargo build
+artefacts. The job runs on every pull request, on a push to `main`, on the
+nightly schedule and on a manual dispatch, which is what lets a dispatch
+measure a warm restore of those homes.
+
+### Change-scoped Kani proofs
+
+`kani-smoke` is a required check, so it runs and reports on every trigger, but
+on a pull request it runs the harnesses only when the pull request changes a
+proof input. [ADR-039](adr-039-change-scoped-kani-gate.md) records the
+decision; this section is the working reference.
+
+- **The decision.** The job's third step, `Decide Kani proof scope`, runs
+  `uv run --script scripts/kani_proof_scope.py` and writes `run-proofs` to its
+  outputs. Every later step carries
+  `if: steps.scope.outputs.run-proofs == 'true'`. A push to `main`, the nightly
+  `schedule` (04:41 UTC) and a `workflow_dispatch` always run every harness. A
+  pull request runs them when its merge commit's diff against the base tip
+  touches the scope, or when that diff cannot be read. A skipped job is green
+  and says why in its summary.
+- **The scope.** `tools/kani/proof-scope.toml` lists `sources`, the harnesses'
+  module closure, and `infrastructure`, what builds and runs them. Entries
+  ending in `/` cover a directory.
+- **Never skip the job itself.** No `paths` filter on the workflow trigger and
+  no job-level `if:` on `kani-smoke`: a required check that never reports
+  blocks the pull request. `kani_smoke_scope_wiring_test.py` refuses both, and
+  requires the decision condition, exactly, on every step after the decision.
+- **Keeping the scope right.** `kani_proof_scope_test.py` recomputes the
+  closure from the source and fails when the scope misses a reached path or a
+  `#[kani::proof]` file anywhere in the repository, when a `sources` entry
+  covers a compiled file no harness reaches, or when a required infrastructure
+  entry is dropped. Its failure message names the paths; copy them into the
+  scope rather than widening an entry. `rust_module_closure_test.py` drives
+  each closure rule over a synthetic crate.
+  `rust_module_closure_property_test.py` generates small flat crates and checks
+  the closure against graph reachability over the generating edge list, never a
+  second parse of the source: every required dependency is reached, nothing
+  test-only is, the answer is stable under declaration and line order, and
+  adding a reference or seed never shrinks it. Unsupported layouts must raise
+  `ModuleGraphError`. The generated crates omit `impl` headers, which
+  over-approximate by design and stay pinned by the synthetic crate.
+  `kani_proof_scope_property_test.py` does the same for scope-entry matching
+  (exact file, directory boundary) and the decision (order independence, an
+  unreadable diff runs the proofs).
+- **Adding a harness.** Put it beside the module it verifies, under
+  `#[cfg(kani)] mod verification`, as the existing harnesses are. Run
+  `make test-workflow-contracts`; if the harness reaches code outside the
+  scope, the contract prints what to add.
+- **Local check.** With a pull request's merge commit checked out,
+  `uv run --script scripts/kani_proof_scope.py --event-name pull_request`
+  prints the decision the job would make.
+- **What the pull-request decision does not cover.** Kani compiles the whole
+  crate on its bundled toolchain, so a pull request outside the scope that uses
+  a language feature newer than that toolchain skips the proofs and breaks the
+  next push-to-`main` run instead. That run, and the nightly one, are the
+  backstop.
+
+The decision script's `cuprum` and `cyclopts` pins are repeated in the
+`test-workflow-contracts` and `typecheck-python` recipes, and
+`kani_proof_scope_decision_test.py` holds them equal.
 
 ## Test execution
 
@@ -2810,10 +4412,15 @@ which would have retired real tests, so both coverage callers pass
 `all-features` and `all-targets`. Without the first, the `legacy-digests` tests
 in `src/stdlib/path/hash_utils.rs` and `tests/std_filter_tests/hash_filters.rs`
 stop running; without the second, the two `benches/` targets stop compiling.
-`-D warnings` is not set as `env.RUSTFLAGS`, which
-`tests/polonius_toolchain_contract.rs` forbids; `setup-rust` exports it from its
-`rustflags` input and `cargo llvm-cov` appends its instrumentation to whatever
-it finds, so warnings stay denied.
+The ambient-target direct-`rustc` UI harness builds use the same
+`--all-features` selection, through `tests/support/cargo_features.rs`, so Cargo
+can reuse the gate's `netsuke-build` artefacts. `test_support` forwards
+`legacy-digests` to `netsuke-build` for that purpose. Isolated fixture and
+packaging builds retain default features because they validate the shipped
+package rather than the gate's feature set. `-D warnings` is not set as
+`env.RUSTFLAGS`, which `tests/polonius_toolchain_contract.rs` forbids;
+`setup-rust` exports it from its `rustflags` input and `cargo llvm-cov` appends
+its instrumentation to whatever it finds, so warnings stay denied.
 
 Doctests are the one thing the instrumented run cannot do at all, so
 `build-test` runs `make doctest` immediately afterwards, on every event.
@@ -2827,6 +4434,7 @@ Table: the executed test set of every job that runs tests.
 | `coverage-upload`          | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | all      | all         | denied   |
 | `netsukefile`              | Ubuntu 22.04 | builds a manifest and runs Ninja           | default  | binary only | allowed  |
 | `kani-smoke`               | Ubuntu 24.04 | `make kani-ir`                             | Kani cfg | harnesses   | allowed  |
+| `kani-smoke` mutation step | Ubuntu 24.04 | `make test-kani-mutations`                 | all      | library     | denied   |
 | `build-test-windows`       | Windows      | `cargo nextest run` and `cargo test --doc` | all      | all         | denied   |
 
 Coverage is measured once per commit. `build-test` measures it only on a pull
@@ -2835,6 +4443,16 @@ request, where the changed-line gate consumes `lcov.info`. On a push to `main`,
 is the sole writer of the ratchet baseline, so the baseline is comparable with
 what the ratchet later checks against. A second instrumented build would pay
 twice and give that baseline two writers.
+
+`kani-smoke` carries two test sets that share only the lane. `make kani-ir`
+verifies the harnesses under the Kani configuration with warnings allowed;
+`make test-kani-mutations` compiles patched trees through the same frontend
+with warnings denied. They are separate because they answer different
+questions: the first asks whether the harnesses hold, the second whether they
+can still be reached at all. The gate compiles each patch into one shared
+`CARGO_TARGET_DIR`, so successive patches reuse a single compiled dependency
+graph rather than rebuilding it apiece: each patch touches one file, so only
+that crate and its dependants recompile.
 
 `netsukefile` and `kani-smoke` differ in platform or in purpose, so neither is
 a candidate for folding. The Windows gate keeps its own `cargo nextest` pass
@@ -2850,7 +4468,10 @@ costs a median of 240.8s on `windows-latest` against about 25s on the cached
 Linux runner. Both platforms still assert the packaged file list. See
 [Windows budget for the isolated-Cargo-build tests][windows-test-budget].
 
-[windows-test-budget]: #windows-budget-for-the-isolated-cargo-build-tests
+[windows-test-budget]: #historical-windows-budget-for-the-isolated-cargo-build-tests
+[fixture-constraints]: #historical-fixture-crate-replacement-constraints
+[adr-028-trim]: adr-028-defer-split-build-dir-harness-trim.md
+[adr-033-split-build]: adr-033-record-split-build-cargo-messages.md
 
 `tests/workflow_contracts/test_execution_coverage_test.py` holds all of this:
 the coverage inputs, the denied warnings, the doctest pass and its position,
@@ -2887,23 +4508,94 @@ governs the non-doctest pass only, and deliberately stays small:
 - **A conservative slow timeout** (warn after 60s, terminate after five
   warning periods) so a hung test surfaces without failing the legitimately
   slow documentation end-to-end suites, which shell out to real Ninja.
-- **Scoped subprocess timings.** The split-build locale harness and packaging
-  smoke test emit their Cargo subprocess durations after each Cargo subprocess
-  returns. They intentionally use private Cargo directories to preserve
-  isolation and publication-boundary coverage; their diagnostics distinguish
-  that work from future regressions without raising the slow-test threshold.
-- **One measured platform override.** `harness_compiles_under_a_split_build_dir`
-  gets seven warning periods (420s) instead of five on Windows alone. See
-  [Windows budget for the isolated-Cargo-build tests][windows-test-budget] for
-  the measurement behind that number. Any future override carries the same
-  obligation: a written rationale citing runs, not an estimate.
+- **One serialized child-Cargo group.** Tests that spawn their own Cargo build
+  join `nested-cargo-builds`, whose `max-threads = 1` stops four Nextest
+  workers from each starting a four-job build on four vCPUs. Membership is
+  decided by Nextest evaluating each override's filter against real test names,
+  so a filter can fail silently in three ways: a name no test has, a form that
+  cannot match how a test is named at run time, or an anchored name missing the
+  module path a submodule contributes. Any of the three selects nothing and
+  leaves the test running under the defaults while the policy still looks
+  enforced. Every filter — for a group slot or for a widened timeout alike —
+  therefore uses `test(/^MODULE::NAME($|::)/)`, not `test(=NAME)`. An
+  `#[rstest]` with `#[case]` attributes compiles to one test per case, named
+  `name::case_1_…`, and the `=` form compares the whole name, so it matches
+  none of them; the anchored regex form matches the plain name and every case
+  suffix alike. Nextest applies that regex to the whole qualified name, so a
+  test declared inside a submodule carries its `module::` prefix and the anchor
+  stops short of it: a filter reading
+  `test(/^every_patched_tree_compiles_under_denied_warnings($|::)/)` names a
+  test whose real name is
+  `compile_guard::every_patched_tree_compiles_under_denied_warnings` and
+  selects nothing. The static contracts cannot see this one, because they
+  compare bare names to bare names and the written name resolves; the accepted
+  grammar admits an optional `module::` prefix and captures only the bare name
+  so that comparison stays bare-to-bare, which leaves the prefix itself to be
+  proved at run time. Nextest's `~` substring form is unanchored and
+  over-matches, so it is not used.
+  `tests/workflow_contracts/nextest_child_cargo_group_test.py` holds these
+  contracts, including that every filtered name resolves to a declared test.
+  The rule is applied to every filter, not only this group's, because the same
+  edit that unhooks a test from its policy is invisible until someone adds a
+  `#[case]` attribute. Two test-only modules sit behind that contract, split by
+  what they read.
+  `tests/workflow_contracts/nextest_child_cargo_group_invariants.py` reads the
+  Nextest configuration and constrains the accepted selector grammar;
+  `tests/workflow_contracts/nextest_rust_test_discovery.py` classifies the Rust
+  integration tests as declared, parameterized (those carrying `#[case]`
+  attributes), or build-capable (reaching a child Cargo build directly or
+  through helper and fixture layers).
+  `tests/workflow_contracts/nextest_child_cargo_syntax_test.py` consumes the
+  discovery helper too, and production code must not import any of them. Those
+  contracts read the configuration as text, which is all a static read can do:
+  they hold every filter to the anchored grammar but cannot say which tests a
+  filter selects, because that needs compiled test binaries. The runtime half is
+  `.github/scripts/verify_nextest_anchored_filters.py`, which runs on the
+  coverage lane after `Test and Measure Coverage` and asks Nextest itself. The
+  reading lives in the `_nextest_oracle` package beside it, so that every unit
+  stays inside the 400-line cap while the workflow keeps calling the entry
+  script by path. It reads the parameterized tests and their case counts from
+  the Rust sources, then asserts that each anchored filter in the configuration
+  selects exactly those instances and that the whole-name form selects none of
+  them. That check alone was scoped past the module-qualification case, because
+  it only ever examined filters naming a parameterized test. It therefore also
+  replays every filter expression in the configuration verbatim through Nextest
+  and requires each to select at least one test, whatever the filter names and
+  whichever override carries it. A filter that joins several selectors with `|`
+  is replayed one alternative at a time, because a union is satisfied by any
+  one of its arms: a dead selector beside a live one would otherwise pass, and
+  the test it names would run unpoliced behind a filter that looks healthy. The
+  split follows bracket depth, since `|` inside `test(...)` belongs to the
+  regular expression rather than to the union. Both replays work on the raw
+  filter text rather than a name re-synthesized from the grammar, so a form the
+  grammar admits but writes differently still round-trips to the same selector
+  — and, for the parameterized check, so the selector replayed is the one the
+  file wrote, module path included, rather than one the checker rebuilt and
+  which would then report its own empty match as a fault in the configuration.
+  The rule for a test's `module::` prefix is written once, as
+  `_nextest_oracle.grammar.MODULE_PATH`, and read from there by every user
+  rather than restated: a second copy stays parseable while it drifts, which is
+  precisely the silent-mismatch shape this script exists to catch. It reuses
+  the instrumented build tree rather than compiling, by taking the environment
+  `cargo llvm-cov show-env` reports, so it is gated exactly as the coverage
+  step is and must run before `Discard the instrumented build tree`. The
+  contracts for that placement live in
+  `tests/workflow_contracts/nextest_anchored_filter_runtime_test.py`.
+- **Scoped subprocess timings.** Packaging smoke tests emit their Cargo
+  subprocess durations after each Cargo subprocess returns. The
+  `harness_compiles_under_a_split_build_dir` parser test reads recorded Cargo
+  JSON, so it has no child Cargo build, is not in `nested-cargo-builds`, and
+  uses the default slow timeout on every platform. Its companion,
+  `split_build_fixture_compiles_through_the_direct_rustc_harness`, runs a small
+  isolated split-build Cargo and direct-`rustc` integration test and is grouped
+  with the other child-Cargo tests.
 
-#### Windows budget for the isolated-Cargo-build tests
+#### Historical Windows budget for the isolated-Cargo-build tests
 
-Two tests spawn a complete isolated Cargo build, and on the four-vCPU
-GitHub-hosted `windows-latest` gate that build is 98.8% of each test's wall
-time. Measured across the 58 Windows gate runs between run 33890685806, the
-merge of pull request 664, and run 34064668331:
+Before issue 732, two tests spawned a complete isolated Cargo build, and on the
+four-vCPU GitHub-hosted `windows-latest` gate that build is 98.8% of each
+test's wall time. Measured across the 58 Windows gate runs between run
+33890685806, the merge of pull request 664, and run 34064668331:
 
 Table: measured Windows durations for the isolated-Cargo-build tests.
 
@@ -2932,28 +4624,82 @@ missed. Three facts shaped the response:
   `cargo package --list`, the assertion the test is named for, still runs
   everywhere. That returns it to the default budget.
 
-`harness_compiles_under_a_split_build_dir` cannot be relocated: the response
-file it exercises exists for a Windows command-line limit. It keeps a 420s
-budget, which clears the measured 312.9s worst case by 34%.
+Issue 732 replaced `harness_compiles_under_a_split_build_dir`'s full live build
+with recorded Cargo JSON. That parser test continues to prove that dependency
+directories span the split build directory and that `test_support` remains
+uplifted under the target directory, without a child Cargo build or a
+platform-specific timeout budget. The companion
+`split_build_fixture_compiles_through_the_direct_rustc_harness` supplies the
+end-to-end boundary with a small temporary two-crate workspace: it runs Cargo
+under private split roots, collects the reported artefacts, and compiles a
+fixture through the direct-`rustc` response-file harness.
+[ADR-033][adr-033-split-build] records the replacement decision and these two
+complementary coverage boundaries.
 
 Removing the second Cargo build sped this one up as well. The two used to run
 concurrently, each with four compile jobs on a four-vCPU runner, so each
-roughly halved the other. Measured on runs 34075197897 and 34079222917, the
-first two under the new shape:
+roughly halved the other. Measured on runs 34075197897, 34079222917 and
+34080385050, the first three under the new shape:
 
 Table: Windows durations before and after the verification build moved.
 
-| Measure                                          | Before (median) | Run 34075197897 | Run 34079222917 |
-| ------------------------------------------------ | --------------- | --------------- | --------------- |
-| `harness_compiles_under_a_split_build_dir`       | 274.7s          | 125.3s          | 170.6s          |
-| `packaged_manifest_retains_build_script_sources` | 244.0s          | 4.2s            | 7.6s            |
-| nextest run phase                                | 365s            | 185.5s          | 258.0s          |
-| `Test` step                                      | 471s            | 260s            | 368s            |
+| Measure                                          | Before (median) | Run 34075197897 | Run 34079222917 | Run 34080385050 |
+| ------------------------------------------------ | --------------- | --------------- | --------------- | --------------- |
+| `harness_compiles_under_a_split_build_dir`       | 274.7s          | 125.3s          | 170.6s          | 170.7s          |
+| `packaged_manifest_retains_build_script_sources` | 244.0s          | 4.2s            | 7.6s            | 6.8s            |
+| nextest run phase                                | 365s            | 185.5s          | 258.0s          | 253.8s          |
+| `Test` step                                      | 471s            | 260s            | 368s            | 358s            |
 
-The 420s budget is therefore sized against the older, contended distribution
-and is deliberately conservative while the new shape has two samples. It is a
-candidate for tightening, or for deletion, once ten runs have accumulated under
-it.
+The historical 420s budget was therefore sized against the older, contended
+distribution and was deliberately conservative while the previous shape had
+three samples. Issue 732 removed that platform-specific budget when it replaced
+the live build; the current test uses the five-period, 300s default described
+above. [ADR-028][adr-028-trim] remains the historical record of that former
+budget and its revisit gate.
+
+Those three samples predate the serialization group described below, which
+lands the harness test in a group of one-at-a-time build-capable tests. Under
+that group the test is a serial link rather than a slow finisher, and the trim
+is worth more than the 85s this table supports.
+
+#### Superseded split-build-dir harness decision
+
+The decision below describes the pre-issue-732 live-build harness. Issue 732
+superseded its full workspace build by driving the Cargo-message parser over
+recorded split-layout JSON. The parser preserves the message-reading regression
+without that expensive private build; the companion fixture test keeps a small
+end-to-end split-layout Cargo and direct-`rustc` check.
+
+A later change to `.config/nextest.toml` — `nested-cargo-builds`, a
+`[test-groups]` entry with `max-threads = 1` — put this test in a group with
+the other tests that spawn a build-capable child Cargo command, so only one of
+them runs at a time. It landed for the coverage lane's benefit: four nextest
+workers each starting a four-job child Cargo build on a four-vCPU runner is
+what the group exists to prevent. The Windows lane runs `make test` with no
+`NEXTEST_PROFILE`, so it selects `[profile.default]` and inherits the same
+group. Under it the test is a serial link rather than a slow finisher, and a
+trim returns its whole group occupancy rather than only the exclusive tail the
+85s above measures. That raises the ceiling on the saving to the test's own
+duration, and it makes the saving track the test's own cost rather than an
+uncontended lane's tail.
+
+The decision does not change with the number, and it is not the number that
+settles it. The figure has moved twice already, both times because the lane
+changed rather than the test, so a decision taken against it would be a
+decision taken against the lane's current shape. The fidelity risk, by
+contrast, is one-directional: the coverage a fixture crate would drop is
+exactly the coverage that fails only on Windows, where it is least likely to be
+noticed.
+
+[ADR-028][adr-028-trim] holds the historical decision: the measurements, the
+rule that a trim can never return more than the test's own duration, the
+alternatives already measured and rejected (`cargo check` for `cargo build`,
+warming the compiler cache, and sharing a target directory), and the ten-run
+revisit gate. [ADR-033][adr-033-split-build] records the replacement decision:
+the live build was removed in favour of recorded Cargo JSON, while the parser
+boundary remains covered. Any future replacement inherits the constraints in
+[what a fixture-crate replacement would have to preserve][fixture-constraints]
+below.
 
 ### How this relates to the isolation utilities
 
@@ -2989,8 +4735,22 @@ Netsuke uses a mixed strategy:
 - Behavioural test discovery is defined in `tests/bdd_tests.rs`.
 - Dependabot configuration lives in `.github/dependabot.yml`, with
   `tests/dependabot_config_tests.rs` validating the Cargo, GitHub Actions, and
-  `rust-toolchain` update policies, including their configured schedules,
-  labels, directories, and open pull request limits where applicable.
+  `rust-toolchain` update policies, including their daily schedules, labels,
+  directories, and open pull request limits where applicable. Each ecosystem
+  has one trailing catch-all group limited to minor and patch updates, so
+  majors arrive one per pull request; `group_policy.rs` under
+  `tests/dependabot_test_support/` owns that check. The only other groups are
+  the GitHub Actions `shared-actions` group (`GITHUB_ACTIONS_LOCKSTEP_GROUPS`),
+  which takes every `leynos/shared-actions` pin bump in one pull request
+  because a SHA-to-SHA bump has no semver level, and the cargo lockstep
+  families listed in `CARGO_LOCKSTEP_GROUPS`: `rustcrypto`, `rstest-bdd` and
+  `ortho-config-fluent`. The last takes `ortho_config` and `fluent-bundle`
+  together, because `fluent-bundle` is constrained to the version
+  `ortho_config` resolves or their `FluentValue` types would differ. Each such
+  group precedes the catch-all, as Dependabot uses the first group that
+  matches. The contract requires each with exactly its patterns and no
+  `update-types` limit. Group options that narrow a group's reach
+  (`exclude-patterns`, `applies-to`, `group-by`) are refused.
 - **Property-based tests** use `proptest` and take two shapes: some live in
   `*_tests.rs` modules adjacent to the code under test, included via
   `#[cfg(test)] #[path = "..."] mod ...;` declarations; others are standalone
@@ -3054,6 +4814,58 @@ provisions `pytest`, `pyyaml`, `hypothesis`, and `cmd-mox==0.2.0` through
 `uv run --with`, so `uv` is the only prerequisite and no virtual environment
 needs creating by hand.
 
+### RFC 0006 standard-library coverage contract
+
+`tests/rfc_stdlib_coverage_tests.rs` runs seven repository checks:
+
+| Check                                         | Responsibility                                      |
+| --------------------------------------------- | --------------------------------------------------- |
+| `every_accepted_helper_has_exactly_one_owner` | Partition accepted helpers across child RFCs.       |
+| `no_forbidden_helper_is_registered`           | Keep deferred and rejected candidates out.          |
+| `totals_and_purity_aggregate_agree`           | Reconcile accepted totals and purity counts.        |
+| `coverage_map_status_is_reported`             | Report written and unwritten capability groups.     |
+| `inter_document_links_resolve`                | Resolve relative RFC links to files in the tree.    |
+| `every_capability_has_a_roadmap_task`         | Match owned helpers to tasks in the assigned step.  |
+| `every_child_discharges_every_clause`         | Check child RFC clause coverage and section 5 text. |
+
+The private modules in `tests/rfc_stdlib_coverage/` parse the source documents,
+derive helper sets, and validate the partition. `survey`, `section7`,
+`section8`, `totals`, and `assertions` read RFC 0006; `map`, `registries`, and
+`clauses` read its coverage map and each child RFC; `roadmap` reads
+`docs/roadmap.md`; `links` checks relative targets across the RFC corpus.
+`document` and `markdown` provide the shared structural and lexical parsing
+used by those readers. The contract therefore depends on the Markdown in RFC
+0006, child RFCs, and the roadmap staying in the supported shapes.
+
+Partial coverage can pass: unwritten child groups are allowed while the split
+is in progress, and the status check reports rather than rejects that state.
+The output count is the liveness signal; it must reach zero before the split is
+complete. `.config/nextest.toml` gives
+`test(/^coverage_map_status_is_reported($|::)/)` the
+`success-output = "immediate"` override so this count appears during the suite,
+as soon as this test finishes, including on a successful run.
+
+Run `make test-rfc-stdlib-coverage` for the focused Rust contract binary,
+`make test-workflow-contracts` for the workflow contracts, and `make test` for
+the full Rust suite. The focused target uses the repository's standard Rust
+gate flags and Nextest configuration. The parser tests live beside the private
+functions they exercise; filesystem cases use isolated temporary fixtures via
+the test-only `Repo` constructor, which is private to that module tree. Those
+fixtures are not a general-purpose Markdown parsing API. The link property's
+private depth helper belongs only to its reference model: it checks traversal
+before the model renders the normalized path. The Nextest contract's private
+policy helper checks only an override already selected by the exact filter; its
+caller owns loading and selection. Neither helper is a shared parser or a
+runtime interface.
+
+The parser intentionally handles a narrow subset: ATX headings, simple
+pipe-delimited table rows, and fenced blocks with up to three leading spaces.
+It does not parse full CommonMark or recognize fences nested in list items.
+Relative links are extracted from inline Markdown link syntax and checked for
+target-file existence; fragment anchors are not validated. See
+[ADR-040](adr-040-focused-child-rfcs-for-survey-rfcs.md) for the split and its
+coverage contract rationale.
+
 ### Configuration-precedence regression tests
 
 The config-precedence ladder and display-policy domain are covered by three
@@ -3069,8 +4881,8 @@ modules under `tests/cli_tests/`:
   display-policy resolution (`EmojiPolicy`, `ColourPolicy`, `ProgressPolicy`,
   `AccessibilityPolicy`, `json`, `NO_COLOR`, and `TERM`/output mode) against a
   handwritten truth model, using one flat Cartesian-product sweep plus a
-  proptest. It adds coverage only; the production resolution in `src/theme.rs`
-  and `src/output_prefs.rs` is not changed.
+  proptest. It adds coverage only; the production resolution in
+  `src/theme/mod.rs` and `src/output/prefs/mod.rs` is not changed.
 - `merge_targets_proptests.rs` holds the handwritten proptest strategies (no
   `#[derive(Arbitrary)]`) for the `default_targets` append-in-discovery-order
   invariant and scalar merge ordering (defaults → file → environment → CLI).
@@ -3121,19 +4933,59 @@ Every fenced example in `README.md`, `docs/users-guide.md`, and
 immediately before its opening fence. The shared
 `tests/documentation_examples/mod.rs` loader owns this marker format and may be
 called only by documentation-focused integration or behavioural tests. It
-rejects unmarked fences, duplicate identifiers and unterminated examples.
+rejects unmarked fences, duplicate identifiers and unterminated examples. For
+every new fence, add its stable identifier to `EXPECTED_EXAMPLE_IDS` and
+validate its meaning in the domain it documents. The `yaml` fence language does
+not make a fragment a Netsukefile: for example, a reusable-workflow fragment
+needs a semantic workflow contract and must stay out of Netsukefile generation
+and execution cases. Run `make test-documentation-contracts` for the
+documentation loader, exact-set registry check, and semantic contracts.
+
+For a change to these examples, run the full required gates: `make check-fmt`,
+`make lint`, `make doc-coverage`, `make markdownlint`, `make test`, and
+`make test-workflow-contracts`.
+
+This guide is loaded under the `FencePolicy::MarkedOnly` policy instead. Its
+many illustrative fences stay unmarked and are skipped, bodies included, while
+the marked `devguide-*` Rust snippets in
+[Unstable Rust API for embedders](#unstable-rust-api-for-embedders) are loaded
+and pinned to the doctests they mirror. The users' guide carries no Rust
+examples. Its YAML fences include Netsukefile manifests and examples from other
+documented interfaces, such as reusable-workflow inputs.
 
 `tests/documentation_examples_tests.rs` loads the exact fenced text, generates
-Ninja for every manifest fence and each complete manifest linked from the
-user's guide, and checks selected command and output contracts against the
-current binary. On Unix, `tests/documentation_examples_e2e_tests.rs` uses real
-Ninja to execute the documented first-run build and `cat hello.txt`, exercise
-the configured default target, verify the photo-edit and writing outputs, and
-run the standard-library manifests in isolated workspaces with controlled
-fixtures, environment variables, and stub executables. The registered `fetch`
-expression is intentionally checked without execution so this suite never makes
-a network request. `tests/documentation_examples_loader_tests.rs` covers
-concrete malformed-fence and non-YAML failure cases.
+Ninja for the registered accepting manifest cases and each complete manifest
+linked from the user's guide, and checks selected command and output contracts
+against the current binary. On Unix,
+`tests/documentation_examples_e2e_tests.rs` uses real Ninja to execute the
+documented first-run build and `cat hello.txt`, exercise the configured default
+target, verify the photo-edit and writing outputs, and run the standard-library
+manifests in isolated workspaces with controlled fixtures, environment
+variables, and stub executables. The registered `fetch` expression is
+intentionally checked without execution so this suite never makes a network
+request. `tests/documentation_examples_loader_tests.rs` covers concrete
+malformed-fence and non-YAML failure cases.
+
+`tests/readme_security_tests.rs` owns the README security examples, including
+an intentionally rejected manifest. Its private fixture loads the accepted
+example through the shared loader. Its private
+`lower_recipe_for_shell(source: &str, shell: RecipeShell)` helper returns the
+lowered action recipe and `BuildGraph` after manifest parsing, rendering, and
+lowering; tests call the Ninja backend separately. The POSIX generation helper
+delegates to it. Keep these helpers local to this integration target: other
+callers reuse the shared loader and production APIs directly. The tests inspect
+shell-variable preservation, path quoting, rejection boundaries, and inert
+comment/heredoc markers across POSIX/Bash command and script cases. They assert
+the typed Ninja-generation failure for command heredocs and execute an inert
+script heredoc with real Ninja. JSON mode exposes the rejected example's
+underlying error cause.
+
+`tests/readme_parity_tests.rs` exercises the manual
+`scripts/check-readme-parity.sh` checker against seven isolated README
+fixtures. It covers matching structures, heading-count and level mismatches,
+fence handling, indentation, CRLF input, a missing README, and invocation from
+outside the fixture root. The test copies the actual script into the fixture;
+the checker remains a manual aid and is not added as a separate CI gate.
 
 The first-run README and user's guide examples also run through the
 `rstest-bdd` scenarios in `tests/features/documentation_examples.feature`.
@@ -3151,14 +5003,14 @@ all valid inputs.
 - Environment-dependent properties must use injected providers. When the
   contract itself requires ambient discovery, configure a child process with
   `env_clear()` followed by `Command::env`; do not mutate the harness process.
-- Canonical example: `src/cli/config_path_precedence_tests.rs` -
+- Canonical example: `src/cli/discovery/path_precedence_tests.rs` -
   `resolve_config_path_obeys_precedence_invariant` asserts the
   `explicit_config_path` selector-precedence invariant for generated optional
   paths.
 - Layer-precedence and replay transitions are also property-tested:
   `tests/cli_tests/merge_precedence_proptests.rs` asserts scalar precedence and
   list appending for arbitrary file, environment, and CLI layer combinations,
-  and `src/cli/discovery_replay_proptests.rs` proves repeated
+  and `src/cli/discovery/replay_proptests.rs` proves repeated
   discovery-diagnostic replays stay identical without re-reading the
   environment.
 
@@ -3169,30 +5021,31 @@ unit tests where a small fixed set of cases must all be verified.
 
 - Annotate the test function with `#[rstest]` and supply cases via
   `#[case(...)]` parameters.
-- Canonical example: `src/cli/config_path_precedence_tests.rs` -
+- Canonical example: `src/cli/discovery/path_precedence_tests.rs` -
   `resolve_config_path_precedence` enumerates all four combinations of
   `--config` and `NETSUKE_CONFIG` presence.
 
 ## IR dependency classes
 
-`src/ir/from_manifest.rs` lowers manifest `sources` into `BuildEdge.inputs`,
-manifest `deps` into `BuildEdge.implicit_deps`, and manifest `order_only_deps`
-into `BuildEdge.order_only_deps`. Keep those classes separate: recipe
-interpolation (`{{ ins }}`) receives only `BuildEdge.inputs`, while
-`src/ninja_gen/mod.rs` renders implicit deps with Ninja's single-pipe separator.
+`src/ir/from_manifest/mod.rs` lowers manifest `sources` into
+`BuildEdge.inputs`, manifest `deps` into `BuildEdge.implicit_deps`, and manifest
+`order_only_deps` into `BuildEdge.order_only_deps`. Keep those classes
+separate: recipe interpolation (`{{ ins }}`) receives only `BuildEdge.inputs`,
+while `src/ninja_gen/mod.rs` renders implicit deps with Ninja's single-pipe
+separator.
 
 `ast::DependencyOrder` is the closed manifest enum responsible for YAML and
-Serde. `src/ir/from_manifest.rs` explicitly converts it to the
+Serde. `src/ir/from_manifest/mod.rs` explicitly converts it to the
 serialization-free `ir::DependencyOrder` stored in
 `BuildEdge::dependency_order`; both types have matching `Parallel` and `Serial`
 variants, and `parallel` remains the default. The ordering policy applies only
 to a manifest `deps` list; never infer it from the number or shape of graph
 edges, and do not apply it to inputs or order-only dependencies.
 
-`src/ir/cycle.rs::CycleDetector::visit` traverses `inputs` and `implicit_deps`
-when detecting cycles. It intentionally does not traverse `order_only_deps`,
-because order-only dependencies express scheduling order rather than rebuild
-freshness.
+`src/ir/cycle/mod.rs::CycleDetector::visit` traverses `inputs` and
+`implicit_deps` when detecting cycles. It intentionally does not traverse
+`order_only_deps`, because order-only dependencies express scheduling order
+rather than rebuild freshness.
 
 ### Serial dependency bundles
 
@@ -3221,18 +5074,18 @@ execute-once memoization.
 
 `GeneratedNinja` is the query-command boundary: generation may construct and
 return it, but it must not publish any filesystem state.
-`src/runner/dyndep_publication.rs` owns the `materialize_dyndep_bundle`
+`src/runner/dyndep/publication.rs` owns the `materialize_dyndep_bundle`
 command, which every `build`, `clean`, and `generate` boundary must call before
 writing or invoking the main file. That command opens the effective
 working-directory capability and injects it into
-`src/runner/process/dyndep_files.rs`, which owns atomic sidecar writes and
+`src/runner/process/dyndep/files/mod.rs`, which owns atomic sidecar writes and
 content verification. The materializer may only use that injected `Dir`; it
 must not inspect CLI state or reopen ambient authority. It verifies existing
 content, then uses a same-directory temporary file plus atomic rename. Keep
 generated sidecars content-addressed and idempotent; corruption is an error,
 not a reason to overwrite an unknown file.
 
-`src/runner/process/dyndep_retention.rs` owns the publication lease and
+`src/runner/process/dyndep/retention/mod.rs` owns the publication lease and
 retention cleanup. The command-boundary module invokes it after materialization
 or successful clean while retaining the lease through bundle consumption.
 
@@ -3247,10 +5100,10 @@ never after a failed clean. Do not introduce age-based cleanup or mutate an
 existing content-addressed sidecar. See
 [ADR-012](adr-012-bound-dyndep-sidecar-retention.md) for the durable policy.
 
-`src/runner/graph_generation_telemetry.rs` owns runner-boundary manifest-to-IR
-graph-generation telemetry, while `src/runner/dyndep_generation_telemetry.rs`
+`src/runner/graph/generation/telemetry.rs` owns runner-boundary manifest-to-IR
+graph-generation telemetry, while `src/runner/dyndep/generation_telemetry.rs`
 owns dyndep bundle-generation telemetry and
-`src/runner/process/dyndep_telemetry.rs` owns publication telemetry. They may
+`src/runner/process/dyndep/telemetry.rs` owns publication telemetry. They may
 wrap their respective boundaries with bounded outcome-and-duration metrics and
 spans. Graph-generation outcomes include the fixed
 `invalid_command_interpolation` category for `IrGenError::InvalidCommand`;
@@ -3272,10 +5125,10 @@ composition here; callers must not measure graph-generation time with `Instant`
 or add manifest-controlled values to telemetry.
 
 The runner-internal `GraphGenerationContext` in
-`src/runner/graph_generation.rs` groups the selected `RecipeShell` and injected
-monotonic clock solely for this graph-generation composition path. It is not a
-general runner context, shared state container, or reusable public API; keep
-unrelated runner inputs and concerns outside it.
+`src/runner/graph/generation/mod.rs` groups the selected `RecipeShell` and
+injected monotonic clock solely for this graph-generation composition path. It
+is not a general runner context, shared state container, or reusable public
+API; keep unrelated runner inputs and concerns outside it.
 
 The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that
@@ -3297,35 +5150,47 @@ The sibling `src/ir/cmd_interpolate/substitution.rs` owns
 after analysing its shell context. Keep this split private to `ir`; it is an
 implementation boundary, not a public command-template API.
 
-The private `src/ir/cmd_interpolate/posix_lexical.rs` helper owns the
+The private `src/ir/cmd_interpolate/posix_lexical/mod.rs` helper owns the
 single-pass recognition of POSIX comments and heredoc inert regions. It copies
-those comments and heredoc bodies byte-for-byte, leaves markers in them
-literal, and queues declarations FIFO, including quoted delimiters and `<<-`
-tab-stripping delimiters, so their text cannot change the surrounding quote
-context. This is a command-interpolation helper, not a general shell parser,
-and is not intended for reuse outside that boundary. The sibling
-`src/ir/cmd_interpolate/command_substitution.rs` owns the local quote and
-parenthesis state needed to keep protected `$()` bodies isolated.
+those comments and heredoc bodies byte-for-byte, so internal marker tokens in
+them are not expanded and can remain in the generated recipe; markers in
+heredoc delimiters are expanded. It queues declarations FIFO, including quoted
+delimiters and `<<-` tab-stripping delimiters, so their text cannot change the
+surrounding quote context. This is a command-interpolation helper, not a
+general shell parser, and is not intended for reuse outside that boundary. The
+sibling `src/ir/cmd_interpolate/command_substitution.rs` owns the local quote
+and parenthesis state needed to keep protected `$()` bodies isolated.
 
-`src/manifest/render.rs` may emit the internal tokens while rendering the only
-accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell variables
-`$ins` and `$outs` are not Netsuke markers and must pass through as shell text
-for the backend to escape. Keep the constants and their recognition limited to
-this two-stage recipe pipeline and its direct IR recipe tests.
+`src/manifest/render/mod.rs` may emit the internal tokens while rendering the
+only accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell
+variables `$ins` and `$outs` are not Netsuke markers and must pass through as
+shell text for the backend to escape. Keep the constants and their recognition
+limited to this two-stage recipe pipeline and its direct IR recipe tests.
 
 ### Command interpolation contract
 
-The scanner recognizes only the internal `INS_TOKEN` and `OUTS_TOKEN` markers
-emitted by manifest rendering. Literal shell variables such as `$in`, `$out`,
-`$ins`, and `$outs` remain unchanged for the selected backend to interpret.
+The scanner recognizes only the internal `INS_TOKEN` and `OUTS_TOKEN` tokens
+emitted by manifest rendering, identically in `command:` and `script:` recipes.
+Literal shell variables such as `$in`, `$out`, `$ins`, and `$outs` remain
+unchanged for the selected backend to interpret, in both recipe kinds; see
+[ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md), which removed
+the former `script:`-only lowering of `$in` and `$out`, and
+[ADR-027](adr-027-command-placeholder-contract.md) for the resulting contract.
 
 `INS_TOKEN` and `OUTS_TOKEN` are machine-generated markers. They match exact
 text, so an adjacent identifier character does not suppress a marker
 substitution. On POSIX-compatible routes, a placeholder inside a
 backtick-delimited region is rejected before it can evade lowering. PowerShell
-uses backticks as escapes and does not enter that protected region. The POSIX
-scanner then validates the substituted command: odd backticks reject the
-command, and the `shlex` guard also evaluates that substituted text. The
+uses backticks as escapes and does not enter that protected region. POSIX and
+Bash scanning also preserves comments and heredoc bodies verbatim; keep markers
+out of those regions, where their internal tokens can remain in generated
+recipe text. Heredoc delimiters are scanned for markers and expand normally.
+`script:` recipes share the POSIX-aware scanner on all shell routes, while
+PowerShell `command:` recipes use separate interpolation rules. For POSIX and
+Bash `command:` recipes, the scanner then validates the substituted text: odd
+backticks reject the command, and the `shlex` guard also evaluates that
+substituted text. `script:` recipes skip both checks, because a script may
+legitimately contain heredocs and other syntax `shlex` cannot model. The
 odd-backtick and guard properties are complementary: one proves rejection of
 odd substituted backtick counts, while the other proves that the guard's
 success or failure and returned command agree with the substituted command.
@@ -3338,144 +5203,14 @@ use the root crate's development dependency.
 
 ## Internal support module boundaries
 
-The repository caps every source file at 400 lines (Whitaker's
-`module_max_lines`, see `docs/whitaker-users-guide.md`). When a production
-module approaches that cap, the established pattern is to split its private
-helpers into a sibling `#[path]` module rather than restructure the public
-surface. Each such module is a pure implementation seam: it keeps the parent
-below the cap while preserving `pub(super)` visibility for the helpers the
-parent needs, and nothing outside the parent module may reach it. A helper may
-use `pub(in crate::ir)` only when a sibling IR support module needs it; that is
-still an internal boundary, not a public API. These split modules record their
-ownership and caller contract in their `//!` header; the following list is the
-authoritative indexing of the current ones.
-
-### `src/ir/cycle_support.rs`
-
-`src/ir/cycle.rs` owns this support module and declares it `pub(super)`, so it
-is nameable only within `ir`. Its `pub(in crate::ir)` comparisons are likewise
-limited to the IR implementation; they must not be re-exported from the crate
-or used by non-IR modules.
-
-`first_byte_cmp` owns the bounded string-comparison semantics for Kani builds.
-Under `cfg(kani)`, it orders non-empty strings by their first UTF-8 byte,
-orders an empty string before a non-empty string, and treats two empty strings
-as equal. Its only direct consumers are `path_cmp`, which adapts cycle paths
-with `Utf8Path::as_str`, and `sort_utils::string_cmp`, which adapts manifest
-rule names. Future IR code may reuse it only when its symbolic inputs have that
-same single-byte contract; ordinary builds must keep their full lexical
-comparison, and a caller with different semantics must own a separate local
-comparator.
-
-This composition keeps the Kani approximation in one owner while leaving the
-cycle and manifest modules responsible for adapting their domain values. It is
-not a general-purpose string-sorting utility.
-
-### `src/ir/sort_utils.rs`
-
-Kani-friendly deterministic sorting and comparison helpers, owned by
-`src/ir/from_manifest_support.rs` (which declares
-`#[path = "sort_utils.rs"] mod sort_utils;`). It provides `insertion_sort_by`,
-`sort_strings`, `sort_paths`, and `has_seen_output`, which the manifest-to-IR
-rule-resolution and duplicate-output detection paths consume. Its Kani
-`string_cmp` adapts rule names to the `cycle::support::first_byte_cmp`
-contract; it must not duplicate or redefine that byte-ordering semantics. Keep
-the local sorting algorithms dependency-free and deterministic so the Kani
-harnesses in `src/ir/from_manifest_verification.rs` can verify bounded symbolic
-input, and do not move them out to a shared utility crate.
-
-### `src/ir/cycle_detector.rs`
-
-The depth-first traversal state machine, owned by `src/ir/cycle.rs` through its
-private `#[path = "cycle_detector.rs"] mod detector;` declaration. It provides
-`CycleDetector`, `VisitState`, and traversal result types used by the production
-`analyse` entry point and its Kani presence-only variant. The module is
-private to `ir::cycle`; its test and verification children reach the types
-through the parent module's private re-exports. Keep graph traversal state
-here, while path comparison and cycle canonicalization remain owned by
-`cycle_support.rs`.
-
-### `src/diagnostic_json_support.rs`
-
-Private helpers for the machine-readable diagnostic document in
-`src/diagnostic_json.rs`. It owns the span extraction, cause collection, help
-and URL rendering, and fallback-payload machinery, exposing them as
-`pub(super)` items re-imported by the parent. Only `src/diagnostic_json.rs` may
-call into it. The schema remains defined by the parent module; this file is a
-size split, not a second schema owner.
-
-### `src/stdlib/command/error_support.rs`
-
-Detail types and message-append helpers for command-failure rendering in
-`src/stdlib/command/error.rs`, which declares
-`#[path = "error_support.rs"] mod support;`. It owns `ExitDetails`,
-`LimitExceeded`, `append_exit_status`, and `append_stderr`, and is reachable
-only from that error module. Keep the localized-message keys it uses alongside
-the other stdlib command keys rather than introducing a separate key namespace.
-
-### `src/stdlib/time/format.rs`
-
-ISO-8601 rendering for the standard-library time values, owned by
-`src/stdlib/time/mod.rs` (which declares `mod format;`). It renders offset
-datetimes and UTC offsets to ISO-8601 while stripping the zero fractional part,
-and exposes the `TimeDeltaValue` and `TimestampValue` MiniJinja object types
-the parent predicates downcast. Only the time module may import it.
-
-### `src/status_indicatif.rs`
-
-The `indicatif`-backed progress reporter and rendering helpers, owned by
-`src/status.rs` through its private
-`#[path = "status_indicatif.rs"] mod indicatif;` declaration. It provides the
-crate's `IndicatifReporter` export and the shared stage/completion rendering
-helpers used by the accessible reporter. Only `status.rs` and its test module
-may reach this private support module; callers use the reporter re-export from
-`status`.
-
-### `src/stdlib/which/env_path_support.rs`
-
-Path parsing and Windows executable-candidate construction, owned by
-`src/stdlib/which/env.rs`, which declares it through a `#[path]` attribute. It
-owns `PathEntry`, `PATH` and `PATHEXT` normalization, UTF-8 current-directory
-conversion, and Windows candidate generation. Only `which::env` imports it;
-lookup modules retain their existing access through `which::env`'s narrow
-`pub(super)` re-exports. The split is purely to keep the environment snapshot
-adapter below the 400-line cap, not a new resolution boundary.
-
-### `test_support/src/check_ninja_tests.rs`
-
-Unix-only unit coverage for the fake-Ninja factories, owned by
-`test_support/src/check_ninja.rs` through a test-gated `#[path]` declaration.
-It exercises the `-C` directory argument contract through the public factory
-only. Keep fixture assertions here and production test-helper behaviour in
-`check_ninja.rs`; this split keeps the public helper below the 400-line cap.
-
-### `test_support/src/http/accept.rs`
-
-Connection acceptance for the local HTTP fixture, split out of
-`test_support/src/http/mod.rs` to keep the fixture configuration below the
-400-line cap. It owns `AcceptWait`, the retry rules that make polling a
-non-blocking listener safe, and the accept loop itself. The parent module
-declares it `mod accept;`, and its surface is `pub(super)`, so nothing outside
-the fixture can reach it. The wait policy stays in `HttpServerConfig`; this
-module only carries the wait out.
-
-### `src/ir/cmd_interpolate_property_support.rs`
-
-This test-only sibling module is owned by the command-interpolation property
-tests. It may contain their generators, independent specifications, and shared
-assertions, but it must not be used by production code or the Kani harnesses.
-Keep those proof and production boundaries explicit; move a helper here only
-when it serves more than one command-interpolation property test.
-
-When adding a new `#[path]` support module, follow the same shape: keep it
-private to its parent, give it a `//!` header stating the split reason and
-ownership, cap its public surface at `pub(super)`, and document it here so the
-boundary inventory stays complete.
-
-The test-only sibling `src/ir/cmd_interpolate_power_shell_tests.rs` owns the
-command-interpolation cases for protected PowerShell contexts. Keep those cases
-in the sibling so the parent test module stays below the 400-line cap;
-production code must not depend on this test module.
+Group shared-prefix modules under `<prefix>/mod.rs` with prefix-free children
+declared by plain `mod` statements. Rename genuinely unrelated prefix matches
+instead. The [layout guide](repository-layout.md#placement-conventions) defines
+the placement and visibility rules and indexes support-module owners.
+`make test-workflow-contracts` runs the Rust module-layout contract over sibling
+`.rs` files and directory modules with `mod.rs`. Its explicit exception table
+requires the exact sibling set and a reason for each disparate-concern prefix;
+remove entries when their modules are renamed.
 
 ## Behavioural testing strategy
 
@@ -3549,20 +5284,21 @@ These points are strategy rules, not optional style guidance.
 
 ## Manifest `foreach` expansion
 
-Manifest collection expansion is implemented by `expand_foreach` in
-`src/manifest/expand.rs`. It processes collection-valued manifest entries such
-as `targets` and `actions`: each item may define `foreach` to create one
-concrete item per value, and may define `when` to filter generated or static
-items before later manifest stages run.
+Manifest collection expansion is implemented by the `src/manifest/expand/`
+module. Its `expand_foreach_with_budget` boundary processes collection-valued
+manifest entries such as `targets` and `actions`: each item may define
+`foreach` to create one concrete item per value, and may define `when` to
+filter generated or static items before later manifest stages run.
 
 The pipeline is:
 
 1. Manifest parsing produces a mutable `ManifestValue` document.
-2. The manifest expansion stage passes that document and the configured
-   MiniJinja `Environment` to `expand_foreach`.
-3. `expand_foreach` reads `targets` and `actions`, evaluates each item's
-   `foreach` expression or literal sequence, evaluates any `when` guard, injects
-   `vars.item` and `vars.index` for generated items, and replaces each
+2. The manifest expansion stage passes that document, the configured
+   MiniJinja `Environment`, and the shared `ManifestBudget` to
+   `expand_foreach_with_budget`.
+3. `expand_foreach_with_budget` reads `targets` and `actions`, evaluates each
+   item's `foreach` expression or literal sequence, evaluates any `when` guard,
+   injects `vars.item` and `vars.index` for generated items, and replaces each
    original collection with the expanded concrete list.
 4. Downstream deserialization and rendering consume the expanded
    `ManifestValue`; they should not see the `foreach` or `when` control keys.
@@ -3804,7 +5540,7 @@ optional `NO_COLOR` lookup behaviour.
 
 ### Localized CLI help snapshot boundary
 
-`src/cli/parser_tests.rs` exclusively owns the private
+`src/cli/parser/tests.rs` exclusively owns the private
 `render_localized_long_help` helper. It builds, localizes, renders, and
 normalizes help as a pure CQRS query with no filesystem I/O. Its only permitted
 callers are `localized_help_includes_config_flag`, `localized_help_snapshot`,
@@ -3879,19 +5615,19 @@ is not obvious from the name:
   string normalization. Keep this exception in `test_support::fs`; production
   code remains capability-scoped or uses its dedicated normalizer.
 - `copy(from, to) -> io::Result<u64>` forwards to `std::fs::copy`, returning
-  the number of bytes copied and propagating its failure. The `dev_fast`
+  the number of bytes copied and propagating its failure. The `build_tools`
   release fixtures use it to place a built archive under its versioned name.
 - `modified(path) -> io::Result<SystemTime>` returns the file's modification
   time. It propagates both the metadata failure and the platform's failure to
   report a timestamp, so it is `io::Result` rather than an `Option`. The
-  `dev_fast` staging fixtures use it to assert a file was or was not rebuilt.
+  `build_tools` staging fixtures use it to assert a file was or was not rebuilt.
 - `write_with_mtime(path, contents, mtime) -> io::Result<()>` (Unix only)
   creates or truncates `path`, writes `contents`, and sets the modification
   time to `mtime`, propagating whichever step fails. The staging fixtures use
   it to backdate a file so a later build sees it as stale.
 
 `write_with_mtime` is the reason `test_support/dylint.toml` carries no
-`dev_fast` exemption. Backdating a fixture needs one open file for both the
+`build_tools` exemption. Backdating a fixture needs one open file for both the
 write and the timestamp, which reads like an irreducibly ambient operation that
 has to happen at the call site. Taking the timestamp as an argument keeps the
 handle inside this module instead: the caller never sees a `File`, so the
@@ -3913,6 +5649,16 @@ received. The last two return the same `(String, RequestLog, HttpServer)` tuple:
 `spawn_http_server_recording` records the request line of every request the
 fixture answers, while `spawn_http_server_expecting_no_requests` records any
 request it receives for a hop or target that must receive none.
+
+`spawn_raw_http_server` is the one entry point that does not take an
+`HttpResponse`. It serves a `RawHttpResponse`, whose bytes the fixture emits
+verbatim, for a case that needs a response no client accepts, such as a
+malformed status line to pin how a client classifies a parse failure. Use the
+checked `HttpResponse` for a valid response that merely needs an unusual
+status, and keep a raw payload for a deliberately malformed one. See
+`test_support/src/http/raw.rs` above for the payload type, the completion
+contract both paths share, and why a bare `TcpListener` must not be used in
+place of this fixture.
 
 `RequestLog` is a shared handle over those recorded lines in arrival order.
 `lines` returns a snapshot of them, and `len` and `is_empty` report how many
@@ -3952,6 +5698,69 @@ the pre-persist action to cover controlled creation orderings; they do not
 claim to model arbitrary scheduler or filesystem interleavings. The fallible
 `test_support::fs::inspect_path` probe treats `NotFound` as absence and
 propagates every other metadata error.
+
+### `test_support::ninja_semantics`
+
+`test_support::ninja_semantics` (`test_support/src/ninja_semantics.rs`) is the
+crate's single shared boundary for inspecting generated Ninja recipe text in
+tests. Its ownership is representation-aware inspection: it locates encoded
+recipe payloads, keeps them out of plaintext matching, and decodes them. The
+module declares the `base64` crate directly in `test_support/Cargo.toml` and
+uses its standard engine for the Base64 UTF-16LE payloads; this keeps the
+decoder's dependency explicit for the support crate.
+
+It exists because Netsuke lowers a completed legacy recipe through one of three
+transports. The POSIX and Bash transports leave recipe text visible in a
+plaintext Ninja binding; the Windows PowerShell transport hides it in a Base64
+UTF-16LE `-EncodedCommand` argument, or — for recipes too large for a command
+line — in Ninja's response-file bootstrap (an `rspfile` plus an
+`rspfile_content` binding carrying a `netsukePayload = '` payload marker). A
+plaintext scan of generated Ninja therefore misses recipe text on Windows even
+when lowering worked correctly. The production transports this helper mirrors
+are described under [Command and recipe lowering](#command-and-recipe-lowering).
+
+The public surface is deliberately narrow:
+
+- `GeneratedNinja` — wraps a whole generated manifest document.
+  `GeneratedNinja::new` borrows the text; `detected_recipe_transports` reports
+  how that document carries recipe text; `recipe_contains` searches plaintext
+  bindings directly and decodes every PowerShell payload before matching, so
+  encoded payload text never matches as plaintext.
+- `RecipeNeedle` — wraps the text to search for, so a needle cannot be passed
+  where a document is expected, or vice versa.
+- `RecipeTransport` — the transport detected in a document (`Plaintext`,
+  `PowerShellEncodedCommand`, `PowerShellResponseFile`);
+  `RecipeTransport::description` gives the wording used in test failure
+  messages.
+- `ResponseFileContent` — wraps the extracted `rspfile_content` binding text;
+  `ResponseFileContent::decode_power_shell_payload` decodes the recipe that
+  binding embeds.
+
+The payload markers and the Base64/UTF-16LE decoding rules live in this module
+alone. Call sites must not re-implement the decoding or repeat the renderer's
+marker constants; they must go through these types. `GeneratedNinja` owns
+payload location, exclusion of encoded spans from plaintext matching, and
+decoding, so text on opposite sides of a removed payload can never form a false
+match.
+
+Permitted call sites are test-support and test code only, in the same spirit as
+`test_support::fs` and `test_support::tracing_capture`; production code must
+not depend on `test_support`. Current call sites are
+`src/ninja_gen_tests/power_shell.rs` and
+`tests/logging_stderr/verbose_secret_absence.rs`, with unit coverage in
+`test_support/src/ninja_semantics_tests.rs`.
+
+To name the active representation in a failure-message diagnostic, call
+`GeneratedNinja::detected_recipe_transports` and map the result through
+`RecipeTransport::description`. Never interpolate the generated document, an
+encoded payload, or decoded recipe text into a failure message: generated
+recipes can contain rendered secret material interpolated through `env()`,
+which the secret-absence regression test protects. Decoder errors likewise
+never echo the payload.
+
+The production generator has its own `netsuke::ninja_gen::GeneratedNinja`
+output type; `test_support::ninja_semantics::GeneratedNinja` is the test-side
+borrowed view of generated text.
 
 ### Temporary Ninja build files
 
@@ -4141,6 +5950,19 @@ pure collection filters without environment state. Keep these registration
 functions as feature-local wiring points rather than calling them independently
 from manifest code.
 
+The stdlib's `now()` helper reads through a `ClockProvider`
+(`src/stdlib/time/clock/mod.rs`), an `Arc`-wrapped `Fn() -> OffsetDateTime` in
+the `EnvReader` shape and for the same reason: registration requires
+`Send + Sync`. `StdlibConfig` is the clock's single owner — `with_clock`
+replaces the provider, `system_clock()` is the production adapter and the only
+place the helper reads the host clock, and `fixed_clock` supplies a
+deterministic instant to tests. Keep the seam confined to the `stdlib::time`
+registration path: manifest-query registration installs the clock-independent
+helpers only and keeps refusing `now`, and the provider is not a general time
+service for the crate. The clock is not an environment variable and no lint
+polices it, so [ADR-008](adr-008-environment-seam-taxonomy.md) supplies the
+shape rubric here but not its original scope.
+
 `CommandConfigInit` is the internal hand-off from `StdlibConfig` to command
 helpers. It carries the capability-scoped workspace root, output limits, and an
 optional `PATH` override. `CommandConfig::new` consumes the owned bundle, and
@@ -4148,10 +5970,11 @@ the resulting configuration applies the override only when a child command is
 spawned; callers should configure this through `StdlibConfig` rather than
 constructing the internal value directly.
 
-The `test_support::dev_fast` sandbox reuses `mockable::Env` only while locating
-the host utilities it explicitly links into its hermetic `PATH`.
+The `test_support::build_tools` sandbox reuses `mockable::Env` only while
+locating the host utilities it explicitly links into its hermetic `PATH`.
 `real_utility_with_env` is the test seam for that lookup; it is not a general
-executable-discovery API and must not be used outside dev-fast test scaffolding.
+executable-discovery API and must not be used outside build-tools test
+scaffolding.
 
 #### Annotating a sanctioned site
 
@@ -4182,6 +6005,286 @@ Three dispositions are in use:
 
 Scope an expectation as tightly as the site allows — a function where one call
 is involved, a module only where the whole file is pending migration.
+
+#### The suppression contract that backs the rule
+
+`expect`-not-`allow` is a convention the compiler enforces only on the outer
+form. `clippy::allow_attributes` does not fire on an *inner* attribute, so
+
+```rust
+#![allow(clippy::disallowed_methods, reason = "escape hatch probe")]
+```
+
+at the top of a file switches the environment-access policy off for everything
+below it and passes `make lint` with every other contract green: `clippy.toml`
+still lists the methods, the workspace still denies the lint, and the lint
+target still runs across the workspace. Each of those asserts a true statement
+about a different thing, and none observes that a source has opted out.
+
+`tests/env_access_suppressions.rs` closes that gap. It reads the compiled
+sources — `src`, `build_l10n_audit`, `test_support/src`, `tests`, `benches`,
+`examples`, and `build.rs` — and fails when an `#[allow(...)]` or
+`#![allow(...)]` attribute names a lint that carries the policy. The roots are
+the ones the workspace lints rather than the ones a convention calls source.
+`tests`, `benches`, and `examples` are in scope because Cargo discovers targets
+in all three and `--all-targets` compiles and lints them, and the modules they
+wire in, exactly as it lints the library, so an inner attribute there silences
+the policy for a whole test, benchmark, or example binary just the same.
+
+Within a root the scan reads every file that is not dot-prefixed, rather than
+only the `*.rs` files, because a `.rs` name is not something the compiler
+requires. A module is read from whatever `#[path = "..."]` names —
+`#[path = "suppressed.inc"] mod suppressed;` compiles — and such a file may
+open with the innermost form of the policy suppression, which
+`allow_attributes` does not report. Naming the compiled sources by an extension
+the language does not require is therefore a filter the one reader who cares
+about it would rather have on. The breadth errs towards reading too much on
+purpose: a file read but never compiled costs a failure message naming a real
+file, while a file compiled but not read hides a suppression. A file that will
+not decode is declined rather than fatal, since Rust source is UTF-8 by
+definition; every other read error still propagates, and that half is the
+load-bearing one, because a file that is text and could not be read is a source
+that went unscanned. A dot-file under a source root stays out, being tooling
+state — `.gitignore`, `.editorconfig`, `.rustfmt.toml` — rather than anything a
+`#[path]` names.
+
+The root list is not trusted to stay complete on its own, because that is how a
+scan silently stops covering something. A second test walks every Rust source
+in the workspace, skipping only the named machine-local directories — `target`,
+the tool caches, and the other entries `.gitignore` declares — and fails when
+one of them is not in the scanned roots, naming each. So a root that is renamed
+or misspelled, or a target location added later, reports itself instead of
+quietly excusing its sources. Extending the roots stays safe: the invariant is
+what says the set is complete, rather than a reviewer re-deriving it.
+
+A root is a directory, and every directory name beneath it comes along, so a
+cache can sit inside a scanned root: `tests/.uv-cache` is under `tests`. The
+scan therefore skips the same machine-local names the workspace walk skips, at
+any depth, rather than reading a cache as though it were repository content. It
+did not always, and the gap was worth closing for a reason other than tidiness:
+a vendored source under a scanned root that carried the banned `allow` failed
+the gate on a machine where the tool had run and passed on a fresh clone. A
+verdict that depends on a machine is worse than no verdict, and this one would
+have been near-impossible to diagnose, because the name is git-ignored and so
+appears in no diff and in no `git status`. Both walks skip by name now, and a
+self-test pins that they agree on what is governed, since the coverage
+invariant only means something while they do.
+
+The skip list is named rather than "anything dot-prefixed", and the difference
+matters. A dot-directory is not evidence of a cache: `.config`, `.github`, and
+`.rules` are tracked repository content, and Cargo compiles a target declared
+under any directory at all, hidden or not. A walk that skipped every
+dot-prefixed name would neither scan a target sitting in one nor report it,
+which is exactly the silent non-coverage the invariant exists to prevent. Where
+the two rules could disagree, the tie breaks towards reporting: an entry
+missing from the list costs a false failure naming a real file, while an entry
+present but wrong hides a source.
+
+The skip is justified by an appeal to `.gitignore` — a name git will not track
+is not one a compiled source can live under — and that appeal is enforced
+rather than trusted, because it stopped being true once. `.netsuke` is
+netsuke's own runtime state, but it was skipped while `git check-ignore`
+declined it; every sibling tool cache is listed and it had been missed. A `.rs`
+file placed there would have been tracked, compiled, skipped by the walk, and
+reported by nobody, which is the failure the invariant exists to catch arriving
+through the list rather than the walk. The name is now in `.gitignore`, and the
+walk's self-test requires each skipped name to be one git would not track.
+`.git` is the single named exception: git refuses to track anything beneath it
+whatever the ignore files say.
+
+That self-test asks the *repository's* rules rather than the working tree,
+because a working tree answers with more than those. Ruff writes a `.gitignore`
+holding `*` into `.ruff_cache` as a side effect of running, so
+`git check-ignore` in the live tree agreed that `.ruff_cache` was ignored while
+the repository's own `.gitignore` said nothing about it — every sibling cache
+has an entry and this one had been missed, the same defect as `.netsuke`
+arriving one level down. A fresh clone, or a `coverage-main` lane that runs
+`make test` without `make lint` first, has no such file, so the answer would
+have depended on which tools had already run. The test therefore copies
+`.gitignore` into a scratch repository and puts the question there: the rule
+has to hold on every checkout, before any tool runs, and `.ruff_cache` is now in
+`.gitignore` beside its siblings. Asking its own repository also means the
+test needs no guard for the copies cargo-mutants makes, since it brings one.
+
+The machine's git configuration is a third place an answer can come from, and
+it is switched off for the same reason. A global ignore file naming one of
+these directories would make the test pass while the repository said nothing
+about the name — the original defect wearing a different hat, and just as
+invisible. An empty `core.excludesFile` covers both spellings a global ignore
+can take: it overrides a configured path and also suppresses the default
+`~/.config/git/ignore`, measured against both. The value is empty rather than a
+device path, since the test also runs on the Windows lane.
+
+A template directory is a fourth, and it is closed at `git init` instead:
+`--template=` keeps a template from seeding the scratch repository's
+`info/exclude`, which `check-ignore` would otherwise read. That is the whole of
+its job, and it is worth stating narrowly: a template can seed `.git/config`
+too, but the empty `core.excludesFile` above already neutralizes an ignore file
+configured there, measured with a template seeding only that. The flag has to
+be on `git init` rather than on the `check-ignore` call, because `info/exclude`
+is written at init time and no later call could unpin it. Note that
+`-c init.templateDir=` on the same command does *not* close it:
+`GIT_TEMPLATE_DIR` outranks it, measured, so the empty `--template` argument is
+the form that works for a contributor with that variable set.
+
+A fifth route does not go through a file at all: `GIT_DIR` repoints git at
+another repository's metadata, so `check-ignore` answers from there. Measured
+at a false pass, with the hostile repository's `info/exclude` holding `*` while
+the honest answer for an unignored name was "not ignored". Both `git` calls
+clear `GIT_DIR`, `GIT_WORK_TREE`, and `GIT_COMMON_DIR`. This one needed a
+mutation to verify rather than a green suite, because a false pass is also a
+pass: a name absent from `.gitignore` is added to the skip list, and the test
+must fail naming it even under that environment, which it does only with the
+pin in place.
+
+It reads the attribute as source text, because that is what an attribute is:
+there is no execution to model, and the assertion is exactly "this text does
+not appear in an `allow` attribute". An attribute nested in a `cfg_attr` is
+read too, since that is the same suppression written one token differently. The
+scan first blanks comments and string and character literals, because that is
+where quoted text lives — a byte or C string escapes like any other, so its
+body ends at an unescaped quote, and reading one as raw would end it early at
+an escaped quote and blank the code after it. Masking is what keeps the scan
+off prose that quotes an attribute, including this section and the mutation
+records that quote the form they prohibit: a quoted attribute never reaches the
+matcher at all, whatever line it sits on. It then matches an attribute by its
+tokens — `#`, an optional `!`, `[`, a name, `(` — with whitespace permitted
+between them, and reads it to its matching parenthesis, so one that `rustfmt`
+has wrapped across several lines is read whole rather than truncated. The
+scanner lives beside the contract in `tests/env_access_suppressions/`
+(`scanner.rs`, `mask.rs`, `policy.rs`), and its self-tests in
+`scanner_tests.rs` and `spelling_tests.rs` pin each shape it must report and
+each innocent source it must not.
+
+Matching tokens rather than lines is the one design decision here that was
+reached the hard way, and it is worth recording why the obvious alternative
+fails. The scan once anchored at the start of a line, reasoning that `rustfmt`
+normalizes an attribute's spelling and `make check-fmt` enforces that, so a
+spelling the anchor declined to read could not reach the compiler. **That
+reasoning is false.** Each of these compiles, silences the policy outright
+(`clippy` exits 0 where the same file without the attribute exits 101), and
+passed the anchored scan, and every one is pinned by a test in
+`spelling_tests.rs` against a real probe file:
+
+- `#[rustfmt::skip]` freezing a split marker: `#[allow` with its `(` on a later
+  line, a newline between `#[allow(` and the lint list, a newline between the
+  `#` and the `[`, or spaces around the `::` of the path. `rustfmt` would
+  normally join or normalize all of these, which is the premise that failed —
+  but a skip attribute is a request to be shown nothing, so the gate passes a
+  spelling it never inspected.
+- `r#allow(...)` and `r#clippy::disallowed_methods`, raw identifiers denoting
+  exactly what the unprefixed names denote. These need no skip attribute at all:
+  `rustfmt` leaves them byte-for-byte as written, so they were reachable on a
+  clean `make check-fmt` run and are the more dangerous of the two groups.
+- the deprecated bare `disallowed_methods` beside its enabler, likewise
+  untouched by `rustfmt`.
+
+A layout gate is not a proof about spelling — it normalizes what it is shown,
+and it is not shown what a skip attribute covers — so the matcher tolerates
+whitespace between tokens and reads the raw prefix instead of trusting a gate
+to have removed them.
+
+The banned set names lints rather than spelling one form, and it follows the
+lint hierarchy where the hierarchy applies. `disallowed_methods` is declared in
+Clippy's `style` group, so allowing that group silences the policy just as
+naming the lint does, and `clippy::all` sits above it; both were measured at
+exit 0 under the gate's own flags. `warnings` is banned as well, but not
+because it sits above them — it does not. The `warnings` group is the set of
+lints *currently at* `warn`, and Cargo passes `[workspace.lints]` as
+command-line denies, so the policy lint is at `deny` and outside the group:
+`#![allow(warnings)]` alone leaves it firing, measured at exit 101 bare and
+gated. It stays in the set because it silences every warn-level lint under the
+gate, because it silences `unfulfilled_lint_expectations` — the self-removal
+mechanism `clippy.toml` relies on when it says the backlog "removes itself
+instead of rotting" — and because it is half of the only measured way past the
+gate's flags. The two guard lints are included because silencing the reporter
+is the one suppression nothing else would report.
+
+That second job sets the membership rule, and it is not "can this reach the
+policy lint". `clippy::restriction` is in the set although it cannot reach the
+policy lint at all — `disallowed_methods` sits in `all` and `style`, and
+allowing `restriction` leaves the policy lint firing at exit 101. It is in the
+set because it is the *group* of both guard lints, so a single crate-level
+`#![allow(clippy::restriction, reason = "…")]` silences them together and an
+item-level bare `allow` further down then passes unreported: measured at exit 0
+where the same file without the crate attribute exits 101. That is the escape
+hatch this module exists to close, since `allow_attributes` does not fire on
+the inner form, and `blanket_clippy_restriction_lints` — denied in the
+workspace — does not cover the attribute route either, firing only on a
+group-level `-W clippy::restriction` and reporting nothing for an attribute
+naming the group. So the rule is: a name is banned when a measurement shows it
+silencing something this module protects, and that is decided per name.
+
+A `warn` attribute is deliberately *not* matched, and the reason is measured
+rather than assumed, because it is the obvious next question. A `warn` of the
+policy lint does lower it — bare `cargo clippy` exits 0 where the same file
+exits 101 — so it is a real suppression and not a no-op. It is not a *silent*
+one: every lint and test target passes `-D warnings`, which re-promotes the
+lint to an error and exits 101. Twelve spellings were probed (inner and outer,
+`cfg_attr`-wrapped, group and alias names, the guard-lint forms) and every one
+is caught by the gate while the bare run silences the same file. Reporting a
+shape that cannot pass a gate would be a rule the code cannot justify, which is
+the reasoning that also leaves `unknown_lints` out.
+
+The one exception is the shape that pairs the two, and it is worth stating
+because it is what makes the `warnings` entry load-bearing rather than
+decorative. `#![warn(clippy::disallowed_methods)]` lowers the policy lint to
+`warn`, which is precisely what puts it *into* the `warnings` group;
+`#![allow(warnings)]` then suppresses that group. Measured at exit 0 under
+`RUSTFLAGS=-D warnings`, in either order, where neither half escapes alone. The
+scan catches it on the `allow` half, because that is the only half it matches.
+Should the lint target ever stop passing `-D warnings`, re-measure the `warn`
+family before trusting this reasoning: the re-promotion is the only thing
+holding that side of the pair.
+
+The set also bans a second route in, which is worth stating because it is not
+obvious. Clippy keeps the old spelling of a renamed lint, and a renamed name
+still selects the lint it was renamed to, so `clippy::disallowed_method` — the
+alias of the policy lint — silences the policy exactly as the current name
+does. On its own that is harmless: `renamed_and_removed_lints` is denied in
+`[workspace.lints.rust]`, so the rename is reported and the alias is an error
+rather than a suppression. Allow that lint as well and the rename goes
+unreported, and the alias suppresses the policy in silence — measured at exit
+0, where the same file without the attribute exits 101. The deprecated bare
+`disallowed_methods` is the same alias under its shorter name, and measurement
+says it behaves identically: it silences the policy beside the enabler, and
+errors without it. Three entries close the class: `renamed_and_removed_lints`,
+because no alias suppresses anything while the rename naming it is still
+reported, plus `clippy::disallowed_method` and the bare `disallowed_methods`,
+so the pair stays honest if a future Clippy stops reporting renames.
+
+`unknown_lints` is deliberately *not* banned, though it looks as if it should
+be: it hides the report that a name does not exist, which reads like the rename
+mechanism above. It was measured and it is not one. A misspelled lint name is a
+no-op whether or not the report is allowed, so suppressing `unknown_lints`
+cannot silence the policy — `#![allow(unknown_lints, disallowed_methods)]`
+without the rename enabler still exits 101 — and banning a name that cannot
+suppress anything would be a rule the code cannot justify. The workspace denies
+`unknown_lints` anyway, which is where that concern belongs. The lesson is the
+one this section keeps relearning: measure the mechanism before writing the
+rule, and do not add a name because it looks like it belongs.
+
+The measurement has to be applied to the name and not to the category, or the
+rule cuts the other way and takes out entries it should keep. "Cannot suppress
+anything" is the test — not "cannot suppress the policy lint", which would also
+excuse the two guard lints and `clippy::restriction`, all three of which
+silence something. Reading the rule as the second form is what kept
+`restriction` out of the set for a round of review, and it would have been a
+real hole: it is the group of the guard lints, and nothing else reports a crate
+that has silenced the reporter.
+
+Three files are exempt, and only for those two guard lints:
+`src/runner/error.rs`, `src/manifest/diagnostics/mod.rs`, and
+`src/manifest/diagnostics/yaml.rs`. Each isolates `thiserror`/`miette` derive
+expansions where `unused_assignments` fires on some Rust versions and not
+others. `#[expect]` fails when the lint does not fire and
+`unfulfilled_lint_expectations` cannot itself be expected, so the module must
+carry an `allow` — which the guard lints then reject, leaving the module no way
+to state the suppression they require it to state. The exemption is scoped to
+those lints on those paths: an `allow` of `clippy::disallowed_methods`,
+`clippy::style`, or `warnings` is a finding there too. Remove an entry from
+`SCOPED_ALLOWLIST` when its workaround goes, or the exemption outlives its
+reason. See <https://github.com/rust-lang/rust/issues/130021>.
 
 ### `LocaleLocalizer`
 
@@ -4243,21 +6346,31 @@ doc-comment promise. `tests/locale_stub_strictness_tests.rs` covers the panic,
 the trichotomy, and the last-declaration-wins rule with both example-based and
 property tests.
 
-#### Locale-stub UI harness and split build directories
+#### Direct-`rustc` UI harnesses and split build directories
 
-`tests/locale_stub_ui_tests.rs` builds `test_support` with
-`cargo build --message-format=json` and parses the resulting Cargo JSON
-messages rather than assuming its dependencies sit beside the uplifted
-`test_support` rlib. For every `compiler-artifact` message it records the
-parent directory of each loadable artefact the message names, and passes the
-whole set to `rustc` as `-L dependency=` directories when compiling the UI
-fixtures. This keeps the harness correct when Cargo's `build.build-dir` setting
-splits intermediate artefacts — where dependency rlibs live — from the final,
-uplifted ones, and when Cargo gives each crate its own build directory instead
-of one shared `deps/`, as the Cargo shipped with the 1.99 nightlies does.
-Deriving the directories from what Cargo actually reports, rather than from a
-single assumed location, means the harness does not need to special-case either
-layout.
+`tests/support/test_support_rlib.rs` owns the direct-`rustc` preparation used by
+`tests/locale_stub_ui_tests.rs` and `tests/ninja_semantics_ui_tests.rs`. Those
+are its only permitted call sites: include it from a `tests/*.rs` UI harness
+when a fixture must compile against `test_support`; a harness for the
+production crate, or one needing no crate, must use its own narrow support code.
+
+`TestSupportRlib::build` builds `test_support` with
+`cargo build --message-format=json --all-features`. The shared feature
+arguments in `tests/support/cargo_features.rs` match `make test-nextest`;
+`test_support` forwards `legacy-digests` to `netsuke-build`, allowing Cargo to
+reuse the gate's matching artefacts. It parses Cargo's `compiler-artifact`
+messages, locating the uplifted metadata artefact and every dependency
+directory from the paths Cargo actually reports. This avoids assuming
+dependencies live beside the final `test_support` rlib when Cargo's
+`build.build-dir` setting separates intermediate artefacts, or when the Cargo
+shipped with the 1.99 nightlies gives each crate its own directory.
+
+`TestSupportRlib::compile` then invokes the workspace `rustc` directly with the
+discovered artefact as `--extern test_support=…`, every discovered
+`-L dependency=` directory, and `--emit=metadata`. Cargo still builds the rlib
+under the workspace toolchain; direct `rustc` is limited to the small UI
+fixtures that prove compile-time contracts without a scratch project or a
+toolchain-sensitive `.stderr` snapshot.
 
 "Loadable artefact" means an rlib, an `.rmeta` metadata file, or a file with
 the platform's dynamic-library extension. The `.rmeta` file is needed for the
@@ -4271,15 +6384,15 @@ search path and its dependents fail with `E0463`. The same rule and the same
 reasoning apply to `tests/command_env_ui_tests.rs`, which builds the `netsuke`
 rlib and derives its search path the same way.
 
-The shared `tests/support/cargo_artifacts.rs` module owns parsing Cargo
-`compiler-artifact` messages and extracting loadable artefact directories. It
-may be included only by these direct-`rustc` UI harnesses; the callers retain
-build and process-spawn orchestration.
+`TestSupportRlib` composes `tests/support/cargo_artifacts.rs`, which parses
+Cargo `compiler-artifact` messages, with
+`tests/support/rustc_response_file.rs`, which renders compiler arguments. The
+UI harnesses retain their case assertions, while the shared support code owns
+the Cargo build, artefact discovery, and direct-`rustc` invocation workflow.
 
 Those arguments reach `rustc` through a **response file**, not the command
-line. One `-L dependency=` pair per crate, over the long unique roots the
-split-build test creates, pushed the Windows `CreateProcessW` command line past
-its 32,767-character limit; the spawn then failed with
+line. One `-L dependency=` pair per crate can push the Windows `CreateProcessW`
+command line past its 32,767-character limit; the spawn then failed with
 `Os { code: 206, kind: InvalidFilename }` before `rustc` ran at all. Every
 directory is required to avoid `E0463`, so the list had to move off the command
 line rather than be shortened or deduplicated further. `rustc` reads arguments
@@ -4287,34 +6400,69 @@ from `@<path>` — UTF-8, one argument per line, no quoting — which leaves eac
 harness passing exactly one argument, so command-line length no longer scales
 with the dependency count.
 
-`tests/support/rustc_response_file.rs` owns that rendering and is included by
-both harnesses through the usual `#[path = …] mod …;` pattern. Its scope is
-deliberately narrow: it renders an argument vector and writes it, and knows
-nothing about what a compilation needs. Reach for it from a `tests/*.rs` binary
-that invokes `rustc` directly with an argument list whose length is not bounded
-by the source; a harness passing a fixed handful of arguments does not need it.
-Its unit tests assert the file's shape — one argument per line, spaces
-preserved without quoting, newlines rejected, and every source, `--extern`,
-dependency-search, and output argument retained — because the failure it
-prevents is Windows-specific and cannot be reproduced on the hosts that run
-most of this suite.
+`TestSupportRlib::compile` must use the response-file writer for every direct
+`rustc` invocation. The writer renders one UTF-8 argument per line without
+quoting, and its unit tests retain every source, `--extern`, dependency-search,
+and output argument while rejecting newlines. This is mandatory because the
+failure is Windows-specific and cannot be reproduced on most local hosts.
 
-`harness_compiles_under_a_split_build_dir` is the regression test for this: it
-forces a split layout with its own private `CARGO_TARGET_DIR` and
-`CARGO_BUILD_BUILD_DIR` roots, confirms the collected dependency directories
-span the split, and then compiles a fixture against them. The roots are private
-to the test rather than the ambient target directory because the `#[once]`
-`test_support_rlib` fixture builds concurrently for
-`stub_env_default_does_not_compile` and
-`stub_env_builders_compile_under_the_same_harness`. Sharing a target directory
-would make `harness_compiles_under_a_split_build_dir` race that build on the
-uplifted rlibs and fail with version-skew errors (`E0460`).
+`harness_compiles_under_a_split_build_dir` is the parser regression test for
+this. It feeds a recorded Cargo JSON fixture through the shared artefact parser
+and asserts that dependency directories span the recorded split build directory
+while the `test_support` artefact remains uplifted under the recorded target
+directory. The parser regression is in interpreting Cargo messages, not running
+Cargo, so this test pays no live build, is not a `nested-cargo-builds` member,
+and uses the default slow timeout on every platform.
 
-That private build is why this test is the most expensive one on the Windows
-gate: `test_support` depends on `netsuke-build`, so a private root means
-compiling that crate and roughly 350 dependencies from scratch. Its measured
-budget is recorded in
-[Windows budget for the isolated-Cargo-build tests][windows-test-budget].
+`split_build_fixture_compiles_through_the_direct_rustc_harness` is the
+complementary integration test. It creates a temporary two-crate workspace,
+runs Cargo with private split target and build roots, selects the
+Cargo-reported fixture-support artefact, passes every discovered dependency
+directory through a response file, and compiles a fixture with direct `rustc`.
+It remains in `nested-cargo-builds` because it intentionally exercises that
+live subprocess boundary.
+
+#### Historical fixture-crate replacement constraints
+
+This section records the constraints considered before issue 732 replaced the
+live build with recorded Cargo JSON. It remains as historical context for the
+response-file boundary; it is not a current implementation plan.
+
+If the trim is taken up after that gate, the obvious shape is a minimal fixture
+crate built under the split layout in place of `test_support`. It needs at
+least one dependency, so that dependency rlibs land in the split build
+directory while the fixture's own uplifted rlib lands in the target directory.
+That is precisely the arrangement the regression exists to catch: a single
+derived `-L dependency=` directory that missed the dependencies entirely. This
+section records what such a replacement must carry; nothing here is built while
+the trim is deferred.
+
+**The fidelity argument.** The current test is a regression test for a defect
+that was found once, and its subject is the real `test_support` build. Swapping
+that subject for a stand-in weakens the test unless the argument for the swap
+is explicit, in a doc comment beside the test, about exactly which regression
+it still guards and what it no longer covers. A one-dependency fixture does
+exercise the split-directory derivation — dependency artefacts in the build
+directory, uplifted artefacts in the target directory — but it no longer covers
+that derivation against the real crate's roughly 350-dependency scale, nor
+against the proc-macro and dynamic-library artefacts described above. Those are
+what makes the directory enumeration non-trivial, and the comment must say so
+rather than let the coverage drop silently.
+
+**The Windows response-file pressure.** `TestSupportRlib::compile` passes its
+arguments through a `rustc` response file, and the reason is a Windows command
+line limit rather than a style choice. Cargo 1.99 gives every crate its own
+artefact directory, so the `-L dependency=` set holds one entry per dependency;
+this test adds long temporary roots on top of that. Passed directly, the result
+exceeds the Windows `CreateProcess` command-line limit and the spawn fails with
+`Os { code: 206 }` before `rustc` runs at all. A fixture crate with one
+dependency produces far fewer directories and would stop exercising that
+pressure, which is a measurable loss of coverage however cheap the fixture
+becomes. So a replacement must either generate enough search paths to keep the
+`@file` path genuinely exercised, or move the response-file contract into its
+own dedicated test. Either way the doc comment above the replacement must say
+which of the two it does, because the failure it guards is Windows-specific and
+cannot be reproduced on most local hosts.
 
 ### Manifest `env()` reader
 
@@ -4328,15 +6476,60 @@ one explicitly, so a test can drive the **real registration path** — the same
 `Environment`, the same `add_function("env", ..)` call — without touching the
 process.
 
+[`manifest::EnvAccessPolicy`](../src/manifest/access_policy/mod.rs) is the
+manifest-domain policy for this port. It stores exact variable names in
+separate allow and block collections. An empty allowlist is default-allow; a
+non-empty allowlist activates default-deny, and block entries take precedence
+over allow entries. Names are compared using the host environment's semantics:
+case-sensitive on other platforms and case-insensitive on Windows. The policy
+has no glob or pattern matching.
+
+`manifest::ManifestEnvironment<'a>` bundles the caller-owned `EnvReader` with
+the owned `EnvAccessPolicy` used for one manifest load. The on-disk loader's
+process-backed compatibility wrapper constructs the process reader and a
+policy, while `from_path_with_policy_and_env` retains the explicit reader
+surface. `from_path_with_policy_and_environment` is the explicit bundle-based
+entry point; use it when the reader and policy must travel together. The
+string-loading `from_str_with_env_and_policy` variant exposes the same
+composition for callers that already hold an input string.
+
+The CLI composition root builds `EnvAccessPolicy` from the effective merged
+`env_allow_var` and `env_block_var` fields, then passes it into manifest
+loading. Primary-project allow entries are quarantined before this composition
+so an untrusted manifest cannot grant itself access or activate default-deny;
+primary-project block entries remain cumulative because they only restrict
+access.
+
+Argument validation and policy enforcement are separate concerns, and the
+module boundary follows that split. `register_env_function` in
+`src/manifest/registration.rs` owns the registration half: it reads the optional
+`default` keyword, rejects a defined non-string value with the localized
+`manifest.env.default_not_string` diagnostic, and rejects leftover keyword
+arguments by delegating to MiniJinja's `Kwargs::assert_all_used` — all before
+any lookup happens. The closure then delegates to `env_var_with_default` in
+`src/manifest/env/reader.rs`, which owns the leaf half: it evaluates the
+requested name against the policy before invoking `EnvReader`, reads through
+the reader, and resolves the three-way result — value, absence, or undecodable
+bytes — substituting a supplied fallback for absence and raising a fixed,
+localized Jinja error otherwise. A blocked lookup therefore cannot obtain a
+process value, and a rejected argument never reaches the lookup counter at all.
+The blocked path returns the `manifest.env.blocked` diagnostic and emits only
+the bounded `failure_kind="blocked"` trace field. Neither the requested name
+nor its value may appear in that diagnostic or trace.
+
 #### Ownership and permitted call sites
 
 - The caller owns the reader. `from_str` constructs `process_env_reader()`
-  and `from_str_with_env` borrows the caller's reader; both pass it to
-  `from_str_named`, which receives it as `&EnvReader` and `Arc::clone`s it into
-  the registered closure, so the closure co-owns the `Arc` alongside the caller.
-  `from_str_named` remains the only place the `env()` function is registered.
-  In production nothing else constructs a reader; tests build their own with
-  `Arc::new`, which is the point of the seam.
+  and `from_str_with_env` borrows the caller's reader. The path loaders that
+  take only a reader, such as `from_path_with_policy_and_env`, build a
+  `ManifestEnvironment` around that borrow and `EnvAccessPolicy::default()`,
+  which is permissive for compatibility; the environment-aware entry points
+  such as `from_path_with_policy_and_environment` carry the caller's policy
+  instead. `register_env_function` then clones the reader into the registered
+  closure, so the closure co-owns the `Arc` alongside the caller. That helper
+  is reached through `from_str_named`, which remains the only route by which the
+  `env()` function is registered. In production nothing else constructs a
+  reader; tests build their own with `Arc::new`, which is the point of the seam.
 - `process_env_reader()` is the sole production supplier and the only place
   `std::env::var` appears in the module.
 - The two test layers cover different things, and both are needed:
@@ -4344,8 +6537,8 @@ process.
     registration — that the reader actually reaches the `env()` function
     Jinja calls. Covering the leaf mapper alone would leave that untested,
     which is the gap the earlier process-mutating tests existed to fill.
-  - **Unit tests may call `env_var_with` directly** to cover error mapping.
-    `src/manifest/tests/env_function.rs` does so deliberately: the
+  - **Unit tests may call `env_var_with_default` directly** to cover error
+    mapping. `src/manifest/tests/env/function.rs` does so deliberately: the
     present, absent, and non-UTF-8 branches are cheaper to drive at the leaf,
     and the non-UTF-8 case is unreachable through a real environment without
     platform-specific `OsString` surgery.
@@ -4480,11 +6673,27 @@ handle passed into the `with_test_subscriber` closure. `snapshot()` recovers a
 poisoned lock rather than panicking, so a panic on another test thread cannot
 cascade into a snapshot assertion.
 
+`span_fields(span_name)` returns the captured fields of every instance of the
+named span, whether they were set when the span was created or recorded after
+it. A field declared `tracing::field::Empty` and never recorded contributes
+nothing, so an assertion can distinguish a populated field from one the code
+under test never set; a span name with no captured fields returns an empty
+collection rather than an error. `discovery_span_fields()` is the bound
+accessor for the configuration-discovery span. See
+`span_fields_are_captured_by_name_and_recording_point` in
+`src/test_tracing_capture.rs`.
+
+`span_fields` exists on the root-crate helper's `CapturedEvents` only. The
+reusable `test_support::tracing_capture::CapturedEvents` exposes `snapshot()`
+and nothing else, so an integration test under `tests/` can assert on rendered
+events but not on a named span's fields; a span-field assertion belongs in a
+unit test.
+
 Tests that snapshot tracing output with `insta` should normalize
 runtime-dependent fields, such as the bounded `path_hash` correlation
 identifier, to a stable placeholder before asserting the snapshot, and assert
 the real value separately with its own check. See
-`src/cli/discovery_tracing_tests.rs` for this pattern.
+`src/cli/discovery/tracing_tests.rs` for this pattern.
 
 ## `TestWorld` field groups
 
@@ -4615,10 +6824,13 @@ merge pass, and the primary project file cannot self-authorize the opt-in. If
 the same file is reached through operator and project roots, both occurrences
 retain their root authority: the operator occurrence remains an ordinary layer,
 while the primary project occurrence is quarantined. The `extends` chain
-remains outside this trust boundary.
+remains outside this trust boundary. The internal quarantine helpers are
+discovery-only composition points: they preserve each occurrence's authority
+and accumulated validation errors while extracting primary-only fetch requests
+and chain-wide budget narrowing requests.
 
 The network-policy domain module
-[`src/stdlib/network/policy/reconciliation.rs`][reconciliation-module] owns
+[`src/stdlib/network/policy/reconciliation/mod.rs`][reconciliation-module] owns
 reconciliation. It accepts domain-shaped operator inputs and a project request,
 returns the reconciled policy and a bounded outcome, and has no tracing or
 metrics side effects. The CLI adapter extracts fetch-policy fields from
@@ -4844,7 +7056,7 @@ explicit root `--json` flag bypasses environment parsing.
 
 #### Workspace fallback switch seam
 
-`src/stdlib/which/workspace_switch.rs` is a leaf module holding the
+`src/stdlib/which/workspace_switch/mod.rs` is a leaf module holding the
 `NETSUKE_WHICH_WORKSPACE` name and the domain state `WorkspaceSwitch` (`Value`,
 `Absent`, `NotUnicode`) with its `enabled()` decision. The variable is read by
 `EnvSnapshot::capture` through the injected `mockable::Env` provider and stored
@@ -4863,7 +7075,7 @@ nor `tracing`, and consulting the switch afterwards is silent. See
 
 #### Ninja program resolver seam
 
-`resolve_ninja_program` in `src/runner/process/ninja_program.rs` is the public
+`resolve_ninja_program` in `src/runner/process/ninja/program.rs` is the public
 resolver and returns `Utf8PathBuf`. It supplies `mockable::DefaultEnv` to the
 internal `resolve_ninja_program_utf8_with` seam. Unit tests inject a `MockEnv`
 that pins the `NETSUKE_NINJA` key, so every override branch runs without
@@ -4905,6 +7117,106 @@ signature again. Pinning both is what lets a behavioural test drive `which` and
 `tests/stdlib_which_pathext_tests.rs`, which is gated to Windows because
 `PATHEXT` governs resolution only there.
 
+#### `which` search-domain contract
+
+`CwdMode` keeps flat PATH lookup, workspace-root lookup, and recursive
+workspace discovery distinct. `Auto` searches only PATH entries; an empty or
+unset PATH has no search directories. `Always` prepends only the workspace
+root/current directory to the PATH pass. `Never` excludes the workspace root
+and empty PATH components. `WorkspaceRecursive` performs the same flat pass as
+`Auto`, then recursively walks the workspace only after that pass misses.
+
+Recursive discovery crosses into checkout-controlled files. It therefore
+requires the explicit `workspace-recursive` value and remains subject to the
+`NETSUKE_WHICH_WORKSPACE` kill-switch. `WhichResolver` includes the selected
+mode and captured switch state in its cache identity, so entries from search
+domains with different trust boundaries cannot collide. The complete contract
+is recorded in
+[ADR-024](adr-024-require-explicit-recursive-workspace-which-search.md) and the
+[executable-discovery design](netsuke-design.md#executable-discovery-filter-which).
+
+`src/stdlib/which/telemetry/mod.rs` is the single owner of both counter names
+and every label vocabulary the resolver emits.
+`netsuke_stdlib_which_cache_total` counts cache outcomes, and
+`netsuke_stdlib_which_resolution_total` counts resolution outcomes; both carry
+the same `cwd_mode` label, drawn from the closed set `auto`, `always`, `never`,
+and `workspace_recursive`. The set is exposed as `WHICH_CWD_MODE_VALUES` and
+re-exported through `netsuke::stdlib`. It is a telemetry vocabulary rather than
+the template spelling: a manifest writes `workspace-recursive`, and the label is
+`workspace_recursive`. The mapping is total over `CwdMode`, so no series can
+be created outside the set, and that is what lets an operator tell which search
+policy a resolution was requested under. The label records the request, not the
+outcome: it is derived from the options before the lookup, so it does not show
+whether recursive lookup ran or produced the result.
+
+The cache counter's `outcome` is drawn from `hit`, `miss`, and `bypass`
+(`WHICH_CACHE_OUTCOME_VALUES`). The resolution counter's `outcome` is drawn from
+`found`, `not_found`, and `error` (`WHICH_RESOLUTION_OUTCOME_VALUES`), where
+`not_found` covers a search or direct-path miss and `error` every other
+failure, so "nothing was found" and "something went wrong" stay separable. A
+non-success resolution additionally carries `category`, one of the ten values in
+`RESOLVE_ERROR_CATEGORY_VALUES`, one per `ResolveError` variant, so the label
+set is fixed by the error type rather than by the failure a host happened to
+encounter. `ResolveError::category()` in `resolve_error.rs` returns the
+domain-owned `ResolveErrorCategory`, whose `label()` is the resolver's own name
+for the failure; `telemetry::category_label()` in `telemetry.rs` maps those
+variants to the constants above, so the two vocabularies are tied together by
+test rather than by a shared constant.
+
+That makes the resolution counter the one series whose label count is not
+fixed: two labels on success, three on failure.
+`WHICH_RESOLUTION_FAILURE_OUTCOME_VALUES` names the two outcomes that
+legitimately carry a category, and `WHICH_RESOLUTION_SUCCESS_OUTCOME_VALUES`
+names the one that legitimately does not, so the application recorder admits
+each shape exactly. The two vocabularies are disjoint complements rather than
+one being a subset of the other, and that is deliberate: a `found` series
+carrying a category and a failure recorded without one are both refused rather
+than exported, because no call site can produce either. Naming the full outcome
+set on the success shape would have admitted the second of those, since a
+two-label `not_found` series would then match it.
+
+The resolver records the same bounded facts on the `stdlib.which.resolve` span
+and emits one debug event when a resolution fails. No command name, no
+filesystem path, no workspace name, and no `PATH` or `PATHEXT` value reaches a
+span field, an event, or a metric label. The `cwd_mode` label records which
+search policy a manifest requested, as one of the resolver's fixed spellings,
+so a series can be exported without quoting the manifest or saying where it
+matched. The tracing tests assert that the command name and the workspace root
+are absent from every captured event and span field.
+
+The counter descriptions are registered once per process behind a `Once`. Both
+counter names are listed in the application recorder's `accepts_name` and
+matched in `accepts_stdlib_counter_registration`, the private helper that
+groups the standard-library counter rules, which delegates them to
+`accepts_which_registration` against their exact label shapes. The series
+survive into the process snapshot rather than being discarded as noop handles,
+while any other label name, label count, or out-of-vocabulary value is rejected.
+
+The application recorder owns counter admission. The stdlib helper composes the
+vocabularies the `src/stdlib/` modules declare rather than redefining them, so
+ownership of each vocabulary stays with its declaring module. The `which` rule
+keeps its own label-shape predicate because its resolution counter is admitted
+under two shapes — a success carries two labels and a failure three — and every
+rule, grouped or not, still validates bounded labels exactly. This is the same
+allowlist that gates the configuration, runner, manifest-filtering, file-read,
+and environment-lookup series.
+
+Tests sit beneath the module: `src/stdlib/which/telemetry/tests/mod.rs` drives
+the real `WhichResolver` against a local debugging recorder and asserts that
+each search domain is attributed to its own series, that every `ResolveError`
+variant reports a declared category, and that nothing outside the closed
+vocabularies is emitted. `src/observability/recorder/tests/which_tests.rs`,
+which `src/observability/recorder/tests/mod.rs` registers, proves the
+production recorder retains each bounded shape and rejects an out-of-vocabulary
+`cwd_mode`, an undeclared extra label, a missing label, and the failure
+`category` on a success series.
+
+Tests that inject `EnvSnapshot::capture_with_env` must use
+`env::mock_env_for_capture`. The strict builder declares every documented read:
+PATH and `NETSUKE_WHICH_WORKSPACE` on every platform, plus `PATHEXT` on
+Windows. Exact `.once()` expectations intentionally fail when capture gains an
+undeclared environment dependency.
+
 That gating has a cost worth stating: the Windows-gated suite runs only on
 `build-test-windows`, so keep host-independent rules — normalization, the
 fallback — in the `#[cfg(any(windows, test))]` unit tests that every host
@@ -4929,7 +7241,7 @@ legacy recipes, which default to PowerShell; Git Bash is used for those recipes
 only when the explicit compatibility selection is enabled. It installs the
 workflow-pinned `cargo-nextest`; the shared Rust setup action supplies
 `rustfmt` and Clippy. The SHA-pinned shared Whitaker installer receives the same
-`installer-version: '0.2.7'` input as Linux and produces a PowerShell wrapper
+`installer-version: '0.2.9'` input as Linux and produces a PowerShell wrapper
 on Windows, so `Lint (Whitaker)` invokes that wrapper directly rather than
 through a Bash shim or `make SHELL=bash lint-whitaker`. The installer resolves
 its home through Windows' `FOLDERID_Profile` known folder, not an environment
@@ -5099,7 +7411,7 @@ the series count is fixed by the code, never by the environment: `outcome` is
 above. It increments exactly once per resolution whatever the outcome, so the
 counter totals resolutions rather than events — the failure path emits a second
 *debug event* but no second sample. Both the success and failure cases are
-pinned by tests in `src/stdlib/path/home_tests.rs`, which capture samples
+pinned by tests in `src/stdlib/path/home/tests.rs`, which capture samples
 through a local `metrics_util` `DebuggingRecorder` rather than the global one.
 
 The events carry no paths and no environment values: neither the resolved home,
@@ -5111,7 +7423,7 @@ recording the value that distinguished it.
 
 The fetch boundary emits four bounded metric families, described once per
 process through `Once`-guarded `describe_counter!` and `describe_histogram!`
-calls in `src/stdlib/network/telemetry.rs`, matching the pattern in
+calls in `src/stdlib/network/telemetry/mod.rs`, matching the pattern in
 `stdlib::which::cache`:
 
 - `netsuke_stdlib_fetch_total` — a counter labelled `outcome=success|failure`.
@@ -5146,22 +7458,35 @@ emitters is covered.
 ### Fetch redirect architecture
 
 Redirect handling splits along an ownership boundary.
-[`src/stdlib/network/redirect_chain.rs`](../src/stdlib/network/redirect_chain.rs)
-is a transport-independent state machine holding every pure decision: hop
+[redirect chain](../src/stdlib/network/redirect/chain/mod.rs) is a
+transport-independent state machine holding every pure decision: hop
 accounting, loop detection, cross-origin credential stripping, and per-hop
 network-policy evaluation. It performs no I/O and builds no user-facing text.
-[`src/stdlib/network/redirect.rs`](../src/stdlib/network/redirect.rs) is the
-thin adapter that owns the HTTP client, the bounded telemetry, and the
-localized diagnostics, and applies the chain's decisions. A new redirect rule
-belongs in the chain module; a new transport, metric, or message belongs in the
-adapter.
+[`src/stdlib/network/redirect/mod.rs`](../src/stdlib/network/redirect/mod.rs)
+is the thin adapter that owns the HTTP client, the bounded telemetry, the
+`Location` header parse, and the localized diagnostics, and applies the chain's
+decisions. A new redirect rule belongs in the chain module; a new transport,
+metric, or message belongs in the adapter.
+
+That boundary decides where a redirect fails. A `Location` header is an HTTP
+response fact, so the adapter reads and resolves it and owns the "absent" and
+"present but unparsable" diagnostics; the chain never sees a raw header, only
+an already-resolved `Url`. Reading a header is transport work, and a chain that
+parsed one would have to name a transport failure in its own vocabulary. So
+`RedirectRejection` holds only the four redirect *decisions* the chain makes —
+`CredentialsNotRemovable`, `LimitExceeded`, `Loop`, and `Policy` — while
+`location_missing` and `location_invalid` are `redirect_failure` reasons the
+adapter records. Both reasons stay in the closed vocabulary of
+[`src/stdlib/network/telemetry/mod.rs`](../src/stdlib/network/telemetry/mod.rs)
+because the adapter still emits them.
 
 The per-hop ordering is the security-relevant part. The adapter dispatches a
-GET, classifies the status, and only then asks the chain to resolve the
-`Location` value. The chain applies to the resolved target, in order, the hop
-limit, cross-origin credential removal, the loop check, and finally the policy
-evaluation, so the target is checked against the configured `NetworkPolicy`
-before any request is sent to it.
+GET, classifies the status, resolves the `Location` value against the URL whose
+request produced the response, and only then asks the chain to judge the
+resolved target. The chain applies, in order, the hop limit, cross-origin
+credential removal, the loop check, and finally the policy evaluation, so the
+target is checked against the configured `NetworkPolicy` before any request is
+sent to it.
 
 One `fetch` accepts at most five redirects (`FETCH_REDIRECT_LIMIT`); the
 initial request is not a hop, and a target already requested in the same chain
@@ -5178,9 +7503,13 @@ userinfo-stripping helper. The `dispatch_hop` warning also carries a closed
 `error_category` drawn from exactly `http_status`, `connection`, `timeout`,
 `io`, `protocol`, `invalid_url`, and `other`. `http_status` marks an
 unsuccessful HTTP response, `connection` a DNS, connect, or proxy failure,
-`timeout` an I/O failure whose source is a timeout, `io` any other I/O failure,
-`protocol` a malformed status line or header, `invalid_url` a URL the client
-could not use, and `other` anything not otherwise classified.
+`timeout` a timeout the client raised or a timed-out I/O failure, `io` any
+other I/O failure, `protocol` a malformed status line or header, `invalid_url`
+a URL the client could not use, and `other` anything not otherwise classified.
+The client reports a refused or reset connection as a plain I/O failure, so the
+I/O terminal is classified by `io::ErrorKind`: `ConnectionRefused`,
+`ConnectionReset`, and `ConnectionAborted` map to `connection`, `TimedOut` to
+`timeout`, and every other kind to `io`.
 
 Every refused redirect is logged, not only a policy rejection, because the
 counter alone cannot show which hop of which fetch was refused. Each event
@@ -5188,26 +7517,28 @@ carries `operation`, an outcome, a closed reason, and `hop`, and never a
 location, URL, host, or userinfo. Those four fields are the bound that ADR-023
 sets for redirect decisions. Policy refusals emit `policy_outcome="rejected"`
 with a `policy_reason` from `scheme_not_allowed`, `missing_host`,
-`host_not_allowlisted`, and `host_blocked`. Every other refusal emits
-`redirect_outcome="rejected"` with a `redirect_failure` drawn from
-`location_missing`, `location_invalid`, `credentials_not_removable`,
-`limit_exceeded`, and `loop`.
+`host_not_allowlisted`, and `host_blocked`. Every other refusal — a chain
+decision or an unusable `Location` header — emits `redirect_outcome="rejected"`
+with a `redirect_failure` drawn from `location_missing`, `location_invalid`,
+`credentials_not_removable`, `limit_exceeded`, and `loop`. Both refusal paths
+share one logging helper, so they are the same shape and differ only by that
+closed reason.
 
 [ADR-023](adr-023-revalidate-fetch-redirects.md) records the rationale for
 revalidating every redirect against the policy.
 
 ### Configuration discovery module layout
 
-`src/cli/discovery.rs` attaches several small `#[path = "..."]` modules that
-split diagnostics, path comparison, and tests out of the main discovery flow:
+`src/cli/discovery/mod.rs` declares small child modules for diagnostics, path
+comparison, and tests alongside the main discovery flow:
 
-- `discovery_diagnostics.rs` — bounded tracing helpers (`path_hash`,
+- `discovery/diagnostics.rs` — bounded tracing helpers (`path_hash`,
   `short_hash`, `debug_config_path`, `debug_optional_config_path`,
   `debug_project_layer_deduplication`, `warn_explicit_config_load_failed`) and
   the `ConfigLoadFailureKind` enum used to classify a load failure without
   retaining error text. The de-duplication event records discovered, project,
   and appended layer counts after filtering without exposing paths.
-- `discovery_paths.rs` — `normalized_path_key` resolves a path to a
+- `discovery/paths.rs` — `normalized_path_key` resolves a path to a
   comparable, canonicalized form and returns canonicalization errors to its
   caller. The discovery-side `comparison_key` fallback uses the original path
   literally when resolution fails, continues discovery, and emits a bounded
@@ -5219,21 +7550,21 @@ split diagnostics, path comparison, and tests out of the main discovery flow:
   `std::fs::canonicalize`. Keep it confined to this comparison boundary:
   selectors remain pure path queries, OrthoConfig supplies the layer path, and
   tracing remains at the orchestration boundary.
-- `discovery_event_assertions.rs` — shared test-only helpers:
+- `discovery/event_assertions.rs` — shared test-only helpers:
   `capture_events` runs a closure under a TRACE capturing subscriber,
   `find_event` locates one emitted event by substring, and `EventAssertion`
   bundles an event with its path to assert bounded `path_hash` and presence
   fields, the absence of raw paths, file names and formatted error text, and to
   normalize the hash before an `insta` snapshot.
-- `discovery_tracing_tests.rs` — tests selector precedence
+- `discovery/tracing_tests.rs` — tests selector precedence
   (`--config` versus `NETSUKE_CONFIG`), the removed legacy
   `NETSUKE_CONFIG_PATH` alias, and event-schema snapshots for both selection
   and explicit load failures.
-- `discovery_layer_tests.rs` — tests the explicit-path versus automatic
+- `discovery/layer_tests.rs` — tests the explicit-path versus automatic
   discovery branches and project-scope handling in the one discovery pass.
 
 Both test modules import `capture_events`, `find_event`, and `EventAssertion`
-from `discovery_event_assertions` rather than duplicating them. The `insta`
+from `discovery::event_assertions` rather than duplicating them. The `insta`
 snapshot calls themselves stay in the test modules because snapshot names bind
 to the test module's path, not to a shared helper module.
 
@@ -5251,7 +7582,7 @@ cached layers to `cli::merge_with_cached_file_layers_with_observer`, then
 replays the returned merge events through `cli::TracingMergeObserver`. The
 boundary replays deferred discovery diagnostics before that merge; the ordinary
 query helpers do not emit tracing themselves. Phase-level metrics are composed
-in `src/observability.rs` around those two operations.
+in `src/observability/mod.rs` around those two operations.
 
 Both aggregate and phase-level configuration-load timing use the same injected
 elapsed-time seam: each boundary receives `&impl monotony::MonotonicClock`.
@@ -5475,7 +7806,7 @@ share one open-and-read policy under `src/stdlib/path/`:
   `max_bytes` and `follow_symlinks` values, and `open_file_checked` resolves
   the parent directory, applies the platform open flags, and rejects anything
   that is not a regular file.
-- `bounded_read.rs` owns the read boundary built on that open: `BoundedRead`
+- `bounded_read/mod.rs` owns the read boundary built on that open: `BoundedRead`
   tracks the running byte total, `read_bounded_chunk` reads through the budget,
   `read_utf8` reads `contents` as text, and `linecount` counts newlines in
   fixed chunks while validating UTF-8 incrementally.
@@ -5506,31 +7837,47 @@ and the `fcntl_getfl`/`fcntl_setfl` calls come from `rustix::fs::OFlags` and
 `rustix::fs`, a production dependency (1.0.8, `fs` feature, per `Cargo.toml`)
 used for this Unix flag handling. Once the opened handle is confirmed to be a
 regular file, `restore_blocking` clears `O_NONBLOCK`. The regular-file check
-runs on the opened handle, so devices and FIFOs are rejected race-free. Windows
-has no `O_NOFOLLOW` through cap-std, so `reject_windows_symlink` checks
-`symlink_metadata` before the open; that check is not race-free and is tracked
-as issue #703.
+runs on the opened handle, so devices and FIFOs are rejected race-free.
 
-Two diagnostics come out of the boundary. `bounded_read.rs` raises
+Windows has no `O_NOFOLLOW` through cap-std, but `windows_reparse` reaches the
+same guarantee through `cap_std`'s Windows-only `OpenOptionsExt::custom_flags`,
+which is OR-ed into the `dwFlagsAndAttributes` argument of the open.
+`apply_open_flags` sets `FILE_FLAG_OPEN_REPARSE_POINT` while symlinks are not
+followed, so the open does not traverse a reparse point and the returned handle
+refers to the point itself, and it always sets `FILE_FLAG_BACKUP_SEMANTICS` so
+a directory can be opened and then rejected by the shared regular-file check
+rather than by the open failing. The decision is then taken from that same
+handle: `reject_reparse_point` reads `file_attributes()` — populated from
+`BY_HANDLE_FILE_INFORMATION` on the open handle — and refuses anything carrying
+`FILE_ATTRIBUTE_REPARSE_POINT`. Testing the attribute bit rather than the tag
+rejects every reparse point, including tags `std` does not report as symlinks:
+`FileType::is_symlink` is true only for name-surrogate tags, so a deduplication
+or cloud placeholder would slip past a symlink-shaped check and be followed.
+Because the judgement and the read share one handle, there is no
+check-then-open window between them; see
+[ADR-032](adr-032-windows-reparse-point-same-handle-open.md).
+
+Two diagnostics come out of the boundary. `bounded_read/mod.rs` raises
 `file_too_large_error`, which quotes the path and the limit that was exceeded;
 `fs_utils.rs` raises `not_regular_file_error`, which quotes only the path and
-is what rejects an opened FIFO or device (and a Windows symlink). On Unix a
-symlink refused by `O_NOFOLLOW` instead surfaces through the mapped open error.
-All of them, like the invalid-UTF-8 diagnostic that `contents` and `linecount`
-raise for undecodable input, are MiniJinja `InvalidOperation` errors. See
+is what rejects an opened FIFO or device (and, on Windows, a reparse point that
+`reject_reparse_point` refuses). On Unix a symlink refused by `O_NOFOLLOW`
+instead surfaces through the mapped open error. All of them, like the
+invalid-UTF-8 diagnostic that `contents` and `linecount` raise for undecodable
+input, are MiniJinja `InvalidOperation` errors. See
 [Digest rendering](#digest-rendering) for the hashing loop that consumes this
 boundary.
 
 ### File-read telemetry
 
-`src/stdlib/path/read_telemetry.rs` owns telemetry for the four file-reading
-filters. Each filter closure hands its result to `record_file_read`, which
-returns that result unchanged, so a call that reaches the boundary is recorded
-exactly once whatever its outcome; a rendered value, a read rejected by the
-byte budget, the file-type policy, or invalid UTF-8, and a refusal that came
-before any read was attempted are each counted once. A malformed keyword value
-or an undeclared keyword is refused by `path_call_limits` or
-`kwargs.assert_all_used()` and reaches the counter through
+`src/stdlib/path/read_telemetry/mod.rs` owns telemetry for the four
+file-reading filters. Each filter closure hands its result to
+`record_file_read`, which returns that result unchanged, so a call that reaches
+the boundary is recorded exactly once whatever its outcome; a rendered value, a
+read rejected by the byte budget, the file-type policy, or invalid UTF-8, and a
+refusal that came before any read was attempted are each counted once. A
+malformed keyword value or an undeclared keyword is refused by
+`path_call_limits` or `kwargs.assert_all_used()` and reaches the counter through
 `record_unresolved_read`, whose entry point passes no limits; the debug event
 for a call refused before its keywords resolved therefore carries `filter` and
 `outcome` alone, since there is no effective budget or symlink policy to
@@ -5553,25 +7900,123 @@ and a category label would either lose the distinction or grow the label set
 with the locale space.
 
 The counter description is registered once per process behind a `Once`. The
-application recorder in `src/observability_recorder.rs` admits the series:
+application recorder in `src/observability/recorder/mod.rs` admits the series:
 `FILE_READ_TOTAL` is listed in `accepts_name` and matched in
-`accepts_counter_registration` against exactly those two label sets, so the
+`accepts_stdlib_counter_registration`, the private helper grouping the
+standard-library counter rules, against exactly those two label sets, so the
 counter survives into the process snapshot rather than being discarded as a
 noop handle, while any other label name, label count, or out-of-vocabulary
 value is rejected. This is the same allowlist that gates the configuration,
 runner, and manifest-filtering series.
 
-Tests sit beside the module: `src/stdlib/path/read_telemetry_tests.rs` drives
+Tests sit within the module: `src/stdlib/path/read_telemetry/tests.rs` drives
 the registered filters against a local debugging recorder and asserts the
 emitted series and the bounded debug event, while
 `recorder_retains_bounded_file_read_series` in
-`src/observability_recorder_tests.rs` proves the production recorder retains
-the two bounded series and rejects out-of-vocabulary `filter` and `outcome`
-values and a series missing a label.
+`src/observability/recorder/tests/mod.rs` proves the production recorder
+retains the two bounded series and rejects out-of-vocabulary `filter` and
+`outcome` values and a series missing a label.
+
+### Manifest environment-lookup telemetry
+
+`src/manifest/env/telemetry.rs` owns telemetry for the `env()` lookup boundary.
+`env_var_with_default` in `src/manifest/env/reader.rs` is the only place an
+`env()` call reaches: it evaluates the access policy, reads through the
+injected reader, and maps failures to Jinja errors, so it also hands each
+result to `record_env_lookup`, which returns that result unchanged and counts
+the lookup exactly once whatever the outcome.
+
+When the variable is absent and the call supplied a `default=`,
+`substitute_fallback` substitutes it and counts the lookup as `success`: the
+manifest asked for a substitution and got one, so it is not a fifth outcome.
+The substitution is marked instead by a bounded trace field on a debug event,
+`fallback_used = true` on `manifest env lookup substituted default`, which is
+the only place that field appears. A fallback does not rescue a value that is
+present but not valid UTF-8: that remains `not_unicode`, because a
+present-but-undecodable value is a configuration fault rather than an absence.
+
+The counter is `netsuke_manifest_env_lookups_total`, with one `outcome` label
+drawn from the closed set `success`, `blocked`, `not_present`, and
+`not_unicode`, exposed as the module constant `ENV_LOOKUP_OUTCOME_VALUES` and
+re-exported through `netsuke::manifest`. Nothing else is recorded: the variable
+name and its value are absent by construction, because environment variable
+names routinely identify credentials and a rendered value can carry secret
+material. The blocked outcome is the reason the series exists; denying a lookup
+is new behaviour that previously could not occur, and the accompanying
+`tracing` event is neither aggregated nor retained by the application recorder.
+
+The counter description is registered once per process behind a `Once`. The
+application recorder in `src/observability/recorder/mod.rs` admits the series:
+`ENV_LOOKUP_TOTAL` is listed in `accepts_name` and matched in
+`accepts_counter_registration` against exactly that one label set, so the
+counter survives into the process snapshot rather than being discarded as a
+noop handle, while any other label name, label count, or out-of-vocabulary
+value is rejected.
+
+Tests sit beside the boundary: `src/manifest/tests/env/telemetry.rs` drives
+`env_var_with_default` against a local debugging recorder and asserts each
+outcome reaches exactly one bounded series, while
+`recorder_retains_bounded_env_lookup_series` in
+`src/observability/recorder/tests/mod.rs` proves the production recorder
+retains the four bounded series and rejects an out-of-vocabulary outcome, an
+extra label, and a series missing its label.
+
+The recorder keeps exact label-shape matching in
+`src/observability/recorder/labels.rs`. These queries serve only the recorder;
+metric-specific admission rules supply the reviewed names and value sets, so
+composing label shapes never widens the accepted vocabulary.
+
+### Recipe-text dialect telemetry
+
+`src/stdlib/recipe_text/dialect_telemetry.rs` owns telemetry for the dialect
+boundary. Both `shell_quote` and `shell_join` reach exactly one place when they
+decide which encoding to apply — `resolve_dialect` in
+`src/stdlib/recipe_text/mod.rs` — so that boundary is also the single telemetry
+point. `record_dialect` returns the resolved dialect unchanged and counts the
+resolution exactly once, whether the call site named a dialect or omitted it.
+
+The counter is `netsuke_manifest_shell_quote_dialect_total`, with two labels.
+`dialect` is drawn from the closed set `sh` and `powershell`, and `source` from
+`explicit` and `default`. Both are the module constants `DIALECT_VALUES` and
+`DIALECT_SOURCE_VALUES`, re-exported through `netsuke::stdlib`, so the series
+count is fixed at four by the module rather than by anything a manifest
+supplies. Nothing else is recorded: no template source, no manifest text, and
+no rendered value.
+
+The `source` label is the reason the series exists. A call that omits `dialect`
+receives a host- and configuration-dependent default, so the rendered text of
+such a manifest can change between hosts or releases with no manifest edit —
+ADR-041 records this as the accepted cost of the two-dialect surface. Nothing
+else aggregates that population: the affected manifests are otherwise
+indistinguishable from those that pin the dialect, and the difference is
+invisible in the generated Ninja. Counting it makes the exposed set measurable,
+which turns "pin your dialect" from advice into something an operator can size.
+The counter's description is registered once per process behind a `Once`.
+
+The application recorder in `src/observability_recorder.rs` admits the series:
+`SHELL_QUOTE_DIALECT_TOTAL` is listed in `accepts_name` and matched in
+`accepts_stdlib_counter_registration`, the private helper grouping the
+standard-library counter rules, against exactly those two label sets, so the
+counter survives into the process snapshot rather than being discarded as a
+noop handle. **The admission step is the silent one**: an unadmitted name or
+label value yields a `Counter::noop` handle, so the build, the lint, and every
+other test still pass while the counter records nothing. The test for it
+therefore drives the real filters under a local recorder and asserts the
+increments arrive, rather than recording the series by hand — a hand-recorded
+series would pass even if no filter ever called the recorder.
+
+Tests sit beside the boundary: the `tests` module in
+`src/stdlib/recipe_text/dialect_telemetry.rs` pins the label vocabularies to
+`ShellDialect::ALL`, the set the encoder can actually produce, since the
+recorder imports them as `'static` arrays that cannot be derived from that enum
+at compile time. `src/observability/recorder/tests/dialect_tests.rs` drives
+both filters through `shell_quote_dialect_total` under the production recorder
+and proves the four bounded series are retained while an out-of-vocabulary
+value, a missing label, and an unlabelled series are rejected.
 
 ## Digest rendering
 
-`src/hex.rs` (`netsuke::hex`) is the single owner of lowercase hexadecimal
+`src/hex/mod.rs` (`netsuke::hex`) is the single owner of lowercase hexadecimal
 rendering for the whole workspace, including the `test_support` crate. It
 exposes two functions:
 
@@ -5591,7 +8036,7 @@ from production output.
 The module is unit-tested across the full `u8` range rather than with a handful
 of vectors, because leading-zero and casing regressions are exactly what
 example-based tests miss. A per-byte sweep cannot see faults that need more
-than one byte to appear, so `src/hex_property_tests.rs` adds `proptest`
+than one byte to appear, so `src/hex/property_tests.rs` adds `proptest`
 coverage over arbitrary slices: two digits per byte, lowercase output, a decode
 round trip, agreement with `push_lower_hex_byte`, and distribution over
 concatenation. That last property is what pins each byte's encoding as
@@ -5621,10 +8066,18 @@ minimal feature for returning an owned digest.
 Because these crates share their breaking changes, `.github/dependabot.yml`
 collects them into a `rustcrypto` group for the `cargo` ecosystem, so the next
 major arrives as one buildable pull request rather than several that cannot
-compile individually. Add any new RustCrypto crate to that group's `patterns`
-list at the same time as the dependency itself. Never work around a lockstep
-break by pinning one member to an exact version: that blocks the whole family,
-which is what issue #477 had to undo.
+compile individually. It, the `rstest-bdd` group and the `ortho-config-fluent`
+group are the only groups permitted to take majors, and all three are listed
+before the `minor-and-patch` catch-all because Dependabot assigns a dependency
+to the first group that matches it. The `rstest-bdd` group exists because
+`rstest-bdd` and `rstest-bdd-macros` also release in lockstep, and Cargo's
+pre-1.0 rules count a 0.x minor as a major, which the catch-all would leave
+ungrouped. The `ortho-config-fluent` group keeps `ortho_config` and
+`fluent-bundle` on one version, since their `FluentValue` types must match. Add
+any new RustCrypto crate to the `rustcrypto` group's `patterns` list at the
+same time as the dependency itself. Never work around a lockstep break by
+pinning one member to an exact version: that blocks the whole family, and
+undoing it was the work of issue #477.
 
 Both removals are pinned by `tests/sha2_migration_guard_tests.rs`, which
 asserts at compile time that the digest type does not implement
@@ -5663,14 +8116,48 @@ yardstick for production cache keys.
 
 ## Manifest processing helpers
 
+### Manifest helper registration
+
+`src/manifest/registration.rs` holds the two helpers that bind the manifest's
+own Jinja functions:
+
+- `register_env_function(jinja, env_reader, env_access_policy)` clones the
+  `Arc<EnvReader>` and the policy into the closure and installs
+  `jinja.add_function("env", ...)`. The clone is what lets the registered
+  helper outlive the parse inputs it was built from: MiniJinja keeps the
+  function for the life of the environment, while the reader and the policy
+  arrive as borrows.
+- `register_glob_function(jinja, manifest_root)` builds a `GlobBaseCache` from
+  the optional root and installs `add_function("glob", ...)`. A `None` root
+  leaves relative patterns anchored at the process current directory, which is
+  the composition root's fallback.
+
+`evaluate_manifest` owns the literal registration order: it calls both helpers,
+then installs the stdlib, then calls `register_manifest_vars`, and only then
+`register_manifest_macros` and `expand_foreach`. `from_str_named` reaches that
+function through the budget adapter, which adds exhaustion telemetry for full
+loads.
+
+Argument validation stays in the closure, not in the leaf. The closure is the
+only place holding a MiniJinja `Kwargs`, so reading the optional `default` and
+asserting that no keyword argument is left over happen there, before the leaf
+is reached; a rejected argument therefore never reaches the lookup counter. Two
+different diagnostics come out of that validation, and only the first is
+Netsuke's: a defined non-string `default` is rejected by `default_as_string`
+with the localized `manifest.env.default_not_string`, while a leftover keyword
+is rejected by MiniJinja's own `Kwargs::assert_all_used`, raising
+`ErrorKind::TooManyArguments` with the engine's `unknown keyword argument` text.
+`env_args_message` and the `manifest.env.args_error` key wrap only the first.
+The leaf function is deliberately Jinja-free, taking a plain read closure,
+which is what lets its error mapping be unit-tested directly.
+
 ### Variable registration
 
-`register_manifest_vars` runs inside `from_str_named` immediately after the
-stdlib is installed in the MiniJinja environment and before
-`register_manifest_macros` and `expand_foreach`. Registering the manifest's
-`vars` first is what makes those variables visible to macro bodies, to
-`foreach` and `when` expressions, and to every string field rendered later by
-`render_manifest`.
+`register_manifest_vars` runs after the stdlib is installed in the MiniJinja
+environment and before `register_manifest_macros` and `expand_foreach`.
+Registering the manifest's `vars` first is what makes those variables visible
+to macro bodies, to `foreach` and `when` expressions, and to every string field
+rendered later by `render_manifest`.
 
 The helper is a no-op when the manifest omits `vars`. When the key is present
 it must deserialize to a JSON object; a list or a scalar produces a localized
@@ -5700,38 +8187,104 @@ the caller's document; values are handed to `Value::from_serialize` by
 reference. Keep that shape when editing the helper — cloning the whole object
 reintroduces a deep copy of every nested value on each manifest parse.
 
+### Shared manifest resource budget
+
+`ManifestBudgetLimits` is the configuration value object for the manifest
+resource contract. `ManifestBudget` creates one set of runtime counters for a
+single load and is shared by manifest expansion, expression evaluation, macro
+invocation, and field rendering. The limits cover per-evaluation MiniJinja
+fuel, aggregate manifest fuel, rendered bytes per value and per manifest,
+template source bytes, `foreach` cardinality, and aggregate expanded entries.
+Each evaluation reserves at most the per-evaluation fuel limit; successful
+expressions, macro calls, and renders refund unused fuel to the aggregate
+manifest allowance. The budget is intentionally manifest-local: callers create
+it at the loading boundary and pass the same handle through every stage.
+
+Budget-aware entry points include the `*_with_limits` manifest loaders,
+`expand_foreach_with_budget`, `render_manifest_with_budget`, and
+`render_manifest_for_manifest_query_with_budget`. The ordinary public wrappers
+construct the safe default limits. Build and manifest-query loading use the
+same accounting path. Query loading selects `ManifestLoadMode::ManifestQuery`;
+that mode suppresses budget-exhaustion telemetry at the loading boundary and
+omits the expansion-report observer, while other instrumentation remains owned
+by the boundaries that invoke it.
+
+The runner boundary promotes a budget exhaustion to the typed
+`RunnerError::ManifestBudgetExceeded` variant. Its localized terminal
+diagnostic carries only the fixed stage and numeric limit; JSON serialization
+uses `netsuke::runner::manifest_budget_exceeded`, and no raw error chain is
+exposed.
+
+Configuration reconciliation is owned by the CLI discovery and merge layers.
+Defaults, trusted operator configuration, environment, and explicit CLI values
+establish the effective ceilings. The project file and every file in its
+`extends` chain are treated as project-controlled narrowing requests, so they
+may lower an established value but may not raise it. Malformed, non-positive,
+or unrepresentable project values remain configuration errors rather than being
+discarded. Keep this monotonic rule at the configuration seam; the manifest
+package consumes the already-resolved `ManifestBudgetLimits` and does not
+decide configuration provenance.
+
+### MiniJinja dependency baseline
+
+Netsuke declares MiniJinja 2.24.0 as its compatible 2.x baseline in
+`Cargo.toml`, with the direct `fuel` and `loader` features retained. `fuel`
+backs manifest evaluation's reservation and refund accounting, and `loader`
+supports the environment setup used for manifest templates and macros.
+
+The compatible requirement alone does not identify the engine Cargo selected.
+Validate dependency changes with the committed `Cargo.lock`,
+`cargo metadata --locked`, and `cargo tree -e features -i minijinja`; the
+current lockfile resolves 2.24.0. Do not introduce a MiniJinja 3 prerelease
+through this path.
+
+MiniJinja's 100 MB repeated-string rejection is an upstream operation guard. It
+can fail before Netsuke's rendered-value and aggregate-rendered-output budgets,
+but does not bound aggregate macro output or internal macro and capture
+buffers. Keep those boundaries and the deferred remediation distinct.
+
 ### Template rendering and macro registration
 
-`manifest::jinja_macros::render_template` is the shared rendering boundary for
-manifest strings. It prepends the import declarations registered in the
-MiniJinja environment, then renders the caller's template and context. This
-keeps manifest-defined macros available to target, rule, and variable
-rendering, including caller-block context; use the higher-level
+`manifest::jinja_macros::render_template_with_budget` is the runtime rendering
+boundary for manifest strings, with the private `render_template_at` helper
+carrying the request and stage details. It prepends the import declarations
+registered in the MiniJinja environment, then renders the caller's template and
+context. This keeps manifest-defined macros available to target, rule, and
+variable rendering, including caller-block context; use the higher-level
 `manifest::render_manifest` entry point unless a lower-level expression must be
-rendered directly.
+rendered directly. The `#[cfg(test)] render_template` wrapper exists only for
+tests and supplies a fresh default budget.
 
 `register_manifest_macros` parses the manifest `macros` section and delegates
 each definition to `register_macro`. Registration validates the compiled
-template and installs both the import declaration used by `render_template` and
-the fallback function built by `make_macro_fn` for compiled expressions.
-`make_macro_fn` captures a macro reference and resolves it against the active
-MiniJinja state on each invocation, so it must not be treated as a reusable
-global template cache. Errors remain at the manifest boundary and retain their
-localized failure category.
+template and installs both the import declaration used by
+`render_template_with_budget` and the fallback function built by
+`make_macro_fn` for compiled expressions. `make_macro_fn` captures a macro
+reference and resolves it against the active MiniJinja state on each
+invocation, so it must not be treated as a reusable global template cache.
+Errors remain at the manifest boundary and retain their localized failure
+category. These are the two boundaries
+[Manifest telemetry: template render and macro invocation](#manifest-telemetry-template-render-and-macro-invocation)
+instruments.
 
 ### Manifest telemetry: template render and macro invocation
 
 `src/manifest/jinja_macros/telemetry.rs` instruments the two boundaries above
 with `tracing` spans and `metrics` counters/histograms, kept out of the
-evaluation code so `render_template` and the macro-invocation callback stay
-plain queries. See [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md)
+evaluation code so the runtime render and macro-invocation callbacks stay plain
+queries. Budget exhaustion is a domain result containing only its
+closed-vocabulary kind, stage, and numeric limit. The Jinja adapter maps that
+result to a localized error; the normal full-load boundary records the bounded
+exhaustion metric, while manifest-query loading suppresses this
+budget-exhaustion metric. Other instrumentation remains owned by the boundaries
+that invoke it. See [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md)
 for the decision to separate observability from evaluation this way, and for
 the alternatives it rejected.
 
 There are two independent boundaries, because template rendering and macro
 invocation are different operations with different failure shapes:
 
-- **Template render.** `render_template` composes
+- **Template render.** `render_template_with_budget` composes
   `telemetry::instrument_template_render` around the render. It opens the
   `manifest.template.render` span, increments the
   `netsuke_manifest_template_renders_total` counter, and records the
@@ -5764,27 +8317,29 @@ values, and environment variable names must never reach telemetry. Manifest
 content is caller-controlled and unbounded, so recording it in a metric label
 would make the metric series unbounded, and recording it in a span or event
 risks leaking secrets — environment variable names routinely identify
-credentials. This mirrors the redaction rule `env_var_with` already applies to
-`env()` lookup failures; see [Manifest `env()` reader](#manifest-env-reader).
+credentials. This mirrors the redaction rule `env_var_with_default` already
+applies to `env()` lookup failures, including the fallback-substitution event,
+which carries only the boolean `fallback_used` and neither the variable name
+nor its value; see [Manifest `env()` reader](#manifest-env-reader).
 
 `describe_macro_metrics` and `describe_render_metrics` register each metric's
 description exactly once, guarded by `std::sync::Once`. Neither is called from
 a query function: `describe_macro_metrics` runs when `make_macro_fn` builds a
 macro's registration, which is setup rather than evaluation, so the guard never
 sits on the invocation hot path; `describe_render_metrics` runs inside
-`instrument_template_render`, so `render_template` names only the
+`instrument_template_render`, so `render_template_with_budget` names only the
 instrumentation boundary it composes with and never reaches for the metric
 registry itself.
 
 Per `AGENTS.md`, this module emits through `metrics` and `tracing` but must not
 install a global recorder or subscriber; only the application does that, at
-startup. Tests follow the same rule: `src/manifest/tests/macros_telemetry.rs`
+startup. Tests follow the same rule: `src/manifest/tests/macros/telemetry.rs`
 (the render boundary) and `src/manifest/tests/macro_invocation_telemetry.rs`
 (the macro-invocation boundary) each drive a local
 `metrics_util::debugging::DebuggingRecorder` through
 `metrics::with_local_recorder`, and capture tracing events with the workspace's
 `with_test_subscriber` helper (see [`tracing_capture`](#tracing_capture)), so
-neither test touches process-wide state. Extend `macros_telemetry.rs` for
+neither test touches process-wide state. Extend `macros/telemetry.rs` for
 render-boundary coverage and `macro_invocation_telemetry.rs` for
 invocation-boundary coverage. The latter also runs a proptest,
 `macro_telemetry_stays_bounded_for_arbitrary_macros`, which asserts the
@@ -5796,9 +8351,11 @@ tests.
 
 #### expand_foreach
 
-`src/manifest/expand.rs` exposes
-`expand_foreach(doc: &mut ManifestValue, env: &Environment) ->
-Result<ExpansionReport>`.
+`src/manifest/expand/` exposes the budget-aware
+`expand_foreach_with_budget(doc: &mut ManifestValue, env: &Environment,
+budget: &ManifestBudget) -> Result<ExpansionReport>`
+boundary. The `expand_foreach` convenience wrapper supplies a fresh default
+budget for callers that do not need to share accounting.
 
 **Purpose:** expands `foreach`/`when` directives in both `targets` and
 `actions` top-level arrays before the manifest is deserialized into the AST.
@@ -5844,6 +8401,8 @@ reaching telemetry.
 - Non-object entries and entries without `foreach` are passed through
   unchanged.
 - Action entries retain their implicit `phony: true` default after expansion.
+- Consumes `foreach` iterators lazily and charges the shared cardinality and
+  expanded-entry limits before cloning or retaining each generated entry.
 - Filtered entries are absent before IR generation, Ninja generation, and
   process execution. Build-time branching belongs inside the recipe command or
   script until a separately designed runtime-condition feature exists.
@@ -5858,9 +8417,9 @@ reaching telemetry.
   `netsuke_manifest_omitted_filtered_entries_total`. These counters have no
   labels and fixed cardinality: their values are aggregate counts, never
   manifest-controlled values. Manifest-query loading supplies no report
-  observer and explicitly suppresses both expansion tracing and these metrics,
-  so it remains telemetry-free. Keep this observer boundary in the loading
-  orchestrator rather than adding side effects to `expand_foreach`.
+  observer and explicitly suppresses both expansion tracing and these metrics.
+  Keep this observer boundary in the loading orchestrator rather than adding
+  side effects to `expand_foreach`.
 
 ### Executable availability predicate
 
@@ -5887,11 +8446,12 @@ whitespace-only `when` values, or type mismatches in the iterable.
 
 `src/runner/dispatch.rs` is private to `runner::run` and owns command routing
 plus successful JSON-result emission. `src/result_json.rs` owns only the
-success envelope; diagnostic serialization remains in `src/diagnostic_json.rs`.
-Both modules reuse only schema-version and generator metadata from the private
-`src/json_envelope.rs` module. Within process execution, `forward_stdout` is
-the single composition point for choosing status-aware or plain child-output
-draining, and its callers select either the terminal or a JSON-mode sink.
+success envelope; diagnostic serialization remains in
+`src/diagnostic_json/mod.rs`. Both modules reuse only schema-version and
+generator metadata from the private `src/json_envelope.rs` module. Within
+process execution, `forward_stdout` is the single composition point for
+choosing status-aware or plain child-output draining, and its callers select
+either the terminal or a JSON-mode sink.
 
 `ExecutionContext` is the private dispatch context shared by build and clean
 handlers. `run_with_ninja_program` constructs it after resolving output mode
@@ -5906,7 +8466,7 @@ deterministic child executable.
 `src/runner/generation.rs` owns the runner's reusable, in-memory generation
 pipeline. It separates manifest loading, IR construction, and Ninja bundle
 synthesis from command reporting and process execution. The read-only pipeline
-is `load_manifest` (optionally observing manifest stages), then
+is `load_manifest_with_limits` (optionally observing manifest stages), then
 `build_graph_for_shell`, then `ninja_text_for_shell`. Its final value is
 `GeneratedNinja`, including any dyndep sidecars, rather than a materialized
 file or a running Ninja process. `generate_ninja_with_shell` is the
@@ -5914,12 +8474,12 @@ orchestration boundary: it selects the legacy `RecipeShell`, performs the shell
 preflight, and carries the same selection through graph lowering and Ninja
 synthesis.
 
-`load_manifest` uses the manifest-query registration: it permits only its
-read-only helpers and rejects template access to the environment, filesystem,
-network, clock, and shell. `load_manifest_for_build` is a separate, explicitly
-effectful loader for build, clean, generate, and graph commands. It receives a
-network policy and enables the full build stdlib; it is not a dry-run or
-background-query primitive.
+`load_manifest_with_limits` uses the manifest-query registration. It permits
+only its read-only helpers and rejects template access to the environment,
+filesystem, network, clock, and shell. `load_manifest_for_build_with_limits` is
+a separate, explicitly effectful loader for build, clean, generate, and graph
+commands. It receives a network policy and enables the full build stdlib; it is
+not a dry-run or background-query primitive.
 
 #### Generation reuse boundary
 
@@ -5929,15 +8489,16 @@ background-query primitive.
   not own `StatusReporter` updates, command dispatch, dyndep publication, or
   Ninja execution.
 - **Permitted call-sites:** `runner::generate_ninja_with_shell` composes the
-  complete shell-aware build pipeline through `load_manifest_for_build` for
-  build, clean, and generate commands. `runner::graph::handle_graph` may stop
-  after the backend-neutral `build_graph` to render the graph, and
-  `runner::help_query` uses `load_manifest` for its read-only target catalogue.
-  Runner unit tests may compose the read-only steps directly. New dry-run or
-  background-generation work may use `load_manifest`, `build_graph_for_shell`,
-  and `ninja_text_for_shell` only within the runner boundary; a public or
-  cross-subsystem consumer requires an explicit application boundary rather
-  than widening these internal helpers.
+  complete shell-aware build pipeline through
+  `load_manifest_for_build_with_limits` for build, clean, and generate commands.
+  `runner::graph::handle_graph` may stop after the backend-neutral
+  `build_graph` to render the graph, and `runner::help_query` uses
+  `load_manifest_with_limits` for its read-only target catalogue. Runner unit
+  tests may compose the read-only steps directly. New dry-run or
+  background-generation work may use `load_manifest_with_limits`,
+  `build_graph_for_shell`, and `ninja_text_for_shell` only within the runner
+  boundary; a public or cross-subsystem consumer requires an explicit
+  application boundary rather than widening these internal helpers.
 - **Composition rules:** command adapters report stages before or after the
   relevant step and wrap `build_graph_for_shell` and dyndep bundle synthesis
   with their respective runner-owned, shell-aware generation telemetry. Only
@@ -5950,9 +8511,39 @@ background-query primitive.
   sidecars; the read-only steps never write files, start processes, or invoke
   effectful template helpers.
 
-### Module: `runner::recipe_shell_telemetry`
+### Module: `runner::manifest_structure_telemetry`
 
-`src/runner/recipe_shell_telemetry.rs` owns bounded observability for shell
+`src/runner/manifest_structure_telemetry.rs` is the crate-internal module
+declared by the private `mod manifest_structure_telemetry;` in
+`src/runner/mod.rs`. It owns bounded structural telemetry for a loaded
+manifest: fixed-vocabulary aggregate counts derived from the manifest shape
+only. It never emits manifest text, paths, recipe contents, variable values,
+macro bodies, or descriptions, because rendered manifest values can carry
+secret material interpolated through `env()`.
+
+`record_manifest_structure(manifest: &NetsukeManifest)` is the single entry
+point, called only from `src/runner/graph/generation/mod.rs` inside
+`generate_ninja_with_shell`, immediately after manifest loading by
+`load_manifest_with_stage_reporting` and before graph construction. It emits one
+`TRACE` span named `runner.manifest.structure`, one `TRACE` event with the
+same six fixed integer fields (`variable_count`, `macro_count`, `rule_count`,
+`action_count`, `target_count`, `default_count`) and message
+`manifest structure summary`, and one increment of the unlabelled counter
+`netsuke_runner_manifest_structures_total`. `describe_metrics()` guards the
+`describe_counter!` registration with a `std::sync::Once`.
+
+The drained-snapshot boundary is `ConfigMetricsRecorder` in
+`src/observability/recorder/mod.rs`: `accepts_name` recognizes the counter and
+`exact_labels(key, &[])` keeps only the unlabelled series, rejecting any
+labelled variant. An inline `#[cfg(test)] mod tests` asserts the emission site
+records one unlabelled series and the event carries the six known counts with
+no fixture sentinel text. The governing decision record is
+`docs/adr-009-bounded-redacted-manifest-telemetry.md`, which forbids unbounded
+or caller-controlled values in metric labels and trace fields.
+
+### Module: `runner::recipe_shell::telemetry`
+
+`src/runner/recipe_shell/telemetry/mod.rs` owns bounded observability for shell
 resolution, the explicit Windows Bash preflight, and complete generated-recipe
 runner operations. `LegacyRecipeOperation` distinguishes `build` from
 `ninja_tool`; the latter describes a Ninja tool invocation and does not claim
@@ -6044,28 +8635,50 @@ disabled, so this event cannot corrupt its diagnostic output.
   immutably. New reporter kinds or selection policies belong in this module
   beside the mode-selection logic, colocated with the output-mode policy.
 
-### Module: `runner::process::ninja_program`
+### Module: `runner::process::ninja::status`
 
-`src/runner/process/ninja_program.rs` owns the executable-resolution boundary.
+`src/runner/process/ninja/status.rs` parses Ninja's default `NINJA_STATUS`
+format, `[current/total] description`, and rejects malformed, regressive, or
+total-inconsistent updates before they reach the reporter. The adjacent
+streaming adapter retains at most 512 bytes for each candidate line. Once a
+line exceeds that bound, it forwards every byte unchanged, skips progress
+parsing until the line's newline, and then resumes parsing. A customized
+`NINJA_STATUS` template that retains the `[current/total] description` shape
+continues to update progress; unsupported shapes produce no task-progress
+updates without affecting child output. Extend `runner::process::ninja::status`
+if alternate formats must be recognized; do not loosen the streaming adapter's
+bound. The unlabelled `netsuke_ninja_status_oversized_lines_total` counter
+records each oversized candidate line. The Unix process-boundary regression
+test in `tests/ninja_status_process_rss_tests.rs` runs each measurement in a
+fresh test-worker process with exactly one Netsuke child. The worker streams
+each 256 MiB fake-Ninja stdout stream to a temporary file and, after the child
+exits, safely records its resource usage through `RUSAGE_CHILDREN` rather than
+measuring the parent test process. It compares progress parsing with
+`--progress never` and permits a fixed 16 MiB overhead, rejecting memory growth
+proportional to the payload.
+
+### Module: `runner::process::ninja::program`
+
+`src/runner/process/ninja/program.rs` owns the executable-resolution boundary.
 It is the only runner adapter that reads `NETSUKE_NINJA`, validates empty and
 non-UTF-8 values, selects the default `ninja` fallback, and records the
 selected source at debug level. Process construction uses the resolved path
 exported by this module and must not interpret the environment override
 independently.
 
-`src/runner/ninja_process_adapter.rs` owns the one-way translation from `Cli` to
+`src/runner/ninja/process_adapter.rs` owns the one-way translation from `Cli` to
 `NinjaProcessOptions` and the public CLI-facing wrappers. It clones the
 already-validated `Cli::directory` into the options' UTF-8 `working_dir`; the
 CLI parser, configuration decoder, and environment extractor reject non-UTF-8
 values before this adapter runs. The process module remains parser-independent;
 callers without CLI state construct `NinjaProcessOptions` directly.
 
-### Module: `runner::process::command_logging`
+### Module: `runner::process::logging`
 
-`src/runner/process/command_logging.rs` owns the structured logging contract
-for all internal Ninja process invocations. `CommandLogContext` is the shared
-log payload builder for a prepared `Command`; it records `program_display` for
-the `ninja_program` field and `arg_count` for stable argument cardinality.
+`src/runner/process/logging.rs` owns the structured logging contract for all
+internal Ninja process invocations. `CommandLogContext` is the shared log
+payload builder for a prepared `Command`; it records `program_display` for the
+`ninja_program` field and `arg_count` for stable argument cardinality.
 `from_command` normalizes non-UTF-8 program paths through lossy UTF-8
 conversion, replacing invalid byte sequences with Unicode replacement
 characters in `program_display`. It redacts sensitive arguments and stores the
@@ -6118,9 +8731,9 @@ reads `cli.json` itself.
 ### Module: `runner::process::redaction`
 
 `src/runner/process/redaction.rs` owns the argument-redaction boundary that
-`command_logging` consumes. `CommandArg` is a newtype over a single
-command-line argument string; it gives the redaction helpers a dedicated type
-to operate on instead of passing bare `String` values around.
+`logging` consumes. `CommandArg` is a newtype over a single command-line
+argument string; it gives the redaction helpers a dedicated type to operate on
+instead of passing bare `String` values around.
 
 `CommandArg` carries no redaction guarantee of its own. The same type holds
 both the raw arguments read from `Command::get_args` and the values returned by
@@ -6151,9 +8764,9 @@ constructed by `BuildTargets::new` and read through `as_slice`. It exposes no
 so it was removed; call `as_slice().is_empty()` where that question needs
 asking.
 
-### Module: `runner::process::command_env`
+### Module: `runner::process::environment`
 
-`src/runner/process/command_env.rs` composes the environment applied to a
+`src/runner/process/environment.rs` composes the environment applied to a
 spawned Ninja command as data, rather than by mutating the parent process.
 
 `CommandEnv` carries overrides as a list of key/value pairs:
@@ -6219,7 +8832,7 @@ The explicit request APIs compose on top of `CommandEnv`: `NinjaBuildRequest`/
 `NinjaToolRequest` carry `env: &CommandEnv` and `stderr_mode: StderrMode`
 fields alongside the program, `NinjaProcessOptions`, and build file, and are
 consumed by `run_ninja_with`/`run_ninja_tool_with`. The convenience wrappers
-`run_ninja`/`run_ninja_tool` live in `src/runner/ninja_process_adapter.rs`,
+`run_ninja`/`run_ninja_tool` live in `src/runner/ninja/process_adapter.rs`,
 call these with `CommandEnv::inherit()`, and derive the `stderr_mode` policy
 from the CLI via `StderrMode::from_json_enabled(cli.json)`, reproducing
 production behaviour; tests reach for `run_ninja_with`/`run_ninja_tool_with`
@@ -6232,19 +8845,68 @@ which Cargo builds as its own integration-test target; Proptest therefore
 persists its failing seeds to `env_path_property_tests.proptest-regressions`
 beside it. The named cases sit in `tests/env_path_tests.rs`.
 
+## Canonical build-edge storage
+
+`BuildGraph` in `src/ir/graph/mod.rs`, re-exported through `src/ir/mod.rs`,
+stores each logical build edge once. `src/ir/graph/mod.rs` holds the
+authoritative live contract. The fields are
+`pub actions: IrHashMap<String, Action>`, a private
+`edges: EdgeArena<BuildEdge>` arena, a private
+`targets: IrHashMap<Utf8PathBuf, EdgeId>` output index, and
+`pub default_targets: Vec<Utf8PathBuf>`. Both aliases live in the same module:
+`IrHashMap` is `HashMap` in production and a bounded model under Kani, while
+`EdgeArena<T>` is `Vec<T>` in production and `IrVec<T>` under Kani.
+
+`EdgeId(usize)` is the stable identity of one canonical edge: an index into the
+arena. The type is `pub`, but its field is private, so callers obtain one only
+from `insert_edge` or `edge_id_for_output` and otherwise compare or copy it.
+Every explicit and implicit output alias is indexed to the same `EdgeId`, so a
+multi-output target does not duplicate the edge per output.
+
+This is a public-surface change: the map was once a public field from output
+path to `BuildEdge`, and it is now private behind the `EdgeId` index.
+`insert_edge` is the only supported insertion path. Code that read or wrote
+that map directly must use `edges()`, `edge_id_for_output`,
+`target_for_output`, or `output_paths()` instead, and code that inserted into
+it must call `insert_edge` and handle the returned
+`IrGenError::DuplicateOutput`.
+
+`insert_edge` validates before mutating: it returns
+`Err(IrGenError::DuplicateOutput)` and leaves the arena and the index unchanged
+when an explicit or implicit output collides with an alias already on the edge
+or already in the graph. The private `duplicate_output` pre-pass keeps the
+mutation all-or-nothing. Under `#[cfg(kani)]` `insert_edge` is infallible and
+returns an `EdgeId` directly, because the bounded model has no duplicate path.
+
+Callers iterate canonical edges with `edges()`, which yields `&BuildEdge` in
+arena insertion order. An alias resolves with
+`edge_id_for_output(&Utf8Path) -> Option<EdgeId>` for the identity alone, or
+`target_for_output(&Utf8Path) -> Option<(&Utf8Path, &BuildEdge)>` for the
+stored key and the producing edge; `output_paths()` iterates every alias key.
+The private `insert_canonical_edge` pushes into the arena and then calls
+`index_output_aliases`. The Kani and non-Kani lookups stay separate: the Kani
+variants match bounded path keys through `IrHashMap::get_key_value_path`, and
+`index_output` asserts a one-byte key under `#[cfg(kani)]` because those keys
+compare one byte at a time. `src/ninja_gen` iterates `graph.edges()` — for
+example `render_edges` in `src/ninja_gen/dyndep.rs`, plus `path_syntax.rs` and
+`mod.rs` — and `src/ir/cycle*` resolves dependencies through the output index.
+
+This guide is not the API reference: the unstable Rust API is recorded here for
+callers who use it anyway, and [Canonical build graph](#canonical-build-graph)
+carries the caller-facing description.
+
 ## IR cycle detection
 
 ### Module: `ir::cycle`
 
-`src/ir/cycle.rs` provides the cycle-detection entry point for the IR target
-graph. It delegates depth-first traversal to the private sibling
-`src/ir/cycle_detector.rs` and path lookup/canonicalization helpers to
-`src/ir/cycle_support.rs`.
+`src/ir/cycle/mod.rs` provides the cycle-detection entry point for the IR
+target graph. It delegates depth-first traversal to the private sibling
+`src/ir/cycle/detector.rs` and path lookup/canonicalization helpers to
+`src/ir/cycle/support.rs`.
 
-**Entry point:**
-`analyse(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetectionReport`
+**Entry point:** `analyse(graph: &BuildGraph) -> CycleDetectionReport`
 
-Accepts the target map produced by IR lowering and returns a
+Accepts the canonical `BuildGraph` produced by IR lowering and returns a
 `CycleDetectionReport` containing:
 
 - `cycle: Option<Vec<Utf8PathBuf>>` — the first dependency cycle found, in
@@ -6259,8 +8921,8 @@ Traversal state is managed by the private `CycleDetector` struct, which owns
 the DFS recursion stack and per-node `VisitState` map. The API surface for
 callers within the `ir` module is:
 
-- `CycleDetector::new(targets)` — borrows the target map for the lifetime of
-  the traversal.
+- `CycleDetector::new(graph)` — borrows the graph for the lifetime of the
+  traversal.
 - `CycleDetector::detect()` — iterates over all nodes in sorted order and
   returns the first detected cycle, or `None`.
 
@@ -6293,7 +8955,7 @@ application-owned recorder boundary and end-of-run snapshot policy.
 
 ### Configuration-load boundary contract
 
-`ConfigurationLoadContext` in `src/config_load.rs` is the private
+`ConfigurationLoadContext` in `src/config_load/mod.rs` is the private
 startup-orchestration input bundle: parsed `cli::Cli`, parsed `ArgMatches`,
 fallback `DiagMode`, and `StartupWriter`. `resolve_configuration` owns one
 configuration-load attempt. It starts the injected clock immediately before
@@ -6310,7 +8972,7 @@ The boundary receives `&impl monotony::MonotonicClock`. Production passes
 do not call `Instant::now` or introduce a configuration-specific clock
 abstraction.
 
-`src/observability.rs` owns the phase-level instrumentation for the two
+`src/observability/mod.rs` owns the phase-level instrumentation for the two
 configuration-loading boundaries in `src/main.rs`. Keep configuration loading
 itself as a plain query: compose this instrumentation only at the CLI
 composition root. Other subsystem boundaries retain their local telemetry
@@ -6390,7 +9052,658 @@ user-facing diagnostic path (stderr for human output and structured JSON for
 JSON output), not in a structured tracing field or metric label. Do not add
 paths, configuration values, or error text as metric labels.
 
+## Test timeouts: the tiers this repository sets
+
+Four independent timers can end a test run. The canonical statement of the
+ordering between them lives in `leynos/shared-actions`' users' guide, under
+"Test timeouts: four tiers, outermost last"
+([`docs/users-guide.md`][shared-actions-users-guide]), and the
+`generate-coverage` README's guidance points there rather than restating it, so
+that a second copy cannot drift from the contract that enforces it. That guide
+does not yet carry the report-phase term or the second watchdog window a
+`doctests: 'true'` step arms, so for the coverage contract the arithmetic below
+is the statement of record, and it is the one to read until both readings are
+fed back upstream.
+
+[shared-actions-users-guide]: https://github.com/leynos/shared-actions/blob/main/docs/users-guide.md#test-timeouts-four-tiers-outermost-last
+
+All four tiers are set here.
+
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                                     |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | ----------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5); 600 s (60 s x 10) for the mutation compile gate |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 780 s (13 m) in CI; unset locally                                 |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m), armed twice per coverage step                     |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 90 m                                                              |
+
+*Table: the timers that can end a run, innermost first. The watchdog is one
+tier but not one window: the coverage step here passes `doctests: 'true'`, so
+the shared action runs `cargo llvm-cov nextest` and then an uninstrumented
+`cargo test --doc`, each arming the watchdog separately. Issue 715 moved two of
+the four: `global-timeout` fell so the watchdog still covers the sum it starts,
+and the ceiling rose to 90 m to contain both windows. The per-test allowance
+and the watchdog's 1,800 s keep the values they already had.*
+
+### The per-test budget is a product, not a period
+
+`terminate-after` counts warning periods, so the budget a test actually gets is
+`period` multiplied by it. Every period here is 60 s, so reading the period
+alone would report a 60 s allowance where the real figure is 600 s. Any
+comparison against the tiers above rests on that reading, and the contract
+asserts it explicitly rather than leaving it implied.
+
+There are two such figures and the larger one governs. `[profile.default]`'s own
+`slow-timeout` gives five periods — 300 s — to every test no override matches,
+which is almost all of them. One override widens it: the mutation compile gate
+takes ten periods, 600 s, because it compiles all 18 patched trees through the
+Kani frontend into a target directory no cache restores. A whole-run budget has
+to sit above the largest allowance in the file, so 600 s is the figure the
+ordering below is written against, not the 300 s most tests get.
+
+That override is the targeted, written-rationale case `.config/nextest.toml`'s
+own policy asks for, and it is worth reading as the worked example of it. The
+gate passed twice at 257.7 s and 261.5 s and then failed at 300.008 s on a head
+whose only diff was eight lines of Markdown. The code was not slow; the cap was
+too near the cost, and a margin of 38 s is the difference between one runner
+and another rather than a budget. The widened allowance is a chosen figure
+inside the ordering rather than at its edge: what
+`global-timeout > largest per-test allowance` permits at 60 s periods is up to
+720 s under the 780 s budget, so the 600 s leaves 180 s of margin and the two
+tiers still bound each other. That override binds only because its filter
+carries the test's module path; for a period it did not, and the two passing
+runs above were read as evidence the widened allowance was in force when both
+sit inside the 300 s default anyway. See "nextest configuration" for the rule.
+
+### The whole-run budget, and how 13 minutes was arrived at
+
+`[profile.ci]` sets `global-timeout = "13m"`. Until it was set the watchdog was
+doing tier two's job as well as its own, because a run whose tests each stay
+inside their allowance can still exceed the watchdog between them, and the
+failure then names `cargo` rather than the run.
+
+That profile exists only to carry this budget and inherits everything else from
+`default`, including its `[[overrides]]`: a nextest profile takes the default
+table wherever it declares nothing of its own, so the per-test allowances still
+apply under it.
+
+#### Why the budget is not in `[profile.default]`
+
+`default` is what every local `make test` runs under, and a developer's host is
+contended in a way a CI runner is not. The packaging smoke test still spawns
+Cargo, so its nested invocation can queue behind the package-cache lock of
+other builds on the machine. The `harness_compiles_under_a_split_build_dir`
+parser test no longer does: it reads recorded Cargo JSON and pays no
+nested-build cost. The companion
+`split_build_fixture_compiles_through_the_direct_rustc_harness` intentionally
+retains a small isolated nested build to cover the complete Cargo-to-rustc
+boundary and is serialized with the other child-Cargo tests.
+
+A whole-run cap in `default` would have ended such a run against a figure read
+from CI logs, which have nothing to say about local contention, and the figure
+would have been blamed rather than the contention. So the cap lives in the
+profile CI selects and local runs keep the per-test allowance and no whole-run
+cap.
+
+#### How CI selects it
+
+`ci.yml` and `coverage-main.yml` both set `NEXTEST_PROFILE: ci` at job level.
+The shared `generate-coverage` action takes no profile input, so the
+environment variable is the only lever, and it is set beside
+`NEXTEST_TEST_THREADS`, which the same jobs already resolve that way.
+
+`tests/workflow_contracts/whole_run_profile_test.py` holds the two halves
+together. It asserts the profile each lane actually resolves across all three
+environment scopes, that the profile it names is the one carrying the budget,
+and that `default` carries none. Without it, deleting the variable from a job
+would leave that lane uncapped while every other assertion about the budget
+still passed, because the rest of the contract reads the budget out of the file
+and never asks whether a run selects it.
+
+The Windows lane in `ci-windows.yml` runs nextest without selecting the
+profile, so it has no whole-run budget. The sample below holds no Windows
+figures, and a cap belongs above a measurement rather than beside one.
+
+The budget bounds the instrumented run alone. The coverage action then runs an
+uninstrumented `cargo test --doc` pass, which is not a nextest run, so nothing
+in `.config/nextest.toml` bounds it and its own cargo watchdog does.
+
+The value was measured, not assumed. The sample is the last 59 runs of each
+workflow as of 2026-09-15, and for the ten longest coverage steps in each lane
+the step's log was read to separate the build, the test run, and the report
+phase that follows it.
+
+| Lane                                  | Longest build | Longest test run | Longest report phase | Run         |
+| ------------------------------------- | ------------- | ---------------- | -------------------- | ----------- |
+| `ci.yml` `build-test`                 | 208 s         | 452 s            | 274 s                | 34914144521 |
+| `coverage-main.yml` `coverage-upload` | 242 s         | 320 s            | 86 s                 | 34920593593 |
+
+*Table: the three phases inside one coverage step. The build is timed from
+`cargo llvm-cov`'s first line to nextest's "Starting N tests"; the test run is
+nextest's own reported figure, which is what `global-timeout` bounds; and the
+report phase is what `cargo llvm-cov` spends after that clock stops, merging
+profile data and writing `lcov.info`. The next-longest report phases measured
+91 s on `ci.yml` run 34897199699 and 86 s again on `ci.yml` run 34920593593.
+The trunk lane's longest build and longest test run fall on different runs; its
+longest test run is 320 s on run 34240220630.*
+
+Thirteen minutes clears the longest test run in the sample by 328 s. It also
+has to sit between its neighbours, and does:
+
+```text
+global-timeout > largest per-test allowance
+780 s          > 600 s
+
+watchdog      >= global-timeout + termination + cold build + report
+1,800 s       >= 780 s + 70 s + 600 s + 300 s = 1,750 s
+```
+
+The termination allowance is the largest `grace-period` the configuration sets,
+or nextest's 10 s default where it sets none, as here, plus a 60 s safety
+margin. The cold-build allowance is 600 s against a 242 s worst measured build,
+because every run in the sample had a warm compiler cache and so none of them
+measured the case the allowance is for. The report allowance is 300 s against
+the 274 s worst measured phase, for the same reason: the sample's runs measured
+a warm profile merge and the allowance is for the case none of them reached.
+
+The report phase is a separate term from the termination margin, and neither
+subsumes the other. The termination margin covers what nextest does after a
+*cancellation* -- the teardown and report writing that follow its grace period.
+The report allowance covers a different program's work after a *normal* finish.
+A run can do one, the other, or both.
+
+Thirteen minutes is the largest whole number of minutes the watchdog can carry.
+The non-budget terms sum to 970 s, so the largest coverable budget is 830 s; 14
+m needs 1,810 s and 15 m needs 1,870 s, both above the watchdog. The estate's
+fifteen-minute margin carried above the worst measured run, rather than made
+the budget itself, gives 1,352 s, which needs a watchdog above 1,800 s and then
+a ceiling above 90 minutes; the gain would be a longer wait for a legible
+failure, so the tighter budget is kept.
+
+Its purpose is that failure's legibility rather than the saving: a run that
+overruns now ends with nextest naming the run, inside a watchdog that still has
+room to report it.
+
+[Issue 715](https://github.com/leynos/netsuke/issues/715) carried two sizing
+faults into this budget, and both are now fixed here. The first was the report
+phase, which the watchdog's four-term sum above now holds. The second was
+cardinality: the model counted one watchdog window per coverage step, and a
+step passing `doctests: 'true'` arms two. Both readings were measured here and
+neither is stated upstream: `leynos/shared-actions` holds the canonical
+ordering and will need the report phase and the second window written into its
+own users' guide and `generate-coverage` README, which is a change to make in
+that repository rather than this one. Until it lands, this guide's arithmetic
+and the shared users' guide disagree by one report term and one window, and
+this repository's contract is the stricter of the two.
+
+### The clocks do not start together
+
+The job timer starts when the job starts, before the checkout, the toolchain
+setup and the linting that precede coverage, and it is still running through
+whatever follows. The watchdog starts when `cargo` does. So a ceiling merely
+above the watchdog still cancels the job before the watchdog can report an
+overrun, and a cancellation discards the log that would have explained it.
+
+The ceiling is therefore sized as the watchdog plus the work outside its
+window, measured from the worst of many runs rather than one, and across runs
+of every conclusion rather than successful ones only. A run cancelled at its
+ceiling is the very case the sizing exists to prevent, so excluding it would
+size the ceiling against the runs that never needed it.
+
+| Lane                                  | Worst coverage step | Worst whole job | Widest gap | Run         |
+| ------------------------------------- | ------------------- | --------------- | ---------- | ----------- |
+| `ci.yml` `build-test`                 | 1,078 s             | 1,593 s         | 648 s      | 34914144521 |
+| `coverage-main.yml` `coverage-upload` | 781 s               | 824 s           | 119 s      | 34920593593 |
+
+*Table: measured coverage-step and whole-job durations. The gap is the job's
+duration less its coverage steps, so it is the work the job timer bounds and
+the watchdog does not. The worst step, the worst job, and the widest gap need
+not fall on the same run: the `ci.yml` gap is from run 34920593696, whose
+coverage step did not run at all, and the `coverage-main.yml` gap from run
+33411190301.*
+
+The sample is the last 59 runs of each workflow as of 2026-09-15: 42 successful
+and 17 failed for `ci.yml`, 58 successful and 1 failed for `coverage-main.yml`.
+Neither history contains a cancelled or timeout-terminated run, so no run in
+the sample was ended by any of these timers. One `coverage-main.yml` run in the
+sample carried a coverage step and no nextest output at all, so a sample of
+failures can measure nothing.
+
+The widest gap is 648 s, so the contract allows 15 minutes, 252 s above it.
+Adding a 15-minute margin above the sum it contains gives the requirement:
+
+```text
+ceiling >= 2 x 1,800 s + 900 s + 900 s
+        = 5,400 s (90 minutes)
+```
+
+The first term is counted twice because both lanes pass the action's `doctests`
+input, so an uninstrumented `cargo test --doc` follows the instrumented run
+inside the same step and each invocation arms the watchdog separately; the log
+prints `cargo watchdog budget: 1800.0s` once per window, twice over on every
+run measured. The second term is the 900 s of measured work outside those
+windows and the third is the estate's fifteen-minute margin carried above the
+sum rather than made part of it.
+
+Both jobs therefore set `timeout-minutes: 90`. The 60 minutes they used to set
+fell 1,800 s short of the two-window requirement -- exactly one watchdog
+window's worth -- so the ceiling would have cancelled those jobs at the moment
+the second window's watchdog would have reported its overrun. That is the shape
+of [`wildside` #486](https://github.com/leynos/wildside/issues/486), where a
+ceiling equal to the watchdog it contained cancelled the job at the moment the
+watchdog would have reported it: the report is the only thing that makes an
+overrun actionable, and a cancellation discards it. The doctest pass measured
+134 s on the longest run, so no run has actually reached either limit; the
+sizing was what was wrong. None of those runs was genuinely cold either, and
+one run is the coldest seen so far, not a measurement of the cold case.
+
+### The workflow-contract gate collects docstring examples
+
+`make test-workflow-contracts` passes `--doctest-modules`, so the examples in
+the modules under `tests/workflow_contracts` are executed rather than read.
+Without it pytest collects test functions only, and every `>>>` in those
+modules is prose that nothing runs. Collection rose from 513 tests to 516 when
+the flag went in, and one of the three examples was wrong and had never been
+run.
+
+The flag collects examples only in the modules pytest already walks, so the
+flag and the path are one mechanism: pointing the run elsewhere collects none
+of these examples, and `tests/workflow_contracts/doctest_collection_test.py`
+asserts both against the recipe `make` actually runs. It reads the target's
+tab-indented lines through `tests/workflow_contracts/makefile_recipes.py`
+rather than searching the file, because a flag named in a comment, in a
+variable, or in a neighbouring target is a flag the gate never passes. That
+distinction is the point of the contract: deleting the flag changes no test and
+breaks no import, so the suite would pass exactly as before while the examples
+silently stopped running.
+
+Doctests elsewhere are a separate matter. Rust examples run under
+`make doctest`, which nextest cannot execute, and twelve example lines under
+`scripts` and `.github/scripts` are collected by no target at all, since no
+pytest invocation has those paths in its collection path.
+
+### The contract
+
+`tests/workflow_contracts/timeout_ordering_test.py` asserts the ordering by
+value over every step invoking the coverage action, in both the `.yml` and
+`.yaml` extensions. It reads the watchdog from the step, then the job, then the
+workflow, as GitHub resolves it, so a lane that overrode the job value is
+judged as it will run and a workflow-level value is not missed. It requires
+every lane to set the watchdog explicitly rather than inherit the action's
+default, and every such job to declare a ceiling, since a job without one
+silently takes GitHub's six-hour default.
+
+`tests/workflow_contracts/timeout_budget_properties_test.py` holds the readings
+themselves, driven with synthetic nextest configurations and synthetic
+workflows rather than the repository's own. Every `terminate-after` here is 5
+or 7 and every period is 60 s, so a reading that confused the two would still
+order the real tiers correctly; against generated inputs it does not. That
+module also fixes the error paths, the malformed-workflow cases, and the
+watchdog's resolution across all three environment scopes.
+
+Four modules sit behind that contract, split by what they read.
+`tests/workflow_contracts/coverage_lanes.py` traverses the workflows: it finds
+the coverage steps and returns one lane per watchdog window, so a step passing
+`doctests: 'true'` yields two lanes sharing one coordinate, each carrying its
+job's ceiling and condition, the watchdog in force, and the nextest profile it
+selects. `tests/workflow_contracts/lane_environment.py` resolves those last two
+out of the step, job and workflow environments, in that order, since it is the
+same walk for both: `watchdog_of` returns a budget in seconds and
+`nextest_profile_of` a profile name, each reporting a blank as nothing set, and
+`WatchdogValueError` separates a watchdog the action cannot read from one no
+scope declares. `tests/workflow_contracts/nextest_budgets.py` holds the nextest
+arithmetic: the duration parser, the per-test and whole-run budgets, and the
+termination allowance. `tests/workflow_contracts/timeout_budgets.py` holds the
+values they compare against. None imports the others' subject.
+
+The environment walk is one module rather than two readings because its
+precedence boundary is the subtle part and is worth stating once. GitHub takes
+the most specific declaration, so a step masks its job and a job masks its
+workflow, and a declared blank masks them just as a value does. Getting that
+wrong in either reading credits a lane with a budget or a profile the `cargo`
+invocation never received.
+
+The nextest configuration is parsed with `tomllib` rather than matched as text.
+A text match finds a key inside a comment, inside a `filter` string, or in a
+table nextest never consults, and reports a budget the runner does not use.
+`terminate-after` is optional, and a `slow-timeout` without it marks a test
+slow and never stops it, so the reading refuses that form rather than reporting
+one period as the budget. Every table in `.config/nextest.toml` sets it
+explicitly, so no value here changes.
+
+The profile's own `slow-timeout` is asserted separately from its overrides. An
+override bounds the tests its filter matches and the profile's own bounds the
+rest, so deleting the base allowance while leaving an override behind would
+still report a bounded subset while every test the override does not match ran
+with no bound at all.
+
+### Trybuild targets, and the list that rots apart
+
+A per-test `terminate-after` and a name-based override list are a pair that
+drifts. The list is written once against the names of the day and is never
+re-derived, and neither a passing run nor a green gate notices a target that
+has fallen out of it, because the cost only appears on a cold cache. A trybuild
+target builds a scratch crate against this workspace's dependency graph, so it
+is the cost that overruns first.
+
+`tests/workflow_contracts/trybuild_override_test.py` discovers the targets from
+the tree rather than listing them, and requires each to be named in an
+override. This repository has none today, and the contract pins that: an empty
+set is not a reason to omit the rule, it is the state the rule must notice
+leaving. A harness added tomorrow inherits the 300 s base allowance, which is
+sized for a test that compiles nothing.
+
+Targets are found as Cargo auto-discovers them
+(`tests/workflow_contracts/cargo_test_targets.py`): `tests/<name>.rs` is a
+target called `<name>`, and `tests/<name>/main.rs` is a target called `<name>`
+compiling every `.rs` file beneath that directory. An override covers a target
+only when its filter selects the binary exactly and without negation:
+`binary(=<name>)` or `binary_id(=netsuke::<name>)`. A substring selector such as
+`binary(<name>)` and any filter containing `not` or `!` count as covering
+nothing.
+
+The discovery reads what a file constructs, not what it mentions.
+`tests/sha2_migration_guard_tests.rs` documents at length why a trybuild
+harness was removed during the Polonius migration, and a text match would
+report it as a target that exists.
+
+The lane reading takes its documents as a parameter, defaulting to the
+repository's own workflows. Reading the filesystem happens at one named
+boundary rather than inside the derivations, which is what makes the synthetic
+cases possible. That boundary is
+`tests/workflow_contracts/workflow_loading.py`, which the rest of the suite
+already reads workflows through: this module parsed them a second time with
+`yaml.safe_load`, a YAML 1.1 loader that reads the `on:` trigger key as `True`,
+and reported an unreadable file with whatever exception the failure happened to
+raise. A missing file, bytes that do not decode, and text that is not YAML now
+all arrive as `WorkflowReadError`, naming the path. So does a workflow
+directory that is absent or is not a directory: `Path.glob` yields nothing for
+either, so the reading returned an empty mapping and every lane assertion
+passed having read no workflow at all.
+
+Durations are read the way nextest reads them, with `humantime`'s grammar,
+measured against humantime 2.3.0 rather than assumed. That is the version the
+lockfile of the pinned `cargo-nextest` release resolves, reached through
+`humantime_serde`. A value may carry a fractional part with whitespace
+tolerated around the point, so `1.5m` and `1 . 5 m` are both ninety seconds, and
+`wk`, `wks`, `yr`, and `yrs` are accepted alongside the longer spellings, as
+are `nanos` and `millis`, read from `humantime`'s own unit table rather than
+guessed at: it takes three spellings each for nanoseconds and milliseconds, and
+this reader had two of each. Whitespace inside the number is ignored as well, so
+`1 0s` is ten seconds, and a bare `0` is the one duration that needs no unit,
+special-cased by `humantime` before its parser reads a character. The reader
+had refused all of those, which is the fault it exists to avoid: a
+configuration the runner is happy with, called broken here. What it still
+refuses is what `humantime` refuses, checked the same way: a point with no
+whole part before it or no digit after it, two points, a signed value, a digit
+separator, and any other number carrying no unit.
+
+The fractional arithmetic is `humantime`'s own, ported rather than
+approximated. It carries a fraction as a numerator over a power of ten and
+divides with a remainder check, so a fraction that is not a whole step of its
+unit is an error rather than a rounded value. Two consequences a float reader
+cannot express: there is no step below a nanosecond, so `0.5ns` is refused
+outright; and for hours and longer the division is over whole seconds, so
+`0.123h` is refused where `0.123s` is exact. Reading those as floats gave 5e-10
+and 442.8, numbers the runner would never have started with, and the ordering
+would then have been asserted over a budget nextest rejects.
+
+The reader is measured against the estate's humantime differential, a set of
+seventy-two inputs with humantime 2.3.0's verdict and value for each, run by
+feeding them to a probe crate pinning that version and comparing. Verdict and
+value both count: a reader that accepts the right set and scales a unit wrongly
+has not passed. It read twenty-two disagreements against that set and now reads
+none. Every one was in the same direction, accepting a duration nextest refuses
+at startup, and they fell into three families.
+
+The first is the character classes, and it is why neither `\s` nor `\d` appears
+in the grammar. Python's `\s` is Rust's `char::is_whitespace` plus U+001C to
+U+001F, the file, group, record, and unit separators, and `str.strip` and
+`str.split` carry the same four-character excess. A reader spelling its class
+that way skips those four wherever it skips a space, so `1\x1cs` read as one
+second and `45m\x1f` as forty-five minutes. Python's `\d` matches every Unicode
+decimal digit where humantime matches `'0'..='9'`, so `1٠s`, an
+ordinary-looking number with one Arabic-Indic character in it, read as ten
+seconds. Both classes are enumerated in `nextest_durations.py`, the trim takes
+the same set, and `nextest_duration_test.py` pins each class against Python's
+in both directions over the first 0x11000 code points, so a change in either
+language's notion of whitespace or of a digit fails there rather than in a
+runner.
+
+The second is the 64-bit range. humantime accumulates in `u64` and checks every
+product and every sum; Python's integers do neither, so `18446744073709551616s`
+and `584542046091y` were read as numbers. `nextest_totals.u64` makes each of
+those checks explicit.
+
+The third is the carry, and it is why the total is a pair rather than a count
+of nanoseconds. humantime keeps whole seconds and a nanosecond part, both
+`u64`, and a value can be refused for overflowing the nanosecond part while its
+total sits far inside the seconds range: `18446744073709551615ns` twice over is
+about 1,169 years, nowhere near the ceiling, and is refused all the same. It
+also declines to normalize a nanosecond part of exactly one second, leaving
+that to the conversion which follows, which carries it and aborts when the
+carry overflows. One mechanism, two answers: `0.5s 0.5s` is one second while
+`18446744073709551615s 500ms 500ms` is refused. A reader made merely stricter,
+refusing every carry, fails the first, so both are in the contract.
+
+humantime carries in two places, its `add_current` on a strict `>` and the
+`Duration::new` that ends the same function on `>=`, and the port was first
+written with both. The strict one is unreachable from outside, and by
+construction rather than by luck: every part passes through `add_current`, and
+each call of it finishes by carrying an exact second, so the running total
+offered to the next part never holds one. Collapsing the two changed no answer
+over any of the inputs, so the strict one went, on the grounds that a guard
+nothing can falsify is worse than no guard at all. What survives is the `>=`.
+
+Where a reader would go wrong is in deferring that carry to the end of the
+parse instead. `1000000000ns 18446744073709551615ns` is the input that shows
+it: taken together the two parts overflow the nanosecond accumulator, and a
+reader holding the first as a nanosecond part until the end refuses the
+sequence. humantime reads it as 18446744074.709551615 seconds, measured with
+the pinned probe, because the first part is already a whole second by the time
+the second arrives. It is in the contract for that reason.
+
+That input was the differential's seventy-first blind spot and is now its
+seventy-second input, added to the estate set on 2026-09-17. The shape it
+catches is a port of `add_current` transcribed line for line, with
+`Duration::new` taken once at the end of the parse rather than at the end of
+every part: that reader scores zero against the older seventy-one and refuses a
+duration nextest runs. Note the direction. Every other fault this reader has
+had accepted what the runner refuses; this one refuses what the runner accepts.
+
+Order is part of the claim, and one input of the set shows it.
+`18446744073709551615ns 1ns` is read only because the first part is carried
+into seconds before the second arrives; summed the other way round the
+nanosecond accumulator overflows and the whole duration is refused, which would
+be this contract refusing a configuration nextest runs quite happily.
+
+### The tiers are compared exactly, not approximately
+
+Every tier comparison is a sum, and a sum is exact only if every term is. One
+`float` among them converts the whole of it back, and the conversion is silent.
+So `seconds` returns a `fractions.Fraction`, and so does everything the
+comparisons add to it: the watchdog budget read from a workflow, the job
+ceiling converted from `timeout-minutes`, and the six allowances and margins
+declared in `timeout_budgets.py`.
+
+The reason is the range. humantime reaches 2**64 seconds and a double holds 53
+bits of significand, so above 2**53 it cannot represent two budgets a second
+apart. `18446744073709551614s` and `18446744073709551615s` are both inputs in
+the estate differential and both convert to the same double, so an ordering
+assertion between them compares equal and passes whichever way round it is
+written. The nanosecond end makes the same point: a tenth of a second has no
+exact double, so a budget assembled from tenths and one written as a decimal
+would differ by a rounding error rather than by anything anyone configured.
+
+A float is still what a reader wants to see in a message, so `display_seconds`
+returns one. The two are behind different names on purpose: a caller chooses
+which it wants rather than getting the lossy one by default.
+
+None of this can be demonstrated on the budgets this repository configures.
+They are minutes and seconds, nowhere near either end, and they never will be
+otherwise, so a contract resting on the real files would pass with every term a
+float. `timeout_exactness_test.py` therefore drives the three compositions the
+ordering contract evaluates at two to the sixtieth, where neighbouring doubles
+are 256 seconds apart and a one-second difference is lost outright rather than
+only on one side of a tie. Each case asserts the collapse alongside the
+ordering, so a case that stopped exercising the loss fails rather than passing
+quietly, and one further case asserts that the values actually in force arrive
+exact, so a float reintroduced on the live path is caught without waiting for a
+budget nobody will set.
+
+Each of the nine terms was reverted to a float in turn and every one failed a
+case naming it. Two of them, the outside-work allowance and the ceiling margin,
+are added by the same function and fail the same ordering case, which is why
+the constants are also asserted one by one under their own names: the report
+then says which of the two moved.
+
+The watchdog reading is the one place a float still appears, and deliberately.
+`Fraction` has no notion of `nan` or `inf` and raises on both, which would turn
+a workflow interpolating an expression to `inf` into unreadable text rather
+than the named refusal that case deserves. So the text is parsed as a float,
+checked for finiteness and sign, and then converted from the text rather than
+from the float, which keeps a tenth exactly a tenth. Nothing is compared
+against the float on the way through.
+
+The port's scope is narrow and deliberately so. `nextest_durations` owns one
+thing: turning the text of a nextest duration into seconds exactly as
+`humantime` would, and refusing what `humantime` refuses. It is a
+workflow-contract helper, not a repository-wide duration parser. Its call-sites
+are `nextest_budgets.py`, which reads `.config/nextest.toml` budgets,
+`timeout_ordering_test.py`, and the three test modules that drive the reading
+directly. Nothing outside `tests/workflow_contracts` imports it, and nothing
+inside should grow a second duration reader beside it. humantime's unit table
+sits beside it in `nextest_units.py`, and humantime's accumulator in
+`nextest_totals.py`, both split off to keep every module inside the 400-line
+limit. The seams are alike: the table is what each unit is called and what it
+is worth, the accumulator is the 64-bit range and the carry, and the reader is
+the grammar that drives both. The three error classes live with the
+accumulator, because every check there raises one, and `nextest_durations`
+re-exports them, so callers import them from the reader as they always did.
+
+It composes one way round. `nextest_durations` knows nothing of TOML, of
+workflows, or of what a budget means; callers hand it text and receive seconds
+or a `NextestConfigurationError`. A reading that needs more than that, such as
+the `timeout-minutes` on a job, belongs with its caller: those are GitHub
+Actions values, integers of minutes and seconds, not `humantime` text, and
+reading them here would make this module answerable for two grammars.
+
+A job may run the coverage action more than once, and every matching step is a
+lane. No job in this repository does, so a reading that returned a job's first
+coverage step, or its last, would satisfy every assertion the real workflows
+support. `coverage_lane_multi_step_test.py` drives that case from a synthetic
+document end to end: two steps in one job read as two lanes with their own
+watchdogs, group under the one job, and fail its ceiling together where each
+alone would have passed.
+
+A watchdog value the action cannot read fails with the lane named, rather than
+raising a Python fault before any assertion runs. A zero or a negative one is
+refused, because the action reads those as no timeout at all.
+
+A blank value is a declaration, not a silence. GitHub takes the most specific
+declaration of a variable, and an empty string is one: a step interpolating an
+expression that resolved to nothing hands the process an empty value, and the
+job's value never reaches it. So a blank at an inner scope masks the outer
+scopes rather than falling through to them, and the reader then reports what
+the consumer actually sees, which is nothing set. The earlier reading fell
+through, and that is the one reading under which a lane losing its watchdog, or
+its profile, passes: it credits the lane with a budget the `cargo` invocation
+never received. `whole_run_profile_test.py` drives that shape end to end, with
+a job selecting the capped profile and a step handing the process an empty one.
+
+The contract also pins the condition each lane carries. A skipped step runs no
+`cargo`, so its watchdog never arms and the tiers say nothing about it:
+`if: false` on the step or on its job would leave a lane that looks bounded and
+is not. `ci.yml` also runs on pushes, which the trunk lane covers, so its
+coverage step is conditional on the pull request; that condition is pinned
+rather than tolerated. Its job also skips on the nightly `schedule`, which
+exists for the Kani proofs alone (see "Change-scoped Kani proofs"); that job
+condition is pinned beside the step's.
+
+The ceiling is judged per job rather than per lane. A lane is one watchdog
+window, and the ceiling belongs to the job, so the job's lanes are summed
+before the comparison: judging each separately against the same ceiling asks
+only that it clear the largest budget, which is the requirement a job arming
+one window happens to satisfy and a job arming two does not. Both jobs here arm
+two, and each ninety-minute ceiling sits exactly at the two-window requirement,
+so summing and taking the largest both pass on this tree and it cannot tell the
+two readings apart; the sum is asserted against controlled lanes instead.
+
+The requirement also carries fifteen minutes above that sum rather than merely
+reaching it, because a ceiling equal to the sum it contains cancels the job at
+the moment the watchdog would have reported the overrun, and the report is the
+only thing that makes an overrun actionable. Both ceilings have moved to ninety
+minutes under that reading: the sixty they used to set fell one whole watchdog
+window short of the two-window requirement.
+
+The ceiling counts windows, not steps, so a step passing `doctests: 'true'`
+contributes two budgets to the sum. `_watchdog_windows` reads that input from
+the step's `with` mapping -- defensively, as every environment scope is, so a
+workflow spelling `with` as something other than a mapping reads as the single
+window the action always runs. It counts the one spelling this repository
+writes, `'true'`, which the input pin in `test_execution_coverage_test` holds
+both coverage producers to; `coverage_lane_multi_step_test.py` drives the
+declined spellings and the two-window arithmetic end to end, and asserts the
+required ceiling is 5,400 s for such a step.
+
+The termination allowance between the whole-run budget and the watchdog is two
+terms, not one: the largest `grace-period` the configuration sets, or nextest's
+ten-second default when it sets none, as here, plus a fixed 60-second safety
+margin. A grace period is what nextest promises a test after `SIGTERM`; the
+margin covers the process teardown and report writing that follow it. The
+reading has a test of its own as well, because the repository sets no grace
+period and so cannot tell a reading that adds the two terms from one that takes
+the larger.
+
+The report phase is a third term and is not one of those two. It covers what
+`cargo llvm-cov` does after a *normal* nextest run -- merging profile data and
+writing the report -- where the termination margin covers nextest's own
+teardown after a *cancellation*. A run can do one, the other, or both, so
+`REPORT_PHASE_ALLOWANCE_SECONDS` is added to the watchdog requirement rather
+than maxed with the margin. It is deliberately absent from `required_ceiling`:
+the report phase runs inside the watchdog's window, after nextest's clock has
+stopped, so the ceiling above contains it through the watchdog rather than
+beside it.
+
+The ordering rule itself is `whole_run_ordering.whole_run_ordering_faults`,
+which takes a configuration and a set of lanes and returns every way the two
+break the ordering. Keeping it out of the contract is what lets
+`whole_run_ordering_test.py` drive it with configurations this repository does
+not have: no whole-run budget at all, one below the largest per-test allowance,
+one equal to it, a watchdog one second short of the requirement and one meeting
+it exactly, a lane declaring no watchdog, and two short lanes at once. The real
+file is one point of that rule and agrees with every rule that happens to
+accept it.
+
+The contract asserts that the budget is present before it asserts where it
+sits. Every ordering assertion reads the value from the file, so commenting the
+key out or deleting it satisfies each of them by leaving nothing to compare,
+and the watchdog silently resumes doing tier two's job. The presence assertion
+is what a comment defeats and an ordering assertion does not.
+`bounds_a_single_test` is driven the same way and for the same reason, since
+this file bounds its default profile and so cannot tell that reading from one
+accepting an override or a bare duration.
+
+`tests/workflow_contracts/whole_run_value_test.py` pins the budget's value as
+well as its place in the order. The ordering holds for everything between the
+600 s largest per-test allowance and the 830 s the watchdog can cover, so the
+budget could drift to a value nobody chose with every comparison still passing,
+and the sample above would then describe a figure the file no longer sets.
+
+Every one of those assertions reads the budget out of the file, and none of
+them asks whether a run selects the profile it sits in. That is what
+`tests/workflow_contracts/whole_run_profile_test.py` is for, and why it is a
+separate module: deleting `NEXTEST_PROFILE` from a coverage job would leave
+that lane uncapped with every assertion above it still green.
+
+It is not the same assertion as
+`tests/workflow_contracts/test_execution_coverage_test.py`, which holds the two
+lanes to the *same* watchdog value. That one stops the lanes drifting apart;
+this one stops the tiers inverting.
+
 ## Documentation upkeep
 
 When test strategy or behavioural test usage changes, update this file in the
 same change-set, so the documented approach remains aligned with the codebase.
+
+[sa-adr-0005]:
+https://github.com/leynos/shared-actions/blob/main/docs/adr/0005-runner-aware-sccache-backend.md

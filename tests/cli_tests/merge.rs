@@ -7,7 +7,7 @@ use anyhow::{Context, Result, ensure};
 use netsuke::cli::{CliConfig, ProgressPolicy};
 use ortho_config::{MergeComposer, sanitize_value};
 use rstest::{fixture, rstest};
-use serde_json::json;
+use serde_json::{Map, Value, json};
 use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
@@ -72,6 +72,81 @@ impl ExpectedValidationError {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct PrecedenceLayer {
+    jobs: u8,
+    fetch_allow_scheme: &'static str,
+    env_allow_var: &'static str,
+    env_block_var: &'static str,
+    progress: &'static str,
+    json: bool,
+    file: Option<&'static str>,
+    locale: Option<&'static str>,
+    verbose: bool,
+}
+
+impl PrecedenceLayer {
+    fn into_json(self) -> Value {
+        let mut values: Map<String, Value> = [
+            ("jobs", json!(self.jobs)),
+            ("fetch_allow_scheme", json!([self.fetch_allow_scheme])),
+            ("env_allow_var", json!([self.env_allow_var])),
+            ("env_block_var", json!([self.env_block_var])),
+            ("progress", json!(self.progress)),
+            ("json", json!(self.json)),
+        ]
+        .into_iter()
+        .map(|(key, value)| (key.to_owned(), value))
+        .collect();
+        if let Some(file) = self.file {
+            values.insert("file".to_owned(), json!(file));
+        }
+        if let Some(locale) = self.locale {
+            values.insert("locale".to_owned(), json!(locale));
+        }
+        if self.verbose {
+            values.insert("verbose".to_owned(), json!(true));
+        }
+        Value::Object(values)
+    }
+}
+
+const FILE_PRECEDENCE_LAYER: PrecedenceLayer = PrecedenceLayer {
+    jobs: 2,
+    fetch_allow_scheme: "http",
+    env_allow_var: "FILE_ALLOW",
+    env_block_var: "FILE_BLOCK",
+    progress: "never",
+    json: true,
+    file: Some("Configfile"),
+    locale: Some("en-US"),
+    verbose: false,
+};
+
+const ENVIRONMENT_PRECEDENCE_LAYER: PrecedenceLayer = PrecedenceLayer {
+    jobs: 3,
+    fetch_allow_scheme: "ftp",
+    env_allow_var: "ENV_ALLOW",
+    env_block_var: "ENV_BLOCK",
+    progress: "always",
+    json: false,
+    file: None,
+    locale: None,
+    verbose: false,
+};
+
+const CLI_PRECEDENCE_LAYER: PrecedenceLayer = PrecedenceLayer {
+    jobs: 4,
+    fetch_allow_scheme: "git",
+    env_allow_var: "CLI_ALLOW",
+    env_block_var: "CLI_BLOCK",
+    progress: "never",
+    json: true,
+    file: None,
+    locale: None,
+    verbose: true,
+};
+
 fn merge_defaults_with_file_layer(
     defaults: serde_json::Value,
     file_layer: serde_json::Value,
@@ -100,50 +175,42 @@ fn assert_merge_rejects(
     Ok(())
 }
 
-#[rstest]
-fn cli_merge_layers_respects_precedence_and_appends_lists(
-    default_cli_json: Result<serde_json::Value>,
-) -> Result<()> {
-    let mut composer = MergeComposer::new();
-    let mut defaults = default_cli_json?;
+fn defaults_with_precedence_values(mut defaults: serde_json::Value) -> Result<serde_json::Value> {
     let defaults_object = defaults
         .as_object_mut()
         .context("defaults should be an object")?;
     defaults_object.insert("jobs".to_owned(), json!(1));
     defaults_object.insert("fetch_allow_scheme".to_owned(), json!(["https"]));
+    defaults_object.insert("env_allow_var".to_owned(), json!(["DEFAULT_ALLOW"]));
+    defaults_object.insert("env_block_var".to_owned(), json!(["DEFAULT_BLOCK"]));
     defaults_object.insert("progress".to_owned(), json!("auto"));
     defaults_object.insert("json".to_owned(), json!(false));
-    composer.push_defaults(defaults);
-    composer.push_file(
-        json!({
-            "file": "Configfile",
-            "jobs": 2,
-            "fetch_allow_scheme": ["http"],
-            "locale": "en-US",
-            "progress": "never",
-            "json": true
-        }),
-        None,
-    );
-    composer.push_environment(json!({
-        "jobs": 3,
-        "fetch_allow_scheme": ["ftp"],
-        "progress": "always",
-        "json": false
-    }));
-    composer.push_cli(json!({
-        "jobs": 4,
-        "fetch_allow_scheme": ["git"],
-        "progress": "never",
-        "json": true,
-        "verbose": true
-    }));
-    let merged = CliConfig::merge_from_layers(composer.layers())?;
+    Ok(defaults)
+}
+
+fn merge_precedence_layers(defaults: serde_json::Value) -> Result<CliConfig> {
+    let mut composer = MergeComposer::new();
+    composer.push_defaults(defaults_with_precedence_values(defaults)?);
+    composer.push_file(FILE_PRECEDENCE_LAYER.into_json(), None);
+    composer.push_environment(ENVIRONMENT_PRECEDENCE_LAYER.into_json());
+    composer.push_cli(CLI_PRECEDENCE_LAYER.into_json());
+    CliConfig::merge_from_layers(composer.layers()).map_err(anyhow::Error::from)
+}
+
+fn assert_precedence_values(merged: &CliConfig) -> Result<()> {
     ensure!(
         merged.file.as_path() == Path::new("Configfile"),
         "file layer should override defaults",
     );
     ensure!(merged.jobs == Some(4), "CLI layer should override jobs");
+    ensure!(
+        merged.env_allow_var == ["DEFAULT_ALLOW", "FILE_ALLOW", "ENV_ALLOW", "CLI_ALLOW"],
+        "environment allow variables should append in layer order",
+    );
+    ensure!(
+        merged.env_block_var == ["DEFAULT_BLOCK", "FILE_BLOCK", "ENV_BLOCK", "CLI_BLOCK"],
+        "environment block variables should append in layer order",
+    );
     ensure!(
         merged.fetch_allow_scheme == vec!["https", "http", "ftp", "git"],
         "list values should append in layer order",
@@ -159,6 +226,14 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
     );
     ensure!(merged.verbose, "CLI layer should set verbose");
     Ok(())
+}
+
+#[rstest]
+fn cli_merge_layers_respects_precedence_and_appends_lists(
+    default_cli_json: Result<serde_json::Value>,
+) -> Result<()> {
+    let merged = merge_precedence_layers(default_cli_json?)?;
+    assert_precedence_values(&merged)
 }
 
 #[rstest]

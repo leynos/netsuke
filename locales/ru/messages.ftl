@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Имена узлов, разрешённые �
 cli.flag.fetch_block_host.help = Имена узлов, которые блокируются всегда, даже если разрешены в другом месте.
 cli.flag.fetch_default_deny.help = Запрещать все узлы по умолчанию; разрешать только объявленный список.
 cli.flag.trust_project_fetch_policy.help = Разрешить конфигурации проекта расширять разрешения политики fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Ограничить число инструкций MiniJinja для каждой оценки манифеста.
+cli.flag.manifest_fuel.help = Ограничить число инструкций MiniJinja в одном манифесте.
+cli.flag.manifest_rendered_value_bytes.help = Ограничить число байтов, выводимых в одно значение манифеста.
+cli.flag.manifest_rendered_manifest_bytes.help = Ограничить общее число байтов, выводимых в одном манифесте.
+cli.flag.manifest_source_bytes.help = Ограничить число байтов исходного кода шаблонов и макросов, используемых для манифеста.
+cli.flag.manifest_foreach_cardinality.help = Ограничить число значений, обрабатываемых одним расширением foreach.
+cli.flag.manifest_expanded_entries.help = Ограничить число целей и действий, расширяемых из одного манифеста.
 cli.flag.json.help = Выводить машиночитаемый JSON.
 cli.flag.no_input.help = Никогда не читать интерактивный ввод.
 cli.flag.color.help = Политика цветного вывода (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = Лексема YAML некорректна и
 manifest.yaml.hint.escape = Экранируйте обратные косые черты либо удалите некорректные escape-последовательности.
 manifest.env.missing = Обязательная переменная окружения не задана.
 manifest.env.invalid_utf8 = Переменная окружения содержит некорректный UTF-8.
+manifest.env.blocked = Доступ к переменной окружения заблокирован.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Значение default в env должно быть строкой, получено { $kind }.
 manifest.vars.not_object = Поле `vars` манифеста должно быть отображением или объектом.
 manifest.vars.reserved_name = Ключ `vars` '{ $name }' в манифесте зарезервирован для встроенной вспомогательной функции шаблонов; переименуйте переменную.
 manifest.read_failed = Не удалось прочитать манифест по пути { $path }.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = потоковая передача
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote ожидал строку, но получил { $kind }.
+stdlib.shell.quote.control_character = Значение, содержащее нулевой байт, возврат каретки или перевод строки, нельзя заключить в кавычки.
+stdlib.shell.dialect_invalid = Неизвестный диалект оболочки { $dialect }; ожидается один из { $accepted }.
+stdlib.shell.dialect_not_string = Опция dialect в shell должна быть строкой, получено { $kind }.
+stdlib.shell.join.not_sequence = shell_join ожидал последовательность, но получил { $kind }.
+stdlib.shell.join.item_not_string = Элемент { $index } в shell_join имеет тип { $kind }, а не строку.
+stdlib.shell.positional_option = { $filter } принимает параметры по ключевым словам; напишите { $example }.
+
 # Диагностика помощника для путей.
 stdlib.path.io.failed = Не удалось выполнить действие «{ $action }» для { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Не удалось выполнить действие «{ $action }» для { $path }: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Неподдерживаемый
 
 # Диагностика помощников для коллекций.
 stdlib.collections.flatten.expected_sequence = flatten ожидал элементы последовательности, но обнаружил { $kind }.
+stdlib.collections.compact.not_sequence = compact ожидал последовательность, но обнаружил { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by требует непустой атрибут.
 stdlib.collections.group_by.unresolved = group_by не смог найти «{ $attr }» у элемента типа { $kind }.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = наносекунды
 
 # Диагностика помощника which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] команда «{ $command }» не найдена после проверки { $count } записей PATH. Предпросмотр: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Пустые сегменты PATH игнорируются; задайте cwd_mode="auto", чтобы включить рабочий каталог.
-stdlib.which.not_found.hint.cwd_always = Задайте cwd_mode="always", чтобы включить текущий каталог.
+stdlib.which.not_found.hint.cwd_auto = Режим auto ищет только в каталогах, явно указанных в PATH.
+stdlib.which.not_found.hint.cwd_always = Режим always сначала ищет в текущем каталоге, а затем — в каталогах, указанных в PATH.
+stdlib.which.not_found.hint.workspace = Чтобы рекурсивно искать в дереве рабочей области, используйте cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] команда «{ $command }» по пути «{ $path }» отсутствует или не является исполняемой.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <пусто>
 stdlib.which.path_entry.non_utf8 = Запись PATH № { $index } содержит символы, не являющиеся UTF-8; Netsuke требует пути в UTF-8.
 stdlib.which.command.empty = which требует непустую строку.
-stdlib.which.cwd_mode.invalid = cwd_mode должен быть «auto», «always» или «never», получено «{ $mode }».
+stdlib.which.cwd_mode.invalid = cwd_mode должен быть 'auto', 'always', 'never' или 'workspace-recursive'; получено '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Не удалось определить текущий каталог: { $details }.
 stdlib.which.cwd.non_utf8 = Текущий каталог содержит части, не являющиеся UTF-8.
 stdlib.which.canonicalize_failed = Не удалось канонизировать «{ $path }»: { $details }.
@@ -434,3 +458,7 @@ example.errors_found = { $count ->
     [many] Найдено { $count } ошибок.
    *[other] Найдено { $count } ошибки.
 }
+manifest.budget.exceeded = Бюджет ресурсов манифеста исчерпан. Этап: { $stage }. Достигнутое значение лимита: { $limit }.
+
+cli.flag.env_allow_var.help = Переменная окружения, разрешённая для помощника env() манифеста.
+cli.flag.env_block_var.help = Переменная окружения, заблокированная для помощника env() манифеста.

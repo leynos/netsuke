@@ -1,0 +1,15 @@
+repository = "leynos/netsuke"
+
+# The pull-request lane (`ci.yml:build-test`) ratchets against the publisher's
+# baseline. The legs differ in three environment keys, none of them an input to
+# what is measured:
+#   BUILD_JOBS              the lane's make parallelism, read by its build steps
+#   NETSUKE_RUST_TOOLCHAIN  the lane spells the pinned toolchain as a literal
+#                           (tests/polonius_toolchain_contract.rs reads it); the
+#                           publisher derives it from rust-toolchain.toml
+#   PYTHON_BASELINE         the workflow's setup-python version for tooling
+[[pairing]]
+lane = "ci.yml:build-test:Test and Measure Coverage"
+publisher = "coverage-main.yml:coverage-upload:Test and Measure Coverage"
+differs = ["BUILD_JOBS", "NETSUKE_RUST_TOOLCHAIN", "PYTHON_BASELINE"]
+guards = []

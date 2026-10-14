@@ -215,7 +215,10 @@ fn which_filter_skips_heavy_directories() -> Result<()> {
     let (env, _state) =
         fallible::stdlib_env_with_config(config.with_path_override(path.into_inner()))?;
     let err = env
-        .render_str("{{ 'helper' | which }}", context! {})
+        .render_str(
+            "{{ 'helper' | which(cwd_mode='workspace-recursive') }}",
+            context! {},
+        )
         .err()
         .context("render should fail when tool is in skipped directory")?;
     ensure!(
@@ -236,7 +239,10 @@ fn which_resolver_honours_workspace_root_override() -> Result<()> {
     let path = PathEnv::new(&[])?;
     let (mut env, _state) =
         fallible::stdlib_env_with_config(config.with_path_override(path.into_inner()))?;
-    let output = render(&mut env, &Template::from("{{ 'helper' | which }}"))?;
+    let output = render(
+        &mut env,
+        &Template::from("{{ 'helper' | which(cwd_mode='workspace-recursive') }}"),
+    )?;
     let expected_path = expected_which_output_path(&tool);
     ensure!(
         output == expected_path,

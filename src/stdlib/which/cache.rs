@@ -1,30 +1,24 @@
 //! LRU-backed cache for the `which` resolver to avoid repeat filesystem scans.
-
-use std::{
-    collections::hash_map::DefaultHasher,
-    ffi::OsString,
-    hash::{Hash, Hasher},
-    sync::{Arc, Mutex, MutexGuard, Once},
-};
-
-use camino::Utf8PathBuf;
-use lru::LruCache;
-use metrics::{counter, describe_counter};
-use tracing::field;
-
 use super::{
     WhichConfig,
     env::EnvSnapshot,
     lookup::{WorkspaceSkipList, lookup},
     options::WhichOptions,
     resolve_error::ResolveError,
+    telemetry::{
+        CACHE_OUTCOME_BYPASS, CACHE_OUTCOME_HIT, CACHE_OUTCOME_MISS, cwd_mode_label,
+        record_cache_outcome, record_resolution_error, record_resolution_found,
+    },
 };
-
-/// Name of the counter tallying cache outcomes labelled hit, miss, or bypass.
-const WHICH_CACHE_TOTAL: &str = "netsuke_stdlib_which_cache_total";
-/// Name of the counter tallying resolution outcomes labelled found, `not_found`, or error.
-const WHICH_RESOLUTION_TOTAL: &str = "netsuke_stdlib_which_resolution_total";
-
+use camino::Utf8PathBuf;
+use lru::LruCache;
+use std::{
+    collections::hash_map::DefaultHasher,
+    ffi::OsString,
+    hash::{Hash, Hasher},
+    sync::{Arc, Mutex, MutexGuard},
+};
+use tracing::field;
 /// Shared resolver that caches `which` lookups under an LRU bound.
 #[derive(Clone, Debug)]
 pub(crate) struct WhichResolver {
@@ -39,7 +33,6 @@ pub(crate) struct WhichResolver {
     /// Directory basenames excluded from the workspace fallback search.
     workspace_skips: WorkspaceSkipList,
 }
-
 impl WhichResolver {
     /// Build a resolver from its configuration.
     ///
@@ -48,7 +41,6 @@ impl WhichResolver {
     /// argument grows the signature every time a new environment seam is
     /// added.
     pub(crate) fn new(config: WhichConfig) -> Self {
-        describe_metrics();
         let WhichConfig {
             cwd_override,
             path_override,
@@ -64,16 +56,23 @@ impl WhichResolver {
             workspace_skips,
         }
     }
-
     /// Resolve `command` to executable paths, consulting the cache unless `fresh`.
     /// Capture and lookup failures are recorded as metrics before being returned.
+    ///
+    /// The span and both counters carry the requested `cwd_mode`, so a
+    /// resolution can be attributed to the policy it was requested under
+    /// without recording the command or any path. The label is read from the
+    /// options before the cache probe and before the lookup, so it reports
+    /// what was asked for rather than the domain that produced the match.
     pub(crate) fn resolve(
         &self,
         command: &str,
         options: &WhichOptions,
     ) -> Result<Vec<Utf8PathBuf>, ResolveError> {
+        let cwd_mode = cwd_mode_label(options.cwd_mode);
         let span = tracing::trace_span!(
             "stdlib.which.resolve",
+            cwd_mode,
             cache_outcome = field::Empty,
             result = field::Empty,
             error_category = field::Empty,
@@ -86,34 +85,31 @@ impl WhichResolver {
         ) {
             Ok(env) => env,
             Err(err) => {
-                record_resolution_error(&span, &err);
+                record_resolution_error(&span, cwd_mode, &err);
                 return Err(err);
             }
         };
         let key = CacheKey::new(command, &env, options, &self.workspace_skips);
         if options.fresh {
-            record_cache_outcome(&span, "bypass");
+            record_cache_outcome(&span, cwd_mode, CACHE_OUTCOME_BYPASS);
         } else if let Some(cached) = self.try_cache(&key) {
-            record_cache_outcome(&span, "hit");
-            span.record("result", "found");
-            counter!(WHICH_RESOLUTION_TOTAL, "outcome" => "found").increment(1);
+            record_cache_outcome(&span, cwd_mode, CACHE_OUTCOME_HIT);
+            record_resolution_found(&span, cwd_mode);
             return Ok(cached);
         } else {
-            record_cache_outcome(&span, "miss");
+            record_cache_outcome(&span, cwd_mode, CACHE_OUTCOME_MISS);
         }
         let matches = match lookup(command, &env, options, &self.workspace_skips) {
             Ok(matches) => matches,
             Err(err) => {
-                record_resolution_error(&span, &err);
+                record_resolution_error(&span, cwd_mode, &err);
                 return Err(err);
             }
         };
         self.store(key, matches.clone());
-        span.record("result", "found");
-        counter!(WHICH_RESOLUTION_TOTAL, "outcome" => "found").increment(1);
+        record_resolution_found(&span, cwd_mode);
         Ok(matches)
     }
-
     // POLONIUS-REFUSED(lock-boundary): the hit is cloned out of the LRU
     // because a reference cannot outlive the `MutexGuard`, and the resolver
     // is shared across template evaluation sites. Owned returns at this
@@ -123,13 +119,11 @@ impl WhichResolver {
         let mut guard = self.lock_cache();
         guard.get(key).map(|entry| entry.matches.clone())
     }
-
     /// Insert matches under a key for later reuse.
     fn store(&self, key: CacheKey, matches: Vec<Utf8PathBuf>) {
         let mut guard = self.lock_cache();
         guard.put(key, CacheEntry { matches });
     }
-
     /// Lock the cache, recovering the guard from a poisoned mutex.
     fn lock_cache(&self) -> MutexGuard<'_, LruCache<CacheKey, CacheEntry>> {
         match self.cache.lock() {
@@ -138,61 +132,12 @@ impl WhichResolver {
         }
     }
 }
-
-/// Describe the resolver's counters once per process.
-fn describe_metrics() {
-    static DESCRIBE: Once = Once::new();
-    DESCRIBE.call_once(|| {
-        describe_counter!(
-            WHICH_CACHE_TOTAL,
-            "Counts which resolver cache outcomes labelled as hit, miss, or bypass."
-        );
-        describe_counter!(
-            WHICH_RESOLUTION_TOTAL,
-            "Counts which resolver outcomes labelled as found, not_found, or error."
-        );
-    });
-}
-
-/// Record a cache outcome on the span and its counter.
-fn record_cache_outcome(span: &tracing::Span, outcome: &'static str) {
-    span.record("cache_outcome", outcome);
-    counter!(WHICH_CACHE_TOTAL, "outcome" => outcome).increment(1);
-}
-
-/// Record a resolution failure's outcome and error category as metrics.
-fn record_resolution_error(span: &tracing::Span, error: &ResolveError) {
-    let category = error.category();
-    let outcome = if matches!(
-        error,
-        ResolveError::NotFound { .. } | ResolveError::DirectNotFound { .. }
-    ) {
-        "not_found"
-    } else {
-        "error"
-    };
-    span.record("result", outcome);
-    span.record("error_category", category);
-    tracing::debug!(
-        outcome,
-        error_category = category,
-        "which resolver finished with non-success result",
-    );
-    counter!(
-        WHICH_RESOLUTION_TOTAL,
-        "outcome" => outcome,
-        "category" => category,
-    )
-    .increment(1);
-}
-
 /// Matches stored in the cache for one key.
 #[derive(Clone, Debug)]
 struct CacheEntry {
     /// The executable paths that resolved for the key.
     matches: Vec<Utf8PathBuf>,
 }
-
 /// Identity of one cached resolution.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct CacheKey {
@@ -207,7 +152,6 @@ struct CacheKey {
     /// The skip list the lookup applied.
     workspace_skips: WorkspaceSkipList,
 }
-
 impl CacheKey {
     /// Build a cache key from the lookup inputs.
     fn new(
@@ -225,7 +169,6 @@ impl CacheKey {
         }
     }
 }
-
 /// Hash the environment inputs that affect a resolution's outcome.
 fn env_fingerprint(env: &EnvSnapshot) -> u64 {
     let mut hasher = DefaultHasher::new();
@@ -237,19 +180,18 @@ fn env_fingerprint(env: &EnvSnapshot) -> u64 {
     env.workspace_switch().hash(&mut hasher);
     hasher.finish()
 }
-
 #[cfg(test)]
 mod tests {
     //! Unit tests for the which resolver cache: key derivation, capacity
     //! bounds, and skip-list handling during resolution.
     use super::*;
+    use crate::stdlib::which::options::CwdMode;
     use crate::stdlib::which::workspace_switch::WorkspaceSwitch;
     use anyhow::{Result, anyhow, ensure};
     use camino::Utf8PathBuf;
     use rstest::rstest;
-    use std::{num::NonZeroUsize, sync::Arc};
+    use std::num::NonZeroUsize;
     use tempfile::TempDir;
-
     fn cache_key_for(command: &str) -> CacheKey {
         CacheKey {
             command: command.to_owned(),
@@ -259,7 +201,6 @@ mod tests {
             workspace_skips: WorkspaceSkipList::default(),
         }
     }
-
     #[rstest]
     fn cache_capacity_bounds_entries() {
         let resolver = WhichResolver::new(WhichConfig::new(
@@ -268,7 +209,6 @@ mod tests {
             WorkspaceSkipList::default(),
             NonZeroUsize::new(1).expect("non-zero cache capacity"),
         ));
-
         let first_key = cache_key_for("first");
         let first_path = Utf8PathBuf::from("/bin/first");
         resolver.store(first_key.clone(), vec![first_path.clone()]);
@@ -276,15 +216,12 @@ mod tests {
             resolver.try_cache(&first_key),
             Some(vec![first_path.clone()])
         );
-
         let second_key = cache_key_for("second");
         let second_path = Utf8PathBuf::from("/bin/second");
         resolver.store(second_key.clone(), vec![second_path.clone()]);
-
         assert!(resolver.try_cache(&first_key).is_none());
         assert_eq!(resolver.try_cache(&second_key), Some(vec![second_path]));
     }
-
     #[test]
     fn cache_key_differs_when_skip_lists_differ() -> Result<()> {
         let temp = TempDir::new()?;
@@ -292,7 +229,6 @@ mod tests {
             .map_err(|path| anyhow!("temp path should be utf8: {path:?}"))?;
         let env = EnvSnapshot::capture(Some(cwd.as_path()), Some(std::ffi::OsStr::new("")))?;
         let options = WhichOptions::default();
-
         let key_a = CacheKey::new(
             "tool",
             &env,
@@ -305,11 +241,9 @@ mod tests {
             &options,
             &WorkspaceSkipList::from_names(["build"]),
         );
-
         ensure!(key_a != key_b, "skip lists must influence cache key");
         Ok(())
     }
-
     /// Differing workspace-switch readings must not share a cache entry.
     ///
     /// A fallback hit cached while `NETSUKE_WHICH_WORKSPACE` left the search
@@ -325,14 +259,12 @@ mod tests {
         let base = EnvSnapshot::capture(Some(cwd.as_path()), Some(std::ffi::OsStr::new("")))?;
         let options = WhichOptions::default();
         let skips = WorkspaceSkipList::default();
-
         let enabled = base.clone().with_workspace_switch(WorkspaceSwitch::Absent);
         let disabled = base.with_workspace_switch(WorkspaceSwitch::Value(String::from("0")));
         ensure!(
             enabled.workspace_fallback_enabled() && !disabled.workspace_fallback_enabled(),
             "the fixtures should sit on opposite sides of the switch"
         );
-
         let key_enabled = CacheKey::new("tool", &enabled, &options, &skips);
         let key_disabled = CacheKey::new("tool", &disabled, &options, &skips);
         ensure!(
@@ -341,45 +273,75 @@ mod tests {
         );
         Ok(())
     }
-
     #[test]
-    fn resolver_applies_skip_list_during_resolution() -> Result<()> {
+    fn cache_key_differs_when_cwd_mode_differs() -> Result<()> {
         let temp = TempDir::new()?;
         let cwd = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
             .map_err(|path| anyhow!("temp path should be utf8: {path:?}"))?;
-
+        let env = EnvSnapshot::capture(Some(cwd.as_path()), Some(std::ffi::OsStr::new("")))?;
+        let skips = WorkspaceSkipList::default();
+        let keys = [
+            CwdMode::Auto,
+            CwdMode::Always,
+            CwdMode::Never,
+            CwdMode::WorkspaceRecursive,
+        ]
+        .map(|cwd_mode| {
+            CacheKey::new(
+                "tool",
+                &env,
+                &WhichOptions {
+                    cwd_mode,
+                    ..WhichOptions::default()
+                },
+                &skips,
+            )
+        });
+        ensure!(
+            keys.iter()
+                .enumerate()
+                .all(|(index, key)| keys.iter().skip(index + 1).all(|other| other != key)),
+            "every distinct search domain must have a distinct cache key"
+        );
+        Ok(())
+    }
+    #[test]
+    fn lookup_applies_skip_list_during_resolution() -> Result<()> {
+        let temp = TempDir::new()?;
+        let cwd = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .map_err(|path| anyhow!("temp path should be utf8: {path:?}"))?;
         let target = cwd.join("target");
         test_support::fs::create_dir_all(target.as_std_path())?;
         test_support::write_exec(target.as_std_path(), "tool")?;
-
-        let capacity = NonZeroUsize::new(64).expect("non-zero cache capacity");
-        // Use path_override to set empty PATH instead of mutating global env
-        let empty_path = Some(std::ffi::OsString::new());
-        let resolver = WhichResolver::new(WhichConfig::new(
-            Some(Arc::new(cwd.clone())),
-            empty_path.clone(),
-            WorkspaceSkipList::default(),
-            capacity,
-        ));
-        let options = WhichOptions::default();
-        let err = resolver
-            .resolve("tool", &options)
+        #[cfg(not(windows))]
+        let env = super::super::env::mock_env_for_capture(
+            Some(std::ffi::OsString::new()),
+            Err(std::env::VarError::NotPresent),
+        );
+        #[cfg(windows)]
+        let env = super::super::env::mock_env_for_capture(
+            Some(std::ffi::OsString::new()),
+            None,
+            Err(std::env::VarError::NotPresent),
+        );
+        let snapshot = EnvSnapshot::capture_with_env(Some(cwd.as_path()), None, &env)?;
+        let options = WhichOptions {
+            cwd_mode: CwdMode::WorkspaceRecursive,
+            ..WhichOptions::default()
+        };
+        let err = lookup("tool", &snapshot, &options, &WorkspaceSkipList::default())
             .expect_err("default skip should ignore target");
-
         ensure!(matches!(err, ResolveError::NotFound { .. }));
-
-        let resolver_custom = WhichResolver::new(WhichConfig::new(
-            Some(Arc::new(cwd.clone())),
-            empty_path,
-            WorkspaceSkipList::from_names([".git"]),
-            capacity,
-        ));
-        let matches = resolver_custom.resolve("tool", &options)?;
+        let matches = lookup(
+            "tool",
+            &snapshot,
+            &options,
+            &WorkspaceSkipList::from_names([".git"]),
+        )?;
         ensure!(
             matches == vec![target.join("tool")],
             "expected executable discovery when target not skipped"
         );
-
         Ok(())
     }
 }

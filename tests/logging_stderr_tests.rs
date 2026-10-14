@@ -11,3 +11,5 @@ mod json;
 mod support;
 #[path = "logging_stderr/verbose.rs"]
 mod verbose;
+#[path = "logging_stderr/verbose_secret_absence.rs"]
+mod verbose_secret_absence;

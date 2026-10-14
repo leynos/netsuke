@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Värdnamn som tillåts när standardnekandet ä
 cli.flag.fetch_block_host.help = Värdnamn som alltid blockeras, även om de tillåts på annat håll.
 cli.flag.fetch_default_deny.help = Neka alla värdar som standard; tillåt endast den angivna listan.
 cli.flag.trust_project_fetch_policy.help = Tillåt projektkonfigurationen att utöka behörigheterna i fetch-principen.
+
+cli.flag.manifest_evaluation_fuel.help = Begränsa antalet MiniJinja-instruktioner för varje manifestevaluering.
+cli.flag.manifest_fuel.help = Begränsa antalet MiniJinja-instruktioner i ett manifest.
+cli.flag.manifest_rendered_value_bytes.help = Begränsa antalet byte som renderas till ett manifestvärde.
+cli.flag.manifest_rendered_manifest_bytes.help = Begränsa det totala antalet byte som renderas i ett manifest.
+cli.flag.manifest_source_bytes.help = Begränsa antalet byte från mall- och makrokällor som används per manifest.
+cli.flag.manifest_foreach_cardinality.help = Begränsa antalet värden som behandlas av en foreach-expansion.
+cli.flag.manifest_expanded_entries.help = Begränsa antalet mål och åtgärder som expanderas från ett manifest.
 cli.flag.json.help = Skriv ut maskinläsbar JSON.
 cli.flag.no_input.help = Läs aldrig interaktiv indata.
 cli.flag.color.help = Policy för färgad utdata (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = YAML-symbolen är ogiltig eller oväntad.
 manifest.yaml.hint.escape = Escapa omvända snedstreck eller ta bort ogiltiga escapesekvenser.
 manifest.env.missing = En obligatorisk miljövariabel är inte satt.
 manifest.env.invalid_utf8 = En miljövariabel innehåller ogiltig UTF-8.
+manifest.env.blocked = Åtkomst till en miljövariabel är blockerad.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = default i env måste vara en sträng, tog emot { $kind }.
 manifest.vars.not_object = Manifestets `vars` måste vara en mappning eller ett objekt.
 manifest.vars.reserved_name = Manifestets `vars`-nyckel '{ $name }' är reserverad för en inbyggd mallhjälpare; byt namn på variabeln.
 manifest.read_failed = Manifestet i { $path } kunde inte läsas.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = strömning
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote väntade en sträng men fick { $kind }.
+stdlib.shell.quote.control_character = Ett värde som innehåller en nollbyte, vagnretur eller radmatning kan inte citeras.
+stdlib.shell.dialect_invalid = Okänd shelldialekt { $dialect }; väntade en av { $accepted }.
+stdlib.shell.dialect_not_string = dialect-alternativet i shell måste vara en sträng, tog emot { $kind }.
+stdlib.shell.join.not_sequence = shell_join väntade en sekvens men fick { $kind }.
+stdlib.shell.join.item_not_string = Element { $index } i shell_join är { $kind }, inte en sträng.
+stdlib.shell.positional_option = { $filter } tar sina alternativ som nyckelord; skriv { $example }.
+
 # Diagnostik för sökvägshjälparen.
 stdlib.path.io.failed = { $action } misslyckades för { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } misslyckades för { $path }: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Hashalgoritmen ”{ $algorithm }
 
 # Diagnostik för samlingshjälpare.
 stdlib.collections.flatten.expected_sequence = flatten väntade poster från en sekvens men fann { $kind }.
+stdlib.collections.compact.not_sequence = compact väntade en sekvens men fann { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by kräver ett attribut som inte är tomt.
 stdlib.collections.group_by.unresolved = group_by kunde inte slå upp ”{ $attr }” på en post av typen { $kind }.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = nanosekunder
 
 # Diagnostik för hjälpfunktionen which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] kommandot ”{ $command }” hittades inte efter genomgång av { $count } PATH-poster. Utdrag: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Tomma delar av PATH ignoreras; använd cwd_mode="auto" för att ta med arbetskatalogen.
-stdlib.which.not_found.hint.cwd_always = Sätt cwd_mode="always" för att ta med den aktuella katalogen.
+stdlib.which.not_found.hint.cwd_auto = Läget auto söker endast i kataloger som uttryckligen anges i PATH.
+stdlib.which.not_found.hint.cwd_always = Läget always söker endast i den aktuella katalogen före kataloger som anges i PATH.
+stdlib.which.not_found.hint.workspace = Använd cwd_mode="workspace-recursive" för att söka rekursivt i arbetsytans träd.
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] kommandot ”{ $command }” i ”{ $path }” saknas eller är inte körbart.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <tom>
 stdlib.which.path_entry.non_utf8 = PATH-post nr { $index } innehåller tecken som inte är UTF-8; Netsuke kräver UTF-8-sökvägar.
 stdlib.which.command.empty = which kräver en sträng som inte är tom.
-stdlib.which.cwd_mode.invalid = cwd_mode måste vara ”auto”, ”always” eller ”never”, men gav ”{ $mode }”.
+stdlib.which.cwd_mode.invalid = cwd_mode måste vara 'auto', 'always', 'never' eller 'workspace-recursive'; fick '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Den aktuella katalogen kunde inte fastställas: { $details }.
 stdlib.which.cwd.non_utf8 = Den aktuella katalogen innehåller delar som inte är UTF-8.
 stdlib.which.canonicalize_failed = ”{ $path }” kunde inte kanoniseras: { $details }.
@@ -427,3 +451,7 @@ example.errors_found = { $count ->
     [one] { $count } fel hittades.
    *[other] { $count } fel hittades.
 }
+manifest.budget.exceeded = Manifestets resursbudget tog slut under { $stage } efter att { $limit } hade nåtts.
+
+cli.flag.env_allow_var.help = Miljövariabel tillåten för manifestets env()-hjälpfunktion.
+cli.flag.env_block_var.help = Miljövariabel blockerad för manifestets env()-hjälpfunktion.

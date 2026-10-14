@@ -56,6 +56,19 @@ introduces, and concrete remediation tasks that would harden the helpers.
   project grants append deliberately; a project cannot set the opt-in for
   itself. Project `fetch_block_host` remains cumulative and continues to
   override allows.
+- [x] **Manifest rendering could ingest arbitrary environment secrets.**
+  *(Status: remediated for issue #666.)* The Jinja `env()` helper previously
+  read any process environment variable requested by a manifest. Operators can
+  now configure exact `env_allow_var` and `env_block_var` entries through the
+  normal configuration layers, `NETSUKE_` environment variables, or CLI flags.
+  Primary-project allow entries are quarantined, so a manifest cannot grant
+  itself access; project block entries remain cumulative restrictions. Empty
+  lists preserve default-allow compatibility; a non-empty allowlist enables
+  default-deny, and an exact blocklist entry always overrides an allowlist
+  entry. Denied reads fail before the process reader runs and expose only a
+  fixed localized diagnostic. This reduces secret ingress into rendered fields
+  but does not make permitted rendered values safe to log; existing output and
+  logging discipline remains required.
 - [x] **Redirects bypass outbound request policy.** *(Status: remediated in
   issue #647.)* An allowed HTTP endpoint could redirect `fetch` to a target
   that the initial policy would block, including link-local metadata services.
@@ -125,15 +138,21 @@ introduces, and concrete remediation tasks that would harden the helpers.
   - **Remediation:** the reading filters now share one policy. The final path
     component is opened without following symlinks (`O_NOFOLLOW` on Unix,
     where the open is also non-blocking so a FIFO or device cannot wedge a
-    build worker; a pre-open `symlink_metadata` check on Windows), and the
-    opened handle must be a regular file. `contents`, `linecount`, `hash`, and
+    build worker; `FILE_FLAG_OPEN_REPARSE_POINT` on Windows, so the open
+    returns the reparse point itself instead of traversing it), and the
+    opened handle must be a regular file. On Windows the handle is also
+    refused when it carries `FILE_ATTRIBUTE_REPARSE_POINT`, which rejects
+    junctions, volume mount points, and every other reparse tag rather than
+    only those `std` reports as symlinks. Because the judgement and the read
+    share one handle, there is no check-then-open window between them.
+    `contents`, `linecount`, `hash`, and
     `digest` stream against a running byte total anchored to
     `StdlibConfig::with_file_max_read_bytes` (default 8 MiB). `linecount`
     counts terminators incrementally instead of materializing the file.
     Per-call `max_bytes` may narrow the ceiling and a named
-    `follow_symlinks=true` opt-in permits link following; budget rejections
-    name the path and the applicable limit, file-type rejections name only the
-    path, and neither discloses file contents.
+    `follow_symlinks=true` opt-in waives that final-component refusal; budget
+    rejections name the path and the applicable limit, and file-type
+    rejections name only the path; neither discloses file contents.
 
 ## Next steps
 

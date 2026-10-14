@@ -135,6 +135,38 @@ gate. The fixed vocabulary may be extended only through a reviewed contract
 change; arbitrary values are rejected by the emitter and by the validation
 tests.
 
+## Addendum (2026-10-03): Release staging and publication observability
+
+This is a separate accepted workflow decision. It preserves the release-
+admission canary decision above and does not change its gating mode.
+
+The `release` and `publish-release` jobs call
+`scripts/release_operation_observability.py` after their staging or publication
+steps. Each job writes an always-run outcome to `GITHUB_STEP_SUMMARY`. The
+publication job uploads `release-operation-observability.jsonl` as the
+`release-operation-observability-${{ github.job }}` workflow artefact. The
+staging job keeps its JSONL file on the runner and does not upload a diagnostic
+artefact, preserving the dry-run contract. The workflow does not set an
+artefact retention override; the configured GitHub Actions retention policy
+applies to the publication artefact.
+
+The JSONL records use fixed operation labels (`release_staging` and
+`release_publication`), fixed phase labels (`draft_release`,
+`artifact_download`, `archive_hoist`, and `upload_plan_validation`), and
+outcomes limited to `success`, `failure`, `cancelled`, `skipped`, or `unknown`.
+Error categories are limited to `draft_creation`, `artifact_download`,
+`archive_hoist`, `upload_plan_validation`, `other`, `cancelled`, or `none`.
+Records contain operation and phase counters, duration samples, and phase
+start/completion events. If cancellation interrupts a phase before its end
+marker, the trace records `release_phase_interrupted`. The summary shows the
+operation, dry-run mode, job and phase outcomes, and the fixed error category.
+No release tags, artefact filenames, raw error messages, or secrets are
+included.
+
+This helper is diagnostic: it does not change the release job guards or turn a
+failed release step into success. Existing workflow conditions and step results
+remain authoritative for release success and publication.
+
 ## Alternatives considered
 
 ### Prometheus, OTLP, or statsd export
@@ -179,6 +211,10 @@ safe and diagnosable.
   [`developers-guide.md`](developers-guide.md#release-admission-observability)
 - Release-admission design and sequencing:
   [`RFC 0005`](rfcs/0005-release-hardening.md)
+- Release-operation observability helper and contract:
+  [`release_operation_observability.py`](../scripts/release_operation_observability.py)
+  and
+  [`release_operation_observability_test.py`](../tests/workflow_contracts/release_operation_observability_test.py)
 
 ## Addendum (2026-09-04)
 

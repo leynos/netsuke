@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = 既定の拒否が有効なときに許可す�
 cli.flag.fetch_block_host.help = 他で許可されていても常に遮断するホスト名。
 cli.flag.fetch_default_deny.help = 既定ですべてのホストを拒否し、宣言した許可リストのみを通します。
 cli.flag.trust_project_fetch_policy.help = プロジェクト設定による fetch ポリシーの許可範囲の拡大を許可します。
+
+cli.flag.manifest_evaluation_fuel.help = 各マニフェスト評価で使用する MiniJinja 命令数を制限します。
+cli.flag.manifest_fuel.help = 1 つのマニフェスト全体で使用する MiniJinja 命令数を制限します。
+cli.flag.manifest_rendered_value_bytes.help = 1 つのマニフェスト値にレンダリングするバイト数を制限します。
+cli.flag.manifest_rendered_manifest_bytes.help = 1 つのマニフェスト全体にレンダリングするバイト数を制限します。
+cli.flag.manifest_source_bytes.help = マニフェストごとに消費するテンプレートとマクロのソースバイト数を制限します。
+cli.flag.manifest_foreach_cardinality.help = 1 回の foreach 展開で処理する値の数を制限します。
+cli.flag.manifest_expanded_entries.help = 1 つのマニフェストから展開するターゲットとアクションの数を制限します。
 cli.flag.json.help = 機械可読な JSON を出力します。
 cli.flag.no_input.help = 対話的な入力を一切読み取りません。
 cli.flag.color.help = 色付き出力の方針（auto、always、never）。
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = YAML のトークンが無効か、予期し�
 manifest.yaml.hint.escape = 逆斜線をエスケープするか、無効なエスケープ列を取り除いてください。
 manifest.env.missing = 必須の環境変数が設定されていません。
 manifest.env.invalid_utf8 = 環境変数に無効な UTF-8 が含まれています。
+manifest.env.blocked = 環境変数へのアクセスはブロックされています。
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env の default は文字列でなければなりません。{ $kind } を受け取りました。
 manifest.vars.not_object = マニフェストの `vars` はマップまたはオブジェクトでなければなりません。
 manifest.vars.reserved_name = マニフェストの `vars` キー '{ $name }' は組み込みのテンプレートヘルパー用に予約されています。変数名を変更してください。
 manifest.read_failed = { $path } のマニフェストを読み取れませんでした。
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = ストリーミング
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote は文字列を期待しましたが、{ $kind } を受け取りました。
+stdlib.shell.quote.control_character = ヌルバイト、復帰、または改行を含む値は引用符で囲めません。
+stdlib.shell.dialect_invalid = 不明なシェル方言 { $dialect } です。{ $accepted } のいずれかを指定してください。
+stdlib.shell.dialect_not_string = shell の dialect オプションは文字列でなければなりません。{ $kind } を受け取りました。
+stdlib.shell.join.not_sequence = shell_join は列を期待しましたが、{ $kind } を受け取りました。
+stdlib.shell.join.item_not_string = shell_join の { $index } 番目の項目は { $kind } であり、文字列ではありません。
+stdlib.shell.positional_option = { $filter } はオプションをキーワードで受け取ります。{ $example } と記述してください。
+
 # パスヘルパーの診断。
 stdlib.path.io.failed = { $path } に対する「{ $action }」に失敗しました（{ $label }）。
 stdlib.path.io.failed_with_detail = { $path } に対する「{ $action }」に失敗しました: { $detail }。
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = 対応していないハッシ�
 
 # コレクションヘルパーの診断。
 stdlib.collections.flatten.expected_sequence = flatten は列の要素を期待しましたが、{ $kind } が見つかりました。
+stdlib.collections.compact.not_sequence = compact は列を期待しましたが、{ $kind } が見つかりました。
 stdlib.collections.group_by.empty_attribute = group_by には空でない属性が必要です。
 stdlib.collections.group_by.unresolved = group_by は種別 { $kind } の要素で「{ $attr }」を解決できませんでした。
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = ナノ秒
 
 # which ヘルパーの診断。
 stdlib.which.not_found = [netsuke::jinja::which::not_found] PATH の項目を { $count } 件調べましたが、コマンド「{ $command }」は見つかりませんでした。プレビュー: { $preview }
-stdlib.which.not_found.hint.cwd_auto = PATH の空の区間は無視されます。作業ディレクトリーを含めるには cwd_mode="auto" を使ってください。
-stdlib.which.not_found.hint.cwd_always = 現在のディレクトリーを含めるには cwd_mode="always" を設定してください。
+stdlib.which.not_found.hint.cwd_auto = auto モードは、PATH で明示的に指定されたディレクトリだけを検索します。
+stdlib.which.not_found.hint.cwd_always = always モードは、PATH で指定されたディレクトリより先に現在のディレクトリだけを検索します。
+stdlib.which.not_found.hint.workspace = ワークスペースツリーを再帰的に検索するには、cwd_mode="workspace-recursive" を使用してください。
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] 「{ $path }」のコマンド「{ $command }」が存在しないか、実行できません。
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <空>
 stdlib.which.path_entry.non_utf8 = PATH の { $index } 番目の項目に UTF-8 でない文字が含まれています。Netsuke は UTF-8 のパスを必要とします。
 stdlib.which.command.empty = which には空でない文字列が必要です。
-stdlib.which.cwd_mode.invalid = cwd_mode は「auto」「always」「never」のいずれかでなければなりませんが、「{ $mode }」が得られました。
+stdlib.which.cwd_mode.invalid = cwd_mode は 'auto'、'always'、'never'、または 'workspace-recursive' でなければなりません。'{ $mode }' が指定されました。
 stdlib.which.cwd.resolve_failed = 現在のディレクトリーを特定できませんでした: { $details }。
 stdlib.which.cwd.non_utf8 = 現在のディレクトリーに UTF-8 でない部分が含まれています。
 stdlib.which.canonicalize_failed = 「{ $path }」を正準化できませんでした: { $details }。
@@ -425,3 +449,7 @@ example.errors_found = { $count ->
     [0] エラーは見つかりませんでした。
    *[other] { $count } 件のエラーが見つかりました。
 }
+manifest.budget.exceeded = { $stage } 中にマニフェストのリソース予算を使い果たしました（{ $limit } に達しました）。
+
+cli.flag.env_allow_var.help = マニフェストの env() ヘルパーで許可する環境変数。
+cli.flag.env_block_var.help = マニフェストの env() ヘルパーでブロックする環境変数。

@@ -3,9 +3,10 @@
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::types::{ContextKey, ContextValue, TemplateContent};
 use anyhow::{Context, Result};
+use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, context, value::Value};
-use netsuke::stdlib::{self, NetworkPolicy, StdlibConfig};
+use netsuke::stdlib::{self, ClockProvider, NetworkPolicy, StdlibConfig};
 use rstest_bdd_macros::when;
 use test_support::{localizer_test_lock, set_en_localizer};
 
@@ -20,6 +21,7 @@ use super::workspace::{ensure_workspace, resolve_template_path};
 struct RenderConfig {
     policy: Option<NetworkPolicy>,
     home: Option<String>,
+    clock: Option<ClockProvider>,
     fetch_max_bytes: Option<u64>,
     command_max_output_bytes: Option<u64>,
     command_stream_max_bytes: Option<u64>,
@@ -33,6 +35,7 @@ fn extract_render_config(world: &TestWorld) -> RenderConfig {
             .borrow()
             .get("HOME")
             .and_then(|value| value.to_str().map(str::to_owned)),
+        clock: world.stdlib_clock.get(),
         fetch_max_bytes: world.stdlib_fetch_max_bytes.get(),
         command_max_output_bytes: world.stdlib_command_max_output_bytes.get(),
         command_stream_max_bytes: world.stdlib_command_stream_max_bytes.get(),
@@ -58,23 +61,22 @@ fn ensure_stdlib_localizer(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn render_template_with_context(
-    world: &TestWorld,
-    template: &TemplateContent,
-    ctx: Value,
-) -> Result<()> {
-    ensure_stdlib_localizer(world)?;
-    let root = ensure_workspace(world)?;
-    let mut env = Environment::new();
-    let workspace = Dir::open_ambient_dir(&root, ambient_authority())
-        .context("open stdlib workspace directory")?;
-    let mut config = StdlibConfig::new(workspace)?.with_workspace_root_path(root.clone())?;
+/// Build the stdlib configuration a rendering step runs with.
+///
+/// The options are applied in a fixed order — network policy, clock, home
+/// override, the response and command byte limits, then the `PATH` override —
+/// so a scenario that sets several of them renders the same way every run.
+fn configure_stdlib(world: &TestWorld, workspace: Dir, root: &Utf8Path) -> Result<StdlibConfig> {
+    let mut config = StdlibConfig::new(workspace)?.with_workspace_root_path(root)?;
 
     // Extract config from world before applying
     let render_cfg = extract_render_config(world);
 
     if let Some(policy) = render_cfg.policy {
         config = config.with_network_policy(policy);
+    }
+    if let Some(clock) = render_cfg.clock {
+        config = config.with_clock(clock);
     }
     if let Some(home) = render_cfg.home {
         config = config.with_home_override(Some(home));
@@ -97,6 +99,21 @@ pub(crate) fn render_template_with_context(
     if let Some(path) = world.stdlib_path_override.borrow().as_ref() {
         config = config.with_path_override(path.clone());
     }
+
+    Ok(config)
+}
+
+pub(crate) fn render_template_with_context(
+    world: &TestWorld,
+    template: &TemplateContent,
+    ctx: Value,
+) -> Result<()> {
+    ensure_stdlib_localizer(world)?;
+    let root = ensure_workspace(world)?;
+    let mut env = Environment::new();
+    let workspace = Dir::open_ambient_dir(&root, ambient_authority())
+        .context("open stdlib workspace directory")?;
+    let config = configure_stdlib(world, workspace, &root)?;
 
     let state = stdlib::register_with_config(&mut env, config)?;
     state.reset_impure();

@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Nomes de anfitrião permitidos quando a recusa 
 cli.flag.fetch_block_host.help = Nomes de anfitrião sempre bloqueados, mesmo que permitidos noutro local.
 cli.flag.fetch_default_deny.help = Recusar todos os anfitriões por predefinição; permitir apenas a lista declarada.
 cli.flag.trust_project_fetch_policy.help = Permitir que a configuração do projeto alargue as permissões da política de fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Limite o número de instruções MiniJinja para cada avaliação do manifesto.
+cli.flag.manifest_fuel.help = Limite o número de instruções MiniJinja num manifesto.
+cli.flag.manifest_rendered_value_bytes.help = Limite o número de bytes renderizados num único valor do manifesto.
+cli.flag.manifest_rendered_manifest_bytes.help = Limite o total de bytes renderizados num manifesto.
+cli.flag.manifest_source_bytes.help = Limite os bytes de origem dos modelos e das macros consumidos por manifesto.
+cli.flag.manifest_foreach_cardinality.help = Limite os valores processados por uma expansão foreach.
+cli.flag.manifest_expanded_entries.help = Limite os destinos e as ações expandidos a partir de um manifesto.
 cli.flag.json.help = Produzir saída JSON legível por máquinas.
 cli.flag.no_input.help = Nunca ler entrada interativa.
 cli.flag.color.help = Política de cor na saída (auto, always, never).
@@ -131,6 +139,9 @@ manifest.yaml.hint.invalid_token = O símbolo YAML é inválido ou inesperado.
 manifest.yaml.hint.escape = Faça o escape das barras invertidas ou remova as sequências de escape inválidas.
 manifest.env.missing = Uma variável de ambiente obrigatória não está definida.
 manifest.env.invalid_utf8 = Uma variável de ambiente contém UTF-8 inválido.
+manifest.env.blocked = O acesso a uma variável de ambiente está bloqueado.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = O default de env tem de ser uma cadeia de carateres, recebido { $kind }.
 manifest.vars.not_object = `vars` do manifesto tem de ser um mapa ou objeto.
 manifest.vars.reserved_name = A chave `vars` '{ $name }' do manifesto está reservada a uma função auxiliar de modelo integrada; mude o nome da variável.
 manifest.read_failed = Não foi possível ler o manifesto em { $path }.
@@ -277,6 +288,17 @@ stdlib.command.output.mode.streaming = fluxo contínuo
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = O shell_quote esperava uma cadeia de caracteres, mas recebeu { $kind }.
+stdlib.shell.quote.control_character = Um valor que contenha um byte nulo, retorno de carro ou quebra de linha não pode ser colocado entre aspas.
+stdlib.shell.dialect_invalid = Dialeto de shell desconhecido { $dialect }; esperado um de { $accepted }.
+stdlib.shell.dialect_not_string = A opção dialect de shell tem de ser uma cadeia de carateres, recebido { $kind }.
+stdlib.shell.join.not_sequence = O shell_join esperava uma sequência, mas recebeu { $kind }.
+stdlib.shell.join.item_not_string = O item { $index } de shell_join é { $kind }, não uma cadeia de caracteres.
+stdlib.shell.positional_option = { $filter } recebe as suas opções por palavra-chave; escreva { $example }.
+
 # Diagnósticos do auxiliar de caminhos.
 stdlib.path.io.failed = { $action } falhou para { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } falhou para { $path }: { $detail }.
@@ -332,6 +354,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algoritmo de hash não suportado
 
 # Diagnósticos dos auxiliares de coleções.
 stdlib.collections.flatten.expected_sequence = O flatten esperava itens de uma sequência, mas encontrou { $kind }.
+stdlib.collections.compact.not_sequence = O compact esperava uma sequência, mas encontrou { $kind }.
 stdlib.collections.group_by.empty_attribute = O group_by exige um atributo não vazio.
 stdlib.collections.group_by.unresolved = O group_by não conseguiu resolver «{ $attr }» num item do tipo { $kind }.
 
@@ -349,14 +372,15 @@ stdlib.time.label.nanoseconds = nanossegundos
 
 # Diagnósticos do auxiliar which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] comando «{ $command }» não encontrado após verificar { $count } entradas do PATH. Pré-visualização: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Os segmentos vazios do PATH são ignorados; use cwd_mode="auto" para incluir a pasta de trabalho.
-stdlib.which.not_found.hint.cwd_always = Defina cwd_mode="always" para incluir a pasta atual.
+stdlib.which.not_found.hint.cwd_auto = O modo auto procura apenas nos diretórios explicitamente indicados em PATH.
+stdlib.which.not_found.hint.cwd_always = O modo always procura primeiro no diretório atual e, depois, nos diretórios indicados em PATH.
+stdlib.which.not_found.hint.workspace = Para pesquisar recursivamente a árvore da área de trabalho, utilize cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] o comando «{ $command }» em «{ $path }» não existe ou não é executável.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <vazio>
 stdlib.which.path_entry.non_utf8 = A entrada n.º { $index } do PATH contém carateres que não são UTF-8; o Netsuke exige caminhos UTF-8.
 stdlib.which.command.empty = O which exige uma cadeia de carateres não vazia.
-stdlib.which.cwd_mode.invalid = cwd_mode tem de ser «auto», «always» ou «never», obteve-se «{ $mode }».
+stdlib.which.cwd_mode.invalid = cwd_mode tem de ser 'auto', 'always', 'never' ou 'workspace-recursive'; foi recebido '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Não foi possível resolver a pasta atual: { $details }.
 stdlib.which.cwd.non_utf8 = A pasta atual contém componentes que não são UTF-8.
 stdlib.which.canonicalize_failed = Não foi possível canonizar «{ $path }»: { $details }.
@@ -429,3 +453,7 @@ example.errors_found = { $count ->
     [one] Foi encontrado { $count } erro.
    *[other] Foram encontrados { $count } erros.
 }
+manifest.budget.exceeded = O orçamento de recursos do manifesto foi esgotado durante { $stage } após atingir { $limit }.
+
+cli.flag.env_allow_var.help = Variável de ambiente permitida para o auxiliar env() do manifesto.
+cli.flag.env_block_var.help = Variável de ambiente bloqueada para o auxiliar env() do manifesto.

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.14"
-# dependencies = ["cyclopts==4.25.2", "cuprum @ git+https://github.com/leynos/cuprum@a2134c7a3966b224eaed917efb94f8090ce5104a"]
+# dependencies = ["cyclopts==4.25.3", "cuprum==0.1.0"]
 # ///
 """Remove the instrumented coverage build trees before any cache save.
 
@@ -19,7 +19,7 @@ import pathlib
 import shutil
 import sys
 
-from ci_support import CiScriptError, catalogue, describe_failure, run
+from ci_support import CiScriptError, RunSpec, catalogue, describe_failure, run
 
 import cyclopts
 from cyclopts import App
@@ -33,7 +33,7 @@ app = App(config=cyclopts.config.Env("INPUT_", command=False))
 
 def show_disk_usage() -> None:
     """Print ``df -h .`` so the log records the volume's state."""
-    result = run(DF, "-h", ".", allowed=ALLOWED)
+    result = run(DF, "-h", ".", spec=RunSpec(ALLOWED))
     if not result.ok:
         message = f"reading disk usage failed: {describe_failure(result)}"
         raise CiScriptError(message)

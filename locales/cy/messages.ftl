@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Enwau gwesteiwyr a ganiateir pan fo'r gwrthod r
 cli.flag.fetch_block_host.help = Enwau gwesteiwyr a rwystrir bob amser, hyd yn oed os caniateir hwy mewn man arall.
 cli.flag.fetch_default_deny.help = Gwrthod pob gwesteiwr yn rhagosodedig; caniatáu'r rhestr a ddatganwyd yn unig.
 cli.flag.trust_project_fetch_policy.help = Caniatáu i ffurfweddiad y prosiect ehangu caniatadau polisi fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Cyfyngu ar gyfarwyddiadau MiniJinja ar gyfer pob gwerthusiad maniffest.
+cli.flag.manifest_fuel.help = Cyfyngu ar gyfarwyddiadau MiniJinja ar draws un maniffest.
+cli.flag.manifest_rendered_value_bytes.help = Cyfyngu ar y beitiau a roddir mewn un gwerth maniffest.
+cli.flag.manifest_rendered_manifest_bytes.help = Cyfyngu ar gyfanswm y beitiau a roddir ar draws un maniffest.
+cli.flag.manifest_source_bytes.help = Cyfyngu ar feintiau beit ffynhonnell templedi a macros a ddefnyddir fesul maniffest.
+cli.flag.manifest_foreach_cardinality.help = Cyfyngu ar y gwerthoedd a brosesir gan un ehangiad foreach.
+cli.flag.manifest_expanded_entries.help = Cyfyngu ar y targedau a'r gweithredoedd a ehangir o un maniffest.
 cli.flag.json.help = Allbynnu JSON y gall pheiriant ei ddarllen.
 cli.flag.no_input.help = Peidio byth â darllen mewnbwn rhyngweithiol.
 cli.flag.color.help = Polisi allbwn lliw (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = Mae'r tocyn YAML yn annilys neu'n annisgwyl.
 manifest.yaml.hint.escape = Diangwch y slaesau ôl neu dynnwch y dilyniannau dianc annilys.
 manifest.env.missing = Nid yw newidyn amgylchedd gofynnol wedi'i osod.
 manifest.env.invalid_utf8 = Mae newidyn amgylchedd yn cynnwys UTF-8 annilys.
+manifest.env.blocked = Mae mynediad at newidyn amgylchedd wedi'i rwystro.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Rhaid i default env fod yn llinyn, derbyniwyd { $kind }.
 manifest.vars.not_object = Rhaid i `vars` y maniffest fod yn fap neu'n wrthrych.
 manifest.vars.reserved_name = Mae'r allwedd `vars` '{ $name }' yn y maniffest wedi'i chadw ar gyfer cynorthwyydd templed mewnol; ailenwch y newidyn.
 manifest.read_failed = Methwyd â darllen y maniffest o { $path }.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = ffrydio
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = Roedd shell_quote yn disgwyl llinyn ond cafodd { $kind }.
+stdlib.shell.quote.control_character = Ni ellir rhoi gwerth sy'n cynnwys beit nwl, dychweliad cerbyd neu doriad llinell mewn dyfynodau.
+stdlib.shell.dialect_invalid = Tafodiaith plisgyn anhysbys { $dialect }; disgwylir un o { $accepted }.
+stdlib.shell.dialect_not_string = Rhaid i'r opsiwn dialect yn shell fod yn llinyn, derbyniwyd { $kind }.
+stdlib.shell.join.not_sequence = Roedd shell_join yn disgwyl dilyniant ond cafodd { $kind }.
+stdlib.shell.join.item_not_string = Mae eitem { $index } shell_join yn { $kind }, nid yn llinyn.
+stdlib.shell.positional_option = Mae { $filter } yn cymryd ei opsiynau fel allweddair; ysgrifennwch { $example }.
+
 # Diagnosteg y cynorthwyydd llwybrau.
 stdlib.path.io.failed = Methodd y weithred ‘{ $action }’ ar gyfer { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Methodd y weithred ‘{ $action }’ ar gyfer { $path }: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algorithm stwnsio nas cefnogir: 
 
 # Diagnosteg cynorthwywyr y casgliadau.
 stdlib.collections.flatten.expected_sequence = Roedd flatten yn disgwyl eitemau dilyniant ond cafodd { $kind }.
+stdlib.collections.compact.not_sequence = Mae compact yn disgwyl dilyniant ond cafodd { $kind }.
 stdlib.collections.group_by.empty_attribute = Mae group_by angen priodoledd nad yw'n wag.
 stdlib.collections.group_by.unresolved = Methodd group_by â chanfod ‘{ $attr }’ ar eitem o'r math { $kind }.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = nanoeiliadau
 
 # Diagnosteg y cynorthwyydd which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] ni chafwyd hyd i'r gorchymyn ‘{ $command }’ ar ôl gwirio { $count } cofnod PATH. Rhagolwg: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Anwybyddir segmentau gwag PATH; defnyddiwch cwd_mode="auto" i gynnwys y cyfeiriadur gwaith.
-stdlib.which.not_found.hint.cwd_always = Gosodwch cwd_mode="always" i gynnwys y cyfeiriadur cyfredol.
+stdlib.which.not_found.hint.cwd_auto = Mae'r modd auto yn chwilio dim ond y cyfeiriaduron a enwir yn benodol yn PATH.
+stdlib.which.not_found.hint.cwd_always = Mae'r modd always yn chwilio dim ond y cyfeiriadur cyfredol cyn cyfeiriaduron a enwir yn PATH.
+stdlib.which.not_found.hint.workspace = I chwilio'r gweithle a'i holl isgyfeiriaduron, defnyddiwch cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] mae'r gorchymyn ‘{ $command }’ yn ‘{ $path }’ ar goll neu nid yw'n weithredadwy.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <gwag>
 stdlib.which.path_entry.non_utf8 = Mae cofnod PATH rhif { $index } yn cynnwys nodau nad ydynt yn UTF-8; mae Netsuke angen llwybrau UTF-8.
 stdlib.which.command.empty = Mae which angen llinyn nad yw'n wag.
-stdlib.which.cwd_mode.invalid = Rhaid i cwd_mode fod yn ‘auto’, ‘always’ neu ‘never’, ond cafwyd ‘{ $mode }’.
+stdlib.which.cwd_mode.invalid = Rhaid i cwd_mode fod yn 'auto', 'always', 'never', neu 'workspace-recursive'; cafwyd '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Methwyd â phennu'r cyfeiriadur cyfredol: { $details }.
 stdlib.which.cwd.non_utf8 = Mae'r cyfeiriadur cyfredol yn cynnwys rhannau nad ydynt yn UTF-8.
 stdlib.which.canonicalize_failed = Methwyd â chanoneiddio ‘{ $path }’: { $details }.
@@ -435,3 +459,7 @@ example.errors_found = { $count ->
     [many] Cafwyd hyd i { $count } gwall.
    *[other] Cafwyd hyd i { $count } gwall.
 }
+manifest.budget.exceeded = Daeth cyllideb adnoddau'r maniffest i ben yn ystod { $stage } ar ôl cyrraedd { $limit }.
+
+cli.flag.env_allow_var.help = Newidyn amgylchedd a ganiateir i gynorthwyydd env() y maniffest.
+cli.flag.env_block_var.help = Newidyn amgylchedd a rwystir i gynorthwyydd env() y maniffest.

@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = أسماء المضيفين المسموح به
 cli.flag.fetch_block_host.help = أسماء المضيفين المحجوبة دائمًا، حتى إن سُمح بها في موضع آخر.
 cli.flag.fetch_default_deny.help = رفض جميع المضيفين افتراضيًا؛ والسماح بالقائمة المعلنة فقط.
 cli.flag.trust_project_fetch_policy.help = ‏السماح لإعدادات المشروع بتوسيع منح سياسة fetch.
+
+cli.flag.manifest_evaluation_fuel.help = ‏حدّ تعليمات MiniJinja لكل تقييم للبيان.
+cli.flag.manifest_fuel.help = ‏حدّ تعليمات MiniJinja عبر بيان واحد.
+cli.flag.manifest_rendered_value_bytes.help = ‏حدّ وحدات البايت المُخرَجة في قيمة بيان واحدة.
+cli.flag.manifest_rendered_manifest_bytes.help = ‏حدّ إجمالي وحدات البايت المُخرَجة عبر بيان واحد.
+cli.flag.manifest_source_bytes.help = ‏حدّ وحدات بايت مصدر القالب ووحدات الماكرو المستهلكة لكل بيان.
+cli.flag.manifest_foreach_cardinality.help = ‏حدّ القيم المعالَجة في توسعة foreach واحدة.
+cli.flag.manifest_expanded_entries.help = ‏حدّ الأهداف والإجراءات الموسَّعة من بيان واحد.
 cli.flag.json.help = إخراج JSON قابل للقراءة آليًا.
 cli.flag.no_input.help = عدم قراءة أي مدخلات تفاعلية أبدًا.
 cli.flag.color.help = سياسة الإخراج الملوّن (auto أو always أو never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = رمز YAML غير صالح أو غير مت�
 manifest.yaml.hint.escape = هرّب الشرطات المائلة العكسية أو احذف تسلسلات التهريب غير الصالحة.
 manifest.env.missing = متغيّر بيئة مطلوب غير مضبوط.
 manifest.env.invalid_utf8 = يتضمّن متغيّر بيئة ترميز UTF-8 غير صالح.
+manifest.env.blocked = تم حظر الوصول إلى متغير بيئة.
+manifest.env.args_error = ‏[netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = يجب أن تكون قيمة default في env سلسلة نصية، وتم تلقّي { $kind }.
 manifest.vars.not_object = يجب أن يكون `vars` في ملف البيانات تخطيطًا أو كائنًا.
 manifest.vars.reserved_name = يُعدّ مفتاح `vars` المسمّى '{ $name }' في ملف البيانات محجوزًا لدالة قوالب مدمجة؛ أعد تسمية المتغيّر.
 manifest.read_failed = تعذّرت قراءة ملف البيانات من { $path }.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = التدفّق
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = ‏[netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = ‏[netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = يتوقّع shell_quote سلسلة نصية لكنه تلقّى { $kind }.
+stdlib.shell.quote.control_character = لا يمكن وضع قيمة تتضمّن بايتاً صفرياً أو إرجاع أوّل السطر أو تغذية السطر بين علامتي اقتباس.
+stdlib.shell.dialect_invalid = لهجة صدفة غير معروفة { $dialect }؛ المتوقّع أحد هذه: { $accepted }.
+stdlib.shell.dialect_not_string = يجب أن يكون خيار dialect في shell سلسلة نصية، وتم تلقّي { $kind }.
+stdlib.shell.join.not_sequence = يتوقّع shell_join تسلسلاً لكنه تلقّى { $kind }.
+stdlib.shell.join.item_not_string = العنصر { $index } في shell_join نوعه { $kind } وليس سلسلة نصية.
+stdlib.shell.positional_option = ‏{ $filter } يتلقّى خياراته ككلمات مفتاحية؛ اكتب { $example }.
+
 # تشخيصات مساعد المسارات.
 stdlib.path.io.failed = فشل الإجراء «{ $action }» على { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = فشل الإجراء «{ $action }» على { $path }: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = خوارزمية تلبيد غي
 
 # تشخيصات مساعدات المجموعات.
 stdlib.collections.flatten.expected_sequence = توقّع flatten عناصر متتالية لكنه وجد { $kind }.
+stdlib.collections.compact.not_sequence = يتطلّب compact تسلسلاً لكنه وجد { $kind }.
 stdlib.collections.group_by.empty_attribute = يتطلّب group_by سمة غير فارغة.
 stdlib.collections.group_by.unresolved = تعذّر على group_by إيجاد «{ $attr }» في عنصر من النوع { $kind }.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = أجزاء من المليار من الثاني
 
 # تشخيصات مساعد which.
 stdlib.which.not_found = ‏[netsuke::jinja::which::not_found] تعذّر العثور على الأمر «{ $command }» بعد فحص { $count } من مداخل PATH. معاينة: { $preview }
-stdlib.which.not_found.hint.cwd_auto = تُتجاهل الأجزاء الفارغة من PATH؛ استخدم cwd_mode="auto" لتضمين دليل العمل.
-stdlib.which.not_found.hint.cwd_always = اضبط cwd_mode="always" لتضمين الدليل الحالي.
+stdlib.which.not_found.hint.cwd_auto = ‏يبحث وضع auto فقط في الأدلة المسماة صراحةً في PATH.
+stdlib.which.not_found.hint.cwd_always = ‏يبحث وضع always فقط في الدليل الحالي قبل الأدلة المسماة في PATH.
+stdlib.which.not_found.hint.workspace = ‏للبحث التكراري في شجرة مساحة العمل، استخدم cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = ‏[netsuke::jinja::which::not_found] الأمر «{ $command }» في «{ $path }» غير موجود أو غير قابل للتنفيذ.
 stdlib.which.args_error = ‏[netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = ‏<فارغ>
 stdlib.which.path_entry.non_utf8 = يتضمّن المدخل رقم { $index } في PATH محارف ليست UTF-8؛ ويتطلّب Netsuke مسارات بترميز UTF-8.
 stdlib.which.command.empty = يتطلّب which سلسلة نصية غير فارغة.
-stdlib.which.cwd_mode.invalid = يجب أن تكون قيمة cwd_mode إحدى «auto» أو «always» أو «never»، لكن ورد «{ $mode }».
+stdlib.which.cwd_mode.invalid = ‏يجب أن يكون cwd_mode هو 'auto' أو 'always' أو 'never' أو 'workspace-recursive'؛ ولكن القيمة هي '{ $mode }'.
 stdlib.which.cwd.resolve_failed = تعذّر تحديد الدليل الحالي: { $details }.
 stdlib.which.cwd.non_utf8 = يتضمّن الدليل الحالي أجزاءً ليست UTF-8.
 stdlib.which.canonicalize_failed = تعذّر تقييس «{ $path }»: { $details }.
@@ -435,3 +459,7 @@ example.errors_found = { $count ->
     [many] عُثر على { $count } خطأً.
    *[other] عُثر على { $count } خطأ.
 }
+manifest.budget.exceeded = ‏استُنفدت ميزانية موارد البيان أثناء { $stage } بعد بلوغ { $limit }.
+
+cli.flag.env_allow_var.help = متغير البيئة المسموح به لمساعد env() في البيان.
+cli.flag.env_block_var.help = متغير البيئة المحظور على مساعد env() في البيان.

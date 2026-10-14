@@ -1,6 +1,6 @@
 //! Integration suite covering stdlib filter modules.
 
-#[path = "std_filter_tests/collection_filters.rs"]
+#[path = "std_filter_tests/collection_filters/mod.rs"]
 mod collection_filters;
 #[path = "std_filter_tests/command_filters/mod.rs"]
 mod command_filters;
@@ -21,6 +21,8 @@ mod path_filters;
 mod read_policy_filters;
 #[path = "std_filter_tests/support.rs"]
 mod support;
+#[path = "std_filter_tests/time_functions.rs"]
+mod time_functions;
 #[path = "std_filter_tests/which_filter_common.rs"]
 mod which_filter_common;
 #[path = "std_filter_tests/which_filter_tests.rs"]

@@ -1,9 +1,8 @@
-"""Exercise hostile LCOV artefact validation in-process and as a command.
+"""Exercise standalone hostile LCOV artefact inspection.
 
-The trusted workflow consumes data uploaded by an untrusted pull-request run.
-These cases prove that only a small, regular LCOV report can cross that
-boundary; links, extra files, oversized input, and malformed text fail before
-the secret-bearing CodeScene action starts.
+These cases prove that standalone inspection accepts only a small, regular
+LCOV report; links, extra files, oversized input, and malformed text fail
+without being executed or materialized as trusted input.
 """
 
 import dataclasses

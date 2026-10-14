@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Ονόματα κόμβων που επιτρέ
 cli.flag.fetch_block_host.help = Ονόματα κόμβων που αποκλείονται πάντοτε, ακόμη κι αν επιτρέπονται αλλού.
 cli.flag.fetch_default_deny.help = Άρνηση όλων των κόμβων από προεπιλογή· να επιτρέπεται μόνο ο δηλωμένος κατάλογος.
 cli.flag.trust_project_fetch_policy.help = Να επιτρέπεται στη διαμόρφωση του έργου να διευρύνει τις παραχωρήσεις της πολιτικής fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Περιορισμός των εντολών MiniJinja για κάθε αξιολόγηση δηλωτικού.
+cli.flag.manifest_fuel.help = Περιορισμός των εντολών MiniJinja σε ένα δηλωτικό.
+cli.flag.manifest_rendered_value_bytes.help = Περιορισμός των byte που αποδίδονται σε μία τιμή δηλωτικού.
+cli.flag.manifest_rendered_manifest_bytes.help = Περιορισμός των συνολικών byte που αποδίδονται σε ένα δηλωτικό.
+cli.flag.manifest_source_bytes.help = Περιορισμός των byte προέλευσης προτύπων και μακροεντολών που καταναλώνονται ανά δηλωτικό.
+cli.flag.manifest_foreach_cardinality.help = Περιορισμός των τιμών που επεξεργάζεται μία επέκταση foreach.
+cli.flag.manifest_expanded_entries.help = Περιορισμός των στόχων και των ενεργειών που επεκτείνονται από ένα δηλωτικό.
 cli.flag.json.help = Παραγωγή εξόδου JSON αναγνώσιμης από μηχανή.
 cli.flag.no_input.help = Να μη γίνεται ποτέ ανάγνωση διαδραστικής εισόδου.
 cli.flag.color.help = Πολιτική έγχρωμης εξόδου (auto, always, never).
@@ -131,6 +139,9 @@ manifest.yaml.hint.invalid_token = Το λεκτικό YAML είναι μη έγ
 manifest.yaml.hint.escape = Διαφύγετε τις ανάστροφες καθέτους ή αφαιρέστε τις μη έγκυρες ακολουθίες διαφυγής.
 manifest.env.missing = Μια απαιτούμενη μεταβλητή περιβάλλοντος δεν έχει οριστεί.
 manifest.env.invalid_utf8 = Μια μεταβλητή περιβάλλοντος περιέχει μη έγκυρο UTF-8.
+manifest.env.blocked = Η πρόσβαση σε μεταβλητή περιβάλλοντος έχει αποκλειστεί.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Το default του env πρέπει να είναι συμβολοσειρά· τύπος τιμής που ελήφθη: { $kind }.
 manifest.vars.not_object = Το `vars` του δηλωτικού πρέπει να είναι αντιστοίχιση ή αντικείμενο.
 manifest.vars.reserved_name = Το κλειδί `vars` '{ $name }' του μανιφέστου είναι δεσμευμένο για ενσωματωμένη βοηθητική συνάρτηση προτύπων· μετονομάστε τη μεταβλητή.
 manifest.read_failed = Δεν ήταν δυνατή η ανάγνωση του δηλωτικού από { $path }.
@@ -277,6 +288,17 @@ stdlib.command.output.mode.streaming = συνεχής ροή
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = Το shell_quote περίμενε συμβολοσειρά, αλλά έλαβε { $kind }.
+stdlib.shell.quote.control_character = Μια τιμή που περιέχει μηδενικό byte, επιστροφή ή αλλαγή γραμμής δεν μπορεί να τεθεί σε εισαγωγικά.
+stdlib.shell.dialect_invalid = Άγνωστη διάλεκτος κελύφους { $dialect }· αναμενόταν μία από { $accepted }.
+stdlib.shell.dialect_not_string = Η επιλογή dialect του shell πρέπει να είναι συμβολοσειρά· τύπος τιμής που ελήφθη: { $kind }.
+stdlib.shell.join.not_sequence = Το shell_join περίμενε ακολουθία, αλλά έλαβε { $kind }.
+stdlib.shell.join.item_not_string = Το στοιχείο { $index } του shell_join είναι { $kind }, όχι συμβολοσειρά.
+stdlib.shell.positional_option = Το { $filter } δέχεται τις επιλογές του ως λέξεις-κλειδιά· γράψτε { $example }.
+
 # Διαγνωστικά του βοηθήματος διαδρομών.
 stdlib.path.io.failed = Η ενέργεια «{ $action }» απέτυχε για { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Η ενέργεια «{ $action }» απέτυχε για { $path }: { $detail }.
@@ -332,6 +354,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Μη υποστηριζόμεν�
 
 # Διαγνωστικά των βοηθημάτων συλλογών.
 stdlib.collections.flatten.expected_sequence = Το flatten περίμενε στοιχεία ακολουθίας αλλά βρήκε { $kind }.
+stdlib.collections.compact.not_sequence = Το compact περιμένει ακολουθία· τύπος τιμής που βρέθηκε: { $kind }.
 stdlib.collections.group_by.empty_attribute = Το group_by απαιτεί μη κενό γνώρισμα.
 stdlib.collections.group_by.unresolved = Το group_by δεν μπόρεσε να εντοπίσει το «{ $attr }» σε στοιχείο τύπου { $kind }.
 
@@ -349,14 +372,15 @@ stdlib.time.label.nanoseconds = δισεκατομμυριοστά του δευ
 
 # Διαγνωστικά του βοηθήματος which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] η εντολή «{ $command }» δεν βρέθηκε μετά τον έλεγχο { $count } καταχωρίσεων του PATH. Προεπισκόπηση: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Τα κενά τμήματα του PATH αγνοούνται· χρησιμοποιήστε cwd_mode="auto" για να συμπεριληφθεί ο κατάλογος εργασίας.
-stdlib.which.not_found.hint.cwd_always = Ορίστε cwd_mode="always" για να συμπεριληφθεί ο τρέχων κατάλογος.
+stdlib.which.not_found.hint.cwd_auto = Η λειτουργία auto αναζητά μόνο καταλόγους που αναφέρονται ρητά στο PATH.
+stdlib.which.not_found.hint.cwd_always = Η λειτουργία always αναζητά μόνο τον τρέχοντα κατάλογο πριν από τους καταλόγους που αναφέρονται στο PATH.
+stdlib.which.not_found.hint.workspace = Για αναδρομική αναζήτηση στο δέντρο του χώρου εργασίας, χρησιμοποιήστε cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] η εντολή «{ $command }» στο «{ $path }» λείπει ή δεν είναι εκτελέσιμη.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <κενό>
 stdlib.which.path_entry.non_utf8 = Η καταχώριση αρ. { $index } του PATH περιέχει χαρακτήρες που δεν είναι UTF-8· το Netsuke απαιτεί διαδρομές UTF-8.
 stdlib.which.command.empty = Το which απαιτεί μη κενή συμβολοσειρά.
-stdlib.which.cwd_mode.invalid = Το cwd_mode πρέπει να είναι «auto», «always» ή «never»· ελήφθη «{ $mode }».
+stdlib.which.cwd_mode.invalid = Το cwd_mode πρέπει να είναι 'auto', 'always', 'never' ή 'workspace-recursive', αλλά δόθηκε '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Δεν ήταν δυνατός ο προσδιορισμός του τρέχοντος καταλόγου: { $details }.
 stdlib.which.cwd.non_utf8 = Ο τρέχων κατάλογος περιέχει τμήματα που δεν είναι UTF-8.
 stdlib.which.canonicalize_failed = Δεν ήταν δυνατή η κανονικοποίηση του «{ $path }»: { $details }.
@@ -429,3 +453,7 @@ example.errors_found = { $count ->
     [one] Βρέθηκε { $count } σφάλμα.
    *[other] Βρέθηκαν { $count } σφάλματα.
 }
+manifest.budget.exceeded = Ο προϋπολογισμός πόρων του δηλωτικού εξαντλήθηκε κατά το στάδιο { $stage }, αφού έφτασε το { $limit }.
+
+cli.flag.env_allow_var.help = Μεταβλητή περιβάλλοντος που επιτρέπεται στον βοηθό env() του δηλωτικού.
+cli.flag.env_block_var.help = Μεταβλητή περιβάλλοντος που αποκλείεται από τον βοηθό env() του δηλωτικού.

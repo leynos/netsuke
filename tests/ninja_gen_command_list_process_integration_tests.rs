@@ -60,7 +60,7 @@ fn run_command_list(
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("chain".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+    graph.insert_edge(edge)?;
     graph.default_targets.push(Utf8PathBuf::from("out"));
 
     let ninja = generate(&graph)?;

@@ -229,6 +229,79 @@ fn fetch_rejects_redirect_loops() -> Result<()> {
     Ok(())
 }
 
+/// A redirect fixture whose `Location` the adapter cannot follow.
+///
+/// The adapter owns the header parse, so these responses fail before the chain
+/// receives a target. Each variant carries both the response to serve and the
+/// diagnostic its failure must report, which keeps the expected text out of the
+/// call sites and names the failure instead of describing it.
+#[derive(Clone, Copy, Debug)]
+enum UnusableLocation {
+    /// A `302` that carries no `Location` header at all.
+    Headerless,
+    /// A `302` whose `Location` cannot be resolved against the current URL.
+    Unparsable,
+}
+
+impl UnusableLocation {
+    /// The fixture response that provokes this failure.
+    fn response(self) -> HttpResponse {
+        match self {
+            Self::Headerless => HttpResponse::new(302, ""),
+            Self::Unparsable => HttpResponse::new(302, "").with_header("Location", "http://[::1"),
+        }
+    }
+
+    /// The diagnostic fragment the failing fetch must report.
+    const fn diagnostic(self) -> &'static str {
+        match self {
+            Self::Headerless => "did not include a Location header",
+            Self::Unparsable => "Invalid redirect location",
+        }
+    }
+}
+
+/// Assert a fetch fails for `case` after exactly one fixture request.
+///
+/// Both header failures stop at the first response, which is what the request
+/// count proves: the fixture answers once, so a second request would find no
+/// queued response. A denied bind skips the case.
+fn assert_single_response_failure(case: UnusableLocation) -> Result<()> {
+    let (url, requests, server) = match http::spawn_http_server_responses([case.response()]) {
+        Ok(server) => server,
+        Err(err) if err.kind() == io::ErrorKind::PermissionDenied => return Ok(()),
+        Err(err) => bail!("spawn redirect fixture: {err}"),
+    };
+
+    let err = match render_fetch(NetworkPolicy::default().allow_scheme("http")?, &url) {
+        Ok(rendered) => bail!("an unusable Location unexpectedly rendered: {rendered:?}"),
+        Err(err) => err,
+    };
+    join_server(server, "redirect fixture")?;
+    let expected = case.diagnostic();
+    ensure!(
+        err.to_string().contains(expected),
+        "expected '{expected}' for {case:?}, got: {err}",
+    );
+    ensure!(
+        requests.load(std::sync::atomic::Ordering::Relaxed) == 1,
+        "an unusable Location should stop after the first request",
+    );
+    Ok(())
+}
+
+/// Verify a redirect response with no `Location` header fails without a retry.
+#[rstest]
+fn fetch_rejects_redirect_without_a_location_header() -> Result<()> {
+    assert_single_response_failure(UnusableLocation::Headerless)
+}
+
+/// Verify a redirect response with an unparsable `Location` fails the same way.
+#[rstest]
+fn fetch_rejects_redirect_with_an_invalid_location_header() -> Result<()> {
+    assert_single_response_failure(UnusableLocation::Unparsable)
+}
+
 /// Verify a redirect chain exceeding the limit fails before opening another hop.
 #[rstest]
 fn fetch_rejects_redirect_chains_beyond_the_limit() -> Result<()> {

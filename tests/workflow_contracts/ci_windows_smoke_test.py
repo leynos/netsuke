@@ -33,8 +33,8 @@ WINDOWS_JOB = "build-test-windows"
 #: separate blocks do not swallow the executable lines between them.
 _BLOCK_COMMENT = re.compile(r"<#.*?#>", re.DOTALL)
 
-#: Both halves of the Windows gate, in declaration order.
-EXPECTED_WINDOWS_JOBS = ("lint-windows", WINDOWS_JOB)
+#: Independent Windows merge-gate jobs, in declaration order.
+EXPECTED_WINDOWS_JOBS = ("lint-windows", WINDOWS_JOB, "windows-msi-upgrade")
 
 
 def command_lines(run: str) -> list[str]:
@@ -111,6 +111,46 @@ def windows_steps() -> list[dict[str, object]]:
     return job_steps(load_workflow(CI_WINDOWS_WORKFLOW_PATH), WINDOWS_JOB)
 
 
+def test_the_direct_windows_build_keeps_the_parallel_frontend(
+    windows_steps: list[dict[str, object]],
+) -> None:
+    """The step that invokes Cargo directly must compose the standard itself.
+
+    Scenario: `Build Netsuke` is the one step in this job that calls Cargo
+    rather than the Makefile, and the pinned `setup-rust` action has already
+    exported its `rustflags` input as `RUSTFLAGS`. An externally set
+    `RUSTFLAGS` displaces every `rustflags` table in `.cargo/config.toml`, so
+    this build silently loses the parallel frontend that every other build in
+    the repository has. mold is Linux-only and correctly absent.
+
+    Invariant: the flag is appended to the inherited value — not assigned over
+    it, which would drop the deny — and the assignment precedes the build,
+    because one placed after it would change nothing at all. The `Test` step
+    above is unaffected: it goes through `make`, which composes the flags in
+    the Makefile.
+    """
+    step_name = "Build Netsuke"
+    step = named_step(windows_steps, step_name)
+    match step.get("run"):
+        case str() as run:
+            pass
+        case _:
+            pytest.fail(f"{step_name} must declare a PowerShell run block")
+
+    lines = command_lines(run)
+    assignment = '$env:RUSTFLAGS = "$env:RUSTFLAGS -Zthreads=8"'
+    build = "cargo build --locked --bin netsuke"
+    assert assignment in lines, (
+        f"{step_name} must append the standard's frontend flag to the inherited "
+        f"RUSTFLAGS, which the `setup-rust` action exports and which otherwise "
+        f"displaces `.cargo/config.toml`; {assignment!r} missing from {lines!r}"
+    )
+    assert lines.index(assignment) < lines.index(build), (
+        f"{step_name} must set RUSTFLAGS before it builds, or the assignment "
+        f"has no effect on the build it is there for, got {lines!r}"
+    )
+
+
 def test_windows_job_runs_the_native_recipe_smoke_after_the_test_gate(
     windows_steps: list[dict[str, object]],
 ) -> None:
@@ -176,19 +216,23 @@ def test_windows_job_runs_the_native_recipe_smoke_after_the_test_gate(
         )
 
 
-def test_windows_workflow_declares_no_serialised_job() -> None:
-    """The Windows lane must stay two concurrent jobs and no more.
+def test_windows_workflow_declares_the_independent_msi_validation_job() -> None:
+    """Keep the Rust gate concurrent and make MSI validation an explicit job.
 
     Scenario: `windows-native-recipe-smoke` used to be a third job that
     ``needs``-ed the gate, costing a measured median 236s of serial tail for 7s
-    of work. Invariant: `ci-windows.yml` declares exactly the lint and test
-    jobs, so a reinstated serial job has to justify the tail rather than arrive
-    quietly.
+    of work. Invariant: `ci-windows.yml` declares the two concurrent Rust jobs
+    plus the independent MSI integration job; neither may become a hidden
+    serial tail.
     """
     workflow = load_workflow(CI_WINDOWS_WORKFLOW_PATH)
     jobs = require_mapping(workflow.get("jobs"), "ci-windows.yml jobs")
     assert list(jobs) == list(EXPECTED_WINDOWS_JOBS), (
-        f"ci-windows.yml must declare exactly {list(EXPECTED_WINDOWS_JOBS)!r}; the "
-        f"native-recipe smoke test is folded into the test job as PowerShell "
-        f"steps, got {list(jobs)!r}"
+        f"ci-windows.yml must declare exactly {list(EXPECTED_WINDOWS_JOBS)!r}, "
+        f"got {list(jobs)!r}"
+    )
+    msi_job = require_mapping(jobs["windows-msi-upgrade"], "windows-msi-upgrade")
+    assert "needs" not in msi_job, (
+        "windows-msi-upgrade must not wait on the Rust gate; it builds only "
+        "disposable MSI fixtures"
     )

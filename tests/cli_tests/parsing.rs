@@ -24,6 +24,8 @@ struct CliCase {
     locale: Option<&'static str>,
     json: bool,
     allow_scheme: Vec<String>,
+    allow_var: Vec<String>,
+    block_var: Vec<String>,
     allow_host: Vec<&'static str>,
     block_host: Vec<&'static str>,
     default_deny: bool,
@@ -46,6 +48,8 @@ impl Default for CliCase {
             locale: None,
             json: false,
             allow_scheme: Vec::new(),
+            allow_var: Vec::new(),
+            block_var: Vec::new(),
             allow_host: Vec::new(),
             block_host: Vec::new(),
             default_deny: false,
@@ -174,6 +178,20 @@ impl Default for CliCase {
     default_deny: true,
     ..CliCase::default()
 })]
+#[case(CliCase {
+    argv: vec![
+        "netsuke",
+        "--env-allow-var",
+        "CI",
+        "--env-allow-var",
+        "PACKAGE_REGISTRY_TOKEN",
+        "--env-block-var",
+        "GITHUB_TOKEN",
+    ],
+    allow_var: vec![String::from("CI"), String::from("PACKAGE_REGISTRY_TOKEN")],
+    block_var: vec![String::from("GITHUB_TOKEN")],
+    ..CliCase::default()
+})]
 fn parse_cli(#[case] case: CliCase) -> Result<()> {
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (parsed_cli, _) = netsuke::cli::parse_with_localizer_from(case.argv.clone(), &localizer)
@@ -195,6 +213,14 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
     );
     ensure!(cli.json == case.json, "json flag should match input");
     ensure!(cli.no_input(), "no-input should remain enabled");
+    ensure!(
+        cli.env_allow_var == case.allow_var,
+        "allow-var flags should match input"
+    );
+    ensure!(
+        cli.env_block_var == case.block_var,
+        "block-var flags should match input"
+    );
     ensure!(
         cli.fetch_allow_scheme == case.allow_scheme,
         "allow-scheme flags should match input",

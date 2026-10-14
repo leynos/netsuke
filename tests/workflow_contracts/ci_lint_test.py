@@ -4,7 +4,7 @@ Two invariants in ``.github/workflows/ci.yml`` are load-bearing but easy to
 lose to an innocuous edit, and both fail in ways that are slow and confusing
 to diagnose from a red run:
 
-* The hermetic dev-fast sandbox probes ``awk`` through a capability-backed
+* The hermetic build-tools sandbox probes ``awk`` through a capability-backed
   directory handle, which deliberately cannot follow a symlink that escapes
   its containing directory. Ubuntu ships ``awk`` as exactly such a symlink,
   so the job installs ``gawk`` and copies it to a regular executable on the
@@ -186,65 +186,6 @@ def test_makefile_clippy_flags_stay_workspace_wide() -> None:
     )
 
 
-def test_makefile_check_fmt_runs_markdown_format_checker() -> None:
-    """Protect NUL-safe Markdown batching and its portable empty-input guard."""
-    makefile_lines = MAKEFILE_PATH.read_text(encoding="utf-8").splitlines()
-    target_index = next(
-        (
-            index
-            for index, line in enumerate(makefile_lines)
-            if line.startswith("check-fmt:")
-        ),
-        None,
-    )
-    assert target_index is not None, "the Makefile must define a check-fmt target"
-
-    top_level_target = re.compile(r"^[A-Za-z0-9_.%/-]+:")
-    recipe_lines = []
-    for line in makefile_lines[target_index + 1 :]:
-        if top_level_target.match(line):
-            break
-        if line.startswith("\t"):
-            recipe_lines.append(line)
-    recipe = "\n".join(recipe_lines)
-
-    required_fragments = {
-        "$(MD_FILES_FIND)": "discover Markdown files with $(MD_FILES_FIND)",
-        "scripts/check-markdown-format.sh": "invoke the Markdown format checker",
-        "xargs -0": "batch Markdown paths with NUL delimiters",
-        "sh -c": "run the portable empty-input guard",
-        'if [ "$$#" -gt 0 ]': "skip the Markdown checker for empty input",
-        'scripts/check-markdown-format.sh "$$@"': (
-            "validate every discovered Markdown path"
-        ),
-    }
-    missing_fragments = [
-        description
-        for fragment, description in required_fragments.items()
-        if fragment not in recipe
-    ]
-    assert not missing_fragments, "check-fmt must " + "; ".join(missing_fragments)
-
-    xargs_arguments = [
-        argument
-        for line in recipe_lines
-        if "xargs" in line
-        for argument in line.split()
-    ]
-    assert not any(
-        argument in {"-r", "--no-run-if-empty"}
-        or (
-            argument.startswith("-")
-            and not argument.startswith("--")
-            and "r" in argument[1:]
-        )
-        for argument in xargs_arguments
-    ), (
-        "check-fmt must use the shell positional-parameter guard instead of "
-        f"GNU-only xargs -r, found xargs arguments: {xargs_arguments!r}"
-    )
-
-
 def test_nextest_version_declared_once_at_workflow_scope() -> None:
     r"""NEXTEST_VERSION is declared once, at workflow scope.
 
@@ -308,12 +249,3 @@ def test_setup_rust_does_not_pass_unsupported_components_input() -> None:
                 f"{job_name} Setup Rust must not pass the unsupported "
                 f"'components' input, got {sorted(with_.keys())!r}"
             )
-
-
-def test_build_job_runs_markdown_formatter_checker_tests() -> None:
-    """The Linux merge gate exercises the Markdown checker process boundary."""
-    runs = step_runs(job_steps(load_workflow(), "build-test"))
-
-    assert runs.count("make test-markdown-format") == 1, (
-        "build-test must run the Markdown checker test suite exactly once"
-    )

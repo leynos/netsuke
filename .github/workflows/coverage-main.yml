@@ -1,11 +1,10 @@
 ---
 name: Coverage (main)
 
-# CodeScene accepts `cs-coverage upload` only for analysed branches, so
-# main-branch coverage is uploaded here on push; pull requests run the
-# changed-line gate (`cs-coverage check`) in ci.yml instead. This
-# workflow also advances the coverage ratchet baseline: caches saved on
-# main are readable by every pull-request run, so the baseline written
+# Main owns both persistent coverage outputs: the CodeScene upload and the
+# ratchet baseline. Pull requests generate coverage only for their local
+# ratchet check; they neither publish the report nor contact CodeScene. Caches
+# saved on main are readable by every pull-request run, so the baseline written
 # here is the one PR ratchet checks compare against.
 
 on:
@@ -24,6 +23,20 @@ on:
   # workflow already relies on, so it needs no opt-in.
   workflow_dispatch:
 
+# Publishers queue rather than race or cancel. Two runs writing at once is a
+# lost update, and cancelling one abandons its work half done. Runs in the
+# group never overlap, and a newer trigger replaces an older pending run;
+# nothing here promises that runs start in commit order. The coverage action
+# saves the ratchet baseline only on a push, under a key naming the run, so a
+# dispatch uploads coverage but leaves the baseline where the last completed
+# push left it, however many pushes were replaced meanwhile. A manual "Re-run
+# jobs" keeps its run ID: it republishes that commit's coverage, but replaces
+# no baseline already saved under that run's key. Only a later push to main
+# publishes a newer baseline.
+concurrency:
+  group: coverage-main-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   coverage-upload:
     # Escalated alongside `build-test` on the same evidence: this job runs the
@@ -32,7 +45,19 @@ jobs:
     # measures the peak; see the developers guide for the return-to-`-2`
     # condition.
     runs-on: ubicloud-standard-4-ubuntu-2404
-    timeout-minutes: 60
+    # The CodeScene token lives in this environment, whose deployment policy
+    # admits `main` alone; the codescene environment contract holds it to
+    # this job.
+    environment: codescene
+    # Ninety minutes, not sixty. The coverage step below passes
+    # `doctests: 'true'`, so the shared action runs `cargo llvm-cov nextest`
+    # and then an uninstrumented `cargo test --doc`, each arming the 1,800 s
+    # cargo watchdog of its own. The ceiling has to contain both windows, the
+    # work outside them and the margin above that sum, which is 5,400 s; a
+    # sixty-minute ceiling would cancel the job at the moment the watchdog
+    # would have reported the overrun. See "Test timeouts: the tiers this
+    # repository sets" in docs/developers-guide.md.
+    timeout-minutes: 90
     permissions:
       contents: read
     env:
@@ -44,20 +69,15 @@ jobs:
       LINUX_LANE_VCPUS: '4'
       CARGO_BUILD_JOBS: '4'
       NEXTEST_TEST_THREADS: '4'
+      # Selects [profile.ci] in .config/nextest.toml, which carries the
+      # 780s whole-run budget. The shared coverage action takes no profile
+      # input, so this variable is the only lever; the default profile is
+      # deliberately uncapped for local runs on contended hosts.
+      NEXTEST_PROFILE: ci
       NETSUKE_RUNNER_IMAGE: ubuntu2404
-      # The instrumented coverage build compiles through the same sccache
-      # store as the ordinary debug build: the two shapes differ only by
-      # flags, which sccache hashes, so they coexist without a `target`
-      # archive and neither shape is left uncached.
-      RUSTC_WRAPPER: sccache
-      # Derived from the same repository variable the merge gate reads, so one
-      # operator switch moves both lanes together. Pinning `true` here would
-      # leave this job writing a GitHub Actions store that no other lane reads
-      # the moment the gate moved to the local directory, and nothing would
-      # fail: the trunk baseline would simply compile cold on every run.
-      SCCACHE_GHA_ENABLED: ${{ vars.NETSUKE_SCCACHE_LOCAL_DIR == 'true' && 'false' || 'true' }}
-      SCCACHE_DIR: ${{ github.workspace }}/.sccache
-      SCCACHE_CACHE_SIZE: 4G
+      # sccache is setup-rust's: it names the wrapper, starts and zeroes the
+      # server, and picks the backend from the runner (shared-actions ADR
+      # 0005). See "Compiler cache" in docs/developers-guide.md.
       # The shared coverage action wraps `cargo llvm-cov nextest` in a
       # watchdog that defaults to 600s, which was sized against a lane that
       # restored a `target` archive and so never paid for a cold compile.
@@ -79,14 +99,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - name: Export sccache credentials
-        # Before the installer, so before anything can start the server: a
-        # server started without these stays on local disk all job.
-        uses: ./.github/actions/sccache-gha-credentials
       - name: Setup uv
         # The sccache report is a scripts/ci helper run through
         # `uv run --script`; uv's own cache is not part of this lane's keys.
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           python-version: '3.14'
           enable-cache: 'false'
@@ -131,8 +147,6 @@ jobs:
               "${lane}" "${COVERAGE_TOOLCHAIN}"
             printf 'CARGO_CACHE_KEY=netsuke-cargo-v1-%s-%s-%s\n' \
               "${lane}" "${COVERAGE_TOOLCHAIN}" "${sources}"
-            printf 'SCCACHE_CACHE_PREFIX=netsuke-sccache-v1-%s-%s-%s-\n' \
-              "${lane}" "${COVERAGE_TOOLCHAIN}" "${BUILD_PROFILE}"
           } >> "$GITHUB_ENV"
       - name: Restore Cargo download store
         id: cargo_registry
@@ -148,26 +162,10 @@ jobs:
             ~/.cargo/git
           key: ${{ env.CARGO_CACHE_KEY }}
           restore-keys: ${{ env.CARGO_CACHE_PREFIX }}
-      - name: Restore compiler cache
-        id: sccache_store
-        # Only in local-directory mode, and only ever as a reader: `build-test`
-        # on the trunk is the single writer of this key family. On the GitHub
-        # Actions backend the compiler cache needs no archive at all, so
-        # restoring one there would give it a second owner.
-        if: vars.NETSUKE_SCCACHE_LOCAL_DIR == 'true'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: ${{ env.SCCACHE_DIR }}
-          # Prefix only: this job never shares the gate's commit, so it takes
-          # the newest generation the gate published for this shape.
-          key: ${{ env.SCCACHE_CACHE_PREFIX }}
-          restore-keys: ${{ env.SCCACHE_CACHE_PREFIX }}
       - name: Record cache observations
         if: always()
         env:
           REGISTRY_HIT: ${{ steps.cargo_registry.outputs.cache-hit }}
-          SCCACHE_LOCAL: ${{ vars.NETSUKE_SCCACHE_LOCAL_DIR }}
-          SCCACHE_STORE_HIT: ${{ steps.sccache_store.outputs.cache-hit }}
         run: |
           {
             printf '### Cache observations\n\n'
@@ -176,23 +174,11 @@ jobs:
             # shellcheck disable=SC2016
             printf -- '- registry key: `%s` hit: `%s`\n' \
               "${CARGO_CACHE_KEY}" "${REGISTRY_HIT:-false}"
-            if [ "${SCCACHE_LOCAL}" = 'true' ]; then
-              # shellcheck disable=SC2016
-              printf -- '- sccache key: `%s` hit: `%s`\n' \
-                "${SCCACHE_CACHE_PREFIX}" "${SCCACHE_STORE_HIT:-false}"
-            else
-              # shellcheck disable=SC2016
-              printf -- '- sccache backend: `gha` (no archive)\n'
-            fi
           } | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Install sccache
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
-        with:
-          tool: sccache@0.16.0
-          fallback: none
       - name: Setup Rust
+        id: setup-rust
         # Pinned to the shared-actions revision that adds `cache-provider`.
-        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           # Match rust-toolchain.toml: the tree needs the nightly-default
           # Polonius borrow checker (see
@@ -202,13 +188,28 @@ jobs:
           # cargo-llvm-cov appends its instrumentation flags to this value.
           rustflags: -D warnings
           cache-provider: external
-          use-sccache: 'false'
+          # This job runs only on Ubicloud, so a missing cache proxy fails
+          # it rather than letting it compile against local disk.
+          expect-cache: ubicloud
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
-      - name: Reset sccache statistics
-        run: sccache --zero-stats
+      - name: Install the build standard
+        # The measured build never links with `mold`: the step below assigns
+        # RUSTFLAGS, which displaces the configuration's linker flag. The
+        # suite still needs it, because tests drive `make` recipes gated on
+        # `check-build-tools`, which refuses to run without the pinned `mold`.
+        run: make install-build-tools
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@77ea10341249024e22ec5d9069e3caa7596e0d4f
+        env:
+          # One of the two exclusions from the build standard. A build whose
+          # output is a measurement is a reproducibility claim, so it takes
+          # neither the parallel frontend nor the linker change. Assigning
+          # RUSTFLAGS is the whole mechanism: it displaces every `rustflags`
+          # table in `.cargo/config.toml`. Stated here rather than inherited
+          # from `setup-rust`, so the exclusion is visible at the step it
+          # applies to and a contract has something to read.
+          RUSTFLAGS: -D warnings
+        uses: leynos/shared-actions/.github/actions/generate-coverage@7d751eded578e48dacf43ab173d5820e6437c474
         with:
           language: rust
           output-path: lcov.info
@@ -220,11 +221,58 @@ jobs:
           all-targets: 'true'
           doctests: 'true'
           with-ratchet: 'true'
+          # `publish-artefact` is deliberately left unset, so the action keeps
+          # its default and archives the report this lane uploads to CodeScene.
+          # Setting it here, as the pull-request lane does, would leave
+          # CodeScene with no report to read.
+      - name: Validate the report before submitting it
+        # The upload asserts only that the file exists, not that it holds a
+        # usable report. A report that is empty, truncated, or otherwise
+        # malformed therefore reaches CodeScene and is refused there, hours
+        # later and in another system: the check run reports "No valid coverage
+        # report found in the build pipeline" against a commit whose logs say
+        # every step passed, which names neither the step nor the file at
+        # fault. This narrows that to the run that produced it.
+        #
+        # `scripts/validate_coverage_artifact.py` already owns the LCOV
+        # contract for hostile reports and is exercised by
+        # `make test-coverage-artifact`; this gives it the live subject it was
+        # built for. It reads the report as data, executes nothing in it, and
+        # requires the artefact directory to hold exactly one `lcov.info`, so
+        # the report is staged into a directory of its own.
+        #
+        # Position matters. The report is read from the workspace, so this
+        # must follow the step that writes it and precede the upload that
+        # sends it; and it must precede `Show sccache statistics`, which
+        # tests/workflow_contracts/sccache_contract_test.py requires to follow
+        # every compile step.
+        run: |
+          set -euo pipefail
+          # Read the baseline rather than copying the number, the way
+          # AGENTS.md does for NEXTEST_VERSION. This lane declares no
+          # PYTHON_BASELINE of its own, and the one source is the Makefile.
+          baseline="$(
+            sed -n 's/^PYTHON_BASELINE[[:space:]]*?=[[:space:]]*\([^[:space:]]*\).*/\1/p' \
+              Makefile | head -n 1
+          )"
+          test -n "${baseline}"
+          staged="$(mktemp --directory)"
+          cp -- lcov.info "${staged}/lcov.info"
+          # `uv` is on PATH because the generation action installs it: its
+          # first steps run `astral-sh/setup-uv` and then `uv run` throughout.
+          # `uv` fetches the baseline interpreter on demand, so no separate
+          # setup-python step is needed here.
+          uv run --no-project --python "${baseline}" \
+            scripts/validate_coverage_artifact.py --artifact-dir "${staged}"
       - name: Show sccache statistics
         # Zero compile requests here would mean the instrumented build never
         # reached the compiler cache, which is a failed integration rather
         # than a quiet no-op.
-        if: always()
+        # A server that fell back never started, so it has no statistics; the
+        # guard keeps an uncached build from reporting misleadingly.
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
+        env:
+          SCCACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
         # Text and JSON files plus a step-summary section, from one script.
         run: uv run --script scripts/ci/report_sccache_stats.py
       - name: Discard the instrumented build tree
@@ -240,13 +288,21 @@ jobs:
         uses: ./.github/actions/memory-sampler
         with:
           mode: report
+      - name: Check CodeScene token availability
+        # Publishes whether the token exists, and nothing else. The token
+        # stays out of every `env` on this job: the upload is a composite
+        # action, and a composite action's nested steps inherit the calling
+        # step's environment, so a token placed there reaches every one of
+        # them.
+        id: codescene_token
+        run: echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
       - name: Upload coverage data to CodeScene
-        env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        if: env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@e041cb75c35c3524201a32d5e57c87408fbd5874
+        # The ref clause is not redundant with the push branch filter: a
+        # warm-run dispatch runs from whichever branch started it, and the
+        # upload action does not check the ref itself.
+        if: steps.codescene_token.outputs.available == 'true' && github.ref == 'refs/heads/main'
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@7d751eded578e48dacf43ab173d5820e6437c474
         with:
           path: lcov.info
           format: lcov
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
-          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+          access-token: ${{ secrets.CS_ACCESS_TOKEN }}

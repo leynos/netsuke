@@ -11,11 +11,14 @@ the YAML 1.2 boolean workaround has a single home.
 Run via ``make test-workflow-contracts``.
 """
 
+import collections.abc as cabc
 import re
+import typing as typ
 from pathlib import Path
 
 import pytest
 import yaml
+from yaml.constructor import ConstructorError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
@@ -32,6 +35,12 @@ MUTATION_TESTING_WORKFLOW_PATH = (
 PACKAGE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "build-and-package.yml"
 RELEASE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "release.yml"
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
+#: The composite action the Windows MSI merge gate delegates to. Its steps are
+#: parsed as YAML by `windows_msi_gate_test.py`, so the path is shared here
+#: rather than spelled out at each call site.
+MSI_VALIDATION_ACTION_PATH = (
+    REPO_ROOT / ".github" / "actions" / "windows-msi-upgrade-validation" / "action.yml"
+)
 
 #: The jobs that call the shared `setup-rust` action directly, paired with the
 #: workflow that declares each. Several suites assert against all of them. The
@@ -43,12 +52,12 @@ SETUP_RUST_JOBS = (
     (CI_WINDOWS_WORKFLOW_PATH, "build-test-windows"),
 )
 
-#: The jobs that run tests and therefore install cargo-nextest. A subset of
-#: `SETUP_RUST_JOBS`: on Windows only the test job runs the suite, so only it
-#: needs the runner.
+#: The jobs that run tests and therefore install cargo-nextest. Windows needs
+#: it on the test job alone; `kani-smoke` needs it for the mutation compile gate.
 NEXTEST_JOBS = (
     (CI_WORKFLOW_PATH, "build-test"),
     (CI_WINDOWS_WORKFLOW_PATH, "build-test-windows"),
+    (CI_WORKFLOW_PATH, "kani-smoke"),
 )
 
 #: The jobs that run the Markdown formatter check and therefore install
@@ -61,14 +70,47 @@ MDTABLEFIX_JOBS = (
 
 
 class _WorkflowLoader(yaml.SafeLoader):
-    """Loader that resolves booleans the YAML 1.2 way.
+    """Loader that resolves booleans the YAML 1.2 way and refuses repeated keys.
 
     PyYAML implements YAML 1.1, where ``on``, ``yes``, and ``off`` are boolean
     words. That silently turns GitHub Actions' ``on:`` trigger key into
     ``True``. Mapping ``True`` back to ``"on"`` after the fact would conflate it
     with a literal ``yes:`` or ``true:`` key, so the resolver is narrowed to
     YAML 1.2's ``true``/``false`` instead and ``on`` simply stays a string.
+
+    PyYAML also keeps the last of two identical keys without a word, so a job
+    declaring ``runs-on`` twice would read as whichever label came second and a
+    paid label in the first half would escape every placement contract. GitHub
+    rejects such a workflow, so refusing it here costs nothing.
     """
+
+    @typ.override
+    def construct_mapping(
+        self, node: yaml.MappingNode, deep: bool = False
+    ) -> dict[object, object]:
+        """Build a mapping, failing on the first repeated key.
+
+        Returns
+        -------
+        dict[object, object]
+            The constructed mapping.
+
+        Raises
+        ------
+        yaml.constructor.ConstructorError
+            If a key appears twice in one mapping.
+        """
+        seen: set[object] = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=True)
+            # An unhashable key is the base constructor's to refuse.
+            if not isinstance(key, cabc.Hashable):
+                continue
+            if key in seen:
+                message = f"found the key {key!r} twice in one mapping"
+                raise ConstructorError(None, None, message, key_node.start_mark)
+            seen.add(key)
+        return super().construct_mapping(node, deep=deep)
 
 
 # Drop the inherited YAML 1.1 bool resolver, then reinstate the 1.2 word set.
@@ -83,6 +125,126 @@ _WorkflowLoader.add_implicit_resolver(
     re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$"),
     list("tTfF"),
 )
+
+
+class WorkflowReadError(OSError):
+    """Raised when a workflow file cannot be read or parsed.
+
+    Reading a workflow is fallible in three ways that look nothing alike
+    from the caller: the file may be missing, its bytes may not decode,
+    or its text may not be YAML. A query-shaped reader that let each
+    raise its own type made the filesystem boundary invisible in its
+    signature, so a contract several frames away failed with an opaque
+    decoding error naming no workflow. Every one of them arrives here
+    instead, carrying the path.
+    """
+
+
+def parse_workflow_text(text: str, description: str) -> object:
+    """Parse workflow YAML with YAML 1.2 booleans, or raise.
+
+    Parameters
+    ----------
+    text
+        The workflow file's contents.
+    description
+        What is being parsed, for the failure message.
+
+    Returns
+    -------
+    object
+        Whatever the document parsed to; the caller decides what shape
+        it must have.
+
+    Raises
+    ------
+    WorkflowReadError
+        If the text is not YAML.
+    """
+    # The loader is driven directly rather than through `yaml.load`
+    # because `_WorkflowLoader` derives from `SafeLoader` and constructs
+    # no arbitrary Python objects; going through `yaml.load` would only
+    # obscure that.
+    loader = _WorkflowLoader(text)
+    try:
+        return loader.get_single_data()
+    except yaml.YAMLError as error:
+        message = f"{description} is not valid YAML: {error}"
+        raise WorkflowReadError(message) from error
+    finally:
+        loader.dispose()
+
+
+def read_workflow_document(path: Path) -> object:
+    """Read and parse one workflow file, or raise.
+
+    Parameters
+    ----------
+    path
+        The workflow file to read.
+
+    Returns
+    -------
+    object
+        Whatever the document parsed to.
+
+    Raises
+    ------
+    WorkflowReadError
+        If the file is missing, does not decode as UTF-8, or is not
+        YAML.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        message = f"{path} could not be read: {error}"
+        raise WorkflowReadError(message) from error
+    return parse_workflow_text(text, str(path))
+
+
+def all_workflow_documents(directory: Path) -> dict[str, dict[str, object]]:
+    """Return every workflow document in a directory, keyed by file name.
+
+    Both GitHub extensions are read: a workflow in the other one would
+    otherwise escape every contract without failing anything. A file
+    that parses to something other than a mapping is not a workflow and
+    is omitted. A file that cannot be read or parsed at all propagates
+    :class:`WorkflowReadError` from :func:`read_workflow_document`,
+    because a contract cannot say anything about a workflow it never
+    saw.
+
+    Parameters
+    ----------
+    directory
+        The directory holding the workflow files.
+
+    Returns
+    -------
+    dict[str, dict[str, object]]
+        File name to parsed document, in file-name order.
+
+    Raises
+    ------
+    WorkflowReadError
+        If ``directory`` is absent or is not a directory.
+    """
+    # `Path.glob` yields nothing for a missing path and for a path that
+    # is not a directory, so without this the reading would return an
+    # empty mapping and every lane assertion above it would pass having
+    # read no workflow at all. That is the same fault as a workflow the
+    # reader never saw, and it is raised the same way.
+    if not directory.is_dir():
+        message = f"{directory} is not a directory, so no workflow was read"
+        raise WorkflowReadError(message)
+    documents: dict[str, dict[str, object]] = {}
+    paths = sorted(
+        path for pattern in ("*.yml", "*.yaml") for path in directory.glob(pattern)
+    )
+    for path in paths:
+        parsed = read_workflow_document(path)
+        if isinstance(parsed, dict):
+            documents[path.name] = parsed
+    return documents
 
 
 def require_mapping(value: object, description: str) -> dict[str, object]:
@@ -137,15 +299,7 @@ def load_workflow(workflow_path: Path = CI_WORKFLOW_PATH) -> dict[str, object]:
     dict[str, object]
         The parsed, string-keyed workflow mapping.
     """
-    # The loader is driven directly rather than through `yaml.load` because
-    # `_WorkflowLoader` derives from `SafeLoader` and constructs no arbitrary
-    # Python objects; going through `yaml.load` would only obscure that.
-    loader = _WorkflowLoader(workflow_path.read_text(encoding="utf-8"))
-    try:
-        document = loader.get_single_data()
-    finally:
-        loader.dispose()
-
+    document = read_workflow_document(workflow_path)
     workflow = require_mapping(document, "the workflow")
     _require_string_keys(workflow, "the workflow mapping")
     jobs = require_mapping(workflow.get("jobs"), "the workflow jobs")

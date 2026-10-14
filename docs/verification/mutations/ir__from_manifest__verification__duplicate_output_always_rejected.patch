@@ -1,7 +1,7 @@
-diff --git a/src/ir/from_manifest_support.rs b/src/ir/from_manifest_support.rs
+diff --git a/src/ir/from_manifest/support/mod.rs b/src/ir/from_manifest/support/mod.rs
 index 04cc1ec0..e4de27a7 100644
---- a/src/ir/from_manifest_support.rs
-+++ b/src/ir/from_manifest_support.rs
+--- a/src/ir/from_manifest/support/mod.rs
++++ b/src/ir/from_manifest/support/mod.rs
 @@ -274,7 +274,7 @@ pub(super) fn find_duplicates(
      let mut index = 0;
      while index < outputs.len() {

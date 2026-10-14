@@ -12,10 +12,12 @@ delayed-comment, and administrative jobs are API-bound and gain nothing from a
 build shape.
 """
 
+import typing as typ
+
+from action_references import FULL_COMMIT_SHA_PATTERN
+from actions_expressions import contains_unquoted_or
+
 NINJA_ACTION_REPOSITORY = "seanmiddleditch/gha-setup-ninja@"
-NINJA_ACTION = (
-    "seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67"
-)
 WINDOWS_PATH_STEP_NAME = "Expose Windows global tool path"
 WINDOWS_PACKAGE_ACTION = "leynos/shared-actions/.github/actions/windows-package@"
 CALLER_SELECTED_RUNNER = "${{ inputs.runner }}"
@@ -44,6 +46,26 @@ INSTRUMENTED_BUILD_JOBS = (
 UBICLOUD_LARGE_LABEL = "ubicloud-standard-4-ubuntu-2404"
 #: The deliberate Ubuntu 22.04 compatibility lane.
 UBICLOUD_COMPAT_LABEL = "ubicloud-standard-2-ubuntu-2204"
+#: The runner labels GitHub hosts, written out rather than matched by prefix:
+#: the registry question needs an exact set. A prefix test absorbs any new
+#: label that looks hosted, so a lane moved onto an unknown image would drop
+#: out of "in use" and its registration would go unnoticed. A name added here
+#: is a deliberate statement that GitHub hosts it.
+#:
+#: `${{ inputs.runner }}` is here because a reusable workflow's caller chooses
+#: the runner, so the callee names no label of its own. Its callers are in the
+#: table above and are checked there.
+GITHUB_HOSTED_LABELS: typ.Final[tuple[str, ...]] = (
+    "ubuntu-latest",
+    "ubuntu-24.04",
+    "ubuntu-22.04",
+    "windows-latest",
+    "macos-latest",
+    "macos-15",
+    "macos-15-intel",
+    CALLER_SELECTED_RUNNER,
+)
+
 UBICLOUD_LABELS = (
     UBICLOUD_DEFAULT_LABEL,
     UBICLOUD_LARGE_LABEL,
@@ -63,9 +85,9 @@ REQUIRED_RUNNER_ASSIGNMENTS = {
     "ci.build-test": UBICLOUD_LARGE_LABEL,
     "ci-windows.lint-windows": "windows-latest",
     "ci-windows.build-test-windows": "windows-latest",
+    "ci-windows.windows-msi-upgrade": "windows-latest",
     "ci.kani-smoke": UBICLOUD_DEFAULT_LABEL,
     "coverage-main.coverage-upload": UBICLOUD_LARGE_LABEL,
-    "coverage-pr-submit.submit-coverage": UBICLOUD_DEFAULT_LABEL,
     "delayed-pr-comment.delay_and_comment": "ubuntu-latest",
     "netsukefile-test.netsukefile": UBICLOUD_COMPAT_LABEL,
     "release.metadata": "ubuntu-latest",
@@ -91,6 +113,7 @@ UBICLOUD_ASSIGNMENT_KEYS = tuple(
 GITHUB_HOSTED_ONLY_KEYS = (
     "ci-windows.lint-windows",
     "ci-windows.build-test-windows",
+    "ci-windows.windows-msi-upgrade",
     "delayed-pr-comment.delay_and_comment",
     "release.metadata",
     "release.build-windows",
@@ -150,12 +173,37 @@ def is_valid_ninja_sequence(
     consumer_indices = [
         index for index, step in enumerate(steps) if step.get("name") == first_consumer
     ]
+    # The pin's value belongs to Dependabot and is never asserted; what this
+    # structural rule needs is that the installer reference is pinned at all,
+    # so a mutable tag or branch cannot stand in for a revision whose contents
+    # nobody reviewed.
     return bool(
         len(setup_indices) == 1
-        and steps[setup_indices[0]].get("uses") == NINJA_ACTION
+        and is_pinned_ninja_action(steps[setup_indices[0]].get("uses"))
         and consumer_indices
         and setup_indices[0] < min(consumer_indices)
     )
+
+
+def is_pinned_ninja_action(uses: object) -> bool:
+    """Return whether a ``uses`` value pins the Ninja installer action.
+
+    Parameters
+    ----------
+    uses
+        A workflow step's ``uses`` value, which may be absent or not a string.
+
+    Returns
+    -------
+    bool
+        ``True`` when ``uses`` names the Ninja installer action and carries a
+        full 40-character lowercase hexadecimal commit SHA.
+    """
+    reference = str(uses or "")
+    path, separator, pin = reference.rpartition("@")
+    if not separator or f"{path}@" != NINJA_ACTION_REPOSITORY:
+        return False
+    return FULL_COMMIT_SHA_PATTERN.match(pin) is not None
 
 
 def is_valid_windows_tool_path_sequence(
@@ -263,24 +311,6 @@ def is_bounded_worker_count(vcpus: int, flags: dict[str, str]) -> bool:
     )
 
 
-def _contains_unquoted_or(expression: str) -> bool:
-    """Report whether `||` appears anywhere outside a quoted literal."""
-    quote: str | None = None
-    index = 0
-    length = len(expression)
-    while index < length:
-        char = expression[index]
-        if quote is not None:
-            if char == quote:
-                quote = None
-        elif char in "'\"":
-            quote = char
-        elif expression[index : index + 2] == "||":
-            return True
-        index += 1
-    return False
-
-
 def is_trunk_only_save(condition: str) -> bool:
     """Return whether a cache-save condition is restricted to a trunk push.
 
@@ -316,7 +346,7 @@ def is_trunk_only_save(condition: str) -> bool:
     second, subtler thing to get wrong.
     """
     normalized = " ".join(condition.split())
-    if _contains_unquoted_or(normalized):
+    if contains_unquoted_or(normalized):
         return False
     return (
         "github.event_name == 'push'" in normalized

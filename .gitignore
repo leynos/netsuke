@@ -9,6 +9,7 @@ memories/
 vtcode.toml
 .memdb/
 .grepai/
+.netsuke/
 build.ninja
 *:Zone.Identifier
 /graph.dot
@@ -17,7 +18,9 @@ __pycache__/
 .coverage
 .uv-cache/
 .uv-tools/
+uv.lock
 .pytest_cache/
+.ruff_cache/
 .typos-oxendict-base.json
 .typos-oxendict-base.toml
 *.swo

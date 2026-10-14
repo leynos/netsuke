@@ -37,7 +37,6 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         phony: true,
         always: false,
     },
-    Utf8PathBuf::from("out"),
     concat!(
         "rule a\n",
         "  command = true\n\n",
@@ -64,7 +63,6 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         phony: false,
         always: false,
     },
-    Utf8PathBuf::from("ab.o"),
     concat!(
         "rule compile\n",
         "  command = cc -c 'a.c' 'b.c' -o 'ab.o'\n\n",
@@ -91,7 +89,6 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         phony: false,
         always: false,
     },
-    Utf8PathBuf::from("out"),
     concat!(
         "rule b\n",
         "  command = true\n\n",
@@ -118,7 +115,6 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         phony: false,
         always: false,
     },
-    Utf8PathBuf::from("out"),
     concat!(
         "rule b\n",
         "  command = true\n\n",
@@ -145,7 +141,6 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         phony: false,
         always: false,
     },
-    Utf8PathBuf::from("out"),
     concat!(
         "rule b\n",
         "  command = true\n\n",
@@ -172,7 +167,6 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         phony: false,
         always: false,
     },
-    Utf8PathBuf::from("out"),
     concat!(
         "rule b\n",
         "  command = true\n\n",
@@ -199,7 +193,6 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         phony: true,
         always: false,
     },
-    Utf8PathBuf::from("phony_action"),
     concat!(
         "rule phony\n",
         "  command = true\n\n",
@@ -209,12 +202,13 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 fn generate_ninja_scenarios(
     #[case] action: Action,
     #[case] edge: BuildEdge,
-    #[case] target_path: Utf8PathBuf,
     #[case] expected: &str,
 ) {
     let mut graph = BuildGraph::default();
     graph.actions.insert(edge.action_id.clone(), action);
-    graph.targets.insert(target_path, edge);
+    graph
+        .insert_edge(edge)
+        .expect("test graph output aliases must be unique");
 
     let ninja = generate_posix(&graph).expect("generate POSIX Ninja manifest");
     assert_eq!(
@@ -246,9 +240,8 @@ fn generate_multiline_script_snapshot() {
             restat: false,
         },
     );
-    graph.targets.insert(
-        Utf8PathBuf::from("out"),
-        BuildEdge {
+    graph
+        .insert_edge(BuildEdge {
             action_id: "script".into(),
             inputs: Vec::new(),
             implicit_deps: Vec::new(),
@@ -258,8 +251,8 @@ fn generate_multiline_script_snapshot() {
             order_only_deps: Vec::new(),
             phony: false,
             always: false,
-        },
-    );
+        })
+        .expect("test graph output aliases must be unique");
     graph.default_targets.push(Utf8PathBuf::from("out"));
 
     let ninja = generate_posix(&graph).expect("generate POSIX Ninja manifest");

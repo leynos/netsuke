@@ -22,7 +22,10 @@ def test_run_returns_captured_output_for_an_allowlisted_program(
     cmd_mox.mock("frob").with_args("--flag", "value").returns(stdout="done\n")
 
     result = support.run(
-        "frob", "--flag", "value", allowed=support.catalogue("frob"), echo=False
+        "frob",
+        "--flag",
+        "value",
+        spec=support.RunSpec(support.catalogue("frob"), echo=False),
     )
 
     assert result.ok, result
@@ -34,7 +37,9 @@ def test_run_refuses_a_program_outside_the_catalogue() -> None:
     from cuprum import UnknownProgramError
 
     with pytest.raises(UnknownProgramError):
-        support.run("frob", allowed=support.catalogue("other"), echo=False)
+        support.run(
+            "frob", spec=support.RunSpec(support.catalogue("other"), echo=False)
+        )
 
 
 def test_run_overlays_env_on_the_child(cmd_mox: CmdMox) -> None:
@@ -45,7 +50,10 @@ def test_run_overlays_env_on_the_child(cmd_mox: CmdMox) -> None:
     )
 
     support.run(
-        "frob", allowed=support.catalogue("frob"), env={"CI_PROBE": "yes"}, echo=False
+        "frob",
+        spec=support.RunSpec(
+            support.catalogue("frob"), env={"CI_PROBE": "yes"}, echo=False
+        ),
     )
 
     assert seen == ["yes"], "expected: seen == ['yes']"
@@ -60,7 +68,9 @@ def test_describe_failure_names_the_command_and_last_stderr_line(
         stderr="first\nlast line\n", exit_code=3
     )
 
-    result = support.run("frob", "x", allowed=support.catalogue("frob"), echo=False)
+    result = support.run(
+        "frob", "x", spec=support.RunSpec(support.catalogue("frob"), echo=False)
+    )
 
     assert support.describe_failure(result) == "`frob x` exited 3: last line", (
         "expected: support.describe_failure(result) == '`frob x` exited 3: l..."

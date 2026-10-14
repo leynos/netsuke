@@ -1,6 +1,9 @@
-//! Executable contracts for examples in the public user documentation.
+//! Executable contracts for examples in the project documentation.
 
 mod documentation_examples;
+
+#[path = "documentation_examples_tests/release_wix_extension.rs"]
+mod release_wix_extension;
 
 use anyhow::{Context, Result, ensure};
 use documentation_examples::{
@@ -16,6 +19,10 @@ use test_support::fs as test_fs;
 use test_support::netsuke::{NetsukeRun, run_netsuke_in, run_netsuke_in_with_env};
 
 const EXPECTED_EXAMPLE_IDS: &[&str] = &[
+    "devguide-clock-snippet",
+    "devguide-env-reader-snippet",
+    "devguide-ninja-request-snippet",
+    "devguide-verbose-timing-reporter",
     "guide-accessible-output",
     "guide-binstall-install",
     "guide-boolean-string-interpolation",
@@ -26,7 +33,6 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-configuration-observability",
     "guide-crates-io-install",
     "guide-direct-command-list",
-    "guide-env-reader-snippet",
     "guide-file-follow-symlinks-expression",
     "guide-file-max-bytes-expression",
     "guide-first-build-commands",
@@ -36,77 +42,100 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-json-command",
     "guide-json-output",
     "guide-macro-manifest",
-    "guide-ninja-request-snippet",
+    "guide-manifest-environment-policy",
+    "guide-manifest-environment-policy-cli",
+    "guide-manifest-environment-policy-env",
     "guide-output-streams",
     "guide-project-anchor",
     "guide-project-config",
+    "guide-release-wix-extension-version",
     "guide-serial-dependency-order-manifest",
     "guide-source-install",
     "guide-utility-commands",
-    "guide-verbose-timing-reporter",
     "guide-windows-bash-compatibility",
     "guide-windows-help",
     "guide-windows-help-install",
     "guide-windows-path",
+    "readme-backtick-rejection-manifest",
     "readme-binstall-install",
     "readme-crates-io-install",
     "readme-first-build-commands",
     "readme-first-build-manifest",
+    "readme-quoted-path-manifest",
+    "readme-safe-placeholder-manifest",
     "readme-source-install",
     "stdlib-fetch-expression",
     "stdlib-file-tests-manifest",
     "stdlib-host-context-manifest",
     "stdlib-jinja-syntax-manifest",
+    "stdlib-optional-rustflags-manifest",
     "stdlib-path-and-collection-manifest",
     "stdlib-time-manifest",
     "stdlib-yaml-syntax-manifest",
 ];
 
-/// The guide's env-reader snippet must stay in step with the API it mirrors.
+/// Assert that a developers' guide snippet is a Rust fence naming the given APIs.
 ///
-/// The snippet is Rust and is executed as the doctest on `from_str_with_env`;
-/// this pins the guide copy to the same entry points so the two cannot drift
-/// silently.
-#[test]
-fn env_reader_snippet_mirrors_the_doctest() -> Result<()> {
-    let example = documented_example("guide-env-reader-snippet")?;
+/// Several guide snippets duplicate an executable doctest, and pinning the copy
+/// to the same identifiers is what keeps the two from drifting silently. The
+/// label names the snippet so a failure reads in the guide's own vocabulary.
+fn assert_snippet_names(example_id: &str, label: &str, needles: &[&str]) -> Result<()> {
+    let example = documented_example(example_id)?;
     ensure!(
         example.language == "rust",
-        "the env-reader snippet should be a Rust fence"
+        "the {label} snippet should be a Rust fence"
     );
-    for needle in ["from_str_with_env", "EnvReader", "env('PROFILE')"] {
+    for needle in needles {
         ensure!(
             example.body.contains(needle),
-            "the env-reader snippet should mention {needle}"
+            "the {label} snippet should mention {needle}"
         );
     }
     Ok(())
 }
-/// The guide's Ninja-request snippet must name the API it documents.
+
+/// The developers' guide env-reader snippet must track the API it mirrors.
 ///
-/// The snippet is the only place the guide constructs the request bundles, so
-/// pinning the identifiers keeps it from drifting into prose about types the
-/// crate no longer exports.
+/// The snippet is Rust and is executed as the doctest on `from_str_with_env`.
+#[test]
+fn env_reader_snippet_mirrors_the_doctest() -> Result<()> {
+    assert_snippet_names(
+        "devguide-env-reader-snippet",
+        "env-reader",
+        &["from_str_with_env", "EnvReader", "env('PROFILE')"],
+    )
+}
+
+/// The developers' guide clock snippet must track the API it mirrors.
+///
+/// The snippet is Rust and is executed as the doctest on `with_clock`.
+#[test]
+fn clock_snippet_mirrors_the_doctest() -> Result<()> {
+    assert_snippet_names(
+        "devguide-clock-snippet",
+        "clock",
+        &["with_clock", "fixed_clock", "StdlibConfig"],
+    )
+}
+
+/// The developers' guide Ninja-request snippet must name the API it documents.
+///
+/// The snippet is the only place the developers' guide constructs the request
+/// bundles, so pinning the identifiers keeps it from drifting into prose about
+/// types the crate no longer exports.
 #[test]
 fn ninja_request_snippet_names_both_request_types() -> Result<()> {
-    let example = documented_example("guide-ninja-request-snippet")?;
-    ensure!(
-        example.language == "rust",
-        "the Ninja-request snippet should be a Rust fence"
-    );
-    for needle in [
-        "NinjaBuildRequest",
-        "NinjaToolRequest",
-        "run_ninja_with",
-        "run_ninja_tool_with",
-        "CommandEnv::inherit",
-    ] {
-        ensure!(
-            example.body.contains(needle),
-            "the Ninja-request snippet should mention {needle}"
-        );
-    }
-    Ok(())
+    assert_snippet_names(
+        "devguide-ninja-request-snippet",
+        "Ninja-request",
+        &[
+            "NinjaBuildRequest",
+            "NinjaToolRequest",
+            "run_ninja_with",
+            "run_ninja_tool_with",
+            "CommandEnv::inherit",
+        ],
+    )
 }
 
 fn assert_default_edges_exist(ninja: &str, context: &str) -> Result<()> {
@@ -172,6 +201,7 @@ fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
 #[case("guide-serial-dependency-order-manifest")]
 #[case("stdlib-yaml-syntax-manifest")]
 #[case("stdlib-jinja-syntax-manifest")]
+#[case("stdlib-optional-rustflags-manifest")]
 fn documented_manifest_generates_ninja(#[case] example_id: &str) -> Result<()> {
     let workspace = manifest_workspace(example_id)?;
     let run = run_netsuke_in(workspace.path(), &["--progress", "never", "generate"])?;

@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = डिफ़ॉल्ट अस्वीकृ�
 cli.flag.fetch_block_host.help = वे होस्ट नाम जो सदैव अवरुद्ध रहते हैं, भले ही अन्यत्र अनुमत हों।
 cli.flag.fetch_default_deny.help = डिफ़ॉल्ट रूप से सभी होस्ट अस्वीकार करें; केवल घोषित सूची को अनुमति दें।
 cli.flag.trust_project_fetch_policy.help = प्रोजेक्ट कॉन्फ़िगरेशन को fetch नीति की अनुमतियाँ बढ़ाने की अनुमति दें।
+
+cli.flag.manifest_evaluation_fuel.help = हर मैनिफ़ेस्ट मूल्यांकन के लिए MiniJinja निर्देशों की सीमा तय करें।
+cli.flag.manifest_fuel.help = एक मैनिफ़ेस्ट में MiniJinja निर्देशों की सीमा तय करें।
+cli.flag.manifest_rendered_value_bytes.help = एक मैनिफ़ेस्ट मान में रेंडर किए गए बाइट्स की सीमा तय करें।
+cli.flag.manifest_rendered_manifest_bytes.help = एक मैनिफ़ेस्ट में रेंडर किए गए कुल बाइट्स की सीमा तय करें।
+cli.flag.manifest_source_bytes.help = प्रत्येक मैनिफ़ेस्ट के लिए उपयोग किए गए टेम्पलेट और मैक्रो स्रोत बाइट्स की सीमा तय करें।
+cli.flag.manifest_foreach_cardinality.help = एक foreach विस्तार द्वारा संसाधित मानों की सीमा तय करें।
+cli.flag.manifest_expanded_entries.help = एक मैनिफ़ेस्ट से विस्तारित लक्ष्यों और कार्रवाइयों की सीमा तय करें।
 cli.flag.json.help = मशीन-पठनीय JSON निर्गत करें।
 cli.flag.no_input.help = संवादात्मक इनपुट कभी न पढ़ें।
 cli.flag.color.help = रंगीन निर्गम की नीति (auto, always, never)।
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = YAML टोकन अमान्य अथ�
 manifest.yaml.hint.escape = बैकस्लैश को एस्केप करें अथवा अमान्य एस्केप अनुक्रम हटाएँ।
 manifest.env.missing = एक आवश्यक परिवेश चर निर्धारित नहीं है।
 manifest.env.invalid_utf8 = एक परिवेश चर में अमान्य UTF-8 है।
+manifest.env.blocked = किसी परिवेश चर तक पहुँच अवरुद्ध है।
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env का default स्ट्रिंग होना चाहिए, { $kind } प्राप्त हुआ।
 manifest.vars.not_object = मैनिफ़ेस्ट का `vars` प्रतिचित्रण अथवा वस्तु होना चाहिए।
 manifest.vars.reserved_name = मैनिफ़ेस्ट की `vars` कुंजी '{ $name }' अंतर्निहित टेम्पलेट सहायक के लिए आरक्षित है; चर का नाम बदलें।
 manifest.read_failed = { $path } से मैनिफ़ेस्ट नहीं पढ़ा जा सका।
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = धारा
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote ने एक स्ट्रिंग की अपेक्षा की, किंतु { $kind } प्राप्त हुआ।
+stdlib.shell.quote.control_character = शून्य बाइट, गाड़ी वापसी या पंक्ति परिवर्तन वाले मान को उद्धृत नहीं किया जा सकता।
+stdlib.shell.dialect_invalid = अज्ञात शेल बोली { $dialect }; इनमें से एक अपेक्षित थी: { $accepted }।
+stdlib.shell.dialect_not_string = shell का dialect विकल्प स्ट्रिंग होना चाहिए, { $kind } प्राप्त हुआ।
+stdlib.shell.join.not_sequence = shell_join ने अनुक्रम की अपेक्षा की, किंतु { $kind } प्राप्त हुआ।
+stdlib.shell.join.item_not_string = shell_join का आइटम { $index } { $kind } है, स्ट्रिंग नहीं।
+stdlib.shell.positional_option = { $filter } अपने विकल्प कीवर्ड के रूप में लेता है; { $example } लिखें।
+
 # पथ सहायक के निदान।
 stdlib.path.io.failed = { $path } पर क्रिया “{ $action }” विफल रही ({ $label })।
 stdlib.path.io.failed_with_detail = { $path } पर क्रिया “{ $action }” विफल रही: { $detail }।
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = असमर्थित है�
 
 # संग्रह सहायकों के निदान।
 stdlib.collections.flatten.expected_sequence = flatten को अनुक्रम की मदें अपेक्षित थीं, किंतु { $kind } मिला।
+stdlib.collections.compact.not_sequence = compact को अनुक्रम अपेक्षित था, किंतु { $kind } मिला।
 stdlib.collections.group_by.empty_attribute = group_by को अरिक्त गुण चाहिए।
 stdlib.collections.group_by.unresolved = group_by { $kind } प्रकार की मद पर “{ $attr }” नहीं खोज सका।
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = नैनोसेकंड
 
 # which सहायक के निदान।
 stdlib.which.not_found = [netsuke::jinja::which::not_found] PATH की { $count } प्रविष्टियाँ जाँचने पर भी आदेश “{ $command }” नहीं मिला। झलक: { $preview }
-stdlib.which.not_found.hint.cwd_auto = PATH के रिक्त खंड अनदेखे रहते हैं; कार्य निर्देशिका सम्मिलित करने हेतु cwd_mode="auto" लें।
-stdlib.which.not_found.hint.cwd_always = वर्तमान निर्देशिका सम्मिलित करने हेतु cwd_mode="always" निर्धारित करें।
+stdlib.which.not_found.hint.cwd_auto = auto मोड केवल PATH में स्पष्ट रूप से नामित निर्देशिकाओं में खोजता है।
+stdlib.which.not_found.hint.cwd_always = always मोड पहले वर्तमान निर्देशिका में और फिर PATH में स्पष्ट रूप से नामित निर्देशिकाओं में खोजता है।
+stdlib.which.not_found.hint.workspace = कार्यस्थान वृक्ष में पुनरावर्ती खोज के लिए cwd_mode="workspace-recursive" का उपयोग करें।
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] “{ $path }” पर आदेश “{ $command }” अनुपस्थित है अथवा निष्पादनीय नहीं है।
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <रिक्त>
 stdlib.which.path_entry.non_utf8 = PATH की { $index }वीं प्रविष्टि में ऐसे वर्ण हैं जो UTF-8 नहीं हैं; Netsuke को UTF-8 पथ चाहिए।
 stdlib.which.command.empty = which को अरिक्त स्ट्रिंग चाहिए।
-stdlib.which.cwd_mode.invalid = cwd_mode “auto”, “always” अथवा “never” होना चाहिए, किंतु “{ $mode }” मिला।
+stdlib.which.cwd_mode.invalid = cwd_mode 'auto', 'always', 'never' या 'workspace-recursive' होना चाहिए; '{ $mode }' मिला।
 stdlib.which.cwd.resolve_failed = वर्तमान निर्देशिका निर्धारित नहीं की जा सकी: { $details }।
 stdlib.which.cwd.non_utf8 = वर्तमान निर्देशिका में ऐसे अंश हैं जो UTF-8 नहीं हैं।
 stdlib.which.canonicalize_failed = “{ $path }” का मानकीकरण नहीं हो सका: { $details }।
@@ -430,3 +454,7 @@ example.errors_found = { $count ->
     [one] { $count } त्रुटि मिली।
    *[other] { $count } त्रुटियाँ मिलीं।
 }
+manifest.budget.exceeded = { $stage } के दौरान { $limit } तक पहुँचने के बाद मैनिफ़ेस्ट का संसाधन बजट समाप्त हो गया।
+
+cli.flag.env_allow_var.help = मैनिफ़ेस्ट env() सहायक के लिए अनुमत परिवेश चर।
+cli.flag.env_block_var.help = मैनिफ़ेस्ट env() सहायक के लिए अवरुद्ध परिवेश चर।

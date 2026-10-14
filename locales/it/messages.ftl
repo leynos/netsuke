@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Nomi host consentiti quando il diniego predefin
 cli.flag.fetch_block_host.help = Nomi host sempre bloccati, anche se consentiti altrove.
 cli.flag.fetch_default_deny.help = Nega tutti gli host per impostazione predefinita; consenti solo l'elenco dichiarato.
 cli.flag.trust_project_fetch_policy.help = Consenti alla configurazione del progetto di ampliare le autorizzazioni del criterio fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Limita le istruzioni MiniJinja per ogni valutazione del manifest.
+cli.flag.manifest_fuel.help = Limita le istruzioni MiniJinja all'interno di un manifest.
+cli.flag.manifest_rendered_value_bytes.help = Limita i byte renderizzati in un singolo valore del manifest.
+cli.flag.manifest_rendered_manifest_bytes.help = Limita i byte totali renderizzati in un manifest.
+cli.flag.manifest_source_bytes.help = Limita i byte sorgente del template e delle macro consumati per manifest.
+cli.flag.manifest_foreach_cardinality.help = Limita i valori elaborati da una singola espansione foreach.
+cli.flag.manifest_expanded_entries.help = Limita i target e le azioni espansi da un manifest.
 cli.flag.json.help = Produci output JSON leggibile da una macchina.
 cli.flag.no_input.help = Non leggere mai input interattivo.
 cli.flag.color.help = Criterio per l'output a colori (auto, always, never).
@@ -131,6 +139,9 @@ manifest.yaml.hint.invalid_token = Il token YAML non è valido o è inatteso.
 manifest.yaml.hint.escape = Usa l'escape per le barre rovesciate o rimuovi le sequenze di escape non valide.
 manifest.env.missing = Una variabile d'ambiente richiesta non è impostata.
 manifest.env.invalid_utf8 = Una variabile d'ambiente contiene UTF-8 non valido.
+manifest.env.blocked = L’accesso a una variabile d’ambiente è bloccato.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Il default di env deve essere una stringa, ricevuto { $kind }.
 manifest.vars.not_object = `vars` del manifest deve essere una mappa o un oggetto.
 manifest.vars.reserved_name = La chiave `vars` '{ $name }' del manifest è riservata a una funzione di supporto per i template integrata; rinomina la variabile.
 manifest.read_failed = Impossibile leggere il manifest in { $path }.
@@ -277,6 +288,17 @@ stdlib.command.output.mode.streaming = streaming
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote si aspettava una stringa ma ha ricevuto { $kind }.
+stdlib.shell.quote.control_character = Un valore che contiene un byte nullo, un ritorno a capo o un avanzamento di riga non può essere racchiuso tra virgolette.
+stdlib.shell.dialect_invalid = Dialetto della shell sconosciuto { $dialect }; atteso uno tra { $accepted }.
+stdlib.shell.dialect_not_string = L'opzione dialect di shell deve essere una stringa, ricevuto { $kind }.
+stdlib.shell.join.not_sequence = shell_join si aspettava una sequenza ma ha ricevuto { $kind }.
+stdlib.shell.join.item_not_string = L'elemento { $index } di shell_join è { $kind }, non una stringa.
+stdlib.shell.positional_option = { $filter } accetta le sue opzioni per parola chiave; scrivere { $example }.
+
 # Diagnostica dell'helper dei percorsi.
 stdlib.path.io.failed = L'operazione di { $action } non è riuscita per { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = L'operazione di { $action } non è riuscita per { $path }: { $detail }.
@@ -332,6 +354,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algoritmo di hash non supportato
 
 # Diagnostica degli helper per le collezioni.
 stdlib.collections.flatten.expected_sequence = flatten si aspettava elementi di sequenza ma ha trovato { $kind }.
+stdlib.collections.compact.not_sequence = compact si aspettava una sequenza ma ha trovato { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by richiede un attributo non vuoto.
 stdlib.collections.group_by.unresolved = group_by non ha potuto risolvere «{ $attr }» su un elemento di tipo { $kind }.
 
@@ -349,14 +372,15 @@ stdlib.time.label.nanoseconds = nanosecondi
 
 # Diagnostica dell'helper which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] comando «{ $command }» non trovato dopo aver controllato { $count } voci di PATH. Anteprima: { $preview }
-stdlib.which.not_found.hint.cwd_auto = I segmenti vuoti di PATH vengono ignorati; usa cwd_mode="auto" per includere la directory di lavoro.
-stdlib.which.not_found.hint.cwd_always = Imposta cwd_mode="always" per includere la directory corrente.
+stdlib.which.not_found.hint.cwd_auto = La modalità auto cerca solo nelle directory specificate esplicitamente in PATH.
+stdlib.which.not_found.hint.cwd_always = La modalità always cerca solo nella directory corrente prima delle directory specificate in PATH.
+stdlib.which.not_found.hint.workspace = Per cercare ricorsivamente nell'albero dell'area di lavoro, usare cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] il comando «{ $command }» in «{ $path }» è assente o non eseguibile.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <vuoto>
 stdlib.which.path_entry.non_utf8 = La voce PATH n. { $index } contiene caratteri non UTF-8; Netsuke richiede percorsi UTF-8.
 stdlib.which.command.empty = which richiede una stringa non vuota.
-stdlib.which.cwd_mode.invalid = cwd_mode deve essere «auto», «always» o «never», ricevuto «{ $mode }».
+stdlib.which.cwd_mode.invalid = cwd_mode deve essere 'auto', 'always', 'never' o 'workspace-recursive'; ricevuto '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Impossibile risolvere la directory corrente: { $details }.
 stdlib.which.cwd.non_utf8 = La directory corrente contiene componenti non UTF-8.
 stdlib.which.canonicalize_failed = Impossibile canonicalizzare «{ $path }»: { $details }.
@@ -428,3 +452,7 @@ example.errors_found = { $count ->
     [one] Trovato { $count } errore.
    *[other] Trovati { $count } errori.
 }
+manifest.budget.exceeded = Budget delle risorse del manifest esaurito durante { $stage } dopo aver raggiunto { $limit }.
+
+cli.flag.env_allow_var.help = Variabile d’ambiente consentita per l’helper env() del manifest.
+cli.flag.env_block_var.help = Variabile d’ambiente bloccata per l’helper env() del manifest.

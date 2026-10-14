@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.14"
-# dependencies = ["cyclopts==4.25.2", "cuprum @ git+https://github.com/leynos/cuprum@a2134c7a3966b224eaed917efb94f8090ce5104a"]
+# dependencies = ["cyclopts==4.25.3", "cuprum==0.1.0"]
 # ///
 """Stage GNU Awk as a regular ``awk`` executable for the test sandbox.
 
@@ -24,6 +24,7 @@ import typing as typ
 
 from ci_support import (
     CiScriptError,
+    RunSpec,
     append_github_path,
     catalogue,
     describe_failure,
@@ -46,7 +47,7 @@ def install_package(package: str) -> None:
         ("update",),
         ("install", "--yes", "--no-install-recommends", package),
     ):
-        result = run(SUDO, APT_GET, *arguments, allowed=PRIVILEGED)
+        result = run(SUDO, APT_GET, *arguments, spec=RunSpec(PRIVILEGED))
         if not result.ok:
             message = f"installing {package} failed: {describe_failure(result)}"
             raise CiScriptError(message)
@@ -92,7 +93,7 @@ def stage_copy(source: pathlib.Path, staging_dir: pathlib.Path) -> pathlib.Path:
 
 def verify_staged(staged: pathlib.Path) -> str:
     """Run the staged ``awk --version`` and return its first output line."""
-    result = run(str(staged), "--version", allowed=catalogue(str(staged)))
+    result = run(str(staged), "--version", spec=RunSpec(catalogue(str(staged))))
     if not result.ok:
         message = f"the staged awk does not run: {describe_failure(result)}"
         raise CiScriptError(message)

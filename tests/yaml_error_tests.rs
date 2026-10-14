@@ -20,11 +20,13 @@ fn normalise_report(report: &str) -> Result<String> {
         "tabs disallowed within this context",
     ],
 )]
+// `serde-saphyr` 1.2.0 reports this one line earlier than 0.0.6 did: the
+// offending simple key is the `command` on line 3, not the line that follows.
 #[case(
     "targets:\n  - name: hi\n    command echo\n",
     &[
-        "line 4, column 1",
-        "simple key expect ':'",
+        "line 3, column 5",
+        "simple key expected ':'",
     ],
 )]
 #[case(
@@ -38,8 +40,8 @@ fn normalise_report(report: &str) -> Result<String> {
         "        deeper: { key: value\n",
     ),
     &[
-        "line 8, column 1",
-        "did not find expected ',' or '}'",
+        "line 7, column 17",
+        "unclosed bracket '{'",
     ],
 )]
 #[case(
@@ -52,9 +54,11 @@ fn normalise_report(report: &str) -> Result<String> {
     ),
     &["line 4", "did not find expected '-'"] ,
 )]
+// The location moved: the unclosed quoted scalar is reported where the scanner
+// detects the unterminated multi-line scalar, not at the line that opened it.
 #[case(
     "targets:\n  - name: 'unterminated\n",
-    &["YAML parse error", "line 2"],
+    &["YAML parse error", "line 3"],
 )]
 #[case(
     "",

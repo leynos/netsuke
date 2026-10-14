@@ -60,7 +60,7 @@ Netsuke currently requires:
 
 ### Installation
 
-The latest published prerelease is Netsuke v0.1.0-beta3, available from
+The latest published prerelease is Netsuke v0.1.0-beta4, available from
 crates.io. Where
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is available,
 prefer it: it fetches a prebuilt release binary and avoids the toolchain
@@ -83,7 +83,7 @@ cargo +nightly-2026-08-23 install netsuke-build
 ```
 
 Pre-built installers are available from the
-[v0.1.0-beta3 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3):
+[v0.1.0-beta4 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta4):
 
 | Platform | Architectures                        | Packages                         |
 | -------- | ------------------------------------ | -------------------------------- |
@@ -96,7 +96,7 @@ as a dependency. Ninja must be installed separately when using the macOS or
 Windows installer. The Windows MSI installs to `C:\Program Files\netsuke` and
 does not update `PATH`. SHA-256 checksum files accompany standalone binaries
 and staged help and licence files. Installer packages do not have checksum
-sidecars in v0.1.0-beta3. See the
+sidecars in v0.1.0-beta4. See the
 [user's guide](docs/users-guide.md#install-netsuke) for platform-specific
 commands and Windows setup.
 
@@ -109,6 +109,19 @@ git clone https://github.com/leynos/netsuke.git
 cd netsuke
 cargo install --path .
 ```
+
+Because that install runs inside the checkout, it inherits the repository's
+build standard: the parallel `rustc` frontend, and on Linux the `mold` linker.
+The pinned nightly comes from `rust-toolchain.toml`, which `rustup` provisions
+automatically; on Linux, `mold` must also be reachable through `PATH` or gcc's
+own search directories. `make install-build-tools` unpacks the pinned release
+into `~/.local/bin` and does not edit any shell profile, and the make targets
+add that directory to `PATH` for themselves only, so a direct `cargo install`
+needs it added first. On macOS and Windows the linker flag is not set, so no
+extra prerequisite applies. Build on another platform, or remove
+`.cargo/config.toml` first, to use the platform linker instead. The
+[user's guide](docs/users-guide.md#install-netsuke) covers the same ground in
+more detail.
 
 ### Your first build
 
@@ -147,7 +160,7 @@ ______________________________________________________________________
 
 ## What works today
 
-Netsuke v0.1.0-beta3's core build-system compiler provides:
+Netsuke v0.1.0-beta4's core build-system compiler provides:
 
 - YAML 1.2 manifest parsing with duplicate-key and schema validation;
 - Jinja variables, macros, `foreach`, `when`, globbing, environment helpers,
@@ -166,17 +179,138 @@ Netsuke v0.1.0-beta3's core build-system compiler provides:
   accessible HTML;
 - layered configuration, localized output, accessibility preferences,
   progress reporting, stage timings, and versioned JSON results or diagnostics;
+- bounded manifest evaluation, operator-controlled network and `env()` access
+  policies, and bounded file-reading filters;
 - unit, behavioural, integration, property, snapshot, and initial Kani
   verification coverage.
 
-The beta3 release also supports dependency-only action and target aggregates:
-nodes with a non-empty `deps` list may omit a recipe.
+Since beta3, Netsuke also supports dependency-only action and target
+aggregates: nodes with a non-empty `deps` list may omit a recipe.
+
+______________________________________________________________________
+
+## Security and command interpolation
+
+A `Netsukefile` executes commands and can use impure template helpers. Treat it
+with the same care as a `Makefile`: review untrusted manifests before running
+them. Netsuke reduces some quoting mistakes; it is not a sandbox. On POSIX
+shell routes, a backtick pair you wrote is executed by the shell when used as
+command substitution.
+
+**What Netsuke does not protect you from.** Handwritten backticks and `$( … )`
+can execute commands. On Unix, Ninja passes command text to `sh -c`; Netsuke
+does not sanitize that text.
+
+**Values you template in are not quoted.** Arbitrary Jinja values, `raw`
+blocks, and handwritten shell fragments become ordinary recipe text. Do not
+interpolate untrusted values into shell commands: path-placeholder quoting does
+not protect those values.
+
+**What Netsuke rewrites.** Only `{{ ins }}` and `{{ outs }}` are Netsuke
+markers. The set is identical in `command:` and `script:` recipes. All the
+dollar forms below, and `$PATH`, remain shell variables in both recipe kinds.
+Netsuke doubles their dollars for Ninja so the selected shell receives them
+unchanged; it does not expose Ninja's own `$in` and `$out` rule variables.
+
+Table 1: Forms rewritten to input or output paths (`yes` means rewritten in
+active recipe text; see the note below).
+
+| Form                                                | `command:`  | `script:`   |
+| --------------------------------------------------- | ----------- | ----------- |
+| `{{ ins }}`                                         | yes[^inert] | yes[^inert] |
+| `{{ outs }}`                                        | yes[^inert] | yes[^inert] |
+| `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output` | no          | no          |
+
+[^inert]: On POSIX and Bash routes, markers in comments and heredoc bodies
+    remain internal tokens instead of becoming paths; markers in heredoc
+    delimiters are expanded. `script:` recipes use the same POSIX-aware scanner,
+    including on PowerShell, while PowerShell `command:` recipes use separate
+    interpolation rules. Keep markers out of comments and heredoc bodies: internal
+    tokens there can remain in the generated recipe.
+
+For example, with an existing `input.txt`, this POSIX manifest copies its
+contents to `output.txt` and checks that the shell's `PATH` is non-empty:
+
+<!-- tested-example: readme-safe-placeholder-manifest -->
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input.txt
+    command: 'cat {{ ins }} > {{ outs }} && test -n "$PATH"'
+defaults: [output.txt]
+```
+
+**What Netsuke quotes.** Only its own path substitutions receive automatic
+shell quoting. POSIX and Bash use `shell-quote` and context-aware encoding;
+PowerShell uses its own literal encoding and rejects markers in quoted regions.
+With an existing `input file.txt`, this POSIX example passes the input path as
+one argument, producing `output.txt`:
+
+<!-- tested-example: readme-quoted-path-manifest -->
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input file.txt
+    command: 'cat {{ ins }} > {{ outs }}'
+defaults: [output.txt]
+```
+
+**Backticks and command substitution.** Netsuke rejects markers inside backtick
+command substitutions on POSIX and Bash, and inside `$( … )` on all shell
+routes, in both recipe kinds. PowerShell uses backticks as escapes, so it is
+outside the backtick restriction, but still rejects markers in `$( … )`. This
+marker boundary is a promised invariant.
+
+Separately, POSIX and Bash `command:` recipes currently reject an odd total
+count of backticks after substitution. This conservative count includes
+backticks inside single quotes; it is not a shell parser. `script:` recipes and
+PowerShell skip the count. A future release may accept more without a breaking
+change. Balanced author-written command substitutions remain live.
+
+This POSIX manifest is rejected before Ninja runs. Run
+`netsuke --json --locale en-GB` to see the cause
+`Invalid command interpolation:` followed by the offending snippet; the default
+human output may show only the enclosing graph-building failure:
+
+<!-- tested-example: readme-backtick-rejection-manifest -->
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input.txt
+    command: 'echo `cat {{ ins }}` > {{ outs }}'
+defaults: [output.txt]
+```
+
+**The `shlex` guard.** POSIX and Bash `command:` recipes must pass
+`shlex::split` after substitution or receive the same localized diagnostic
+during lowering. `script:` recipes and PowerShell bypass this guard. Netsuke
+does not execute the returned tokens. `shlex` performs no expansion and treats
+backticks as ordinary characters: passing the guard does not make a command
+safe. Do not use it as an injection check.
+
+Rejection is part of the observable contract, but the precise accepted set is
+not a stability commitment: it depends on the `shlex` version resolved when
+Netsuke was built. A future version accepting previously rejected text is not a
+breaking change; rejecting previously accepted text is a defect to record in
+the changelog, not a policy change.
+
+**Stability and further reading.** Netsuke is pre-1.0; interfaces may still
+change. The scoped guarantees above do not make arbitrary recipes safe. See the
+[users' guide safety boundary](docs/users-guide.md#review-the-safety-boundary)
+for shell-route mechanics and
+[ADR-027](docs/adr-027-command-placeholder-contract.md) for these decisions.
 
 ______________________________________________________________________
 
 ## Release and development status
 
-The v0.1.0-beta3 release is a useful preview for early adopters, not a
+The v0.1.0-beta4 release is a useful preview for early adopters, not a
 declaration that Netsuke is finished or that every interface is stable. The
 compiler pipeline and ordinary local-build workflow are substantial; the
 command-line interface, configuration vocabulary, and advanced recipe model
@@ -185,7 +319,7 @@ remain pre-stable.
 Pin the Netsuke version in automation and expect some command names, flags,
 diagnostic schemas, and manifest details to change before 1.0.
 
-The following limitations apply to beta3.
+The following limitations apply to beta4.
 
 Known limitations include:
 
@@ -204,10 +338,16 @@ The beta3 release fixes beta2's shell-dollar limitation with Ninja-aware
 escaping, so ordinary shell expressions can be written normally. Beta2
 manifests that use literal shell dollar expressions require migration; see the
 [users' guide safety boundary](docs/users-guide.md#review-the-safety-boundary).
+Beta4 extends the same treatment to `$in` and `$out` in `script:` recipes, so
+beta3 manifests that relied on them for path substitution must use `{{ ins }}`
+and `{{ outs }}` instead; see the
+[migration guide](docs/v0-1-0-migration-guide.md).
 
-A `Netsukefile` can execute commands and use impure template helpers. Treat it
-with the same care as a `Makefile`: review untrusted manifests before running
-them. Netsuke quotes supported path substitutions, but it is not a sandbox.
+Review
+[Security and command interpolation](#security-and-command-interpolation) and
+the
+[users' guide safety boundary](docs/users-guide.md#review-the-safety-boundary)
+before running untrusted manifests.
 
 ______________________________________________________________________
 

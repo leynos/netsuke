@@ -38,6 +38,7 @@ def _move_failing_at_the_third_call(
     call_numbers = itertools.count(1)
 
     def failing_move(src: Path, dst: Path) -> str | Path:
+        """Inject the selected forward or rollback move failure."""
         call = next(call_numbers)
         if call == ABORTING_MOVE_CALL:
             msg = "injected move failure"
@@ -58,6 +59,7 @@ def _move_with_non_oserror_rollback_failure() -> cabc.Callable[
     call_numbers = itertools.count(1)
 
     def failing_move(src: Path, dst: Path) -> str | Path:
+        """Inject a non-``OSError`` failure during rollback."""
         call = next(call_numbers)
         if call == ABORTING_MOVE_CALL:
             raise OSError(_INJECTED_MOVE_FAILURE)

@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Numele de gazde permise atunci când refuzul im
 cli.flag.fetch_block_host.help = Numele de gazde blocate întotdeauna, chiar dacă sunt permise în altă parte.
 cli.flag.fetch_default_deny.help = Refuză implicit toate gazdele; permite doar lista declarată.
 cli.flag.trust_project_fetch_policy.help = Permite configurației proiectului să extindă permisiunile politicii fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Limitează instrucțiunile MiniJinja pentru fiecare evaluare a manifestului.
+cli.flag.manifest_fuel.help = Limitează instrucțiunile MiniJinja pentru un singur manifest.
+cli.flag.manifest_rendered_value_bytes.help = Limitează numărul de octeți redați într-o singură valoare a manifestului.
+cli.flag.manifest_rendered_manifest_bytes.help = Limitează numărul total de octeți redați într-un manifest.
+cli.flag.manifest_source_bytes.help = Limitează octeții sursă ai șablonului și macrocomenzilor consumați per manifest.
+cli.flag.manifest_foreach_cardinality.help = Limitează valorile procesate de o singură extindere foreach.
+cli.flag.manifest_expanded_entries.help = Limitează țintele și acțiunile extinse dintr-un singur manifest.
 cli.flag.json.help = Produce ieșire JSON care poate fi prelucrată automat.
 cli.flag.no_input.help = Nu citi niciodată date introduse interactiv.
 cli.flag.color.help = Politica de ieșire colorată (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = Simbolul YAML este nevalid sau neașteptat.
 manifest.yaml.hint.escape = Aplicați escape barelor oblice inverse sau eliminați secvențele de escape nevalide.
 manifest.env.missing = O variabilă de mediu obligatorie nu este setată.
 manifest.env.invalid_utf8 = O variabilă de mediu conține UTF-8 nevalid.
+manifest.env.blocked = Accesul la o variabilă de mediu este blocat.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Valoarea default din env trebuie să fie un șir de caractere, s-a primit { $kind }.
 manifest.vars.not_object = Câmpul `vars` al manifestului trebuie să fie o mapare sau un obiect.
 manifest.vars.reserved_name = Cheia `vars` '{ $name }' din manifest este rezervată pentru o funcție ajutătoare de șabloane integrată; redenumiți variabila.
 manifest.read_failed = Manifestul din { $path } nu a putut fi citit.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = flux continuu
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote aștepta un șir, dar a primit { $kind }.
+stdlib.shell.quote.control_character = O valoare care conține octet nul, retur de car sau salt de linie nu poate fi pusă între ghilimele.
+stdlib.shell.dialect_invalid = Dialect de shell necunoscut { $dialect }; se aștepta unul dintre { $accepted }.
+stdlib.shell.dialect_not_string = Opțiunea dialect din shell trebuie să fie un șir de caractere, s-a primit { $kind }.
+stdlib.shell.join.not_sequence = shell_join aștepta o secvență, dar a primit { $kind }.
+stdlib.shell.join.item_not_string = Elementul { $index } din shell_join este { $kind }, nu un șir.
+stdlib.shell.positional_option = { $filter } își preia opțiunile ca cuvinte-cheie; scrieți { $example }.
+
 # Diagnostice ale ajutorului pentru căi.
 stdlib.path.io.failed = Acțiunea „{ $action }” a eșuat pentru { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Acțiunea „{ $action }” a eșuat pentru { $path }: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algoritm de dispersie neacceptat
 
 # Diagnostice ale ajutoarelor pentru colecții.
 stdlib.collections.flatten.expected_sequence = flatten aștepta elemente dintr-o secvență, dar a găsit { $kind }.
+stdlib.collections.compact.not_sequence = compact aștepta o secvență, dar a găsit { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by necesită un atribut care nu este gol.
 stdlib.collections.group_by.unresolved = group_by nu a putut găsi „{ $attr }” pe un element de tipul { $kind }.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = nanosecunde
 
 # Diagnostice ale ajutorului which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] comanda „{ $command }” nu a fost găsită după verificarea a { $count } intrări din PATH. Previzualizare: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Segmentele goale din PATH sunt ignorate; folosiți cwd_mode="auto" pentru a include directorul de lucru.
-stdlib.which.not_found.hint.cwd_always = Stabiliți cwd_mode="always" pentru a include directorul curent.
+stdlib.which.not_found.hint.cwd_auto = Modul auto caută numai în directoarele indicate explicit în PATH.
+stdlib.which.not_found.hint.cwd_always = Modul always caută mai întâi în directorul curent, apoi în directoarele indicate în PATH.
+stdlib.which.not_found.hint.workspace = Pentru a căuta recursiv în arborele spațiului de lucru, utilizați cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] comanda „{ $command }” din „{ $path }” lipsește sau nu este executabilă.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <gol>
 stdlib.which.path_entry.non_utf8 = Intrarea nr. { $index } din PATH conține caractere care nu sunt UTF-8; Netsuke necesită căi UTF-8.
 stdlib.which.command.empty = which necesită un șir de caractere care nu este gol.
-stdlib.which.cwd_mode.invalid = cwd_mode trebuie să fie „auto”, „always” sau „never”; s-a primit „{ $mode }”.
+stdlib.which.cwd_mode.invalid = cwd_mode trebuie să fie 'auto', 'always', 'never' sau 'workspace-recursive'; s-a primit '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Directorul curent nu a putut fi determinat: { $details }.
 stdlib.which.cwd.non_utf8 = Directorul curent conține componente care nu sunt UTF-8.
 stdlib.which.canonicalize_failed = „{ $path }” nu a putut fi canonizat: { $details }.
@@ -431,3 +455,7 @@ example.errors_found = { $count ->
     [few] S-au găsit { $count } erori.
    *[other] S-au găsit { $count } de erori.
 }
+manifest.budget.exceeded = Bugetul de resurse al manifestului s-a epuizat în timpul etapei { $stage }, după atingerea limitei { $limit }.
+
+cli.flag.env_allow_var.help = Variabilă de mediu permisă pentru ajutorul env() al manifestului.
+cli.flag.env_block_var.help = Variabilă de mediu blocată pentru ajutorul env() al manifestului.

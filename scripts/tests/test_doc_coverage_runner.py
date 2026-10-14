@@ -34,6 +34,15 @@ class FakeCoverageAdapter:
     """Record runner calls while returning one target and its coverage result."""
 
     def __init__(self, calls: list[object], coverage: object) -> None:
+        """Initialise the fake adapter with its call log and fixed result.
+
+        Parameters
+        ----------
+        calls
+            Mutable list that receives metadata and coverage calls.
+        coverage
+            Fixed coverage result returned for the target.
+        """
         self._calls = calls
         self._coverage = coverage
 

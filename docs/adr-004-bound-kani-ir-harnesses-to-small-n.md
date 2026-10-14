@@ -92,7 +92,7 @@ Netsuke accepts small bounded Kani harnesses for roadmap item `4.2.1`.
   replacing those paths in harnesses.
 
 The duplicate-output harness drives the private production `find_duplicates`
-helper in `src/ir/from_manifest.rs`, rather than the full
+helper in `src/ir/from_manifest/mod.rs`, rather than the full
 `BuildGraph::from_manifest` path. This keeps the proof focused on duplicate
 discovery after direct attempts through manifest lowering reached serde-backed
 action hashing before duplicate assertions became tractable. Under `cfg(kani)`,

@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-release-admission test-coverage-artifact test-markdown-format test-ci-scripts test-typos-config build release lint lint-clippy lint-whitaker lint-python github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest test-documentation-contracts doctest test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -6,7 +6,7 @@ RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 export RUST_TOOLCHAIN_FILE
 # Threshold and toolchain for the Rustdoc doc-comment coverage gate. The
 # threshold mirrors the 80% bar stated in AGENTS.md; the toolchain recollects
-# the channel from rust-toolchain.toml the same way the dev-fast variables do,
+# the channel from rust-toolchain.toml the same way the build-tools variables do,
 # so overriding either stays independent.
 DOC_COVERAGE_THRESHOLD ?= 80
 DOC_COVERAGE_TOOLCHAIN ?= $(shell awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $$2; exit }' "$$RUST_TOOLCHAIN_FILE")
@@ -17,9 +17,14 @@ DOC_COVERAGE_TOOLCHAIN ?= $(shell awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/
 export DOC_COVERAGE_THRESHOLD DOC_COVERAGE_TOOLCHAIN
 
 APP ?= netsuke
-CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
-# CARGO is resolved above before it is exported: `export` alone would define
-# the variable empty and shadow the `?=` fallback for every recipe.
+# A bare command name, resolved by the recipe shell. That shell is the only one
+# that receives the curated PATH below, which is where `$HOME/.cargo/bin` is
+# added; a parse-time `command -v` probe would query the environment Make was
+# started with instead, and what that environment exports to a shell function
+# is neither documented nor stable across Make releases.
+CARGO ?= cargo
+# The default must be defined before the export: `export CARGO` on its own
+# would define the variable empty and shadow the `?=` default for every recipe.
 export CARGO
 # Pass `--locked` through only when a caller asks for lockfile verification.
 # Keeping the default empty preserves the interactive inner-loop behaviour.
@@ -40,34 +45,99 @@ KANI_FLAGS ?=
 KANI_INSTALL_FLAGS ?=
 KANI_CHECK_FLAGS ?=
 KANI_VERSION_FILE ?= tools/kani/VERSION
-# Opt-in local build acceleration. The Cargo fragment is deliberately kept out
-# of an auto-discovered `.cargo/config.toml`, because Cranelift and mold must
-# stay opt-in so release, packaging, coverage, and formal-verification paths
-# keep the supported LLVM backend and platform linker. The toolchain is not
-# pinned separately — dev-fast uses the repository's own nightly.
+# The development build standard: the `mold` linker and the parallel `rustc`
+# frontend are the defaults for development, test, lint, and typecheck builds.
+# `.cargo/config.toml` carries them so a bare `cargo` invocation gets them too;
+# release and coverage builds are excluded there and below. The toolchain is not
+# pinned separately — the standard uses the repository's own nightly from
+# `rust-toolchain.toml`.
 MOLD_VERSION_FILE ?= tools/mold/VERSION
 MOLD_SHA256SUMS_FILE ?= tools/mold/SHA256SUMS
-DEV_FAST_CONFIG ?= tools/dev-fast/config.toml
-# Preserve the raw override before export: otherwise Make expands a caller's
-# literal dollar signs while preparing the environment for the recipe shell.
-override DEV_FAST_CONFIG := $(value DEV_FAST_CONFIG)
-DEV_FAST_PREFIX ?= $(HOME)/.local
+BUILD_TOOLS_PREFIX ?= $(HOME)/.local
 # Exported rather than interpolated into the recipes. Make hands an exported
 # variable to the child process directly, so a path containing a quote cannot
 # break the command line the shell parses; a `VAR='$(VAR)'` prefix could.
 export MOLD_VERSION_FILE MOLD_SHA256SUMS_FILE
-export DEV_FAST_CONFIG DEV_FAST_PREFIX
-DEV_FAST_TOOLCHAIN = $$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $$2; exit }' "$$RUST_TOOLCHAIN_FILE")
-MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
+export BUILD_TOOLS_PREFIX
+
+# Cargo picks a single `rustflags` source rather than merging them, and an
+# externally set `RUSTFLAGS` outranks every `rustflags` table in
+# `.cargo/config.toml`. Every gate target below sets `RUSTFLAGS` to deny
+# warnings, and CI's `setup-rust` exports the same value for a whole job, so
+# without restating the flags here the gates would silently fall back to the
+# platform linker and a single-threaded frontend while still reporting success.
+# tests/makefile_test_target/rustflags.rs holds these variables equal to the
+# configuration file; changing one without the other fails that test.
+STANDARD_THREADS_FLAG ?= -Zthreads=8
+STANDARD_MOLD_FLAG ?= -Clink-arg=-fuse-ld=mold
+# `mold` ships for Linux only. macOS and Windows keep their platform linker,
+# matching the `cfg(target_os = "linux")` gate in `.cargo/config.toml`.
+BUILD_HOST_OS := $(shell uname -s)
+STANDARD_RUSTFLAGS = $(STANDARD_THREADS_FLAG)$(if $(filter Linux,$(BUILD_HOST_OS)), $(STANDARD_MOLD_FLAG))
+# Warnings-as-errors plus the standard, appended to whatever the caller set.
+GATE_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(STANDARD_RUSTFLAGS)"
+# A debug build that keeps the caller's warning policy rather than imposing one.
+DEBUG_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(STANDARD_RUSTFLAGS)"
+# Release builds take neither the parallel frontend nor `mold`: assigning
+# `RUSTFLAGS` at all, even to an empty inherited value, displaces the
+# configuration file's `rustflags` tables, which is the whole mechanism. The
+# configuration names no codegen backend at all, so nothing else is needed.
+RELEASE_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS-}"
+# Kani denies warnings like the gates, but takes none of the standard: it drives
+# `rustc` through `kani-compiler` on its own bundled toolchain, so the parallel
+# frontend and `mold` would neither apply nor be honoured there. Inherited flags
+# still survive, since `cargo kani` appends this value to its own.
+KANI_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings"
+# Command name, resolved by the recipe shell from the curated PATH, which
+# carries `$HOME/.bun/bin` where the global markdownlint install lands.
+MDLINT ?= markdownlint-cli2
+# `make fmt` and `make check-fmt` call mdtablefix directly. `--git` selects the
+# Markdown files Git tracks and `--include-untracked` adds the untracked files
+# Git does not ignore, so a new document is formatted before it is staged.
+# `--git` skips symbolic links, so CRUSH.md (a link to AGENTS.md) is never
+# rewritten or checked twice. Both modes need mdtablefix 0.6.0 or later; CI
+# pins the version in MDTABLEFIX_VERSION in .github/workflows/ci.yml.
+MDTABLEFIX ?= mdtablefix
+MDTABLEFIX_SELECT = --git --include-untracked
+MDTABLEFIX_RULES = --wrap --renumber --breaks --ellipsis --fences
 NIXIE ?= nixie
 YAMLLINT ?= yamllint
+# Go separates `GOPATH` entries with the platform list separator: `;` on
+# Windows, `:` elsewhere. `go install` writes to the `bin` directory of the
+# *first* entry, so split on that separator and keep the first one; appending
+# `/bin` to a whole list would curate `$GOPATH` itself and omit the directory Go
+# actually installs into.
+GOPATH_SEPARATOR := $(if $(filter Windows_NT,$(OS)),;,:)
+# `go install` writes to `$GOBIN` when set, otherwise that first `$GOPATH` entry's
+# `bin`, otherwise `$HOME/go/bin`. The directory is absent from a minimal caller
+# PATH, so name it once here and curate it on PATH below, next to the other user
+# tool directories.
+GO_BIN ?= $(if $(GOBIN),$(GOBIN),$(if $(GOPATH),$(word 1,$(subst $(GOPATH_SEPARATOR), ,$(GOPATH)))/bin,$(HOME)/go/bin))
+# Exported so the `github-actions-lint` preflight can name the directory from
+# the recipe shell rather than interpolating a path into the command line.
+export GO_BIN
+# Command name, resolved by the recipe shell like CARGO and MDLINT above, so an
+# absolute `ACTIONLINT=/path/to/actionlint` still overrides it (CI does that).
+# The `github-actions-lint` preflight reports the Go tool directory when the
+# lookup fails, instead of letting the recipe die with a bare exit 127.
 ACTIONLINT ?= actionlint
-# Single source of truth for the typos version; the markdownlint target and CI
-# both consume it, so the Makefile and CI cannot drift apart.
-TYPOS_VERSION ?= 1.48.0
+export ACTIONLINT
+# Single source of truth for the shared spelling gate; the Makefile and CI
+# both consume it, so the pinned builder cannot drift apart.
+TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.3
 YAMLLINT_VERSION ?= 1.38.0
 UV ?= uv
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
+
+# The CV-005 CodeScene contracts live in shared-actions and run from a full
+# commit, so a fix is a pin bump. `.github/cv005.toml` holds this repository's
+# parameters and lane pairing.
+CV005_CONTRACTS_REF ?= 3754876bc4e94dc65c83af3def37828934f8f65e
+CV005_CONTRACTS = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
+	--from 'git+https://github.com/leynos/shared-actions@$(CV005_CONTRACTS_REF)\#subdirectory=packages/cv005-contracts' \
+	cv005-contracts
+# Public GitHub tool sources must not inherit workspace-specific URL rewrites.
+PUBLIC_GIT_SOURCE_ENV = GIT_CONFIG_COUNT=0
 # The Python baseline every uv-driven helper pins. Bump this alongside the
 # `target-version`/`py-version` settings in pyproject.toml and the
 # `python-version` inputs in .github/workflows/ci.yml, release.yml, and
@@ -81,6 +151,13 @@ COVERAGE_ARTIFACT_DIR ?= coverage-artifact
 # tests/workflow_contracts keeps the two from drifting apart.
 RUFF_VERSION ?= 0.16.4
 RUFF = $(UV_ENV) $(UV) tool run --from ruff==$(RUFF_VERSION) ruff
+# Pin Interrogate so documentation coverage is stable between local and CI
+# runs. The repository uses it only as a quality gate; it is not a Python
+# distribution and does not need project metadata.
+INTERROGATE_VERSION ?= 1.7.0
+INTERROGATE = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
+	--from 'interrogate==$(INTERROGATE_VERSION)' \
+	interrogate --fail-under 100
 # Pin ty so `make` and CI invoke the same typechecker release. ty is pre-1.0
 # and diagnostics shift between releases, so an unpinned install breaks the
 # typecheck gate without any code change. Bump deliberately and fix new
@@ -89,25 +166,25 @@ TY_VERSION ?= 0.0.74
 # The CI helper scripts under scripts/ci declare these in their PEP 723
 # blocks; scripts/tests/test_ci_scripts_metadata.py holds the two in step, so
 # `uv run --script` in CI and the test and typecheck gates resolve one release.
-# cuprum is pinned to a leynos/cuprum commit until 0.2.0 ships the
-# `RunOutputOptions` runtime the scripts use.
-CYCLOPTS_VERSION ?= 4.25.2
-CUPRUM_REF ?= a2134c7a3966b224eaed917efb94f8090ce5104a
-CUPRUM_SOURCE = cuprum @ git+https://github.com/leynos/cuprum@$(CUPRUM_REF)
-CI_SCRIPT_DEPS = --with cyclopts==$(CYCLOPTS_VERSION) --with '$(CUPRUM_SOURCE)'
+# cuprum is a PyPI release, not a git ref: the scripts and the older
+# `scripts/` helpers share one `run_sync` signature, and a git pin would give
+# `make typecheck-python` a different cuprum from the one those helpers
+# declare, so no single resolution could satisfy both.
+CYCLOPTS_VERSION ?= 4.25.3
+CUPRUM_VERSION ?= 0.1.0
+CI_SCRIPT_DEPS = --with cyclopts==$(CYCLOPTS_VERSION) --with cuprum==$(CUPRUM_VERSION)
 # Every Python source the repository owns. Ruff and Pylint resolve their own
 # configuration and exclusions from pyproject.toml, so these paths only bound
 # the walk.
 PYTHON_SOURCES = .github/scripts scripts tests/workflow_contracts
 # Pylint must run on the Python baseline so it parses every repository-owned
-# source. `--load-plugins=` clears the shim's default plugin list so this pass
-# runs exactly the messages pyproject.toml enables.
+# source. `--load-plugins=` clears any configured plugins so this pass runs
+# exactly the messages pyproject.toml enables.
 PYLINT_PYTHON ?= $(PYTHON_BASELINE)
+PYLINT_VERSION ?= 4.0.9
 PYLINT_TARGETS ?= $(PYTHON_SOURCES)
-PYLINT_PYPY_SHIM_REF ?= 726d09f968b4d729ee4b29c71fc732e744854f3b
-PYLINT_PYPY_SHIM = git+https://github.com/leynos/pylint-pypy-shim.git@$(PYLINT_PYPY_SHIM_REF)
-PYLINT = $(UV_ENV) $(UV) tool run --python $(PYLINT_PYTHON) \
-	--from '$(PYLINT_PYPY_SHIM)' pylint-pypy --load-plugins=
+PYLINT = $(UV_ENV) $(UV) tool run --managed-python --python $(PYLINT_PYTHON) \
+	--from 'pylint==$(PYLINT_VERSION)' pylint --load-plugins=
 # The df12 house lints need CPython 3.14: they parse syntax PyPy's 3.11
 # runtime cannot, and the baseline-gated messages (R9112, C9112) key off the
 # `py-version` in pyproject.toml. They run through `uv tool run` rather than
@@ -116,32 +193,21 @@ PYLINT = $(UV_ENV) $(UV) tool run --python $(PYLINT_PYTHON) \
 DF12_PYTHON_LINTS_REF ?= v0.3.0
 DF12_PYTHON_LINTS = git+https://github.com/leynos/df12-python-lints.git@$(DF12_PYTHON_LINTS_REF)
 DF12_PYLINT_MESSAGES = R9101,C9102,R9103,R9104,C9105,C9106,C9107,R9108,R9109,R9110,R9111,R9112,C9112
-DF12_PYLINT = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
+DF12_PYLINT = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run \
+	--python $(PYTHON_BASELINE) \
 	--from 'pylint' --with '$(DF12_PYTHON_LINTS)' pylint \
 	--disable=all --load-plugins=df12_python_lints \
 	--enable=$(DF12_PYLINT_MESSAGES)
-AMBRLEAKS = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
+AMBRLEAKS = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run \
+	--python $(PYTHON_BASELINE) \
 	--from '$(DF12_PYTHON_LINTS)' ambrleaks
-SPELLING_HELPER_COVERAGE = --cov=generate_typos_config --cov=typos_rollout_check --cov=typos_rollout \
-	--cov=typos_rollout_cache --cov=typos_rollout_http
-SPELLING_HELPER_FILES = scripts/generate_typos_config.py \
-	scripts/typos_rollout_check.py \
-	scripts/typos_rollout.py scripts/typos_rollout_cache.py \
-	scripts/typos_rollout_http.py scripts/tests/conftest.py \
-	scripts/tests/test_typos_rollout.py \
-	scripts/tests/test_typos_rollout_check.py \
-	scripts/tests/test_typos_rollout_hardening.py \
-	scripts/tests/test_typos_rollout_refresh.py \
-	scripts/tests/typos_rollout_test_support.py
-# Markdown files, excluding build output and tool caches. CRUSH.md is a symlink
-# to AGENTS.md, so `-type f` skips it and avoids double-checking the same prose.
-MD_FILES_FIND = find . -type f -name '*.md' \
-	-not -path './target/*' -not -path './.venv/*' \
-	-not -path './.vtcode/*' -not -path './memories/*' \
-	-not -path './.pytest_cache/*' \
-	-not -path './.uv-cache/*' \
-	-not -path './.uv-tools/*' \
-	-not -path './node_modules/*' -print0
+# The shared en-GB-oxendict spelling gate. It regenerates `typos.toml` from
+# the live shared dictionary and the `typos.local.toml` overlay on every run,
+# then runs Typos and the prohibited-phrase check.
+TYPOS_CONFIG_BUILDER = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run \
+	--python $(PYTHON_BASELINE) \
+	--from "git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_VERSION)" \
+	typos-config-builder
 PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@b07ef696f8373d54ae68e517d39d47a5d27a5bd5
 PROVER_TOOLS ?= uv tool run --from $(PROVER_TOOLS_SOURCE) prover-tools
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
@@ -151,7 +217,13 @@ VERUS_FLAGS ?=
 VERUS_INSTALL_FLAGS ?=
 WHITAKER ?= whitaker
 
-export PATH := $(HOME)/.cargo/bin:$(HOME)/.local/bin:$(HOME)/.bun/bin:$(PATH)
+# The build-tools install prefix leads: `-fuse-ld=mold` resolves by PATH order, so
+# the pinned release must outrank any distribution `mold`. Every build target
+# now links with it, so this is global rather than target-specific.
+# GO_BIN is appended after the three fixed directories so a tool present in
+# more than one location keeps its current precedence; CI's explicit
+# `ACTIONLINT=` override still wins over all of them.
+export PATH := $(BUILD_TOOLS_PREFIX)/bin:$(HOME)/.cargo/bin:$(HOME)/.local/bin:$(HOME)/.bun/bin:$(GO_BIN):$(PATH)
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -163,14 +235,46 @@ clean: ## Remove build artefacts
 
 test: test-nextest doctest ## Run every Rust test with warnings treated as errors
 
-test-nextest: ## Run all non-doctest Rust tests through cargo-nextest
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+test-nextest: check-build-tools ## Run all non-doctest Rust tests through cargo-nextest
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
-doctest: ## Run doctests, which cargo-nextest cannot execute
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
+.PHONY: test-rfc-stdlib-coverage
+test-rfc-stdlib-coverage: check-build-tools ## Check the RFC 0006 split and its parsers
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test rfc_stdlib_coverage_tests --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
-test-workflow-contracts: ## Validate GitHub Actions workflow contracts
-	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' pytest tests/workflow_contracts -q
+test-documentation-contracts: check-build-tools ## Validate marked documentation examples and semantic contracts
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test documentation_examples_loader_tests --test documentation_examples_tests --all-features --no-tests fail -E 'test(malformed_documented_examples_are_rejected) | test(every_documented_fence_has_a_known_unique_identifier) | test(release_wix_extension)' $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+
+doctest: check-build-tools ## Run doctests, which cargo-nextest cannot execute
+	$(GATE_RUSTFLAGS) $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
+
+test-kani-mutations: check-build-tools ## Compile each mutation patch's patched tree under the Kani configuration
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test kani_mutation_evidence_tests --all-features --run-ignored ignored-only $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+
+# The first uv run mirrors the exact Cuprum/Cyclopts pins in
+# scripts/kani_proof_scope.py's PEP 723 metadata. The second uses compatible
+# bounded ranges for those tools.
+test-workflow-contracts: ## Validate the CV-005 contracts and the GitHub Actions workflow contracts
+	$(CV005_CONTRACTS) check --repository .
+	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		--with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' \
+		--with 'cmd-mox==0.2.0' --with 'cuprum==0.1.0' \
+		--with 'cyclopts==4.25.3' pytest tests/workflow_contracts -q --doctest-modules
+	PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		--with 'pytest>=8' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' \
+		--with 'cyclopts>=4.25.3,<5' --with 'cuprum>=0.1.0,<0.2.0' \
+		pytest scripts/tests/test_ensure_draft_release.py \
+			scripts/tests/test_install_orthohelp.py \
+			scripts/tests/test_report_glibc_floor.py \
+			scripts/tests/test_resolve_wix_extension_version.py \
+			scripts/ensure_draft_release.py scripts/install_orthohelp.py \
+			scripts/report_glibc_floor.py scripts/resolve_wix_extension_version.py \
+			scripts/hoist_binstall_archives.py -q --doctest-modules
+
+test-windows-msi-release-rank: ## Validate Windows MSI release-rank parsing
+	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		--with pytest==9.0.2 --with hypothesis==6.151.9 \
+		python -m pytest scripts/tests/test_windows_msi_release_rank.py
 
 test-release-admission: ## Validate the release-admission runtime contract
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
@@ -186,43 +290,88 @@ test-coverage-artifact: ## Test hostile LCOV artefact validation
 		scripts/tests/test_validate_coverage_archive.py -c /dev/null --rootdir=. \
 		-p no:cacheprovider
 
-test-markdown-format: ## Validate the Markdown formatter checker
+test-linux-package-metadata: ## Test Linux package metadata reading and validation
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
-		--with pytest==9.0.2 --with hypothesis==6.151.9 \
-		python -m pytest scripts/tests/test_check_markdown_format.py -c /dev/null \
-		--rootdir=. -p no:cacheprovider
+		--with pytest==9.0.2 --with hypothesis==6.151.9 python -m pytest \
+		scripts/tests/test_cargo_package_metadata.py \
+		scripts/tests/test_validate_linux_package_metadata.py -c /dev/null --rootdir=. \
+		-p no:cacheprovider
 
 test-ci-scripts: ## Test the CI helper scripts under scripts/ci with pytest and cmd-mox
 	@PYTHONPATH=scripts/ci:scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with pytest==9.0.2 --with cmd-mox==0.2.0 $(CI_SCRIPT_DEPS) \
-		python -m pytest -p cmd_mox.pytest_plugin scripts/tests/test_ci_*.py \
+		python -m pytest -p cmd_mox.pytest_plugin \
+		scripts/tests/test_ci_discard_instrumented_tree.py \
+		scripts/tests/test_ci_install_actionlint.py \
+		scripts/tests/test_ci_install_kani.py \
+		scripts/tests/test_ci_report_sccache_stats.py \
+		scripts/tests/test_ci_scripts_metadata.py \
+		scripts/tests/test_ci_stage_test_shell.py \
+		scripts/tests/test_ci_support.py \
 		-c /dev/null --rootdir=. -p no:cacheprovider
 
-test-typos-config: spelling-helper-test ## Verify the shared spelling-policy integration
+# Split rather than a single `target/%/$(APP)` pattern: the two profiles no
+# longer share a command line. The debug build takes the standard; the release
+# build is one of the two exclusions.
+target/debug/$(APP): | check-build-tools ## Build the debug binary
+	$(DEBUG_RUSTFLAGS) $(CARGO) build $(BUILD_JOBS) --bin $(APP)
 
-target/%/$(APP): ## Build binary in debug or release mode
-	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
+target/release/$(APP): ## Build the release binary on the LLVM backend
+	$(RELEASE_RUSTFLAGS) $(CARGO) build $(BUILD_JOBS) --release --bin $(APP)
 
 lint: lint-clippy lint-whitaker lint-python github-actions-lint ## Run the Rust, Python, and GitHub Actions lint suites with warnings denied
 
-lint-python: ## Run Ruff, Pylint, the df12 house lints, and ambrleaks over the Python sources
+lint-python: lint-workflow-scripts ## Run Ruff, Pylint, Interrogate, the df12 house lints, and ambrleaks over the Python sources
 	$(RUFF) check $(PYTHON_SOURCES)
 	$(PYLINT) $(PYLINT_TARGETS)
 	$(DF12_PYLINT) $(PYLINT_TARGETS)
 	$(AMBRLEAKS) $(PYTHON_SOURCES)
+	$(INTERROGATE) $(PYTHON_SOURCES)
 
-lint-clippy: ## Run rustdoc and Clippy with warnings denied
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) doc --workspace --no-deps
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) clippy $(CLIPPY_FLAGS)
+lint-workflow-scripts: ## Load every trusted workflow module under the Python baseline
+	# The trusted coverage workflow runs these through GitHub Actions' `python`
+	# shell, and tests/workflow_contracts/python_shell_interpreter_test.py
+	# holds that shell to the baseline. Ruff and ty read the modules; loading
+	# them catches a definition-time failure -- a name used at module scope, an
+	# invalid decorator -- which no pull request can fix once it is on main,
+	# because the workflow runs the default branch's copy.
+	#
+	# Loading does NOT catch an annotation naming a TYPE_CHECKING-only import,
+	# which this comment claimed until the baseline moved to 3.14: PEP 649
+	# defers annotation evaluation, so such a module loads cleanly and fails
+	# only when something resolves the annotation. The claim held under 3.12
+	# and no longer does. Catch it by calling typing.get_type_hints, not by
+	# loading; see
+	# docs/adr-038-runtime-annotation-introspection-in-workflow-contracts.md.
+	@for module in .github/scripts/*.py; do \
+		$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) python -c \
+			'import runpy, sys; runpy.run_path(sys.argv[1], run_name="lint_workflow_scripts")' \
+			"$$module" || { echo "$$module does not load under Python $(PYTHON_BASELINE)" >&2; exit 1; }; \
+	done
 
-lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
-	DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(WHITAKER) --all --no-deps --package netsuke-build -- --all-targets --all-features
+lint-clippy: check-build-tools ## Run rustdoc and Clippy with warnings denied
+	$(GATE_RUSTFLAGS) $(CARGO) doc --workspace --no-deps
+	$(GATE_RUSTFLAGS) $(CARGO) clippy $(CLIPPY_FLAGS)
+
+lint-whitaker: check-build-tools ## Run the Whitaker Dylint suite with warnings denied
+	DYLINT_TOML="$$(cat dylint.toml)" $(GATE_RUSTFLAGS) $(WHITAKER) --all --no-deps --package netsuke-build -- --all-targets --all-features
 	# Run from the crate directory as well so Whitaker loads the narrow
 	# `test_support::fs` exemption from test_support/dylint.toml.
-	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
+	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" $(GATE_RUSTFLAGS) $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
 
+# actionlint is resolved in the recipe shell below, never while Make parses the
+# file: only the recipe shell receives the curated PATH, so a parse-time probe
+# can report a Go-installed actionlint as missing. Checking in the shell also
+# keeps the diagnostic beside the invocation it explains.
 github-actions-lint: ## Validate GitHub Actions workflows
 	$(YAMLLINT) --config-file .yamllint.yml .github/workflows
+	@command -v "$$ACTIONLINT" >/dev/null 2>&1 || { \
+		printf '%s\n' \
+			"actionlint could not be run: ACTIONLINT is '$$ACTIONLINT'." \
+			"Install it with go (go install github.com/rhysd/actionlint/cmd/actionlint@latest)," \
+			"which writes $$GO_BIN/actionlint, or set ACTIONLINT=/path/to/actionlint." >&2; \
+		exit 1; \
+	}
 	$(ACTIONLINT)
 
 doc-coverage: doc-coverage-test ## Verify aggregate Rustdoc doc-comment coverage meets the threshold
@@ -252,49 +401,45 @@ fmt: ## Format Rust, Python, and Markdown sources
 	$(CARGO) fmt --all
 	$(RUFF) format $(PYTHON_SOURCES)
 	$(RUFF) check --select I --fix $(PYTHON_SOURCES)
-	mdformat-all
+	$(MDTABLEFIX) --in-place $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
+	@unset FORCE_COLOR; $(MDLINT) --fix "**/*.md"
 
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
 	$(RUFF) format --check $(PYTHON_SOURCES)
-	@$(MD_FILES_FIND) | xargs -0 sh -c '\
-		if [ "$$#" -gt 0 ]; then \
-			scripts/check-markdown-format.sh "$$@"; \
-		fi' sh
+	$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
 
-typecheck: typecheck-python ## Typecheck all targets and features
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
+typecheck: check-build-tools typecheck-python ## Typecheck all targets and features
+	$(GATE_RUSTFLAGS) $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
 
 typecheck-python: ## Typecheck the Python sources with ty
 	# `uv tool run` materialises one venv holding ty plus the test-suite
 	# dependencies, so ty can resolve third-party imports. `uv run --with`
 	# would layer the extras through `.pth` chaining, which ty cannot follow.
+	# Standalone scripts declare these runtime dependencies in PEP 723 blocks,
+	# which ty does not read, so include them in its environment explicitly.
+	# The bounded ranges name the band each pin sits in, so this one
+	# resolution typechecks every script and helper together: the CI helper
+	# scripts pin cyclopts and cuprum exactly, and `scripts/kani_proof_scope.py`
+	# declares its own pins, which the Kani workflow-contract test holds this
+	# target to. Both `scripts` and `.github/scripts` are named as search
+	# roots because the contract tests import from them through a `sys.path`
+	# insert, which ty does not follow; without the roots those imports read
+	# as unresolved.
 	$(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 		--from ty==$(TY_VERSION) --with pytest==9.0.2 --with pytest-cov==7.0.0 \
 		--with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' \
-		$(CI_SCRIPT_DEPS) \
+		--with 'cyclopts>=4.25.3,<5' --with 'cuprum>=0.1.0,<0.2.0' \
 		ty check --python-version $(PYTHON_BASELINE) \
-		--extra-search-path scripts/ci --extra-search-path scripts $(PYTHON_SOURCES)
+		--extra-search-path scripts/ci --extra-search-path scripts \
+		--extra-search-path .github/scripts \
+		$(PYTHON_SOURCES)
 
 markdownlint: spelling ## Lint Markdown and enforce en-GB-oxendict spelling
 	@unset FORCE_COLOR; $(MDLINT) "**/*.md"
 
-spelling: spelling-config ## Enforce en-GB-oxendict spelling in Markdown prose
-	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) scripts/typos_rollout_check.py --repository .
-	@$(MD_FILES_FIND) | xargs -0 -r env $(UV_ENV) \
-		$(UV) tool run typos@$(TYPOS_VERSION) --config typos.toml --force-exclude
-
-spelling-config: spelling-helper-test ## Generate and validate the spelling configuration
-	@$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) scripts/generate_typos_config.py
-	@git ls-files --error-unmatch typos.toml >/dev/null
-	@git diff --exit-code -- typos.toml
-
-spelling-helper-test: ## Validate the shared spelling-policy integration
-	# `--isolated` keeps this gate independent of the repository configuration
-	# so the spelling helpers stay self-contained on the shared estate policy.
-	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) format --isolated --target-version py314 --check $(SPELLING_HELPER_FILES)
-	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) check --isolated --target-version py314 $(SPELLING_HELPER_FILES)
-	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) --with pytest==9.0.2 --with pytest-cov==7.0.0 python -m pytest scripts/tests/test_typos_rollout*.py -c /dev/null --rootdir=. -p no:cacheprovider $(SPELLING_HELPER_COVERAGE) --cov-fail-under=90
+spelling: ## Enforce en-GB-oxendict spelling
+	$(TYPOS_CONFIG_BUILDER) gate --repository .
 
 nixie: ## Validate Mermaid diagrams
 	nixie --no-sandbox
@@ -312,9 +457,31 @@ kani-check: ## Check the installed Kani verifier version
 	@$(PROVER_TOOLS) kani check-version --kani-command "$(KANI)" $(KANI_CHECK_FLAGS) || { status=$$?; printf 'prover-tools: target=kani-check failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
 kani-full: ## Run the full Kani verification suite
-	$(KANI) $(KANI_FLAGS)
+	$(KANI_RUSTFLAGS) $(KANI) $(KANI_FLAGS)
 
 kani-ir: kani-full ## Run the IR Kani verification suite
+
+# The scope wrapper's own end-to-end suite. It drives `systemd-run --user
+# --scope` at test-sized limits rather than the documented eight minutes, so it
+# needs no Kani install. The strict variable is what makes this lane meaningful:
+# without it a host lacking a per-user systemd manager would skip every scenario
+# and still report green, which would be coverage in name only. See
+# tests/kani_scope_wrapper_e2e_tests.rs for the prerequisites.
+#
+# It takes `KANI_RUSTFLAGS`, not `GATE_RUSTFLAGS`, and declares no
+# `check-build-tools` prerequisite. Both would be wrong here: the lane that runs
+# this is `kani-smoke`, which builds on the stable toolchain, so `-Zthreads` is
+# rejected outright and the capability check would fail before a single scenario
+# ran. The suite is an ordinary test binary with no need for the build standard's
+# linker or frontend, so it takes the same flags the Kani targets do. The lane
+# does install the build standard, because every Linux job that runs the nextest
+# suite must -- but that is `nextest_lane_mold_test.py`'s rule about the lane,
+# not a prerequisite of this target, and this target must stay reachable on a
+# host that has only `rustup`.
+KANI_SCOPE_WRAPPER_STRICT ?= 1
+test-kani-scope-wrapper: ## Verify the Kani scope wrapper end to end
+	NETSUKE_KANI_SCOPE_WRAPPER_STRICT=$(KANI_SCOPE_WRAPPER_STRICT) \
+		$(KANI_RUSTFLAGS) $(CARGO) nextest run --test kani_scope_wrapper_e2e_tests $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 install-verus: ## Install the pinned Verus verifier
 	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2
@@ -331,27 +498,15 @@ verus: ## Run the Verus proof entry point
 formal-pr: ## Run pull-request formal-verification checks
 	$(MAKE) kani-check
 
-install-dev-fast: ## Install the pinned mold linker and Cranelift backend
-	@scripts/install-dev-fast.sh
+install-build-tools: ## Install the pinned mold linker and the pinned toolchain
+	@scripts/install-build-tools.sh
 
-dev-fast-check: ## Check the mold and Cranelift local build prerequisites
-	@scripts/dev-fast-check.sh
+check-build-tools: ## Check the mold linker and toolchain prerequisites
+	@scripts/check-build-tools.sh
 
-# Every dev-fast target needs the install prefix ahead of a distribution mold:
-# the check probes PATH for it, and `-fuse-ld=mold` resolves by PATH order.
-# Target-specific exports do not reach prerequisites, so `dev-fast-check` is
-# listed in its own right as well as being a prerequisite of the others.
-DEV_FAST_TARGETS = install-dev-fast dev-fast-check dev-build dev-test bench-build
-$(DEV_FAST_TARGETS): export PATH := $(DEV_FAST_PREFIX)/bin:$(PATH)
-
-dev-build: dev-fast-check ## Build the debug binary with Cranelift and mold
-	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) $(CARGO_LOCKED) --config "$$DEV_FAST_CONFIG" build $(BUILD_JOBS) --bin $(APP)
-
-dev-test: dev-fast-check ## Run the nextest pass with Cranelift and mold
-	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config "$$DEV_FAST_CONFIG" nextest run $(CARGO_LOCKED) --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS)
-
-bench-build: dev-fast-check ## Time clean and incremental debug builds for both paths
-	@CARGO="$(CARGO)" scripts/bench-build.sh
+bench-build: check-build-tools ## Time clean and incremental debug builds for all three paths
+	@CARGO="$(CARGO)" STANDARD_THREADS_FLAG="$(STANDARD_THREADS_FLAG)" \
+		STANDARD_MOLD_FLAG="$(STANDARD_MOLD_FLAG)" scripts/bench-build.sh
 
 bench-config-load: ## Benchmark cached configuration loading without layer copies
 	$(CARGO) bench --bench config_load_cached_merge

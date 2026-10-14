@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.14"
-# dependencies = ["cyclopts==4.25.2", "cuprum @ git+https://github.com/leynos/cuprum@a2134c7a3966b224eaed917efb94f8090ce5104a"]
+# dependencies = ["cyclopts==4.25.3", "cuprum==0.1.0"]
 # ///
 """Record sccache statistics as text, JSON, and a step-summary section.
 
@@ -11,14 +11,17 @@ failure alike. The human-readable statistics go to the log and to
 and the text is appended to the job summary under an ``sccache`` heading.
 
 Parameters arrive from the environment: ``GITHUB_STEP_SUMMARY`` is ambient in
-GitHub Actions; ``INPUT_OUTPUT_DIR`` overrides where the two files land.
+GitHub Actions; ``INPUT_OUTPUT_DIR`` overrides where the two files land, and
+``SCCACHE_BACKEND`` names the cache backend the lane selected. That one keeps
+its own name rather than taking the ``INPUT_`` prefix, because it is the
+variable `setup-rust` and the Windows lanes already export.
 """
 
 import pathlib
 import sys
 import typing as typ
 
-from ci_support import CiScriptError, catalogue, describe_failure, run
+from ci_support import CiScriptError, RunSpec, catalogue, describe_failure, run
 
 import cyclopts
 from cyclopts import App, Parameter
@@ -34,17 +37,35 @@ app = App(config=cyclopts.config.Env("INPUT_", command=False))
 
 def show_stats(*extra: str, echo: bool) -> str:
     """Return ``sccache --show-stats`` output, failing on a non-zero exit."""
-    result = run(SCCACHE, "--show-stats", *extra, allowed=ALLOWED, echo=echo)
+    result = run(SCCACHE, "--show-stats", *extra, spec=RunSpec(ALLOWED, echo=echo))
     if not result.ok:
         message = f"reading statistics failed: {describe_failure(result)}"
         raise CiScriptError(message)
     return result.stdout or ""
 
 
-def summary_section(text: str) -> str:
-    """Return the Markdown block appended to the job summary."""
+def summary_section(text: str, backend: str = "") -> str:
+    """Return the Markdown block appended to the job summary.
+
+    Parameters
+    ----------
+    text
+        The human-readable ``sccache --show-stats`` output.
+    backend
+        The cache backend `setup-rust` selected, named above the statistics.
+        Empty on a lane that wires its own cache, which then gets no backend
+        line. The statistics' own ``Cache location`` cannot stand in for it:
+        that reads ``ghac`` for the Ubicloud cache proxy and GitHub's own
+        service alike, so it cannot tell the two apart.
+
+    Returns
+    -------
+    str
+        The fenced section, always closing the block on its own line.
+    """
     body = text if text.endswith("\n") else f"{text}\n"
-    return f"{SUMMARY_HEADING}\n\n```text\n{body}```\n"
+    named = f"- backend: {backend}\n\n" if backend else ""
+    return f"{SUMMARY_HEADING}\n\n{named}```text\n{body}```\n"
 
 
 @app.default
@@ -54,6 +75,7 @@ def main(
         pathlib.Path, Parameter(env_var="GITHUB_STEP_SUMMARY")
     ],
     output_dir: pathlib.Path = pathlib.Path(),
+    backend: typ.Annotated[str, Parameter(env_var="SCCACHE_BACKEND")] = "",
 ) -> int:
     """Write the statistics files and the summary section.
 
@@ -63,6 +85,9 @@ def main(
         The ``GITHUB_STEP_SUMMARY`` file the section is appended to.
     output_dir
         Where ``sccache-stats.txt`` and ``sccache-stats.json`` are written.
+    backend
+        The backend `setup-rust` selected; empty on a lane that wires its
+        own compiler cache, which then reports no backend.
 
     Returns
     -------
@@ -78,7 +103,7 @@ def main(
     (output_dir / TEXT_NAME).write_text(text, encoding="utf-8")
     (output_dir / JSON_NAME).write_text(machine, encoding="utf-8")
     with github_step_summary.open("a", encoding="utf-8") as handle:
-        handle.write(summary_section(text))
+        handle.write(summary_section(text, backend))
     return 0
 
 

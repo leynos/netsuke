@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Varsayılan reddetme açıkken izin verilen mak
 cli.flag.fetch_block_host.help = Başka yerde izin verilse bile her zaman engellenen makine adları.
 cli.flag.fetch_default_deny.help = Varsayılan olarak tüm makineleri reddet; yalnızca bildirilen listeye izin ver.
 cli.flag.trust_project_fetch_policy.help = Proje yapılandırmasının fetch politikası izinlerini genişletmesine izin ver.
+
+cli.flag.manifest_evaluation_fuel.help = Her manifest değerlendirmesi için MiniJinja talimatlarının sayısını sınırla.
+cli.flag.manifest_fuel.help = Tek bir manifest genelindeki MiniJinja talimatlarının sayısını sınırla.
+cli.flag.manifest_rendered_value_bytes.help = Tek bir manifest değerine işlenen bayt sayısını sınırla.
+cli.flag.manifest_rendered_manifest_bytes.help = Tek bir manifeste işlenen toplam bayt sayısını sınırla.
+cli.flag.manifest_source_bytes.help = Manifest başına kullanılan şablon ve makro kaynak baytlarını sınırla.
+cli.flag.manifest_foreach_cardinality.help = Tek bir foreach genişletmesinin işlediği değer sayısını sınırla.
+cli.flag.manifest_expanded_entries.help = Tek bir manifestten genişletilen hedef ve eylem sayısını sınırla.
 cli.flag.json.help = Makinece okunabilir JSON çıktısı üret.
 cli.flag.no_input.help = Etkileşimli girdi hiçbir zaman okunmasın.
 cli.flag.color.help = Renkli çıktı ilkesi (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = YAML belirteci geçersiz ya da beklenmedik.
 manifest.yaml.hint.escape = Ters eğik çizgileri kaçırın ya da geçersiz kaçış dizilerini kaldırın.
 manifest.env.missing = Gerekli bir ortam değişkeni ayarlanmamış.
 manifest.env.invalid_utf8 = Bir ortam değişkeni geçersiz UTF-8 içeriyor.
+manifest.env.blocked = Bir ortam değişkenine erişim engellendi.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env default değeri bir dizge olmalıdır, { $kind } alındı.
 manifest.vars.not_object = Bildirimin `vars` alanı bir eşleme ya da nesne olmalıdır.
 manifest.vars.reserved_name = Manifestteki `vars` anahtarı '{ $name }' yerleşik bir şablon yardımcı işlevi için ayrılmıştır; değişkeni yeniden adlandırın.
 manifest.read_failed = { $path } konumundaki bildirim okunamadı.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = akış
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote bir dize bekliyordu, ancak { $kind } aldı.
+stdlib.shell.quote.control_character = Null bayt, satır başı veya satır sonu içeren bir değer tırnak içine alınamaz.
+stdlib.shell.dialect_invalid = Bilinmeyen kabuk lehçesi { $dialect }; şunlardan biri bekleniyordu: { $accepted }.
+stdlib.shell.dialect_not_string = shell dialect seçeneği bir dizge olmalıdır, { $kind } alındı.
+stdlib.shell.join.not_sequence = shell_join bir dizi bekliyordu, ancak { $kind } aldı.
+stdlib.shell.join.item_not_string = shell_join öğesi { $index }, { $kind } türünde; dize değil.
+stdlib.shell.positional_option = { $filter } seçeneklerini anahtar sözcükle alır; şöyle yazın: { $example }.
+
 # Yol yardımcısının tanılaması.
 stdlib.path.io.failed = "{ $action }" eylemi { $path } için başarısız oldu ({ $label }).
 stdlib.path.io.failed_with_detail = "{ $action }" eylemi { $path } için başarısız oldu: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Desteklenmeyen özet algoritmas�
 
 # Koleksiyon yardımcılarının tanılaması.
 stdlib.collections.flatten.expected_sequence = flatten dizi öğeleri bekliyordu, ancak { $kind } buldu.
+stdlib.collections.compact.not_sequence = compact bir dizi bekliyordu, ancak { $kind } buldu.
 stdlib.collections.group_by.empty_attribute = group_by boş olmayan bir öznitelik gerektirir.
 stdlib.collections.group_by.unresolved = group_by, { $kind } türündeki bir öğede "{ $attr }" özniteliğini bulamadı.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = nanosaniye
 
 # which yardımcısının tanılaması.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] { $count } PATH girdisi denetlendikten sonra "{ $command }" komutu bulunamadı. Önizleme: { $preview }
-stdlib.which.not_found.hint.cwd_auto = PATH'in boş bölümleri yok sayılır; çalışma dizinini katmak için cwd_mode="auto" kullanın.
-stdlib.which.not_found.hint.cwd_always = Geçerli dizini katmak için cwd_mode="always" ayarlayın.
+stdlib.which.not_found.hint.cwd_auto = auto modu yalnızca PATH içinde açıkça belirtilen dizinlerde arama yapar.
+stdlib.which.not_found.hint.cwd_always = always modu önce geçerli dizinde, ardından PATH içinde belirtilen dizinlerde arama yapar.
+stdlib.which.not_found.hint.workspace = Çalışma alanı ağacında özyinelemeli arama yapmak için cwd_mode="workspace-recursive" kullanın.
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] "{ $path }" konumundaki "{ $command }" komutu yok ya da çalıştırılabilir değil.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <boş>
 stdlib.which.path_entry.non_utf8 = { $index }. PATH girdisi UTF-8 olmayan karakterler içeriyor; Netsuke UTF-8 yollar gerektirir.
 stdlib.which.command.empty = which boş olmayan bir dizge gerektirir.
-stdlib.which.cwd_mode.invalid = cwd_mode "auto", "always" ya da "never" olmalıdır, "{ $mode }" alındı.
+stdlib.which.cwd_mode.invalid = cwd_mode 'auto', 'always', 'never' veya 'workspace-recursive' olmalıdır; '{ $mode }' alındı.
 stdlib.which.cwd.resolve_failed = Geçerli dizin belirlenemedi: { $details }.
 stdlib.which.cwd.non_utf8 = Geçerli dizin UTF-8 olmayan bölümler içeriyor.
 stdlib.which.canonicalize_failed = "{ $path }" kurallı biçime çevrilemedi: { $details }.
@@ -428,3 +452,7 @@ example.errors_found = { $count ->
     [one] { $count } hata bulundu.
    *[other] { $count } hata bulundu.
 }
+manifest.budget.exceeded = Manifest kaynak bütçesi { $stage } aşamasında { $limit } değerine ulaşıldıktan sonra tükendi.
+
+cli.flag.env_allow_var.help = Bildirim env() yardımcısı için izin verilen ortam değişkeni.
+cli.flag.env_block_var.help = Bildirim env() yardımcısı için engellenen ortam değişkeni.

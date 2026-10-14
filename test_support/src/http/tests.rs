@@ -6,7 +6,9 @@
 //! module.
 
 use super::{
-    AcceptWait, HttpResponse, HttpServerConfig, accept_connection, response::render_response,
+    HttpResponse, HttpServerConfig,
+    accept::{AcceptWait, accept_connection},
+    response::render_response,
 };
 
 use std::{

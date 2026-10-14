@@ -19,7 +19,8 @@ use anyhow::{Context, Result, bail, ensure};
 use environment::{expand_env, manifest_env_reader};
 use netsuke::{
     ast::{Recipe, StringOrList, Target},
-    manifest,
+    manifest::{self, ManifestBudgetLimits},
+    recipe_shell::RecipeShell,
     stdlib::NetworkPolicy,
 };
 use rstest_bdd_macros::{given, then, when};
@@ -83,10 +84,16 @@ fn parse_manifest_inner(world: &TestWorld, path: &ManifestPath) {
         path.as_str().to_owned()
     };
     let env_reader = manifest_env_reader(world);
-    let outcome = manifest::from_path_with_policy_and_env(
+    let environment = manifest::ManifestEnvironment::new(
+        &env_reader,
+        world.manifest_env_access_policy.borrow().clone(),
+    );
+    let outcome = manifest::from_path_with_policy_and_environment_and_limits(
         &manifest_path,
         NetworkPolicy::default(),
-        &env_reader,
+        &environment,
+        world.manifest_budget_limits.get().unwrap_or_default(),
+        RecipeShell::host_default(),
         None,
     )
     .map_err(|e| display_error_chain(e.as_ref()));
@@ -122,6 +129,26 @@ fn set_env_var_step(world: &TestWorld, key: EnvVarKey, value: EnvVarValue) -> Re
 #[given("the environment variable {key:string} is unset")]
 fn unset_env_var_step(world: &TestWorld, key: EnvVarKey) -> Result<()> {
     shared_mutate_env_var(world, key, None)
+}
+
+#[given("the manifest budget uses small test limits")]
+fn configure_manifest_budget(world: &TestWorld) {
+    world.manifest_budget_limits.set(ManifestBudgetLimits {
+        evaluation_fuel: 64,
+        manifest_fuel: 256,
+        rendered_value_bytes: 16,
+        rendered_manifest_bytes: 128,
+        source_bytes: 1_024,
+        foreach_cardinality: 2,
+        expanded_entries: 4,
+    });
+}
+
+/// Block one exact environment variable name for subsequent manifest loads.
+#[given("the manifest environment variable {key:string} is blocked")]
+fn block_manifest_env_var(world: &TestWorld, key: EnvVarKey) {
+    let policy = std::mem::take(&mut *world.manifest_env_access_policy.borrow_mut());
+    *world.manifest_env_access_policy.borrow_mut() = policy.block_var(key.into_string());
 }
 
 #[expect(
@@ -205,6 +232,18 @@ fn manifest_error_contains(world: &TestWorld, text: &str) -> Result<()> {
         "expected parse error to contain '{}', but was '{msg}'",
         text
     );
+    Ok(())
+}
+
+/// Confirm a blocked environment access reports only the fixed diagnostic.
+#[then("the blocked environment error omits {name:string}")]
+fn blocked_environment_error_omits_name(world: &TestWorld, name: &str) -> Result<()> {
+    let message = world
+        .manifest_error
+        .get()
+        .context("expected manifest parsing to produce an error")?;
+    ensure!(message.contains("Access to an environment variable is blocked."));
+    ensure!(!message.contains(name));
     Ok(())
 }
 

@@ -27,10 +27,10 @@ EXPECTED_USES_PATH = "leynos/shared-actions/.github/workflows/mutation-cargo.yml
 #: declarations; cargo-mutants does not evaluate that cfg, so their
 #: survivors would be noise.
 KANI_EXCLUDES = (
-    "src/ir/cycle_verification.rs",
+    "src/ir/cycle/verification.rs",
     "src/ir/cmd_interpolate/verification.rs",
-    "src/ir/from_manifest_verification.rs",
-    "src/ir/graph_kani_map.rs",
+    "src/ir/from_manifest/verification.rs",
+    "src/ir/graph/kani_map.rs",
 )
 
 #: The exact caller configuration; assert the whole block so an added or

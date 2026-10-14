@@ -56,6 +56,12 @@
   conventions and practices in [developers' guide](docs/developers-guide.md).
 - **Style:** All documentation must adhere to the
   [documentation style guide](docs/documentation-style-guide.md).
+- **ExecPlans:** Keep an ExecPlan's header `Status:` line to one bare value
+  from the closed set `DRAFT | APPROVED | IN PROGRESS | BLOCKED | COMPLETE`,
+  and move free-text qualifiers into a sentence beneath the header. The plan's
+  `Progress` and `Outcomes & retrospective` sections and its roadmap checkbox
+  are authoritative over that line. See *ExecPlan* in the
+  [documentation style guide](docs/documentation-style-guide.md).
 
 ## Change quality & committing
 
@@ -166,31 +172,54 @@ Polonius, the pin is the whole mechanism — do not add a `-Znext-solver`
 directive anywhere.
 
 - Run `make check-fmt`, `make lint`, `make doc-coverage`, and `make test`
-  before committing. These targets wrap the following commands, so contributors
-  understand the exact behaviour and policy enforced:
+  before committing. `make test` runs the Rust suite only, and `make lint`
+  lints the Python sources without executing them, so neither runs the Python
+  suites below. When the change touches a workflow or a workflow-contract suite
+  under `tests/workflow_contracts/`, also run `make test-workflow-contracts`.
+  When it touches the coverage artefact validators under `scripts/`, also run
+  `make test-coverage-artifact`; `validate-coverage-artifact` is an
+  operator-run validator rather than a test, and needs a downloaded artefact
+  directory, so it is not part of this set. No one of these targets runs
+  another: `make test-workflow-contracts` does not run either coverage-artefact
+  target. These targets wrap the following commands, so contributors understand
+  the exact behaviour and policy enforced:
   - `make check-fmt` executes:
 
     ```sh
     cargo fmt --all -- --check
     ruff format --check scripts tests/workflow_contracts
-    $(MD_FILES_FIND) | xargs -0 -r scripts/check-markdown-format.sh
+    mdtablefix --check --git --include-untracked \
+      --wrap --renumber --breaks --ellipsis --fences
     ```
 
     validating Rust, Python, and Markdown formatting without modifying files.
     Ruff runs at the version pinned in the Makefile `RUFF_VERSION` variable
-    through `uv tool run`. The Markdown check requires `mdtablefix` on `PATH`;
-    the developers' guide documents how to install the CI-pinned version.
-  - `make lint` executes:
+    through `uv tool run`. The Markdown check requires `mdtablefix` 0.6.0 or
+    later on `PATH`; the developers' guide documents how to install the
+    CI-pinned version. `--git --include-untracked` selects the tracked and
+    untracked Markdown files Git does not ignore, and `--check` exits `1` when
+    any of them would be reformatted.
+  - On Linux, `make lint` executes:
 
     ```sh
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     cargo clippy --workspace --all-targets --all-features -- -D warnings
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     whitaker --all -- --all-targets --all-features
     yamllint --config-file .yamllint.yml .github/workflows
     actionlint
     ```
+
+    The Makefile composes that `RUSTFLAGS` value from one variable.
+    `-Clink-arg=-fuse-ld=mold` is Linux-only, so every sample in this section
+    drops it elsewhere — macOS and Windows use their platform linker and the
+    value ends `-D warnings -Zthreads=8`. Only that one flag is platform-gated;
+    `-Zthreads=8` and `-D warnings` apply everywhere. The flags are restated in
+    the Makefile rather than left to `.cargo/config.toml` because an assigned
+    `RUSTFLAGS` replaces every `rustflags` table in that file; see *Build
+    standard* below.
 
     linting every target with all features enabled, denying all Clippy
     warnings, running the Whitaker Dylint suite (see
@@ -198,18 +227,35 @@ directive anywhere.
     whitaker-installer && whitaker-installer`). `make lint-clippy` runs the
     Clippy-only subset when Whitaker is unavailable. `make lint` also runs
     `make lint-python`, which lints the Python sources with Ruff, Pylint, the
-    df12 house lints, and `ambrleaks`; see "Python tooling and baseline" in
-    `docs/developers-guide.md` for the gate inventory and the Python 3.14
+    df12 house lints, and `ambrleaks`, and first runs
+    `make lint-workflow-scripts`, which loads every trusted module under
+    `.github/scripts` on the Python baseline; see "Python tooling and
+    baseline" in `docs/developers-guide.md` for the gate inventory and the
+    Python 3.14
     baseline it enforces. `make github-actions-lint` validates GitHub Actions
     workflows with yamllint and actionlint alone; `make lint` includes it.
-  - `make test` executes:
+    The Makefile curates `$HOME/.cargo/bin`, `$HOME/.local/bin`,
+    `$HOME/.bun/bin`, and the Go tool directory onto `PATH` for its recipes,
+    so a binary installed with `go install` is found even when the caller's
+    `PATH` omits it. Recipes resolve `cargo`, `markdownlint-cli2`, and
+    `actionlint` in that shell, never while Make parses the file, so the
+    curated `PATH` is what decides. The Go tool directory is `$GOBIN` when
+    set, otherwise the `bin` subdirectory of the first `$GOPATH` entry
+    (`GOPATH` entries are `;`-separated on Windows and `:` elsewhere),
+    otherwise `$HOME/go/bin`; override `GO_BIN` to point at a different
+    directory, or pass `ACTIONLINT=/path/to/actionlint` to name the binary
+    directly, as CI does.
+  - On Linux, `make test` executes:
 
     ```sh
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     cargo nextest run --workspace --all-targets --all-features
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     cargo test --workspace --doc --all-features
     ```
+
+    The platform caveat stated under `make lint` applies unchanged: the linker
+    flag is Linux-only and the rest of the value is not.
 
     running every unit, integration, and behavioural test through
     [cargo-nextest](https://nexte.st/), then the doctests separately because
@@ -386,6 +432,19 @@ as `--toolchain`.
   child process. A test manipulating the environment in-process does not
   qualify, whatever layer it claims to occupy.
 
+### Executable documentation
+
+Every new fenced example in `README.md`, `docs/users-guide.md`, or
+`docs/stdlib-yaml-and-jinja-guide.md` needs a stable `tested-example` marker,
+an entry in `EXPECTED_EXAMPLE_IDS`, and validation appropriate to its domain.
+The YAML language tag alone does not identify a Netsukefile: workflow fragments
+and other YAML examples need their own semantic contract, not inclusion in
+Netsukefile generation or execution cases. Run
+`make test-documentation-contracts` for the loader, exact-set registry, and
+semantic documentation contracts. For changes to these examples, also run
+`make check-fmt`, `make lint`, `make doc-coverage`, `make markdownlint`,
+`make test`, and `make test-workflow-contracts`.
+
 ### Dependency management
 
 - **Mandate caret requirements for all dependencies.** All crate versions
@@ -449,17 +508,8 @@ as `--toolchain`.
 
 ## Markdown guidance
 
-- Validate Markdown files using `make markdownlint`. This target also enforces
-  en-GB-oxendict (Oxford) spelling over Markdown prose with
-  [`typos`](https://github.com/crate-ci/typos), pinned by the Makefile
-  `TYPOS_VERSION` variable and run through `uv tool run`.
-- `typos.toml` is generated from the shared estate dictionary and the narrow
-  repository policy in `typos.local.toml`; never edit generated entries by
-  hand. Change the local overlay and regenerate with
-  `uv run scripts/generate_typos_config.py`. For identifiers or API names that
-  must keep upstream spelling, prefer backticks (which the gate ignores) over
-  widening the accepted-word list. See the
-  [developers' guide](docs/developers-guide.md) for the full workflow.
+- Validate Markdown files using `make markdownlint`. This target also runs
+  `make spelling`, the shared en-GB-oxendict (Oxford) spelling gate.
 - Run `make fmt` after any documentation changes to format all Markdown
   files and fix table markup.
 - Validate Mermaid diagrams in Markdown files by running `make nixie`.
@@ -469,6 +519,22 @@ as `--toolchain`.
 - Use dashes (`-`) for list bullets.
 - Use GitHub-flavoured Markdown footnotes (`[^1]`) for references and
   footnotes.
+
+<!-- typos-config-builder:agents-md:start -->
+
+## Spelling
+
+- `make spelling` runs the pinned `typos-config-builder gate`, which
+  regenerates `typos.toml` from the shared en-GB-oxendict dictionary and
+  `typos.local.toml`, then checks spelling and the shared phrase corrections.
+- `typos.toml` is generated: never edit it by hand. Put narrow
+  repository-specific exceptions in `typos.local.toml`, as exact or full-line
+  patterns rather than bare accepted words.
+- When `make spelling` changes `typos.toml`, commit the regenerated file. If
+  the change is unrelated to your work, commit it in a separate base pull
+  request and stack your branch on it, so each review diff stays focused.
+
+<!-- typos-config-builder:agents-md:end -->
 
 ## Project documentation
 
@@ -519,23 +585,49 @@ The following tooling is available in this environment:
   and enables editing by syntax tree patterns.
 - `difft` **(Difftastic)** — Semantic diff tool that compares code structure
   rather than just text differences.
-- `typos` — Source-code and prose spell checker. `make markdownlint` runs it
-  against Markdown at the pinned `TYPOS_VERSION` to enforce en-GB-oxendict
-  spelling; run it with `--write-changes` to apply corrections mechanically.
+- `typos` — Source-code and prose spell checker. `make spelling` runs it
+  against Markdown through the shared gate to enforce en-GB-oxendict spelling;
+  run it with `--write-changes` to apply corrections mechanically.
 
 ## Key takeaway
 
 These practices help maintain a high-quality codebase and facilitate
 collaboration.
 
-## Fast development builds
+## Build standard
 
-`make dev-build` and `make dev-test` compile with the opt-in Cranelift backend
-and the mold linker configured in `tools/dev-fast/config.toml`. Run
-`make install-dev-fast` to install the pinned nightly's
-`rustc-codegen-cranelift-preview` component and, on Linux, the pinned `mold`
-release. `make dev-fast-check` preflights those prerequisites before Cargo is
-invoked. Linux `x86_64` and `aarch64` hosts use `mold`; macOS and Windows use
-their platform linker instead. The fragment is passed explicitly with
-`--config`, so release, coverage, and verification builds are unaffected; never
-copy its contents into `.cargo/config.toml`, which Cargo applies to every build.
+The `mold` linker and the parallel `rustc` frontend (`-Zthreads=8`) are the
+**defaults** for development, test, lint, and typecheck builds. They are
+committed to `.cargo/config.toml`, which Cargo auto-discovers, so a bare
+`cargo build` gets them too. The Cranelift codegen backend is deliberately not
+part of the standard and a contract refuses one; the developers' guide records
+why.
+
+Run `make install-build-tools` to install the pinned nightly and, on Linux, the
+pinned `mold` release. `make check-build-tools` preflights those prerequisites,
+and is a prerequisite of `make build`, `make test`, `make lint`, and
+`make typecheck`, so a missing tool reports an installation hint before Cargo
+runs. Linux hosts use `mold`; macOS and Windows keep their platform linker,
+which the `cfg(target_os = "linux")` gate in the configuration expresses.
+
+Two build shapes are excluded and must stay excluded:
+
+- **Release and packaging.** The release recipe assigns `RUSTFLAGS` so the
+  configuration's `rustflags` tables do not apply. A shipped artefact is built
+  on the platform linker and a single-threaded frontend.
+- **Coverage.** A build whose output is a measurement is a reproducibility
+  claim. The coverage steps assign `RUSTFLAGS` at the step itself and carry
+  neither `-Zthreads` nor the linker flag.
+
+Cargo picks a single `rustflags` source rather than merging them: a matching
+`[target.*]` table replaces `[build] rustflags`, and an externally set
+`RUSTFLAGS` replaces both. Every gate recipe assigns `RUSTFLAGS` to deny
+warnings, so the standard's flags are restated in the Makefile and composed
+into that value. Changing one source without the other fails a contract test;
+do not "simplify" by deleting a restatement.
+
+There is no separate accelerated target. `make build`, `make test`,
+`make lint`, and `make typecheck` are the build targets, and they all run on
+the standard. See "The build standard" in
+[developers' guide](docs/developers-guide.md) for the full ownership boundary,
+the benchmark, and the fallback behaviour.

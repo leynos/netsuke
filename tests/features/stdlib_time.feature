@@ -7,6 +7,18 @@ Feature: Template time helpers
     When I render the stdlib template "{{ now() }}" without context
     Then the stdlib output is an ISO8601 UTC timestamp
 
+  Scenario: A fixed clock makes now() deterministic
+    Given a stdlib workspace
+    And the stdlib clock is fixed at "2026-06-08T12:00:00Z"
+    When I render the stdlib template "{{ now() }}" without context
+    Then the stdlib output equals "2026-06-08T12:00:00Z"
+
+  Scenario: A fixed clock renders now() with an offset at the same instant
+    Given a stdlib workspace
+    And the stdlib clock is fixed at "2026-06-08T17:30:00+05:30"
+    When I render the stdlib template "{{ now(offset='+02:00') }}" without context
+    Then the stdlib output equals "2026-06-08T14:00:00+02:00"
+
   Scenario: Rendering now() with an offset preserves the offset
     Given a stdlib workspace
     When I render the stdlib template "{{ now(offset='+02:00').iso8601 }}" without context

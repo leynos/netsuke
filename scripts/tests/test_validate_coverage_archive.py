@@ -1,8 +1,7 @@
-"""Exercise ZIP inspection before trusted coverage materialization.
+"""Exercise standalone ZIP inspection and controlled materialization.
 
-The download action leaves its untrusted artifact compressed. These cases prove
-that the archive validator rejects hostile metadata before it writes a report
-for the secret-bearing CodeScene action to consume.
+These cases prove that the archive validator rejects hostile metadata before
+it writes a report to the operator-selected output directory.
 """
 
 import collections.abc as cabc

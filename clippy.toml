@@ -20,4 +20,5 @@ disallowed-methods = [
   { path = "std::env::set_var", reason = "use a stub environment in tests" },
   { path = "std::env::remove_var", reason = "use a stub environment in tests" },
   { path = "std::env::set_current_dir", reason = "inject a base-directory seam; confine CWD changes to Command::current_dir" },
+  { path = "shell_quote::QuoteRefExt::quoted", reason = "recipe-shell word quoting lives in shell_word::quote_word" },
 ]

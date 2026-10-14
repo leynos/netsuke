@@ -1,4 +1,5 @@
 {
+  "gitignore": true,
   "config": {
     "MD004": { "style": "dash" },
     "MD010": { "code_blocks": false },
@@ -18,6 +19,8 @@
     "**/target/**",
     ".terraform/**",
     ".uv-cache/**",
+    "**/.uv-cache/**",
+    "**/.uv-tools/**",
     ".vtcode/**",
     "memories/**",
     "CRUSH.md"

@@ -6,16 +6,18 @@ use crate::localization::{self, keys};
 
 use super::resolve_error::ResolveError;
 
-/// How the current working directory contributes to the PATH search.
+/// Define the executable-search domain beyond directories explicitly in `PATH`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub(crate) enum CwdMode {
     #[default]
-    /// Search the current directory only when it appears in `PATH`.
+    /// Search directories named by `PATH`, including its empty current-directory entries.
     Auto,
-    /// Always search the current directory, ahead of the PATH entries.
+    /// Search the current directory before directories named by `PATH`.
     Always,
-    /// Never search the current directory.
+    /// Search only non-empty directories explicitly named by `PATH`.
     Never,
+    /// Search `PATH` and then recursively discover executables below the workspace root.
+    WorkspaceRecursive,
 }
 
 impl CwdMode {
@@ -31,7 +33,23 @@ fn parse_cwd_mode(value: &str) -> Option<CwdMode> {
         "auto" => Some(CwdMode::Auto),
         "always" => Some(CwdMode::Always),
         "never" => Some(CwdMode::Never),
+        "workspace-recursive" => Some(CwdMode::WorkspaceRecursive),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for `cwd_mode` parsing.
+
+    use super::CwdMode;
+
+    #[test]
+    fn parses_workspace_recursive_mode() {
+        assert_eq!(
+            CwdMode::parse("workspace-recursive"),
+            Some(CwdMode::WorkspaceRecursive)
+        );
     }
 }
 

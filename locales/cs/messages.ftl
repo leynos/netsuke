@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Názvy hostitelů povolené, když je zapnuto v
 cli.flag.fetch_block_host.help = Názvy hostitelů, které se vždy blokují, i když jsou povoleny jinde.
 cli.flag.fetch_default_deny.help = Ve výchozím stavu odmítat všechny hostitele; povolit jen uvedený seznam.
 cli.flag.trust_project_fetch_policy.help = Umožnit konfiguraci projektu rozšířit oprávnění zásady fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Omezit instrukce MiniJinja pro každé vyhodnocení manifestu.
+cli.flag.manifest_fuel.help = Omezit instrukce MiniJinja v rámci jednoho manifestu.
+cli.flag.manifest_rendered_value_bytes.help = Omezit počet bajtů vyrenderovaných do jedné hodnoty manifestu.
+cli.flag.manifest_rendered_manifest_bytes.help = Omezit celkový počet bajtů vyrenderovaných v rámci jednoho manifestu.
+cli.flag.manifest_source_bytes.help = Omezit počet bajtů zdroje šablon a maker spotřebovaných pro jeden manifest.
+cli.flag.manifest_foreach_cardinality.help = Omezit počet hodnot zpracovaných jedním rozšířením foreach.
+cli.flag.manifest_expanded_entries.help = Omezit počet cílů a akcí rozšířených z jednoho manifestu.
 cli.flag.json.help = Vypisovat strojově čitelný výstup JSON.
 cli.flag.no_input.help = Nikdy nečíst interaktivní vstup.
 cli.flag.color.help = Zásada barevného výstupu (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = Token YAML je neplatný nebo neočekávaný.
 manifest.yaml.hint.escape = Escapujte zpětná lomítka nebo odstraňte neplatné únikové sekvence.
 manifest.env.missing = Povinná proměnná prostředí není nastavena.
 manifest.env.invalid_utf8 = Proměnná prostředí obsahuje neplatné UTF-8.
+manifest.env.blocked = Přístup k proměnné prostředí je zablokován.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Hodnota default v env musí být řetězec; typ obdržené hodnoty: { $kind }.
 manifest.vars.not_object = Položka `vars` manifestu musí být mapování nebo objekt.
 manifest.vars.reserved_name = Klíč `vars` '{ $name }' v manifestu je vyhrazen pro vestavěného pomocníka šablon; přejmenujte proměnnou.
 manifest.read_failed = Manifest v { $path } se nepodařilo přečíst.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = proudové zpracování
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote očekával řetězec, ale obdržel { $kind }.
+stdlib.shell.quote.control_character = Hodnotu obsahující nulový bajt, návrat vozíku nebo konec řádku nelze uzavřít do uvozovek.
+stdlib.shell.dialect_invalid = Neznámý dialekt shellu { $dialect }; očekáván jeden z { $accepted }.
+stdlib.shell.dialect_not_string = Volba dialect v shell musí být řetězec; typ obdržené hodnoty: { $kind }.
+stdlib.shell.join.not_sequence = shell_join očekával posloupnost, ale obdržel { $kind }.
+stdlib.shell.join.item_not_string = Prvek { $index } v shell_join má typ { $kind }, nikoli řetězec.
+stdlib.shell.positional_option = { $filter } přijímá své volby jako klíčová slova; zapište { $example }.
+
 # Diagnostika pomocníka pro cesty.
 stdlib.path.io.failed = Akce „{ $action }“ selhala pro { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Akce „{ $action }“ selhala pro { $path }: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nepodporovaný hashovací algori
 
 # Diagnostika pomocníků pro kolekce.
 stdlib.collections.flatten.expected_sequence = flatten očekával prvky posloupnosti, ale nalezl { $kind }.
+stdlib.collections.compact.not_sequence = compact očekává posloupnost; typ obdržené hodnoty: { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by vyžaduje neprázdný atribut.
 stdlib.collections.group_by.unresolved = group_by nedokázal najít „{ $attr }“ u prvku typu { $kind }.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = nanosekundy
 
 # Diagnostika pomocníka which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] příkaz „{ $command }“ nebyl nalezen po prohledání { $count } položek proměnné PATH. Náhled: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Prázdné části proměnné PATH se ignorují; pomocí cwd_mode="auto" zahrnete pracovní adresář.
-stdlib.which.not_found.hint.cwd_always = Nastavte cwd_mode="always", chcete-li zahrnout aktuální adresář.
+stdlib.which.not_found.hint.cwd_auto = Režim auto prohledává pouze adresáře výslovně uvedené v PATH.
+stdlib.which.not_found.hint.cwd_always = Režim always prohledává před adresáři uvedenými v PATH pouze aktuální adresář.
+stdlib.which.not_found.hint.workspace = Chcete-li rekurzivně prohledat strom pracovního prostoru, použijte cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] příkaz „{ $command }“ v „{ $path }“ chybí nebo není spustitelný.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <prázdné>
 stdlib.which.path_entry.non_utf8 = Položka č. { $index } proměnné PATH obsahuje znaky, které nejsou v UTF-8; Netsuke vyžaduje cesty v UTF-8.
 stdlib.which.command.empty = which vyžaduje neprázdný řetězec.
-stdlib.which.cwd_mode.invalid = cwd_mode musí být „auto“, „always“ nebo „never“, obdrženo „{ $mode }“.
+stdlib.which.cwd_mode.invalid = cwd_mode musí být 'auto', 'always', 'never' nebo 'workspace-recursive', zadáno '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Aktuální adresář se nepodařilo určit: { $details }.
 stdlib.which.cwd.non_utf8 = Aktuální adresář obsahuje části, které nejsou v UTF-8.
 stdlib.which.canonicalize_failed = Cestu „{ $path }“ se nepodařilo kanonizovat: { $details }.
@@ -432,3 +456,7 @@ example.errors_found = { $count ->
     [many] Nalezeno { $count } chyby.
    *[other] Nalezeno { $count } chyb.
 }
+manifest.budget.exceeded = Rozpočet prostředků manifestu byl během fáze { $stage } vyčerpán po dosažení hodnoty { $limit }.
+
+cli.flag.env_allow_var.help = Proměnná prostředí povolená pomocníkovi env() manifestu.
+cli.flag.env_block_var.help = Proměnná prostředí blokovaná pomocníkovi env() manifestu.

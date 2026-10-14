@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Hostnamen die zijn toegestaan wanneer standaard
 cli.flag.fetch_block_host.help = Hostnamen die altijd worden geblokkeerd, ook als ze elders zijn toegestaan.
 cli.flag.fetch_default_deny.help = Weiger standaard alle hosts; sta alleen de opgegeven lijst toe.
 cli.flag.trust_project_fetch_policy.help = Sta projectconfiguratie toe om de toekenningen van het fetch-beleid uit te breiden.
+
+cli.flag.manifest_evaluation_fuel.help = Beperk het aantal MiniJinja-instructies voor elke manifestevaluatie.
+cli.flag.manifest_fuel.help = Beperk het aantal MiniJinja-instructies voor één manifest.
+cli.flag.manifest_rendered_value_bytes.help = Beperk het aantal bytes dat in één manifestwaarde wordt gerenderd.
+cli.flag.manifest_rendered_manifest_bytes.help = Beperk het totale aantal bytes dat in één manifest wordt gerenderd.
+cli.flag.manifest_source_bytes.help = Beperk het aantal bytes aan template- en macrobron dat per manifest wordt gebruikt.
+cli.flag.manifest_foreach_cardinality.help = Beperk het aantal waarden dat door één foreach-uitbreiding wordt verwerkt.
+cli.flag.manifest_expanded_entries.help = Beperk het aantal doelen en acties dat uit één manifest wordt uitgebreid.
 cli.flag.json.help = Geef machineleesbare JSON-uitvoer.
 cli.flag.no_input.help = Lees nooit interactieve invoer.
 cli.flag.color.help = Beleid voor gekleurde uitvoer (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = Het YAML-token is ongeldig of onverwacht.
 manifest.yaml.hint.escape = Escape de backslashes of verwijder ongeldige escapereeksen.
 manifest.env.missing = Een vereiste omgevingsvariabele is niet ingesteld.
 manifest.env.invalid_utf8 = Een omgevingsvariabele bevat ongeldige UTF-8.
+manifest.env.blocked = Toegang tot een omgevingsvariabele is geblokkeerd.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = De default van env moet een tekenreeks zijn, ontvangen { $kind }.
 manifest.vars.not_object = De `vars` van het manifest moet een toewijzing of object zijn.
 manifest.vars.reserved_name = De `vars`-sleutel '{ $name }' in het manifest is gereserveerd voor een ingebouwde sjabloonfunctie; hernoem de variabele.
 manifest.read_failed = Het manifest in { $path } kon niet worden gelezen.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = streamen
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote verwachtte een tekenreeks, maar kreeg { $kind }.
+stdlib.shell.quote.control_character = Een waarde met een nulbyte, regelterugloop of regeleinde kan niet tussen aanhalingstekens worden gezet.
+stdlib.shell.dialect_invalid = Onbekend shell-dialect { $dialect }; verwacht een van { $accepted }.
+stdlib.shell.dialect_not_string = De optie dialect van shell moet een tekenreeks zijn, ontvangen { $kind }.
+stdlib.shell.join.not_sequence = shell_join verwachtte een reeks, maar kreeg { $kind }.
+stdlib.shell.join.item_not_string = Element { $index } van shell_join is { $kind }, geen tekenreeks.
+stdlib.shell.positional_option = { $filter } neemt zijn opties als trefwoord; schrijf { $example }.
+
 # Diagnostiek van de padhelper.
 stdlib.path.io.failed = { $action } is mislukt voor { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } is mislukt voor { $path }: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Het hash-algoritme ‘{ $algorit
 
 # Diagnostiek van de verzamelinghelpers.
 stdlib.collections.flatten.expected_sequence = flatten verwachtte items uit een reeks, maar vond { $kind }.
+stdlib.collections.compact.not_sequence = compact verwachtte een reeks, maar vond { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by vereist een attribuut dat niet leeg is.
 stdlib.collections.group_by.unresolved = group_by kon ‘{ $attr }’ niet vinden op een item van het type { $kind }.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = nanoseconden
 
 # Diagnostiek van de which-helper.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] opdracht ‘{ $command }’ niet gevonden na het doorlopen van { $count } PATH-items. Voorbeeld: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Lege delen van PATH worden genegeerd; gebruik cwd_mode="auto" om de werkmap mee te nemen.
-stdlib.which.not_found.hint.cwd_always = Stel cwd_mode="always" in om de huidige map mee te nemen.
+stdlib.which.not_found.hint.cwd_auto = De modus auto zoekt alleen in mappen die expliciet in PATH zijn vermeld.
+stdlib.which.not_found.hint.cwd_always = De modus always zoekt alleen in de huidige map vóór de mappen die in PATH zijn vermeld.
+stdlib.which.not_found.hint.workspace = Gebruik cwd_mode="workspace-recursive" om de werkruimtestructuur recursief te doorzoeken.
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] de opdracht ‘{ $command }’ in ‘{ $path }’ ontbreekt of is niet uitvoerbaar.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <leeg>
 stdlib.which.path_entry.non_utf8 = PATH-item nr. { $index } bevat tekens die geen UTF-8 zijn; Netsuke vereist UTF-8-paden.
 stdlib.which.command.empty = which vereist een tekenreeks die niet leeg is.
-stdlib.which.cwd_mode.invalid = cwd_mode moet ‘auto’, ‘always’ of ‘never’ zijn, maar gaf ‘{ $mode }’.
+stdlib.which.cwd_mode.invalid = cwd_mode moet 'auto', 'always', 'never' of 'workspace-recursive' zijn; ontvangen: '{ $mode }'.
 stdlib.which.cwd.resolve_failed = De huidige map kon niet worden bepaald: { $details }.
 stdlib.which.cwd.non_utf8 = De huidige map bevat delen die geen UTF-8 zijn.
 stdlib.which.canonicalize_failed = ‘{ $path }’ kon niet worden gecanoniseerd: { $details }.
@@ -428,3 +452,7 @@ example.errors_found = { $count ->
     [one] { $count } fout gevonden.
    *[other] { $count } fouten gevonden.
 }
+manifest.budget.exceeded = Het resourcebudget van het manifest is tijdens { $stage } uitgeput nadat { $limit } was bereikt.
+
+cli.flag.env_allow_var.help = Omgevingsvariabele toegestaan voor de env()-helper van het manifest.
+cli.flag.env_block_var.help = Omgevingsvariabele geblokkeerd voor de env()-helper van het manifest.

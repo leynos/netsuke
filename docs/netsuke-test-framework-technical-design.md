@@ -167,7 +167,7 @@ have invented:
   template for the "unavailable under test" messages in §5.5; the test mode
   reuses the mechanism with its own message keys rather than intercepting
   MiniJinja's unknown-function error.
-- `disabled_env_reader` (`src/manifest/env_reader.rs:79`) already provides
+- `disabled_env_reader` (`src/manifest/env/reader.rs:115`) already provides
   a reader that refuses every lookup. The test reader is that reader with the
   case's declared variables layered over it (§5.1).
 - `src/manifest/query.rs` is the precedent module for a capability-scoped
@@ -252,29 +252,42 @@ Each seam follows the ADR-008 taxonomy; two exist, two are new.
 
 ### 5.1. Environment (existing)
 
-`EnvReader` (`src/manifest/env_reader.rs:56`) is an
+`EnvReader` (`src/manifest/env/reader.rs:59`) is an
 `Arc<dyn Fn(&str) -> Result<String, EnvReadError> + Send + Sync>`. The runner
 builds one from the case's `given.env` map: declared names return their values,
 `unset` names and everything else return `EnvReadError::NotPresent`. The host
 environment is reachable only through an explicit future opt-in; the default
 reader never consults it (C2, C4).
 
-### 5.2. Clock (new seam)
+### 5.2. Clock
 
-`now()` currently calls `OffsetDateTime::now_utc()` directly
-(`src/stdlib/time/mod.rs:62`) — a gap relative to ADR-008. The stdlib time
-module gains a clock provider in the `EnvReader` shape (an `Arc` closure,
-because MiniJinja registration requires `Send + Sync`):
+Implemented. The stdlib time module owns a clock provider in the `EnvReader`
+shape (an `Arc` closure, because MiniJinja registration requires `Send + Sync`):
 
 ```rust
 pub type ClockProvider = Arc<dyn Fn() -> OffsetDateTime + Send + Sync>;
 ```
 
-Production registration wraps `OffsetDateTime::now_utc`; the test runner
-supplies a fixed instant parsed from `given.clock.now`. The seam lives in
+It lives in `src/stdlib/time/clock/mod.rs` with `system_clock()`, the
+production adapter wrapping `OffsetDateTime::now_utc`, and
+`fixed_clock(instant)`, the deterministic adapter. The seam is held in
 `StdlibConfig` alongside the existing `path_override` and `home_directory`
-knobs — the clock's single owner — and is a prerequisite refactor deliverable
-in its own right.
+knobs — the clock's single owner — and `with_clock` is the injection point;
+`register_functions` captures the provider when it installs `now()`, so each
+evaluation reads the provider again, and no provider-less call path can bypass
+it.
+
+`StdlibConfig` stores the provider in a private `WallClock` container, a
+mechanical addition this design did not name. It confines a handwritten `Debug`
+(a closure is not printable, so `StdlibConfig` could not have derived one) and
+normalizes every read to UTC, because an injected provider is free to return
+any offset while `now()` is documented to yield UTC. Manifest-query
+registration receives no clock and keeps its refusing `now` stub.
+
+The test runner's `given.clock.now` input
+([UX design §7](netsuke-test-framework-ux-design.md)) is not yet wired to this
+seam; the BDD suite drives it with an explicit clock fixture step instead. That
+wiring belongs to the runner slices, for which this seam is the prerequisite.
 
 ### 5.3. Network (policy, not transport)
 
@@ -582,7 +595,7 @@ compositions of public library functions:
 - `load_manifest` → `manifest::from_str_named`-equivalent entry with
   `ManifestLoadOptions` (§4.3);
 - `build_graph` → `BuildGraph::from_manifest`
-  (`src/ir/from_manifest.rs:49`) over the loaded manifest;
+  (`src/ir/from_manifest/mod.rs:49`) over the loaded manifest;
 - `generate_ninja` → `ninja_gen::generate` over the built graph.
 
 `BuildGraph::from_manifest` lowers path placeholders for
@@ -759,8 +772,8 @@ zombies survive the run.
 
 ## 10. CLI integration
 
-`src/cli/parser.rs` gains `Commands::Test(TestArgs)` with the flags from the UX
-design §12. Like `GraphArgs`, the purely per-invocation flags are
+`src/cli/parser/mod.rs` gains `Commands::Test(TestArgs)` with the flags from
+the UX design §12. Like `GraphArgs`, the purely per-invocation flags are
 `#[serde(skip)]`ed out of OrthoConfig layering; candidates for config-file
 defaults (`jobs`, display policy) follow the existing precedence rules.
 `src/runner/dispatch.rs` routes the variant to `testing::run`, which owns
@@ -919,7 +932,7 @@ Existing modules touched: `src/manifest/mod.rs` (options entry point,
 (test-mode loader entry beside the query entry), `src/stdlib/register.rs`
 (test-mode registration), `src/stdlib/time/` (clock seam), `src/stdlib/config/`
 (clock in `StdlibConfig`), `src/ast/mod.rs` (optional `tests` field),
-`src/cli/parser.rs` and `src/runner/dispatch.rs` (command wiring),
+`src/cli/parser/mod.rs` and `src/runner/dispatch.rs` (command wiring),
 `src/localization/keys.rs` (strings). Errors are semantic `thiserror` enums per
 module, composed into the runner's reporting. The supervisor reuses the
 `wait_timeout`-then-kill-then-reap pattern already proven in

@@ -1,0 +1,73 @@
+//! Compose manifest-to-IR graph generation with runner status and telemetry.
+//!
+//! This runner-internal boundary combines the selected recipe shell, monotonic
+//! clock, pipeline reporting, and observability. It keeps the pure generation
+//! queries in [`super::super::generation`] free of runner infrastructure.
+
+mod telemetry;
+
+use super::super::manifest_structure_telemetry::record_manifest_structure;
+use super::super::{
+    Cli, Context, LocalizationKey, PipelineStage, Result, StatusReporter, dyndep, generation,
+    load_manifest_with_stage_reporting, path_helpers, recipe_shell, report_pipeline_stage,
+};
+use crate::localization::{self, keys};
+use crate::ninja_gen;
+use monotony::MonotonicClock;
+
+/// Supply the dependencies that select and measure graph generation.
+///
+/// Keep this runner-internal composition boundary limited to graph generation
+/// so unrelated command dispatch does not acquire a clock dependency.
+pub(in crate::runner) struct GraphGenerationContext<'a> {
+    /// Select the legacy-recipe interpreter used during graph generation.
+    pub(in crate::runner) recipe_shell: crate::recipe_shell::RecipeShell,
+    /// Measure graph generation with a runner-provided monotonic clock.
+    pub(in crate::runner) clock: &'a dyn MonotonicClock,
+}
+
+/// Generate a Ninja bundle from the manifest referenced by `cli`.
+///
+/// # Errors
+///
+/// Returns an error if the manifest cannot be loaded or translated.
+///
+/// # Examples
+/// ```ignore
+/// use netsuke::cli::Cli;
+/// use netsuke::ninja_gen::GeneratedNinja;
+/// # let _: Option<GeneratedNinja> = None;
+/// ```
+/// Generate Ninja output using one selected legacy-recipe interpreter.
+pub(in crate::runner) fn generate_ninja_with_shell(
+    cli: &Cli,
+    reporter: &dyn StatusReporter,
+    tool_key: Option<LocalizationKey>,
+    graph_generation: &GraphGenerationContext<'_>,
+) -> Result<ninja_gen::GeneratedNinja> {
+    recipe_shell::validate_recipe_shell(graph_generation.recipe_shell)?;
+    let manifest_path = path_helpers::resolve_manifest_path(cli)?;
+    path_helpers::ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
+
+    let inputs = generation::ManifestLoadInputs::from_cli(cli, graph_generation.recipe_shell)?;
+    let manifest = load_manifest_with_stage_reporting(&manifest_path, &inputs, reporter)?;
+    record_manifest_structure(&manifest);
+
+    report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
+    let graph = self::telemetry::instrument_graph_generation(
+        graph_generation.clock,
+        graph_generation.recipe_shell,
+        || generation::build_graph_for_shell(&manifest, graph_generation.recipe_shell),
+    )
+    .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
+
+    report_pipeline_stage(
+        reporter,
+        PipelineStage::NinjaSynthesisAndExecution,
+        tool_key,
+    );
+    dyndep::generation_telemetry::instrument_bundle_generation(&graph, || {
+        generation::ninja_text_for_shell(&graph, graph_generation.recipe_shell)
+    })
+    .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))
+}

@@ -1,0 +1,177 @@
+"""The synthetic lane the CodeScene contract tests drive their cases on.
+
+A contract test has to be shown a lane that satisfies it before it can vary one
+field and assert the offender that results; otherwise a broken template makes
+every negative case pass for the wrong reason. That template, the fixtures it
+interpolates, and the accessors the cases read it back through are data and
+mechanics rather than contracts, so they live here rather than growing the test
+modules past the repository's 400-line file limit. This module holds no tests of
+its own.
+
+The template is parsed from workflow text through the shared loader rather than
+assembled as a Python literal, so the cases exercise the same value resolution
+the repository file does: an `if` written bare, an expression inside `env`, and
+a literal block whose newlines survive parsing are all shapes the predicates
+have to cope with, and a hand-built dict would not reproduce them.
+
+Run via ``make test-workflow-contracts``.
+"""
+
+import copy
+import typing as typ
+
+from ci_coverage_wiring_invariants import (
+    COVERAGE_REPORT_PATH,
+    GENERATE_COVERAGE_ACTION,
+    UPLOAD_COVERAGE_ACTION,
+)
+from codescene_credential_invariants import (
+    CREDENTIAL_ENVIRONMENT_KEY,
+    CREDENTIAL_INPUT,
+    CREDENTIAL_INPUT_VALUE,
+    CREDENTIAL_SOURCE_NAMESPACE,
+)
+from codescene_report_validation_invariants import (
+    REPORT_VALIDATION_STEP,
+    REPORT_VALIDATOR_SCRIPT,
+)
+from codescene_upload_invariants import (
+    CODESCENE_UPLOAD_STEP,
+    COVERAGE_FORMAT_INPUT,
+    COVERAGE_FORMAT_VALUE,
+    COVERAGE_STEP,
+    OUTPUT_PATH_INPUT,
+    UPLOAD_PATH_INPUT,
+)
+from lane_steps import step_named, step_names_declared_twice
+from workflow_loading import (
+    COVERAGE_MAIN_WORKFLOW_PATH,
+    job_steps,
+    load_workflow,
+    parse_workflow_text,
+)
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
+#: The job holding the trunk lane's report-delivery steps.
+TRUNK_JOB = "coverage-upload"
+
+#: The step publishing whether the credential exists, and the id whose output
+#: the upload's gate reads. Modelled in the fixture because the upload's guard
+#: is a statement about that output, so a clean lane without the step would be
+#: one whose gate reads nothing.
+AVAILABILITY_STEP = "Check CodeScene token availability"
+AVAILABILITY_STEP_ID = "codescene_token"
+
+#: The check's command, which publishes a boolean and nothing else. The token
+#: itself is named here and in the upload's input — nowhere else in the lane,
+#: and nowhere in an environment.
+AVAILABILITY_COMMAND = (
+    'echo "available=${{ '
+    f"{CREDENTIAL_SOURCE_NAMESPACE}.{CREDENTIAL_ENVIRONMENT_KEY} != ''"
+    ' }}" >> "$GITHUB_OUTPUT"'
+)
+
+#: The guard the upload must carry, in the spelling the repository uses.
+UPLOAD_GUARD = (
+    f"steps.{AVAILABILITY_STEP_ID}.outputs.available == 'true'"
+    " && github.ref == 'refs/heads/main'"
+)
+
+#: A full 40-character lowercase commit SHA, standing in for whatever
+#: revision the dependency updater last pinned. The contract checks the
+#: reference's identity and the pin's *shape*, never the revision, so any
+#: value of that shape exercises the rule the repository actually enforces.
+FIXTURE_PIN = "0" * 40
+
+#: A lane satisfying every clause of the contract. The negative cases load it,
+#: vary one field, and assert the offender that results; a template that was
+#: itself non-compliant would make each of them pass for the wrong reason, so
+#: the test module holds it to the contract before varying anything.
+#:
+#: The `uv` invocation is continued across two lines, as the repository file
+#: writes it, which is why its backslash is doubled below: a single one would
+#: be Python's own line continuation, consumed at parse time along with the
+#: newline, and the fixture generated from this text would then be a shape the
+#: real lane does not have. Doubling it leaves the shell the continuation it
+#: is meant to read.
+CLEAN_LANE = f"""
+jobs:
+  {TRUNK_JOB}:
+    steps:
+      - name: {COVERAGE_STEP}
+        uses: {GENERATE_COVERAGE_ACTION}@{FIXTURE_PIN}
+        with:
+          language: rust
+          {OUTPUT_PATH_INPUT}: {COVERAGE_REPORT_PATH}
+          {COVERAGE_FORMAT_INPUT}: {COVERAGE_FORMAT_VALUE}
+      - name: {REPORT_VALIDATION_STEP}
+        run: |
+          staged="$(mktemp --directory)"
+          cp -- {COVERAGE_REPORT_PATH} "${{staged}}/{COVERAGE_REPORT_PATH}"
+          uv run --no-project \\
+            {REPORT_VALIDATOR_SCRIPT} --artifact-dir "${{staged}}"
+      - name: {AVAILABILITY_STEP}
+        id: {AVAILABILITY_STEP_ID}
+        run: {AVAILABILITY_COMMAND}
+      - name: {CODESCENE_UPLOAD_STEP}
+        if: {UPLOAD_GUARD}
+        uses: {UPLOAD_COVERAGE_ACTION}@{FIXTURE_PIN}
+        with:
+          {UPLOAD_PATH_INPUT}: {COVERAGE_REPORT_PATH}
+          {COVERAGE_FORMAT_INPUT}: {COVERAGE_FORMAT_VALUE}
+          {CREDENTIAL_INPUT}: {CREDENTIAL_INPUT_VALUE}
+"""
+
+
+def trunk_steps() -> list[dict[str, object]]:
+    """Return the trunk lane's parsed steps, in declaration order."""
+    return job_steps(load_workflow(COVERAGE_MAIN_WORKFLOW_PATH), TRUNK_JOB)
+
+
+def clean_steps() -> list[dict[str, object]]:
+    """Return a fresh copy of the clean lane's steps.
+
+    Parsed from workflow text through the shared loader rather than assembled
+    as a Python literal, so the cases below exercise the same value resolution
+    the repository file does. Copied so a case that mutates a step cannot reach
+    the next case's baseline.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        The parsed steps, owned by the caller.
+    """
+    document = parse_workflow_text(CLEAN_LANE, "synthetic workflow")
+    assert isinstance(document, dict), "synthetic workflow must parse to a mapping"
+    return copy.deepcopy(job_steps(document, TRUNK_JOB))
+
+
+def inputs_of(step: dict[str, object]) -> dict[str, object]:
+    """Return a step's ``with`` block, which the clean lane always declares."""
+    with_ = step.get("with")
+    assert isinstance(with_, dict), "the clean lane declares the step's inputs"
+    return with_
+
+
+def step_of(steps: cabc.Sequence[dict[str, object]], name: str) -> dict[str, object]:
+    """Return the uniquely named step of a lane, which the clean lane has.
+
+    The uniqueness assertion is this accessor's, not the lookup's, and it is
+    load-bearing: a case that varied a field on the first of two same-named
+    steps would assert against a lane the contract is not inspecting, because
+    the step it edited is not the one the contract read.
+
+    Returns
+    -------
+    dict[str, object]
+        The step carrying ``name``.
+    """
+    assert name not in step_names_declared_twice(steps), (
+        f"the lane must declare {name!r} once; "
+        "the step a case varies has to be the step the contract reads"
+    )
+    found = step_named(steps, name)
+    assert found is not None, f"the lane must declare {name!r}"
+    return found

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.14"
-# dependencies = ["cyclopts==4.25.2", "cuprum @ git+https://github.com/leynos/cuprum@a2134c7a3966b224eaed917efb94f8090ce5104a"]
+# dependencies = ["cyclopts==4.25.3", "cuprum==0.1.0"]
 # ///
 """Install the pinned actionlint release, reusing a cached binary that matches.
 
@@ -17,6 +17,7 @@ Parameters arrive from the environment: ``INPUT_ACTIONLINT_VERSION`` and
 step; ``INPUT_INSTALL_DIR`` and ``INPUT_RELEASE_ROOT`` override the defaults.
 """
 
+import dataclasses
 import pathlib
 import sys
 import tempfile
@@ -24,6 +25,7 @@ import typing as typ
 
 from ci_support import (
     CiScriptError,
+    RunSpec,
     catalogue,
     describe_failure,
     download,
@@ -43,32 +45,65 @@ DEFAULT_PLATFORM = "linux_amd64"
 app = App(config=cyclopts.config.Env("INPUT_", command=False))
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class Release:
+    """One actionlint release: its pins, where it comes from, and where it lands.
+
+    The fields are the step's inputs and nothing else, so the entry point takes
+    one parameter rather than one per input. Every field names its environment
+    variable outright: a nested dataclass field is not a command path
+    component, so the app-level ``INPUT_`` prefix does not supply the rest of
+    the name, and leaving it implicit would leave these unbound.
+    """
+
+    version: typ.Annotated[
+        str, Parameter(env_var="INPUT_ACTIONLINT_VERSION", required=True)
+    ]
+    sha256: typ.Annotated[
+        str, Parameter(env_var="INPUT_ACTIONLINT_SHA256", required=True)
+    ]
+    install_dir: typ.Annotated[
+        pathlib.Path, Parameter(env_var="INPUT_INSTALL_DIR")
+    ] = pathlib.Path()
+    release_root: typ.Annotated[
+        str, Parameter(env_var="INPUT_RELEASE_ROOT")
+    ] = DEFAULT_RELEASE_ROOT
+    platform: typ.Annotated[str, Parameter(env_var="INPUT_PLATFORM")] = DEFAULT_PLATFORM
+    runner_temp: typ.Annotated[
+        pathlib.Path | None, Parameter(env_var="RUNNER_TEMP")
+    ] = None
+
+    @property
+    def url(self) -> str:
+        """The release archive URL for this version and platform."""
+        return (
+            f"{self.release_root}/v{self.version}/"
+            f"{BINARY_NAME}_{self.version}_{self.platform}.tar.gz"
+        )
+
+    @property
+    def binary(self) -> pathlib.Path:
+        """The cached binary's path, resolved so it is never looked up on PATH."""
+        return (self.install_dir / BINARY_NAME).resolve()
+
+
 def reported_version(binary: pathlib.Path) -> str | None:
     """Return the version ``binary --version`` reports, or ``None`` if it fails."""
     if not is_executable_file(binary):
         return None
-    result = run(str(binary), "--version", allowed=catalogue(str(binary)), echo=False)
+    spec = RunSpec(catalogue(str(binary)), echo=False)
+    result = run(str(binary), "--version", spec=spec)
     if not result.ok or not result.stdout:
         return None
     return result.stdout.splitlines()[0].strip()
 
 
-def archive_url(release_root: str, version: str, platform: str) -> str:
-    """Return the release archive URL for ``version`` on ``platform``."""
-    return f"{release_root}/v{version}/{BINARY_NAME}_{version}_{platform}.tar.gz"
-
-
-def install(
-    binary: pathlib.Path,
-    url: str,
-    sha256: str,
-    scratch: pathlib.Path,
-) -> None:
-    """Download, verify, and extract the release archive to ``binary``."""
-    archive = scratch / pathlib.PurePosixPath(url).name
-    download(url, archive)
-    verify_sha256(archive, sha256)
-    extract_members(archive, binary.parent, (BINARY_NAME,))
+def install(release: Release, scratch: pathlib.Path) -> None:
+    """Download, verify, and extract the pinned archive over ``release.binary``."""
+    archive = scratch / pathlib.PurePosixPath(release.url).name
+    download(release.url, archive)
+    verify_sha256(archive, release.sha256)
+    extract_members(archive, release.binary.parent, (BINARY_NAME,))
 
 
 def ensure_installed_version(binary: pathlib.Path, expected: str) -> str:
@@ -87,7 +122,8 @@ def ensure_installed_version(binary: pathlib.Path, expected: str) -> str:
     installed = reported_version(binary)
     if installed == expected:
         return installed
-    result = run(str(binary), "--version", allowed=catalogue(str(binary)), echo=False)
+    spec = RunSpec(catalogue(str(binary)), echo=False)
+    result = run(str(binary), "--version", spec=spec)
     message = (
         f"installed {BINARY_NAME} reports {installed!r}, expected "
         f"{expected!r} ({describe_failure(result)})"
@@ -95,52 +131,23 @@ def ensure_installed_version(binary: pathlib.Path, expected: str) -> str:
     raise CiScriptError(message)
 
 
-# One keyword-only parameter per environment input is the Cyclopts contract.
 @app.default
-def main(  # pylint: disable=too-many-arguments  # one parameter per input
-    *,
-    actionlint_version: typ.Annotated[str, Parameter(required=True)],
-    actionlint_sha256: typ.Annotated[str, Parameter(required=True)],
-    install_dir: pathlib.Path = pathlib.Path(),
-    release_root: str = DEFAULT_RELEASE_ROOT,
-    platform: str = DEFAULT_PLATFORM,
-    runner_temp: typ.Annotated[
-        pathlib.Path | None, Parameter(env_var="RUNNER_TEMP")
-    ] = None,
-) -> int:
-    """Ensure ``install_dir/actionlint`` is the pinned release.
-
-    Parameters
-    ----------
-    actionlint_version
-        The release to install, for example ``1.7.12``.
-    actionlint_sha256
-        The hex SHA-256 of the release archive for ``platform``.
-    install_dir
-        Where the binary lives; the gate cache restores and saves it here.
-    release_root
-        The releases URL prefix; tests point it at a ``file://`` fixture.
-    platform
-        The archive platform suffix.
-    runner_temp
-        Scratch space for the download; the system default when unset.
+def main(*, release: Release) -> int:
+    """Ensure ``release.install_dir/actionlint`` is the pinned release.
 
     Returns
     -------
     int
         ``0`` when the pinned binary is in place, ``1`` otherwise.
     """
-    # Resolved so the cached binary is executed by path, never looked up on PATH.
-    binary = (install_dir / BINARY_NAME).resolve()
     try:
-        if reported_version(binary) == actionlint_version:
-            print(f"{BINARY_NAME} {actionlint_version} restored from the cache volume")
+        if reported_version(release.binary) == release.version:
+            print(f"{BINARY_NAME} {release.version} restored from the cache volume")
             return 0
-        url = archive_url(release_root, actionlint_version, platform)
-        with tempfile.TemporaryDirectory(dir=runner_temp) as scratch:
-            install(binary, url, actionlint_sha256, pathlib.Path(scratch))
-        installed = ensure_installed_version(binary, actionlint_version)
-        print(f"installed {BINARY_NAME} {installed} from {url}")
+        with tempfile.TemporaryDirectory(dir=release.runner_temp) as scratch:
+            install(release, pathlib.Path(scratch))
+        installed = ensure_installed_version(release.binary, release.version)
+        print(f"installed {BINARY_NAME} {installed} from {release.url}")
     except CiScriptError as error:
         print(f"install_actionlint: {error}", file=sys.stderr)
         return 1

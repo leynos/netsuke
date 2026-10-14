@@ -20,7 +20,7 @@ pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'
         Commands::Build(args) => execute_build(cli, &args, context),
         Commands::Generate { output } => execute_generate(cli, output.as_ref(), context),
         Commands::Clean => execute_clean(cli, context),
-        Commands::Graph(args) => graph::handle_graph(cli, &args, context.reporter),
+        Commands::Graph(args) => graph::handle_graph(cli, &args, context),
         Commands::Help(args) => execute_help(cli, &args, context.reporter),
     }
 }

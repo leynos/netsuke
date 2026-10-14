@@ -55,11 +55,11 @@ well — the owned style was habit, so they carry no toolchain caveat:
   compiling under both borrow checkers.
 - `src/stdlib/collections.rs` — `group_by_filter` consumed its resolved key
   in `entry(key_value)` instead of cloning it first.
-- `src/ir/cycle.rs` — `detect_targets` snapshots borrowed
+- `src/ir/cycle/mod.rs` — `detect_targets` snapshots borrowed
   `&'targets Utf8Path` keys for its deterministic sort instead of cloning every
   target path per analysis. The snapshot exists for sorting, not to end a
   borrow, so it stays.
-- `src/stdlib/which/env.rs` — `EnvSnapshot::resolved_dirs` returns
+- `src/stdlib/which/env/mod.rs` — `EnvSnapshot::resolved_dirs` returns
   `Vec<&Utf8Path>` borrowed from the snapshot; the search loop reads borrowed
   directories and the paths are copied into the owned `ResolveError::NotFound`
   only at the error boundary.
@@ -69,20 +69,20 @@ well — the owned style was habit, so they carry no toolchain caveat:
 Owned style retained deliberately. The constraint, not the borrow checker, is
 load-bearing; each site carries the matching source tag:
 
-| Site                                                     | Tag                               | Constraint                                                                                                                                                                                      |
-| -------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/ir/from_manifest_support.rs` — `register_action`    | `POLONIUS-REFUSED(id-is-data)`    | The action hash is persistent IR identity: stored on every `BuildEdge` and named in the generated Ninja file. Remains owned unless callers demonstrate a need for the canonical interned value. |
-| `src/stdlib/which/cache.rs` — `WhichResolver::try_cache` | `POLONIUS-REFUSED(lock-boundary)` | Cache hits are cloned out of the LRU because references cannot outlive the `MutexGuard`; the resolver is shared across evaluation sites.                                                        |
-| `src/stdlib/collections.rs` — `GroupedValues::new`       | `POLONIUS-REFUSED(miss-dominant)` | First-wins string-key registration almost always inserts, so the owned-key `entry` form pays nothing on the rare hit.                                                                           |
+| Site                                                      | Tag                               | Constraint                                                                                                                                                                                      |
+| --------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/ir/from_manifest/support/mod.rs` — `register_action` | `POLONIUS-REFUSED(id-is-data)`    | The action hash is persistent IR identity: stored on every `BuildEdge` and named in the generated Ninja file. Remains owned unless callers demonstrate a need for the canonical interned value. |
+| `src/stdlib/which/cache.rs` — `WhichResolver::try_cache`  | `POLONIUS-REFUSED(lock-boundary)` | Cache hits are cloned out of the LRU because references cannot outlive the `MutexGuard`; the resolver is shared across evaluation sites.                                                        |
+| `src/stdlib/collections.rs` — `GroupedValues::new`        | `POLONIUS-REFUSED(miss-dominant)` | First-wins string-key registration almost always inserts, so the owned-key `entry` form pays nothing on the rare hit.                                                                           |
 
 ## Non-candidates reviewed and cleared
 
 Scanner suspects that turned out not to be NLL residue:
 
-- `src/ir/from_manifest_support.rs` — the `contains_key`/`insert` guard in
+- `src/ir/from_manifest/support/mod.rs` — the `contains_key`/`insert` guard in
   `register_action` keeps no reference, so it already compiles under NLL
   (write-only guarding); the refusal above covers the owned hash it returns.
-- `src/ir/cycle.rs:238` — the doc comment on `visit_known_edge` blaming the
+- `src/ir/cycle/mod.rs:238` — the doc comment on `visit_known_edge` blaming the
   borrow checker describes the `'targets` borrow discipline accurately and
   needs no Polonius caveat.
 - `src/cli/merge.rs` — clones construct the resolved `Cli` from borrowed
@@ -152,13 +152,13 @@ has to use the pinned toolchain; nothing needs to propagate a build setting:
 Measured with `rg --count '\.clone\(\)'` over `src/` (tests included where they
 live in `src/`):
 
-| Scope                        | Before | After |
-| ---------------------------- | ------ | ----- |
-| `src/` total                 | 158    | 151   |
-| `src/graph_view/mod.rs`      | 17     | 14    |
-| `src/ir/cycle.rs` (non-test) | 1      | 0     |
-| `src/stdlib/which/env.rs`    | 4      | 1     |
-| `src/stdlib/collections.rs`  | 4      | 3     |
+| Scope                            | Before | After |
+| -------------------------------- | ------ | ----- |
+| `src/` total                     | 158    | 151   |
+| `src/graph_view/mod.rs`          | 17     | 14    |
+| `src/ir/cycle/mod.rs` (non-test) | 1      | 0     |
+| `src/stdlib/which/env/mod.rs`    | 4      | 1     |
+| `src/stdlib/collections.rs`      | 4      | 3     |
 
 The scanner's clone-modify-writeback section was empty before and after the
 migration. The remaining graph_view clones construct owned keys for the two

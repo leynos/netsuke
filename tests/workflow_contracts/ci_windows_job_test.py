@@ -28,10 +28,12 @@ from workflow_loading import (
 
 WINDOWS_JOB = "build-test-windows"
 LINT_JOB = "lint-windows"
+MSI_JOB = "windows-msi-upgrade"
 
-#: Both halves of the Windows merge gate. They run concurrently and neither
-#: needs the other, so every property that makes one a gate must hold for both.
-WINDOWS_JOBS = (LINT_JOB, WINDOWS_JOB)
+#: The Rust-aware concurrent halves of the Windows merge gate.
+RUST_WINDOWS_JOBS = (LINT_JOB, WINDOWS_JOB)
+#: Every independent Windows merge-gate job, including MSI integration.
+WINDOWS_JOBS = (*RUST_WINDOWS_JOBS, MSI_JOB)
 
 #: Which job each Git Bash Makefile gate belongs to after the split. Asserted
 #: as a mapping rather than a set so a gate silently migrating between jobs,
@@ -85,9 +87,9 @@ def windows_steps() -> list[dict[str, object]]:
 
 @pytest.fixture
 def lane_steps() -> list[dict[str, object]]:
-    """Return every step of both Windows jobs, lint first."""
+    """Return every step of the Rust-aware Windows jobs, lint first."""
     workflow = load_workflow(CI_WINDOWS_WORKFLOW_PATH)
-    return [step for name in WINDOWS_JOBS for step in job_steps(workflow, name)]
+    return [step for name in RUST_WINDOWS_JOBS for step in job_steps(workflow, name)]
 
 
 @pytest.mark.parametrize("job_name", WINDOWS_JOBS)
@@ -106,7 +108,7 @@ def test_windows_jobs_run_on_a_github_hosted_runner(job_name: str) -> None:
     )
 
 
-@pytest.mark.parametrize("job_name", WINDOWS_JOBS)
+@pytest.mark.parametrize("job_name", RUST_WINDOWS_JOBS)
 def test_windows_jobs_use_git_bash_for_recipes(job_name: str) -> None:
     """Each job runs recipes under Git Bash, not cmd.exe.
 
@@ -178,7 +180,7 @@ def test_windows_lints_and_tests_run_in_separate_concurrent_jobs() -> None:
     """
     workflow = load_workflow(CI_WINDOWS_WORKFLOW_PATH)
     owners = {}
-    for job_name in WINDOWS_JOBS:
+    for job_name in RUST_WINDOWS_JOBS:
         job = workflow_job(workflow, job_name)
         assert "needs" not in job, (
             f"{job_name} must not wait on another job; the two halves of the "

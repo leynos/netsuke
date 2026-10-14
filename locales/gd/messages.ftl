@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Ainmean òstairean a tha ceadaichte nuair a tha
 cli.flag.fetch_block_host.help = Ainmean òstairean a thèid a bhacadh an-còmhnaidh, ged a bhiodh iad ceadaichte an àite eile.
 cli.flag.fetch_default_deny.help = Diùlt a h-uile òstair mar bhun-roghainn; na ceadaich ach an liosta a chaidh ainmeachadh.
 cli.flag.trust_project_fetch_policy.help = Leig le rèiteachadh a’ phròiseict ceadan poileasaidh fetch a leudachadh.
+
+cli.flag.manifest_evaluation_fuel.help = Cuir crìoch air stiùiridhean MiniJinja airson gach measadh air foirm-liosta.
+cli.flag.manifest_fuel.help = Cuir crìoch air stiùiridhean MiniJinja thar aon fhoirm-liosta.
+cli.flag.manifest_rendered_value_bytes.help = Cuir crìoch air na beitean a chuirear ann an aon luach foirm-liosta.
+cli.flag.manifest_rendered_manifest_bytes.help = Cuir crìoch air na beitean iomlan a chuirear thar aon fhoirm-liosta.
+cli.flag.manifest_source_bytes.help = Cuir crìoch air beitean tùs nan teamplaidean agus macros a thèid an cleachdadh gach foirm-liosta.
+cli.flag.manifest_foreach_cardinality.help = Cuir crìoch air na luachan a làimhsicheas aon leudachadh foreach.
+cli.flag.manifest_expanded_entries.help = Cuir crìoch air na targaidean agus gnìomhan a leudaichear à aon fhoirm-liosta.
 cli.flag.json.help = Cuir a-mach JSON a leughas inneal.
 cli.flag.no_input.help = Na leugh cur-a-steach eadar-ghnìomhach idir.
 cli.flag.color.help = Poileasaidh an às-chuir dhathte (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = Tha an t-samhla YAML mì-dhligheach no gun d�
 manifest.yaml.hint.escape = Teich na slaisean-cùil no thoir air falbh na sreathan teichidh mì-dhligheach.
 manifest.env.missing = Chan eil caochladair àrainneachd riatanach air a shuidheachadh.
 manifest.env.invalid_utf8 = Tha UTF-8 mì-dhligheach ann an caochladair àrainneachd.
+manifest.env.blocked = Tha inntrigeadh do chaochladair àrainneachd air a bhacadh.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Feumaidh default env a bhith na shreang; fhuaras { $kind }.
 manifest.vars.not_object = Feumaidh `vars` an fhoirm-liosta a bhith na mhapadh no na oibseact.
 manifest.vars.reserved_name = Tha an iuchair `vars` '{ $name }' sa mhanifest glèidhte do chuidiche teamplaid na broinn; thoir ainm ùr air a' chaochladair.
 manifest.read_failed = Cha b' urrainnear am foirm-liosta a leughadh o { $path }.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = sruthadh
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = Bha dùil aig shell_quote ri sreang ach fhuair e { $kind }.
+stdlib.shell.quote.control_character = Chan urrainnear luach le baidht neoni, tilleadh-carbaid no briseadh-loidhne a chur ann an comharran-labhairt.
+stdlib.shell.dialect_invalid = Dual-chainnt sligean neo-aithnichte { $dialect }; bha dùil ri aon de { $accepted }.
+stdlib.shell.dialect_not_string = Feumaidh roghainn dialect shell a bhith na shreang; fhuaras { $kind }.
+stdlib.shell.join.not_sequence = Bha dùil aig shell_join ri sreath ach fhuair e { $kind }.
+stdlib.shell.join.item_not_string = Tha nì { $index } aig shell_join na { $kind }, chan e sreang.
+stdlib.shell.positional_option = Bidh { $filter } a' gabhail a roghainnean mar fhacal-luirg; sgrìobh { $example }.
+
 # Breithneachadh cuidiche nan slighean.
 stdlib.path.io.failed = Dh'fhàillig an gnìomh “{ $action }” airson { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Dh'fhàillig an gnìomh “{ $action }” airson { $path }: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algairim hais gun taic: “{ $al
 
 # Breithneachadh chuidichean nan cruinneachaidhean.
 stdlib.collections.flatten.expected_sequence = Bha dùil aig flatten ri nithean sreath ach fhuair e { $kind }.
+stdlib.collections.compact.not_sequence = Bha dùil aig compact ri sreath ach fhuair e { $kind }.
 stdlib.collections.group_by.empty_attribute = Tha group_by ag iarraidh buadh nach eil falamh.
 stdlib.collections.group_by.unresolved = Cha b' urrainn do group_by “{ $attr }” a lorg air nì den t-seòrsa { $kind }.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = nano-dhiogan
 
 # Breithneachadh a' chuidiche which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] cha deach an àithne “{ $command }” a lorg às dèidh { $count } innteart PATH a sgrùdadh. Ro-shealladh: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Thèid earrannan falamh de PATH a leigeil seachad; cleachd cwd_mode="auto" gus am pasgan obrach a ghabhail a-steach.
-stdlib.which.not_found.hint.cwd_always = Suidhich cwd_mode="always" gus am pasgan làithreach a ghabhail a-steach.
+stdlib.which.not_found.hint.cwd_auto = Cha bhith am modh auto a’ lorg ach ann an clàran a tha ainmichte gu soilleir ann am PATH.
+stdlib.which.not_found.hint.cwd_always = Bidh am modh always a’ lorg sa chlàr làithreach an toiseach, agus an uair sin ann an clàran ainmichte ann am PATH.
+stdlib.which.not_found.hint.workspace = Gus craobh an àite-obrach a lorg gu h-ath-chùrsach, cleachd cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] tha an àithne “{ $command }” aig “{ $path }” a dhìth no chan eil i so-ruithe.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <falamh>
 stdlib.which.path_entry.non_utf8 = Tha caractaran nach eil nan UTF-8 ann an innteart àireamh { $index } de PATH; tha Netsuke ag iarraidh slighean UTF-8.
 stdlib.which.command.empty = Tha which ag iarraidh sreang nach eil falamh.
-stdlib.which.cwd_mode.invalid = Feumaidh cwd_mode a bhith na “auto”, “always” no “never”, ach fhuaireadh “{ $mode }”.
+stdlib.which.cwd_mode.invalid = Feumaidh cwd_mode a bhith 'auto', 'always', 'never', no 'workspace-recursive'; fhuaras '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Cha b' urrainnear am pasgan làithreach a dhearbhadh: { $details }.
 stdlib.which.cwd.non_utf8 = Tha pàirtean anns a' phasgan làithreach nach eil nan UTF-8.
 stdlib.which.canonicalize_failed = Cha b' urrainnear “{ $path }” a bhun-riaghailteachadh: { $details }.
@@ -432,3 +456,7 @@ example.errors_found = { $count ->
     [few] Chaidh { $count } mearachdan a lorg.
    *[other] Chaidh { $count } mearachd a lorg.
 }
+manifest.budget.exceeded = Dh’fhalbh buidseat ghoireasan na foirm-liosta rè { $stage } às dèidh { $limit } a ruigsinn.
+
+cli.flag.env_allow_var.help = Caochladair àrainneachd ceadaichte do chuidiche env() a’ mhanaifeist.
+cli.flag.env_block_var.help = Caochladair àrainneachd toirmisgte do chuidiche env() a’ mhanaifeist.

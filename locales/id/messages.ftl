@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Nama host yang diizinkan ketika penolakan bawaa
 cli.flag.fetch_block_host.help = Nama host yang selalu diblokir, meski diizinkan di tempat lain.
 cli.flag.fetch_default_deny.help = Tolak semua host secara bawaan; izinkan hanya daftar yang dinyatakan.
 cli.flag.trust_project_fetch_policy.help = Izinkan konfigurasi proyek memperluas izin kebijakan fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Batasi instruksi MiniJinja untuk setiap evaluasi manifes.
+cli.flag.manifest_fuel.help = Batasi instruksi MiniJinja di seluruh satu manifes.
+cli.flag.manifest_rendered_value_bytes.help = Batasi byte yang dirender ke dalam satu nilai manifes.
+cli.flag.manifest_rendered_manifest_bytes.help = Batasi total byte yang dirender di seluruh satu manifes.
+cli.flag.manifest_source_bytes.help = Batasi byte sumber templat dan makro yang digunakan untuk setiap manifes.
+cli.flag.manifest_foreach_cardinality.help = Batasi nilai yang diproses oleh satu ekspansi foreach.
+cli.flag.manifest_expanded_entries.help = Batasi target dan tindakan yang diperluas dari satu manifes.
 cli.flag.json.help = Hasilkan keluaran JSON yang terbaca mesin.
 cli.flag.no_input.help = Jangan pernah membaca masukan interaktif.
 cli.flag.color.help = Kebijakan keluaran berwarna (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = Token YAML tidak sah atau tidak terduga.
 manifest.yaml.hint.escape = Lakukan escape pada garis miring terbalik atau hapus urutan pelolosan yang tidak sah.
 manifest.env.missing = Variabel lingkungan wajib belum disetel.
 manifest.env.invalid_utf8 = Variabel lingkungan memuat UTF-8 yang tidak sah.
+manifest.env.blocked = Akses ke variabel lingkungan diblokir.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = default pada env harus berupa untai, menerima { $kind }.
 manifest.vars.not_object = `vars` pada manifes harus berupa pemetaan atau objek.
 manifest.vars.reserved_name = Kunci `vars` '{ $name }' pada manifes dicadangkan untuk fungsi bantu templat bawaan; ganti nama variabel tersebut.
 manifest.read_failed = Manifes di { $path } tidak dapat dibaca.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = penstriman
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote mengharapkan string, tetapi menerima { $kind }.
+stdlib.shell.quote.control_character = Nilai yang memuat byte nol, retur kereta, atau ganti baris tidak dapat diberi tanda kutip.
+stdlib.shell.dialect_invalid = Dialek shell tidak dikenal { $dialect }; diharapkan salah satu dari { $accepted }.
+stdlib.shell.dialect_not_string = Opsi dialect pada shell harus berupa untai, menerima { $kind }.
+stdlib.shell.join.not_sequence = shell_join mengharapkan urutan, tetapi menerima { $kind }.
+stdlib.shell.join.item_not_string = Item { $index } pada shell_join bertipe { $kind }, bukan string.
+stdlib.shell.positional_option = { $filter } mengambil opsinya sebagai kata kunci; tulis { $example }.
+
 # Diagnostik pembantu jalur.
 stdlib.path.io.failed = Tindakan "{ $action }" gagal untuk { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Tindakan "{ $action }" gagal untuk { $path }: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algoritme hash tidak didukung: "
 
 # Diagnostik pembantu koleksi.
 stdlib.collections.flatten.expected_sequence = flatten mengharapkan butir urutan tetapi menemukan { $kind }.
+stdlib.collections.compact.not_sequence = compact mengharapkan urutan tetapi menemukan { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by memerlukan atribut yang tidak kosong.
 stdlib.collections.group_by.unresolved = group_by tidak dapat menemukan "{ $attr }" pada butir bertipe { $kind }.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = nanodetik
 
 # Diagnostik pembantu which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] perintah "{ $command }" tidak ditemukan setelah memeriksa { $count } entri PATH. Pratinjau: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Ruas PATH yang kosong diabaikan; gunakan cwd_mode="auto" untuk menyertakan direktori kerja.
-stdlib.which.not_found.hint.cwd_always = Setel cwd_mode="always" untuk menyertakan direktori saat ini.
+stdlib.which.not_found.hint.cwd_auto = Mode auto hanya mencari direktori yang secara eksplisit disebutkan dalam PATH.
+stdlib.which.not_found.hint.cwd_always = Mode always mencari direktori saat ini terlebih dahulu, kemudian direktori yang secara eksplisit disebutkan dalam PATH.
+stdlib.which.not_found.hint.workspace = Untuk mencari pohon ruang kerja secara rekursif, gunakan cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] perintah "{ $command }" di "{ $path }" tidak ada atau tidak dapat dieksekusi.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <kosong>
 stdlib.which.path_entry.non_utf8 = Entri PATH ke-{ $index } memuat karakter yang bukan UTF-8; Netsuke memerlukan jalur UTF-8.
 stdlib.which.command.empty = which memerlukan untai yang tidak kosong.
-stdlib.which.cwd_mode.invalid = cwd_mode harus "auto", "always", atau "never", tetapi diperoleh "{ $mode }".
+stdlib.which.cwd_mode.invalid = cwd_mode harus berupa 'auto', 'always', 'never', atau 'workspace-recursive'; diperoleh '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Direktori saat ini tidak dapat ditentukan: { $details }.
 stdlib.which.cwd.non_utf8 = Direktori saat ini memuat bagian yang bukan UTF-8.
 stdlib.which.canonicalize_failed = "{ $path }" tidak dapat dikanonikalisasi: { $details }.
@@ -426,3 +450,7 @@ example.errors_found = { $count ->
     [0] Tidak ada galat yang ditemukan.
    *[other] { $count } galat ditemukan.
 }
+manifest.budget.exceeded = Anggaran sumber daya manifes habis selama { $stage } setelah mencapai { $limit }.
+
+cli.flag.env_allow_var.help = Variabel lingkungan yang diizinkan untuk pembantu env() manifes.
+cli.flag.env_block_var.help = Variabel lingkungan yang diblokir untuk pembantu env() manifes.

@@ -12,6 +12,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import pytest
+from fork_fallback import owned_runner
 from runner_placement_invariants import (
     CALLEE_SELECTED_RUNNER,
     GITHUB_HOSTED_ONLY_KEYS,
@@ -37,13 +38,9 @@ DIRECT_RUNNER_SOURCES = (
     ("ci.build-test", "ci.yml", "build-test"),
     ("ci-windows.lint-windows", "ci-windows.yml", "lint-windows"),
     ("ci-windows.build-test-windows", "ci-windows.yml", "build-test-windows"),
+    ("ci-windows.windows-msi-upgrade", "ci-windows.yml", "windows-msi-upgrade"),
     ("ci.kani-smoke", "ci.yml", "kani-smoke"),
     ("coverage-main.coverage-upload", "coverage-main.yml", "coverage-upload"),
-    (
-        "coverage-pr-submit.submit-coverage",
-        "coverage-pr-submit.yml",
-        "submit-coverage",
-    ),
     (
         "delayed-pr-comment.delay_and_comment",
         "delayed-pr-comment.yml",
@@ -68,13 +65,9 @@ DIRECT_RUNNER_SOURCES = (
         ("ci.yml", "build-test", UBICLOUD_LARGE_LABEL),
         ("ci-windows.yml", "lint-windows", "windows-latest"),
         ("ci-windows.yml", "build-test-windows", "windows-latest"),
+        ("ci-windows.yml", "windows-msi-upgrade", "windows-latest"),
         ("ci.yml", "kani-smoke", UBICLOUD_DEFAULT_LABEL),
         ("coverage-main.yml", "coverage-upload", UBICLOUD_LARGE_LABEL),
-        (
-            "coverage-pr-submit.yml",
-            "submit-coverage",
-            UBICLOUD_DEFAULT_LABEL,
-        ),
         ("delayed-pr-comment.yml", "delay_and_comment", "ubuntu-latest"),
         ("netsukefile-test.yml", "netsukefile", UBICLOUD_COMPAT_LABEL),
         ("release.yml", "metadata", "ubuntu-latest"),
@@ -89,7 +82,11 @@ def test_repository_owned_jobs_use_required_runners(
 ) -> None:
     """Require each repository-owned job to use its intended runner."""
     workflow = load_workflow(WORKFLOW_DIR / workflow_name)
-    actual_runner = workflow_job(workflow, job_name).get("runs-on")
+    # A lane that serves pull requests names two runners. The table pins the
+    # one this repository's own branches get; the fork arm is a GitHub-hosted
+    # fallback whose shape this rule deliberately does not govern, and
+    # `test_pull_request_lanes_fall_back_for_forks` pins it instead.
+    actual_runner = owned_runner(workflow_job(workflow, job_name).get("runs-on"))
     assert actual_runner == expected_runner, (
         f"{workflow_name} job {job_name} must run on {expected_runner}, "
         f"got {actual_runner!r}"
@@ -248,7 +245,7 @@ def _all_workflow_text() -> str:
 def _checked_in_runner_assignments() -> dict[str, str]:
     """Normalize checked-in direct, matrix, and reusable runner ownership."""
     assignments = {
-        key: str(
+        key: owned_runner(
             workflow_job(load_workflow(WORKFLOW_DIR / workflow), job).get("runs-on")
         )
         for key, workflow, job in DIRECT_RUNNER_SOURCES

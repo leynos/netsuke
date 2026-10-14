@@ -35,17 +35,17 @@ whether it is expected to grow:
    The module owns a private function that takes an
    `FnOnce(&str) -> Result<String, env::VarError>` (or the equivalent
    `OsString`-typed form) instead of calling `std::env::var` itself. Examples:
-   the `resolve_with` variants in `output_mode.rs` and `output_prefs.rs`
-   described earlier in the developer guide. A related but distinct pattern
-   injects a resolved *value* rather than a closure: the `stdlib::path`
-   home-directory resolver's `HomeDirectory` enum (`Ambient`/`Missing`/
-   `Explicit`) lets a caller supply the home directory directly, so the
-   process-reading `home_from_env` ladder in `src/stdlib/path/path_utils.rs`
-   remains a directly annotated composition root rather than gaining its own
-   `_with` closure parameter.
+   the `resolve_with` variants in `src/output/mode.rs` and
+   `src/output/prefs/mod.rs` described earlier in the developer guide. A
+   related but distinct pattern injects a resolved *value* rather than a
+   closure: the `stdlib::path` home-directory resolver's `HomeDirectory` enum
+   (`Ambient`/`Missing`/ `Explicit`) lets a caller supply the home directory
+   directly, so the process-reading `home_from_env` ladder in
+   `src/stdlib/path/path_utils.rs` remains a directly annotated composition
+   root rather than gaining its own `_with` closure parameter.
 - **The `mockable::Env` trait**, for a boundary mocked across many tests or
    expected to grow further inputs. `resolve_ninja_program_utf8_with` in
-   `src/runner/process/ninja_program.rs` takes `&impl Env`; production supplies
+   `src/runner/process/ninja/program.rs` takes `&impl Env`; production supplies
    `mockable::DefaultEnv`, and tests supply `mockable::MockEnv` for every
    resolution branch without mutating the process (#488).
    `stdlib::which::env::EnvSnapshot::capture_with_env` takes the same
@@ -54,7 +54,7 @@ whether it is expected to grow:
    (#487).
 - **`EnvReader` `Arc` closures**, for a boundary whose registration point
    requires `Send + Sync`. The manifest `env()` Jinja helper
-   (`src/manifest/env_reader.rs`) reads through an injected `EnvReader`, a
+   (`src/manifest/env/reader.rs`) reads through an injected `EnvReader`, a
    shared `Fn(&str) -> Result<String, EnvReadError>` (a manifest-owned error
    type distinguishing an absent variable from a non-UTF-8 one, so the helper
    does not expose the process adapter's `VarError`); `minijinja` requires
@@ -163,7 +163,7 @@ resolution entirely rather than setting the variable for a child to read.
 
 - **A single shared `Env` trait for every boundary.** Rejected: forcing
   `mockable::Env` (or an equivalent trait object) on single-variable,
-  single-caller sites such as `output_mode.rs`'s `resolve_with` would add
+  single-caller sites such as `src/output/mode.rs`'s `resolve_with` would add
   indirection with no matching test-surface benefit, and would blur the "one
   variable or one precedence ladder" ownership rule this ADR reaffirms.
 - **Reading the parent process's environment for child-process tests.**
@@ -177,17 +177,22 @@ resolution entirely rather than setting the variable for a child to read.
 ## Implementation references
 
 - Workspace switch state:
-  [`src/stdlib/which/workspace_switch.rs`](../src/stdlib/which/workspace_switch.rs)
-- `EnvSnapshot`: [`src/stdlib/which/env.rs`](../src/stdlib/which/env.rs)
+  [workspace switch](../src/stdlib/which/workspace_switch/mod.rs)
+- `EnvSnapshot`: [`src/stdlib/which/env/mod.rs`](../src/stdlib/which/env/mod.rs)
 - Cache fingerprint: [`src/stdlib/which/cache.rs`](../src/stdlib/which/cache.rs)
 - `mockable::Env` seam:
-  [`src/runner/process/ninja_program.rs`](../src/runner/process/ninja_program.rs);
+  [Ninja resolver](../src/runner/process/ninja/program.rs);
   `runner::run_with_ninja_program` in
   [`src/runner/mod.rs`](../src/runner/mod.rs) is the companion injected seam
   that lets callers select the resolved Ninja executable directly, without
   going through `NETSUKE_NINJA` resolution at all
-- `EnvReader`: [`src/manifest/env_reader.rs`](../src/manifest/env_reader.rs)
+- `EnvReader`: [`src/manifest/env/reader.rs`](../src/manifest/env/reader.rs)
   (manifest `env()` Jinja helper)
+- Clock seam: [`src/stdlib/time/clock/mod.rs`](../src/stdlib/time/clock/mod.rs)
+  (`ClockProvider`, `system_clock`, `fixed_clock`); `StdlibConfig::with_clock`
+  in [`src/stdlib/config/clock.rs`](../src/stdlib/config/clock.rs) is the
+  injection point, and [`src/stdlib/register.rs`](../src/stdlib/register.rs)
+  captures the provider when it registers `now()`
 - Child-environment composition:
   [`test_support/src/netsuke.rs`](../test_support/src/netsuke.rs)
   (`run_netsuke_in_with_env`) and `tests/bdd/steps/manifest_command_helpers.rs`
@@ -234,3 +239,32 @@ process-global environment or working-directory changes. Route B avoids CWD
 changes by passing absolute paths or preserving `-C/--directory` for automatic
 project discovery. Explicit relative `--config` and `NETSUKE_CONFIG` selectors
 remain anchored to the child process CWD; they are not rebased beneath `-C`.
+
+### 2026-09-11: Stdlib clock seam
+
+The stdlib `now()` helper reads its instant through an injected
+`ClockProvider`, an `Arc<dyn Fn() -> OffsetDateTime + Send + Sync>` held by
+`StdlibConfig` and captured by the registered Jinja function. It takes the
+`EnvReader` shape, not a narrow closure and not `mockable::Env`, for the same
+reason `EnvReader` does: `minijinja` requires registered functions to be
+`Send + Sync`, so a borrowed closure parameter cannot satisfy the bound.
+`StdlibConfig` is the clock's single owner; `system_clock()` is the sole
+production supplier and the only place `OffsetDateTime::now_utc` is called for
+`now()`. Manifest-query registration receives no clock and keeps its refusing
+`now` stub.
+
+The taxonomy is applied here to an ambient input that is *not* an environment
+variable. This ADR's context section is written about `clippy.toml`'s ban on
+`std::env::var` and friends, and no lint forbids reading the clock; the shape
+rubric transfers, the original scope does not. Note also that `StdlibConfig`
+now holds two ambient seams in two shapes — `home_directory: HomeDirectory`, a
+resolved value, and the clock, a closure. The clock's shape is the one this
+rubric prescribes for a `Send + Sync` registration point; `HomeDirectory` is
+the outlier, and the two should not be "harmonized" without revisiting this
+entry. `ClockProvider` also puts `time::OffsetDateTime` on netsuke's public
+surface, so a `time` 0.4 bump is a breaking library-API change.
+
+`mockable::Clock` was not used: it is typed in `chrono`, which this workspace
+does not depend on, so adopting it would add a second date-time crate to render
+one timestamp. `monotony`, already a dependency, abstracts only monotonic
+elapsed time and has no wall-clock type.

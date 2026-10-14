@@ -51,7 +51,7 @@ Netsuke目前需要：
 
 ### 安装
 
-最新发布的预发布版本是Netsuke v0.1.0-beta3，可从crates.io获取；若可以使用
+最新发布的预发布版本是Netsuke v0.1.0-beta4，可从crates.io获取；若可以使用
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall)
 ，则优先使用它：它会获取预构建的发行版二进制文件，从而避免下文提到的工具链要求。
 
@@ -67,7 +67,7 @@ cargo +nightly-2026-08-23 install netsuke-build
 ```
 
 预构建的安装程序可从
-[v0.1.0-beta3 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3)
+[v0.1.0-beta4 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta4)
 获取：
 
 | 平台    | 架构                                | 软件包                          |
@@ -79,7 +79,7 @@ cargo +nightly-2026-08-23 install netsuke-build
 Linux软件包会安装`netsuke`的手册页，并声明`ninja-build`为依赖项
 ；使用macOS或Windows安装程序时，必须单独安装Ninja；Windows MSI会安装到
 `C:\Program Files\netsuke`，且不会更新`PATH`
-；SHA-256校验和文件会随附独立二进制文件以及配套的帮助文档和许可证文件；在v0.1.0-beta3中，安装程序包不附带校验和文件；关于平台专属命令和Windows设置，参见
+；SHA-256校验和文件会随附独立二进制文件以及配套的帮助文档和许可证文件；在v0.1.0-beta4中，安装程序包不附带校验和文件；关于平台专属命令和Windows设置，参见
 [用户指南](docs/users-guide.md#install-netsuke)。
 
 要使用Cargo安装当前的源码检出：
@@ -121,7 +121,7 @@ ______________________________________________________________________
 
 ## 目前已支持的功能
 
-Netsuke v0.1.0-beta3的核心构建系统编译器提供以下功能：
+Netsuke v0.1.0-beta4的核心构建系统编译器提供以下功能：
 
 - YAML 1.2清单解析，包含重复键检测和模式验证；
 - Jinja变量、宏、`foreach`、`when`
@@ -134,19 +134,125 @@ Netsuke v0.1.0-beta3的核心构建系统编译器提供以下功能：
 - Ninja文件的生成与执行，以及`clean`和独立清单生成；
 - 可复现的依赖图，格式为Graphviz DOT或自包含、无障碍的HTML；
 - 分层配置、本地化输出、无障碍偏好设置、进度报告、阶段耗时，以及带版本号的JSON结果或诊断信息；
+- 有界的清单求值、由操作者控制的网络与`env()`访问策略
+  ，以及有界的文件读取过滤器；
 - 单元测试、行为测试、集成测试、属性测试、快照测试，以及初步的Kani验证覆盖。
 
-beta3版本还支持仅依赖的操作和目标聚合：`deps`列表非空的节点可以省略配方。
+自beta3起，Netsuke还支持仅依赖的操作和目标聚合：
+`deps`列表非空的节点可以省略配方。
+
+______________________________________________________________________
+
+## 安全与命令插值
+
+`Netsukefile`会执行命令，也可以使用有副作用的模板辅助函数。请像对待
+`Makefile`一样谨慎：运行不受信任的清单之前先进行审查。Netsuke可以减少
+某些引号错误，但它不是沙箱。在POSIX shell路径中，你写入的反引号对
+如果用于命令替换，就会由shell执行。
+
+**Netsuke无法防护的内容。** 手写反引号和 `$( … )` 都可以执行命令。
+在Unix上，Ninja会将命令文本传给 `sh -c`；Netsuke不会清理这些文本。
+
+**模板中的值不会自动加引号。** 任意Jinja值、`raw` 块和手写shell片段
+都会成为普通配方文本。不要将不受信任的值插入shell命令：路径占位符的
+加引号处理无法保护这些值。
+
+**Netsuke会改写什么。** 只有 `{{ ins }}` 和 `{{ outs }}` 是Netsuke 标记。
+`command:` 和 `script:` 配方使用相同的标记集合。下表中的所有 美元符号形式以及
+`$PATH` 在两种配方中仍然是shell变量。Netsuke会为
+Ninja将美元符号加倍，使所选shell收到的内容保持不变；它不会暴露Ninja
+自身的规则变量 `$in` 和 `$out`。
+
+表1：会被改写为输入或输出路径的形式（`yes` 表示在配方的有效文本中改写；
+请参阅下方说明）。
+
+| 形式                                                | `command:`  | `script:`   |
+| --------------------------------------------------- | ----------- | ----------- |
+| `{{ ins }}`                                         | yes[^inert] | yes[^inert] |
+| `{{ outs }}`                                        | yes[^inert] | yes[^inert] |
+| `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output` | no          | no          |
+
+[^inert]: 在 POSIX 和 Bash 路径中，Netsuke 会将注释和 heredoc 正文中的标记原样
+    复制为内部令牌，而不会展开；heredoc 分隔符中的标记会展开。包括 PowerShell 在内的
+    `script:` 配方使用同一个兼容 POSIX 的扫描器；PowerShell `command:` 配方则遵循
+    单独的插值规则。请勿在注释或 heredoc 正文中使用标记：内部令牌可能会保留在生成的
+    配方中。
+
+例如，若已有 `input.txt`，以下POSIX清单会将其内容复制到 `output.txt`，
+并检查shell的 `PATH` 是否非空：
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input.txt
+    command: 'cat {{ ins }} > {{ outs }} && test -n "$PATH"'
+defaults: [output.txt]
+```
+
+**Netsuke会为哪些内容加引号。** 只有Netsuke自己的路径替换会自动进行
+shell加引号。POSIX和Bash使用 `shell-quote` 及基于上下文的编码；
+PowerShell使用自己的字面量编码，并拒绝带引号区域中的标记。若已有
+`input file.txt`，以下POSIX示例会将输入路径作为一个参数传递，并生成
+`output.txt`：
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input file.txt
+    command: 'cat {{ ins }} > {{ outs }}'
+defaults: [output.txt]
+```
+
+**反引号与命令替换。** POSIX和Bash中，Netsuke会拒绝位于反引号命令
+替换中的标记；所有shell路径中也会拒绝位于 `$( … )` 中的标记，两条
+规则均适用于两种配方。PowerShell使用反引号作为转义符，因此不受反引号
+限制，但仍会拒绝 `$( … )` 中的标记。这一标记边界是明确保证的不变量。
+
+此外，POSIX和Bash的 `command:` 配方目前会拒绝替换后反引号总数为奇数
+的命令。这项保守计数也包括单引号内的反引号；它不是shell解析器。 `script:`
+配方和PowerShell不执行此计数。未来版本可能在不造成破坏性
+变更的情况下接受更多内容。作者写入且反引号成对的命令替换仍可使用。
+
+以下POSIX清单会在Ninja运行前被拒绝。运行 `netsuke --json --locale en-GB`
+可查看原因： `Invalid command interpolation:`，后面附有出错片段；默认的人类可读
+输出可能只显示构建图失败这一外层错误：
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input.txt
+    command: 'echo `cat {{ ins }}` > {{ outs }}'
+defaults: [output.txt]
+```
+
+**`shlex` 检查。** POSIX和Bash的 `command:` 配方在替换后必须通过 `shlex::split`
+，否则会在转换为中间表示时收到相同的本地化诊断。`script:`
+配方和PowerShell跳过此检查。Netsuke不会执行返回的令牌。`shlex` 不会
+进行展开，并将反引号视为普通字符：通过检查并不意味着命令安全。不要
+将它用作注入检查。
+
+拒绝行为属于可观察契约的一部分，但确切的可接受输入集合不属于稳定性
+承诺：它取决于构建Netsuke时解析到的 `shlex` 版本。未来版本接受以前拒绝
+的文本不属于破坏性变更；拒绝以前接受的文本则是缺陷，应记录在变更日志
+中，而不是作为策略变更处理。
+
+**稳定性与延伸阅读。** Netsuke尚未达到1.0；接口仍可能变化。上述有限
+保证并不意味着任意配方都是安全的。shell路径的具体机制见
+[用户指南中的安全边界](docs/users-guide.md#review-the-safety-boundary)，
+相关决策见[ADR-027](docs/adr-027-command-placeholder-contract.md)。
 
 ______________________________________________________________________
 
 ## 发布与开发状态
 
-v0.1.0-beta3版本是面向早期采用者的实用预览版，并不代表Netsuke已经完成，也不代表每个接口都已稳定；编译器管线和普通本地构建工作流已相当完善，但命令行界面、配置词汇和高级配方模型仍处于预稳定阶段。
+v0.1.0-beta4版本是面向早期采用者的实用预览版，并不代表Netsuke已经完成，也不代表每个接口都已稳定；编译器管线和普通本地构建工作流已相当完善，但命令行界面、配置词汇和高级配方模型仍处于预稳定阶段。
 
 在自动化流程中锁定Netsuke的版本号，并预期在1.0版本发布之前，部分命令名称、标志、诊断模式和清单细节可能发生变化。
 
-以下限制适用于beta3版本。
+以下限制适用于beta4版本。
 
 已知限制包括：
 
@@ -162,10 +268,12 @@ v0.1.0-beta3版本是面向早期采用者的实用预览版，并不代表Netsu
 beta3版本通过引入Ninja感知的转义，修复了beta2中shell美元符号（`$`
 ）的限制，因此可以正常编写普通的shell表达式；使用字面shell美元符号表达式的beta2清单需要迁移，参见
 [用户指南中的安全边界](docs/users-guide.md#review-the-safety-boundary)。
+beta4对`script:`配方中的`$in`和`$out`采用同样的处理
+，将其视为shell变量；依赖它们进行路径替换的beta3清单必须改用
+`{{ ins }}`和`{{ outs }}`，参见 [迁移指南](docs/v0-1-0-migration-guide.md)。
 
-`Netsukefile`可以执行命令并使用非纯的模板辅助函数；应以对待
-`Makefile`同样的谨慎态度对待它
-：在运行不受信任的清单之前先进行审查；Netsuke会对受支持的路径替换加引号，但它并非沙箱。
+详见[安全与命令插值](#安全与命令插值)以及
+[用户指南中的安全边界](docs/users-guide.md#review-the-safety-boundary)。
 
 ______________________________________________________________________
 

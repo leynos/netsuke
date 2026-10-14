@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = Назви вузлів, дозволені з�
 cli.flag.fetch_block_host.help = Назви вузлів, які блокуються завжди, навіть якщо дозволені деінде.
 cli.flag.fetch_default_deny.help = Типово забороняти всі вузли; дозволяти лише оголошений перелік.
 cli.flag.trust_project_fetch_policy.help = Дозволити конфігурації проєкту розширювати дозволи політики fetch.
+
+cli.flag.manifest_evaluation_fuel.help = Обмежити кількість інструкцій MiniJinja для кожного оцінювання маніфесту.
+cli.flag.manifest_fuel.help = Обмежити кількість інструкцій MiniJinja в одному маніфесті.
+cli.flag.manifest_rendered_value_bytes.help = Обмежити кількість байтів, відрендерених в одне значення маніфесту.
+cli.flag.manifest_rendered_manifest_bytes.help = Обмежити загальну кількість байтів, відрендерених в одному маніфесті.
+cli.flag.manifest_source_bytes.help = Обмежити кількість байтів джерела шаблонів і макросів, спожитих для маніфесту.
+cli.flag.manifest_foreach_cardinality.help = Обмежити кількість значень, оброблених одним розгортанням foreach.
+cli.flag.manifest_expanded_entries.help = Обмежити кількість цілей і дій, розгорнутих з одного маніфесту.
 cli.flag.json.help = Виводити машиночитний JSON.
 cli.flag.no_input.help = Ніколи не читати інтерактивне введення.
 cli.flag.color.help = Політика кольорового виводу (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = Лексема YAML некоректна аб
 manifest.yaml.hint.escape = Екрануйте зворотні скісні риски або вилучіть некоректні escape-послідовності.
 manifest.env.missing = Обов’язкову змінну середовища не задано.
 manifest.env.invalid_utf8 = Змінна середовища містить некоректний UTF-8.
+manifest.env.blocked = Доступ до змінної середовища заблоковано.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Значення default у env має бути рядком, отримано { $kind }.
 manifest.vars.not_object = Поле `vars` маніфесту має бути відображенням або об’єктом.
 manifest.vars.reserved_name = Ключ `vars` '{ $name }' у маніфесті зарезервовано для вбудованої допоміжної функції шаблонів; перейменуйте змінну.
 manifest.read_failed = Не вдалося прочитати маніфест за шляхом { $path }.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = потокова передача
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote очікував рядок, але отримав { $kind }.
+stdlib.shell.quote.control_character = Значення, що містить нульовий байт, повернення каретки або переведення рядка, не можна взяти в лапки.
+stdlib.shell.dialect_invalid = Невідомий діалект оболонки { $dialect }; очікується один із { $accepted }.
+stdlib.shell.dialect_not_string = Опція dialect у shell має бути рядком, отримано { $kind }.
+stdlib.shell.join.not_sequence = shell_join очікував послідовність, але отримав { $kind }.
+stdlib.shell.join.item_not_string = Елемент { $index } у shell_join має тип { $kind }, а не рядок.
+stdlib.shell.positional_option = { $filter } приймає параметри за ключовими словами; напишіть { $example }.
+
 # Діагностика помічника для шляхів.
 stdlib.path.io.failed = Не вдалося виконати дію «{ $action }» для { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Не вдалося виконати дію «{ $action }» для { $path }: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Непідтримуваний �
 
 # Діагностика помічників для колекцій.
 stdlib.collections.flatten.expected_sequence = flatten очікував елементи послідовності, але знайшов { $kind }.
+stdlib.collections.compact.not_sequence = compact очікував послідовність, але знайшов { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by потребує непорожнього атрибута.
 stdlib.collections.group_by.unresolved = group_by не зміг знайти «{ $attr }» в елементі типу { $kind }.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = наносекунди
 
 # Діагностика помічника which.
 stdlib.which.not_found = [netsuke::jinja::which::not_found] команду «{ $command }» не знайдено після перевірки { $count } записів PATH. Попередній перегляд: { $preview }
-stdlib.which.not_found.hint.cwd_auto = Порожні сегменти PATH ігноруються; задайте cwd_mode="auto", щоб урахувати робочий каталог.
-stdlib.which.not_found.hint.cwd_always = Задайте cwd_mode="always", щоб урахувати поточний каталог.
+stdlib.which.not_found.hint.cwd_auto = Режим auto шукає лише в каталогах, явно вказаних у PATH.
+stdlib.which.not_found.hint.cwd_always = Режим always спочатку шукає в поточному каталозі, а потім у каталогах, вказаних у PATH.
+stdlib.which.not_found.hint.workspace = Щоб рекурсивно шукати в дереві робочої області, використовуйте cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] команда «{ $command }» за шляхом «{ $path }» відсутня або не є виконуваною.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <порожньо>
 stdlib.which.path_entry.non_utf8 = Запис PATH № { $index } містить символи, які не є UTF-8; Netsuke потребує шляхів у UTF-8.
 stdlib.which.command.empty = which потребує непорожнього рядка.
-stdlib.which.cwd_mode.invalid = cwd_mode має бути «auto», «always» або «never», отримано «{ $mode }».
+stdlib.which.cwd_mode.invalid = cwd_mode має бути 'auto', 'always', 'never' або 'workspace-recursive'; отримано '{ $mode }'.
 stdlib.which.cwd.resolve_failed = Не вдалося визначити поточний каталог: { $details }.
 stdlib.which.cwd.non_utf8 = Поточний каталог містить частини, які не є UTF-8.
 stdlib.which.canonicalize_failed = Не вдалося канонізувати «{ $path }»: { $details }.
@@ -434,3 +458,7 @@ example.errors_found = { $count ->
     [many] Знайдено { $count } помилок.
    *[other] Знайдено { $count } помилки.
 }
+manifest.budget.exceeded = Бюджет ресурсів маніфесту вичерпано на етапі { $stage } після досягнення значення { $limit }.
+
+cli.flag.env_allow_var.help = Змінна середовища, дозволена для помічника env() маніфесту.
+cli.flag.env_block_var.help = Змінна середовища, заблокована для помічника env() маніфесту.

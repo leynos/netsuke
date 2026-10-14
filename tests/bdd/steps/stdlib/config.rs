@@ -1,10 +1,26 @@
 //! Configuration-related BDD steps for stdlib scenarios.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
-use netsuke::{cli_localization, localization};
+use anyhow::Result;
+use netsuke::{cli_localization, localization, stdlib};
 use rstest_bdd_macros::given;
 use std::sync::Arc;
 use test_support::localizer_test_lock;
+
+use super::parsing::parse_iso_timestamp;
+
+/// Fix the stdlib wall clock at `instant`, given as an ISO 8601 timestamp.
+///
+/// The instant is parsed rather than taken as an opaque string so a malformed
+/// scenario value fails here with a parse diagnostic instead of surfacing as an
+/// unexplained render mismatch. A provider carrying a non-UTC offset is
+/// accepted, and exercises the normalization `now()` is documented to perform.
+#[given("the stdlib clock is fixed at {instant:string}")]
+pub(crate) fn configure_stdlib_clock(world: &TestWorld, instant: &str) -> Result<()> {
+    let parsed = parse_iso_timestamp(instant)?;
+    world.stdlib_clock.set(stdlib::fixed_clock(parsed));
+    Ok(())
+}
 
 #[given("the stdlib fetch response limit is {limit:u64} bytes")]
 pub(crate) fn configure_fetch_limit(world: &TestWorld, limit: u64) {

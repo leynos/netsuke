@@ -10,11 +10,11 @@ name: CI (Windows)
 # keyed by `runner.os` and `runner.arch`, so a Linux archive can never restore
 # onto Windows.
 #
-# Two jobs that run concurrently, not three in series. `lint-windows` runs
-# formatting, Clippy and Whitaker; `build-test-windows` runs the tests and the
-# native-recipe smoke steps. Neither needs the other's output, and they used to
-# sit in one job: 518s of lint ahead of a 471s test step, measured over the 57
-# runs between run 33890685806 and run 34064668331.
+# `lint-windows` and `build-test-windows` run concurrently; the former runs
+# formatting, Clippy and Whitaker, while the latter runs tests and native
+# recipes. `windows-msi-upgrade` is intentionally independent: it
+# packages fixtures without building Rust, then blocks a merge on a failed
+# Windows Installer upgrade contract.
 #
 # The native-recipe smoke test was itself a third job that needed the gate, a
 # measured median of 236s plus queue for 7s of work; it is now two steps at the
@@ -114,12 +114,12 @@ jobs:
             exit $LASTEXITCODE
           }
       - name: Install sccache
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a  # v2.87.25
         with:
           tool: sccache@0.16.0
           fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
@@ -134,18 +134,19 @@ jobs:
           rustc --version
           cargo --version
       - name: Install mdtablefix
-        # Required by `make check-fmt`. mdtablefix 0.5.1 publishes a Windows
-        # x86_64 archive, so this lane installs a prebuilt binary like every
+        # Required by `make check-fmt`, which runs `mdtablefix --check --git`
+        # (0.6.0 or later). mdtablefix has published a Windows x86_64 archive
+        # since 0.5.1, so this lane installs a prebuilt binary like every
         # other. It compiled the tool from source until then, which was this
         # repository's last source-build exception.
         uses: >-
-          leynos/shared-actions/.github/actions/install-mdtablefix@c5a54701c8603a0fa756a6b34c49bc2af75a6c11
+          leynos/shared-actions/.github/actions/install-mdtablefix@0606ca899ce2995a0c4bc78e660e80832e6e8855
         with:
           version: ${{ env.MDTABLEFIX_VERSION }}
       - name: Setup uv
         # `make check-fmt` runs the uv-driven Ruff format check on every
         # platform, so the Windows job needs uv on the PATH as well.
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
           enable-cache: 'false'
@@ -157,9 +158,9 @@ jobs:
         run: make SHELL=bash lint-clippy
       - name: Install Whitaker
         uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@e041cb75c35c3524201a32d5e57c87408fbd5874
+          leynos/shared-actions/.github/actions/install-whitaker@6dea5677a84fec60ca51b07202570e3af12ffdb4
         with:
-          installer-version: '0.2.7'
+          installer-version: '0.2.9'
           # The tool and Whitaker cache steps own `~/.cargo/bin` and the
           # installer's data directory, so the action must not create a second
           # owner for the same paths.
@@ -175,7 +176,13 @@ jobs:
         run: |
           $profileHome = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
           $whitaker = Join-Path $profileHome '.local\bin\whitaker.ps1'
-          $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
+          # Assigning RUSTFLAGS displaces every `rustflags` table in
+          # `.cargo/config.toml`, so the value has to carry the standard's
+          # flags as well as the deny. Name `-Zthreads=8` explicitly: mold is
+          # Linux-only so its flag is absent here, but the parallel frontend is
+          # not, and dropping it would lint a differently compiled tree from the
+          # one the other lanes measure.
+          $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings -Zthreads=8"
           $env:DYLINT_TOML = Get-Content dylint.toml -Raw
           & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features
           if ($LASTEXITCODE -ne 0) {
@@ -207,7 +214,6 @@ jobs:
           tools-hit: ${{ steps.caches.outputs['tools-hit'] }}
           whitaker-hit: ${{ steps.caches.outputs['whitaker-hit'] }}
           sccache-hit: ${{ steps.caches.outputs['sccache-hit'] }}
-
   build-test-windows:
     # The test half of the Windows merge gate: the `#[cfg(windows)]` tree is
     # compiled and tested under `-D warnings` on this platform (see #518),
@@ -261,7 +267,7 @@ jobs:
       - name: Setup uv
         # The sccache report is a scripts/ci helper run through
         # `uv run --script`; uv's own cache is not part of this lane's keys.
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           python-version: '3.14'
           enable-cache: 'false'
@@ -274,12 +280,12 @@ jobs:
             exit $LASTEXITCODE
           }
       - name: Install sccache
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a  # v2.87.25
         with:
           tool: sccache@0.16.0
           fallback: none
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@e041cb75c35c3524201a32d5e57c87408fbd5874
+        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
@@ -289,7 +295,7 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a  # v2.87.25
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Reset sccache statistics
@@ -321,6 +327,15 @@ jobs:
         # been made.
         shell: pwsh
         run: |
+          # The `setup-rust` action exports its `rustflags` input as
+          # `RUSTFLAGS`, and an externally set `RUSTFLAGS` displaces every
+          # `rustflags` table in `.cargo/config.toml`. This step invokes Cargo
+          # directly rather than through the Makefile, so nothing composes the
+          # standard back in: without this line the binary users get would be
+          # the one build here not compiled with the parallel frontend. mold is
+          # Linux-only, so its flag stays absent. Same assignment, and same
+          # reason, as `Lint (Whitaker)` above.
+          $env:RUSTFLAGS = "$env:RUSTFLAGS -Zthreads=8"
           cargo build --locked --bin netsuke
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
@@ -357,3 +372,39 @@ jobs:
           tools-hit: ${{ steps.caches.outputs['tools-hit'] }}
           whitaker-hit: ${{ steps.caches.outputs['whitaker-hit'] }}
           sccache-hit: ${{ steps.caches.outputs['sccache-hit'] }}
+
+  windows-msi-upgrade:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set MSI validation directory
+        shell: pwsh
+        run: |
+          "MSI_VALIDATION_DIRECTORY=$(Join-Path $env:RUNNER_TEMP 'netsuke-msi-upgrade-validation')" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Setup Python
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          python-version: ${{ env.PYTHON_BASELINE }}
+          enable-cache: 'false'
+      - name: Test Windows MSI release-rank helper
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = 'scripts'
+          uv run --no-project --python $env:PYTHON_BASELINE `
+            --with pytest==9.0.2 --with hypothesis==6.151.9 `
+            python -m pytest scripts/tests/test_windows_msi_release_rank.py
+      - name: Validate Windows MSI upgrade paths
+        uses: ./.github/actions/windows-msi-upgrade-validation
+      - name: Upload Windows MSI validation logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows-msi-upgrade-validation-logs
+          path: ${{ env.MSI_VALIDATION_DIRECTORY }}/*.log
+          if-no-files-found: warn

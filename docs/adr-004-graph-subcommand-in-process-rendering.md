@@ -51,13 +51,13 @@ Specifically:
   `HashMap` iteration order. A proptest confirms equivalence under reversed
   insertion order across freshly seeded `HashMap`s.
 - A `GraphRenderer` port (in
-  [`src/graph_view/render.rs`](../src/graph_view/render.rs)) defines the
-  contract
+  [`src/graph_view/render/mod.rs`](../src/graph_view/render/mod.rs)) defines
+  the contract
   `render(&self, view: &GraphView, sink: &mut dyn io::Write) -> Result<(), GraphRenderError>`.
-- [`DotRenderer`](../src/graph_view/render_dot.rs) and
-  [`HtmlRenderer`](../src/graph_view/render_html/mod.rs) implement that port.
+- [`DotRenderer`](../src/graph_view/render/dot.rs) and
+  [`HtmlRenderer`](../src/graph_view/render/html/mod.rs) implement that port.
   The HTML adapter is split across focused modules under
-  [`src/graph_view/render_html/`](../src/graph_view/render_html/).
+  [`src/graph_view/render/html/`](../src/graph_view/render/html/).
 - The runner's [`Commands::Graph` dispatch](../src/runner/mod.rs) no longer
   spawns `ninja -t graph`. Tests that previously asserted the Ninja-tool
   dispatch have been updated.
@@ -114,7 +114,7 @@ Specifically:
   [`docs/execplans/3-4-5-extend-graph-subcommand-with-an-html-renderer.md`](execplans/3-4-5-extend-graph-subcommand-with-an-html-renderer.md)
 - Production code: [`src/graph_view`](../src/graph_view), runner
   dispatch in [`src/runner/mod.rs`](../src/runner/mod.rs).
-- Tests: [`src/graph_view/tests.rs`](../src/graph_view/tests.rs),
-  [`src/graph_view/render_html/tests.rs`](../src/graph_view/render_html/tests.rs),
+- Tests: [`src/graph_view/tests/mod.rs`](../src/graph_view/tests/mod.rs),
+  [`src/graph_view/render/html/tests.rs`](../src/graph_view/render/html/tests.rs),
   [`tests/runner_graph_tests.rs`](../tests/runner_graph_tests.rs),
   [`tests/features_unix/graph.feature`](../tests/features_unix/graph.feature).

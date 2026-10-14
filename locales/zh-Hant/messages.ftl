@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = 啟用預設拒絕時仍然允許的主機名�
 cli.flag.fetch_block_host.help = 一律封鎖的主機名稱，即使在別處獲得允許。
 cli.flag.fetch_default_deny.help = 預設拒絕所有主機；只放行所宣告的允許清單。
 cli.flag.trust_project_fetch_policy.help = 允許專案設定擴大 fetch 政策的授權項目。
+
+cli.flag.manifest_evaluation_fuel.help = 限制每次資訊清單評估的 MiniJinja 指令數。
+cli.flag.manifest_fuel.help = 限制單一資訊清單中的 MiniJinja 指令總數。
+cli.flag.manifest_rendered_value_bytes.help = 限制轉譯至單一資訊清單值的位元組數。
+cli.flag.manifest_rendered_manifest_bytes.help = 限制轉譯至單一資訊清單的總位元組數。
+cli.flag.manifest_source_bytes.help = 限制每份資訊清單消耗的範本與巨集來源位元組數。
+cli.flag.manifest_foreach_cardinality.help = 限制單次 foreach 展開處理的值數量。
+cli.flag.manifest_expanded_entries.help = 限制從單一資訊清單展開的目標與動作數量。
 cli.flag.json.help = 輸出機器可讀的 JSON。
 cli.flag.no_input.help = 絕不讀取互動式輸入。
 cli.flag.color.help = 彩色輸出原則（auto、always、never）。
@@ -129,6 +137,9 @@ manifest.yaml.hint.invalid_token = YAML 記號無效或出乎意料。
 manifest.yaml.hint.escape = 請逸出反斜線，或移除無效的逸出序列。
 manifest.env.missing = 未設定必要的環境變數。
 manifest.env.invalid_utf8 = 環境變數含有無效的 UTF-8。
+manifest.env.blocked = 對環境變數的存取已遭封鎖。
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env 的 default 必須是字串，但收到 { $kind }。
 manifest.vars.not_object = 資訊清單的 `vars` 必須是對應或物件。
 manifest.vars.reserved_name = 清單的 `vars` 鍵 '{ $name }' 已保留給內建範本輔助函式；請重新命名該變數。
 manifest.read_failed = 無法讀取 { $path } 的資訊清單。
@@ -275,6 +286,17 @@ stdlib.command.output.mode.streaming = 串流
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote 預期字串，卻收到 { $kind }。
+stdlib.shell.quote.control_character = 含有空位元組、歸位或換行的值無法加上引號。
+stdlib.shell.dialect_invalid = 未知的 shell 方言 { $dialect }；應為 { $accepted } 之一。
+stdlib.shell.dialect_not_string = shell 的 dialect 選項必須是字串，但收到 { $kind }。
+stdlib.shell.join.not_sequence = shell_join 預期序列，卻收到 { $kind }。
+stdlib.shell.join.item_not_string = shell_join 的第 { $index } 項為 { $kind }，不是字串。
+stdlib.shell.positional_option = { $filter } 以關鍵字接收選項；請寫成 { $example }。
+
 # 路徑輔助函式的診斷。
 stdlib.path.io.failed = 對 { $path } 執行「{ $action }」失敗（{ $label }）。
 stdlib.path.io.failed_with_detail = 對 { $path } 執行「{ $action }」失敗：{ $detail }。
@@ -330,6 +352,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = 不支援的雜湊演算法「{ 
 
 # 集合輔助函式的診斷。
 stdlib.collections.flatten.expected_sequence = flatten 預期序列元素，卻發現 { $kind }。
+stdlib.collections.compact.not_sequence = compact 預期序列，卻發現 { $kind }。
 stdlib.collections.group_by.empty_attribute = group_by 需要非空的屬性。
 stdlib.collections.group_by.unresolved = group_by 無法在型別為 { $kind } 的元素上解析「{ $attr }」。
 
@@ -347,14 +370,15 @@ stdlib.time.label.nanoseconds = 奈秒
 
 # which 輔助函式的診斷。
 stdlib.which.not_found = [netsuke::jinja::which::not_found] 檢查了 { $count } 個 PATH 項目後仍找不到命令「{ $command }」。預覽：{ $preview }
-stdlib.which.not_found.hint.cwd_auto = PATH 中的空白區段會被忽略；若要納入工作目錄，請使用 cwd_mode="auto"。
-stdlib.which.not_found.hint.cwd_always = 若要納入目前的目錄，請設定 cwd_mode="always"。
+stdlib.which.not_found.hint.cwd_auto = auto 模式只會搜尋 PATH 中明確指定的目錄。
+stdlib.which.not_found.hint.cwd_always = always 模式會先搜尋目前目錄，再搜尋 PATH 中指定的目錄。
+stdlib.which.not_found.hint.workspace = 若要遞迴搜尋工作區樹，請使用 cwd_mode="workspace-recursive"。
 stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] 「{ $path }」中的命令「{ $command }」不存在或無法執行。
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <空白>
 stdlib.which.path_entry.non_utf8 = 第 { $index } 個 PATH 項目含有非 UTF-8 字元；Netsuke 需要 UTF-8 路徑。
 stdlib.which.command.empty = which 需要非空的字串。
-stdlib.which.cwd_mode.invalid = cwd_mode 必須是「auto」、「always」或「never」，卻得到「{ $mode }」。
+stdlib.which.cwd_mode.invalid = cwd_mode 必須是 'auto'、'always'、'never' 或 'workspace-recursive'；收到的是 '{ $mode }'。
 stdlib.which.cwd.resolve_failed = 無法判定目前的目錄：{ $details }。
 stdlib.which.cwd.non_utf8 = 目前的目錄含有非 UTF-8 的部分。
 stdlib.which.canonicalize_failed = 無法正規化「{ $path }」：{ $details }。
@@ -424,3 +448,7 @@ example.errors_found = { $count ->
     [0] 未發現錯誤。
    *[other] 發現 { $count } 個錯誤。
 }
+manifest.budget.exceeded = 資訊清單資源預算在 { $stage } 階段達到 { $limit } 後耗盡。
+
+cli.flag.env_allow_var.help = 資訊清單 env() 輔助程式允許使用的環境變數。
+cli.flag.env_block_var.help = 資訊清單 env() 輔助程式封鎖使用的環境變數。

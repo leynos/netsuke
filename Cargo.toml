@@ -1,6 +1,6 @@
 [package]
 name = "netsuke-build"
-version = "0.1.0-beta3"
+version = "0.1.0-beta4"
 edition = "2024"
 include = [
     "/src/**",
@@ -101,8 +101,8 @@ legacy-digests = ["sha1", "md5"]
 [dependencies]
 clap = { version = "4.5.0", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
-serde-saphyr = "0.0.6"
-minijinja = { version = "2.12.0", features = ["loader"] }
+serde-saphyr = "1.2.0"
+minijinja = { version = "2.24.0", features = ["fuel", "loader"] }
 cap-primitives = "3.4.4"
 cap-std = { version = "3.4.4", features = ["fs_utf8"] }
 fs4 = "1.1.0"
@@ -138,7 +138,7 @@ tempfile = "3.8.0"
 shell-quote = { version = "0.7.2", default-features = false, features = ["sh"] }
 shlex = "2.0.1"
 time = { version = "0.3.44", features = ["formatting", "macros", "parsing", "serde"] }
-ureq = { version = "2.10.5" }
+ureq = { version = "3.4.0" }
 wait-timeout = "0.2"
 url = "^2.5.0"
 ortho_config = { version = "0.9.0", features = ["serde_json"] }
@@ -158,6 +158,9 @@ thiserror = "1"
 time = { version = "0.3.44", features = ["formatting"] }
 tracing = "0.1"
 [dev-dependencies]
+libc = "0.2.189"
+nix = { version = "0.31.3", features = ["resource"] }
+roxmltree = "0.21.1"
 rstest = "0.26.1"
 rstest-bdd = "0.5.0"
 rstest-bdd-macros = { version = "0.5.0", features = ["strict-compile-time-validation"] }
@@ -178,6 +181,11 @@ proptest = "1.11.0"
 googletest = "0.14.3"
 pretty_assertions = "1.4.1"
 regex = "1.12.2"
+# The resolver boundary contract reads a module's `use` items as the trees they
+# are rather than as text, so `telemetry` is matched as an identifier and a
+# comment or a literal quoting the same name is not one. Full syntax, because
+# the items being read are ordinary source files.
+syn = { version = "2", features = ["full", "visit"] }
 # Plural-selection tests must pass numeric arguments to Fluent. `ortho_config`
 # exposes `LocalizationArgs` as a map of `FluentValue`, but does not re-export
 # the value type, so the tests need `fluent-bundle` directly. Constrained to

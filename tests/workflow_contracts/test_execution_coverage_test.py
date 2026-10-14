@@ -7,21 +7,32 @@ uninstrumented one would have been, so these checks pin its flags, pin the
 doctest pass that `cargo llvm-cov nextest` cannot perform, and reject a second
 Linux job quietly reintroducing `cargo nextest` or `cargo test`.
 
+The Makefile reading those checks lean on lives in ``makefile_recipes.py``, so
+this module states the coverage contract and that one owns the file access.
+
 Run via ``make test-workflow-contracts``.
 """
 
 import re
+import tomllib
+import typing as typ
 
+import makefile_recipes
 import pytest
 from cache_contract_data import WORKFLOW_DIR
+from makefile_recipes import load_makefile, makefile_recipe
+from makefile_variables import expand_makefile_variables, makefile_definitions
 from workflow_loading import (
-    MAKEFILE_PATH,
+    REPO_ROOT,
     job_steps,
     load_workflow,
     named_step,
     require_mapping,
     workflow_job,
 )
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 
 #: Inputs that make the coverage run as broad as `make test` was. Without
 #: `all-features` the `legacy-digests` tests in `src/stdlib/path/hash_utils.rs`
@@ -34,6 +45,16 @@ REQUIRED_COVERAGE_INPUTS = {
     "doctests": "true",
 }
 
+#: Ambient-target UI harness builds must share the gate's feature fingerprint.
+#: Isolated fixture and packaging builds intentionally retain shipped defaults.
+GATE_FEATURES_MODULE: Path = REPO_ROOT / "tests" / "support" / "cargo_features.rs"
+TEST_SUPPORT_MANIFEST: Path = REPO_ROOT / "test_support" / "Cargo.toml"
+AMBIENT_TARGET_NESTED_BUILD_SOURCES: tuple[Path, ...] = (
+    REPO_ROOT / "tests" / "support" / "test_support_rlib.rs",
+    REPO_ROOT / "tests" / "command_env_ui_tests.rs",
+    REPO_ROOT / "tests" / "build_module_slice_ui_tests.rs",
+)
+
 #: Every job that measures coverage, and the event it is restricted to. Two
 #: coverage runs against one commit pay twice and give the ratchet baseline
 #: two writers.
@@ -42,55 +63,72 @@ COVERAGE_PRODUCERS = {
     ("coverage-main.yml", "coverage-upload"): None,
 }
 
-#: Linux jobs allowed to execute Rust tests outside the instrumented run.
-#: `netsukefile` builds a manifest and drives Ninja on Ubuntu 22.04, and
-#: `kani-smoke` runs verification harnesses; neither is a unit-test lane.
-LINUX_TEST_EXEMPTIONS = {
-    ("ci.yml", "kani-smoke"),
-    ("netsukefile-test.yml", "netsukefile"),
-}
-LINUX_WORKFLOWS = ("ci.yml", "coverage-main.yml", "netsukefile-test.yml")
-#: Patterns for a Rust suite execution. `make test` is matched only as a whole
-#: target name, so the unrelated `make test-markdown-format` and
-#: `make test-workflow-contracts` gates are not mistaken for one.
-FORBIDDEN_TEST_COMMANDS = (
-    re.compile(r"\bcargo nextest\b"),
-    re.compile(r"\bcargo test\b"),
-    re.compile(r"\bmake test(?![\w-])"),
-)
 
+def test_definitions_are_substituted_one_level_and_unknown_names_left_alone() -> None:
+    """Check the pure expansion against supplied definitions, with no file read.
 
-def _makefile_recipe(target: str) -> str:
-    """Return the recipe lines of a Makefile target.
-
-    Parameters
-    ----------
-    target
-        Makefile target whose recipe is wanted.
-
-    Returns
-    -------
-    str
-        The recipe's lines, joined by newlines.
+    The helper is deliberately a plain substitution so that its behaviour can
+    be pinned here, and so a recipe's flag is never asserted against a value
+    that came from somewhere the test did not name.
     """
-    lines = MAKEFILE_PATH.read_text(encoding="utf-8").splitlines()
-    start = next(
-        (
-            index
-            for index, line in enumerate(lines)
-            if line.startswith(f"{target}:") or line.startswith(f"{target} ")
-        ),
-        None,
+    definitions = {"GATE_RUSTFLAGS": 'RUSTFLAGS="$(RUSTFLAGS:+$RUSTFLAGS )-D warnings"'}
+    text = "$(GATE_RUSTFLAGS) $(CARGO) nextest run $(UNDEFINED)"
+
+    expanded = expand_makefile_variables(text, definitions)
+
+    assert expanded == (
+        'RUSTFLAGS="$(RUSTFLAGS:+$RUSTFLAGS )-D warnings" '
+        "$(CARGO) nextest run $(UNDEFINED)"
+    ), "one level only: nested references survive for the shell or Make to resolve"
+    assert expand_makefile_variables("nothing to do", {}) == "nothing to do", (
+        "text naming no variable must pass through untouched"
     )
-    if start is None:
-        pytest.fail(f"the Makefile must declare a {target!r} target")
-    recipe: list[str] = []
-    for line in lines[start + 1 :]:
-        if line.startswith("\t"):
-            recipe.append(line)
-        elif line.strip():
-            break
-    return "\n".join(recipe)
+    assert makefile_definitions("FOO ?= bar\nBAZ = qux\nnot a definition\n") == {
+        "FOO": "bar",
+        "BAZ": "qux",
+    }, "both assignment spellings count, and prose does not"
+
+
+def test_the_loader_reports_an_unreadable_makefile_with_its_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Fail the loader test, not the assertion, when the Makefile is unreadable.
+
+    The pure helpers take text, so the fallible read is the whole of the
+    boundary, and this is where it owes the caller a diagnosis. A missing file
+    and undecodable bytes are the two ways in; the second is the one worth
+    driving, because it is what a UTF-8 read of a file written by a non-UTF-8
+    editor looks like.
+
+    Both readers are driven, not just :func:`load_makefile`: the recipe reader
+    reaches the same path, and a contract that only exercised the loader would
+    report the recipe reader's own read as covered while it failed with a bare
+    ``OSError`` beside an assertion about a gate's flags.
+    """
+    # Patch the reader's own module: that is where the path is looked up, and a
+    # patch against this module's namespace would silently do nothing.
+    broken = tmp_path / "Makefile"
+    broken.write_bytes(b"\xff\xfe not utf-8")
+    monkeypatch.setattr(makefile_recipes, "MAKEFILE_PATH", broken)
+    with pytest.raises(
+        pytest.fail.Exception, match=re.escape(f"could not read {broken}")
+    ):
+        load_makefile()
+    with pytest.raises(
+        pytest.fail.Exception, match=re.escape(f"could not read {broken}")
+    ):
+        makefile_recipe("test-nextest")
+
+    missing = tmp_path / "absent" / "Makefile"
+    monkeypatch.setattr(makefile_recipes, "MAKEFILE_PATH", missing)
+    with pytest.raises(
+        pytest.fail.Exception, match=re.escape(f"could not read {missing}")
+    ):
+        load_makefile()
+    with pytest.raises(
+        pytest.fail.Exception, match=re.escape(f"could not read {missing}")
+    ):
+        makefile_recipe("test-nextest")
 
 
 @pytest.mark.parametrize(
@@ -157,18 +195,46 @@ def test_the_local_test_target_still_runs_both_passes() -> None:
     `make test`, so the target must still compose both passes with the same
     breadth.
     """
-    makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
+    makefile = load_makefile()
     assert "test: test-nextest doctest" in makefile, (
         "`make test` must compose the nextest and doctest passes"
     )
-    nextest = _makefile_recipe("test-nextest")
+    definitions = makefile_definitions(makefile)
+    nextest = expand_makefile_variables(makefile_recipe("test-nextest"), definitions)
     for flag in ("--workspace", "--all-targets", "--all-features"):
         assert flag in nextest, f"the local nextest pass must pass {flag}"
-    doctest = _makefile_recipe("doctest")
+    doctest = expand_makefile_variables(makefile_recipe("doctest"), definitions)
     for flag in ("--workspace", "--doc", "--all-features"):
         assert flag in doctest, f"the local doctest pass must pass {flag}"
     for recipe, label in ((nextest, "nextest"), (doctest, "doctest")):
         assert "-D warnings" in recipe, f"the local {label} pass must deny warnings"
+
+
+def test_ambient_target_harnesses_match_the_gate_feature_selection() -> None:
+    """Require ambient nested Cargo builds to reuse the gate's artefacts.
+
+    The direct-rustc UI harnesses build `test_support` or `netsuke-build` in
+    the workspace target directory. Their Cargo feature selection must match
+    `make test-nextest`; otherwise Cargo gives `netsuke-build` a distinct
+    fingerprint and recompiles its graph for each harness.
+    """
+    module = GATE_FEATURES_MODULE.read_text(encoding="utf-8")
+    assert (
+        'pub const GATE_FEATURE_ARGUMENTS: &[&str] = &["--all-features"];' in module
+    ), "the shared Cargo feature module must define the gate's --all-features argument"
+    for source in AMBIENT_TARGET_NESTED_BUILD_SOURCES:
+        text = source.read_text(encoding="utf-8")
+        assert "cargo_features::GATE_FEATURE_ARGUMENTS" in text, (
+            f"{source.relative_to(REPO_ROOT)} must use the shared gate feature "
+            "selection"
+        )
+    manifest = tomllib.loads(TEST_SUPPORT_MANIFEST.read_text(encoding="utf-8"))
+    features = manifest.get("features")
+    assert isinstance(features, dict), "test_support must declare its features"
+    assert features.get("default") == [], "test_support defaults must stay empty"
+    assert features.get("legacy-digests") == ["netsuke/legacy-digests"], (
+        "test_support must forward legacy-digests exactly to netsuke-build"
+    )
 
 
 @pytest.mark.parametrize(
@@ -188,87 +254,6 @@ def test_one_coverage_producer_per_event(
         f"{workflow_name} {job_name} must measure coverage under "
         f"{expected_condition!r}, got {step.get('if')!r}"
     )
-
-
-def _step_scan_texts(step: dict[str, object]) -> list[tuple[str, str]]:
-    """Return every scannable command text on a step, paired with its source.
-
-    A Linux job can reintroduce a suite execution through a bare `run`
-    script, or through a composite action input such as `with.args`, so
-    both the `run` script and every `with` value are scanned with the same
-    forbidden-command patterns.
-
-    Parameters
-    ----------
-    step
-        A single workflow step.
-
-    Returns
-    -------
-    list[tuple[str, str]]
-        Pairs of source label and text. The label is ``"run"`` for the step's
-        script and ``"with.<key>"`` for each of its inputs, so a failure names
-        where the forbidden command was found.
-    """
-    texts = [("run", str(step.get("run", "")))]
-    with_inputs = step.get("with")
-    if isinstance(with_inputs, dict):
-        texts += [(f"with.{key}", str(value)) for key, value in with_inputs.items()]
-    return texts
-
-
-def _step_offenders(step: dict[str, object]) -> list[str]:
-    """Return one label per forbidden pattern this step's texts match."""
-    return [
-        f"{step.get('name')!r} ({source}): {pattern.pattern}"
-        for source, text in _step_scan_texts(step)
-        for pattern in FORBIDDEN_TEST_COMMANDS
-        if pattern.search(text)
-    ]
-
-
-def _is_scannable_job(workflow_name: str, job_name: str, declaration: object) -> bool:
-    """Return whether a job declares steps this contract should scan."""
-    if (workflow_name, job_name) in LINUX_TEST_EXEMPTIONS:
-        return False
-    # A job that calls a reusable workflow declares no steps of its own; the
-    # callee's own contracts cover it.
-    match declaration:
-        case {"steps": _}:
-            return True
-        case _:
-            return False
-
-
-def _workflow_offenders(workflow_name: str) -> list[str]:
-    """Return every forbidden-command match in one workflow's Linux jobs."""
-    workflow = load_workflow(WORKFLOW_DIR / workflow_name)
-    jobs = workflow.get("jobs")
-    assert isinstance(jobs, dict), f"{workflow_name} must declare jobs"
-    return [
-        f"{workflow_name} {job_name} {offender}"
-        for job_name, declaration in jobs.items()
-        if _is_scannable_job(workflow_name, job_name, declaration)
-        for step in job_steps(workflow, job_name)
-        for offender in _step_offenders(step)
-    ]
-
-
-def test_no_other_linux_job_executes_the_rust_suite() -> None:
-    """Reject a second Linux job running the workspace suite.
-
-    A duplicate execution is exactly what folding the gate into the coverage
-    run removed, so it must not reappear under another step name. The scan
-    covers both a step's `run` script and its `with` input values, so a
-    composite or shared action wrapping `cargo nextest` cannot reintroduce
-    the suite either.
-    """
-    offenders = [
-        offender
-        for workflow_name in LINUX_WORKFLOWS
-        for offender in _workflow_offenders(workflow_name)
-    ]
-    assert not offenders, f"a second Linux test execution reappeared: {offenders!r}"
 
 
 #: The instrumented lanes' budget for one `cargo llvm-cov nextest` invocation,

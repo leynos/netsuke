@@ -1,0 +1,2 @@
+{"reason":"compiler-artifact","target":{"name":"sha2"},"filenames":["/recorded/split-build/debug/deps/libsha2-abc123.rmeta","/recorded/split-build/debug/deps/libsha2-abc123.rlib"]}
+{"reason":"compiler-artifact","target":{"name":"test_support"},"filenames":["/recorded/uplifted-target/debug/libtest_support.rmeta","/recorded/uplifted-target/debug/libtest_support.rlib"]}

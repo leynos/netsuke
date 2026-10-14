@@ -13,20 +13,32 @@
 
 ### Number allocation
 
-No RFC has been merged to `main` yet, so the `docs/rfcs/` sequence is defined
-entirely by in-flight branches. This RFC takes `0006` and treats the numbers
-below it as reserved, per the "gaps are acceptable when numbers are reserved,
-drafted on another branch, or intentionally skipped" rule in
+Numbers `0001` to `0012` are merged to `main` and are therefore taken. This RFC
+takes `0006`, and reserves `0013` to `0020` for the capability child RFCs
+section 14.13 allocates, per the "gaps are acceptable when numbers are
+reserved, drafted on another branch, or intentionally skipped" rule in
 [the documentation style guide](../documentation-style-guide.md).
 
-| Numbers      | Reserved for                                                                                                | Current state                                                                                                                      |
-| ------------ | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 0001         | Structured command blocks, plus the two amendments                                                          | Drafted in [#573](https://github.com/leynos/netsuke/pull/573) and superseded by [#600](https://github.com/leynos/netsuke/pull/600) |
-| 0002 to 0004 | Manifest composition: repository-relative includes, versioned local bundles, digest-pinned external bundles | Drafted in [#600](https://github.com/leynos/netsuke/pull/600)                                                                      |
-| 0005         | Release integrity and admission                                                                             | Proposed in [#556](https://github.com/leynos/netsuke/pull/556)                                                                     |
-| 0006         | This RFC                                                                                                    | Proposed                                                                                                                           |
+| Numbers      | Reserved for                                                                                                | Current state                                                |
+| ------------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| 0001         | Structured command blocks                                                                                   | Merged in [#573](https://github.com/leynos/netsuke/pull/573) |
+| 0002 to 0004 | Manifest composition: repository-relative includes, versioned local bundles, digest-pinned external bundles | Merged in [#600](https://github.com/leynos/netsuke/pull/600) |
+| 0005         | Release integrity and admission                                                                             | Merged in [#556](https://github.com/leynos/netsuke/pull/556) |
+| 0006         | This RFC                                                                                                    | Merged in [#602](https://github.com/leynos/netsuke/pull/602) |
+| 0007         | Netsukefile testing framework                                                                               | Merged in [#566](https://github.com/leynos/netsuke/pull/566) |
+| 0008         | Repository-wide code-health contracts and fuzzing                                                           | Merged in [#556](https://github.com/leynos/netsuke/pull/556) |
+| 0009 to 0010 | Structured-command amendments: per-command working directories, and runtime bindings and secure tempdirs    | Merged in [#600](https://github.com/leynos/netsuke/pull/600) |
+| 0011         | Allow-listed structured command shells                                                                      | Merged in [#653](https://github.com/leynos/netsuke/pull/653) |
+| 0012         | Netsukefile property testing                                                                                | Merged in [#654](https://github.com/leynos/netsuke/pull/654) |
+| 0013 to 0020 | Capability child RFCs this RFC's accepted set is split into                                                 | Reserved here; allocated in section 14.13                    |
 
-_Table 1: RFC sequence reservations across in-flight branches._
+_Table 1: RFC number allocation and merge state, and the numbers reserved here._
+
+Every row of table 1 records a merge state, and `Proposed` is not one: it is the
+`Status` this RFC's own preamble carries, and every merged RFC in the corpus
+carries it too — a merged RFC's status stays `Proposed` until its capability
+has shipped. `0006` is therefore merged and `Proposed`, and the row states the
+merge because that is the fact the column is about.
 
 ## 1. Summary
 
@@ -48,7 +60,7 @@ existing Netsuke surface, and a delivery sequence of ten focused slices.
 
 This RFC specifies behaviour only. It contains no implementation, and it is not
 itself a request to merge one large standard-library change. Accepted groups
-become focused child issues after v0.1.0 final.
+become focused child RFCs after v0.1.0 final.
 
 ## 2. Problem
 
@@ -150,26 +162,29 @@ Three existing mechanisms matter to this proposal.
 
 ### 3.3. Known weaknesses in the current surface
 
-Three existing gaps constrain this design and are called out so the follow-up
-work does not silently inherit them.
+Three gaps constrained this design at the time of writing and are called out so
+the follow-up work does not silently inherit them. The first two remain open;
+the third has since been closed.
 
 - **Excluded helpers do not all fail explicitly.** `register_manifest_query`
-  stubs six helpers: `env`, `glob`, `fetch`, `shell`, `grep`, and `contents`. A
-  further sixteen names registered in the full environment are absent from the
-  manifest-query environment altogether, so a manifest query reports "unknown
-  filter" or "unknown test" rather than explaining the restriction. They are
-  the filters `realpath`, `expanduser`, `size`, `linecount`, `hash`, and
-  `digest`; `which`, which is registered as both a filter and a function; the
-  functions `command_available` and `now`; and the file tests `dir`, `file`,
-  `symlink`, `pipe`, `block_device`, `char_device`, and `device`. Section 6.2
-  makes explicit failure normative, and section 14.1 schedules the repair
-  across that whole set rather than the path filters alone.
+  stubs fifteen helpers: `env`, `glob`, `fetch`, `shell`, `grep`, and
+  `contents`, then `realpath`, `expanduser`, `size`, `linecount`, `hash`,
+  `digest`, `which`, `command_available`, and `now`. Each raises a restriction
+  diagnostic rather than "unknown filter" or "unknown test". A further seven
+  names registered in the full environment are absent from the manifest-query
+  environment altogether: the file tests `dir`, `file`, `symlink`, `pipe`,
+  `block_device`, `char_device`, and `device`. Section 6.2 makes explicit
+  failure normative, and section 14.1 schedules the repair of that remaining
+  set.
 - **`manifest_query_operation_error` is not localized.** It builds its message
   with `format!` rather than a Fluent key, unlike the rest of the stdlib.
-- **`now` has no injected clock seam.** It calls `OffsetDateTime::now_utc()`
-  directly. The time helpers proposed here are pure and do not need the seam,
-  but the gap is recorded because it bounds how far time behaviour can be
-  tested deterministically.
+- **`now` had no injected clock seam.** It called `OffsetDateTime::now_utc()`
+  directly. The time helpers proposed here are pure and did not need the seam,
+  but the gap was recorded because it bounded how far time behaviour could be
+  tested deterministically. Roadmap item 7.1.1 has since closed it: `now()`
+  reads through a `ClockProvider` held by `StdlibConfig`, classified in the
+  [ADR-008](../adr-008-environment-seam-taxonomy.md) addendum for 2026-09-11
+  and answered as question 7 in section 16.
 
 ## 4. Goals and non-goals
 
@@ -191,12 +206,13 @@ work does not silently inherit them.
   - A generic plugin or lookup dispatcher. See section 10.5.
   - Any change to the v0.1.0 release scope.
   - Any change to the existing `hash` contract. See section 11.1.
-  - Implementation. This RFC specifies behaviour; child issues implement it.
+  - Implementation. This RFC specifies behaviour; child RFCs carry it, and the
+    roadmap tasks in steps 6.2 to 6.9 are what schedule the work.
 
 ## 5. Licensing and provenance boundary
 
 Ansible is licensed GPL-3.0-or-later. Netsuke is licensed ISC. The following
-rules are normative for every child issue arising from this RFC.
+rules are normative for every child RFC arising from this RFC.
 
 1. Names, concepts, documented signatures, and independently verified
    observable behaviour may be borrowed.
@@ -221,8 +237,8 @@ and
 
 ## 6. Cross-cutting contract
 
-This section is normative. A child issue that does not satisfy every clause
-below for every helper it adds is not complete.
+This section is normative. A child RFC that does not satisfy every clause below
+for every helper it adds is not complete.
 
 ### 6.1. Purity classes
 
@@ -362,6 +378,12 @@ values through a hash set.
   order-preserving map keyed on the canonical key; they must not expose the
   map's iteration order.
 
+The canonical-JSON domain is the set of values for which RFC 8785 produces a
+canonical JSON representation, with string keys at every mapping level and no
+value excluded above. Round-trip claims in section 8.1 are limited to that
+domain. A serializer may accept additional native values, but converting them
+does not establish canonical equality with the original value.
+
 ### 6.8. Resource bounds
 
 Every parser, combinatorial helper, regular-expression operation, and
@@ -421,8 +443,11 @@ Netsuke registers exactly **one** name per capability.
 
 ### 6.11. Documentation and testing obligations
 
-Each accepted helper requires all of the following before its child issue
-closes.
+Each accepted helper requires all of the following before its roadmap task in
+the owning child RFC's step is complete. The obligations attach to the helper,
+not to the child RFC document: a child RFC states each helper's contract and
+enumerates these obligations, while the checklist that tracks them is the
+roadmap task the helper is scheduled under.
 
 1. An entry in `docs/stdlib-yaml-and-jinja-guide.md` giving its signature,
    purity label, prose contract, edge cases, and an example, in the format the
@@ -647,7 +672,7 @@ are optional keyword arguments; arguments shown without one are required.
 
 ### 8.1. Structured data interchange
 
-All six helpers in this group are pure. They exist so that manifests can
+All five helpers in this group are pure. They exist so that manifests can
 consume compiler metadata, package manifests, and generated configuration
 fragments without a subprocess.
 
@@ -720,9 +745,9 @@ Deterministically serializes a native value as block-style YAML.
   timestamp, or an empty value, and whenever it has leading or trailing
   whitespace. This explicitly covers the YAML 1.1 spellings `yes`, `no`, `on`,
   `off`, `y`, and `n`, so the Norway problem cannot reach a generated file.
-- Round trip: `value | to_yaml | from_yaml` returns a value equal to `value`
-  under section 6.7 canonical equality, for every value expressible in YAML.
-  This is a property test.
+- Round trip: for values in the section 6.7 canonical-JSON domain that are
+  expressible in YAML, `value | to_yaml | from_yaml` returns a value equal to
+  `value` under section 6.7 canonical equality. This is a property test.
 - Undefined input is an error.
 
 #### `value | to_nice_json(indent=2, sort_keys=false)`
@@ -736,8 +761,19 @@ Pretty-prints JSON. MiniJinja's `tojson` remains the compact serializer; no
 - Output uses LF line endings and does **not** end with a trailing newline, so
   the result composes inside a larger document.
 - Integer and boolean mapping keys are rendered in their canonical string
-  form. Other key kinds are rejected rather than coerced.
-- Round trip: `value | to_nice_json | from_json` returns an equal value.
+  form. Other key kinds are rejected rather than coerced. This conversion is
+  lossy: `from_json` reads the rendered key as a string, so the original key
+  type is not preserved.
+- Distinct source keys that render to the same string are rejected with
+  `duplicate_key`. For example, a mapping containing integer key `1` and string
+  key `"1"`, or boolean key `true` and string key `"true"`, is rejected.
+- Round trip: for values in the section 6.7 canonical-JSON domain,
+  `value | to_nice_json | from_json` returns a value equal to `value`. Inputs
+  with converted integer or boolean keys are outside this guarantee, including
+  such mappings nested in sequences.
+
+The normative amendment and its acceptance cases are recorded in
+[RFC 0013](0013-structured-data-interchange-helpers.md).
 
 ### 8.2. Mapping and sequence transforms
 
@@ -1096,10 +1132,12 @@ the existing `basename` and `dirname` filters, which keep their present
 host-native behaviour when it is omitted, so no shipped manifest changes
 meaning.
 
-Every helper in this group is **pure and lexical**. None touches the
-filesystem, none resolves symbolic links, and none grants authority. Normalizing
-`../../etc/passwd` produces text, not access; containment remains the
-capability layer's responsibility, per section 6.4.
+Every helper in this group except `expandvars` is **pure and lexical**. None
+touches the filesystem, none resolves symbolic links, and none grants
+authority. Normalizing `../../etc/passwd` produces text, not access;
+containment remains the capability layer's responsibility, per section 6.4.
+`expandvars` is the one environment-observing helper in this RFC, and section
+14.7 separates it from the lexical helpers for that reason.
 
 #### `parts | path_join(dialect='host')`
 
@@ -1396,13 +1434,28 @@ Quotes one value for a named shell dialect, reusing Netsuke's existing quoting
 machinery rather than adding a second implementation.
 
 - The subject must be a string. An embedded NUL is an error.
-- `dialect` currently accepts only `sh`, matching the single `shell-quote`
-  feature Netsuke enables. An unknown value is an error enumerating the
-  accepted dialects.
-- **This is the same capability as the `shell_escape` helper documented but
-  unimplemented today**, which roadmap task 3.14.8 exists to resolve. That task
-  remains the owner and ships first; this RFC contributes only the canonical
-  name and the `dialect` argument. Section 13 records the sequencing.
+- `dialect` accepts `sh` and `powershell`. An unknown value is an error
+  enumerating the accepted dialects. **Amended 2026-09-27**: this section
+  originally read "`dialect` currently accepts only `sh`, matching the single
+  `shell-quote` feature Netsuke enables." The feature half was right and the
+  conclusion did not follow: `RecipeShell::host_default()` returns `PowerShell`
+  on Windows, and `src/ir/cmd_interpolate/` already carried a second,
+  non-`shell-quote` encoder for that case. An `sh`-only filter would have
+  emitted POSIX quoting into a recipe Windows PowerShell then parses, silently
+  corrupting the argument the author believed was protected.
+  [ADR-041](../adr-041-canonical-recipe-shell-quoting-surface.md) records the
+  decision and rejects `bash` for the reason given below.
+- **This was the same capability as the `shell_escape` helper documented but
+  unimplemented at the time**, which roadmap task 3.14.8 existed to resolve.
+  That task was the owner and shipped first; this RFC contributed only the
+  canonical name and the `dialect` argument. Section 13 records the sequencing.
+  **Delivered by 3.14.8 on 2026-09-27**, which superseded `shell_escape` rather
+  than implementing it (the roadmap permitted either) and shipped `shell_quote`
+  and `shell_join` over one implementation in `src/shell_word.rs`. `bash` is
+  refused by that implementation; `sh` output is valid Bash, and the
+  `shell-quote` crate's `Bash` encoder emits a different form Netsuke does not
+  compile in. The name and the `dialect` argument were adopted as proposed
+  here; nothing in this section is still pending.
 - Ansible's `quote` alias is rejected; see section 10.2.
 - Structured recipes, tracked in
   [#593](https://github.com/leynos/netsuke/issues/593), remain the preferred
@@ -1829,16 +1882,16 @@ does not have and what to write instead.
 
 ### 13.3. Relationship to in-flight work
 
-| Work item                                                        | Relationship                                                                                                                                                                                      |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Roadmap 3.14.8, `shell_escape`                                   | Owns the shell-quoting capability and ships first. This RFC contributes the canonical name `shell_quote` and the `dialect` argument; the roadmap task should adopt them so the two do not diverge |
-| Roadmap 3.15.5, enumerable errors                                | Section 6.6 requires every string-valued option to enumerate its valid values on failure; these helpers are a large new source of such options                                                    |
-| [#594](https://github.com/leynos/netsuke/issues/594)             | Gates all of this work; nothing here may widen the hardening release                                                                                                                              |
-| [#593](https://github.com/leynos/netsuke/issues/593)             | Structured recipes remain the preferred shell-free answer; `shell_quote` serves the manifests that still need a shell                                                                             |
-| [#590](https://github.com/leynos/netsuke/issues/590)             | Owns any future dynamic provider registry; section 10.5 defers all dispatcher questions there                                                                                                     |
-| [ADR-008](../adr-008-environment-seam-taxonomy.md)               | Governs the `expandvars` environment seam                                                                                                                                                         |
-| [ADR-010](../adr-010-scope-glob-capability-to-literal-prefix.md) | Governs `glob(files_only=true)`, whose capability scoping is unchanged                                                                                                                            |
-| [ADR-001](../adr-001-replace-serde-yml-with-serde-saphyr.md)     | Governs the YAML stack that `from_yaml` and `from_yaml_all` use                                                                                                                                   |
+| Work item                                                        | Relationship                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Roadmap 3.14.8, `shell_escape`                                   | Owns the shell-quoting capability and ships first. This RFC contributes the canonical name `shell_quote` and the `dialect` argument; the roadmap task should adopt them so the two do not diverge. **Delivered 2026-09-27**: 3.14.8 adopted both and superseded `shell_escape`; the dialect set is wider than this RFC assumed, per section 8.9 and [ADR-041](../adr-041-canonical-recipe-shell-quoting-surface.md) |
+| Roadmap 3.15.5, enumerable errors                                | Section 6.6 requires every string-valued option to enumerate its valid values on failure; these helpers are a large new source of such options                                                                                                                                                                                                                                                                      |
+| [#594](https://github.com/leynos/netsuke/issues/594)             | Gates all of this work; nothing here may widen the hardening release                                                                                                                                                                                                                                                                                                                                                |
+| [#593](https://github.com/leynos/netsuke/issues/593)             | Structured recipes remain the preferred shell-free answer; `shell_quote` serves the manifests that still need a shell                                                                                                                                                                                                                                                                                               |
+| [#590](https://github.com/leynos/netsuke/issues/590)             | Owns any future dynamic provider registry; section 10.5 defers all dispatcher questions there                                                                                                                                                                                                                                                                                                                       |
+| [ADR-008](../adr-008-environment-seam-taxonomy.md)               | Governs the `expandvars` environment seam                                                                                                                                                                                                                                                                                                                                                                           |
+| [ADR-010](../adr-010-scope-glob-capability-to-literal-prefix.md) | Governs `glob(files_only=true)`, whose capability scoping is unchanged                                                                                                                                                                                                                                                                                                                                              |
+| [ADR-001](../adr-001-replace-serde-yml-with-serde-saphyr.md)     | Governs the YAML stack that `from_yaml` and `from_yaml_all` use                                                                                                                                                                                                                                                                                                                                                     |
 
 _Table 14: Relationship to in-flight Netsuke work._
 
@@ -1865,14 +1918,14 @@ re-verifies rather than assuming.
 ## 14. Delivery slices and sequencing
 
 This RFC is deliberately not one implementation change. Each slice below
-becomes a focused child issue that can ship, be reviewed, and be reverted
+becomes a focused child RFC that can ship, be reviewed, and be reverted
 independently, and each carries the full cross-cutting contract from section 6
 rather than saying only "match Ansible".
 
-For screen readers: the following flowchart shows slice 0 as the sole
-prerequisite for slices 1, 2, 3 and 8; slice 5 as the prerequisite for slice 6;
-and roadmap task 3.14.8 as an external prerequisite for slice 7. Slices 4, 5
-and 9 have no prerequisites within this RFC.
+For screen readers: the following flowchart shows slice 0 as a prerequisite for
+every other slice; slice 5 as an additional prerequisite for slice 6; and
+roadmap task 3.14.8 as an external prerequisite for slice 7. No slice has
+another slice as its only prerequisite.
 
 ```mermaid
 flowchart TD
@@ -1890,7 +1943,12 @@ flowchart TD
     S0 --> S1
     S0 --> S2
     S0 --> S3
+    S0 --> S4
+    S0 --> S5
+    S0 --> S6
+    S0 --> S7
     S0 --> S8
+    S0 --> S9
     S5 --> S6
     R8 --> S7
 ```
@@ -1899,8 +1957,13 @@ _Figure 1: Prerequisite relationships between the delivery slices._
 
 ### 14.1. Slice 0: shared contract and inventory foundation
 
-This slice exists because seven of the eight remaining slices would otherwise
-each invent their own version of the same shared machinery.
+This slice exists because every one of the nine remaining slices would
+otherwise invent its own version of the same shared machinery. Figure 1 shows
+it as a prerequisite for all nine: a slice that adds no helper still uses the
+domain-error scaffolding for the helpers it does add, and a slice whose helpers
+materialize nothing still declares the bounds it does not reach, which is why
+the edge is drawn to slices 4, 5, and 9 as well as to the four that plainly
+need the canonical key or the cardinality helper.
 
 - The canonical value key and equality relation from section 6.7, with its
   property tests.
@@ -1917,17 +1980,13 @@ each invent their own version of the same shared machinery.
   once clause 2 of section 6.2 is satisfied.
 - The repair of the two existing gaps recorded in section 3.3. This slice
   localizes `manifest_query_operation_error` through a Fluent key, and it adds
-  an explicit stub for every one of the sixteen names that section 3.3 records
-  as absent from the manifest-query environment, so no helper silently
+  an explicit stub for each of the seven names that section 3.3 records as
+  still absent from the manifest-query environment, so no helper silently
   disappears from a manifest query. Every stub raises the same localized
-  manifest-query restriction diagnostic. The names are:
-  - the filters `realpath`, `expanduser`, `size`, `linecount`, `hash`, and
-    `digest`;
-  - `which`, which needs a stub in both its filter form and its function form,
-    because filters and functions occupy separate namespaces;
-  - the functions `command_available` and `now`; and
-  - the tests `dir`, `file`, `symlink`, `pipe`, `block_device`, `char_device`,
-    and `device`.
+  manifest-query restriction diagnostic. The remaining names are the tests
+  `dir`, `file`, `symlink`, `pipe`, `block_device`, `char_device`, and
+  `device`; the other nine of the original sixteen are already stubbed (section
+  3.3).
 - The **maintained inventory** in
   [the standard-library guide](../stdlib-yaml-and-jinja-guide.md): one table
   distinguishing MiniJinja built-ins, existing Netsuke extensions, adopted
@@ -1958,8 +2017,10 @@ equality and the cardinality bound.
 ### 14.5. Slice 4: pattern and version predicates
 
 `regex_replace`, `regex_search`, `regex_findall`, `regex_escape`, and the tests
-`match`, `search`, `regex`, and `version`. Adds the `regex` dependency and the
-bounded compiled-pattern cache. The version predicate has no dependency on the
+`match`, `search`, `regex`, and `version`. Requires slice 0 for the
+bounded-materialization helper, which bounds `regex_findall`'s match count and
+`regex_replace`'s output. Adds the `regex` dependency and the bounded
+compiled-pattern cache. The version predicate has no dependency on the
 regular-expression work and may be split out if the slice grows too large for
 one review.
 
@@ -1968,6 +2029,8 @@ one review.
 `path_join`, `normpath`, `splitext`, `commonpath`, `relpath`, `splitdrive`, the
 `dialect` argument on `basename` and `dirname`, the tests `exists`,
 `link_exists`, `abs`, `same_file`, and `mount`, and `glob(files_only=...)`.
+Requires slice 0 for the domain-error and diagnostic scaffolding every helper
+in the slice raises through.
 
 Order within the slice: the `dialect` mechanism first, then the pure lexical
 helpers, then the filesystem predicates, then `mount` last for the reason in
@@ -1975,9 +2038,11 @@ section 8.7.
 
 ### 14.7. Slice 6: environment-backed path expansion
 
-`expandvars`. Separated from slice 5 because it is the only
-environment-observing helper in the RFC and therefore the only one that needs
-an injected reader, a manifest-query stub, and its own capability review.
+`expandvars`. Requires slice 5 for the `dialect` argument it shares with that
+slice's helpers, and slice 0 for the domain-error scaffolding it raises
+through. Separated from slice 5 because it is the only environment-observing
+helper in the RFC and therefore the only one that needs an injected reader, a
+manifest-query stub, and its own capability review.
 
 ### 14.8. Slice 7: encoding, identity, and formatting
 
@@ -1994,7 +2059,8 @@ whichever larger slice lands alongside it.
 ### 14.10. Slice 9: date and time conversion
 
 `to_datetime` and `strftime`, plus the shared conversion-specifier table and
-its invariant-locale renderer.
+its invariant-locale renderer. Requires slice 0 for the domain-error and
+diagnostic scaffolding both helpers raise through.
 
 ### 14.11. Recommended first wave
 
@@ -2019,6 +2085,51 @@ Every slice must satisfy all of the following before it merges:
 - a row per helper in the maintained inventory from section 14.1; and
 - green `make check-fmt`, `make lint`, `make doc-coverage`, `make test`,
   `make markdownlint`, and `make nixie` on the merge commit.
+
+### 14.13. Coverage map
+
+Each row below allocates one or more capability groups to one focused child
+RFC, which carries the full cross-cutting contract from section 6 for the
+helpers it owns. The map's boundaries are the roadmap's rather than section
+8's, and the two do not coincide in either direction: rows `0015` and `0016`
+each own a pair of whole groups, because one roadmap step delivers both, while
+rows `0017` and `0018` divide two groups between them, because section 8.6 and
+section 8.7 sit on opposite sides of the pure/observing boundary. The rows
+partition the accepted set: every helper section 8 specifies — including
+`basename`, `dirname`, and `glob`, which gain an option rather than being
+introduced — appears in exactly one row, and no row claims a helper section 8
+does not specify. Delivery is tracked by the roadmap step each row names, per
+roadmap task 6.1.1.
+
+The `Owns` column is a grammar rather than a list, so the allocation cannot
+drift from section 8 as it is edited:
+
+- `` `8.6` `` claims every helper section 8.6 specifies;
+- `` `8.6` except `expandvars` `` claims all of them but the named one;
+- `` `8.7` only `abs` `` claims the named one alone; and
+- clauses separated by `;` are unioned.
+
+The `Status` column reads `unwritten` while the child RFC does not exist and
+`written` once it does, and the `Child RFC` cell — not `Status` — carries the
+relative link to it. A repository test asserts that the two agree, that the
+rows partition the accepted set, that no rejected or deferred name reaches a
+child registry, and that no helper in this map is missing from the roadmap step
+that owns it. The convention and its amendment procedure are recorded in
+[ADR-040](../adr-040-focused-child-rfcs-for-survey-rfcs.md).
+
+| Child RFC                                                       | Title                                           | Owns                                        | Optioned              | Roadmap step | Status  |
+| --------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------- | --------------------- | ------------ | ------- |
+| [0013](0013-structured-data-interchange-helpers.md)             | Structured data interchange helpers             | `8.1`                                       | —                     | 6.2          | written |
+| [0014](0014-mapping-and-sequence-transform-helpers.md)          | Mapping and sequence transform helpers          | `8.2`                                       | —                     | 6.3          | written |
+| [0015](0015-ordered-collection-algebra-and-truth-predicates.md) | Ordered collection algebra and truth predicates | `8.3`; `8.8`                                | —                     | 6.4          | written |
+| [0016](0016-pattern-and-version-predicates.md)                  | Pattern and version predicates                  | `8.4`; `8.5`                                | —                     | 6.5          | written |
+| [0017](0017-lexical-path-composition.md)                        | Lexical path composition                        | `8.6` except `expandvars`; `8.7` only `abs` | `basename`; `dirname` | 6.6          | written |
+| [0018](0018-host-state-predicates-and-environment-expansion.md) | Host-state predicates and environment expansion | `8.7` except `abs`; `8.6` only `expandvars` | `glob`                | 6.7          | written |
+| [0019](0019-encoding-identity-and-formatting-helpers.md)        | Encoding, identity, and formatting helpers      | `8.9`                                       | —                     | 6.8          | written |
+| [0020](0020-date-and-time-conversion-helpers.md)                | Date and time conversion helpers                | `8.10`                                      | —                     | 6.9          | written |
+
+_Table 16: Allocation of the accepted set to focused child RFCs and roadmap
+steps._
 
 ## 15. Alternatives considered
 
@@ -2098,16 +2209,19 @@ Windows host needs when generating paths for a Unix target.
 6. **Should `text_hash` gain a truncating sibling?** The existing `digest`
    filter is `hash` plus a length. If `text_hash` proves useful, `text_digest`
    is the obvious follow-on. It is not proposed here for want of a use case.
-7. **Does `now` need an injected clock seam?** Section 3.3 records the gap.
-   Nothing in this RFC requires it, because `to_datetime` and `strftime` are
-   pure, but a future slice that wants deterministic time tests will have to
-   answer it.
+7. **Does `now` need an injected clock seam?** Resolved. Section 3.3 records
+   the gap, and nothing in this RFC required the seam, because `to_datetime` and
+   `strftime` are pure. Roadmap item 7.1.1 supplied it: `now()` reads through a
+   `ClockProvider` held by `StdlibConfig`, classified in the
+   [ADR-008](../adr-008-environment-seam-taxonomy.md) addendum for 2026-09-11.
+   The seam is answered there rather than here, and RFC 0020 — which owns
+   `to_datetime` and `strftime` — neither needs it nor depends on 7.1.1.
 
 ## 17. Recommendation
 
 Adopt this RFC as the specification for Netsuke's Ansible-inspired
 standard-library expansion, and schedule the slices in section 14 as focused
-child issues after v0.1.0 final.
+child RFCs after v0.1.0 final.
 
 The case for adopting rather than deferring is that the gaps in section 2 are
 not stylistic. Each one currently resolves to `shell()`, and each such

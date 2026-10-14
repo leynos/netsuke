@@ -49,6 +49,8 @@ raizing = "raising"
 # The tokenizer splits the valid hyphenated prefix in `mis-grouping`.
 # Inline code spans quote identifiers verbatim (e.g. tokio's `flavor`
 # attribute argument), so they are not en-GB prose and must stay exempt.
+# Inline code spans were masked by the previous dictionary snapshot; kept
+# until the shared dictionary rules on it.
 # The scanner tokenizes the `COLOR` suffix in this environment variable
 # separately, so ignore the complete identifier rather than accepting `COLOR`.
 # The shared dictionary corrects this en-GB term to American spelling; this
@@ -93,5 +95,4 @@ exclude = [
   "README.ja.md",
   "README.pt-BR.md",
   "README.zh-CN.md",
-  "scripts/tests/test_typos_rollout_hardening.py",
 ]

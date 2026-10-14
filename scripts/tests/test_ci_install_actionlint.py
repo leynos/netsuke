@@ -191,8 +191,9 @@ def test_missing_pins_are_reported_before_anything_runs(
         script.app([])
 
     assert caught.value.code == 1, "expected: caught.value.code == 1"
-    assert "actionlint-version" in capsys.readouterr().err, (
-        "expected: 'actionlint-version' in capsys.readouterr().err"
+    # The group is the parameter name, so the message names the field beneath it.
+    assert "--release.version" in capsys.readouterr().err, (
+        "expected: '--release.version' in capsys.readouterr().err"
     )
     assert not (tmp_path / "actionlint").exists(), (
         "expected: not (tmp_path / 'actionlint').exists()"
@@ -201,8 +202,13 @@ def test_missing_pins_are_reported_before_anything_runs(
 
 def test_archive_url_follows_the_release_layout() -> None:
     """The URL is the versioned release path with the platform suffix."""
-    url = script.archive_url("https://example.invalid/dl", "1.2.3", "linux_amd64")
+    release = script.Release(
+        version="1.2.3",
+        sha256="0" * 64,
+        release_root="https://example.invalid/dl",
+        platform="linux_amd64",
+    )
 
-    assert url == (
+    assert release.url == (
         "https://example.invalid/dl/v1.2.3/actionlint_1.2.3_linux_amd64.tar.gz"
-    ), url
+    ), release.url

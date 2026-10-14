@@ -17,6 +17,14 @@ cli.flag.fetch_allow_host.help = שמות מארחים המותרים כאשר �
 cli.flag.fetch_block_host.help = שמות מארחים החסומים תמיד, גם אם הותרו במקום אחר.
 cli.flag.fetch_default_deny.help = דחיית כל המארחים כברירת מחדל; התרת הרשימה המוצהרת בלבד.
 cli.flag.trust_project_fetch_policy.help = לאפשר לתצורת הפרויקט להרחיב את ההרשאות של מדיניות fetch.
+
+cli.flag.manifest_evaluation_fuel.help = ‏הגבלת הוראות MiniJinja לכל הערכה של מניפסט.
+cli.flag.manifest_fuel.help = ‏הגבלת הוראות MiniJinja במניפסט אחד.
+cli.flag.manifest_rendered_value_bytes.help = ‏הגבלת מספר הבתים שנכתבים לערך מניפסט אחד.
+cli.flag.manifest_rendered_manifest_bytes.help = ‏הגבלת מספר הבתים הכולל שנכתב במניפסט אחד.
+cli.flag.manifest_source_bytes.help = ‏הגבלת בתי המקור של תבניות ומאקרו הנצרכים לכל מניפסט.
+cli.flag.manifest_foreach_cardinality.help = ‏הגבלת הערכים שמעובדים בהרחבת foreach אחת.
+cli.flag.manifest_expanded_entries.help = ‏הגבלת היעדים והפעולות שמורחבים ממניפסט אחד.
 cli.flag.json.help = פלט JSON הניתן לקריאה במכונה.
 cli.flag.no_input.help = לעולם לא לקרוא קלט אינטראקטיבי.
 cli.flag.color.help = מדיניות הפלט הצבעוני (auto, always, never).
@@ -130,6 +138,9 @@ manifest.yaml.hint.invalid_token = אסימון ה‑YAML אינו תקין או
 manifest.yaml.hint.escape = בצעו מילוט ללוכסנים אחוריים או הסירו רצפי מילוט לא תקינים.
 manifest.env.missing = משתנה סביבה נדרש אינו מוגדר.
 manifest.env.invalid_utf8 = משתנה סביבה מכיל UTF-8 לא תקין.
+manifest.env.blocked = הגישה למשתנה סביבה חסומה.
+manifest.env.args_error = ‏[netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = הערך default של env חייב להיות מחרוזת, התקבל { $kind }.
 manifest.vars.not_object = השדה `vars` של המניפסט חייב להיות מיפוי או אובייקט.
 manifest.vars.reserved_name = מפתח `vars` בשם '{ $name }' במניפסט שמור לפונקציית עזר מובנית של תבניות; שנה את שם המשתנה.
 manifest.read_failed = לא ניתן היה לקרוא את המניפסט מ‑{ $path }.
@@ -276,6 +287,17 @@ stdlib.command.output.mode.streaming = הזרמה
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = ‏[netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = ‏[netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = ‏shell_quote ציפה למחרוזת אך קיבל { $kind }.
+stdlib.shell.quote.control_character = לא ניתן להקיף במרכאות ערך המכיל בייט אפס, החזרת גרר או מעבר שורה.
+stdlib.shell.dialect_invalid = דיאלקט מעטפת לא מוכר { $dialect }; צפוי אחד מבין { $accepted }.
+stdlib.shell.dialect_not_string = האפשרות dialect של shell חייבת להיות מחרוזת, התקבל { $kind }.
+stdlib.shell.join.not_sequence = ‏shell_join ציפה לרצף אך קיבל { $kind }.
+stdlib.shell.join.item_not_string = הפריט { $index } ב-shell_join הוא { $kind }, לא מחרוזת.
+stdlib.shell.positional_option = ‏{ $filter } מקבל את אפשרויותיו כמילת מפתח; כתבו { $example }.
+
 # אבחון עוזר הנתיבים.
 stdlib.path.io.failed = הפעולה „{ $action }” נכשלה עבור { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = הפעולה „{ $action }” נכשלה עבור { $path }: { $detail }.
@@ -331,6 +353,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = אלגוריתם גיבוב שא
 
 # אבחון עוזרי האוספים.
 stdlib.collections.flatten.expected_sequence = ‏flatten ציפה לפריטים של סדרה אך מצא { $kind }.
+stdlib.collections.compact.not_sequence = ‏compact ציפה לסדרה אך מצא { $kind }.
 stdlib.collections.group_by.empty_attribute = ‏group_by מחייב תכונה שאינה ריקה.
 stdlib.collections.group_by.unresolved = ‏group_by לא הצליח לאתר את „{ $attr }” בפריט מסוג { $kind }.
 
@@ -348,14 +371,15 @@ stdlib.time.label.nanoseconds = מיליארדיות שנייה
 
 # אבחון העוזר which.
 stdlib.which.not_found = ‏[netsuke::jinja::which::not_found] הפקודה „{ $command }” לא נמצאה לאחר בדיקת { $count } רשומות ב‑PATH. תצוגה מקדימה: { $preview }
-stdlib.which.not_found.hint.cwd_auto = מקטעים ריקים ב‑PATH מתעלמים מהם; השתמשו ב‑cwd_mode="auto" כדי לכלול את ספריית העבודה.
-stdlib.which.not_found.hint.cwd_always = הגדירו cwd_mode="always" כדי לכלול את הספרייה הנוכחית.
+stdlib.which.not_found.hint.cwd_auto = ‏מצב auto מחפש רק בספריות המצוינות במפורש ב־PATH.
+stdlib.which.not_found.hint.cwd_always = ‏מצב always מחפש תחילה בספרייה הנוכחית ולאחר מכן בספריות המצוינות במפורש ב־PATH.
+stdlib.which.not_found.hint.workspace = ‏כדי לחפש באופן רקורסיבי בעץ סביבת העבודה, השתמשו ב־cwd_mode="workspace-recursive".
 stdlib.which.direct_not_found = ‏[netsuke::jinja::which::not_found] הפקודה „{ $command }” ב‑„{ $path }” חסרה או אינה ניתנת להרצה.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = ‏<ריק>
 stdlib.which.path_entry.non_utf8 = הרשומה מס׳ { $index } ב‑PATH מכילה תווים שאינם UTF-8; ‏Netsuke מחייב נתיבים בקידוד UTF-8.
 stdlib.which.command.empty = ‏which מחייב מחרוזת שאינה ריקה.
-stdlib.which.cwd_mode.invalid = ‏cwd_mode חייב להיות „auto”, „always” או „never”, אך התקבל „{ $mode }”.
+stdlib.which.cwd_mode.invalid = ‏cwd_mode חייב להיות 'auto', 'always', 'never' או 'workspace-recursive'; התקבל '{ $mode }'.
 stdlib.which.cwd.resolve_failed = לא ניתן היה לקבוע את הספרייה הנוכחית: { $details }.
 stdlib.which.cwd.non_utf8 = הספרייה הנוכחית מכילה חלקים שאינם UTF-8.
 stdlib.which.canonicalize_failed = לא ניתן היה לבצע קנוניזציה ל‑„{ $path }”: { $details }.
@@ -432,3 +456,7 @@ example.errors_found = { $count ->
     [many] נמצאו { $count } שגיאות.
    *[other] נמצאו { $count } שגיאות.
 }
+manifest.budget.exceeded = ‏תקציב המשאבים של המניפסט אזל במהלך { $stage } לאחר שהגיע ל־{ $limit }.
+
+cli.flag.env_allow_var.help = משתנה סביבה שמותר למסייע env() של המניפסט.
+cli.flag.env_block_var.help = משתנה סביבה שחסום למסייע env() של המניפסט.

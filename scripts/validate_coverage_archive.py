@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Validate and safely materialize a hostile LCOV artifact ZIP archive.
+"""Inspect and safely materialize a hostile LCOV artifact ZIP archive.
 
-The trusted workflow downloads an untrusted artifact without decompression.
-This command validates the archive directory and ZIP metadata before writing
-the sole validated ``lcov.info`` member to a trusted output directory.
+This standalone maintenance command validates a supplied archive directory and
+ZIP metadata before writing the sole validated ``lcov.info`` member to a
+controlled output directory.
 """
 
 import argparse
