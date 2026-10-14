@@ -102,7 +102,9 @@ fn isolated_power_shell_entries_use_encoded_child_processes() {
         .map(|[low, high]| u16::from(*low) | (u16::from(*high) << 8))
         .collect::<Vec<_>>();
     let child = String::from_utf16(&units).expect("child payload should be UTF-16LE");
-    assert!(child.starts_with("$ErrorActionPreference = 'Stop'\n$LASTEXITCODE = 0\n"));
+    assert!(child.starts_with(
+        "$ErrorActionPreference = 'Continue'\n$PSDefaultParameterValues['*:ErrorAction'] = 'Stop'\n$LASTEXITCODE = 0\n"
+    ));
     assert!(child.contains("$env:VALUE = 'first'"));
     assert!(child.ends_with("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"));
 }

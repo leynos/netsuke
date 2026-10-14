@@ -44,8 +44,10 @@ in Netsuke.
   and `shared` retain shared state.
 - Isolation starts every entry from the action's working directory and
   environment. State changes made inside an entry do not reach the next entry.
-- Entries remain ordered and fail-fast. A successful `exit` or direct `exec`
-  ends only its isolated entry; a non-zero exit prevents later entries.
+- Entries remain ordered and fail-fast. On POSIX and Bash, a successful
+  `exit` or direct `exec` ends only its isolated entry; a successful PowerShell
+  `exit` ends only its child process. A non-zero exit prevents later entries,
+  and `exec` has no POSIX meaning on the PowerShell route.
 - A mode is invalid beside `script` or `rule`, without a recipe, or as
   `isolated` on a scalar command.
 
@@ -111,10 +113,14 @@ emitted only for failed isolated entries. The shared wrapper and its output
 remain unchanged.
 
 Each PowerShell entry runs in a new child process from the parent action's
-initial directory and environment. The child sets `$ErrorActionPreference` to
-`Stop`, resets `$LASTEXITCODE`, executes one entry, and propagates a non-zero
-native exit. A successful `exit` ends only that child and the parent proceeds
-to the next entry. Native stderr remains connected to Ninja's stderr.
+initial directory and environment. The child leaves `$ErrorActionPreference` at
+`Continue` so native stderr from a successful command remains informational,
+and sets `$PSDefaultParameterValues['*:ErrorAction']` to `Stop` so cmdlet
+errors still fail fast. This policy differs from the shared route to avoid
+treating successful native stderr as a PowerShell failure. The parent also
+allows native stderr through while checking each child's exit status. A
+successful `exit` ends only that child and the parent proceeds to the next
+entry. Native stderr remains connected to Ninja's stderr.
 
 This runtime baseline is distinct from manifest-load `env()` access, which
 remains governed by [ADR-026](adr-026-manifest-environment-access-policy.md);

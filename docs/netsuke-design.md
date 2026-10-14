@@ -315,15 +315,17 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   variables carry forward. Isolated groups run in subshells from the action
   baseline. The `eval` boundary keeps an entry's inline comments or trailing
   control operators from consuming the generated group terminator. Entries
-  remain ordered and fail fast. In isolated mode, a successful `exit` or direct
-  `exec` ends only that entry; in shared mode it ends the remaining chain. A
-  failed POSIX/Bash entry emits a bounded action/entry marker for the runner to
-  include in the failure diagnostic. The resulting POSIX command must be
-  parsable by [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). On
-  Windows with the default PowerShell route, shared lists use one encoded
-  script, while isolated lists launch one new encoded `powershell.exe` process
-  per entry. Both modes check `$LASTEXITCODE` and stop on a non-zero status. An
-  entry remains opaque recipe text, so multiple native commands separated by
+  remain ordered and fail fast. On POSIX and Bash, a successful `exit` or direct
+  `exec` ends only an isolated entry; in shared mode it ends the remaining
+  chain. A successful PowerShell `exit` ends its process, while `exec` has no
+  POSIX meaning on that route. A failed POSIX/Bash entry emits a bounded
+  action/entry marker for the runner to include in the failure diagnostic. The
+  resulting POSIX command must be parsable by
+  [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). On Windows with
+  the default PowerShell route, shared lists use one encoded script, while
+  isolated lists launch one new encoded `powershell.exe` process per entry.
+  Both modes check `$LASTEXITCODE` and stop on a non-zero status. An entry
+  remains opaque recipe text, so multiple native commands separated by
   semicolons inside one entry are not checked individually. An empty command
   list is rejected during manifest deserialization. Plain command strings
   remain shell text; authors should use structured recipes or explicit quoting
@@ -2502,14 +2504,18 @@ The PowerShell route gives each scalar command and script a fresh process. A
 shared command list uses one process and checks `$LASTEXITCODE` immediately
 after each generated list entry. An isolated list starts a fresh
 `powershell.exe` per entry from the action's working-directory and environment
-baseline. Both modes stop on the first non-zero status; a successful `exit` or
-direct `exec` ends only an isolated entry, while it ends the shared chain.
-Terminating PowerShell errors also fail the recipe. Multiple native commands
-inside one entry are not individually instrumented. POSIX and Bash use the same
-brace-group and `eval` wrapper: shared groups carry current-shell state, while
-isolated groups run in subshells. The background-job and `exec` validation
-rules apply to both POSIX modes. Target discovery and generation do not execute
-recipes, so they do not require the optional Bash runtime.
+baseline. Both modes stop on the first non-zero status. A successful PowerShell
+`exit` ends only an isolated child, while it ends the shared process. On POSIX
+and Bash, a successful `exit` or direct `exec` ends only an isolated entry,
+while it ends the shared chain; `exec` has no POSIX meaning on the PowerShell
+route. Shared PowerShell recipes retain their existing `Stop` preference;
+isolated entries keep cmdlet errors fail-fast while native stderr remains
+informational. Multiple native commands inside one entry are not individually
+instrumented. POSIX and Bash use the same brace-group and `eval` wrapper:
+shared groups carry current-shell state, while isolated groups run in
+subshells. The background-job and `exec` validation rules apply to both POSIX
+modes. Target discovery and generation do not execute recipes, so they do not
+require the optional Bash runtime.
 
 PowerShell recipes that fit within the 32,766-character Windows command-line
 limit use `-EncodedCommand`. Each isolated child command line is checked

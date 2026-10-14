@@ -62,7 +62,11 @@ fn isolated_power_shell_lists_use_fresh_encoded_children() -> Result<()> {
     .write_into(&mut rendered)?;
 
     let parent = decode_power_shell_payload(direct_command_payload(&rendered)?)?;
-    ensure!(parent.starts_with("$ErrorActionPreference = 'Stop'\n$LASTEXITCODE = 0\n"));
+    ensure!(parent.starts_with("$ErrorActionPreference = 'Continue'\n$LASTEXITCODE = 0\n"));
+    ensure!(
+        parent.contains("$LASTEXITCODE = 0\n& $netsukeChildExecutable "),
+        "the parent must reset native status before launching each child"
+    );
     ensure!(parent.contains("$netsukeChildExecutable = \"$PSHOME\\powershell.exe\""));
     ensure!(
         parent
@@ -96,7 +100,9 @@ fn isolated_power_shell_lists_use_fresh_encoded_children() -> Result<()> {
     let second = children
         .get(1)
         .context("second isolated child should exist")?;
-    ensure!(first.starts_with("$ErrorActionPreference = 'Stop'\n$LASTEXITCODE = 0\n"));
+    ensure!(first.starts_with(
+        "$ErrorActionPreference = 'Continue'\n$PSDefaultParameterValues['*:ErrorAction'] = 'Stop'\n$LASTEXITCODE = 0\n"
+    ));
     ensure!(first.contains("Set-Location nested"));
     ensure!(second.contains("Write-Output second"));
     ensure!(second.ends_with("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"));

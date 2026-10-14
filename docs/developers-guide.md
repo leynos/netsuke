@@ -793,21 +793,24 @@ The lowering stages have deliberately separate responsibilities:
   own `$PSCommandPath` in a `finally` block after the recipe succeeds or fails;
   query-only generation emits the bindings without creating files. Shared lists
   become one PowerShell script that checks `$LASTEXITCODE` after each entry and
-  carries PowerShell state forward. Isolated lists encode each entry with the
-  same error and native-exit policy, launch a fresh `"$PSHOME\powershell.exe"`
-  from the unchanged parent baseline, and stop when a child returns non-zero.
+  carries PowerShell state forward. Isolated lists encode each entry with a
+  cmdlet `ErrorAction` default of `Stop` and native stderr pass-through, then
+  launch a fresh `"$PSHOME\powershell.exe"` from the unchanged parent baseline
+  and stop when a child returns non-zero. The parent also passes through native
+  stderr so a successful child that reports diagnostics does not stop dispatch.
   Netsuke rejects statically oversized child command lines during generation;
   the parent also checks the expanded `$PSHOME` executable path before launch
   and reports the entry and final length if it exceeds 32,766 characters.
   Multiple native commands inside one entry are not individually instrumented.
-  Terminating PowerShell errors also stop the list. The POSIX command-list
-  analyser is deliberately not applied to this route; PowerShell does not emit
-  POSIX failure markers. The runner resolves `NETSUKE_WINDOWS_SHELL` and
-  preflights `bash.exe` only when the optional compatibility route is selected;
-  `help targets` stays outside this execution boundary.
+  Cmdlet errors and non-zero native exits stop isolated entries; native stderr
+  alone does not. The POSIX command-list analyser is deliberately not applied
+  to this route; PowerShell does not emit POSIX failure markers. The runner
+  resolves `NETSUKE_WINDOWS_SHELL` and preflights `bash.exe` only when the
+  optional compatibility route is selected; `help targets` stays outside this
+  execution boundary.
 - The brace-group, `eval`, background-job, and `exec` validation rules described
   above apply only to Unix and the explicit Windows Bash compatibility route.
-  PowerShell uses its per-entry `$LASTEXITCODE` and terminating-error checks
+  PowerShell uses its per-entry `$LASTEXITCODE` and cmdlet-error policy
   instead. In shell-dollar documentation, `$$` therefore means a process
   identifier only for POSIX/Bash; PowerShell's `$$` automatic variable contains
   the last token received by the session.

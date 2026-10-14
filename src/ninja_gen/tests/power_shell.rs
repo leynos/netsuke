@@ -174,6 +174,10 @@ fn power_shell_command_lists_preserve_state_and_stop_on_native_failure() -> Resu
     .write_into(&mut rendered)?;
     let generated = GeneratedNinja::new(&rendered);
     ensure!(
+        generated.recipe_contains(RecipeNeedle::new("$ErrorActionPreference = 'Stop'"))?,
+        "shared PowerShell output must retain its existing error policy"
+    );
+    ensure!(
         generated.recipe_contains(RecipeNeedle::new("$env:NETSUKE_ORDER = 'first'"))?,
         "the decoded recipe should preserve command-list state"
     );
