@@ -32,6 +32,7 @@ def _sccache(cmd_mox: CmdMox, *, json_exit: int = 0) -> list[list[str]]:
     calls: list[list[str]] = []
 
     def handle(invocation: Invocation) -> tuple[str, str, int]:
+        """Record the call and fail only the JSON-format report."""
         calls.append(list(invocation.args))
         if "--stats-format=json" in invocation.args:
             return (JSON_STATS, "", json_exit)
@@ -121,7 +122,7 @@ def test_names_the_backend_the_lane_selected(
         "## Earlier\n### sccache\n\n- backend: ubicloud\n\n```text\n"
         + TEXT_STATS
         + "```\n"
-    )
+    ), "the backend line must precede the statistics block"
 
 
 def test_a_lane_without_a_backend_gets_no_backend_line(

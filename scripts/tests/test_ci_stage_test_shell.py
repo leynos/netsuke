@@ -48,6 +48,7 @@ def _apt_get(cmd_mox: CmdMox, *, install_exit: int = 0) -> list[list[str]]:
     calls: list[list[str]] = []
 
     def handle(invocation: Invocation) -> tuple[str, str, int]:
+        """Record the call and fail only the ``install`` subcommand."""
         calls.append(list(invocation.args))
         exit_code = install_exit if "install" in invocation.args else 0
         return ("", "E: install failed\n" if exit_code else "", exit_code)
