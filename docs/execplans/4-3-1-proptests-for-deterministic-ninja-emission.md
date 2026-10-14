@@ -24,9 +24,29 @@ the allowance is deliberately left unwidened because this suite's
 counter-example seeds are lost when the runner kills a process. CI also caught
 a Windows-only defect in this branch's own test, now fixed in `1e1508ca` and
 confirmed fixed by the Windows job at `c517f6fd`; the Linux gates could not
-have seen it. `EP-M3` is the next milestone and is not yet started. This
-revision follows a design review, a rebase onto `origin/main`, that Windows
-repair, and gate pass #5.
+have seen it.
+
+`EP-M3` has not started, and its preparation produced three corrections before
+any of it was written. Two were defects in this plan and are recorded in
+`Surprises & discoveries`: the planned `determinism/` property suites carried no
+`proptests` or `property_tests` module segment, so `make proptest` would have
+selected **none** of them while exiting 0; and the IR artefact list named a
+sibling layout the module-layout contract rejects. The third was a delegated
+implementation packet whose recommendation was falsified by executing that
+contract: its individual claims verified, but it applied them to the wrong
+artefact and contradicted two of this plan's own acceptance criteria. The plan
+was followed over the packet, and the packet has been rewritten.
+
+One item is genuinely outstanding and is recorded as a blocker rather than a
+pass: the milestone `coderabbit review --agent` is **unobtained**. Seven
+consecutive attempts across two sessions and three revisions (`8fc7a2fa`,
+`bc101f4c`, `1d46fb20`) failed service-side with
+`"Failed to start review. Please try again."`, each in 7-8 s with the `--usage`
+counter unchanged, producing zero findings at any revision. This branch has no
+current CodeRabbit assessment, and `docs/roadmap.md:595` shows the house
+pattern treats such a review as completion evidence — a second reason roadmap
+item 4.3.1 stays unchecked. This revision follows a design review, a rebase onto
+`origin/main`, that Windows repair, and gate pass #5.
 
 One item is genuinely outstanding and is recorded as a blocker rather than a
 pass: the milestone `coderabbit review --agent` is **unobtained**. Five
@@ -371,8 +391,8 @@ FV-DET       -> ADR-NNN     -> EP-M5 -> tests::ninja_gen_hashmap_boundary::no_ha
 FV-DET       -> FV-DET      -> EP-M6 -> ir::action_hash_property_tests::equal_actions_hash_equally
 FV-CONTRACT  -> ADR-NNN     -> EP-M6 -> tests::ninja_determinism_process::two_runs_emit_identical_bytes
 RM-4.3.1.a   -> ADR-NNN     -> EP-M6 -> ninja_gen::determinism::declaration::declaration_order_does_not_change_emission
-RM-4.2.1.dup -> ADR-004     -> EP-M7 -> ir::graph_property_tests::duplicate_outputs_are_rejected_at_larger_n
-RM-4.2.1.cyc -> ADR-004     -> EP-M7 -> ir::graph_property_tests::cycles_are_rejected_at_larger_n
+RM-4.2.1.dup -> ADR-004     -> EP-M7 -> ir::graph::property_tests::duplicates::duplicate_outputs_are_rejected_at_larger_n
+RM-4.2.1.cyc -> ADR-004     -> EP-M7 -> ir::graph::property_tests::cycles::cycles_are_rejected_at_larger_n
 FV-CONTRACT  -> ADR-NNN     -> EP-M1 -> docs/adr-030-ninja-emission-determinism-contract.md
 ```
 
@@ -1047,7 +1067,7 @@ every manifest whose outputs are pairwise distinct, lowering succeeds.
   collision mode (`across`, `within`, `none`).
 - **Oracle:** the injected collision is known by construction; the expected
   variant and path are computed without calling `find_duplicates`.
-- **Artefact:** `src/ir/graph_property_tests/duplicates.rs`.
+- **Artefact:** `src/ir/graph/property_tests/duplicates.rs`.
 - **Non-vacuity:**
   - *Covers.* All three modes fire. The `none` arm must assert a *successful*
     lowering, not merely a non-`DuplicateOutput` error — otherwise a lowering
@@ -1085,7 +1105,7 @@ cycle, interior multiset, stable start node — is 4.2.2's, proved by Kani over
   outside the namespace.
 - **Oracle:** cyclicity known from the generator's index discipline, not from
   the production detector.
-- **Artefact:** `src/ir/graph_property_tests/cycles.rs`.
+- **Artefact:** `src/ir/graph/property_tests/cycles.rs`.
 - **Non-vacuity:**
   - *Covers.* Self-edges; two-node cycles; **cycles of length at least 8** —
     the range Kani cannot reach and the entire point of the obligation; acyclic
@@ -1347,8 +1367,12 @@ Three preparatory pieces, none of which changes behaviour:
   include `cli/discovery/helper_proptests.rs`, `cli/merge/logging_proptests.rs`,
   `cli/discovery/layers/property_tests.rs` (this one is `property_tests`), and
   `hex/property_tests.rs`; the planned `src/ir/action_hash_property_tests.rs`
-  and `src/ir/graph_property_tests/` use `property_tests`. The selector must
-  therefore carry **both** suffixes, each in its own anchored alternation.
+  and `src/ir/graph/property_tests/` use `property_tests`. The selector must
+  therefore carry **both** suffixes, each in its own anchored alternation. Note
+  that carrying the right suffix in the *selector* is not sufficient: the new
+  suites must also carry it in their own **module paths**, or the selector
+  matches nothing while still exiting 0. That is the defect recorded in
+  `Surprises & discoveries` for the `determinism/` tree.
 
   Use an anchored form, not a bare one. The first draft's
   `test(determinism_property_tests)` missed its own
@@ -1628,10 +1652,19 @@ Strategies and library-side properties, all `#[cfg(test)]`, wired from
 - `src/ninja_gen/determinism/mod.rs`
 - `src/ninja_gen/determinism/strategy/mod.rs`, `graph.rs`, `manifest.rs`,
   `classification.rs`
-- `src/ninja_gen/determinism/path_key.rs`, `no_loss.rs`, `order.rs`,
-  `defaults.rs`, `declaration.rs`, `ninja_oracle.rs`
+- `src/ninja_gen/determinism/property_tests/mod.rs`, `path_key.rs`,
+  `no_loss.rs`, `order.rs`, `defaults.rs`, `declaration.rs`, `ninja_oracle.rs`,
+  `strategy/mod.rs`, `strategy/graph.rs`
 - `src/ir/action_hash_property_tests.rs`
-- `src/ir/graph_property_tests/mod.rs`, `duplicates.rs`, `cycles.rs`
+- `src/ir/graph/property_tests/mod.rs`, `duplicates.rs`, `cycles.rs`
+
+The intervening `property_tests` segment on the third line is **load-bearing,
+not stylistic**: `PROPTEST_FILTER` (`Makefile:264`) keys on a module segment
+ending in `proptests` or `property_tests`, so without it `make proptest`
+selects **none** of the planned `determinism` suites while still exiting 0. The
+same segment is also what the module-layout contract wants, so the two
+constraints agree on one shape. See the corresponding entry in
+`Surprises & discoveries`.
 
 Integration tests (no strategy dependency, so `tests/` placement is sound):
 
@@ -2652,13 +2685,23 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   concluded **success**, all five jobs. Its `build-test` job (`115666757113`,
   03:35:42 → 03:56:57; log at `/tmp/ci-build-test-c517f6fd.log`) shows
   `cli_configuration_fixture_compiles` **PASS [66.986s]** and
-  `production_build_module_slice_has_expected_boundary` **PASS
-  [37.893s]`, against the 300 s cap one of them exhausted locally at that very revision. `Release
-  Dry
-  Run` (`38507024993`) also concluded success. So the local exhaustion is environmental by direct measurement, not by inference, and the refusal to widen the allowance is vindicated a second time. One detail cuts against complacency while supporting the disposition: `cli_configuration_fixture_compiles` is **itself `SLOW
-  [>
-  60.000s]` in CI** at 66.986 s. The test is genuinely expensive everywhere; what differs is only the headroom the host has. CI leaves it 4.5x, a contended host with an unreachable cache leaves it none — so local timeouts on this fixture should be *expected* to recur, and CI stays the standing oracle rather than a one-time tiebreak. A direct probe recorded separately confirms the mechanism: given a 1500 s allowance the same test passes in **977 s wall**, split as 4 m 28 s to compile the binary plus **709 s inside the test body**, where it spawns a child `cargo
-  check` against a `target/.tmp…/` tree that is **cold on every run** and then queues behind 20+ peer crates for the same four-slot admission pool.
+  `production_build_module_slice_has_expected_boundary` **PASS [37.893s]**,
+  against the 300 s cap one of them exhausted locally at that very revision.
+  `Release Dry Run` (`38507024993`) also concluded success. So the local
+  exhaustion is environmental by direct measurement, not by inference, and the
+  refusal to widen the allowance is vindicated a second time. One detail cuts
+  against complacency while supporting the disposition:
+  `cli_configuration_fixture_compiles` is **itself `SLOW [> 60.000s]` in CI**
+  at 66.986 s. The test is genuinely expensive everywhere; what differs is only
+  the headroom the host has. CI leaves it 4.5x, a contended host with an
+  unreachable cache leaves it none — so local timeouts on this fixture should
+  be *expected* to recur, and CI stays the standing oracle rather than a
+  one-time tiebreak. A direct probe recorded separately confirms the mechanism:
+  given a 1500 s allowance the same test passes in **977 s wall**, split as 4 m
+  28 s to compile the binary plus **709 s inside the test body**, where it
+  spawns a child `cargo check` against a `target/.tmp…/` tree that is **cold on
+  every run** and then queues behind 20+ peer crates for the same four-slot
+  admission pool.
 - [x] (2026-10-14T00:00:00Z) **A second CI run, at the tip, is green too — and
   the spread across three revisions is itself the finding.** Runs `38509361585`
   (`CI`), `38509361371` (`Release Dry Run`) and `38509361348`
@@ -2698,8 +2741,8 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 ## Surprises & discoveries
 
 - (2026-10-14) **`mdtablefix --wrap` can need two passes to converge, so one
-  canonicalisation is not enough to clear `make check-fmt`.** After a hand-edit
-  to a long paragraph in this plan, piping a single canonicalisation straight
+  canonicalization is not enough to clear `make check-fmt`.** After a hand-edit
+  to a long paragraph in this plan, piping a single canonicalization straight
   back into the file still failed `--check` with a `+3 -17` line delta. Running
   mdtablefix over *its own output* changed it further; only that second output
   was a fixed point. The wrap and join steps interact — re-flowing a line
@@ -2708,6 +2751,22 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   copy back only once `diff` is empty. This is worth knowing because the
   failure mode looks like "the gate is flaky" when the tool is in fact
   deterministic and the repair was simply incomplete.
+
+- (2026-10-14) **Convergence is necessary but not sufficient: `mdtablefix` can
+  produce malformed Markdown that is its own fixed point, and `check-fmt`
+  accepts it.** The two-pass loop above only proves the canonical form is
+  stable. It does not prove the canonical form is *correct*. While repairing
+  this plan, one paragraph was left carrying a stray backtick after
+  `[37.893s]`; mdtablefix re-flowed it into a shape with two long lines and
+  three MD038 violations, and re-running mdtablefix over that output returned
+  it unchanged. `mdtablefix --check` exited 0 on the damaged file, so
+  `make check-fmt` was **green on a file `make markdownlint` rejected**. The
+  stray backtick was the root cause: every backtick in the paragraph is a
+  single-backtick run, so one unpaired one flips the parity of *every* span
+  after it, and the tool paired the wrong ones while re-flowing. The general
+  lesson is that a formatter's fixed points are not a correctness oracle for
+  Markdown; the two gates are not redundant, and only `markdownlint` catches
+  this class. Run both.
 
 - (2026-10-14) **A serialized test group turns a compile-cache outage into a
   timeout, and it does so at whatever test happens to be holding the slot.** The
@@ -2780,6 +2839,60 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   still resolved correctly at the new path. That is the useful signal: the
   migration moved files without reflowing them, so a citation whose *path* is
   stale may still have an accurate *line*.
+
+- (2026-10-14) **The planned `determinism/` property suites would not have been
+  run by `make proptest` at all, and this was found only by evaluating the
+  filter against the planned *test names* rather than reading it.** This is a
+  third defect, independent of the two below, and the most dangerous of the
+  three because it fails *silently*. `PROPTEST_FILTER` (`Makefile:264`) selects
+  a module *segment* ending in `proptests` or `property_tests`. The plan's
+  property homes are `src/ninja_gen/determinism/path_key.rs`, `no_loss.rs`,
+  `order.rs`, `defaults.rs`, `declaration.rs`, and `ninja_oracle.rs` — **not
+  one of which ends in either suffix**. Evaluated against the real filter,
+  `ninja_gen::determinism::path_key::path_key_is_permutation_invariant` and its
+  six siblings each match **nothing**:
+
+  ```plaintext
+  plan as written : 0 of 7 planned suites selected
+  with one intervening `property_tests` segment : 7 of 7 selected
+  ```
+
+  The repair is to interpolate a single `property_tests` segment —
+  `src/ninja_gen/determinism/property_tests/{…}.rs` — and it *also* passes the
+  module-layout contract, so both constraints agree on one shape. What makes
+  this worth recording beyond the fix is the failure mode: `make proptest`
+  would have exited **0** while running none of the new properties, and `EP-M4`
+  through `EP-M6` all carry the acceptance line "`make proptest` passes". The
+  plan already warns about exactly this class at line 1373 — "nextest exits 0
+  while selecting nothing, so the target would look green while running no
+  property test" — and it re-entered through *file naming* rather than selector
+  spelling, which is the route the earlier analysis did not consider. The
+  transferable lesson is that a selector's coverage must be checked against the
+  names the new tests will actually carry, not against the selector's own
+  syntax.
+
+- (2026-10-14) **A delegated implementation packet was falsified by executing
+  the repository's contracts, and the falsification is more useful than the
+  packet.** The packet prepared for `EP-M3` recommended locating the shared
+  strategy at `src/ir/graph/property_tests/`. That recommendation was the
+  correct repair for the *wrong artefact*: it took `EP-M7`'s IR path,
+  discovered by probe that it fails the layout contract, and prescribed the
+  nested form — which the plan had **already** recorded here at the entry
+  below. It then reused that path as the home for `EP-M3`'s shared generator,
+  which the plan places at `src/ninja_gen/determinism/strategy/` (lines 1499,
+  1628-1631) and which **passes** the contract unaided. Following it would have
+  moved a generator consumed by the `ninja_gen` suites into an unrelated domain
+  module. The packet also contradicted two plan requirements outright: it
+  directed that `EP-M3` add no property, where the acceptance requires the
+  strategy be "exercised by a smoke property" and that classification counts
+  reproduce `EP-M0` question 1; and it specified the compact `Debug` as counts
+  plus the order permutation, where the plan requires "counts per class **plus
+  a stable digest**". Both contradictions were resolved in the plan's favour,
+  the plan being the approved artefact and the packet a scratch one. The
+  generalizable point is that a packet's *verified* premises can still support
+  a *wrong* conclusion — every individual claim in it checked out, and the
+  error was in which artefact the claim was applied to. Verifying a delegated
+  packet's facts is not the same as verifying its recommendation.
 
 - (2026-10-14) **`EP-M3`'s artefact list names a module layout this repository
   does not use.** The plan specifies
