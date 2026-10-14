@@ -252,11 +252,11 @@ fn accepts_a_written_row_linking_to_an_existing_parsed_child() -> Result<()> {
     let root = camino::Utf8Path::from_path(temporary.path()).context("UTF-8 fixture root")?;
     let dir = cap_std::fs_utf8::Dir::open_ambient_dir(root, cap_std::ambient_authority())?;
     dir.create_dir_all("docs/rfcs")?;
-    dir.write("docs/rfcs/0013-child.md", "fixture")?;
+    dir.write("docs/rfcs/rfc-0013-child.md", "fixture")?;
     let mut world = fixture::world();
     world
         .child_paths
-        .insert("0013".into(), "0013-child.md#registry".into());
+        .insert("0013".into(), "rfc-0013-child.md#registry".into());
     check_status(&Repo::fixture(root)?, &world)?;
     check_schedule(&world)
 }
@@ -294,7 +294,7 @@ fn rejects_inconsistent_clause_sets(
         mutated_child,
     )?;
     let error = check_discharges(&Repo::fixture(root)?, &world).expect_err("clause mismatch");
-    ensure!(error.to_string().contains("docs/rfcs/0013-child.md"));
+    ensure!(error.to_string().contains("docs/rfcs/rfc-0013-child.md"));
     ensure!(error.to_string().contains(diagnostic), "{error:#}");
     Ok(())
 }
@@ -305,9 +305,9 @@ fn inter_document_check_reports_corpus_failures() -> Result<()> {
     let root = camino::Utf8Path::from_path(temporary.path()).context("UTF-8 fixture root")?;
     let dir = cap_std::fs_utf8::Dir::open_ambient_dir(root, cap_std::ambient_authority())?;
     dir.create_dir_all("docs/rfcs")?;
-    dir.write("docs/rfcs/0013-child.md", "[missing](missing.md)")?;
+    dir.write("docs/rfcs/rfc-0013-child.md", "[missing](missing.md)")?;
     let error = inter_document_links_resolve(&Repo::fixture(root)?).expect_err("missing document");
     ensure!(error.to_string().contains("dangling inter-document links"));
-    ensure!(error.to_string().contains("docs/rfcs/0013-child.md:1"));
+    ensure!(error.to_string().contains("docs/rfcs/rfc-0013-child.md:1"));
     Ok(())
 }

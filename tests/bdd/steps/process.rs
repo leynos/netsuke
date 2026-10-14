@@ -326,11 +326,14 @@ fn run_graph(world: &TestWorld) -> Result<()> {
 // Then steps
 // ---------------------------------------------------------------------------
 
+/// Require command success and show captured output when it fails.
 #[then("the command should succeed")]
 fn command_should_succeed(world: &TestWorld) -> Result<()> {
+    let stderr = world.command_stderr.get().unwrap_or_default();
+    let stdout = world.command_stdout.get().unwrap_or_default();
     ensure!(
         world.run_status.get() == Some(true),
-        "command run status should be success"
+        "command run status should be success; stderr:\n{stderr}\nstdout:\n{stdout}"
     );
     Ok(())
 }

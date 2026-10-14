@@ -1,11 +1,13 @@
 //! Shell-safe rendering for ordered Ninja command-list entries.
 
-use sha2::{Digest, Sha256};
+use crate::ast::CommandIsolation;
 
-use crate::hex::to_lower_hex;
-
+mod entry;
+mod render;
 mod scanner;
 
+use entry::{action_identity, shell_single_quote};
+pub(super) use render::command_list_shell_text;
 use scanner::background_operator_count;
 
 /// Prefix used to carry bounded list-entry failure attribution through Ninja.
@@ -79,8 +81,9 @@ pub(super) fn command_list_entry_error(
 
 /// Render one entry so it fails atomically without exposing command content.
 ///
-/// Brace groups deliberately run in the current shell, so the EXIT trap must
-/// be cleared on both the success and failure paths before leaving the group.
+/// Shared mode runs the brace group in the current shell; isolated mode places
+/// that same group inside a subshell. The EXIT trap must be cleared on both the
+/// success and failure paths before leaving the entry.
 /// `$!` records only the latest background PID: validation rejects entries
 /// with multiple or dynamically generated background jobs before rendering.
 /// The `_netsuke_*` variables are reserved because user assignments to them
@@ -92,15 +95,33 @@ pub(super) fn command_list_entry(
     command: CommandListEntry<'_>,
     action_id: ActionId<'_>,
     entry_index: usize,
+    isolation: CommandIsolation,
 ) -> String {
     let identity = action_identity(action_id);
     let context = format!("{COMMAND_LIST_FAILURE_PREFIX}{identity}, entry {entry_index}");
     let evaluator = command_evaluator(command);
+    let failure_trap = match isolation {
+        CommandIsolation::Shared => format!(
+            concat!(
+                "trap '_netsuke_command_status=$?; printf \"%s\\n\" \"{}\" >&2; ",
+                "trap - EXIT; exit \"$_netsuke_command_status\"' EXIT"
+            ),
+            context
+        ),
+        CommandIsolation::Isolated => format!(
+            concat!(
+                "trap '_netsuke_command_status=$?; ",
+                "if [ \"$_netsuke_command_status\" -ne 0 ]; then ",
+                "printf \"%s\\n\" \"{}\" >&2; fi; ",
+                "trap - EXIT; exit \"$_netsuke_command_status\"' EXIT"
+            ),
+            context
+        ),
+    };
     format!(
         concat!(
             "{{ _netsuke_background_before=${{!:-}}; _netsuke_exec_succeeded=0; ",
-            "trap '_netsuke_command_status=$?; printf \"%s\\n\" \"{}\" >&2; ",
-            "trap - EXIT; exit \"$_netsuke_command_status\"' EXIT; ",
+            "{}; ",
             "if {}; then _netsuke_command_status=0;{} else _netsuke_command_status=$?; fi; ",
             "_netsuke_background_after=${{!:-}}; ",
             "if [ -n \"$_netsuke_background_after\" ] && ",
@@ -114,7 +135,7 @@ pub(super) fn command_list_entry(
             "else trap - EXIT; printf '%s\\n' '{}' >&2; ",
             "exit \"$_netsuke_command_status\"; fi; }}"
         ),
-        context, evaluator.shell_expression, evaluator.exec_success_fragment, context,
+        failure_trap, evaluator.shell_expression, evaluator.exec_success_fragment, context,
     )
 }
 
@@ -369,26 +390,6 @@ impl CommandListEntry<'_> {
     fn has_ninja_control_character(self) -> bool {
         self.0.chars().any(char::is_control)
     }
-}
-
-/// Return a fixed-width fingerprint for an action identifier.
-///
-/// IR-generated identifiers are already hashes, but hashing again prevents a
-/// programmatically supplied identifier from disclosing arbitrary content.
-fn action_identity(action_id: ActionId<'_>) -> String {
-    to_lower_hex(&Sha256::digest(action_id.0.as_bytes()))
-}
-
-/// Quote `value` as one literal POSIX shell argument.
-///
-/// The command-list renderer passes each entry to `eval` so an inline comment
-/// or trailing control operator cannot consume the brace-group terminator.
-fn shell_single_quote(command: CommandListEntry<'_>) -> String {
-    // `shell_quote::QuoteRefExt::quoted(Sh)` produces minimally quoted
-    // fragments, while the `eval` wrapper requires this canonical enclosing
-    // form to preserve its generated Ninja text and delimiter contract.
-    let escaped = command.0.replace('\'', r"'\''");
-    format!("'{escaped}'")
 }
 
 #[cfg(test)]

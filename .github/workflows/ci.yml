@@ -9,8 +9,9 @@ on:
   push:
     branches: [main]
   # Nightly at 04:41 UTC, clear of the 03:05 mutation-testing run, so every
-  # Kani harness is verified even on a day with no push to `main`. Only
-  # `kani-smoke` runs on it; see docs/adr-039-change-scoped-kani-gate.md.
+  # Kani harness is verified even on a day with no push to `main`. The
+  # `kani-smoke` job is the only one it runs. See
+  # docs/adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md.
   schedule:
     - cron: '41 4 * * *'
   workflow_dispatch:
@@ -56,20 +57,24 @@ jobs:
     # a second condition. Keep the continuation at this indent: a deeper
     # one keeps its break inside the folded scalar and puts a newline in
     # the expression, which GitHub evaluates anyway.
+    # Dependabot pull requests run on the hosted pool too (free on a public
+    # repository). The author is tested, not the actor, which changes when
+    # someone else pushes to the branch.
     runs-on: >-
-      ${{ github.event.pull_request.head.repo.fork
+      ${{ (github.event.pull_request.head.repo.fork
+      || github.event.pull_request.user.login == 'dependabot[bot]')
       && 'ubuntu-latest' || 'ubicloud-standard-4-ubuntu-2404' }}
     # The nightly schedule exists for the Kani proofs alone.
     if: github.event_name != 'schedule'
-    # Ninety minutes, not sixty. The coverage step below passes
+    # One hundred minutes, not ninety. The coverage step below passes
     # `doctests: 'true'`, so the shared action runs `cargo llvm-cov nextest`
-    # and then an uninstrumented `cargo test --doc`, each arming the 1,800 s
+    # and then an uninstrumented `cargo test --doc`, each arming the 1,980 s
     # cargo watchdog of its own. The ceiling has to contain both windows, the
-    # work outside them and the margin above that sum, which is 5,400 s; a
-    # sixty-minute ceiling would cancel the job at the moment the watchdog
-    # would have reported the overrun. See "Test timeouts: the tiers this
+    # work outside them and the margin above that sum, which is 5,760 s; a
+    # ninety-minute ceiling would cancel the job before the watchdog could
+    # report the overrun. See "Test timeouts: the tiers this
     # repository sets" in docs/developers-guide.md.
-    timeout-minutes: 90
+    timeout-minutes: 100
     permissions:
       contents: read
     env:
@@ -84,16 +89,17 @@ jobs:
       CARGO_BUILD_JOBS: '4'
       NEXTEST_TEST_THREADS: '4'
       # Selects [profile.ci] in .config/nextest.toml, which carries the
-      # 780s whole-run budget. The shared coverage action takes no profile
+      # 960s whole-run budget. The shared coverage action takes no profile
       # input, so this variable is the only lever; the default profile is
       # deliberately uncapped for local runs on contended hosts.
       NEXTEST_PROFILE: ci
       # sccache is setup-rust's: it names the wrapper, starts and zeroes the
       # server, and picks the backend from the runner (shared-actions ADR
       # 0005). See "Compiler cache" in docs/developers-guide.md.
-      # Polonius is nightly-only (docs/adr-006-adopt-polonius-nightly-toolchain.md),
+      # Polonius is nightly-only (see
+      # docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md),
       # so CI builds with the dated nightly pinned in rust-toolchain.toml.
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-10-22
       YAMLLINT_VERSION: '1.38.0'
       UV_CACHE_DIR: ${{ github.workspace }}/.uv-cache
       UV_TOOL_DIR: ${{ github.workspace }}/.uv-tools
@@ -102,7 +108,7 @@ jobs:
       # default because a cold sccache store leaves the whole instrumented
       # build to do. See the same variable in coverage-main.yml for the
       # measurement behind the value.
-      RUN_RUST_CARGO_WAIT_TIMEOUT: '1800'
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '1980'
       # Real-Ninja integration coverage must not silently skip when a runner
       # image lacks the backend executable.
       NETSUKE_REQUIRE_NINJA: '1'
@@ -126,7 +132,7 @@ jobs:
         # First, because the CI helper scripts under scripts/ci run through
         # `uv run --script` from the next step on, and the uv-driven Ruff,
         # Pylint, and df12 gates need it before Format.
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
           # The gate cache already owns the uv download and tool stores, and
@@ -150,7 +156,7 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a  # v2.87.25
+        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe  # v2.87.27
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Install the build standard
@@ -228,6 +234,12 @@ jobs:
         run: make test-release-admission
       - name: Linux package metadata tests
         run: make test-linux-package-metadata
+      - name: Package verification
+        # `cargo publish --dry-run` compiles the extracted package with the
+        # shipped default features. It left the test suite because that cold
+        # compile cannot be bounded by a per-test allowance (ADR-0059); what
+        # Cargo packages does not vary by platform, so this lane alone runs it.
+        run: make test-package-verify
       - name: Test and Measure Coverage
         # The only test execution on this lane: measuring and testing in one
         # instrumented run costs one compile instead of two, so the flags must
@@ -260,6 +272,10 @@ jobs:
           # Compare changed-line coverage against the baseline written by
           # coverage-main.yml (caches saved on main are readable by every PR).
           with-ratchet: 'true'
+          # A new path starts a new baseline: the cache entry's version hashes
+          # this path, so the restore misses the figure measured on the previous
+          # toolchain and the committed file sets the baseline.
+          baseline-rust-file: .coverage-baseline-v2.rust
           # This lane measures and compares; it does not publish. The action
           # archives the report it generated under a step of its own, which no
           # scanner over this file's steps can see, so declining that archive
@@ -326,6 +342,22 @@ jobs:
       mdtablefix-version: '0.6.1'
       python-baseline: '3.14'
 
+  default-features:
+    # Lint and test the default feature set, which is what release binaries
+    # build and which excludes `lint` until v0.2.0. It is a reusable workflow
+    # for the same line-budget reason as `windows`, and repeats both pins as
+    # literals for the same reason: a reusable workflow cannot read the
+    # caller's `env`; see ci-default-features.yml.
+    name: Default features
+    # The nightly schedule exists for the Kani proofs alone.
+    if: github.event_name != 'schedule'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci-default-features.yml
+    with:
+      nextest-version: '0.9.133'
+      rust-toolchain: 'nightly-2026-10-22'
+
   kani-smoke:
     # A required check, so it runs and reports on every trigger; it is never
     # skipped by a `paths` filter or a job-level `if:`, since a required check
@@ -336,8 +368,9 @@ jobs:
     # change to `tools/kani/`, which is an entry) every later step skips and
     # the job ends green, saying why in its summary. A push to `main`, the
     # nightly schedule and a dispatch always run every harness. See
-    # docs/adr-039-change-scoped-kani-gate.md. A dispatch cannot publish a
-    # generation, since the save gates on a push to `main`, so all it can do
+    # docs/adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md.
+    # A dispatch cannot publish a generation, since the save gates on a push
+    # to `main`, so all it can do
     # here is measure a warm restore, which is the one the exit gate needs.
     # A pull request from a fork cannot obtain a Ubicloud runner, so the
     # fork arm falls back to a GitHub-hosted one. On a push the pull
@@ -346,7 +379,8 @@ jobs:
     # one keeps its break inside the folded scalar and puts a newline in
     # the expression, which GitHub evaluates anyway.
     runs-on: >-
-      ${{ github.event.pull_request.head.repo.fork
+      ${{ (github.event.pull_request.head.repo.fork
+      || github.event.pull_request.user.login == 'dependabot[bot]')
       && 'ubuntu-latest' || 'ubicloud-standard-2-ubuntu-2404' }}
     # Thirty minutes, not twenty. The compile gate at the end of this job
     # builds the whole dependency graph through the Kani frontend, and a cold
@@ -397,13 +431,13 @@ jobs:
       # `GATE_RUSTFLAGS` unconditionally appends the nightly-only `-Zthreads=8`
       # and stable rejects it before a single patch compiles.
       # `check-build-tools` cannot catch it: it asserts the pin is *installed*,
-      # not *active*, so it can report `toolchain nightly-2026-08-23 available`
+      # not *active*, so it can report `toolchain nightly-2026-10-22 available`
       # one line before the gate aborts on stable.
       #
       # With `cargo kani` the value would not matter, because it resolves its
       # own bundled toolchain. Do not drop it on the grounds that the harnesses
       # pass without it: the mutation compile gate is the consumer.
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-10-22
       CARGO_HOME: ${{ github.workspace }}/.kani-cargo
       KANI_HOME: ${{ github.workspace }}/.kani-home
       # Redirected so the Kani payloads' toolchain state is cached and torn down
@@ -424,7 +458,7 @@ jobs:
           # whose diff is the change set the scope decision reads.
           fetch-depth: 2
       - name: Setup uv
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
           # Nothing here is worth a cache entry; the job owns only the Kani key.
@@ -433,6 +467,7 @@ jobs:
         id: scope
         env:
           INPUT_EVENT_NAME: ${{ github.event_name }}
+          INPUT_METRICS_FILE: ${{ runner.temp }}/kani-smoke-metrics/decision.json
         run: uv run --script scripts/kani_proof_scope.py
       - name: Restore Kani payloads
         id: kani_cache
@@ -506,7 +541,7 @@ jobs:
         # standard runner, and this job installs none of the test tooling the
         # `build-test` lane does. Pinned to the same action revision and the
         # same workflow-scoped version as that lane, so the two cannot drift.
-        uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a  # v2.87.25
+        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe  # v2.87.27
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Verify the scope wrapper end to end
@@ -519,10 +554,33 @@ jobs:
         # per-user systemd manager into a failure instead of a skip -- a lane
         # that skipped every scenario would otherwise read as green.
         run: make test-kani-scope-wrapper
+      - name: Mark proof start
+        if: steps.scope.outputs.run-proofs == 'true'
+        env:
+          INPUT_STATE_DIRECTORY: ${{ runner.temp }}/kani-smoke-metrics
+        run: >-
+          uv run --script scripts/kani_smoke_metrics.py mark-start 2>/dev/null ||
+          printf '%s\n' '::warning::Kani proof timing mark could not be recorded.'
       - name: Run Kani harnesses
+        id: proofs
         if: steps.scope.outputs.run-proofs == 'true'
         run: make kani-ir
+      - name: Mark proof end
+        id: proof_end
+        # Preserve the proof duration after a failed harness while leaving
+        # cancellation free to terminate the job without starting more work.
+        if: ${{ !cancelled() && steps.scope.outputs.run-proofs == 'true' }}
+        env:
+          INPUT_STATE_DIRECTORY: ${{ runner.temp }}/kani-smoke-metrics
+        run: |
+          if uv run --script scripts/kani_smoke_metrics.py mark-end 2>/dev/null; then
+            printf '%s\n' 'recorded=true' >> "$GITHUB_OUTPUT"
+          else
+            printf '%s\n' 'recorded=false' >> "$GITHUB_OUTPUT"
+            printf '%s\n' '::warning::Kani proof timing mark could not be recorded.'
+          fi
       - name: Mutation patch compile gate
+        id: mutations
         if: steps.scope.outputs.run-proofs == 'true'
         # Applies each patch under docs/verification/mutations/ and compiles the
         # patched tree under `-D warnings`. `#[ignore]`-gated and run from its
@@ -560,3 +618,28 @@ jobs:
           mode: save
           runner-image: ${{ env.NETSUKE_RUNNER_IMAGE }}
           kani-hit: ${{ steps.kani_cache.outputs.cache-hit }}
+      - name: Finalize Kani metrics
+        if: always()
+        env:
+          INPUT_EVENT_NAME: ${{ github.event_name }}
+          INPUT_JOB_STATUS: ${{ job.status }}
+          INPUT_SCOPE_OUTCOME: ${{ steps.scope.outcome }}
+          INPUT_RUN_PROOFS: ${{ steps.scope.outputs.run-proofs }}
+          INPUT_CACHE_OUTCOME: ${{ steps.kani_cache.outcome }}
+          INPUT_CACHE_HIT: ${{ steps.kani_cache.outputs.cache-hit }}
+          INPUT_PROOFS_OUTCOME: ${{ steps.proofs.outcome }}
+          INPUT_MUTATIONS_OUTCOME: ${{ steps.mutations.outcome }}
+          INPUT_END_MARK_RECORDED: ${{ steps.proof_end.outputs.recorded }}
+          INPUT_END_MARK_OUTCOME: ${{ steps.proof_end.outcome }}
+          INPUT_STATE_DIRECTORY: ${{ runner.temp }}/kani-smoke-metrics
+          INPUT_DECISION_FILE: ${{ runner.temp }}/kani-smoke-metrics/decision.json
+          INPUT_METRICS_FILE: ${{ runner.temp }}/kani-smoke-metrics/metrics.jsonl
+        run: uv run --script scripts/kani_smoke_metrics.py finalize
+      - name: Upload Kani metrics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: kani-smoke-metrics-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/kani-smoke-metrics/metrics.jsonl
+          retention-days: 30
+          if-no-files-found: error

@@ -143,10 +143,10 @@ project:
 
 Netsuke compiles with the Polonius alpha analysis, which the dated nightly
 pinned in `rust-toolchain.toml` enables by default (see
-`docs/adr-006-adopt-polonius-nightly-toolchain.md` and `docs/polonius.md`). No
-`-Z` directive is needed, or wanted: do not add one. Internal APIs are
-borrow-centric: lookups and get-or-create accessors return references, clone
-keys only on insertion, and build error context lazily.
+`docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md`
+and `docs/polonius.md`). No `-Z` directive is needed, or wanted: do not add
+one. Internal APIs are borrow-centric: lookups and get-or-create accessors
+return references, clone keys only on insertion, and build error context lazily.
 
 - **Never** rewrite a site tagged `POLONIUS(...)` into a double lookup
   (`contains_key` + `get_mut`), an `entry(key.clone())` call, or an id/index
@@ -176,7 +176,10 @@ directive anywhere.
   lints the Python sources without executing them, so neither runs the Python
   suites below. When the change touches a workflow or a workflow-contract suite
   under `tests/workflow_contracts/`, also run `make test-workflow-contracts`.
-  When it touches the coverage artefact validators under `scripts/`, also run
+  When it touches the package's `include` list, `build.rs`, or
+  `build_l10n_audit/`, also run `make test-package-verify`, which runs Cargo's
+  publish verification build outside the test suite (ADR-0059). When it touches
+  the coverage artefact validators under `scripts/`, also run
   `make test-coverage-artifact`; `validate-coverage-artifact` is an
   operator-run validator rather than a test, and needs a downloaded artefact
   directory, so it is not part of this set. No one of these targets runs
@@ -425,7 +428,7 @@ as `--toolchain`.
 - **`EnvLock`, `CwdGuard`, and `EnvVarGuard` are retired.** They do not relax
   the rule against process-wide locks. Do not restore or replace them; follow
   the injected seam decision in
-  [ADR-008](docs/adr-008-environment-seam-taxonomy.md).
+  [ADR-0008](docs/adrs/adr-0008-environment-seam-taxonomy.md).
 - **Subprocess isolation is the sole exemption.** End-to-end behavioural tests
   invoking `netsuke` through `assert_cmd` may configure the environment via
   `Command::env`/`Command::env_clear`, because the mutation is confined to the

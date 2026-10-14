@@ -62,6 +62,8 @@ Each phase validates a product hypothesis:
 - Phase 29 evaluates a bounded, compatibility-gated Paralegal experiment.
 - Phase 30 validates that opt-in, immutable host facts can replace platform
   shell probes without weakening discovery privacy or Ninja invalidation.
+- Phase 31 validates that the manifest linter shipped as a v0.2.0 prototype
+  earns the rule set, severities, and contracts it will have to keep.
 
 Each phase carries one hypothesis, and Phase 6 is the capability track for
 template standard-library work. Phases 3 to 5 predate that separation: each
@@ -76,6 +78,8 @@ the [composition roadmap](roadmap-composition.md), with local includes before
 local bundles and external acquisition only after both local layers. Phases 26
 to 29 continue in the [architecture roadmap](roadmap-hexagonal-hardening.md).
 Phase 30 owns RFC 0029's host facts and follows phase 15 in this document.
+Phase 31 is the capability track for manifest linting behind `netsuke check`,
+and new lint work belongs there.
 
 The roadmap keeps user-facing product grammar separate from implementation
 detail. Public tasks name Netsuke capabilities first. Implementation adapters,
@@ -162,8 +166,8 @@ rewrite:
   not reused.
 - Phase 6 is new and introduces the template standard-library expansion
   specified in
-  [RFC 0006](rfcs/0006-ansible-inspired-template-standard-library.md). It
-  reuses no historical numbers.
+  [RFC 0006](rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md).
+  It reuses no historical numbers.
 - Git change-detection helper work follows the shared Phase 6 contract in
   [the helper design](git-change-detection-helpers-design.md).
 
@@ -172,37 +176,45 @@ rewrite:
 The following mapping identifies one implementation owner for each contract;
 shared integration work does not duplicate those implementations.
 
-- [RFC 0001](rfcs/0001-structured-command-blocks.md): phases 12 to 14,
-  with deferred execution extensions in phase 15.
-- [RFC 0002](rfcs/0002-repository-relative-includes.md): phase 16 in the
-  [composition roadmap](roadmap-composition.md).
-- [RFC 0003](rfcs/0003-versioned-local-bundles.md): phase 17, including
-  canonical runtime-resource coverage, private exports, parameters, and locks.
-- [RFC 0004](rfcs/0004-digest-pinned-external-bundles.md): phase 18 after
-  local include and bundle acceptance; deferred provenance policy in phase 19.
-- [RFC 0009](rfcs/0009-structured-command-working-directories.md): 12.1.1
-  reconciles path contracts, 12.2.3 implements literal directories, 13.3.1
-  covers independent stage directories, and 17.4.4 covers fragment and bundle
-  provenance without changing the importing-workspace anchor.
-- [RFC 0010](rfcs/0010-runtime-bindings-and-secure-tempdirs.md): step 13.2
-  owns stderr pipelines, steps 14.1 and 14.2 own runtime bindings and secure
-  directories, and 14.3.1 plus 17.4.4 cover execution and composition matrices.
-- [RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md): phase 11
+- [RFC 0001](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md):
+  phases 12 to 14, with deferred execution extensions in phase 15. Task 12.1.1
+  consolidated the amended contract in
+  [ADR-0043](adrs/adr-0043-consolidated-structured-command-execution-contract.md).
+- [RFC 0002](rfcs/rfc-0002-repository-relative-manifest-includes.md): phase 16
+  in the [composition roadmap](roadmap-composition.md).
+- [RFC 0003](rfcs/rfc-0003-versioned-local-manifest-bundles.md): phase 17,
+  including canonical runtime-resource coverage, private exports, parameters,
+  and locks.
+- [RFC 0004](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md):
+  phase 18 after local include and bundle acceptance; deferred provenance
+  policy in phase 19.
+- [RFC 0009](rfcs/rfc-0009-structured-command-working-directories.md): 12.1.1
+  reconciled the path contracts in
+  [ADR-0043](adrs/adr-0043-consolidated-structured-command-execution-contract.md),
+  12.2.3 implements literal directories, 13.3.1 covers independent stage
+  directories, and 17.4.4 covers fragment and bundle provenance without
+  changing the importing-workspace anchor.
+- [RFC 0010](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md):
+  step 13.2 owns stderr pipelines, steps 14.1 and 14.2 own runtime bindings and
+  secure directories, and 14.3.1 plus 17.4.4 cover execution and composition
+  matrices.
+- [RFC 0011](rfcs/rfc-0011-allow-listed-structured-command-shells.md): phase 11
   owns registry primitives and resolved-shell integration. Task 11.3.1 needs
   the codec and basic runner, not completed runtime bindings; 11.3.2 waits for
-  the full pipeline and directory facilities it exercises. Task 12.1.1 must
-  reconcile RFC 0011 §6.2 and ADR-019 with the other stream-path contracts.
-- [RFC 0026](rfcs/0026-hexagonal-domain-hardening.md): phase 26 in the
-  [architecture roadmap](roadmap-hexagonal-hardening.md) owns trustworthy
-  resolved build semantics, and phase 27 owns the application and diagnostic
-  boundary.
-- [RFC 0027](rfcs/0027-executable-architecture-contract.md): phase 28 owns
-  executable architecture policy and governance, with its checked baseline
-  established before required enforcement.
-- [RFC 0028](rfcs/0028-paralegal-architecture-experiment.md): phase 29 owns
-  the bounded compatibility-gated Paralegal experiment, which may conclude
-  without adoption.
-- [RFC 0029](rfcs/0029-first-class-host-facts.md): phase 30 owns opt-in host
+  the full pipeline and directory facilities it exercises. Task 12.1.1
+  reconciled RFC 0011 §6.2 and ADR-0019 with the other stream-path contracts in
+  [ADR-0043](adrs/adr-0043-consolidated-structured-command-execution-contract.md).
+- [RFC 0026](rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md):
+  phase 26 in the [architecture roadmap](roadmap-hexagonal-hardening.md) owns
+  trustworthy resolved build semantics, and phase 27 owns the application and
+  diagnostic boundary.
+- [RFC 0027](rfcs/rfc-0027-check-an-executable-architecture-contract.md): phase
+  28 owns executable architecture policy and governance, with its checked
+  baseline established before required enforcement.
+- [RFC 0028](rfcs/rfc-0028-evaluate-paralegal-for-architectural-flow-checks.md):
+  phase 29 owns the bounded compatibility-gated Paralegal experiment, which may
+  conclude without adoption.
+- [RFC 0029](rfcs/rfc-0029-first-class-host-facts.md): phase 30 owns opt-in host
   facts, shipping the platform-only slice before separately authorized
   distribution and kernel observations.
 
@@ -280,7 +292,7 @@ and agents.
   - [x] Migrate the remaining callers under issue #493.
   - [x] Remove `EnvLock` under issue #494 after every remaining `EnvLock`
     caller has migrated.
-  - See [ADR-008](adr-008-environment-seam-taxonomy.md).
+  - See [ADR-0008](adrs/adr-0008-environment-seam-taxonomy.md).
 
 ### 3.12. Terminal rendering verification
 
@@ -325,7 +337,7 @@ and agents.
   - [x] Add `dependency_order: serial` for direct action and target `deps`.
     Staged Ninja dyndep lowering preserves declaration order, failure
     short-circuiting, shared-work reuse, and unrelated-branch concurrency;
-    [ADR-011](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md)
+    [ADR-0011](adrs/adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md)
     records the path-scoped guarantee and generated-state contract.
 - [x] 3.14.4. Add `command_available(name, **kwargs)` as a non-throwing
   executable probe. Depends on archived task `3.5.1`. See
@@ -367,7 +379,7 @@ and agents.
 - [x] 3.14.8. Make Jinja command helpers match the documented ergonomics.
   Depends on archived task `2.2.4` and 3.14.4. See
   [netsuke-design.md §§4.4 and 4.5](netsuke-design.md) and
-  [ADR-041](adr-041-canonical-recipe-shell-quoting-surface.md).
+  [ADR-0041](adrs/adr-0041-canonical-recipe-shell-quoting-surface.md).
   - [x] Add `env(name, default=...)` without changing the existing missing and
     invalid UTF-8 diagnostics.
   - [x] Implement or remove the documented `shell_escape` helper so the user
@@ -429,6 +441,9 @@ identifier remains reserved, not checked off as implemented.
   - [x] Remove `build --emit`; use `generate --output`.
   - [ ] Add `check`, `context`, `skill-path`, `runs`, `profile`, and
     `feedback`.
+    - [x] `check` lints the selected manifest. See
+      [manifest linter design](netsuke-linter-design.md) and
+      [ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md).
   - [ ] Rename `--file` to `--manifest`, keeping `-f` as an intentional
     shorthand.
   - [ ] Depend on OrthoConfig `7.1.1` to `7.1.3` for shared vocabulary policy
@@ -450,6 +465,7 @@ identifier remains reserved, not checked off as implemented.
   - [x] Emit exactly one JSON result document on successful JSON-mode commands.
   - [x] Emit exactly one JSON diagnostic document on failing JSON-mode commands.
   - [x] Suppress progress, colour, emoji, tracing, and timing text in JSON mode.
+  - [x] Snapshot the `help targets --edges` graph schema as a v1 JSON schema.
   - [ ] Snapshot every v1 JSON schema.
   - [ ] Depend on OrthoConfig `7.2.3` to `7.2.5`, `7.3.1`, `8.1.1`, and
     `8.1.2` for shared result, stream, exit-code, and enumerable-error
@@ -531,7 +547,8 @@ and test workflow intact. See
   [formal-verification-methods-in-netsuke.md §Kani for the IR core](formal-verification-methods-in-netsuke.md#kani-for-the-ir-core).
   See also
   [execplan 4.2.1](execplans/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md)
-  and [ADR-004](adr-004-bound-kani-ir-harnesses-to-small-n.md).
+  and
+  [ADR-0047](adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md).
   - [x] Prove duplicate-output rejection on bounded manifests. Kani covers the
     accepted small-N proof boundary; 4.3.1 closes the larger-N Proptest
     coverage.
@@ -626,8 +643,8 @@ and test workflow intact. See
   - [x] State the current backtick-handling boundary explicitly.
   - [x] State whether `shlex::split` is part of the semantic acceptance
     contract.
-  Completed: [ADR-027](adr-027-command-placeholder-contract.md) records the
-  contract; the English README and all six translations carry it, with
+  Completed: [ADR-0027](adrs/adr-0027-command-placeholder-contract.md) records
+  the contract; the English README and all six translations carry it, with
   executable examples and regression tests.
 - [ ] 4.4.2. Document which dependency kinds participate in cycle detection in
   the user guide. Requires 4.2.1. See
@@ -819,13 +836,13 @@ Kind: capability. Value is measured by the manifest operations that no longer
 require a subprocess, not by name parity with Ansible.
 
 Scope: the accepted set in
-[RFC 0006](rfcs/0006-ansible-inspired-template-standard-library.md). Every task
-in this phase targets a release after v0.1.0 final and must not widen the
-hardening release defined by issue `#594`. Candidates that RFC 0006 §10 rejects
-must not be reintroduced by a later task, and candidates it defers are gated
-behind step 6.10. The bounded Git change-detection capability in step 6.11 is
-outside RFC 0006's Ansible-derived candidate set, but follows the same shared
-contract and capability boundary.
+[RFC 0006](rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md).
+Every task in this phase targets a release after v0.1.0 final and must not
+widen the hardening release defined by issue `#594`. Candidates that RFC 0006
+§10 rejects must not be reintroduced by a later task, and candidates it defers
+are gated behind step 6.10. The bounded Git change-detection capability in step
+6.11 is outside RFC 0006's Ansible-derived candidate set, but follows the same
+shared contract and capability boundary.
 
 ### 6.1. Settle the standard-library contract before the volume arrives
 
@@ -850,7 +867,7 @@ ordinary additions or need individual design passes. See RFC 0006 §§6 and 14.1
     deferred or rejected candidate is covered by neither. A capability may be
     named by more than one roadmap task, as `product` already is by 6.4.2 and
     6.4.5, so only the RFC count is exactly one.
-- [ ] 6.1.2. Implement the canonical value key and equality relation.
+- [x] 6.1.2. Implement the canonical value key and equality relation.
   - See RFC 0006 §6.7.
   - Derive the key with the existing `serde_json_canonicalizer` dependency and
     reject value kinds that have no canonical form.
@@ -920,13 +937,13 @@ manifests, and generated configuration fragments directly, or whether `jq`,
 `yq`, and a scripting runtime remain unavoidable host assumptions. Its outcome
 determines how much surrounding toolchain a `Netsukefile` still has to assume.
 See RFC 0006 §8.1, delivered by
-[RFC 0013](rfcs/0013-structured-data-interchange-helpers.md), and
-[adr-001-replace-serde-yml-with-serde-saphyr.md](adr-001-replace-serde-yml-with-serde-saphyr.md).
+[RFC 0013](rfcs/rfc-0013-structured-data-interchange-helpers.md), and
+[adr-0001-replace-serde-yml-with-serde-saphyr-for-yaml-parsing-in-netsuke.md](adrs/adr-0001-replace-serde-yml-with-serde-saphyr-for-yaml-parsing-in-netsuke.md).
 
 - [ ] 6.2.1. Add `from_json` with duplicate-key rejection and source offsets.
   Requires 6.1.3 and 6.1.4.
   - See RFC 0006 §8.1 and
-    [RFC 0013](rfcs/0013-structured-data-interchange-helpers.md) §7.
+    [RFC 0013](rfcs/rfc-0013-structured-data-interchange-helpers.md) §7.
   - Preserve object order and report line, column, and byte offset on failure.
   - Success: a document with a repeated object key fails naming the key and
     the offset of its second occurrence, rather than silently keeping the last
@@ -934,7 +951,7 @@ See RFC 0006 §8.1, delivered by
 - [ ] 6.2.2. Add `from_yaml` and `from_yaml_all` over the existing safe YAML
   stack. Requires 6.2.1.
   - See RFC 0006 §8.1 and
-    [RFC 0013](rfcs/0013-structured-data-interchange-helpers.md) §§5.8 and 7.
+    [RFC 0013](rfcs/rfc-0013-structured-data-interchange-helpers.md) §§5.8 and 7.
   - Reject non-standard tags, duplicate keys, and merge keys, and materialize
     the multi-document result rather than exposing a lazy iterator.
   - Establish whether `serde-saphyr` can bound alias expansion; if it cannot,
@@ -943,8 +960,8 @@ See RFC 0006 §8.1, delivered by
     instead of exhausting memory.
 - [ ] 6.2.3. Add the deterministic `to_yaml` and `to_nice_json` serializers.
   Requires 6.2.2.
-  - See RFC 0006 §§6.3 and 8.1, and
-    [RFC 0013](rfcs/0013-structured-data-interchange-helpers.md) §§5.3, 5.7, and
+  - See RFC 0006 §§6.3 and 8.1, and [RFC
+    0013](rfcs/rfc-0013-structured-data-interchange-helpers.md) §§5.3, 5.7, and
     8.
   - Pin key ordering, indentation, scalar quoting, line endings, and
     trailing-newline behaviour, quoting every scalar that could be read back
@@ -963,12 +980,13 @@ This step answers whether the mapping transforms remove the merge and re-index
 loops that `vars`, `foreach`, and per-entry overrides currently force manifest
 authors to write by hand. Its outcome informs how much of the platform and
 toolchain configuration problem the template layer can own. See RFC 0006 §8.2,
-delivered by [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md).
+delivered by
+[RFC 0014](rfcs/rfc-0014-mapping-and-sequence-transform-helpers.md).
 
 - [ ] 6.3.1. Add `combine` with explicit recursion and list policies. Requires
   6.1.2 and 6.1.4.
   - See RFC 0006 §8.2 and
-    [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md) §§5.3,
+    [RFC 0014](rfcs/rfc-0014-mapping-and-sequence-transform-helpers.md) §§5.3,
     5.8, and 7.
   - Support `recursive` and the `replace`, `keep`, `append`, and `prepend`
     list policies, enumerating them on an unknown one.
@@ -987,7 +1005,7 @@ delivered by [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md).
 - [ ] 6.3.2. Add `dict2items` and `items2dict` with an explicit duplicate
   policy. Requires 6.3.1.
   - See RFC 0006 §8.2 and
-    [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md) §§5.7 and
+    [RFC 0014](rfcs/rfc-0014-mapping-and-sequence-transform-helpers.md) §§5.7 and
     5.10.
   - Reject equal `key_name` and `value_name`, and reject missing fields naming
     the element index.
@@ -996,7 +1014,7 @@ delivered by [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md).
 - [ ] 6.3.3. Add `extract` with explicit missing-value behaviour. Requires
   6.3.2.
   - See RFC 0006 §8.2 and
-    [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md) §5.6.
+    [RFC 0014](rfcs/rfc-0014-mapping-and-sequence-transform-helpers.md) §5.6.
   - Keep the key as the filter subject so the filter composes with `map`.
   - Reject negative sequence indices, and treat traversal into a
     non-container as an error even when `default` is given.
@@ -1004,7 +1022,7 @@ delivered by [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md).
     `default` is given; the filter never yields undefined.
 - [ ] 6.3.4. Add `subelements` and `rekey_on_member`. Requires 6.3.3.
   - See RFC 0006 §8.2 and
-    [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md) §§5.5
+    [RFC 0014](rfcs/rfc-0014-mapping-and-sequence-transform-helpers.md) §§5.5
     and 5.6.
   - Keep `skip_missing` scoped to absence only; a value present at the path
     but not a sequence is always an error.
@@ -1013,7 +1031,7 @@ delivered by [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md).
 - [ ] 6.3.5. Add an end-to-end layered-configuration manifest example.
   Requires 6.3.4.
   - See
-    [RFC 0014](rfcs/0014-mapping-and-sequence-transform-helpers.md) §§5.11
+    [RFC 0014](rfcs/rfc-0014-mapping-and-sequence-transform-helpers.md) §§5.11
     and 7.
   - Cover defaults, a platform overlay, and a per-target overlay composed with
     `combine`, `dict2items`, and `extract`.
@@ -1029,11 +1047,11 @@ This step answers whether ordered collection algebra can replace both
 hand-expanded target matrices and Ansible's set-backed filters without
 introducing a single unstable ordering. Its outcome is the strongest test of
 the determinism claim in RFC 0006 §6.3. See RFC 0006 §§8.3 and 8.8, delivered by
-[RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md).
+[RFC 0015](rfcs/rfc-0015-ordered-collection-algebra-and-truth-predicates.md).
 
 - [ ] 6.4.1. Add the ordered set algebra. Requires 6.1.2.
   - See RFC 0006 §8.3 and
-    [RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md)
+    [RFC 0015](rfcs/rfc-0015-ordered-collection-algebra-and-truth-predicates.md)
     §§5.3, 5.7, and 7.
   - Implement `union`, `intersect`, `difference`, and `symmetric_difference`
     with first-appearance ordering and canonical-key deduplication.
@@ -1041,7 +1059,7 @@ the determinism claim in RFC 0006 §6.3. See RFC 0006 §§8.3 and 8.8, delivered
     that reordering an input's duplicate positions does not change the result.
 - [ ] 6.4.2. Add the bounded combinatorial filters. Requires 6.1.3.
   - See RFC 0006 §§6.8 and 8.3 and
-    [RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md)
+    [RFC 0015](rfcs/rfc-0015-ordered-collection-algebra-and-truth-predicates.md)
     §§5.6 and 5.8.
   - Implement `product`, `combinations`, and `permutations` with checked
     cardinality and the lower ceiling for `permutations`.
@@ -1051,13 +1069,13 @@ the determinism claim in RFC 0006 §6.3. See RFC 0006 §§8.3 and 8.8, delivered
     the ceiling, without allocating the result.
 - [ ] 6.4.3. Add `zip_longest` with a required fill value. Requires 6.4.1.
   - See RFC 0006 §8.3 and
-    [RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md)
+    [RFC 0015](rfcs/rfc-0015-ordered-collection-algebra-and-truth-predicates.md)
     §§5.6 and 5.9.
   - Omitting `fill_value` is an error, so a silent `none` cannot enter a build
     graph.
 - [ ] 6.4.4. Add the collection and truth predicates. Requires 6.1.2.
   - See RFC 0006 §8.8 and
-    [RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md)
+    [RFC 0015](rfcs/rfc-0015-ordered-collection-algebra-and-truth-predicates.md)
     §§5.7, 5.8, and 5.10.
   - Implement `any`, `all`, `subset`, `superset`, `contains`, `truthy`, and
     `falsy`.
@@ -1068,7 +1086,7 @@ the determinism claim in RFC 0006 §6.3. See RFC 0006 §§8.3 and 8.8, delivered
 - [ ] 6.4.5. Add the matrix-determinism end-to-end suite. Requires 6.4.2 and
   6.4.4.
   - See
-    [RFC 0015](rfcs/0015-ordered-collection-algebra-and-truth-predicates.md)
+    [RFC 0015](rfcs/rfc-0015-ordered-collection-algebra-and-truth-predicates.md)
     §§5.3, 5.11, and 7.
   - Compile a representative target matrix built from `product`, the set
     algebra, and `selectattr` with `contains`, twice from the same inputs.
@@ -1089,12 +1107,12 @@ dialect and a strict version predicate can replace the `shell()` calls that
 manifests currently use to inspect `--version` output and filter path lists.
 Its outcome determines whether conditional flag selection can be expressed at
 manifest time. See RFC 0006 §§8.4 and 8.5, delivered by
-[RFC 0016](rfcs/0016-pattern-and-version-predicates.md).
+[RFC 0016](rfcs/rfc-0016-pattern-and-version-predicates.md).
 
 - [ ] 6.5.1. Establish the `netsuke-regex-v1` dialect and the bounded pattern
   cache. Requires 6.1.3 and 6.1.4.
   - See RFC 0006 §8.4 and
-    [RFC 0016](rfcs/0016-pattern-and-version-predicates.md) §§5.3 and 5.8.
+    [RFC 0016](rfcs/rfc-0016-pattern-and-version-predicates.md) §§5.3 and 5.8.
   - Add the `regex` dependency, name the supported and unsupported constructs
     in the standard-library guide, and enforce the compiled-pattern size limit
     and least-recently-used cache from RFC 0006 table 3.
@@ -1104,7 +1122,7 @@ manifest time. See RFC 0006 §§8.4 and 8.5, delivered by
 - [ ] 6.5.2. Add `regex_replace` with dollar-form replacements. Requires
   6.5.1.
   - See RFC 0006 §8.4 and
-    [RFC 0016](rfcs/0016-pattern-and-version-predicates.md) §§5.6 and 5.9.
+    [RFC 0016](rfcs/rfc-0016-pattern-and-version-predicates.md) §§5.6 and 5.9.
   - Support `count` and `mandatory_count`, and reject a Python-style `\1` or
     `\g<name>` replacement with a diagnostic pointing at the `$1` form.
   - Success: a replacement pasted from an Ansible playbook fails loudly rather
@@ -1112,7 +1130,7 @@ manifest time. See RFC 0006 §§8.4 and 8.5, delivered by
 - [ ] 6.5.3. Add `regex_search`, `regex_findall`, and `regex_escape`. Requires
   6.5.2.
   - See RFC 0006 §8.4 and
-    [RFC 0016](rfcs/0016-pattern-and-version-predicates.md) §§5.6, 5.7, 5.8,
+    [RFC 0016](rfcs/rfc-0016-pattern-and-version-predicates.md) §§5.6, 5.7, 5.8,
     and 5.9.
   - Return `none` for a non-match, keep the `regex_findall` return shape
     dependent only on the arguments, and accept only the `netsuke` escape
@@ -1121,13 +1139,13 @@ manifest time. See RFC 0006 §§8.4 and 8.5, delivered by
     has zero, one, or several capture groups.
 - [ ] 6.5.4. Add the `match`, `search`, and `regex` tests. Requires 6.5.1.
   - See RFC 0006 §8.4 and
-    [RFC 0016](rfcs/0016-pattern-and-version-predicates.md) §§5.6 and 5.9.
+    [RFC 0016](rfcs/rfc-0016-pattern-and-version-predicates.md) §§5.6 and 5.9.
   - Support `match_type` values `search`, `match`, and `fullmatch`,
     enumerating them on an unknown value.
 - [ ] 6.5.5. Add the `version` test over the existing `semver` dependency.
   Requires 6.1.4.
   - See RFC 0006 §8.5 and
-    [RFC 0016](rfcs/0016-pattern-and-version-predicates.md) §§5.9 and 8.
+    [RFC 0016](rfcs/rfc-0016-pattern-and-version-predicates.md) §§5.9 and 8.
   - Make `operator` required, accept the six symbolic and six mnemonic forms,
     and accept only `semver` for `scheme`.
   - Resolve RFC 0006 §16 question 3 on whether a `v` prefix is tolerated
@@ -1142,19 +1160,19 @@ cross-compilation better than a family of Windows-specific filter names, and
 whether lexical normalization can be offered without weakening the capability
 boundary. Its outcome informs how Netsuke describes any future cross-platform
 surface. See RFC 0006 §8.6, delivered by
-[RFC 0017](rfcs/0017-lexical-path-composition.md).
+[RFC 0017](rfcs/rfc-0017-lexical-path-composition.md).
 
 - [ ] 6.6.1. Add the `dialect` argument and its `host`, `posix`, and `windows`
   path parsers. Requires 6.1.4.
   - See RFC 0006 §8.6 and
-    [RFC 0017](rfcs/0017-lexical-path-composition.md) §§5.2 and 5.5.
+    [RFC 0017](rfcs/rfc-0017-lexical-path-composition.md) §§5.2 and 5.5.
   - Extend the existing `basename` and `dirname` filters additively, so
     omitting `dialect` preserves current behaviour.
   - Success: a Unix host parses a Windows path identically to a Windows host,
     with no host-native fallback.
 - [ ] 6.6.2. Add `path_join`, `normpath`, and `splitext`. Requires 6.6.1.
   - See RFC 0006 §8.6 and
-    [RFC 0017](rfcs/0017-lexical-path-composition.md) §§5.6 and 5.9.
+    [RFC 0017](rfcs/rfc-0017-lexical-path-composition.md) §§5.6 and 5.9.
   - Reject an absolute component after the first position in `path_join`, and
     reject empty components.
   - Document the single-suffix `splitext` rule against the existing
@@ -1163,19 +1181,19 @@ surface. See RFC 0006 §8.6, delivered by
     index rather than yielding `/etc/passwd`.
 - [ ] 6.6.3. Add `commonpath`, `relpath`, and `splitdrive`. Requires 6.6.2.
   - See RFC 0006 §8.6 and
-    [RFC 0017](rfcs/0017-lexical-path-composition.md) §§5.5 and 5.6.
+    [RFC 0017](rfcs/rfc-0017-lexical-path-composition.md) §§5.5 and 5.6.
   - Compare component-wise, reject mixed absolute and relative inputs, and
     reject differing drives or UNC roots under the `windows` dialect.
   - Contrast `relpath` with the stricter existing `relative_to` in the guide.
 - [ ] 6.6.4. Add the `abs` test as a pure lexical predicate. Requires 6.6.1.
   - See RFC 0006 §8.7 and
-    [RFC 0017](rfcs/0017-lexical-path-composition.md) §§5.2 and 8.
+    [RFC 0017](rfcs/rfc-0017-lexical-path-composition.md) §§5.2 and 8.
   - Resolve RFC 0006 §16 question 2 on the name before registering.
   - Success: `abs` is registered in the read-only manifest-query environment,
     unlike the filesystem predicates in step 6.7.
 - [ ] 6.6.5. Add the combinatorial path-dialect suite. Requires 6.6.3 and
   6.6.4.
-  - See [RFC 0017](rfcs/0017-lexical-path-composition.md) §§5.5 and 5.11.
+  - See [RFC 0017](rfcs/rfc-0017-lexical-path-composition.md) §§5.5 and 5.11.
   - Cross every lexical path helper with all three dialects and both host
     platforms, including drive-relative paths, UNC roots, trailing
     separators, and leading `..` components.
@@ -1188,11 +1206,11 @@ This step answers whether existence probing and environment expansion can be
 added without a second ambient-authority path and without any helper silently
 disappearing from a manifest query. Its outcome is the practical test of the
 capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7, delivered by
-[RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md).
+[RFC 0018](rfcs/rfc-0018-host-state-predicates-and-environment-expansion.md).
 
 - [ ] 6.7.1. Add the `exists` and `link_exists` tests. Requires 6.1.6.
   - See RFC 0006 §8.7 and
-    [RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md)
+    [RFC 0018](rfcs/rfc-0018-host-state-predicates-and-environment-expansion.md)
     §§5.4 and 5.11.
   - Route both through the injected `cap_std` workspace handle, and treat a
     path outside the capability boundary as an error rather than `false`.
@@ -1200,7 +1218,7 @@ capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7, delivered b
     `link_exists`.
 - [ ] 6.7.2. Add the `same_file` and `mount` tests. Requires 6.7.1.
   - See RFC 0006 §§6.5 and 8.7 and
-    [RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md)
+    [RFC 0018](rfcs/rfc-0018-host-state-predicates-and-environment-expansion.md)
     §§5.5 and 5.6.
   - Compare file identity rather than path spelling, and error on a missing
     operand rather than reporting `false`.
@@ -1211,9 +1229,9 @@ capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7, delivered b
 - [ ] 6.7.3. Add the `files_only` option to the existing `glob` function.
   Requires 6.7.1.
   - See RFC 0006 §8.7,
-    [RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md)
+    [RFC 0018](rfcs/rfc-0018-host-state-predicates-and-environment-expansion.md)
     §§5.3, 5.8, and 8, and
-    [adr-010-scope-glob-capability-to-literal-prefix.md](adr-010-scope-glob-capability-to-literal-prefix.md).
+    [adr-0010-scope-the-glob-metadata-capability-to-the-literal-prefix.md](adrs/adr-0010-scope-the-glob-metadata-capability-to-the-literal-prefix.md).
   - Leave the existing capability scoping, ordering, and observability
     contracts unchanged, and do not introduce a second glob implementation.
   - Settle RFC 0018 §8's `files_only` default conflict before the option
@@ -1222,9 +1240,9 @@ capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7, delivered b
 - [ ] 6.7.4. Add `expandvars` through an injected environment reader. Requires
   6.1.5 and 6.6.1.
   - See RFC 0006 §8.6,
-    [RFC 0018](rfcs/0018-host-state-predicates-and-environment-expansion.md)
+    [RFC 0018](rfcs/rfc-0018-host-state-predicates-and-environment-expansion.md)
     §§5.2 and 5.9, and
-    [adr-008-environment-seam-taxonomy.md](adr-008-environment-seam-taxonomy.md).
+    [adr-0008-environment-seam-taxonomy.md](adrs/adr-0008-environment-seam-taxonomy.md).
   - Support `missing` values `error`, `empty`, and `preserve`, defaulting to
     `error`, and reject malformed references rather than passing them through.
   - Exclude it from the read-only manifest-query registration exactly as `env`
@@ -1239,12 +1257,12 @@ This step answers whether Netsuke can produce comment banners, encoded
 payloads, quoted shell words, human-readable sizes, and content-derived
 identifiers without either a subprocess or a second quoting implementation. See
 RFC 0006 §8.9, delivered by
-[RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md).
+[RFC 0019](rfcs/rfc-0019-encoding-identity-and-formatting-helpers.md).
 
 - [ ] 6.8.1. Add `b64encode`, `b64decode`, and `urldecode`. Requires 6.1.3 and
   6.1.4.
   - See RFC 0006 §8.9 and
-    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.6,
+    [RFC 0019](rfcs/rfc-0019-encoding-identity-and-formatting-helpers.md) §§5.6,
     5.9, and 5.11.
   - Add the Base64 dependency, support both alphabets and configurable
     padding, and default `urldecode` to `plus=false` so it round-trips with
@@ -1254,7 +1272,7 @@ RFC 0006 §8.9, delivered by
 - [ ] 6.8.2. Add `to_uuid` over a documented Netsuke namespace. Requires
   6.1.4.
   - See RFC 0006 §8.9 and
-    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.3
+    [RFC 0019](rfcs/rfc-0019-encoding-identity-and-formatting-helpers.md) §§5.3
     and 5.6.
   - Use the frozen namespace recorded in the RFC, accept an explicit
     `namespace`, and record why UUID version 5 does not fall under the
@@ -1264,7 +1282,7 @@ RFC 0006 §8.9, delivered by
 - [ ] 6.8.3. Add `shell_quote` over the existing quoting machinery. Requires
   3.14.8 and 6.1.4.
   - See RFC 0006 §8.9 and
-    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.5
+    [RFC 0019](rfcs/rfc-0019-encoding-identity-and-formatting-helpers.md) §§5.5
     and 5.10.
   - Adopt `shell_quote` as the canonical name that resolves the documented but
     unimplemented `shell_escape` helper, and add the `dialect` argument with
@@ -1273,7 +1291,7 @@ RFC 0006 §8.9, delivered by
     single implementation in `src/shell_word.rs`, so what remains here is the
     wider RFC 0006 dialect set beyond `sh` and `powershell` — `bash` in
     particular, which 3.14.8 deliberately refuses. See
-    [ADR-041](adr-041-canonical-recipe-shell-quoting-surface.md). The
+    [ADR-0041](adrs/adr-0041-canonical-recipe-shell-quoting-surface.md). The
     registry row in RFC 0019 §5.1 records the capability as `New` because the
     coverage contract classifies a renamed capability as new, not because the
     implementation is absent.
@@ -1281,7 +1299,7 @@ RFC 0006 §8.9, delivered by
     quoting implementation is introduced.
 - [ ] 6.8.4. Add `comment` with a closing-marker guard. Requires 6.1.4.
   - See RFC 0006 §8.9 and
-    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.4
+    [RFC 0019](rfcs/rfc-0019-encoding-identity-and-formatting-helpers.md) §§5.4
     and 5.9.
   - Support the three line styles, the two block styles, and an explicit
     `prefix`, emitting no trailing whitespace.
@@ -1289,7 +1307,7 @@ RFC 0006 §8.9, delivered by
     fails, so comment text cannot escape into a generated file as live syntax.
 - [ ] 6.8.5. Add `human_readable` and `human_to_bytes`. Requires 6.1.3.
   - See RFC 0006 §8.9 and
-    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.3
+    [RFC 0019](rfcs/rfc-0019-encoding-identity-and-formatting-helpers.md) §§5.3
     and 5.8.
   - Pin locale-independent output, parse case-insensitively, select bits by
     keyword rather than by letter case, and use checked integer arithmetic.
@@ -1298,7 +1316,7 @@ RFC 0006 §8.9, delivered by
 - [ ] 6.8.6. Add `text_hash` without disturbing the existing `hash` contract.
   Requires 6.1.4.
   - See RFC 0006 §§8.9 and 11.1 and
-    [RFC 0019](rfcs/0019-encoding-identity-and-formatting-helpers.md) §§5.6
+    [RFC 0019](rfcs/rfc-0019-encoding-identity-and-formatting-helpers.md) §§5.6
     and 5.10.
   - Reuse the existing `legacy-digests` gating for `sha1` and `md5`, and
     register neither `hash_text` nor `checksum`.
@@ -1310,12 +1328,12 @@ RFC 0006 §8.9, delivered by
 This step answers whether timestamp parsing and formatting can be added as pure
 helpers over the existing `now()` value, leaving clock access as the only
 host-observing time operation. See RFC 0006 §8.10, delivered by
-[RFC 0020](rfcs/0020-date-and-time-conversion-helpers.md).
+[RFC 0020](rfcs/rfc-0020-date-and-time-conversion-helpers.md).
 
 - [ ] 6.9.1. Add the shared conversion-specifier set and `strftime`. Requires
   6.1.4.
   - See RFC 0006 §8.10 and table 12 and
-    [RFC 0020](rfcs/0020-date-and-time-conversion-helpers.md) §§5.3 and 5.9.
+    [RFC 0020](rfcs/rfc-0020-date-and-time-conversion-helpers.md) §§5.3 and 5.9.
   - Pin the invariant C locale for the name-producing specifiers, and reject
     every specifier outside the accepted set with the supported set
     enumerated.
@@ -1325,7 +1343,7 @@ host-observing time operation. See RFC 0006 §8.10, delivered by
     different locales.
 - [ ] 6.9.2. Add `to_datetime`. Requires 6.9.1.
   - See RFC 0006 §8.10 and
-    [RFC 0020](rfcs/0020-date-and-time-conversion-helpers.md) §§5.6 and 5.11.
+    [RFC 0020](rfcs/rfc-0020-date-and-time-conversion-helpers.md) §§5.6 and 5.11.
   - Accept `UTC` and fixed offsets for `timezone`, rejecting IANA zone names
     so no time-zone database is required.
   - Success: a property test shows that `to_datetime` followed by `strftime`
@@ -1334,8 +1352,8 @@ host-observing time operation. See RFC 0006 §8.10, delivered by
 Both filters extend the existing `stdlib.time.*` family rather than founding a
 namespace, and neither observes the clock: only `now` keeps a refusing stub in
 the manifest-query registration. See
-[RFC 0020](rfcs/0020-date-and-time-conversion-helpers.md) §§5.2 and 5.9 and
-[adr-008-environment-seam-taxonomy.md](adr-008-environment-seam-taxonomy.md).
+[RFC 0020](rfcs/rfc-0020-date-and-time-conversion-helpers.md) §§5.2 and 5.9 and
+[adr-0008-environment-seam-taxonomy.md](adrs/adr-0008-environment-seam-taxonomy.md).
 
 ### 6.10. Decide the deferred candidates on evidence rather than parity
 
@@ -1406,7 +1424,7 @@ untracked-file discovery, or per-linter file selection.
   - See
     [git-change-detection-helpers-design.md §§5, 8, and 9](git-change-detection-helpers-design.md#5-changed-path-result-contract).
   - Follow
-    [ADR-015](adr-015-use-bounded-git-cli-for-change-detection.md).
+    [ADR-0015](adrs/adr-0015-use-bounded-git-cli-queries-for-change-detection.md).
   - Success: temporary-repository cases preserve newline-bearing paths,
     represent renames as old plus new paths, reject oversized and malformed
     output, and demonstrate the specified purity transitions.
@@ -1458,7 +1476,7 @@ deterministic, mock-friendly, and runs through the same compiler pipeline as
 the build.
 
 Objective: deliver the `netsuke test` command and YAML test dialect specified in
-[RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
+[RFC 0007](rfcs/rfc-0007-netsukefile-testing-framework.md), the
 [UX and semantic design](netsuke-test-framework-ux-design.md), and the
 [technical design](netsuke-test-framework-technical-design.md).
 
@@ -1473,7 +1491,7 @@ Objective: deliver the `netsuke test` command and YAML test dialect specified in
     it, and the ambient fallback when no provider is configured, all
     registered through `StdlibConfig`.
   - [x] Record the seam classification per
-    [ADR-008](adr-008-environment-seam-taxonomy.md).
+    [ADR-0008](adrs/adr-0008-environment-seam-taxonomy.md).
 
 - [ ] 7.1.2. Introduce the options-carrying manifest loader entry point. See
   [technical design §4.3](netsuke-test-framework-technical-design.md).
@@ -1555,7 +1573,7 @@ Objective: deliver the `netsuke test` command and YAML test dialect specified in
     than the process working directory.
   - [ ] Resolve file-test paths through the sandbox handle instead of
     `open_ambient_dir`, rejecting escapes.
-  - [ ] Leave the build path's ADR-010 behaviour unchanged.
+  - [ ] Leave the build path's ADR-0010 behaviour unchanged.
 
 - [ ] 7.4.2. Implement the fixture lifecycle. See
   [UX design §9](netsuke-test-framework-ux-design.md) and
@@ -1667,10 +1685,11 @@ boundaries, then workflow drift, stale exceptions, and malformed-input failures
 can be closed without displacing the fast checks required for pull-request
 review.
 
-This phase implements [RFC 0008](rfcs/0008-code-health.md). It establishes the
-deterministic policy spine before adding scheduled coverage-guided depth, so
-the repository can distinguish blocking contract failures from longer-running
-health signals.
+This phase implements
+[RFC 0008](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md).
+It establishes the deterministic policy spine before adding scheduled
+coverage-guided depth, so the repository can distinguish blocking contract
+failures from longer-running health signals.
 
 ### 8.1. Establish one inventory and health-policy authority
 
@@ -1693,8 +1712,8 @@ boundary for the blocking validator and later scheduled jobs.
   - Record the chosen boundary and reuse policy in an Architectural Decision
     Record (ADR) and the developer documentation before implementation.
   - See [RFC 0008 §Health tiers and exception/allowlist
-    registry](rfcs/0008-code-health.md#health-tiers-and-exceptionallowlist-registry)
-    and [§Open questions](rfcs/0008-code-health.md#open-questions).
+    registry](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#health-tiers-and-exceptionallowlist-registry)
+    and [§Open questions](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#open-questions).
   - Success: the registry has one documented schema and cannot represent an
     ownerless, unscoped, non-expiring, or subjectless exception, nor accept an
     unprotected policy change.
@@ -1707,9 +1726,9 @@ boundary for the blocking validator and later scheduled jobs.
   - Return stable source locations and identifiers so each diagnostic names a
     file, YAML path, rule, and remediation.
   - See [RFC 0008 §Repository-wide workflow-policy
-    validator](rfcs/0008-code-health.md#repository-wide-workflow-policy-validator)
+    validator](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#repository-wide-workflow-policy-validator)
     and [§Gate self-consistency
-    contracts](rfcs/0008-code-health.md#gate-self-consistency-contracts).
+    contracts](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#gate-self-consistency-contracts).
   - Success: a clean checkout produces a deterministic inventory without
     GitHub credentials, network access, or process-global environment mutation.
 - [ ] 8.1.3. Run the inventory and registry in report-only mode.
@@ -1720,7 +1739,7 @@ boundary for the blocking validator and later scheduled jobs.
     the existing Proptest, Kani, coverage, mutation, and no-blanket-retry
     contracts.
   - See [RFC 0008 §Phase 1: Inventory and
-    report](rfcs/0008-code-health.md#phase-1-inventory-and-report).
+    report](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#phase-1-inventory-and-report).
   - Success: every reported finding has an owner and disposition, and the clean
     checkout has no unexplained inventory or tier mismatch.
 - [ ] 8.1.4. Validate protected policy-input changes.
@@ -1731,7 +1750,7 @@ boundary for the blocking validator and later scheduled jobs.
   - Test acceptable protected changes and reject direct, unprotected
     modifications before exception evaluation.
   - See [RFC 0008 §Health tiers and exception/allowlist
-    registry](rfcs/0008-code-health.md#health-tiers-and-exceptionallowlist-registry).
+    registry](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#health-tiers-and-exceptionallowlist-registry).
   - Success: a registry change cannot relax a blocking rule without the
     required protected approval, and validation identifies the protected input.
 
@@ -1758,7 +1777,7 @@ schedule.
     triggers, untrusted checkout and artefact-provenance cases, and
     pull-request data flowing to shell commands.
   - See [RFC 0008 §Repository-wide workflow-policy
-    validator](rfcs/0008-code-health.md#repository-wide-workflow-policy-validator).
+    validator](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#repository-wide-workflow-policy-validator).
   - Success: every security-policy class has a stable failing fixture and an
     actionable rule identifier, including allowed-source and declared-repository
     SHA provenance, both `continue-on-error` scopes, `pull_request_target`, and
@@ -1780,9 +1799,9 @@ schedule.
     removes duplicate parsing, while preserving their domain-specific
     assertions.
   - See [RFC 0008 §Gate self-consistency
-    contracts](rfcs/0008-code-health.md#gate-self-consistency-contracts)
+    contracts](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#gate-self-consistency-contracts)
     and [§Documentation
-    consistency](rfcs/0008-code-health.md#documentation-consistency).
+    consistency](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#documentation-consistency).
   - Success: every tracked workflow and indexed documentation reference
     resolves, or is explicitly marked as historical under the documented rule;
     the blocking validator requires no network access.
@@ -1796,9 +1815,9 @@ schedule.
   - Add the validator to a canonical Make target and the per-pull-request CI
     path without weakening existing gates or adding blanket retries.
   - See [RFC 0008 §Health tiers and exception/allowlist
-    registry](rfcs/0008-code-health.md#health-tiers-and-exceptionallowlist-registry)
+    registry](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#health-tiers-and-exceptionallowlist-registry)
     and [§Phase 2: Block deterministic
-    contracts](rfcs/0008-code-health.md#phase-2-block-deterministic-contracts).
+    contracts](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#phase-2-block-deterministic-contracts).
   - Success: twenty measured runs on the standard CI runner complete in under
     two minutes each and produce the same classifications for the same tree;
     every accepted exception has one valid subject, owner, reference, rationale,
@@ -1811,7 +1830,7 @@ schedule.
     exceptions, shell quoting, comments, and multiline commands in combination.
   - Exercise every tracked workflow through the same command that CI invokes.
   - See [RFC 0008 §Acceptance
-    criteria](rfcs/0008-code-health.md#acceptance-criteria).
+    criteria](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#acceptance-criteria).
   - Success: each policy class fails independently and in representative
     combinations, while the repository corpus passes without allowlist drift.
 - [ ] 8.2.5. Report external-link reachability outside blocking validation.
@@ -1820,7 +1839,7 @@ schedule.
     per-URL timeout and a 10-minute job limit. Classify DNS, connection, TLS,
     redirect, HTTP-status, and timeout failures without changing PR results.
   - See [RFC 0008 §Documentation
-    consistency](rfcs/0008-code-health.md#documentation-consistency).
+    consistency](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#documentation-consistency).
   - Success: a temporarily unavailable external URL is reported with its
     classified failure while the repository-only blocking validator still
     completes deterministically.
@@ -1842,8 +1861,8 @@ remain scheduled.
   - Document the harness ownership and composition rules before extracting any
     new shared boundary.
   - See [RFC 0008 §Scheduled cargo-fuzz
-    targets](rfcs/0008-code-health.md#scheduled-cargo-fuzz-targets)
-    and [§Open questions](rfcs/0008-code-health.md#open-questions).
+    targets](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#scheduled-cargo-fuzz-targets)
+    and [§Open questions](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#open-questions).
   - Success: a fixed input always yields the same bounded value or typed error,
     the registry publishes every fixed budget, watchdog expiry is an explicit
     timeout result, and a harness defect cannot invoke user commands or escape
@@ -1854,7 +1873,7 @@ remain scheduled.
     valid minimal manifests, and current parser limits.
   - Check in minimized valid, malformed, and boundary smoke inputs.
   - See [RFC 0008 §Scheduled cargo-fuzz
-    targets](rfcs/0008-code-health.md#scheduled-cargo-fuzz-targets).
+    targets](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#scheduled-cargo-fuzz-targets).
   - Success: bounded parsing returns a typed result without panic, timeout, or
     uncontrolled filesystem access.
 - [ ] 8.3.3. Implement the `jinja_expansion` fuzz boundary.
@@ -1863,7 +1882,7 @@ remain scheduled.
     expansion-size pressure, and the current control-key and binding rules.
   - Check in minimized valid, malformed, and boundary smoke inputs.
   - See [RFC 0008 §Scheduled cargo-fuzz
-    targets](rfcs/0008-code-health.md#scheduled-cargo-fuzz-targets).
+    targets](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#scheduled-cargo-fuzz-targets).
   - Success: expansion is bounded and deterministic and preserves current
     semantics without panic.
 - [ ] 8.3.4. Implement the `command_interpolation` fuzz boundary.
@@ -1873,7 +1892,7 @@ remain scheduled.
   - Preserve the current whole-placeholder rewriting contract.
   - Check in minimized valid, malformed, and boundary smoke inputs.
   - See [RFC 0008 §Scheduled cargo-fuzz
-    targets](rfcs/0008-code-health.md#scheduled-cargo-fuzz-targets).
+    targets](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#scheduled-cargo-fuzz-targets).
   - Success: the target produces a deterministic typed result without panic,
     timeout, or command execution.
 - [ ] 8.3.5. Implement the `path_processing` fuzz boundary.
@@ -1883,7 +1902,7 @@ remain scheduled.
   - Preserve capability-root confinement and current path classifications.
   - Check in minimized valid, malformed, and boundary smoke inputs.
   - See [RFC 0008 §Scheduled cargo-fuzz
-    targets](rfcs/0008-code-health.md#scheduled-cargo-fuzz-targets).
+    targets](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#scheduled-cargo-fuzz-targets).
   - Success: the target produces a deterministic typed result without panic,
     timeout, uncontrolled filesystem access, or path escape.
 - [ ] 8.3.6. Implement the `ninja_emission` fuzz boundary.
@@ -1892,7 +1911,7 @@ remain scheduled.
     names and commands, ordering variation, and output-size limits.
   - Check in minimized valid, malformed, and boundary smoke inputs.
   - See [RFC 0008 §Scheduled cargo-fuzz
-    targets](rfcs/0008-code-health.md#scheduled-cargo-fuzz-targets).
+    targets](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#scheduled-cargo-fuzz-targets).
   - Success: equivalent input produces deterministic output accepted by the
     renderer contract, or a typed error, without running Ninja.
 - [ ] 8.3.7. Integrate fuzz smoke checks, scheduled campaigns, and crash
@@ -1919,7 +1938,7 @@ remain scheduled.
     harness defect that blocks promotion; correct validator false positives
     with a fixture and rule change rather than a broad allowlist.
   - See [RFC 0008 §Phase 3: Add scheduled
-    fuzzing](rfcs/0008-code-health.md#phase-3-add-scheduled-fuzzing).
+    fuzzing](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#phase-3-add-scheduled-fuzzing).
   - Success: every target has a passing smoke corpus and bounded properties
     cover the range invariants, resource and operation limits, validator graph
     and exception-schema boundaries, limit edges, the 256-case bound, and
@@ -1939,7 +1958,7 @@ temporary exceptions instead of normalizing them.
     coverage trends, mutation survivors, and exception age.
   - Distinguish tool or runner outages from product and policy failures.
   - See [RFC 0008 §Phase 4: Ratchet and
-    review](rfcs/0008-code-health.md#phase-4-ratchet-and-review).
+    review](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#phase-4-ratchet-and-review).
   - Success: the evidence has no unexplained missing run, hidden retry, stale
     crasher, or ownerless exception.
 - [ ] 8.4.2. Promote only stable signals and reconcile documentation.
@@ -1951,7 +1970,7 @@ temporary exceptions instead of normalizing them.
     tier registry, workflows, Make targets, developer guide, and formal
     verification guide.
   - See [RFC 0008 §Compatibility and
-    migration](rfcs/0008-code-health.md#compatibility-and-migration).
+    migration](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md#compatibility-and-migration).
   - Success: the registry and documentation agree with every producing job,
     and each surviving exception remains narrow, owned, justified, and current.
 
@@ -1962,7 +1981,8 @@ dependency policy, and archive checks to deterministic evidence for the exact
 tag commit, then publication can fail closed before an invalid or
 under-evidenced artefact becomes a release.
 
-This phase implements [RFC 0005](rfcs/0005-release-hardening.md). It keeps
+This phase implements
+[RFC 0005](rfcs/rfc-0005-harden-release-integrity-and-admission.md). It keeps
 measurement separate from enforcement, then makes the existing publication job
 consume one read-only admission decision without changing public command or
 archive naming contracts.
@@ -1984,9 +2004,10 @@ must share.
   - Record substantive decisions as ADRs and update release architecture and
     developer documentation.
   - See [RFC 0005 §Open
-    questions](rfcs/0005-release-hardening.md#open-questions) and
+    questions](rfcs/rfc-0005-harden-release-integrity-and-admission.md#open-questions)
+    and
     [§Phase 1: Measure and
-    inventory](rfcs/0005-release-hardening.md#phase-1-measure-and-inventory).
+    inventory](rfcs/rfc-0005-harden-release-integrity-and-admission.md#phase-1-measure-and-inventory).
   - Success: every threshold, freshness rule, waiver, and retained artefact has
     one documented owner and source of truth.
 - [ ] 9.1.2. Define and validate the release-evidence manifest schema.
@@ -1999,7 +2020,7 @@ must share.
   - Reject unknown, missing, stale, malformed, duplicated, or contradictory
     evidence and require exactly one sidecar per archive.
   - See [RFC 0005 §Release-admission
-    evidence](rfcs/0005-release-hardening.md#release-admission-evidence).
+    evidence](rfcs/rfc-0005-harden-release-integrity-and-admission.md#release-admission-evidence).
   - Success: schema fixtures prove every required field, exact-commit relation,
     producer provenance binding, and malformed or mismatched identity case
     without granting publish permissions.
@@ -2011,7 +2032,7 @@ must share.
   - Record stripped and unstripped binary sizes and representative-workload
     timings with the evidence inputs needed to reproduce them.
   - See [RFC 0005 §Release-mode
-    invariants](rfcs/0005-release-hardening.md#release-mode-invariants).
+    invariants](rfcs/rfc-0005-harden-release-integrity-and-admission.md#release-mode-invariants).
   - Success: five repeated baseline runs per supported target are retained and
     identify their exact commit and build inputs.
 
@@ -2028,7 +2049,7 @@ the accepted size and performance budgets.
   - Preserve the pinned nightly toolchain, Polonius, Kani, and existing
     all-target and all-feature gates.
   - See [RFC 0005 §Release-mode
-    invariants](rfcs/0005-release-hardening.md#release-mode-invariants).
+    invariants](rfcs/rfc-0005-harden-release-integrity-and-admission.md#release-mode-invariants).
   - Success: every supported target builds with both invariants enabled and no
     release path silently restores Cargo defaults.
 - [ ] 9.2.2. Add end-to-end release-path invariant coverage.
@@ -2055,7 +2076,7 @@ the accepted size and performance budgets.
   - Require supported failures to remain typed, documented errors rather than
     assertion failures or arithmetic panics.
   - See [RFC 0005 §Measurable acceptance
-    criteria](rfcs/0005-release-hardening.md#measurable-acceptance-criteria).
+    criteria](rfcs/rfc-0005-harden-release-integrity-and-admission.md#measurable-acceptance-criteria).
   - Success: every named assertion site, the `Recipe::Rule` profile-dependent
     rejection, and selected overflow boundaries are covered across supported
     targets without weakening an invariant. Bounded properties cover release
@@ -2070,7 +2091,7 @@ the accepted size and performance budgets.
     slower or its stripped binary is more than 10% larger; retain unstripped
     size as a diagnostic.
   - See [RFC 0005 §Measurable acceptance
-    criteria](rfcs/0005-release-hardening.md#measurable-acceptance-criteria).
+    criteria](rfcs/rfc-0005-harden-release-integrity-and-admission.md#measurable-acceptance-criteria).
   - Success: repeated measurements are reproducible, exact-commit-bound, and
     fail closed when either budget is exceeded.
 
@@ -2094,7 +2115,7 @@ temporary waivers into permanent trust.
     pattern, path, reviewer, rationale, and expiry without disabling the
     repository scan.
   - See [RFC 0005 §Secret
-    scanning](rfcs/0005-release-hardening.md#secret-scanning).
+    scanning](rfcs/rfc-0005-harden-release-integrity-and-admission.md#secret-scanning).
   - Success: a synthetic secret fails each candidate event without printing
     secret material, while an unpinned scanner or broad suppression fails
     policy validation.
@@ -2109,7 +2130,7 @@ temporary waivers into permanent trust.
   - Treat a late, missing, unavailable, or newly failing scan as unknown or
     failed, never passed.
   - See [RFC 0005 §Secret
-    scanning](rfcs/0005-release-hardening.md#secret-scanning).
+    scanning](rfcs/rfc-0005-harden-release-integrity-and-admission.md#secret-scanning).
   - Success: release evidence rejects stale history scans and identifies a
     finding without disclosing its content.
 - [ ] 9.3.3. Add versioned advisory and dependency policy.
@@ -2121,7 +2142,7 @@ temporary waivers into permanent trust.
   - Require waivers to name the advisory, dependency, reason, owner, approval,
     and expiry; generated output cannot waive a failed policy.
   - See [RFC 0005 §Dependency and licence
-    policy](rfcs/0005-release-hardening.md#dependency-and-licence-policy).
+    policy](rfcs/rfc-0005-harden-release-integrity-and-admission.md#dependency-and-licence-policy).
   - Success: clean policy output is reproducible from the committed lockfile,
     tool versions, registry state, and policy files, and every advisory,
     source, ban, and licence negative fixture fails closed.
@@ -2134,7 +2155,7 @@ temporary waivers into permanent trust.
   - Require each exception to name the dependency, reason, owner, approval,
     and expiry; generated output cannot waive a failed policy.
   - See [RFC 0005 §Dependency and licence
-    policy](rfcs/0005-release-hardening.md#dependency-and-licence-policy).
+    policy](rfcs/rfc-0005-harden-release-integrity-and-admission.md#dependency-and-licence-policy).
   - Success: the notice inventory is complete and reproducible, and each
     unmaintained finding has the blocking or review outcome defined by policy.
 
@@ -2153,7 +2174,7 @@ runs prove the failure boundary before any job receives release permissions.
     checked-out release SHA; record tool versions, policy inputs, and immutable
     producer, log, and artefact identities or digests.
   - See [RFC 0005 §Release-admission
-    evidence](rfcs/0005-release-hardening.md#release-admission-evidence).
+    evidence](rfcs/rfc-0005-harden-release-integrity-and-admission.md#release-admission-evidence).
   - Success: a candidate has exactly one successful, reproducible,
     provenance-bound result for every required gate, target, archive, and
     checksum sidecar.
@@ -2175,12 +2196,12 @@ runs prove the failure boundary before any job receives release permissions.
     including missing evidence, but does not fail the workflow or make
     publication depend on the scaffold. Connect publication to the admission
     result only once a real evidence producer is available and enforcement
-    mode is enabled. See [ADR-020](adr-020-release-admission-observability.md)
+    mode is enabled. See [ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md)
     and the
     [release-admission observability
     guidance](developers-guide.md#release-admission-observability).
   - See [RFC 0005 §Phase 4: Turn on
-    admission](rfcs/0005-release-hardening.md#phase-4-turn-on-admission).
+    admission](rfcs/rfc-0005-harden-release-integrity-and-admission.md#phase-4-turn-on-admission).
   - Success: no job with publication permission can run before successful
     exact-commit admission, and no archive is admitted without three-way
     byte-derived digest agreement.
@@ -2193,9 +2214,9 @@ runs prove the failure boundary before any job receives release permissions.
   - Prove tool outages and expired waivers remain unknown or failed, and prove
     a dry run cannot bypass admission for a real publication event.
   - See [RFC 0005 §Failure modes and
-    mitigations](rfcs/0005-release-hardening.md#failure-modes-and-mitigations)
+    mitigations](rfcs/rfc-0005-harden-release-integrity-and-admission.md#failure-modes-and-mitigations)
     and [§Measurable acceptance
-    criteria](rfcs/0005-release-hardening.md#measurable-acceptance-criteria).
+    criteria](rfcs/rfc-0005-harden-release-integrity-and-admission.md#measurable-acceptance-criteria).
   - Success: every invalid matrix case blocks before upload, while clean
     evidence preserves the established archive and sidecar contract.
 
@@ -2208,7 +2229,7 @@ runs prove the failure boundary before any job receives release permissions.
     evidence; do not remove release invariants or widen thresholds to clear a
     failed release.
   - See [RFC 0005 §Compatibility and
-    migration](rfcs/0005-release-hardening.md#compatibility-and-migration).
+    migration](rfcs/rfc-0005-harden-release-integrity-and-admission.md#compatibility-and-migration).
   - Success: a real release is publishable only from the admitted exact tag
     commit, and its retained evidence reproduces the admission decision.
 
@@ -2221,16 +2242,18 @@ Ninja text.
 
 Objective: deliver the `result.actions` view, the declarative `forall`
 generation block, the metamorphic `mutations` vocabulary, and the coverage lint
-specified in [RFC 0012](rfcs/0012-netsukefile-property-testing.md), extending
-the phase 7 framework without reopening its closed dialect.
+specified in
+[RFC 0012](rfcs/rfc-0012-property-based-testing-of-generated-build-scripts.md),
+extending the phase 7 framework without reopening its closed dialect.
 
 ### 10.1. Structured observation of invocations and environments
 
 This step answers whether plan-mode projections can expose command lines and
 constructed environments host-independently. Its outcome fixes the assertion
 surface that every later property builds on. See
-[RFC 0012 §1](rfcs/0012-netsukefile-property-testing.md#1-the-resultactions-view)
-and [§2](rfcs/0012-netsukefile-property-testing.md#2-quantified-assertions).
+[RFC 0012 §1](rfcs/rfc-0012-property-based-testing-of-generated-build-scripts.md#1-the-resultactions-view)
+and
+[§2](rfcs/rfc-0012-property-based-testing-of-generated-build-scripts.md#2-quantified-assertions).
 
 - [ ] 10.1.1. Pin the recipe shell for plan-mode projections.
   - Requires 7.5.1.
@@ -2249,7 +2272,7 @@ and [§2](rfcs/0012-netsukefile-property-testing.md#2-quantified-assertions).
   - Success: every Table 1 field and helper is observable in plan mode, and
     identical manifests produce byte-identical, canonically ordered views under
     the RFC 8785 canonical JSON contract of
-    [RFC 0006 §6.7](rfcs/0006-ansible-inspired-template-standard-library.md#67-canonical-value-equality),
+    [RFC 0006 §6.7](rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md#67-canonical-value-equality),
     regardless of declaration or IR iteration order.
 - [ ] 10.1.3. Implement quantified assertions.
   - Requires 7.5.5 and 10.1.2.
@@ -2267,8 +2290,9 @@ and [§2](rfcs/0012-netsukefile-property-testing.md#2-quantified-assertions).
 This step answers whether a closed domain vocabulary with deterministic
 expansion is expressive enough for real Netsukefile properties, informing
 whether further constructors are warranted before the dialect stabilizes. See
-[RFC 0012 §3](rfcs/0012-netsukefile-property-testing.md#3-the-forall-block) and
-[§5](rfcs/0012-netsukefile-property-testing.md#5-engine-and-determinism).
+[RFC 0012 §3](rfcs/rfc-0012-property-based-testing-of-generated-build-scripts.md#3-the-forall-block)
+and
+[§5](rfcs/rfc-0012-property-based-testing-of-generated-build-scripts.md#5-engine-and-determinism).
 
 - [ ] 10.2.1. Parse the `forall` block and domain vocabulary.
   - Requires 7.2.2.
@@ -2294,9 +2318,9 @@ whether further constructors are warranted before the dialect stabilizes. See
 
 This step answers whether built-in two-run relations catch generator
 regressions that authors would not have written down as fixtures. See
-[RFC 0012 §4](rfcs/0012-netsukefile-property-testing.md#4-built-in-metamorphic-relations)
+[RFC 0012 §4](rfcs/rfc-0012-property-based-testing-of-generated-build-scripts.md#4-built-in-metamorphic-relations)
 and
-[§6](rfcs/0012-netsukefile-property-testing.md#6-coverage-completeness-lint).
+[§6](rfcs/rfc-0012-property-based-testing-of-generated-build-scripts.md#6-coverage-completeness-lint).
 
 - [ ] 10.3.1. Implement the `mutations` vocabulary.
   - Requires 10.1.2 and 10.2.2.
@@ -2346,15 +2370,16 @@ without giving Netsukefiles arbitrary interpreter authority or moving working
 directories, streams, pipelines, and failure handling back into shell text.
 
 This phase is governed by
-[ADR-019](adr-019-structured-command-shell-selection.md) and
-[RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md). It extends the
-structured-command design in
-[RFC 0001](rfcs/0001-structured-command-blocks.md). Primitive work can precede
-that design's AST; core integration requires 12.3.1. The full interaction
-matrix in 11.3.2 waits for 12.3.3, 13.2.3, and 14.2.3. This separates basic
-shell selection from the later facilities whose shared semantics it verifies.
-Issue `#593` remains the broader feature umbrella; 17.4.4 validates composed
-recipes without creating another shell registry or changing its authority.
+[ADR-0019](adrs/adr-0019-select-allow-listed-structured-command-shells.md) and
+[RFC 0011](rfcs/rfc-0011-allow-listed-structured-command-shells.md). It extends
+the structured-command design in
+[RFC 0001](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
+Primitive work can precede that design's AST; core integration requires 12.3.1.
+The full interaction matrix in 11.3.2 waits for 12.3.3, 13.2.3, and 14.2.3.
+This separates basic shell selection from the later facilities whose shared
+semantics it verifies. Issue `#593` remains the broader feature umbrella;
+17.4.4 validates composed recipes without creating another shell registry or
+changing its authority.
 
 ### 11.1. Settle the contract before implementation
 
@@ -2371,10 +2396,11 @@ before any schema or runtime code exists.
     name.
   - Record the schema, compatibility, implementation phases, and test strategy
     in RFC 0011 without changing runtime code.
-  - See [ADR-019](adr-019-structured-command-shell-selection.md),
+  - See
+    [ADR-0019](adrs/adr-0019-select-allow-listed-structured-command-shells.md),
     [RFC 0001 §Shell
-    mode](rfcs/0001-structured-command-blocks.md#10-shell-mode), and
-    [RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md).
+    mode](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md#10-shell-mode),
+    and [RFC 0011](rfcs/rfc-0011-allow-listed-structured-command-shells.md).
   - Success: accepted architecture and proposed schema documents define every
     required decision, while the production source tree remains unchanged.
 
@@ -2384,7 +2410,7 @@ This step builds data and resolution primitives independently of the future
 structured-command AST. Each task keeps configuration and ambient host input
 outside the execution domain.
 
-- [ ] 11.2.1. Add the manifest-facing shell selection vocabulary.
+- [x] 11.2.1. Add the manifest-facing shell selection vocabulary.
   - Requires 11.1.1.
   - Add the finite `BuiltInShell` enum with `sh`, `bash`, `pwsh`, and
     `powershell`, plus a validated `ShellName` registry-name type capable of
@@ -2498,7 +2524,7 @@ that all completed facilities use the same path and authority boundary.
     and shebang-based scripts distinct. Task 11.3.2 owns the complete runtime
     interaction matrix once its prerequisites land.
   - See
-    [RFC 0011 §§4-6 and 9](rfcs/0011-allow-listed-structured-command-shells.md).
+    [RFC 0011 §§4-6 and 9](rfcs/rfc-0011-allow-listed-structured-command-shells.md).
   - Success: unit and behavioural tests prove identical implemented outer
     semantics for direct and named-shell blocks, while selected shell source
     receives only the rendered `invoke` text after fixed arguments.
@@ -2514,9 +2540,10 @@ that all completed facilities use the same path and authority boundary.
   - Prove that direct mode retains argv-boundary protection while both Boolean
     and named shell modes continue to treat `invoke` as shell source. Bindings,
     command overlays, and source placement must not replace the resolved shell.
-  - See [RFC 0011 §§5-11](rfcs/0011-allow-listed-structured-command-shells.md),
-    [RFC 0009 §19](rfcs/0009-structured-command-working-directories.md), and
-    [RFC 0010 §17](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - See
+    [RFC 0011 §§5-11](rfcs/rfc-0011-allow-listed-structured-command-shells.md),
+    [RFC 0009 §19](rfcs/rfc-0009-structured-command-working-directories.md), and
+    [RFC 0010 §17](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md).
   - Success: the supported-host matrix passes in CI, every invalid case fails
     before execution with its typed diagnostic class, and existing `true` and
     `false` compatibility snapshots remain unchanged.
@@ -2532,7 +2559,7 @@ that all completed facilities use the same path and authority boundary.
     hardening, but keep the unrestricted MiniJinja `shell()` and `grep()`
     command-capability finding open until its separate remediation lands.
   - Success: user, operator, developer, sample-configuration, and security
-    guidance agree with ADR-019 and make the Netsukefile-versus-`CliConfig`
+    guidance agree with ADR-0019 and make the Netsukefile-versus-`CliConfig`
     authority boundary explicit.
 
 ## 12. Argv-safe commands in ordinary builds
@@ -2542,13 +2569,13 @@ command, preserve argument boundaries through Ninja, and keep existing legacy
 recipes unchanged without learning a second quoting language.
 
 This phase begins the implementation of
-[RFC 0001](rfcs/0001-structured-command-blocks.md).
+[RFC 0001](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
 
 Its amendments include
 
-- [RFC 0009](rfcs/0009-structured-command-working-directories.md).
-- [RFC 0010](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
-- [RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md).
+- [RFC 0009](rfcs/rfc-0009-structured-command-working-directories.md).
+- [RFC 0010](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md).
+- [RFC 0011](rfcs/rfc-0011-allow-listed-structured-command-shells.md).
 
 Phases 12 to 14 cover the structured-command portion of issue `#593`; the
 [composition roadmap](roadmap-composition.md) owns includes and bundles. Phase
@@ -2558,12 +2585,14 @@ composition tracks without making either local foundation wait for the other's
 implementation.
 
 The RFCs remain proposed until their acceptance work completes. Task 12.1.1
-must settle their conflicting text before implementation; this roadmap does not
-silently choose a different contract. Intermediate slices must reject
-unsupported forms rather than ignore fields or fall back to legacy execution.
-Task 14.3.3 gates publication of the complete amended schema. Every delivery
-task includes unit and behavioural coverage, with properties and bounded proofs
-at pure boundaries and cross-feature suites at integration boundaries.
+settled their conflicting text; implementation follows
+[ADR-0043](adrs/adr-0043-consolidated-structured-command-execution-contract.md)
+rather than the superseded paragraphs of any single amendment. Intermediate
+slices must reject unsupported forms rather than ignore fields or fall back to
+legacy execution. Task 14.3.3 gates publication of the complete amended schema.
+Every delivery task includes unit and behavioural coverage, with properties and
+bounded proofs at pure boundaries and cross-feature suites at integration
+boundaries.
 
 ### 12.1. Fix command structure before evaluating template values
 
@@ -2571,31 +2600,50 @@ This step asks whether one closed command grammar can preserve source identity
 and argv boundaries through typed interpolation. Its outcome fixes the compiler
 contract before any new command can execute.
 
-- [ ] 12.1.1. Consolidate and ratify the amended execution contract.
-  - Reconcile RFC 0001 §§9 and 12.1, RFC 0009 §§5 and 11, and RFC 0011 §6.2
-    on absolute `cwd`, capability confinement, and workspace-relative versus
-    `cwd`-relative stream paths. Include ADR-019 in the decision, updating
-    any affected accepted architecture through its documented decision process,
-    and align every RFC example before implementation.
-  - Distinguish ephemeral `capture_stdout` from `stdout: { env: NAME }`,
+- [x] 12.1.1. Consolidate and ratify the amended execution contract.
+  Ratified by
+  [ADR-0043](adrs/adr-0043-consolidated-structured-command-execution-contract.md);
+  see that record for the decision and its rationale.
+  - [x] Reconcile RFC 0001 §§9 and 12.1, RFC 0009 §§5 and 11, and RFC 0011
+    §6.2 on absolute `cwd`, capability confinement, and workspace-relative
+    versus `cwd`-relative stream paths. Include ADR-0019 in the decision,
+    updating any affected accepted architecture through its documented decision
+    process, and align every RFC example before implementation.
+  - [x] Distinguish ephemeral `capture_stdout` from `stdout: { env: NAME }`,
     and per-stage `temp_dir` variable overrides from `cwd: { tempdir: {} }`
     directory selection. Record whether both spellings remain and how their
     combinations validate, without losing either amendment's requirements.
-  - Record acceptance, the next available manifest minor version, action-plan
-    versioning, and bounded termination and stale-plan cleanup policies. Keep
-    the trust boundary from ADR-019 and defer the extensions in phase 15.
-    Coordinate schema allocation with 16.1.1 and 17.1.1 without requiring their
-    implementations to complete first.
-  - See [RFC 0001 §§19 and 23](rfcs/0001-structured-command-blocks.md),
-    [RFC 0009 §§5 and 11](rfcs/0009-structured-command-working-directories.md),
-    [RFC 0010 §§7 and 10](rfcs/0010-runtime-bindings-and-secure-tempdirs.md),
-    and [RFC 0011 §6.2](rfcs/0011-allow-listed-structured-command-shells.md).
+  - [x] Record acceptance, the next available manifest minor version,
+    action-plan versioning, and bounded termination and stale-plan cleanup
+    policies. Keep the trust boundary from ADR-0019 and defer the extensions in
+    phase 15. Coordinate schema allocation with 16.1.1 and 17.1.1 without
+    requiring their implementations to complete first.
+  - See
+    [RFC 0001 §§19 and 23](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md),
+    [RFC 0009 §§5 and 11](rfcs/rfc-0009-structured-command-working-directories.md),
+    [RFC 0010 §§7 and 10](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md),
+    and [RFC 0011 §6.2](rfcs/rfc-0011-allow-listed-structured-command-shells.md).
   - Success: one accepted contract and consistent examples define every
     disputed case, including temporary-directory precedence and lifetime;
     direct, default-shell, and named-shell implementations share one path
     contract rather than selecting contradictory paragraphs.
+  - Outcome: relative stream paths resolve against the block's resolved `cwd`,
+    and RFC 0009 §11's contrary summary of RFC 0001 §12.1 is corrected as a
+    drafting error rather than a competing design. An absolute `cwd` is
+    rejected in the initial surface, resolving RFC 0001 §9 against RFC 0009 §5
+    in favour of confinement. Both capture spellings remain and are mutually
+    exclusive per stage: `capture_stdout` is an ephemeral raw-byte sink, and
+    `stdout: { env: NAME }` commits a sequence-local UTF-8 binding. Both
+    temporary-directory spellings remain and may combine: the tempdir `cwd`
+    form sets the working directory, and `temp_dir` binds `TMPDIR`, `TMP`, and
+    `TEMP` to a separate per-stage directory. Manifest minor version `1.1.0` is
+    reserved for the shared mapping schema, persisted plans are versioned
+    independently by the variants they contain, and bounded termination and
+    bounded stale-plan cleanup are now defined in RFC 0001 §13.3 and §17.4.
 - [ ] 12.1.2. Add the closed structured-command AST and schema version gate.
   - Requires 12.1.1 and 11.2.1.
+  - Follow up the help-targets graph export with structured-command recipe
+    variants after the AST and schema version gate are defined.
   - Preserve scalar commands and all-string lists; accept an `invoke` mapping
     or a non-empty heterogeneous list containing strings, structured blocks,
     single-key rule references, and single-key script items. Retain source
@@ -2603,7 +2651,8 @@ contract before any new command can execute.
   - Validate unknown and duplicate keys, mutually exclusive recipe forms,
     required values, Boolean-or-name shell intent, and amendment field types;
     reject unsupported syntax before Ninja or a user command starts.
-  - See [RFC 0001 §§6, 15, and 17.1](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §§6, 15, and 17.1](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: positive and negative schema fixtures cover every recipe shape,
     singular-versus-list restrictions, minimum versions, and actionable
     source-local errors while existing manifest fixtures retain their meaning.
@@ -2616,7 +2665,8 @@ contract before any new command can execute.
   - Reject malformed expressions, unmatched quotes, whitespace-only commands,
     unquoted shell operators, and standalone direct-mode `$in` or `$out` with
     corrective diagnostics; do not add shell expansion or comment syntax.
-  - See [RFC 0001 §7](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §7](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: grammar fixtures and bounded generated templates cover all quote,
     escape, delimiter, and expression-boundary cases without sentinel leakage
     or reparsing rendered values as command structure.
@@ -2628,7 +2678,8 @@ contract before any new command can execute.
     unsupported values, NUL, and an absent or empty final program.
   - Preserve literal fragments and scalar values exactly; keep legacy and
     shell-mode interpolation on their existing, separate rendering path.
-  - See [RFC 0001 §§8 and 21](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §§8 and 21](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: property tests show hostile scalar text never changes argument
     count, valid splices preserve element order and identity, and malformed
     values fail before execution; retain every generated regression.
@@ -2649,7 +2700,7 @@ process state. It supplies the execution boundary needed by Ninja and streams.
     reference-site and definition-site provenance, and stop later units after
     failure without flattening away future binding scopes.
   - See
-    [RFC 0001 §§6.3, 14, 15, and 17.3](rfcs/0001-structured-command-blocks.md).
+    [RFC 0001 §§6.3, 14, 15, and 17.3](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: normalization snapshots and bounded properties preserve lexical
     order, legacy state sharing, boundary isolation, and deterministic cycle
     diagnostics for nested rules and mixed command lists.
@@ -2663,12 +2714,15 @@ process state. It supplies the execution boundary needed by Ninja and streams.
     `cmd.exe`, `.bat`, and `.cmd` targets in Windows direct mode with an
     explicit-shell remedy. Reuse one helper executable that reports argv,
     environment, working directory, bytes, and requested exit status in tests.
-  - See [RFC 0001 §§9, 11, and 21](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §§9, 11, and 21](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: observed child arguments and overlays match the plan on supported
     hosts, including spaces, empty arguments, metacharacters, and Unicode;
     subsequent units and the parent retain their original environment.
 - [ ] 12.2.3. Apply capability-scoped literal working directories at spawn.
   - Requires 12.1.1 and 12.2.2.
+  - Follow up the help-targets graph export with literal per-command `cwd`
+    fields after this milestone defines their manifest and execution contract.
   - Implement the consolidated RFC 0009 contract: normalize literal `cwd`
     against the effective workspace after `-C`, reject text escapes, and
     revalidate directory existence and type immediately before spawning.
@@ -2678,7 +2732,7 @@ process state. It supplies the execution boundary needed by Ninja and streams.
     Do not mutate the parent directory or treat source-file placement as
     directory authority; composed-recipe integration belongs to 17.4.4.
   - See [RFC 0009 §§5-15 and
-    19](rfcs/0009-structured-command-working-directories.md).
+    19](rfcs/rfc-0009-structured-command-working-directories.md).
   - Success: direct-process tests and bounded path properties cover missing,
     non-directory, permission, lexical and symlink escape, spaces, Unicode,
     Windows path forms, and source-fragment-independent resolution.
@@ -2690,8 +2744,10 @@ process state. It supplies the execution boundary needed by Ninja and streams.
     prefixes, and keep shebang scripts and legacy shell groups distinct.
   - Preserve direct mode for absent or false `shell`; leave named-selector
     integration to 11.3.1 rather than introducing another registry.
-  - See [RFC 0001 §§10 and 17.3](rfcs/0001-structured-command-blocks.md) and
-    [ADR-019](adr-019-structured-command-shell-selection.md).
+  - See
+    [RFC 0001 §§10 and 17.3](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md)
+    and
+    [ADR-0019](adrs/adr-0019-select-allow-listed-structured-command-shells.md).
   - Success: Unix-like and Windows tests observe the specified default-shell
     invocation, directory isolation, and fail-fast behaviour, without claiming
     direct-mode injection protection for rendered shell source.
@@ -2710,7 +2766,8 @@ Ninja manifests remain usable after the generating process exits.
   - Add bounded typed failures with action, item, stage, and source context;
     render human and JSON diagnostics through the established boundary with
     environment values, sensitive arguments, and private paths redacted.
-  - See [RFC 0001 §§16, 17.3, and 17.4](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §§16, 17.3, and 17.4](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: codec round-trips and hostile-plan fixtures either preserve the
     exact execution value or fail closed before spawning; diagnostics never
     dump the plan or use arbitrary arguments and paths as metric labels.
@@ -2723,7 +2780,8 @@ Ninja manifests remain usable after the generating process exits.
   - Fingerprint fully rendered execution plans deterministically. Keep build
     sidecars outside the workspace, owner-private, and leased until Ninja and
     owned runner descendants finish; implement bounded stale-plan cleanup.
-  - See [RFC 0001 §§17.4 and 20](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §§17.4 and 20](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: end-to-end builds preserve argv through Ninja, equivalent plans
     have stable fingerprints, changed execution data invalidates the action, and
     success, failure, and interruption release only owned sidecars.
@@ -2734,7 +2792,8 @@ Ninja manifests remain usable after the generating process exits.
     atomically while leaving the previous valid generation intact on failure.
   - Confine action identifiers to their sidecar set and bound replacement,
     deletion, and stale-state cleanup; do not reuse ephemeral build leases.
-  - See [RFC 0001 §17.4](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §17.4](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: saved manifests execute after the generator exits; interrupted
     publication, concurrent generation, unknown schemas, and escaping action
     identifiers cannot expose partial plans or remove another generation.
@@ -2746,7 +2805,8 @@ Ninja manifests remain usable after the generating process exits.
   - Document the working slice in the users' and developers' guides, replace
     the planned `exec.program`/`exec.args` sketch, and explain argv safety
     versus callee-language interpretation and the explicit shell escape hatch.
-  - See [RFC 0001 §§18-21](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §§18-21](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: the matrix passes on supported hosts, legacy snapshots remain
     unchanged except intentional version metadata, and every documented
     example executes through the same public workflow it describes.
@@ -2776,7 +2836,8 @@ handles to individual commands, tee relays, and complete pipelines.
     NUL, capture bounds, competing sinks, and predecessor-input conflicts.
   - Keep stream paths out of inferred graph dependencies and outputs; apply
     the agreed path base independently of source-file or bundle placement.
-  - See [RFC 0001 §§12, 15, and 17](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §§12, 15, and 17](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: schema fixtures and bounded exclusivity properties reject every
     conflicting sink combination before opening a file or starting Ninja.
 - [ ] 13.1.2. Open provisional stream handles without truncation.
@@ -2788,7 +2849,8 @@ handles to individual commands, tee relays, and complete pipelines.
   - Reject `EEXIST` after recorded absence rather than reopening the path, do
     not create missing parent directories, and close provisional handles on
     failure through a narrow capability-scoped filesystem adapter.
-  - See [RFC 0001 §12.1](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §12.1](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: deterministic barrier tests cover disappearance, replacement, and
     absent-to-created races, proving that competing files retain their bytes
     and no rejected path receives a truncating or fallback open.
@@ -2803,7 +2865,8 @@ handles to individual commands, tee relays, and complete pipelines.
   - Truncate and bind only the validated handles after all checks pass; never
     reopen by path. Start a fresh validation set for each sequential unit so
     a later unit can consume an earlier unit's output.
-  - See [RFC 0001 §§12.1 and 12.4](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §§12.1 and 12.4](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: a valid relative-path fixture resolves against the agreed base,
     while alias and replacement fixtures fail before truncation or spawn;
     sequential output reuse succeeds, and tests assert the complete open,
@@ -2816,7 +2879,7 @@ handles to individual commands, tee relays, and complete pipelines.
   - Own relay handles and join completion with child completion; do not detach
     relays or retain unbounded buffers while a destination applies pressure.
   - See
-    [RFC 0001 §§12.3, 12.5, and 13.2](rfcs/0001-structured-command-blocks.md).
+    [RFC 0001 §§12.3, 12.5, and 13.2](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: binary and high-volume fixtures reproduce both destinations
     byte-for-byte, and injected read or write failure stops execution and
     leaves no relay or child running.
@@ -2828,7 +2891,8 @@ handles to individual commands, tee relays, and complete pipelines.
     runtime binding or silently truncating successful output.
   - Keep capture diagnostics bounded and redacted; reserve the distinct named
     UTF-8 capture contract for 14.1.2.
-  - See [RFC 0001 §§12.3, 16, and 21](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §§12.3, 16, and 21](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: zero, exact-limit, and one-byte-over cases have the specified
     result and bounded memory, including binary output and child failure.
 
@@ -2846,8 +2910,10 @@ captures and temporary-directory preparation will extend.
     pipes into or out of legacy groups, scripts, or rule-reference boundaries.
   - Preserve independent directories and unselected streams for every stage,
     including stdout tee or capture alongside a stderr pipe.
-  - See [RFC 0001 §13.1](rfcs/0001-structured-command-blocks.md) and
-    [RFC 0010 §8](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - See
+    [RFC 0001 §13.1](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md)
+    and
+    [RFC 0010 §8](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md).
   - Success: generated topology cases and bounded Kani checks over the pure
     normalization kernel preserve stage order and prove one selected stream
     per edge and at most one predecessor per input.
@@ -2859,8 +2925,10 @@ captures and temporary-directory preparation will extend.
     duplicated handles so downstream readers can observe end-of-file.
   - Transfer raw bytes for either selected stream; do not decode, prefix,
     normalize, merge, or implicitly duplicate standard error.
-  - See [RFC 0001 §13.2](rfcs/0001-structured-command-blocks.md) and
-    [RFC 0010 §§8.1 and 8.3](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - See
+    [RFC 0001 §13.2](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md)
+    and
+    [RFC 0010 §§8.1 and 8.3](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md).
   - Success: three-stage pipelines exceed pipe-buffer capacity without hanging
     on supported hosts, preserve binary bytes, and observe timely end-of-file.
 - [ ] 13.2.3. Supervise pipeline status, cancellation, and partial startup.
@@ -2871,7 +2939,8 @@ captures and temporary-directory preparation will extend.
     close endpoints, apply the agreed bounded process-group or job-object
     termination policy, reap started children, and join every owned relay.
     Preserve the primary error and any secondary cleanup failures.
-  - See [RFC 0001 §§13.2-14 and 21](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §§13.2-14 and 21](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: injected first, middle, and final stage failures, failed later
     spawns, broken pipes, and interruptions produce deterministic diagnostics
     without orphaned children, detached relays, or an unbounded wait.
@@ -2891,9 +2960,10 @@ the baseline for adding action-local state in phase 14.
   - Exercise deterministic replacement and exclusive-create races together
     with partial startup, failed relays, cancellation, and saved-plan execution
     using helper processes and synchronization barriers rather than sleeps.
-  - See [RFC 0001 §21](rfcs/0001-structured-command-blocks.md),
-    [RFC 0009 §19](rfcs/0009-structured-command-working-directories.md), and
-    [RFC 0010 §17](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - See
+    [RFC 0001 §21](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md),
+    [RFC 0009 §19](rfcs/rfc-0009-structured-command-working-directories.md), and
+    [RFC 0010 §17](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md).
   - Success: the supported-host matrix preserves bytes and existing files,
     reports the correct item and stage, and demonstrates zero surviving owned
     children, relays, or leased build sidecars after every completion path.
@@ -2906,7 +2976,8 @@ the baseline for adding action-local state in phase 14.
   - Expose bounded, redacted execution-unit and stream-topology inspection
     without leaking private plan paths or coupling consumers to internal IR;
     keep phase 10's `result.actions` implementation owned by 10.1.2.
-  - See [RFC 0001 §§16, 19-21](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §§16, 19-21](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: examples run through Ninja, inspection snapshots explain each
     unit's topology, and the guides agree with the tested path and exit policy.
 
@@ -2918,10 +2989,10 @@ manifest compilation stateful or allowing captured text to grant filesystem
 authority.
 
 This phase completes the runtime facilities in
-[RFC 0010](rfcs/0010-runtime-bindings-and-secure-tempdirs.md), using the
-consolidated capture and temporary-directory distinctions from 12.1.1. Runtime
-bindings stay within one action-runner sequence; they do not become graph
-outputs, cache keys, or manifest-time Jinja variables.
+[RFC 0010](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md),
+using the consolidated capture and temporary-directory distinctions from
+12.1.1. Runtime bindings stay within one action-runner sequence; they do not
+become graph outputs, cache keys, or manifest-time Jinja variables.
 
 ### 14.1. Pass validated discovery results to later execution units
 
@@ -2939,7 +3010,7 @@ the text-versus-capability distinction used by directory consumers.
     not across rule-reference or independent action boundaries; reject a stage
     consuming another stage's uncommitted execution-produced binding.
   - See [RFC 0010 §§5, 6, 12, and
-    13](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+    13](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md).
   - Success: scope and precedence properties cover producer collisions,
     shadowing, rule boundaries, and fresh concurrent action contexts without
     parent-environment mutation or runtime values entering persisted plans.
@@ -2954,7 +3025,7 @@ the text-versus-capability distinction used by directory consumers.
     terminate and reap as needed and publish nothing. Allow capture with no
     pipe or a stderr pipe, never a stdout pipe.
   - See
-    [RFC 0010 §§5.4 and 7](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+    [RFC 0010 §§5.4 and 7](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md).
   - Success: limit-edge, UTF-8, NUL, newline, and pipeline-failure fixtures
     observe exact values only after success, and human and JSON diagnostics
     never expose captured contents by default.
@@ -2967,7 +3038,8 @@ the text-versus-capability distinction used by directory consumers.
   - Retain authority only for a runner-owned directory binding. An overlay
     shadow resolves as ordinary text even when its spelling matches the
     directory path; an absolute captured path never manufactures a capability.
-  - See [RFC 0010 §9](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - See
+    [RFC 0010 §9](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md).
   - Success: all text sources reject absolute and symlink escapes before
     spawn, injected directory capabilities retain their identity, and overlay
     shadowing removes that authority without changing the stored binding.
@@ -2988,8 +3060,10 @@ Its outcome determines whether temporary execution is safe to expose at all.
     owned processes and relays finish, with the root removed last. Cleanup
     failure fails otherwise successful execution or attaches a secondary cause
     to an existing failure; never silently retain sensitive temporary data.
-  - See [RFC 0001 §11.3](rfcs/0001-structured-command-blocks.md) and
-    [RFC 0010 §10](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - See
+    [RFC 0001 §11.3](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md)
+    and
+    [RFC 0010 §10](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md).
   - Success: permission and fault-injection tests cover every creation and
     removal boundary, prove privacy before spawn, and reject attempts to
     redirect the root through command overlays or captured values.
@@ -3002,9 +3076,11 @@ Its outcome determines whether temporary execution is safe to expose at all.
   - Publish named directory capabilities for current and later children,
     preserve their sequence lifetime, and exclude generated paths and captured
     values from serialized plans, graph fingerprints, and telemetry labels.
-  - See [RFC 0001 §11.3](rfcs/0001-structured-command-blocks.md) and
+  - See
+    [RFC 0001 §11.3](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md)
+    and
     [RFC 0010 §§6.4, 10, and
-    12](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+    12](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md).
   - Success: end-to-end sequences distinguish both temporary modes, reuse only
     named directory capabilities, and clean the correct lifetime after
     success, failure, interruption, timeout, or spawn error.
@@ -3018,7 +3094,7 @@ Its outcome determines whether temporary execution is safe to expose at all.
     prepared directories. Preserve bounded teardown after later execution
     failures and diagnose incompatible detached descendants explicitly.
   - See [RFC 0010 §§5.4, 10.3, 10.5, and
-    10.6](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+    10.6](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md).
   - Success: barrier-controlled concurrent-stage cases and preparation-failure
     injection prove all-or-nothing visibility, zero premature spawns, complete
     cleanup, and retained primary and secondary failure categories.
@@ -3039,8 +3115,10 @@ gates the manifest-version promise rather than merely a parser milestone.
     limit overflow, failed capability preparation, cancellation, timeout,
     cleanup errors, and concurrent independent actions. Verify source-aware
     redacted human and JSON diagnostics and no runtime-state persistence.
-  - See [RFC 0001 §21](rfcs/0001-structured-command-blocks.md) and
-    [RFC 0010 §17](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - See
+    [RFC 0001 §21](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md)
+    and
+    [RFC 0010 §17](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md).
   - Success: the supported-host matrix demonstrates no cross-action binding
     leaks, forged directory authority, orphaned owned processes, or silent
     cleanup failures, with deterministic replay of each injected failure.
@@ -3054,8 +3132,10 @@ gates the manifest-version promise rather than merely a parser milestone.
     bundle implementation a prerequisite. Task 17.4.4 later joins the tracks.
     Update user, design, developer, repository-layout, and security guidance
     with the tested scope.
-  - See [RFC 0001 §§18-21](rfcs/0001-structured-command-blocks.md) and
-    [RFC 0010 §§11 and 16](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - See
+    [RFC 0001 §§18-21](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md)
+    and
+    [RFC 0010 §§11 and 16](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md).
   - Success: canary evidence records equivalent successful outputs and intended
     failure behaviour, and documentation states capability limits, byte/text
     distinctions, cleanup guarantees, and the absence of child sandboxing.
@@ -3068,8 +3148,10 @@ gates the manifest-version promise rather than merely a parser milestone.
   - Run the repository's formatting, lint, documentation, unit, behavioural,
     property, and bounded proof gates on the supported target matrix; retain
     compatibility, deterministic plan, and cleanup evidence with the change.
-  - See [RFC 0001 §§19-21](rfcs/0001-structured-command-blocks.md) and
-    [RFC 0011](rfcs/0011-allow-listed-structured-command-shells.md).
+  - See
+    [RFC 0001 §§19-21](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md)
+    and
+    [RFC 0011](rfcs/rfc-0011-allow-listed-structured-command-shells.md).
   - Success: every in-scope RFC requirement maps to a passing acceptance case,
     the released version advertises no incomplete variant, and generated
     manifests remain reproducible and runnable with the matching runner.
@@ -3097,14 +3179,16 @@ the existing surface deliberately small.
     plus `default`, `prepend`, `append`, and `unset`, before authorizing the
     previously planned implementation in 3.14.9. Keep exact per-block overlays
     independent of this decision.
-  - See [RFC 0001 §§11.1, 11.4, and 23](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §§11.1, 11.4, and 23](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: a follow-on RFC defines ordered merges and portable path-list
     operations, or a recorded rejection leaves 3.14.9 deferred.
 - [ ] 15.1.2. Decide whether an explicit argv escape hatch earns its complexity.
   - Requires 14.3.3.
   - Compare real unresolved authoring cases with the existing argv-template
     grammar; do not revive `exec.program`/`exec.args` or add `args` by default.
-  - See [RFC 0001 §§22 and 23](rfcs/0001-structured-command-blocks.md).
+  - See
+    [RFC 0001 §§22 and 23](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md).
   - Success: a documented decision names a consumer and compatibility contract
     for any proposed new form, or explicitly retains the current grammar.
 
@@ -3120,9 +3204,10 @@ capability guarantees before any new execution path can land.
     trusted Windows batch opt-ins, external text-selected directories,
     cross-action runtime outputs, and temporary retention outside the initial
     contract; select only evidenced candidates for independent RFCs.
-  - See [RFC 0001 §§4 and 23](rfcs/0001-structured-command-blocks.md),
-    [RFC 0009 §20](rfcs/0009-structured-command-working-directories.md), and
-    [RFC 0010 §§3.2 and 10](rfcs/0010-runtime-bindings-and-secure-tempdirs.md).
+  - See
+    [RFC 0001 §§4 and 23](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md),
+    [RFC 0009 §20](rfcs/rfc-0009-structured-command-working-directories.md), and
+    [RFC 0010 §§3.2 and 10](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md).
   - Success: every candidate has an explicit defer, reject, or separately
     specified disposition, with no relaxation hidden inside an implementation
     task for phases 12 to 14.
@@ -3137,7 +3222,7 @@ Hypothesis: manifests can replace `uname` probes and environment conventions
 with one immutable, opt-in `host` snapshot without weakening non-disclosing
 target discovery, cross-compilation correctness, or Ninja work invalidation.
 
-This phase implements [RFC 0029](rfcs/0029-first-class-host-facts.md). The
+This phase implements [RFC 0029](rfcs/rfc-0029-first-class-host-facts.md). The
 platform-only slice in step 30.2 is independently useful; distribution and
 kernel observations in step 30.3 need explicit selection and an operator grant.
 The phase depends on neither external bundles, remote execution, a resource
@@ -3159,7 +3244,8 @@ task in this phase.
   - Record the substantive decision in an ADR referenced from the design
     document, and allocate the additive manifest-format version without
     coupling it to the schedules of 12.1.1 or 16.1.1.
-  - See [RFC 0029 §§4, 5, 13.1, and 14](rfcs/0029-first-class-host-facts.md).
+  - See
+    [RFC 0029 §§4, 5, 13.1, and 14](rfcs/rfc-0029-first-class-host-facts.md).
   - Success: the RFC is accepted with no open review decision, and the ADR
     names the schema version, field spellings, and adapter choices.
 - [ ] 30.1.2. Define the owned snapshot, request, grant, and diagnostic types.
@@ -3169,7 +3255,7 @@ task in this phase.
   - Add the `HostFactsProvider` seam with disjoint field ownership, treating a
     duplicate contribution as an internal contract error, and a
     `FixedHostFactsProvider` with no fallback to real host APIs.
-  - See [RFC 0029 §§6.4, 11, and 12](rfcs/0029-first-class-host-facts.md).
+  - See [RFC 0029 §§6.4, 11, and 12](rfcs/rfc-0029-first-class-host-facts.md).
   - Success: property tests over bounded requests and grants prove strict
     request-and-grant intersection and preserve null versus empty values.
 
@@ -3188,7 +3274,7 @@ groups are worth adding at all.
   - Resolve `host_fact_policy.allowed_groups` through the shared OrthoConfig
     metadata path with provenance; denials outrank project requests, and no
     environment variable overrides fact values.
-  - See [RFC 0029 §§5.1 and 5.2](rfcs/0029-first-class-host-facts.md).
+  - See [RFC 0029 §§5.1 and 5.2](rfcs/rfc-0029-first-class-host-facts.md).
   - Success: denied and invalid requests fail before any provider call, and
     the unchanged quickstart and an existing `vars.host` manifest render
     byte-for-byte as before without opt-in.
@@ -3202,7 +3288,7 @@ groups are worth adding at all.
     mutation. Report `host_fact_not_collected` and `unknown_host_fact`,
     including inside `default` expressions.
   - See [RFC 0029 §§5.3, 6.1, 6.4, 7.1, 7.2, and
-    11](rfcs/0029-first-class-host-facts.md).
+    11](rfcs/rfc-0029-first-class-host-facts.md).
   - Success: fixed Linux, macOS, Windows, and other-platform snapshots render
     identical results on every runner, and a counting provider observes one
     collection per invocation however many fields templates read.
@@ -3214,7 +3300,7 @@ groups are worth adding at all.
   - Carry the digest in generated-plan identity and per-edge command
     signatures, check reused-plan context with `host_plan_context_mismatch`,
     and document the native Ninja bypass of that check.
-  - See [RFC 0029 §§9.1-9.3](rfcs/0029-first-class-host-facts.md).
+  - See [RFC 0029 §§9.1-9.3](rfcs/rfc-0029-first-class-host-facts.md).
   - Success: property tests show digests are deterministic across insertion
     order and change for altered semantic facts, and real Ninja runs prove
     no-op reuse, rebuilds, removal of deselected edges, and reused-plan
@@ -3226,7 +3312,7 @@ groups are worth adding at all.
   - Add the per-invocation consent flag settled in 30.1.1; it reuses the
     planning provider, renders no recipes, and enables no `env()`, `which()`,
     command, or network helper. Project settings cannot enable it.
-  - See [RFC 0029 §8.1](rfcs/0029-first-class-host-facts.md).
+  - See [RFC 0029 §8.1](rfcs/rfc-0029-first-class-host-facts.md).
   - Success: discovery without consent makes zero provider calls, and with
     consent recipe-only fact references remain unevaluated.
 - [ ] 30.2.5. Add the standalone `facts` inspection command.
@@ -3237,7 +3323,7 @@ groups are worth adding at all.
   - Emit the JSON envelope and escaped human output through the existing CLI
     metadata, localization, and JSON conventions; the schema-description
     option collects nothing. Update the users' guide.
-  - See [RFC 0029 §§8.2 and 8.3](rfcs/0029-first-class-host-facts.md).
+  - See [RFC 0029 §§8.2 and 8.3](rfcs/rfc-0029-first-class-host-facts.md).
   - Success: snapshot tests fix human and JSON output under fixed providers,
     keep empty, null, and unsupported values distinct, and show filters never
     widen collection.
@@ -3256,7 +3342,7 @@ values. Its outcome decides which optional groups each platform supports.
   - Parse without a shell within the byte, string, and identifier bounds,
     applying duplicate-key precedence and never merging the two files.
     Non-Linux platforms report `unsupported`.
-  - See [RFC 0029 §§6.2, 7.1, and 12](rfcs/0029-first-class-host-facts.md).
+  - See [RFC 0029 §§6.2, 7.1, and 12](rfcs/rfc-0029-first-class-host-facts.md).
   - Success: the RFC's parser corpus passes, a FIFO at either path fails
     promptly, and bounded fuzzing from a finite seed corpus finds no panic or
     unbounded read.
@@ -3267,7 +3353,7 @@ values. Its outcome decides which optional groups each platform supports.
     Populate `native_arch` only when its meaning is established.
   - Preserve `forbid(unsafe_code)` by selecting a reviewed safe adapter or
     proposing the dependency change explicitly.
-  - See [RFC 0029 §§6.3 and 11](rfcs/0029-first-class-host-facts.md).
+  - See [RFC 0029 §§6.3 and 11](rfcs/rfc-0029-first-class-host-facts.md).
   - Success: translated fixtures report a process architecture distinct from
     the native one, unknown native architecture stays null, and denied or
     unselected groups perform zero native or filesystem operations.
@@ -3283,8 +3369,8 @@ whether the facts surface is ready to document as supported.
   - Register a typed host fixture in the manifest-test mock registry and
     validate it against the fact schema. Synthetic facts may render and
     inspect a graph but never authorize execution or widen capabilities.
-  - See [RFC 0029 §11](rfcs/0029-first-class-host-facts.md) and
-    [RFC 0007](rfcs/0007-netsukefile-testing-framework.md).
+  - See [RFC 0029 §11](rfcs/rfc-0029-first-class-host-facts.md) and
+    [RFC 0007](rfcs/rfc-0007-netsukefile-testing-framework.md).
   - Success: a fixture selecting an unavailable group fails instead of reading
     the developer's machine, and no ordinary build flag overrides host values.
 - [ ] 30.4.2. Share one snapshot across includes and bundle instances.
@@ -3292,7 +3378,7 @@ whether the facts surface is ready to document as supported.
   - Reject collector requests in included files; let bundles declare static
     requirements for already selected groups without widening the root request
     or operator grant; keep bundle and host provenance separate.
-  - See [RFC 0029 §7.3](rfcs/0029-first-class-host-facts.md).
+  - See [RFC 0029 §7.3](rfcs/rfc-0029-first-class-host-facts.md).
   - Success: missing required facts fail before bundle rendering, and nested
     fragments observe the importing planner's snapshot.
 - [ ] 30.4.3. Add the host-facts interaction and native smoke matrix.
@@ -3303,7 +3389,8 @@ whether the facts surface is ready to document as supported.
   - Run native smoke jobs on Linux, macOS, and Windows, including Git Bash and
     WSL launches, and model-check the collect-once and query-consent state
     machine against the production validation functions.
-  - See [RFC 0029 §§4.2, 7.2, and 13.2](rfcs/0029-first-class-host-facts.md).
+  - See
+    [RFC 0029 §§4.2, 7.2, and 13.2](rfcs/rfc-0029-first-class-host-facts.md).
   - Success: the matrix records fixture rendering separately from native
     execution, and no case collects twice, collects without consent, or leaks
     identifying inventory into JSON, diagnostics, or telemetry labels.
@@ -3313,7 +3400,7 @@ whether the facts surface is ready to document as supported.
     Repovec Appliance, MXD, and OrthoConfig canaries without changing their
     release ownership. Update the users' guide, design document, and
     developers' guide.
-  - See [RFC 0029 §§13.1 and 13.3](rfcs/0029-first-class-host-facts.md).
+  - See [RFC 0029 §§13.1 and 13.3](rfcs/rfc-0029-first-class-host-facts.md).
   - Success: canary evidence keeps target selection and build budgets as
     explicit inputs, the quickstart stays byte-for-byte unchanged, and no
     simulated snapshot counts as a native smoke test.
@@ -3329,8 +3416,8 @@ implementation promises.
   - Keep CPU, memory, load, filesystem features, libc compatibility, and tool
     presence out of the schema unless canary evidence justifies a group that
     separates physical resources, effective constraints, and approved budgets.
-  - See [RFC 0029 §10](rfcs/0029-first-class-host-facts.md) and
-    [RFC 0024](rfcs/0024-named-contention-classes.md).
+  - See [RFC 0029 §10](rfcs/rfc-0029-first-class-host-facts.md) and
+    [RFC 0024](rfcs/rfc-0024-named-contention-classes.md).
   - Success: a follow-on RFC or a recorded rejection exists, and neither `-j`,
     Ninja pools, nor contention classes change as a side effect.
 - [ ] 30.5.2. Triage persistent reuse, dependency tracking, and remote facts.
@@ -3339,6 +3426,219 @@ implementation promises.
     listing of unresolved discovery conditions, and remote execution-context
     facts against evidence from the shipped slice.
   - See [RFC 0029 §§8.1, 9.1, 9.3, and
-    14.5](rfcs/0029-first-class-host-facts.md).
+    14.5](rfcs/rfc-0029-first-class-host-facts.md).
   - Success: each candidate has an explicit defer, reject, or separately
     specified disposition, with no relaxation hidden in phase 30 tasks.
+
+## 31. Manifest linting
+
+Hypothesis: the v0.2.0 linter is a prototype whose rule set was chosen from the
+evidence available before anyone had used it; if that prototype is exercised
+against real manifests and the findings are fed back into the rules, their
+severities, and their prose, `netsuke check` earns a rule set worth freezing,
+and the contracts it then fixes — identifiers, output schema, and suppression
+grammar — can be relied on rather than merely published.
+
+Kind: capability, in a deliberately provisional state. Value is measured by
+findings that changed a manifest, not by the number of rules registered.
+
+Scope: everything behind `netsuke check`. The
+[manifest linter design](netsuke-linter-design.md) is a living document and
+[ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md) records the
+decisions it currently rests on; both are expected to change under this phase,
+and a task that supersedes either must say so. The v0.2.0 rule identifiers are
+already treated as permanent, so a rule withdrawn here keeps its name reserved.
+
+Two decisions are explicitly provisional and are settled by steps in this
+phase: which rules deserve their default severity, and whether rule prose stays
+in the registry. Nothing else in the linter's contract should be treated as
+frozen until step 31.4 completes.
+
+### 31.1. Learn what the prototype actually finds
+
+This step answers whether the shipped rules fire on defects that authors then
+fix, or on constructs they consider correct. Its outcome decides which rules
+graduate unchanged, which change default severity, and which are withdrawn, so
+it gates the freeze in step 31.4. Until it completes, a rule's default severity
+is a proposal rather than a contract.
+
+- [ ] 31.1.1. Lint a corpus of real manifests and record every finding.
+  - Cover Netsuke's own examples, the manifests in downstream repositories,
+    and any manifest supplied through issue reports.
+  - Record, per rule, how many findings were acted on, dismissed as correct,
+    or judged unclear.
+  - Success: every shipped rule has a recorded outcome from at least one
+    manifest its authors did not write.
+- [ ] 31.1.2. Classify each rule's evidence and propose a disposition. Requires
+  31.1.1.
+  - Propose one of: keep, change default severity, narrow the detection,
+    convert to opt-in, or withdraw.
+  - A rule whose findings were mostly dismissed is a candidate for opt-in or
+    withdrawal, not for a better message.
+  - Success: every rule carries a written disposition citing the evidence
+    behind it.
+- [ ] 31.1.3. Apply the dispositions and record them in the design document.
+  Requires 31.1.2.
+  - A withdrawn rule keeps its name reserved and its reference section states
+    that it was withdrawn and why.
+  - Success: the registry, the rule reference, and the design document agree,
+    and the contract tests still bind them.
+
+### 31.2. Localize lint output
+
+This step answers how far the linter's text can move into the localization
+catalogues without letting the emitted text and the rule reference drift apart,
+which is the risk
+[ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md) cited when it
+deferred the work. It is sequenced after step 31.1 so the prose being
+translated is prose the rules have earned.
+
+Rule identifiers stay untranslated. A rule name, its category name, its
+severity name, and its diagnostic code are values a user types into a
+configuration file or a suppression comment and a machine matches exactly; the
+[translators' guide](translators-guide.md) already covers that class. Only the
+prose is localized.
+
+- [ ] 31.2.1. Move rule summary, rationale, and remediation into the
+  localization catalogues, keyed by the rule's stable name. Requires 31.1.3.
+  - Key each message as `lint.rule.<name>.summary`, `.rationale`, and
+    `.remediation` so the key follows the rule rather than its category.
+  - Keep the registry's English text as the fallback, so a catalogue gap
+    degrades to the source locale rather than to an empty diagnostic.
+  - Success: `netsuke --locale <tag> check` reports a finding's message and
+    remediation in that locale, while its `rule`, `category`, `severity`, and
+    `code` fields are byte-identical across locales.
+- [ ] 31.2.2. Localize the framing text `--explain` prints. Requires 31.2.1.
+  - Cover the catalogue's column headings and the single-rule reference
+    layout.
+  - Keep the machine-readable `--explain --json` catalogue in the source
+    locale, so an editor building a rule picker gets stable text.
+  - Success: `--explain` prose is localized and `--explain --json` is not.
+- [ ] 31.2.3. Bind the rule reference to the source catalogue. Requires 31.2.1.
+  - Extend the reference contract test to compare against the source-locale
+    messages rather than the registry constants.
+  - Success: a rule whose catalogue text changes fails the contract test until
+    its reference section is updated.
+- [ ] 31.2.4. Translate the rule messages for every shipped locale. Requires
+  31.2.1.
+  - Follow the [localization glossary](localization-glossary.md) and
+    [style guide](localization-styleguide.md).
+  - Leave manifest identifiers such as `order_only_deps`, `{{ outs }}`, and
+    `dependency_order` verbatim.
+  - Success: the build-script localization audit passes with no catalogue
+    carrying an untranslated copy of a rule message.
+
+### 31.3. Close the gaps the prototype left open
+
+This step answers whether the analysis can reach the constructs it currently
+cannot see, and whether its diagnostics can point at them. Each task is
+independent, so the step can be delivered incrementally, but all of it precedes
+the freeze in step 31.4.
+
+- [ ] 31.3.1. Give expanded manifest and graph findings exact source spans.
+  - Thread provenance through `foreach` expansion so a generated target's
+    finding points at the declaration that generated it.
+  - Success: a manifest whose targets all come from `foreach` reports no
+    finding without a span.
+- [ ] 31.3.2. Add rules for the constructs v0.2.0 structured commands make
+  expressible. Requires the structured command syntax.
+  - Give the shell-oriented rules a structured remediation target rather than
+    an ordered `command` list.
+  - Success: `bashism`, `background-job`, and `command-chain-not-list` name
+    the structured form in their remediation.
+- [ ] 31.3.3. Extend `undeclared-target-input` using git-aware change detection.
+  Requires the v0.3.0 change-detection work.
+  - Report a recipe that reads a tracked file the graph does not declare, not
+    only one that reads another target's output.
+  - Success: a recipe reading an undeclared tracked source is reported, and a
+    recipe reading a generated file already in the dependency closure is not.
+- [ ] 31.3.4. Add rules for dependency and provider configuration. Requires the
+  v0.3.0 dependency and provider work.
+  - Cover the ambiguous and weakly reproducible provider configurations that
+    the manifest cannot yet express.
+  - Success: every provider configuration the design names as ambiguous has a
+    rule, and each cites the design section that defines it.
+
+### 31.4. Freeze the contracts the linter publishes
+
+This step answers whether the linter's published surfaces are stable enough to
+promise. It is last because every earlier step can still change them, and its
+completion is what turns the prototype into a supported feature.
+
+- [ ] 31.4.1. Snapshot the `netsuke check` JSON documents as v1. Requires 31.1.3
+  and 31.2.1.
+  - Cover the result document, the threshold diagnostic, and the `--explain`
+    catalogue.
+  - Depend on roadmap task 3.15.3, which snapshots every v1 JSON schema.
+  - Success: a field added, renamed, or removed in any of the three documents
+    fails a snapshot test.
+- [ ] 31.4.2. Give lint failures their own exit class. Requires 31.4.1.
+  - Distinguish "findings reached the threshold" from "the manifest could not
+    be analysed", which currently share exit code 1.
+  - Depend on roadmap task 3.15.5, which defines the exit-code taxonomy.
+  - Success: a CI script can tell a lint failure from a broken manifest
+    without parsing output.
+- [ ] 31.4.3. Publish the rule-stability policy. Requires 31.1.3.
+  - State what a rule name guarantees, what may change within a name, and what
+    requires a new one.
+  - Record it in the [users' guide](users-guide.md) beside the suppression
+    grammar, so an author writing a directive can see the promise it rests on.
+  - Success: the policy is published and the rule reference links to it.
+- [ ] 31.4.4. Make `netsuke check` standard by removing the `lint` feature
+  gate.
+  - Delete every `#[cfg(feature = "lint")]` and
+    `#[cfg(not(feature = "lint"))]` twin.
+  - Make `granit-parser` a normal dependency and drop the feature.
+  - Delete `tests/check_command_absent_tests.rs`.
+  - Collapse the help snapshots back to one set.
+  - Retire the default-features CI lane or repoint it at the next gated
+    feature, updating its workflow contracts.
+  - Update the users' guide, README, changelog, and ADR-056.
+  - Success: a default `cargo build` ships `netsuke check`, and release
+    binaries list it in `--help`.
+
+### 31.5. Pay down the prototype's structural debt
+
+This step answers whether the linter's internals can carry a growing rule set
+and a production workload, as distinct from whether the rules themselves are
+right. Each task is a refactor of code the prototype already ships, so none
+changes a finding, an identifier, or an output schema; they are separated from
+steps 31.1 to 31.4 because they are reviewable independently and none blocks
+the freeze.
+
+- [x] 31.5.1. Move the `miette` dependency out of the lint core into an adapter.
+  - `src/lint` currently converts its own `Span` and `Severity` into `miette`
+    types, implements `Diagnostic` on its finding projection, and owns a
+    `NamedSource`, so the core cannot be used without the reporting framework.
+  - Keep findings, spans, severities, reports, and policy framework-free, and
+    convert them at the runner boundary where the diagnostics are rendered.
+  - Success: `src/lint` names no `miette` type, and the JSON and human output
+    are byte-identical to their current snapshots.
+- [x] 31.5.2. Add runner-boundary telemetry for `netsuke check`.
+  - The command loads a manifest, builds a graph, indexes the source, and runs
+    every rule without emitting a metric or a span, unlike its sibling
+    commands.
+  - Record a bounded invocation counter and a duration histogram labelled by
+    outcome and a finite error category, following the pattern in
+    `src/runner/help/telemetry/mod.rs`.
+  - Keep labels low-cardinality: no rule names, manifest paths, or finding
+    text.
+  - Success: a check run emits one counter and one histogram observation, and
+    the label vocabulary is enumerated in a test.
+- [ ] 31.5.3. Scan each recipe once when matching graph outputs.
+  - `undeclared-target-input` rebuilds the shell-active mask for every
+    (recipe, output) pair, so its cost grows with targets multiplied by
+    outputs.
+  - Extract each recipe's shell-active words once, then intersect them with an
+    indexed output set.
+  - Success: the rule reports exactly what it does now on the example
+    manifests, and its cost grows with the manifest's size rather than with its
+    square.
+
+**Success criterion:** every shipped rule has a recorded disposition drawn from
+manifests its authors did not write; a finding's prose is localized while its
+identifiers are not; findings from expanded manifests carry source spans; the
+lint core names no reporting framework and the command reports its own
+telemetry; and the JSON documents, exit classes, and rule-name guarantees are
+snapshotted, published, and stable enough that a downstream consumer can depend
+on them.

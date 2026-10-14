@@ -32,13 +32,34 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 /// it fails if any Rust source anywhere in the workspace is outside these
 /// roots, so a root that is misspelled, or a target location nobody predicted,
 /// is caught rather than silently excusing its sources.
-pub(super) const COMPILED_SOURCE_ROOTS: [&str; 6] = [
+///
+/// `verus` is a scanned root for a different reason from its neighbours.
+/// Cargo neither discovers nor compiles it, so the clippy argument above does
+/// not apply; the directory holds tracked repository sources whose compiler is
+/// Verus, not rustc. It is listed because it is repository source rather than
+/// machine-local state, and the tie-break rule stated under
+/// [`MACHINE_LOCAL_DIRECTORIES`] decides it: an entry that should be here and
+/// is missing costs a false failure naming a real file, while an entry that
+/// should not be here can only hide a source. Do not remove it for failing the
+/// rationale its neighbours share.
+///
+/// `build_slice_fixture` and `public_api_fixture` are workspace members, so
+/// `cargo clippy --workspace` lints them exactly as it lints the library; the
+/// first compiles production sources through `#[path]`, and the second stands
+/// in for an external embedder. Listing them is what keeps that boundary
+/// honest: an inner attribute in either would silence the policy for a crate
+/// the gates compile, and the coverage assertion below would otherwise be the
+/// only thing standing between that and silence.
+pub(super) const COMPILED_SOURCE_ROOTS: [&str; 9] = [
     "src",
     "build_l10n_audit",
     "test_support/src",
+    "build_slice_fixture",
+    "public_api_fixture",
     "tests",
     "benches",
     "examples",
+    "verus",
 ];
 
 /// The fewest Rust sources the workspace can hold while the walk still works.
@@ -229,18 +250,29 @@ pub(super) fn is_readable_source(name: &str) -> bool {
 /// source can live under without `git add -f`, which is deliberate
 /// circumvention rather than an accident this invariant is shaped to catch.
 /// Verified both ways: `git ls-files` finds no tracked path beneath any of the
-/// fifteen names at any depth, and every nested occurrence in the tree sits
+/// sixteen names at any depth, and every nested occurrence in the tree sits
 /// inside another skipped directory or a cache.
 ///
 /// That appeal to `.gitignore` is only sound while it holds for every name, so
-/// it is enforced rather than trusted. It did not hold twice: `.netsuke` is
-/// netsuke's own runtime state, and `.ruff_cache` a tool cache, but both were
-/// skipped while the repository's `.gitignore` declined them — every sibling
-/// cache is listed, and they were missed — so a `.rs` file placed under either
-/// would have been tracked, compiled, skipped by the walk, and reported by
-/// nobody. Both names are now in `.gitignore` like their siblings, and the
-/// walk's self-test requires each skipped name to be one the repository's own
-/// rules ignore, with `.git` as the single named exception.
+/// it is enforced rather than trusted. It did not hold three times: `.netsuke`
+/// is netsuke's own runtime state, `.ruff_cache` a tool cache, and `.verus`
+/// the pinned verifier's install tree, but all three were skipped while the
+/// repository's `.gitignore` declined them — every sibling cache is listed, and
+/// they were missed — so a `.rs` file placed under any of them would have been
+/// tracked, compiled, skipped by the walk, and reported by nobody. All three
+/// names are now in `.gitignore` like their siblings, and the walk's self-test
+/// requires each skipped name to be one the repository's own rules ignore, with
+/// `.git` as the single named exception.
+///
+/// `.verus` arrived by measurement rather than by prediction. Installing the
+/// pinned verifier writes `.verus/<version>/` into the workspace root, and that
+/// tree carries thirteen `.rs` files under `verus/build/*/out/`. Nothing
+/// ignored the directory, so before it was named here the coverage walk
+/// reported every one of them as an unscanned source and the contract failed on
+/// any machine where `make install-verus` had run — a verdict that turned on
+/// the operator rather than on the tree, which is the failure mode this list
+/// exists to prevent. Naming it here without the matching `.gitignore` entry
+/// would have been the older defect instead, so the two land together.
 ///
 /// The list is named rather than "anything dot-prefixed", and that distinction
 /// is the point. A dot-directory is not evidence of a cache: `.config`,
@@ -253,7 +285,7 @@ pub(super) fn is_readable_source(name: &str) -> bool {
 /// towards reporting: an entry that should have been here but is missing costs
 /// a false failure that names a real file, while an entry that should not be
 /// here hides a source.
-pub(super) const MACHINE_LOCAL_DIRECTORIES: [&str; 15] = [
+pub(super) const MACHINE_LOCAL_DIRECTORIES: [&str; 16] = [
     "__pycache__",
     ".claude",
     ".crush",
@@ -266,6 +298,7 @@ pub(super) const MACHINE_LOCAL_DIRECTORIES: [&str; 15] = [
     ".ruff_cache",
     ".uv-cache",
     ".uv-tools",
+    ".verus",
     ".vtcode",
     "memories",
     "target",

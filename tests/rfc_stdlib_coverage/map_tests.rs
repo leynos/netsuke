@@ -21,7 +21,7 @@ fn row(cells: &str) -> RawRow {
 #[case::suffix("0013b")]
 #[case::unicode("٠٠١٣")]
 #[case::bad_link("[0013](missing")]
-#[case::bad_label("[RFC 0013](0013-child.md)")]
+#[case::bad_label("[RFC 0013](rfc-0013-child.md)")]
 fn child_numbers_reject_malformed_cells(#[case] input: &str) {
     assert!(child_number(input).is_none());
 }
@@ -30,8 +30,8 @@ fn child_numbers_reject_malformed_cells(#[case] input: &str) {
 fn child_numbers_accept_bare_and_linked_cells() {
     assert_eq!(child_number("`0013`"), Some(("0013".into(), None)));
     assert_eq!(
-        child_number("[0013](0013-child.md)"),
-        Some(("0013".into(), Some("0013-child.md".into())))
+        child_number("[0013](rfc-0013-child.md)"),
+        Some(("0013".into(), Some("rfc-0013-child.md".into())))
     );
 }
 
@@ -46,11 +46,11 @@ fn child_numbers_accept_bare_and_linked_cells() {
 )]
 #[case::missing_link("| `0013` | group | `8.1` | — | 6.2 | written |", "marked written")]
 #[case::unexpected_link(
-    "| [0013](0013-child.md) | group | `8.1` | — | 6.2 | unwritten |",
+    "| [0013](rfc-0013-child.md) | group | `8.1` | — | 6.2 | unwritten |",
     "marked unwritten"
 )]
 #[case::wrong_target(
-    "| [0013](0014-child.md) | group | `8.1` | — | 6.2 | written |",
+    "| [0013](rfc-0014-child.md) | group | `8.1` | — | 6.2 | written |",
     "whose number is 0014"
 )]
 #[case::non_rfc_target(
@@ -269,11 +269,11 @@ fn eight_distinct_reservations_parse() -> Result<()> {
 #[test]
 fn written_rows_preserve_link_step_and_option_claims() {
     let parsed = parse_row(
-        &row("| [0013](0013-child.md) | group | `8.1` only `alpha` | `glob` | 6.2 | written |"),
+        &row("| [0013](rfc-0013-child.md) | group | `8.1` only `alpha` | `glob` | 6.2 | written |"),
         &sections(),
     )
     .expect("written row agrees with its numbered link");
-    assert_eq!(parsed.written.as_deref(), Some("0013-child.md"));
+    assert_eq!(parsed.written.as_deref(), Some("rfc-0013-child.md"));
     assert_eq!(parsed.step, "6.2");
     assert_eq!(parsed.claims(), ["alpha", "glob"]);
     assert_eq!(Map { rows: vec![parsed] }.unwritten(), 0);

@@ -35,8 +35,8 @@ pinned toolchain is not picked up automatically; select it explicitly:
 <!-- tested-example: guide-crates-io-install -->
 
 ```sh
-rustup toolchain install nightly-2026-08-23
-cargo +nightly-2026-08-23 install netsuke-build
+rustup toolchain install nightly-2026-10-22
+cargo +nightly-2026-10-22 install netsuke-build
 ```
 
 Pre-built installers are available from the
@@ -374,6 +374,22 @@ same Jinja context, including `{{ ins }}` and `{{ outs }}`; those two
 placeholders are resolved later to the concrete target's shell-quoted input and
 output paths. An empty command list is rejected when the manifest is parsed.
 
+Set `command_isolation: isolated` alongside a command list to start every entry
+from the action's working directory and environment. The default is `shared`;
+omitting the key or writing `command_isolation: shared` preserves the legacy
+shared-state behaviour. The key is literal schema data, not a Jinja expression.
+It belongs beside `command`, including on a reusable rule whose mode is then
+inherited by targets that reference the rule. The key is rejected without a
+recipe or beside `script` or `rule`, and `isolated` is rejected for scalar
+commands. A scalar may use the explicit `shared` value.
+
+On Unix and in the explicit Windows Bash route, entries use the existing
+brace-group and `eval` wrapper. In `shared` mode the groups run in the current
+shell, so `cd`, environment assignments, and shell variables carry forward. In
+`isolated` mode each group runs in a subshell; a successful `exit` or direct
+`exec` ends only that entry, and the next entry runs. In either mode entries
+remain ordered and fail fast on a non-zero status.
+
 ### Windows legacy recipe contract
 
 On Windows, v0.1.x interprets every legacy `command` string, `command` list, and
@@ -384,15 +400,20 @@ started from PowerShell, `cmd.exe`, an IDE, or Git Bash therefore uses the same
 recipe interpreter. This is a Windows PowerShell contract, not a PowerShell Core
 (`pwsh`) contract.
 
-Scalar commands and scripts each receive a fresh PowerShell process. A command
-list receives one shared process: entries run in declaration order, and each
-generated entry is followed immediately by a `$LASTEXITCODE` check. A non-zero
-status stops the list before a later entry can overwrite it. An entry remains
-opaque recipe text, so multiple native commands separated by semicolons inside
-one entry are not checked individually; only the status left by that entry is
-observed. PowerShell terminating errors also fail the recipe. Later entries see
+Scalar commands and scripts each receive a fresh PowerShell process. A `shared`
+command list receives one PowerShell process: entries run in declaration order,
+and each generated entry is followed immediately by a `$LASTEXITCODE` check;
+shared lists retain the existing PowerShell error policy. Later entries see
 PowerShell variables, `$env:` assignments, and locations left by earlier
-entries, but state does not cross action or target boundaries.
+entries. With `command_isolation: isolated`, Netsuke starts a fresh
+`powershell.exe` for each entry from the action's unchanged working-directory
+and environment baseline. Each child passes through native stderr from
+successful commands and applies a default `ErrorAction` of `Stop` to cmdlets.
+An immediate `$LASTEXITCODE` check stops on a non-zero native status, and a
+successful `exit` ends only that child. Cmdlet errors also fail the recipe. In
+both modes, an entry remains opaque recipe text, so multiple native commands
+separated by semicolons inside one entry are not checked individually. State
+does not cross action or target boundaries.
 
 Use PowerShell syntax in the default route. `$name` is a PowerShell variable and
 `$env:NAME` reads an environment variable. PowerShell parses the braced
@@ -400,7 +421,10 @@ variable name in `${VAR:-default}`, but does not perform POSIX default-value
 expansion. Recipe text is protected from Ninja dollar expansion, so write
 ordinary PowerShell dollars rather than `$$`. The rendered `{{ ins }}` and
 `{{ outs }}` paths use literal, single-quoted PowerShell arguments; an
-apostrophe is doubled, so `O'Brien.txt` becomes `'O''Brien.txt'`. Build and
+apostrophe is doubled, so `O'Brien.txt` becomes `'O''Brien.txt'`. Netsuke also
+rejects a marker immediately beside any PowerShell single-quote character,
+including typographic forms, or another marker: standalone single-quoted
+literals could merge with adjacent string or argument text. Build and
 default-target paths containing spaces are escaped for Ninja before recipe
 generation, so `{{ outs }}` can name a whitespace-containing output. Quote
 every other path and argument with PowerShell syntax; arbitrary rendered Jinja
@@ -420,9 +444,34 @@ when the recipe succeeds or fails. Query-only generation emits these bindings
 but does not create files. Response-file setup failures are reported by Ninja
 as execution errors.
 
+An isolated PowerShell list also encodes each entry for its child process.
+Ninja generation rejects child command lines that already exceed 32,766
+characters, and the parent checks the expanded `$PSHOME` executable path before
+launching each child. If that path takes the final command line over the limit,
+the parent reports the entry and measured length, then stops. The 1 MiB limit
+applies to the complete parent script, including its encoded child payloads. On
+Unix and the Windows Bash route, isolated entries use subshells instead of
+PowerShell child processes.
+
 Ninja turns a failed recipe into its own non-zero result, and `netsuke` returns
 failure after forwarding Ninja's output. The CLI contract distinguishes success
 from failure; it does not promise to return the recipe's exact child value.
+
+### What a static reader may rely on
+
+- Isolated entries start with the action's working directory and environment on
+  every route.
+- In shared mode, state changed by `cd`, `Set-Location`, assignments, or shell
+  variables reaches later entries in that action.
+- State never crosses action or target boundaries.
+- Recipe text remains dialect-specific, and POSIX `${VAR:-default}` expansion
+  is unavailable on the default Windows PowerShell route.
+
+Quality gates that need an entry's command and directory to be independently
+auditable should use `command_isolation: isolated` and avoid shell-specific
+defaults in recipes that may run on different routes. Structured commands with
+literal per-unit `cwd` fields are planned by RFC 0009 and roadmap items 12.1.1
+and 12.2.3; they are not shipped behaviour.
 
 To retain POSIX interpretation on Windows, explicitly select a Git
 Bash-compatible runtime:
@@ -437,25 +486,31 @@ netsuke build
 
 MSYS2 Bash is also supported when `bash.exe` is on `PATH`. Before `build` or
 Ninja-tool execution, Netsuke checks this selection. If `bash.exe --version`
-cannot run, it stops with instructions to install Git for Windows or MSYS2, add
-Bash to `PATH`, or unset `NETSUKE_WINDOWS_SHELL`. `generate` and `help targets`
-do not execute recipes, so they do not require Bash. In CI, install Git
-explicitly, prepend its `bin` directory to `PATH`, set
-`NETSUKE_WINDOWS_SHELL=bash`, and launch Netsuke normally from a `pwsh` step;
-do not rely on a workflow-wide `shell: bash` setting.
+cannot run, it stops with the selected path, probe status, and bounded output.
+Netsuke searches `PATH` from left to right and uses that same absolute
+executable for the probe and generated build commands. It does not fall back to
+an executable outside `PATH` when the selected runtime fails. `generate` does
+not probe Bash: its output retains the `bash.exe` command name, so Ninja
+resolves Bash from `PATH` when that saved plan is later run. `help targets`
+does not require Bash. In CI, install Git explicitly, prepend its `bin`
+directory to `PATH`, set `NETSUKE_WINDOWS_SHELL=bash`, and launch Netsuke
+normally from a `pwsh` step; do not rely on a workflow-wide `shell: bash`
+setting.
 
 For the Unix default and the explicit Bash route, each list entry is evaluated
 inside its own brace group and the groups are joined with `&&`. The entry is
 passed to `eval` as a shell-quoted payload, so an inline `#` comment or a
 trailing control operator such as `&` cannot consume the generated group's
-closing boundary. Brace groups run in the current shell rather than a subshell:
-a changed working directory, environment assignment, or shell variable can
-therefore be used by later entries. A failed entry stops the chain, and the
-diagnostic identifies the generated action and one-based list-entry positions,
-for example `netsuke command-list failure: action HASH, entry 2`. These
-brace-group, `eval`, background-job, and `exec` restrictions apply only to the
-Unix renderer and the explicit Windows Bash compatibility route; the Windows
-PowerShell route uses its native-command and error checks instead.
+closing boundary. In `shared` mode, brace groups run in the current shell
+rather than a subshell, so a changed working directory, environment assignment,
+or shell variable can be used by later entries. In `isolated` mode, each
+brace/eval wrapper runs inside a subshell and its state changes do not reach
+later entries. A failed entry stops the chain, and the diagnostic identifies
+the generated action and one-based list-entry positions, for example
+`netsuke command-list failure: action HASH, entry 2`. These brace-group,
+`eval`, background-job, and `exec` restrictions apply only to the Unix renderer
+and the explicit Windows Bash compatibility route; the Windows PowerShell route
+uses its native-command and error checks instead.
 
 <!-- tested-example: guide-command-list -->
 
@@ -1090,6 +1145,11 @@ netsuke generate --output build.ninja
 unless `--output` is supplied. HTML output contains a server-rendered SVG, a
 textual outline and a `<noscript>` DOT representation.
 
+`netsuke graph` uses the full manifest loader, including normal template
+rendering, and is not a hermetic manifest query. For a side-effect-free JSON
+catalogue with authored dependency edges and raw recipe bodies, use
+`netsuke --json help targets --edges` below.
+
 `generate` writes Ninja without running it. With no `--output`, stdout contains
 only the generated Ninja manifest. With `--output <FILE>`, Netsuke writes the
 manifest to that file and leaves stdout empty. For a serial dependency list,
@@ -1158,8 +1218,202 @@ The standard-library reference describes the full helper set available while
 rendering a normal build manifest. The query allowlist above is the deliberate
 exception for `netsuke help targets`.
 
+#### Export dependency edges and raw recipes
+
+Add `--edges` to the JSON help-targets command to include a separate v1 `graph`
+object alongside the existing action and target catalogue. The root-level
+`--json` option is required before `help`, as in
+`netsuke --json help targets --edges`:
+
+<!-- tested-example: guide-help-targets-edges-json -->
+
+```json
+{
+  "schema_version": 1,
+  "generator": {
+    "name": "netsuke",
+    "version": "0.1.0-beta4"
+  },
+  "result": {
+    "command": "help-targets",
+    "actions": [],
+    "targets": [
+      {
+        "name": "hello.txt",
+        "description": "Build hello.txt",
+        "default": true,
+        "conditional": false
+      }
+    ],
+    "graph": {
+      "defaults": ["hello.txt"],
+      "rules": [],
+      "nodes": [
+        {
+          "kind": "target",
+          "names": [{"name": "hello.txt", "default": true}],
+          "description": "Build hello.txt",
+          "conditional": false,
+          "phony": false,
+          "always": false,
+          "dependency_order": "parallel",
+          "edges": {
+            "sources": [],
+            "deps": [],
+            "order_only_deps": []
+          },
+          "recipe": {
+            "kind": "command",
+            "form": "string",
+            "commands": ["touch hello.txt"],
+            "isolation": "shared"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+Run the example with `netsuke --json help targets --edges`. The `graph` object
+contains `defaults` in authored order (including duplicates), `rules` in
+declaration order, and declaration-level `nodes`, with actions before targets.
+Each node contains its expanded `names`, optional `description` (JSON `null`
+when absent), `conditional`, `phony`, `always`, `dependency_order`, authored
+`edges`, and a tagged `recipe`. The edge object has `sources`, `deps`, and
+`order_only_deps` arrays. A node name's `default` flag is true exactly when
+that name appears in `defaults`.
+
+Recipe kinds are closed in schema v1: `command` carries `form` (`string` or
+`list`), raw `commands`, and `isolation` (`shared` or `isolated`); `script`
+carries raw script text; `rule` carries rendered selector names; and
+`dependency_only` represents an empty-command aggregate. Command isolation is
+explicit even when it has the default `shared` value, so a static reader can
+distinguish command lists that run in a shared shell from lists whose entries
+start from the original process state. The query renders names, edges,
+descriptions, and rule selectors through its restricted Jinja surface. It never
+renders command or script recipe bodies, executes them, or invokes helpers
+inside them. Defaults retain their authored values. Manifest-query rendering
+does not resolve a recipe shell. For shell filters in query-rendered metadata,
+an omitted `dialect` uses the fixed `sh` dialect on every host; an explicit
+dialect is honoured as written. This keeps exported metadata independent of the
+build shell and avoids resolving shell configuration during a read-only query.
+Calls inside recipe bodies are not evaluated during the export. When a build
+later renders those bodies, the selected recipe shell's dialect applies, or the
+host default when no shell is selected; pin a dialect when rendered command
+text must be host-independent. The export records no `cwd`, shell, argv,
+variable, or macro fields. Structured-command recipes are reserved for
+milestone 12.1.2, and literal `cwd` for 12.2.3.
+
+The export inherits query validation: unresolved conditional nodes remain in
+the catalogue but are excluded from graph validation; lowering errors fail the
+export; and `foreach` that requires a query-disabled, host-dependent helper
+fails. Names, edges, descriptions, and rule selectors that call disabled
+helpers also fail. These limits preserve the existing `help targets` validation
+order and rules.
+
 Recipe-body skipping and conditional catalogue entries are beta3 behaviour.
 Published beta2 `help targets` does not provide those semantics.
+
+### Lint a manifest with `netsuke check`
+
+This command is available only in builds compiled with the `lint` Cargo
+feature; the v0.1.0 release binaries, including the GitHub release archives,
+`cargo binstall`, and the Windows MSI, do not include it. Build it from source
+with `cargo install netsuke-build --features lint`, or, in a checkout, with
+`cargo build --features lint`. It is planned to become part of every build in
+v0.2.0. Running `netsuke check` in an unsupported build reports it as an
+unknown subcommand.
+
+`netsuke check` analyses the selected manifest for constructs that parse and
+lower cleanly but are likely erroneous, unsafe, non-portable, or hostile to
+caching. It loads, expands, renders, and lowers the manifest through the same
+stages as a build, with impure template helpers disabled; no recipe runs and no
+build output is created.
+
+<!-- tested-example: guide-check-command -->
+
+```sh
+netsuke check
+```
+
+Every rule, what it detects, and how to fix it are documented in the
+[lint rule reference](netsuke-linter-rules.md). List them from the command
+line, or read one rule in full:
+
+<!-- tested-example: guide-check-explain -->
+
+```sh
+netsuke check --explain
+netsuke check --explain directory-dep-not-order-only
+```
+
+Each finding carries a severity: `error`, `warning`, or `advice`.
+`--fail-on <SEVERITY>` sets the severity at which findings fail the command,
+defaulting to `error`; `never` makes findings purely informational.
+`--rule <NAME>=<SEVERITY>` sets the severity of one rule or of a whole
+category, where `SEVERITY` is `off`, `advice`, `warning`, or `error`. Selectors
+apply in order, so a category selector followed by a rule selector narrows it:
+
+<!-- tested-example: guide-check-policy -->
+
+```sh
+netsuke check --rule clarity=off --rule literal-recipe-path=error --fail-on warning
+```
+
+Two rules encode a project convention rather than a defect and are therefore
+off unless a selector enables them: `unreachable-target` and
+`rule-without-description`. Both flags layer through the normal configuration
+precedence, so a project can fix its policy once:
+
+<!-- tested-example: guide-check-config -->
+
+```toml
+[cmds.check]
+rule = ["clarity=off", "unreachable-target=warning"]
+fail_on = "warning"
+```
+
+`--limit <N>` caps the number of findings reported, keeping the first in source
+order; `0` disables the limit and reports every finding. Truncation bounds the
+report only: the exit code still reflects every finding, so a run cannot pass
+because the finding that reached the threshold fell outside the limit.
+
+Silence one finding with a comment that names the rules it allows and states a
+reason. A directive on its own line governs the declaration beneath it,
+together with everything indented under that declaration; a directive at the
+end of a line governs that line's declaration:
+
+<!-- tested-example: guide-check-suppression -->
+
+```yaml
+netsuke_version: "1.0.0"
+
+targets:
+  # netsuke-lint: allow background-job -- the viewer must outlive the build
+  - name: preview
+    phony: true
+    script: |
+      feh build &
+```
+
+`# netsuke-lint-file: allow <rule> -- <reason>` governs the whole manifest, and
+exists for findings that could not be resolved to a source position. There is
+no blanket disable comment: a directive must name the rules it silences, and a
+directive without a reason, naming an unknown rule, or silencing nothing is
+itself reported.
+
+With `--json`, a run in which no finding reaches the failure threshold succeeds
+and writes a result document whose `result.command` is `check` and whose
+`result.findings` array holds every reported finding. A run in which one does
+fail writes a diagnostic document whose single top-level entry is the threshold
+summary and whose `related` array holds the same reported findings. Both arrays
+use the same per-finding shape as any other Netsuke diagnostic, so a consumer
+reads `result.findings` when it is present and `diagnostics[0].related`
+otherwise. `--limit` truncates these stored output arrays; the verdict and
+severity totals are computed from all findings before truncation.
+`netsuke --json check --explain` emits the rule catalogue as a result document
+whose `result.command` is `check-explain`.
 
 ## Configure Netsuke
 
@@ -1181,13 +1435,17 @@ configuration chain, so ordinary project values can override the winner while
 fields present only in the winner remain available.
 
 Fetch-policy fields are the security-sensitive exception to this ordinary
-precedence. Only the exact primary project file is a project request, so its
-grants remain below operator policy unless the operator enables
-`trust_project_fetch_policy`. Primary-project environment allow rules are also
-an exception: `env_allow_var` entries from the primary project file are removed
-before policy composition rather than merged, so they cannot widen the
-allowlist or activate default-deny. Files loaded through `extends` retain
-ordinary file-layer semantics.
+precedence. Every occurrence selected through the project `.netsuke.toml` and
+its `extends` chain is a project request, so its grants remain quarantined
+unless an operator enables `trust_project_fetch_policy`. Automatic discovery
+also removes project-chain `env_allow_var` entries before policy composition.
+An explicit `--config` selector bypasses automatic discovery. If its selected
+layers include the project `.netsuke.toml`, that file and its inherited parents
+remain project-scoped for fetch and environment allow policy; an unrelated
+explicit configuration chain retains operator authority. A file reached from
+both project and trusted configuration roots retains each occurrence's
+authority. `fetch_block_host` and `env_block_var` remain cumulative because
+they only add restrictions.
 
 An explicit selector bypasses automatic discovery. Selectors are checked in
 this order:
@@ -1197,6 +1455,11 @@ this order:
 
 An explicit file that is missing or invalid causes an error; Netsuke does not
 fall back to discovery.
+
+When an explicit `--config` chain contains the matching project
+`.netsuke.toml`, that project occurrence and its inherited parents are
+project-scoped for fetch and environment allow policy. An unrelated explicit
+configuration chain remains operator-scoped.
 
 When automatic discovery finds no configuration file, Netsuke uses its built-in
 defaults. When it finds a candidate that cannot be loaded, such as malformed
@@ -1219,7 +1482,7 @@ limits are enforced before the buffer Netsuke controls accepts output, but
 `MiniJinja` materializes a macro result before its size can be checked, so a
 macro can allocate above the per-value ceiling before the limit is reported.
 That residual gap and its deferral are recorded in
-[ADR-018](adr-018-bound-manifest-template-evaluation.md).
+[ADR-0050](adrs/adr-0050-bound-manifest-template-evaluation.md).
 
 MiniJinja 2.24.0 also rejects one repeated string above 100 MB with the
 `repeated string is too large` template error. This rejection happens before
@@ -1643,8 +1906,8 @@ Exactly one outcome branch is present:
 with global flags or their configuration equivalents. Fetch policy has a trust
 boundary that differs from ordinary configuration precedence: system and user
 configuration, `NETSUKE_` environment variables, and explicit CLI options are
-operator policy, while only the primary project `.netsuke.toml` is an untrusted
-project request.
+operator policy, while every occurrence in the selected project configuration
+chain is an untrusted project request.
 
 - `--fetch-allow-scheme <SCHEME>`
 - `--fetch-allow-host <HOST>`
@@ -1652,14 +1915,20 @@ project request.
 - `--fetch-default-deny`
 - `--trust-project-fetch-policy`
 
-By default, project configuration may only narrow the operator policy. A project
+By default, the project chain may only narrow the operator policy. A project
 `fetch_default_deny = true` can enable default-deny, but a project
 `fetch_default_deny = false` cannot disable an operator's default-deny setting.
 Project `fetch_block_host` entries accumulate with entries from the other
-layers, and a block always wins over an allow. Project `fetch_allow_scheme` and
-`fetch_allow_host` entries are ignored by default; the project cannot enable
-them by setting `trust_project_fetch_policy` itself. Configuration loaded
-through `extends` is not quarantined and retains ordinary file-layer precedence.
+layers, and a block always wins over an allow. Project-chain
+`fetch_allow_scheme` and `fetch_allow_host` entries are ignored by default; no
+project-chain file can enable them by setting `trust_project_fetch_policy`
+itself.
+
+For example, if `.netsuke.toml` extends `policy.toml`, grants in either file
+are project-chain requests and need operator opt-in before they can widen the
+fetch policy. A `trust_project_fetch_policy = true` in `policy.toml` is also
+quarantined and cannot authorize those grants; trust must come from system,
+user, environment, or CLI configuration.
 
 An operator who deliberately trusts a checkout can set
 `trust_project_fetch_policy = true` in system or user configuration, set
@@ -1668,8 +1937,9 @@ An operator who deliberately trusts a checkout can set
 allow-host entries are appended to the operator values in dependency-first
 order, with the primary file last. A present `fetch_default_deny` value from
 the project chain applies directly; the last present project value wins. The
-opt-in is resolved only from operator-controlled layers, so no project file can
-self-authorize.
+opt-in is resolved only from operator-controlled layers, so no project-chain
+file can self-authorize. When a file is reached from both operator and project
+roots, each occurrence retains its own authority.
 
 Host patterns may contain wildcards such as `*.example.com`. A block rule wins
 over an allow rule. `--fetch-default-deny` permits only explicitly allowed
@@ -1712,12 +1982,14 @@ compatibility. Adding at least one effective `env_allow_var` entry makes the
 allowlist restrictive: only listed names may resolve. An `env_block_var` list
 without an allowlist blocks only its listed names. A blocklist entry always
 overrides an allowlist entry. Every entry is one exact variable name; this
-policy has no glob or pattern matching. Primary-project `env_allow_var` entries
-are removed before policy composition, so a manifest cannot grant itself access
-to inherited environment variables or activate default-deny alone.
-Primary-project `env_block_var` entries remain cumulative because they can only
-restrict access. Configuration loaded through `extends` retains ordinary
-file-layer precedence.
+policy has no glob or pattern matching. `env_allow_var` entries from project
+occurrences selected through `.netsuke.toml` and its `extends` chain are
+removed before policy composition. This prevents a checkout-controlled ancestor
+from widening the operator allowlist or activating default-deny.
+`env_block_var` entries remain cumulative because they only restrict access.
+Operator chains and unrelated explicit configuration chains retain their
+grants; a file reached from both project and operator roots keeps its separate
+authority for each occurrence.
 
 This policy reduces secret ingress into rendered manifest fields. It does not
 make rendered manifest contents safe to log: allowed values still require the
@@ -1841,29 +2113,27 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   may retain the original input so invalid patterns can be explained.
 - `raw` template output and handwritten shell fragments remain the manifest
   author's responsibility.
-- On Unix and in the explicit Windows Bash compatibility route, each
-  `command` list entry is joined into a single shell chain; a later entry
-  inherits the working directory, environment, and shell variables left by an
-  earlier entry, and runs only when that earlier entry exits with status zero.
-  A failed entry may still leave side effects behind before it halts the chain.
-  The generated brace/eval boundary keeps comments and trailing control
-  operators inside an entry from changing the chain's structure. An entry may
-  start at most one background job; Netsuke waits for that job before moving to
-  a later entry, and rejects an entry that starts more than one background job
-  during Ninja generation. It also rejects an entry whose nested `eval` payload
-  makes the background-job count dynamic because the wrapper cannot safely
-  determine which jobs to wait for. A direct simple `exec`, optionally prefixed
-  by shell assignments, is supervised so its success or failure retains the
-  list's status semantics: a successful `exec` ends the remaining chain, while
-  structured or nested `exec` forms are rejected during Ninja generation.
-  Failure diagnostics include the action fingerprint and one-based entry
-  position when Netsuke can attribute the failed list entry.
-- On Windows in the default PowerShell route, each command list shares one
-  PowerShell process. Netsuke checks `$LASTEXITCODE` immediately after every
-  generated list entry and stops before a later entry can overwrite a failure.
-  Multiple native commands inside one entry are not individually instrumented;
-  terminating PowerShell errors also stop the list. The POSIX brace-group,
-  `eval`, background-job, and `exec` restrictions do not apply to this route.
+- On Unix and in the explicit Windows Bash compatibility route, `shared` is
+  the default for command lists: each entry uses the generated brace/eval
+  boundary in the current shell, so its working-directory, environment, and
+  shell-variable changes reach later entries. In isolated mode, each brace/eval
+  group runs in a subshell from the action baseline; a successful `exit` or
+  direct `exec` ends only that entry. Both modes keep the fail-fast `&&` chain.
+  An entry may start at most one background job; Netsuke waits for that job
+  before moving to a later entry and rejects multiple or dynamically hidden
+  jobs during Ninja generation. Structured or nested `exec` forms are also
+  rejected. Failure diagnostics include the action fingerprint and one-based
+  entry position when Netsuke can attribute the failed list entry.
+- On Windows in the default PowerShell route, `shared` command lists use one
+  PowerShell process and carry location, `$env:`, and variable changes forward.
+  With `command_isolation: isolated`, each entry runs in a fresh child process
+  from the action's working-directory and environment baseline; a successful
+  `exit` ends only that entry. Netsuke checks `$LASTEXITCODE` after each entry
+  and stops before a later entry can overwrite a failure. Multiple native
+  commands inside one entry are not individually instrumented; isolated
+  children keep cmdlet errors fail-fast while native stderr alone does not stop
+  the list. The POSIX brace-group, `eval`, background-job, and `exec`
+  restrictions do not apply to this route.
 - Write shell dollar expressions normally. `$PATH`, `$RUSTFLAGS`, `$in`,
   `$out`, `$ins`, and `$outs` are literal shell variables in both `command:` and
   `script:` recipes; PowerShell routes use `$name` or `$env:NAME`. Netsuke
@@ -1871,10 +2141,29 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   them unchanged. `{{ ins }}` and `{{ outs }}` are the only Netsuke markers for
   input and output paths. On POSIX and Bash routes, Netsuke encodes a marker
   for its unquoted, single-quoted, or double-quoted shell context, and rejects
-  one in a command substitution or backticks. In PowerShell, use markers
-  unquoted; Netsuke rejects quoted and command-substitution marker sites rather
-  than risking a context escape. PowerShell uses backticks as its native escape
-  syntax, so they do not suppress marker interpolation.
+  one in a command substitution or backticks. In PowerShell `command:` and
+  `script:` recipes, markers are valid only at unquoted sites. Netsuke rejects
+  markers in single-quoted strings, double-quoted strings, here-strings, `$()`,
+  and immediately after a backtick. Netsuke rejects markers in the raw
+  native-command region after PowerShell's `--%` stop-parsing token. That
+  region ends at a newline or pipeline character; a semicolon does not end it,
+  and scanning resumes after the boundary. Only ASCII double quotes are
+  modelled for pipeline detection; a single quote, backtick, or typographic
+  quote in the raw region makes later markers fail closed. The path text
+  otherwise reaches the native command literally instead of being interpreted
+  as Netsuke's quoted path literal. PowerShell scripts have no inert comment
+  regions: plain line-comment text leaves later markers eligible for
+  interpolation, while scanner-sensitive syntax after a comment boundary or any
+  mid-token `#` can make later markers fail closed. This includes a
+  block-comment opener, quotes, backticks, or substitution syntax. In
+  particular, an apostrophe in a comment can make a later marker fail closed.
+  Typographic PowerShell quote characters also make later markers fail closed.
+  A braced variable such as `${env:NAME}` or a here-string opened inside `$()`
+  also makes later markers fail closed. PowerShell path bindings use a
+  single-quoted literal that is unsafe inside an existing string. Markers
+  touching any PowerShell single-quote character, including typographic forms,
+  or another marker are also rejected because the literals could merge with
+  adjacent string or argument text.
 - Build and default-target paths escape a literal space as a `$` followed by a
   space, Ninja's own path escape. They reject `|` and control characters, which
   Ninja's path grammar cannot represent, and also reject `$` and colon, which
@@ -1908,6 +2197,37 @@ The recipe interpolation terms have distinct roles:
 
 Do not run an untrusted `Netsukefile`. Prefer explicit inputs, avoid embedding
 secrets in commands or URLs, and pin dependencies used by recipes.
+
+## Compatibility links for the imported `rstest-bdd` guides
+
+Netsuke imports two documents from the upstream `leynos/rstest-bdd` repository
+byte-for-byte, and keeps them unedited so their recorded digests still prove
+which upstream revision each one holds:
+[`rstest-bdd-users-guide.md`](rstest-bdd-users-guide.md) and
+[`rstest-bdd-v0-6-0-migration-guide.md`](rstest-bdd-v0-6-0-migration-guide.md).
+
+Those documents refer to each other and to upstream design records by relative
+path. Because the imported text cannot be rewritten, the headings below exist
+only to give the surviving upstream anchors a local target. They are
+compatibility shims, not Netsuke documentation; the linked sections in the
+imported guide are the content.
+
+### Stateful GPUI scenarios with durable handles
+
+The thread-local scenario-state playbook for `rstest-bdd` 0.6.x, including the
+`StepContext::borrow_mut` constraint it works around, is in the imported
+reference at
+[Stateful GPUI scenarios with durable handles](rstest-bdd-users-guide.md#stateful-gpui-scenarios-with-durable-handles).
+
+### Published gpui 0.2.2 stateful step variants
+
+The `gpui` 0.2.2 step variants that replace the vendored call sites are in the
+imported reference at
+[Published gpui 0.2.2 stateful step variants](rstest-bdd-users-guide.md#published-gpui-022-stateful-step-variants).
+
+The complete mapping — renamed filenames, and the upstream files Netsuke does
+not carry — is in
+[`rstest-bdd-link-compatibility.md`](rstest-bdd-link-compatibility.md).
 
 ## Explore complete examples
 

@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = หากไม่มีหัวข้อ ค�
 cli.help.actions_heading = การดำเนินการ:
 cli.help.targets_heading = เป้าหมาย:
 cli.help.targets.about = แสดงรายการเป้าหมายและการดำเนินการในไฟล์รายการที่เลือก
+cli.help.targets.flag.edges.help = รวมเส้นเชื่อมการพึ่งพาและสูตรดิบไว้ในผลลัพธ์ JSON
 cli.help.default_marker = ค่าเริ่มต้น
 cli.help.conditional_marker = มีเงื่อนไข
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = โหลดไฟล์รายการที�
 runner.context.build_graph = สร้างกราฟจากไฟล์รายการไม่สำเร็จ
 runner.context.generate_ninja = สร้างไฟล์รายการ Ninja ไม่สำเร็จ
 runner.context.render_graph = แสดงผลลัพธ์กราฟไม่สำเร็จ
+runner.help.targets_edges_require_json = ตัวเลือก --edges ต้องใช้ --json ในระดับบนสุด
 
 runner.io.create_temp_file = สร้างไฟล์ Ninja ชั่วคราวไม่สำเร็จ
 runner.io.write_temp_ninja = เขียนไฟล์ Ninja ชั่วคราวไม่สำเร็จ
@@ -179,6 +181,8 @@ manifest.glob.unknown_pattern_error = ข้อผิดพลาดของร
 manifest.glob.io_failed = glob ล้มเหลวสำหรับ “{ $pattern }”: { $detail }
 manifest.glob.unknown_io_error = ข้อผิดพลาดรับส่งข้อมูลที่ไม่รู้จัก
 manifest.command_list_empty = ฟิลด์ “command” ต้องไม่ว่าง: ระบุสตริงคำสั่งหรือรายการที่ไม่ว่าง
+manifest.command_isolation_recipe = ฟิลด์ “command_isolation” ต้องใช้สูตรที่มีรายการคำสั่ง
+manifest.command_isolation_scalar = “command_isolation: isolated” ต้องใช้รายการคำสั่ง
 
 # ข้อผิดพลาดของรูปแทนระดับกลาง
 ir.rule_not_found = ไม่พบกฎ “{ $rule }” ที่เป้าหมาย “{ $target }” อ้างถึง
@@ -453,3 +457,22 @@ manifest.budget.exceeded = ใช้งบประมาณทรัพยา�
 
 cli.flag.env_allow_var.help = ตัวแปรสภาพแวดล้อมที่ได้รับอนุญาตสำหรับตัวช่วย env() ของแมนิเฟสต์
 cli.flag.env_block_var.help = ตัวแปรสภาพแวดล้อมที่ถูกบล็อกสำหรับตัวช่วย env() ของแมนิเฟสต์
+
+# การตรวจสอบไฟล์รายการ (`netsuke check`).
+cli.subcommand.check.about = ตรวจสอบไฟล์รายการโดยไม่สร้างหรือรันการบิลด์
+cli.subcommand.check.long_about = ตรวจไฟล์รายการที่เลือกเพื่อหาโครงสร้างที่แม้จะแจงได้ แต่มีแนวโน้มผิดพลาด ไม่ปลอดภัย ไม่พอร์ตได้ หรือเป็นผลเสียต่อแคช
+cli.subcommand.check.flag.rule.help = กำหนดระดับความรุนแรงของกฎหรือหมวดหมู่ เขียนเป็น NAME=SEVERITY
+cli.subcommand.check.flag.fail_on.help = ระดับความรุนแรงของข้อค้นพบที่จะทำให้คำสั่งล้มเหลว
+cli.subcommand.check.flag.limit.help = จำนวนข้อค้นพบสูงสุดที่รายงาน; 0 หมายถึงรายงานทั้งหมด
+cli.subcommand.check.flag.explain.help = พิมพ์เอกสารอ้างอิงกฎแทนการตรวจสอบไฟล์รายการ
+check.threshold_exceeded = ข้อค้นพบถึงเกณฑ์ { $severity } แล้ว: { $failing } จาก { $reported } ที่รายงาน
+check.threshold_exceeded.help = แก้ไขข้อค้นพบที่รายงาน ปรับ --rule หรือผ่อนเกณฑ์ --fail-on
+check.summary.counts = ผลการตรวจสอบ — ข้อผิดพลาด: { $errors }, คำเตือน: { $warnings }, คำแนะนำ: { $advice }, ถูกระงับ: { $suppressed }
+check.summary.clean = ไม่พบข้อค้นพบ
+check.summary.truncated = แสดง { $shown } ข้อค้นพบ; --limit ละไว้อีก { $omitted } รายการ
+check.rule.malformed = ตัวเลือก { $selector } ไม่ได้เขียนในรูปแบบ NAME=SEVERITY
+check.rule.unknown = ตัวเลือกระบุ { $name } ซึ่งไม่ใช่ทั้งกฎและหมวดหมู่
+check.rule.severity = ตัวเลือก { $name } ระบุความรุนแรง { $severity }; คาดหวังหนึ่งใน { $values }
+check.fail_on.invalid = เกณฑ์ความล้มเหลวที่ไม่รู้จัก { $value }; คาดหวังหนึ่งใน { $values }
+check.source_index = ไม่สามารถทำดัชนี { $path } สำหรับการวินิจฉัยที่บรรทัด { $line }: { $reason }
+status.tool.check = ตรวจสอบ

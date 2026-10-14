@@ -176,7 +176,7 @@ fn analyse_returns_cycle_with_empty_missing_dependencies() {
 }
 
 proptest! {
-    /// analyse() reports no cycle and no missing dependencies for DAGs.
+    /// `analyse()` reports no cycle and no missing dependencies for DAGs.
     #[test]
     fn analyse_acyclic_chains_report_no_cycle(count in 2usize..=8) {
         let nodes = sequential_nodes(count);
@@ -187,7 +187,7 @@ proptest! {
         prop_assert!(report.missing_dependencies.is_empty());
     }
 
-    /// analyse() reports the expected cycle and no missing dependencies.
+    /// `analyse()` reports the expected cycle and no missing dependencies.
     #[test]
     fn analyse_cycle_graphs_report_cycle_without_missing_dependencies(count in 2usize..=8) {
         let nodes = sequential_nodes(count);
@@ -199,7 +199,7 @@ proptest! {
         prop_assert!(report.missing_dependencies.is_empty());
     }
 
-    /// analyse() reports missing dependencies on acyclic graphs.
+    /// `analyse()` reports missing dependencies on acyclic graphs.
     #[test]
     fn analyse_acyclic_chains_report_missing_dependencies(count in 2usize..=8) {
         let nodes = sequential_nodes(count);

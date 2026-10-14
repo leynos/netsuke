@@ -16,23 +16,29 @@ output and some leaf files so the long-lived structure remains visible.
 ├── .github/
 │   ├── actions/
 │   └── workflows/
+├── build_slice_fixture/
 ├── cyclopts/
 ├── docs/
 │   ├── archive/
+│   ├── adrs/
 │   ├── execplans/
 │   └── rfcs/
 ├── examples/
 │   └── hello-world/
 ├── installer/
 ├── locales/
+├── public_api_fixture/
 ├── scripts/
 ├── src/
 │   ├── cli/
 │   ├── ir/
+│   ├── lint/
+│   │   └── rules/
 │   ├── localization/
 │   ├── manifest/
 │   ├── ninja_gen/
 │   ├── runner/
+│   ├── shell_selection/
 │   ├── snapshots/
 │   ├── shell_word.rs
 │   └── stdlib/
@@ -82,6 +88,14 @@ output and some leaf files so the long-lived structure remains visible.
   repository automation workflows.
 - `cyclopts/`: Local Python typing support for release and packaging helper
   scripts.
+- `build_slice_fixture/`: Non-published workspace library that compiles the
+  production build-script module slice before test execution. Its dependency
+  subset is checked against the root build dependencies by a workflow contract;
+  its doctests exercise the supported CLI boundary using the compiled library.
+- `public_api_fixture/`: Non-published workspace library that depends on
+  `netsuke` alone and type-checks its embedder-facing API as an external crate
+  would. Cargo compiles it in the build phase, so a visibility or signature
+  regression fails the build rather than a timed test.
 - `docs/`: Long-lived project documentation, guides, design documents, decision
   records, and planning material.
 - `docs/archive/`: Historical planning documents retained for traceability
@@ -92,9 +106,14 @@ output and some leaf files so the long-lived structure remains visible.
   `Progress` and `Outcomes & retrospective` sections, and its roadmap checkbox,
   are authoritative over that line. The status vocabulary is defined under
   *ExecPlan* in the [documentation style guide](documentation-style-guide.md).
+- `docs/adrs/`: Accepted architectural decisions, named
+  `adr-nnnn-title-slug.md`. ADR numbers are unique within the repository,
+  allocated independently of RFC numbers, and never reused or renumbered after
+  publication.
 - `docs/rfcs/`: Requests for Comments proposing changes that need technical
-  review before they become binding, named `NNNN-short-topic.md` and numbered
-  in allocation order. Numbers are never reused, and are never renumbered after
+  review before they become binding, named `rfc-nnnn-title-slug.md`. RFC
+  numbers are unique within the repository and allocated independently of ADR
+  numbers. Numbers are never reused, and are never renumbered after
   publication. Gaps are therefore expected rather than erroneous: a number may
   be reserved, drafted on another branch, or deliberately skipped, so an unused
   number is not free for reallocation. Check every remote branch for
@@ -115,6 +134,10 @@ output and some leaf files so the long-lived structure remains visible.
   the build script compiles only the pattern module.
 - `src/ir/`: Intermediate representation generation, interpolation, graph, and
   cycle logic.
+- `src/lint/`: Manifest linting — the rule registry, the typed rule interface,
+  the spanned document index, suppression scanning, and policy resolution behind
+  `netsuke check`. Rules live under `src/lint/rules/`, grouped by the concern
+  they address.
 - `src/locale/`: Shipped Fluent catalogue registry and locale resolution,
   exposed through the historical root module paths.
 - `src/localization/`: Localization key definitions and runtime localization
@@ -128,6 +151,10 @@ output and some leaf files so the long-lived structure remains visible.
   orchestration, capability-injected dyndep publication, and bounded generation
   and publication telemetry, including `graph/generation_telemetry.rs`,
   `dyndep/generation_telemetry.rs`, and `process/dyndep/telemetry.rs`.
+- `src/shell_selection/`: Public data-only shell-selection vocabulary,
+  including validated `ShellName`, `ShellSelection`, and the finite built-in
+  shell registry. It records intent without resolving or executing shells; see
+  the [detailed ownership section](#srcshell_selection).
 - `src/snapshots/`: Checked-in `insta` snapshots for source-level snapshot
   tests.
 - `src/shell_word.rs`: The single encoding of one string as a recipe shell
@@ -157,7 +184,7 @@ output and some leaf files so the long-lived structure remains visible.
 - `tools/kani/`: Kani formal-verification harness configuration and related
   local tooling, including `proof-scope.toml`, the paths whose change runs the
   Kani proofs on a pull request (see
-  [ADR-039](adr-039-change-scoped-kani-gate.md)).
+  [ADR-0039](adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)).
 - `tools/mold/`: Pinned `mold` linker release version and the SHA-256 checksums
   used to verify the downloaded release artefacts.
 
@@ -401,6 +428,27 @@ This test-only module owns the command-interpolation cases for protected
 PowerShell contexts. Keep those cases here to hold the parent test module below
 the 400-line cap; production code must not depend on this test module.
 
+### `src/shell_selection/`
+
+This public data-only module owns structured-command shell intent, validated
+registry names, and the fixed built-in table. The related `src/shell_word.rs`
+module encodes one string as a recipe shell word for a named dialect; neither
+module is a child of the other. The layout contract records only this exact
+pair as a disparate-prefix exception; adding or removing a member invalidates
+the exception.
+
+Production `name/mod.rs` remains standalone for the future build-script slice.
+Its unit and property tests are plain child modules under `name/`;
+`built_in/tests.rs` similarly belongs only to `built_in/mod.rs`. Owner modules
+use `mod.rs` because they have child modules, as required by Clippy. The
+property helpers are visible only inside `shell_selection` for the selector
+properties; production code must never depend on them. This preserves Rust
+module and snapshot identities without sibling `#[path]` declarations. The
+private `count_accepted_samples` helper belongs only to the local name strategy
+audit. It counts exactly 1,000 parser outcomes using that audit's shared
+runner; it is neither a production helper nor a selector decoding helper. Other
+property helpers retain their existing narrow sharing boundary.
+
 ## Placement conventions
 
 Keep every source file below the 400-line cap enforced by Whitaker's
@@ -456,9 +504,10 @@ The crates.io package is named `netsuke-build`, while its library and binary
 targets remain named `netsuke`. Keep command-line help, manual pages, release
 artefacts, and operating-system packages aligned with the `netsuke` target name
 rather than the Cargo package name.
-[ADR-007](adr-007-publish-as-netsuke-build.md) records the decision, and the
-[developer guide](developers-guide.md) describes how the build script, release
-packaging, and `cargo binstall` metadata honour it.
+[ADR-0007](adrs/adr-0007-publish-the-crates-io-package-as-netsuke-build.md)
+records the decision, and the [developer guide](developers-guide.md) describes
+how the build script, release packaging, and `cargo binstall` metadata honour
+it.
 
 Place feature files in `tests/features/` unless the behaviour depends on
 Unix-specific platform contracts, in which case use `tests/features_unix/`.
@@ -474,4 +523,5 @@ the current bundle, at most 32 obsolete `.dd` files, and 1 MiB of obsolete
 `.dd` bytes. They remove stale `.tmp` files while holding the exclusive
 directory lease; `clean` prunes only after successful `ninja -t clean`. An
 older arbitrary `generate --output` manifest may therefore need regeneration
-after a later command. See [ADR-012](adr-012-bound-dyndep-sidecar-retention.md).
+after a later command. See
+[ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md).

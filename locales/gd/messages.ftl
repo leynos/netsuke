@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Às aonais cuspair, tha seo a' freagairt ri `--
 cli.help.actions_heading = Gnìomhan:
 cli.help.targets_heading = Targaidean:
 cli.help.targets.about = Dèan liosta de na targaidean agus na gnìomhan anns an fhoirm-liosta a chaidh a thaghadh.
+cli.help.targets.flag.edges.help = Cuir oirean eisimeileachd agus reasabaidhean amh ann an toradh JSON.
 cli.help.default_marker = bunaiteach
 cli.help.conditional_marker = cumhach
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Cha b' urrainnear am foirm-liosta a luchdachadh o
 runner.context.build_graph = Cha b' urrainnear graf a thogail on fhoirm-liosta.
 runner.context.generate_ninja = Cha b' urrainnear am foirm-liosta Ninja a dhèanamh.
 runner.context.render_graph = Cha b' urrainnear toradh a' ghraf a reandarachadh.
+runner.help.targets_edges_require_json = Feumaidh an roghainn --edges --json aig an ìre as àirde.
 
 runner.io.create_temp_file = Cha b' urrainnear am faidhle Ninja sealach a chruthachadh.
 runner.io.write_temp_ninja = Cha b' urrainnear sgrìobhadh don fhaidhle Ninja shealach.
@@ -179,6 +181,8 @@ manifest.glob.unknown_pattern_error = mearachd phàtrain neo-aithnichte.
 manifest.glob.io_failed = Dh'fhàillig glob airson “{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = mearachd ion-chuir/às-chuir neo-aithnichte.
 manifest.command_list_empty = Chan fhaod an raon “command” a bhith falamh: thoir seachad sreang àithne no liosta nach eil falamh.
+manifest.command_isolation_recipe = Feumaidh an raon ‘command_isolation’ reasabaidh le liosta àitheantan.
+manifest.command_isolation_scalar = Feumaidh ‘command_isolation: isolated’ liosta àitheantan.
 
 # Mearachdan an riochdachaidh mheadhanaich.
 ir.rule_not_found = Cha deach an riaghailt “{ $rule }” air a bheil an targaid “{ $target }” a' toirt iomradh a lorg.
@@ -460,3 +464,22 @@ manifest.budget.exceeded = Dh’fhalbh buidseat ghoireasan na foirm-liosta rè {
 
 cli.flag.env_allow_var.help = Caochladair àrainneachd ceadaichte do chuidiche env() a’ mhanaifeist.
 cli.flag.env_block_var.help = Caochladair àrainneachd toirmisgte do chuidiche env() a’ mhanaifeist.
+
+# Sgrùdadh a' mhaniffeast (`netsuke check`).
+cli.subcommand.check.about = Sgrùd am maniffeast gun togail a chruthachadh no a ruith.
+cli.subcommand.check.long_about = Rannsaich am maniffeast a thagh thu airson structaran a thèid a pharsadh ach a tha coltach ri bhith mearachdach, mì-shàbhailte, neo-ghiùlaineach no cronail don tasgadan.
+cli.subcommand.check.flag.rule.help = Suidhich cho dona 's a tha riaghailt no roinn, sgrìobhte mar NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = An ìre dona far am fàillig an àithne mar thoradh air na lorgar.
+cli.subcommand.check.flag.limit.help = An àireamh as motha de lorgan ri aithris; aithrisidh 0 a h-uile gin.
+cli.subcommand.check.flag.explain.help = Clò-bhuail iomradh nan riaghailtean an àite maniffeast a sgrùdadh.
+check.threshold_exceeded = Ràinig na lorgan an stairsneach { $severity }: { $failing } à { $reported } a chaidh aithris.
+check.threshold_exceeded.help = Càraich na lorgan a chaidh aithris, atharraich --rule, no lasaich --fail-on.
+check.summary.counts = Toraidhean an sgrùdaidh — mearachdan: { $errors }, rabhaidhean: { $warnings }, comhairle: { $advice }, mùchte: { $suppressed }.
+check.summary.clean = Cha deach dad a lorg.
+check.summary.truncated = A' sealltainn { $shown } lorg; dh'fhàg --limit { $omitted } eile às.
+check.rule.malformed = Chan eil an roghnaichear { $selector } sgrìobhte mar NAME=SEVERITY.
+check.rule.unknown = Tha an roghnaichear ag ainmeachadh { $name }, nach eil na riaghailt no na roinn.
+check.rule.severity = Tha an roghnaichear { $name } ag ainmeachadh na h-ìre { $severity }; bha dùil ri fear de { $values }.
+check.fail_on.invalid = Stairsneach fàilligidh neo-aithnichte { $value }; bha dùil ri fear de { $values }.
+check.source_index = Cha b' urrainn { $path } a chlàr-amais airson breithneachaidh air loidhne { $line }: { $reason }.
+status.tool.check = Sgrùdadh

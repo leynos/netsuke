@@ -12,18 +12,19 @@ Existing task identifiers remain unchanged. Phases 16 to 19 belong to the
 reserves phases 20 to 25 and RFCs 0021 to 0025 for progressive orchestration.
 [PR `#697`][stdlib-pr] reserves RFCs 0013 to 0020. This programme therefore
 uses RFCs 0026 to 0028 and phases 26 to 29, with open ADR allocations
-re-checked at rebase time, after `main` published [ADR-029][main-adr-029] using
-a number this programme had drafted. Every open allocation through 034 was
-therefore counted as taken, whether or not it has merged, and the three
-decision records here were renumbered to [ADR-035][adr-model],
-[ADR-036][adr-checks], and [ADR-037][adr-experiment]. Published identifiers
+re-checked at rebase time, after `main` published [ADR-0029][main-adr-0029]
+using a number this programme had drafted. Every open allocation through 034
+was therefore counted as taken, whether or not it has merged, and the three
+decision records here were renumbered to [ADR-0035][adr-model],
+[ADR-0036][adr-checks], and [ADR-0037][adr-experiment]. Published identifiers
 must not be silently reused.
 
 The governing proposals are [RFC 0026][hardening], [RFC 0027][checking], and
-[RFC 0028][experiment], with [ADR-035][adr-model], [ADR-036][adr-checks], and
-[ADR-037][adr-experiment]. Explicit dependencies, not phase numbers, define the
-implementation order. Phase 29 starts with toolchain compatibility and may stop
-without affecting the other phases. Its preflight does not wait for a refactor.
+[RFC 0028][experiment], with [ADR-0035][adr-model], [ADR-0036][adr-checks], and
+[ADR-0037][adr-experiment]. Explicit dependencies, not phase numbers, define
+the implementation order. Phase 29 starts with toolchain compatibility and may
+stop without affecting the other phases. Its preflight does not wait for a
+refactor.
 
 This programme adds no v0.1.0 release-admission requirement. Preserve the
 ordinary quickstart, unannotated manifests, deterministic outputs, supported
@@ -33,13 +34,13 @@ service is required. All proposed implementation tasks begin unchecked.
 
 [progressive-pr]: https://github.com/leynos/netsuke/pull/741
 [stdlib-pr]: https://github.com/leynos/netsuke/pull/697
-[main-adr-029]: adr-029-mold-and-parallel-frontend-as-build-defaults.md
-[hardening]: rfcs/0026-hexagonal-domain-hardening.md
-[checking]: rfcs/0027-executable-architecture-contract.md
-[experiment]: rfcs/0028-paralegal-architecture-experiment.md
-[adr-model]: adr-035-semantic-compiler-boundaries.md
-[adr-checks]: adr-036-layered-architecture-enforcement.md
-[adr-experiment]: adr-037-gate-paralegal-on-measured-evidence.md
+[main-adr-0029]: adrs/adr-0029-make-mold-and-the-parallel-frontend-the-default-build.md
+[hardening]: rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
+[checking]: rfcs/rfc-0027-check-an-executable-architecture-contract.md
+[experiment]: rfcs/rfc-0028-evaluate-paralegal-for-architectural-flow-checks.md
+[adr-model]: adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
+[adr-checks]: adrs/adr-0036-enforce-architecture-through-complementary-checks.md
+[adr-experiment]: adrs/adr-0037-gate-paralegal-adoption-on-measured-evidence.md
 
 ## Existing work and ownership
 
@@ -64,9 +65,9 @@ service is required. All proposed implementation tasks begin unchecked.
 Hypothesis: model-owned operations and interpreter-bound lowering eliminate
 invalid executable states without changing ordinary manifest behaviour.
 
-Entry: RFC 0026 and ADR-035 have accepted scope. A focused release-critical fix
-may proceed separately; that does not authorize the whole transformation. Exit:
-successful lowering excludes unresolved execution, shell mismatch is
+Entry: RFC 0026 and ADR-0035 have accepted scope. A focused release-critical
+fix may proceed separately; that does not authorize the whole transformation.
+Exit: successful lowering excludes unresolved execution, shell mismatch is
 unrepresentable or rejected, and compatibility/canonical-edge evidence passes.
 
 ### 26.1. Characterize the semantic boundary
@@ -116,7 +117,8 @@ unrepresentable or rejected, and compatibility/canonical-edge evidence passes.
     argument at any retained compatibility entry point.
   - Acceptance: constructors and mutation APIs cannot manufacture an unchecked
     pair; positive and mismatch controls exercise every library entry point.
-  - Dependencies: 26.2.2; coordinate with ADR-019, not the entire future runner.
+  - Dependencies: 26.2.2; coordinate with ADR-0019, not the entire future
+    runner.
 - [ ] 26.3.2. Validate supported shells and backend escaping independently.
   - Exercise spaces, apostrophes, dollar signs, and interpreter-specific path
     cases, with separate expectations for shell quoting and Ninja escaping.
@@ -164,14 +166,14 @@ not required to close the initial H3/H4 delivery.
     and process request machinery instead of copying `Cli` wholesale.
   - Acceptance: a library caller requests supported build/clean/inspection use
     cases without constructing `Cli`; tests verify operand and option mapping.
-  - Dependencies: 26.1.1 and the approved execution scope in ADR-035.
+  - Dependencies: 26.1.1 and the approved execution scope in ADR-0035.
 - [ ] 27.2.2. Implement the execution port and coherent preparation ownership.
   - Add recording/failing and production Ninja implementations. Reuse child
     environments, reporting, clocks, dyndep publication, capabilities, and
     leases.
   - Acceptance: preparation and execution cannot diverge through a decorative
     token or unrelated path; application tests need no Ninja subprocess.
-  - Dependencies: 27.2.1; preserve ADR-011 and ADR-012 semantics.
+  - Dependencies: 27.2.1; preserve ADR-0011 and ADR-0012 semantics.
 - [ ] 27.2.3. Qualify shared contracts and production adapter behaviour.
   - Cover success, injected errors, output routing, cleanup, and existing
     cancellation semantics; retain real-process and filesystem integration.
@@ -206,7 +208,7 @@ not required to close the initial H3/H4 delivery.
 Hypothesis: explicit coverage, narrow debt, and qualified checks prevent new
 boundary regressions while permitting an incremental transformation.
 
-Entry: accepted RFC 0027 and ADR-036. Exit: the structural/effect policy runs
+Entry: accepted RFC 0027 and ADR-0036. Exit: the structural/effect policy runs
 through the real required gate, fails its seeded violations, reports its scope,
 and remains within a measured approved budget. No Paralegal prerequisite
 applies.
@@ -281,7 +283,7 @@ applies.
 Hypothesis: a compatible Paralegal configuration detects useful architectural
 flow regressions beyond the baseline checks at acceptable cost.
 
-Entry: approve only RFC 0028/ADR-037's bounded P0 initially. Exit: a recorded
+Entry: approve only RFC 0028/ADR-0037's bounded P0 initially. Exit: a recorded
 retain, defer, or reject outcome, not necessarily a deployed analyser. An
 incompatible or inconclusive P0 prevents later trial work. Completing a task
 that records a failed experiment never means its hypothesis passed. Unreached

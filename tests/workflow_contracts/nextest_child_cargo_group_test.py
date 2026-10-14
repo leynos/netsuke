@@ -19,7 +19,6 @@ import typing as typ
 import pytest
 from nextest_child_cargo_group_invariants import (
     CHILD_CARGO_GROUP,
-    GROUP_FILTER,
     LEGACY_EXACT_FILTER,
     NESTED_CARGO_BUILD_TESTS,
     all_filter_text,
@@ -58,10 +57,6 @@ def test_nested_cargo_group_serializes_build_capable_tests() -> None:
         f"nested Cargo build tests missing from {CHILD_CARGO_GROUP}: "
         f"{sorted(set(NESTED_CARGO_BUILD_TESTS) - grouped)!r}"
     )
-    assert {
-        "cli_configuration_fixture_compiles",
-        "packaged_manifest_retains_build_script_sources",
-    } <= grouped, "the two isolated nested Cargo tests must be serialized"
     immediate = [
         override
         for override in all_overrides(config)
@@ -71,6 +66,31 @@ def test_nested_cargo_group_serializes_build_capable_tests() -> None:
     assert all(
         override.get("success-output") == "immediate" for override in immediate
     ), "nested Cargo build diagnostics must remain immediate"
+
+
+def test_no_default_suite_test_starts_a_cargo_build() -> None:
+    """Keep compiler work out of every test the default suite runs.
+
+    A child Cargo build inside a test charges Cargo's package lock, dependency
+    rebuilds, and compiler-admission waits to that test's time allowance, so it
+    times out whenever the host is busy. ADR-0059 moved every such build out of
+    the suite; only the `#[ignore]`-gated mutation compile gate, which runs in
+    its own `make test-kani-mutations` invocation, may still start one. With no
+    build-capable test left beside them, the generated-completion readers no
+    longer need the group's exclusion either.
+    """
+    discovered = set().union(
+        *(build_capable_test_names(source) for source in rust_test_sources().values())
+    )
+    unexpected = sorted(discovered - set(NESTED_CARGO_BUILD_TESTS))
+    assert not unexpected, (
+        f"tests start a build-capable child Cargo command: {unexpected!r}; move "
+        "the compiler work into the build graph, a compile_fail doctest, or a "
+        "Makefile target (ADR-0059)"
+    )
+    assert "generated_completion_exposes_the_clap_command_tree" not in (
+        grouped_test_names(nextest_config())
+    ), "completion readers need no serialization once no writer runs beside them"
 
 
 def test_nested_cargo_group_covers_discovered_build_commands() -> None:
@@ -121,11 +141,10 @@ def test_filters_match_parameterized_test_instances() -> None:
         f"parameterized tests cannot be selected with the exact-name form, which "
         f"matches none of their cases: {sorted(named_by_legacy)!r}"
     )
-    named_by_group = set(GROUP_FILTER.findall(filters)) & parameterized
-    assert named_by_group, (
-        "the parameterized build-capable test must be named by a case-matching "
-        "filter, so its instances are serialized"
-    )
+    # No filter names a parameterized test today, so this guard has nothing in
+    # the live configuration to bite on; the scratch-tree case in
+    # `test_the_anchored_form_is_the_one_the_contracts_admit` keeps the
+    # case-matching form itself pinned.
 
 
 def test_no_filter_uses_the_exact_name_form() -> None:
@@ -166,6 +185,19 @@ fn new_fixture_compiles() {
 """
     assert build_capable_test_names(source) == {"new_fixture_compiles"}, (
         "the discovery contract must classify direct Cargo build commands"
+    )
+
+
+def test_child_cargo_test_preparation_requires_group_policy() -> None:
+    """Discover Cargo test preparation as a build-capable child command."""
+    source = """
+#[test]
+fn prepared_fixture_compiles() {
+    Command::new(cargo()).arg("test").arg("--no-run");
+}
+"""
+    assert build_capable_test_names(source) == {"prepared_fixture_compiles"}, (
+        "Cargo test preparation must retain the nested-build group policy"
     )
 
 

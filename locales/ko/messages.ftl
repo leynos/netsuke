@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = 주제가 없으면 `--help`와 동일합니다
 cli.help.actions_heading = 작업:
 cli.help.targets_heading = 대상:
 cli.help.targets.about = 선택한 매니페스트의 대상 및 작업을 나열합니다.
+cli.help.targets.flag.edges.help = JSON 출력에 종속성 간선과 원본 레시피를 포함합니다.
 cli.help.default_marker = 기본값
 cli.help.conditional_marker = 조건부
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = { $path }의 매니페스트를 불러오지 못�
 runner.context.build_graph = 매니페스트로 그래프를 구성하지 못했습니다.
 runner.context.generate_ninja = Ninja 매니페스트를 생성하지 못했습니다.
 runner.context.render_graph = 그래프 산출물을 렌더링하지 못했습니다.
+runner.help.targets_edges_require_json = --edges 옵션을 사용하려면 최상위 수준에서 --json을 지정해야 합니다.
 
 runner.io.create_temp_file = 임시 Ninja 파일을 만들지 못했습니다.
 runner.io.write_temp_ninja = 임시 Ninja 파일에 쓰지 못했습니다.
@@ -179,6 +181,8 @@ manifest.glob.unknown_pattern_error = 알 수 없는 패턴 오류.
 manifest.glob.io_failed = '{ $pattern }'에 대한 glob이 실패했습니다: { $detail }.
 manifest.glob.unknown_io_error = 알 수 없는 입출력 오류.
 manifest.command_list_empty = 'command' 필드는 비어 있을 수 없습니다: 명령 문자열 또는 비어 있지 않은 목록을 지정하십시오.
+manifest.command_isolation_recipe = ‘command_isolation’ 필드에는 명령 목록 레시피가 필요합니다.
+manifest.command_isolation_scalar = ‘command_isolation: isolated’에는 명령 목록이 필요합니다.
 
 # 중간 표현 오류.
 ir.rule_not_found = 대상 '{ $target }'이(가) 참조하는 규칙 '{ $rule }'을(를) 찾을 수 없습니다.
@@ -453,3 +457,22 @@ manifest.budget.exceeded = { $stage } 중 매니페스트 리소스 예산이 �
 
 cli.flag.env_allow_var.help = 매니페스트 env() 도우미에 허용되는 환경 변수.
 cli.flag.env_block_var.help = 매니페스트 env() 도우미에서 차단되는 환경 변수.
+
+# 매니페스트 검사(`netsuke check`).
+cli.subcommand.check.about = 빌드를 생성하거나 실행하지 않고 매니페스트를 검사합니다.
+cli.subcommand.check.long_about = 선택한 매니페스트에서 구문 분석은 되지만 오류이거나 안전하지 않거나 이식성이 낮거나 캐싱에 불리할 가능성이 큰 구성을 찾습니다.
+cli.subcommand.check.flag.rule.help = 규칙 또는 범주의 심각도를 NAME=SEVERITY 형식으로 설정합니다.
+cli.subcommand.check.flag.fail_on.help = 발견 항목이 명령을 실패시키는 심각도입니다.
+cli.subcommand.check.flag.limit.help = 보고할 최대 발견 항목 수. 0은 전부 보고합니다.
+cli.subcommand.check.flag.explain.help = 매니페스트를 검사하는 대신 규칙 참조를 출력합니다.
+check.threshold_exceeded = 발견 항목이 { $severity } 임계값에 도달했습니다: 보고된 { $reported }건 중 { $failing }건.
+check.threshold_exceeded.help = 보고된 항목을 수정하거나 --rule 옵션을 조정하거나 --fail-on 옵션을 완화하세요.
+check.summary.counts = 검사 결과 — 오류: { $errors }, 경고: { $warnings }, 권고: { $advice }, 억제됨: { $suppressed }.
+check.summary.clean = 발견 항목이 없습니다.
+check.summary.truncated = { $shown }건을 표시합니다. --limit 옵션으로 { $omitted }건을 생략했습니다.
+check.rule.malformed = 선택자 { $selector }이(가) NAME=SEVERITY 형식이 아닙니다.
+check.rule.unknown = 선택자가 지정한 { $name }은(는) 규칙도 범주도 아닙니다.
+check.rule.severity = 선택자 { $name }이(가) 심각도 { $severity }을(를) 지정했습니다. 다음 중 하나여야 합니다: { $values }.
+check.fail_on.invalid = 알 수 없는 실패 임계값 { $value }. 다음 중 하나여야 합니다: { $values }.
+check.source_index = 진단을 위해 { $path }의 { $line } 행을 색인할 수 없습니다: { $reason }.
+status.tool.check = 검사

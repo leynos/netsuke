@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add `netsuke check`, a semantic linter for Netsukefiles, shipped behind the
+  off-by-default `lint` Cargo feature; it is absent from release binaries built
+  with the default feature set, and is planned to become standard in v0.2.0. It
+  analyses the compiler's own artefacts — the authored source with its spans,
+  the expanded manifest, and the lowered build graph — rather than the YAML
+  text, so a rule can tell an order-only directory dependency from a content
+  dependency and recognize that a literal path in a recipe is another target's
+  output. Twenty-four rules ship across nine categories, covering stale
+  escaping workarounds, non-portable shell constructs, dependency shapes that
+  defeat change detection, unused declarations, and the lint directives
+  themselves. Findings are the command's result rather than its failure mode:
+  `--fail-on` sets the severity at which they fail the command,
+  `--rule NAME=SEVERITY` configures one rule or a whole category, and
+  `--explain` prints the rule reference. Suppression is a comment that names
+  the rules it silences and states a reason; there is no blanket disable
+  ([#592](https://github.com/leynos/netsuke/issues/592))
+
 ## [0.1.0-beta4] - 2026-09-26
 
 _If you are upgrading: see the
@@ -59,14 +80,14 @@ _If you are upgrading: see the
   `TYPE_CHECKING`-only import; the claim held under 3.12, and under the 3.14
   baseline PEP 649 defers evaluation, so only resolving the annotation catches
   it
-  ([#730](https://github.com/leynos/netsuke/issues/730), [ADR-038](docs/adr-038-runtime-annotation-introspection-in-workflow-contracts.md))
+  ([#730](https://github.com/leynos/netsuke/issues/730), [ADR-0038](docs/adrs/adr-0038-runtime-annotation-introspection-in-workflow-contracts.md))
 - Add the `shell_quote` and `shell_join` recipe-text filters, and the `compact`
   collection filter. `shell_quote` encodes one string as one shell word and
   `shell_join` encodes a sequence as a command line, each for a `dialect` of
   `sh` or `powershell` that defaults to the dialect implied by the active
   recipe shell. The documented `shell_escape` name is superseded rather than
   implemented, because it would quote for the wrong interpreter on Windows
-  ([#593](https://github.com/leynos/netsuke/issues/593), [ADR-041](docs/adr-041-canonical-recipe-shell-quoting-surface.md))
+  ([#593](https://github.com/leynos/netsuke/issues/593), [ADR-0041](docs/adrs/adr-0041-canonical-recipe-shell-quoting-surface.md))
 - Add the `default=` keyword argument to the `env()` template function, leaving
   the existing missing-variable and invalid-UTF-8 diagnostics unchanged
   ([#593](https://github.com/leynos/netsuke/issues/593))
@@ -74,8 +95,9 @@ _If you are upgrading: see the
   `netsuke_manifest_shell_quote_dialect_total` counter, labelled by `dialect`
   and by whether the call site named the dialect or accepted the default, so
   the manifests whose generated text is not pinned to an encoding are measurable
-  ([ADR-041](docs/adr-041-canonical-recipe-shell-quoting-surface.md))
+  ([ADR-0041](docs/adrs/adr-0041-canonical-recipe-shell-quoting-surface.md))
 
+<!-- markdownlint-disable-next-line MD024 -->
 ### Added
 
 - Bound manifest evaluation with configurable instruction, rendered-output,

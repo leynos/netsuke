@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = ללא נושא, זה תואם את `--help`. �
 cli.help.actions_heading = פעולות:
 cli.help.targets_heading = יעדים:
 cli.help.targets.about = הצגת רשימת היעדים והפעולות במניפסט שנבחר.
+cli.help.targets.flag.edges.help = כלילת קשתות תלות ומתכונים גולמיים בפלט JSON.
 cli.help.default_marker = ברירת מחדל
 cli.help.conditional_marker = מותנה
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = לא ניתן היה לטעון את המניפס
 runner.context.build_graph = לא ניתן היה לבנות גרף מהמניפסט.
 runner.context.generate_ninja = לא ניתן היה ליצור את מניפסט Ninja.
 runner.context.render_graph = לא ניתן היה לעבד את תוצר הגרף.
+runner.help.targets_edges_require_json = האפשרות --edges מחייבת --json ברמה העליונה.
 
 runner.io.create_temp_file = לא ניתן היה ליצור את קובץ Ninja הזמני.
 runner.io.write_temp_ninja = לא ניתן היה לכתוב לקובץ Ninja הזמני.
@@ -179,6 +181,8 @@ manifest.glob.unknown_pattern_error = שגיאת תבנית לא ידועה.
 manifest.glob.io_failed = ‏glob נכשל עבור „{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = שגיאת קלט/פלט לא ידועה.
 manifest.command_list_empty = השדה „command” אינו יכול להיות ריק: יש לספק מחרוזת פקודה או רשימה שאינה ריקה.
+manifest.command_isolation_recipe = השדה ‘command_isolation’ מחייב מתכון עם רשימת פקודות.
+manifest.command_isolation_scalar = ‏‘command_isolation: isolated’ מחייב רשימת פקודות.
 
 # שגיאות הייצוג הביניימי.
 ir.rule_not_found = הכלל „{ $rule }” שאליו מפנה היעד „{ $target }” לא נמצא.
@@ -460,3 +464,25 @@ manifest.budget.exceeded = ‏תקציב המשאבים של המניפסט אז
 
 cli.flag.env_allow_var.help = משתנה סביבה שמותר למסייע env() של המניפסט.
 cli.flag.env_block_var.help = משתנה סביבה שחסום למסייע env() של המניפסט.
+
+# בדיקת קובץ המניפסט (`netsuke check`).
+cli.subcommand.check.about = בדוק את המניפסט בלי לייצר בנייה ובלי להריץ אותה.
+cli.subcommand.check.long_about = סרוק את המניפסט הנבחר אחר מבנים שאמנם מנותחים תחבירית אך קרוב לוודאי שגויים, לא בטוחים, לא ניידים או פוגעים במטמון.
+cli.subcommand.check.flag.rule.help = קבע את חומרת הכלל או הקטגוריה, בכתיב NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = החומרה שבה ממצאים מכשילים את הפקודה.
+cli.subcommand.check.flag.limit.help = מספר הממצאים המרבי לדיווח; 0 מדווח על כולם.
+cli.subcommand.check.flag.explain.help = הדפס את מדריך הכללים במקום לבדוק מניפסט.
+check.threshold_exceeded = הממצאים הגיעו לסף { $severity }: { $failing } מתוך { $reported } שדווחו.
+check.threshold_exceeded.help = תקן את הממצאים שדווחו, התאם את ‎--rule או הרפה את ‎--fail-on.
+check.summary.counts = תוצאות הבדיקה — שגיאות: { $errors }, אזהרות: { $warnings }, המלצות: { $advice }, הושתקו: { $suppressed }.
+check.summary.clean = אין ממצאים.
+check.summary.truncated = { $shown ->
+    [one] מוצג { $shown } ממצא; ‎--limit השמיט { $omitted } נוספים.
+   *[other] מוצגים { $shown } ממצאים; ‎--limit השמיט { $omitted } נוספים.
+}
+check.rule.malformed = הבורר { $selector } אינו כתוב בכתיב NAME=SEVERITY.
+check.rule.unknown = הבורר מציין את { $name }, שאינו כלל ואינו קטגוריה.
+check.rule.severity = הבורר { $name } מציין את החומרה { $severity }; נדרש אחד מתוך { $values }.
+check.fail_on.invalid = סף כישלון לא מוכר { $value }; נדרש אחד מתוך { $values }.
+check.source_index = לא ניתן לאנדקס את { $path } לצורך אבחון בשורה { $line }: { $reason }.
+status.tool.check = בדיקה

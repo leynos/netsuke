@@ -68,18 +68,21 @@ fn write_description_manifest(template: &str) -> Result<(tempfile::TempDir, std:
     Ok((temp, manifest_path))
 }
 
-/// Run `netsuke --json help targets` against `template`.
+/// Run the graph-bearing help query against `template`.
 fn run_query(template: &str) -> Result<QueryRun> {
     let (temp, manifest_path) = write_description_manifest(template)?;
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(temp.path())
+        // A query must not resolve or inspect the build-shell override.
+        .env("NETSUKE_WINDOWS_SHELL", "invalid-query-shell")
         .arg("--json")
         .arg("--file")
         .arg(&manifest_path)
         .arg("help")
         .arg("targets")
+        .arg("--edges")
         .output()
-        .context("run netsuke --json help targets")?;
+        .context("run netsuke --json help targets --edges")?;
     Ok(QueryRun {
         success: output.status.success(),
         stdout: String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?,

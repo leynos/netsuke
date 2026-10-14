@@ -1,0 +1,12 @@
+---
+source: src/shell_selection/built_in/tests.rs
+assertion_line: 164
+expression: rendered
+---
+name | unix-like | windows | executable | fixed arguments
+sh | true | false | absolute-path /bin/sh | -c
+bash | true | true | bare-name bash | --noprofile --norc -c
+pwsh | true | true | bare-name pwsh | -NoLogo -NoProfile -NonInteractive -Command
+powershell | false | true | bare-name powershell.exe | -NoLogo -NoProfile -NonInteractive -Command
+unix-like default: sh
+windows default: powershell

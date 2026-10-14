@@ -2,9 +2,9 @@
 
 Netsuke compiles with the Polonius alpha borrow-checking analysis, which the
 dated nightly pinned in `rust-toolchain.toml` enables by default.
-[ADR-006](adr-006-adopt-polonius-nightly-toolchain.md) records the toolchain
-policy; this document records the audit that motivated it, the API evolutions
-it enabled, and the refusals that bound it. Issue
+[ADR-0006](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)
+records the toolchain policy; this document records the audit that motivated
+it, the API evolutions it enabled, and the refusals that bound it. Issue
 [#465](https://github.com/leynos/netsuke/issues/465) tracked the migration.
 
 The migration originally ran against an opt-in `-Zpolonius=next` directive.
@@ -100,9 +100,10 @@ Scanner suspects that turned out not to be NLL residue:
 The toolchain policy is contract-tested: `tests/polonius_toolchain_contract.rs`
 requires the pinned channel to be a dated nightly at or after 2026-08-04, fails
 if any build configuration reintroduces a `-Zpolonius` directive, and pins the
-shared-action `with.rustflags` and toolchain inputs in the CI, Netsukefile,
-coverage, and packaging workflows. The `RUSTFLAGS` shape of each Makefile
-recipe is covered separately by `tests/makefile_test_target.rs`.
+shared-action `with.rustflags` and toolchain inputs in the CI (including its
+Windows and default-feature lanes), Netsukefile, coverage, and packaging
+workflows. The `RUSTFLAGS` shape of each Makefile recipe is covered separately
+by `tests/makefile_test_target.rs`.
 
 ## Harness consequences
 
@@ -139,7 +140,7 @@ has to use the pinned toolchain; nothing needs to propagate a build setting:
 - **Registry installs**: the crates.io package excludes `rust-toolchain.toml`,
   and registry builds run outside the checkout, so
   `cargo install netsuke-build` must select the pinned nightly explicitly
-  (`cargo +nightly-2026-08-23 install netsuke-build`). The README and users'
+  (`cargo +nightly-2026-10-22 install netsuke-build`). The README and users'
   guide document the command and `tests/documentation_installation_tests.rs`
   pins it.
 - **cargo-mutants** (scheduled, informational) runs through the shared

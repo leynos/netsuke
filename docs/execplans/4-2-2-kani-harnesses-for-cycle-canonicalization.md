@@ -60,8 +60,8 @@ of decisions that need the user's confirmation.
 ## Constraints
 
 - The user approved implementation on 2026-06-22. Stage B proceeded using the
-  per-node-count harness shape, N ceiling of 4, and ADR-004 inheritance already
-  recommended in the Decision Log.
+  per-node-count harness shape, N ceiling of 4, and ADR-0047 inheritance
+  already recommended in the Decision Log.
 - The user approved private production changes on 2026-06-23 after the direct
   `Utf8PathBuf` salvage experiment exceeded the resource cap at N=2. The
   approved goal is to make production more legible and testable, not to create
@@ -113,7 +113,7 @@ of decisions that need the user's confirmation.
   only if a footnote is needed to record the bound; do not rewrite its
   recommendation.
 - Extend the existing
-  [`docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`](../adr-004-bound-kani-ir-harnesses-to-small-n.md)
+  [`docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`](../adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md)
   rather than adding a new ADR. `4.2.2` applies the same small-bounded-N
   decision along a different bounding axis (cycle length rather than map size)
   and records the private production-kernel proof boundary as an extension of
@@ -328,11 +328,12 @@ of decisions that need the user's confirmation.
   do not change that.
 
 - Risk: ADR numbering collision. The repository already contains several files
-  numbered `adr-004-*` (a known artefact of parallel branches). Severity: low.
+  numbered `ADR-0047-*` (a known artefact of parallel branches). Severity: low.
   Likelihood: low. Mitigation: this plan inherits the existing
-  `adr-004-bound-kani-ir-harnesses-to-small-n.md` rather than minting a new
-  number; if Stage A elects a new ADR, the next genuinely free number must be
-  confirmed against `docs/contents.md` before writing it.
+  `adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+  rather than minting a new number; if Stage A elects a new ADR, the next
+  genuinely free number must be confirmed against `docs/contents.md` before
+  writing it.
 
 ## Progress
 
@@ -356,7 +357,7 @@ of decisions that need the user's confirmation.
       Logisphere community-of-experts design review, revising the plan to
       address each finding.
 - [x] (2026-06-22T21:41:49Z) Stage A: implementation was explicitly approved by
-      the user. The combined-per-N harness shape, N ceiling of 4, and ADR-004
+      the user. The combined-per-N harness shape, N ceiling of 4, and ADR-0047
       inheritance are accepted for implementation.
 - [x] (2026-06-22T21:42:47Z) Stage B (red): added deliberately failing
       canonicalization harness scaffolds to `src/ir/cycle_verification.rs`.
@@ -522,7 +523,7 @@ of decisions that need the user's confirmation.
       `/tmp/coderabbit-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-kernel.out`.
 - [x] (2026-06-23T14:33:14Z) Stage D refactor and documentation: tightened
       `is_closed_id_cycle` so empty output is not treated as closed, extended
-      the harness inventory in `docs/developers-guide.md`, extended ADR-004
+      the harness inventory in `docs/developers-guide.md`, extended ADR-0047
       with the approved production-kernel boundary, and added the three
       mutation patches under `docs/verification/mutations/`. The
       `git apply --check` validation confirmed that each patch applies cleanly.
@@ -763,14 +764,14 @@ of decisions that need the user's confirmation.
   choice is unlikely to matter, and the attribute is pinned rather than left to
   the version-dependent default. Date/Author: 2026-06-20 / planning agent.
 
-- Decision: inherit ADR-004 rather than write a new ADR. Rationale: `4.2.2`
-  makes no new, hard-to-reverse architectural choice. It applies ADR-004's
+- Decision: inherit ADR-0047 rather than write a new ADR. Rationale: `4.2.2`
+  makes no new, hard-to-reverse architectural choice. It applies ADR-0047's
   small-bounded-N-with-Proptest-hand-off decision along a different bounding
   axis (cycle length, not map size), introduces no public API, no collection
   port, and no contract change (there is no hasher or serde to stub). The plan
-  extends ADR-004's consequences with one sentence recording the
+  extends ADR-0047's consequences with one sentence recording the
   canonicalization bounding axis and its proptest tail. Date/Author: 2026-06-20
-  / planning agent. **Stage A open question:** confirm inheriting ADR-004
+  / planning agent. **Stage A open question:** confirm inheriting ADR-0047
   versus minting a new ADR.
 
 - Decision: proceed with implementation from this ExecPlan on 2026-06-22.
@@ -778,8 +779,8 @@ of decisions that need the user's confirmation.
   functionality, including keeping this ExecPlan current, using CodeRabbit
   after major milestones, and committing frequently. This satisfies the
   approval gate and accepts the open Stage A recommendations: one harness per
-  node count for N in {2, 3, 4}, plus inheriting ADR-004 rather than creating a
-  new ADR. Date/Author: 2026-06-22 / implementation agent.
+  node count for N in {2, 3, 4}, plus inheriting ADR-0047 rather than creating
+  a new ADR. Date/Author: 2026-06-22 / implementation agent.
 
 - Decision: keep `symbolic_id`, `closed_id_cycle`, the per-N closed-cycle
   builders, and the path-adapter helpers private to
@@ -965,7 +966,7 @@ The relevant supporting files are:
   `make kani-cycle-canon` may be added if Stage A elects a per-feature target.
 - [`docs/developers-guide.md`](../developers-guide.md): the "Kani harness
   inventory" table (rows around lines 186-196) that this plan extends.
-- [`docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`](../adr-004-bound-kani-ir-harnesses-to-small-n.md):
+- [`docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`](../adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md):
   the decision this plan inherits.
 - [`docs/verification/mutations/`](../verification/mutations/): the directory of
   literal mutation patches, one per harness.
@@ -993,7 +994,7 @@ Use these skills while implementing this plan:
   visibility widening for verification; use the skill to police drift rather
   than as a pattern source.
 - `arch-decision-records`: if Stage A elects a new ADR, write it with the
-  project's Y-statement template; otherwise extend ADR-004.
+  project's Y-statement template; otherwise extend ADR-0047.
 - `rust-unit-testing`: model harness helpers after the existing `path` and
   `edge` helpers in `src/ir/cycle_verification.rs`.
 - `leta`: use for symbol navigation when extracting helpers.
@@ -1014,7 +1015,7 @@ Primary local references:
 - [`docs/execplans/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md`](4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md):
   the predecessor whose structure, conventions, and lessons this plan mirrors.
 - [`docs/developers-guide.md`](../developers-guide.md) §Kani harness inventory.
-- [`docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`](../adr-004-bound-kani-ir-harnesses-to-small-n.md).
+- [`docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`](../adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md).
 - [`docs/documentation-style-guide.md`](../documentation-style-guide.md)
   §Architecture Decision Records.
 
@@ -1110,7 +1111,7 @@ two-node path orderings against the `u8` kernel. Keep all harness helpers
 private to the verification module.
 
 Extend the "Kani harness inventory" table in `docs/developers-guide.md` with
-the three kernel harnesses and the adapter harness. Extend ADR-004 with the
+the three kernel harnesses and the adapter harness. Extend ADR-0047 with the
 canonicalization boundary. Add three mutation patches under
 `docs/verification/mutations/` and confirm each applies with
 `git apply --check`.
@@ -1382,8 +1383,8 @@ No new external dependency is introduced.
 2. Node-count ceiling: N in {2, 3, 4} interior nodes for the `u8` kernel; the
    Proptest suite covers the larger path-bearing tail.
 3. ADR: extend
-   `adr-004-bound-kani-ir-harnesses-to-small-n.md` rather than minting a new
-   ADR.
+   `adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+   rather than minting a new ADR.
 4. Make target: defer a filtered `make kani-cycle-canon` target unless
    `make kani-ir` or `make kani-full` runtime approaches the tolerance.
 5. Tractability boundary: direct `Utf8PathBuf` N=2..4 property proofs are out of

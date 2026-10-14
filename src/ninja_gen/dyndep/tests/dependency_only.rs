@@ -14,6 +14,7 @@ fn dependency_only_serial_bundle_uses_phony_without_a_recipe() -> Result<()> {
         Action {
             recipe: Recipe::Command {
                 command: StringOrList::Empty,
+                isolation: crate::ast::CommandIsolation::Shared,
             },
             description: None,
             depfile: None,

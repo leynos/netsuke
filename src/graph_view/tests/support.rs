@@ -15,6 +15,7 @@ pub(super) fn make_action(description: Option<&str>) -> Action {
     Action {
         recipe: Recipe::Command {
             command: "echo".into(),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         description: description.map(str::to_owned),
         depfile: None,

@@ -5,12 +5,9 @@
 //! the obligations a reader meets first — the disabled-helper arity cases and
 //! the permitted-helper sweep.
 //!
-//! Both tests run a real `netsuke` process through the sibling [`run_query`],
-//! so this module is where the two registration paths are compared rather than
-//! merely described. The trios exist because an explicit `dialect=` overrides
-//! the registration's dialect outright: the dialect-omitting probes are the
-//! only ones that can detect a wrong default, and the explicit twins are what
-//! make their result falsifiable rather than satisfiable by either family.
+//! Both tests run a real graph-bearing `netsuke` query through the sibling
+//! [`run_query`]. The explicit probes pin each dialect, while the omitted
+//! probes pin the query surface's stable `sh` default on every host.
 //!
 //! [`run_query`]: super::run_query
 
@@ -23,8 +20,8 @@ use super::{assert_full_stdlib_renders, run_query};
 ///
 /// Two trios, each a join or a quote rendered three times: once with an
 /// explicit `sh`, once with an explicit `powershell`, and once with the dialect
-/// omitted. The explicit pair pins what each encoder produces; the omitted
-/// field must equal whichever of the pair the host's default dialect selects:
+/// omitted. The omitted fields must match the explicit `sh` fields regardless
+/// of the host:
 ///
 /// | index | expression                                        |
 /// |-------|---------------------------------------------------|
@@ -35,12 +32,8 @@ use super::{assert_full_stdlib_renders, run_query};
 /// | 4     | `shell_quote` of the word, `dialect='powershell'` |
 /// | 5     | `shell_quote` of the word, dialect omitted        |
 ///
-/// The trios exist because a probe that names its dialect *cannot* detect a
-/// wrong default: `dialect=` overrides the registration's dialect outright, so
-/// seeding `register_query_helpers` with the PowerShell dialect leaves fields
-/// 0, 1, 3, and 4 untouched. Fields 2 and 5 are the only ones that read the
-/// default the divergence is about, and they are the reason each omitted probe
-/// carries explicit twins.
+/// Explicit twins make the fixed default assertion falsifiable: each pair has
+/// different output, so an omitted field cannot accidentally match both.
 ///
 /// NOTE: a `|` cannot separate the fields because a POSIX field's output
 /// contains one; a backslash cannot because a PowerShell field's output does.
@@ -59,9 +52,8 @@ const PROBE_SEPARATOR: &str = "@";
 
 /// The three explicit-dialect fields, as `(label, rendered)`.
 ///
-/// Measured on this host by probe, not derived. `shell_join` quotes each
-/// element separately, and the two dialect families differ in kind: `sh`
-/// *fragments* around the metacharacter, leaving the longest safe prefix bare,
+/// Stable output for these inputs. `shell_join` quotes each element separately,
+/// and the dialect families differ: `sh` fragments around the metacharacter,
 /// while PowerShell encloses each whole element in single quotes.
 const fn expected_explicit_fields() -> [(usize, &'static str, &'static str); 4] {
     [
@@ -73,10 +65,6 @@ const fn expected_explicit_fields() -> [(usize, &'static str, &'static str); 4] 
 }
 
 /// The `(explicit sh field, explicit powershell field, omitted field)` trios.
-///
-/// The host's `RecipeShell::host_default` picks which of the first two the
-/// third must equal: `PowerShell` on Windows, `Posix` — which shares the `Sh`
-/// dialect with `Bash` — elsewhere.
 const TRIOS: [(usize, usize, usize); 2] = [(0, 1, 2), (3, 4, 5)];
 
 /// Run `PROBES` as a description and split its rendering into fields.
@@ -89,64 +77,36 @@ fn probe_fields() -> Result<Vec<String>> {
     );
     let document: Value = serde_json::from_str(&run.stdout)
         .with_context(|| format!("stdout should be one JSON document: {}", run.stdout))?;
-    let description = document
+    let catalogue_description = document
         .pointer("/result/targets/0/description")
         .and_then(Value::as_str)
         .context("the catalogue should carry the target description")?;
-    let fields = description
+    let graph_description = document
+        .pointer("/result/graph/nodes/0/description")
+        .and_then(Value::as_str)
+        .context("the graph should carry the declaration description")?;
+    ensure!(
+        graph_description == catalogue_description,
+        "catalogue and graph metadata should share one rendered description"
+    );
+    let fields = graph_description
         .split(PROBE_SEPARATOR)
         .map(str::to_owned)
         .collect::<Vec<_>>();
     ensure!(
         fields.len() == 6,
-        "the description should split into six probes, got {}: {description:?}",
+        "the description should split into six probes, got {}: {graph_description:?}",
         fields.len()
     );
     Ok(fields)
 }
 
-/// An explicitly named dialect renders identically under both surfaces.
+/// An explicit dialect overrides the query's fixed default.
 ///
-/// This is the assertion that *can* be made from a test on this host.
-/// `register_query_helpers` documents the two surfaces' **defaults** as
-/// deliberately divergent — the query surface quotes for
-/// [`RecipeShell::host_default`], while the build surface quotes for the shell
-/// the runner resolves, which on Windows honours `NETSUKE_WINDOWS_SHELL`. That
-/// divergence is real. On this host it is *masked* rather than absent, and the
-/// masking is what makes it unreachable from here: `resolve_recipe_shell_with`
-/// returns [`RecipeShell::Posix`] before it reads the environment, so the
-/// build's default and the query's default coincide for reasons that have
-/// nothing to do with the code under test. See `docs/developers-guide.md`,
-/// "the difference is wider than 'the same value reached twice' … it is masked,
-/// not absent".
-///
-/// The hazard the divergence is weighed against is conditional. On Windows
-/// there is no `cfg` early return, but `execute_help` returns before
-/// `resolve_recipe_shell` is called, so the query never resolves a shell on
-/// either platform; resolving it *above* that return would make a metadata-only
-/// query reject a malformed `NETSUKE_WINDOWS_SHELL`. That is a statement about
-/// what hoisting the resolution would do, not about today's reachability, and
-/// it is not something a test here can settle — which is precisely why this
-/// file does not try to.
-///
-/// What is host-independent is the explicit case, and that is what this test
-/// pins: give both surfaces the same `dialect=` and they agree, because the
-/// keyword overrides the registration's default outright. So the agreement
-/// below is a statement about the *keyword*, not about the defaults — a test
-/// that appeared to cover the divergence while being unable to reach it would
-/// be worse than no test, because its green result would read as evidence.
-///
-/// `assert_full_stdlib_renders` is the negative control, and it is a weak one:
-/// it asserts that the build renders the probe, not that it renders the *same
-/// text*, so a build whose default dialect differed would leave it green. The
-/// comparison below carries the agreement; the control only rules out two
-/// identical failures. Strengthening it means moving the probe onto a rule —
-/// rule descriptions do reach `build.ninja`, unlike a `command:` target's,
-/// which `src/ir/from_manifest.rs:140-141` drops on purpose — and comparing the
-/// six fields. That is recorded as a follow-on rather than done here, because
-/// the default it would pin is the masked Windows-only one above.
+/// The full stdlib is a negative control: the same templates must remain valid
+/// during build rendering even though that surface selects its recipe shell.
 #[test]
-fn query_surface_agrees_with_the_build_on_explicit_dialects() -> Result<()> {
+fn query_surface_honours_explicit_dialects() -> Result<()> {
     let fields = probe_fields()?;
     for (index, label, expected) in expected_explicit_fields() {
         let observed = fields
@@ -161,41 +121,9 @@ fn query_surface_agrees_with_the_build_on_explicit_dialects() -> Result<()> {
     Ok(())
 }
 
-/// The index of the trio field that carries the dialect the host resolves to.
-///
-/// `RecipeShell::host_default` is `PowerShell` on Windows and `Posix` — which
-/// shares the `Sh` dialect with `Bash` — everywhere else. Mirroring that `cfg!`
-/// here is not a second guess at the host: it is the same predicate restated
-/// where a reader of this contract can check it, and it is what makes the
-/// assertion below falsifiable. A membership test over *both* twins would not
-/// be — seeding `register_query_helpers` with the PowerShell dialect satisfies
-/// it on a Unix host, because the omitted field then equals the PowerShell
-/// twin.
-const fn host_default_field(trio: (usize, usize, usize)) -> usize {
-    let (sh_index, power_shell_index, default_index) = trio;
-    if cfg!(windows) {
-        let _ = (sh_index, default_index);
-        power_shell_index
-    } else {
-        let _ = (power_shell_index, default_index);
-        sh_index
-    }
-}
-
-/// The dialect-omitting probes resolve to the host's default dialect.
-///
-/// The assertion a wrong default trips, and the explicit-dialect one cannot:
-/// `dialect=` overrides the registration's dialect, so seeding
-/// `register_query_helpers` with `RecipeShell::PowerShell` leaves every
-/// explicit probe intact. The defect would reach a user as silently mismatched
-/// quoting between `netsuke help targets` and the build that consumes the same
-/// manifest.
-///
-/// This file runs on Windows too — `make SHELL=bash test` is a merge gate
-/// (`.github/workflows/ci-windows.yml`) — so the expected twin is chosen by
-/// [`host_default_field`] rather than hardcoded to `sh`.
+/// The omitted dialect always uses `sh`, including when the host is Windows.
 #[test]
-fn query_surface_renders_the_host_resolved_dialect() -> Result<()> {
+fn query_surface_uses_a_stable_sh_default() -> Result<()> {
     let fields = probe_fields()?;
     for trio in TRIOS {
         let (sh_index, power_shell_index, default_index) = trio;
@@ -209,22 +137,16 @@ fn query_surface_renders_the_host_resolved_dialect() -> Result<()> {
             format!("probe {default_index} (default dialect) should have rendered")
         })?;
 
-        // The twins must differ, or the comparison below would be satisfied by
-        // a single dialect family however the default resolved.
         ensure!(
             sh != power_shell,
             "probes {sh_index} and {power_shell_index} should render differently, \
              got {sh:?} for both"
         );
 
-        let expected = fields
-            .get(host_default_field(trio))
-            .context("the host-default field index should be in range")?;
         ensure!(
-            default == expected,
-            "the dialect-omitting probe {default_index} rendered {default:?}, but this host's \
-             default dialect produces {expected:?}; sh renders {sh:?} and powershell renders \
-             {power_shell:?}"
+            default == sh,
+            "the dialect-omitting probe {default_index} rendered {default:?}, but query metadata \
+             must use the fixed sh dialect; powershell renders {power_shell:?}"
         );
     }
     Ok(())

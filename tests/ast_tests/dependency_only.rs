@@ -1,8 +1,9 @@
 //! Tests for manifests whose actions or targets only declare dependencies.
 
 use anyhow::{Context, Result, ensure};
+use netsuke::localization::{self, keys};
 use netsuke::{
-    ast::{NetsukeManifest, Recipe, StringOrList},
+    ast::{CommandIsolation, NetsukeManifest, Recipe, StringOrList},
     ir::BuildGraph,
 };
 use rstest::rstest;
@@ -34,12 +35,16 @@ fn dependency_only_entries_require_non_empty_deps() -> Result<()> {
         matches!(
             &action.recipe,
             Recipe::Command {
-                command: StringOrList::Empty
+                command: StringOrList::Empty,
+                isolation: CommandIsolation::Shared,
+                ..
             }
         ) && matches!(
             &target.recipe,
             Recipe::Command {
-                command: StringOrList::Empty
+                command: StringOrList::Empty,
+                isolation: CommandIsolation::Shared,
+                ..
             }
         ),
         "entries with deps should deserialize as dependency-only recipes"
@@ -56,11 +61,43 @@ fn dependency_only_entries_require_non_empty_deps() -> Result<()> {
         .and_then(serde_json::Value::as_array)
         .and_then(|targets| targets.first())
         .context("serialised manifest should contain the dependency-only target")?;
+    let serialised_action_recipe = serialised_action
+        .get("Command")
+        .and_then(serde_json::Value::as_object)
+        .context("serialised dependency-only action should contain its recipe")?;
+    let serialised_target_recipe = serialised_target
+        .get("Command")
+        .and_then(serde_json::Value::as_object)
+        .context("serialised dependency-only target should contain its recipe")?;
     ensure!(
-        serialised_action.get("command").is_none() && serialised_target.get("command").is_none(),
+        serialised_action_recipe.get("command").is_none()
+            && serialised_target_recipe.get("command").is_none()
+            && serialised_action_recipe.get("command_isolation").is_none()
+            && serialised_target_recipe.get("command_isolation").is_none(),
         "dependency-only entries should serialize without a synthetic command: {serialised}"
     );
 
+    Ok(())
+}
+
+/// Reject a mode-only entry instead of treating it as dependency-only.
+#[test]
+fn command_isolation_without_a_recipe_is_rejected() -> Result<()> {
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        actions:
+          - name: all
+            deps: [check-fmt]
+            command_isolation: shared
+        targets: []
+    "#;
+    let error = parse_manifest(yaml).expect_err("mode-only entries are not dependency-only");
+    let chain = display_error_chain(error.as_ref());
+    let expected = localization::message(keys::MANIFEST_COMMAND_ISOLATION_RECIPE).to_string();
+    ensure!(
+        chain.contains(&expected),
+        "unexpected mode-only diagnostic: {chain}"
+    );
     Ok(())
 }
 

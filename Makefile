@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest test-documentation-contracts doctest test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-package-verify build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -136,8 +136,9 @@ CV005_CONTRACTS_REF ?= 3754876bc4e94dc65c83af3def37828934f8f65e
 CV005_CONTRACTS = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 	--from 'git+https://github.com/leynos/shared-actions@$(CV005_CONTRACTS_REF)\#subdirectory=packages/cv005-contracts' \
 	cv005-contracts
-# Public GitHub tool sources must not inherit workspace-specific URL rewrites.
-PUBLIC_GIT_SOURCE_ENV = GIT_CONFIG_COUNT=0
+# Public GitHub tool sources must not inherit URL rewrites or custom Git
+# helper paths from the invoking environment.
+PUBLIC_GIT_SOURCE_ENV = env -u GIT_EXEC_PATH GIT_CONFIG_COUNT=0
 # The Python baseline every uv-driven helper pins. Bump this alongside the
 # `target-version`/`py-version` settings in pyproject.toml and the
 # `python-version` inputs in .github/workflows/ci.yml, release.yml, and
@@ -208,7 +209,7 @@ TYPOS_CONFIG_BUILDER = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run \
 	--python $(PYTHON_BASELINE) \
 	--from "git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_VERSION)" \
 	typos-config-builder
-PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@b07ef696f8373d54ae68e517d39d47a5d27a5bd5
+PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@2ba17da6b7e24160c4041e8d41ba1ba6cca87b35
 PROVER_TOOLS ?= uv tool run --from $(PROVER_TOOLS_SOURCE) prover-tools
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 unexport RUSTDOC_FLAGS
@@ -243,10 +244,32 @@ test-rfc-stdlib-coverage: check-build-tools ## Check the RFC 0006 split and its 
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test rfc_stdlib_coverage_tests --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 test-documentation-contracts: check-build-tools ## Validate marked documentation examples and semantic contracts
-	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test documentation_examples_loader_tests --test documentation_examples_tests --all-features --no-tests fail -E 'test(malformed_documented_examples_are_rejected) | test(every_documented_fence_has_a_known_unique_identifier) | test(release_wix_extension)' $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test documentation_examples_loader_tests --test documentation_examples_tests --all-features --no-tests fail -E 'test(malformed_documented_examples_are_rejected) | test(every_documented_fence_has_a_known_unique_identifier) | test(help_targets_edges_example_matches_live_schema) | test(release_wix_extension)' $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 doctest: check-build-tools ## Run doctests, which cargo-nextest cannot execute
 	$(GATE_RUSTFLAGS) $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
+
+# Cargo's publish verification: extract the packaged crate and compile it with
+# the shipped default features. It runs here rather than in a test because the
+# cost is a cold compile of the packaged crate, which no per-test allowance can
+# bound; `tests/packaging_smoke_tests.rs` keeps the file-list assertions, which
+# compile nothing. Not part of `make test`: CI runs it on the Linux lane, and
+# what Cargo packages does not vary by platform. See ADR-0059.
+test-package-verify: check-build-tools ## Verify that the packaged crate builds for publication
+	$(GATE_RUSTFLAGS) $(CARGO) publish --dry-run --allow-dirty -p netsuke-build $(BUILD_JOBS)
+
+# The default-feature lane. Release binaries build the default feature set,
+# which excludes `lint` (`netsuke check`) until v0.2.0, so these targets lint
+# and test exactly that set; `lint-clippy` and `test` above cover
+# `--all-features`. See ADR-056 and "Feature-gated code" in the developers'
+# guide.
+test-default-features: check-build-tools ## Run every Rust test with only the default features, as release binaries build
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --workspace --all-targets $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+	$(GATE_RUSTFLAGS) $(CARGO) test --workspace --doc $(BUILD_JOBS)
+
+lint-default-features: check-build-tools ## Run rustdoc and Clippy with only the default features and warnings denied
+	$(GATE_RUSTFLAGS) $(CARGO) doc --workspace --no-deps
+	$(GATE_RUSTFLAGS) $(CARGO) clippy --workspace --all-targets -- -D warnings
 
 test-kani-mutations: check-build-tools ## Compile each mutation patch's patched tree under the Kani configuration
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test kani_mutation_evidence_tests --all-features --run-ignored ignored-only $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
@@ -279,9 +302,21 @@ test-windows-msi-release-rank: ## Validate Windows MSI release-rank parsing
 test-release-admission: ## Validate the release-admission runtime contract
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with pytest==9.0.2 --with hypothesis==6.151.9 \
+		--with 'cmd-mox==0.2.0' --with 'cuprum==0.1.0' --with 'cyclopts==4.25.3' \
 		python -m pytest scripts/tests/test_release_admission_metrics.py \
 		scripts/tests/test_release_admission_metric_failures.py \
-		scripts/tests/test_release_admission_metric_boundedness.py -c /dev/null \
+		scripts/tests/test_release_admission_metric_boundedness.py \
+		scripts/tests/test_release_admission_process_bounds.py \
+		scripts/tests/test_release_admission_environment_contract.py \
+		scripts/tests/test_release_admission_configuration_resolution.py \
+		scripts/tests/test_release_admission_artefact_initialization.py \
+		scripts/tests/test_release_admission_artefact_truncation.py \
+		scripts/tests/test_release_admission_default_forms.py \
+		scripts/tests/test_release_admission_adapter_defaults.py \
+		scripts/tests/test_release_admission_status_translation.py \
+		scripts/tests/test_release_admission_runner_contract.py \
+		scripts/tests/test_release_admission_metric_degradation.py \
+		scripts/tests/test_release_admission_sink_persistence.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 
 test-coverage-artifact: ## Test hostile LCOV artefact validation
@@ -313,11 +348,17 @@ test-ci-scripts: ## Test the CI helper scripts under scripts/ci with pytest and 
 # Split rather than a single `target/%/$(APP)` pattern: the two profiles no
 # longer share a command line. The debug build takes the standard; the release
 # build is one of the two exclusions.
+#
+# Both select the whole workspace rather than `--bin $(APP)`. The workspace has
+# no `default-members`, so a package-scoped build compiles only `netsuke-build`
+# and never `build_slice_fixture`; the fixture is what compiles the production
+# build-script module slice, so a package-scoped build would leave that slice
+# compiled by nothing but the test commands. See ADR-0051.
 target/debug/$(APP): | check-build-tools ## Build the debug binary
-	$(DEBUG_RUSTFLAGS) $(CARGO) build $(BUILD_JOBS) --bin $(APP)
+	$(DEBUG_RUSTFLAGS) $(CARGO) build --workspace $(BUILD_JOBS)
 
 target/release/$(APP): ## Build the release binary on the LLVM backend
-	$(RELEASE_RUSTFLAGS) $(CARGO) build $(BUILD_JOBS) --release --bin $(APP)
+	$(RELEASE_RUSTFLAGS) $(CARGO) build --workspace $(BUILD_JOBS) --release
 
 lint: lint-clippy lint-whitaker lint-python github-actions-lint ## Run the Rust, Python, and GitHub Actions lint suites with warnings denied
 
@@ -342,7 +383,7 @@ lint-workflow-scripts: ## Load every trusted workflow module under the Python ba
 	# only when something resolves the annotation. The claim held under 3.12
 	# and no longer does. Catch it by calling typing.get_type_hints, not by
 	# loading; see
-	# docs/adr-038-runtime-annotation-introspection-in-workflow-contracts.md.
+	# docs/adrs/adr-0038-runtime-annotation-introspection-in-workflow-contracts.md.
 	@for module in .github/scripts/*.py; do \
 		$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) python -c \
 			'import runpy, sys; runpy.run_path(sys.argv[1], run_name="lint_workflow_scripts")' \
@@ -410,7 +451,7 @@ check-fmt: ## Verify formatting
 	$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
 
 typecheck: check-build-tools typecheck-python ## Typecheck all targets and features
-	$(GATE_RUSTFLAGS) $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
+	$(GATE_RUSTFLAGS) $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)
 
 typecheck-python: ## Typecheck the Python sources with ty
 	# `uv tool run` materialises one venv holding ty plus the test-suite

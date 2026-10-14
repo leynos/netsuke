@@ -3,7 +3,7 @@
 use super::*;
 use rstest::rstest;
 
-const FILE: &str = "docs/rfcs/0013-child.md";
+const FILE: &str = "docs/rfcs/rfc-0013-child.md";
 
 /// Write one isolated registry document, keeping its directory alive.
 fn fixture(file: &str, text: &str) -> Result<(tempfile::TempDir, Repo)> {
@@ -72,7 +72,7 @@ fn missing_registry_data_is_rejected(#[case] text: &str, #[case] expected: &str)
 
 #[rstest]
 #[case::malformed("docs/rfcs/child.md", "not named as an RFC")]
-#[case::parent_number("docs/rfcs/0012-child.md", "child RFCs start at 0013")]
+#[case::parent_number("docs/rfcs/rfc-0012-child.md", "child RFCs start at 0013")]
 fn registry_filename_is_validated(#[case] file: &str, #[case] expected: &str) -> Result<()> {
     let (_temp, repo) = fixture(file, &registry("| `alpha` | filter | new | pure | yes |"))?;
     let error = parse(&repo, file).err().context("bad filename must fail")?;
@@ -175,12 +175,13 @@ fn purity_vocabulary_and_counts_exclude_option_rows(
 #[test]
 fn parse_all_uses_only_reserved_numbers_and_sorts_them() -> Result<()> {
     let text = registry("| `alpha` | filter | new | pure | yes |");
-    let (_temp, repo) = fixture("docs/rfcs/0014-child.md", &text)?;
+    let (_temp, repo) = fixture("docs/rfcs/rfc-0014-child.md", &text)?;
     repo.dir.write(FILE, &text)?;
     repo.dir
-        .write("docs/rfcs/0099-other.md", "not a registry")?;
+        .write("docs/rfcs/rfc-0099-other.md", "not a registry")?;
     repo.dir.write("docs/rfcs/readme.md", "not numbered")?;
-    repo.dir.write("docs/rfcs/0015-child.txt", "not Markdown")?;
+    repo.dir
+        .write("docs/rfcs/rfc-0015-child.txt", "not Markdown")?;
     let parsed = parse_all(&repo, &["0014".into(), "0013".into()])?;
     {
         let actual = parsed
@@ -198,10 +199,23 @@ fn parse_all_uses_only_reserved_numbers_and_sorts_them() -> Result<()> {
 
 #[rstest]
 #[case("13-child.md", None)]
-#[case("00133-child.md", None)]
-#[case("٠٠١٣-child.md", None)]
-#[case("docs/rfcs/0013-child.md", Some("0013"))]
-fn filename_numbers_require_four_ascii_digits(#[case] input: &str, #[case] expected: Option<&str>) {
+#[case("rfc-13-child.md", None)]
+#[case("rfc-00133-child.md", None)]
+#[case("rfc-٠٠١٣-child.md", None)]
+#[case("rfc-0013child.md", None)]
+#[case("rfc-0013-.md", None)]
+#[case("rfc-0013-Child.md", None)]
+#[case("rfc-0013-a_b.md", None)]
+#[case("rfc-0013-a b.md", None)]
+#[case("rfc-0013-a--b.md", None)]
+#[case("rfc-0013--a.md", None)]
+#[case("rfc-0013-child.txt", None)]
+#[case("docs/rfcs/rfc-0013-child.md", Some("0013"))]
+#[case("docs/rfcs/rfc-0013-child-42.md", Some("0013"))]
+fn canonical_rfc_filenames_reserve_four_ascii_digits(
+    #[case] input: &str,
+    #[case] expected: Option<&str>,
+) {
     assert_eq!(rfc_number(input).as_deref(), expected);
 }
 

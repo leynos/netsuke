@@ -163,7 +163,8 @@ def expected_expect_cache(runs_on: object) -> str:
     Examples
     --------
     >>> expected_expect_cache(
-    ...     "${{ github.event.pull_request.head.repo.fork"
+    ...     "${{ (github.event.pull_request.head.repo.fork"
+    ...     " || github.event.pull_request.user.login == 'dependabot[bot]')"
     ...     " && 'ubuntu-latest' || 'ubicloud-standard-4-ubuntu-2404' }}"
     ... )
     'any'

@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = 沒有主題時，此命令等同於 `--help`�
 cli.help.actions_heading = 動作：
 cli.help.targets_heading = 目標：
 cli.help.targets.about = 列出所選資訊清單中的目標和動作。
+cli.help.targets.flag.edges.help = 在 JSON 輸出中包含相依邊與原始配方。
 cli.help.default_marker = 預設
 cli.help.conditional_marker = 條件式
 
@@ -99,6 +100,7 @@ runner.context.load_manifest = 無法載入 { $path } 的資訊清單。
 runner.context.build_graph = 無法依資訊清單建立圖。
 runner.context.generate_ninja = 無法產生 Ninja 資訊清單。
 runner.context.render_graph = 無法算繪圖產物。
+runner.help.targets_edges_require_json = --edges 選項需要在最上層指定 --json。
 
 runner.io.create_temp_file = 無法建立暫存的 Ninja 檔案。
 runner.io.write_temp_ninja = 無法寫入暫存的 Ninja 檔案。
@@ -178,6 +180,8 @@ manifest.glob.unknown_pattern_error = 未知的樣式錯誤。
 manifest.glob.io_failed = 對「{ $pattern }」執行 glob 失敗：{ $detail }。
 manifest.glob.unknown_io_error = 未知的輸入輸出錯誤。
 manifest.command_list_empty = 「command」欄位不得為空：請提供命令字串或非空清單。
+manifest.command_isolation_recipe = 「command_isolation」欄位需要包含命令清單的配方。
+manifest.command_isolation_scalar = 「command_isolation: isolated」需要命令清單。
 
 # 中介表示法的錯誤。
 ir.rule_not_found = 找不到目標「{ $target }」所參照的規則「{ $rule }」。
@@ -452,3 +456,22 @@ manifest.budget.exceeded = 資訊清單資源預算在 { $stage } 階段達到 {
 
 cli.flag.env_allow_var.help = 資訊清單 env() 輔助程式允許使用的環境變數。
 cli.flag.env_block_var.help = 資訊清單 env() 輔助程式封鎖使用的環境變數。
+
+# 清單靜態檢查（`netsuke check`）。
+cli.subcommand.check.about = 在不產生或執行建置的情況下檢查資訊清單。
+cli.subcommand.check.long_about = 檢查所選資訊清單中雖能解析、但很可能有誤、不安全、不可移植或不利於快取的寫法。
+cli.subcommand.check.flag.rule.help = 以 NAME=SEVERITY 的形式設定規則或類別的嚴重程度。
+cli.subcommand.check.flag.fail_on.help = 使發現項導致指令失敗的嚴重程度。
+cli.subcommand.check.flag.limit.help = 回報的發現項上限；0 表示全部回報。
+cli.subcommand.check.flag.explain.help = 輸出規則參考，而不檢查資訊清單。
+check.threshold_exceeded = 發現項已達到 { $severity } 門檻：已回報 { $reported } 項中的 { $failing } 項。
+check.threshold_exceeded.help = 請修正已回報的發現項，調整 --rule，或放寬 --fail-on。
+check.summary.counts = 檢查結果 — 錯誤：{ $errors }，警告：{ $warnings }，建議：{ $advice }，已抑制：{ $suppressed }。
+check.summary.clean = 沒有發現項。
+check.summary.truncated = 顯示 { $shown } 項發現；--limit 略去了另外 { $omitted } 項。
+check.rule.malformed = 選擇器 { $selector } 未寫成 NAME=SEVERITY 的形式。
+check.rule.unknown = 選擇器指定的 { $name } 既不是規則也不是類別。
+check.rule.severity = 選擇器 { $name } 指定的嚴重程度 { $severity } 無效；應為 { $values } 之一。
+check.fail_on.invalid = 未知的失敗門檻 { $value }；應為 { $values } 之一。
+check.source_index = 無法為診斷在第 { $line } 行索引 { $path }：{ $reason }。
+status.tool.check = 檢查

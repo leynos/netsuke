@@ -79,8 +79,11 @@ pub(super) fn register_action(
 /// Resolves action bindings in the recipe variant supplied by a manifest.
 fn resolve_recipe(recipe: Recipe, bindings: ActionBindings<'_>) -> Result<Recipe, IrGenError> {
     match recipe {
-        Recipe::Command { command } => Ok(Recipe::Command {
+        Recipe::Command {
+            command, isolation, ..
+        } => Ok(Recipe::Command {
             command: resolve_command(command, bindings)?,
+            isolation,
         }),
         Recipe::Script { script } => Ok(Recipe::Script {
             script: resolve_script(&script, bindings)?,
@@ -362,8 +365,7 @@ fn find_duplicate_graph_outputs(
 pub(super) fn get_target_display_name(paths: &[Utf8PathBuf]) -> String {
     paths
         .first()
-        .map(|p: &Utf8PathBuf| p.to_string())
-        .unwrap_or_default()
+        .map_or_else(Default::default, |p: &Utf8PathBuf| p.to_string())
 }
 
 #[cfg(test)]

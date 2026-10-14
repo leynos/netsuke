@@ -239,8 +239,7 @@ mod tests {
         let help = yaml_diag
             .help
             .as_ref()
-            .map(|m: &LocalizedMessage| m.to_string())
-            .unwrap_or_default();
+            .map_or_else(Default::default, |m: &LocalizedMessage| m.to_string());
         ensure!(help == expected, "message missing tab hint: {help}");
         Ok(())
     }

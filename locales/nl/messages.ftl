@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Zonder onderwerp komt dit overeen met `--help`.
 cli.help.actions_heading = Acties:
 cli.help.targets_heading = Doelen:
 cli.help.targets.about = Doelen en acties in het geselecteerde manifest weergeven.
+cli.help.targets.flag.edges.help = Neem afhankelijkheidskanten en onbewerkte recepten op in de JSON-uitvoer.
 cli.help.default_marker = standaard
 cli.help.conditional_marker = voorwaardelijk
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Het manifest in { $path } kon niet worden geladen
 runner.context.build_graph = De graaf kon niet uit het manifest worden opgebouwd.
 runner.context.generate_ninja = Het Ninja-manifest kon niet worden gegenereerd.
 runner.context.render_graph = Het graafartefact kon niet worden weergegeven.
+runner.help.targets_edges_require_json = De optie --edges vereist --json op het hoogste niveau.
 
 runner.io.create_temp_file = Het tijdelijke Ninja-bestand kon niet worden aangemaakt.
 runner.io.write_temp_ninja = Het tijdelijke Ninja-bestand kon niet worden geschreven.
@@ -179,6 +181,8 @@ manifest.glob.unknown_pattern_error = onbekende patroonfout.
 manifest.glob.io_failed = Glob is mislukt voor ‘{ $pattern }’: { $detail }.
 manifest.glob.unknown_io_error = onbekende I/O-fout.
 manifest.command_list_empty = Het veld ‘command’ mag niet leeg zijn: geef een opdrachtreeks of een niet-lege lijst op.
+manifest.command_isolation_recipe = Het veld ‘command_isolation’ vereist een recept met een opdrachtenlijst.
+manifest.command_isolation_scalar = ‘command_isolation: isolated’ vereist een opdrachtenlijst.
 
 # Fouten in de tussenrepresentatie.
 ir.rule_not_found = De regel ‘{ $rule }’ waarnaar doel ‘{ $target }’ verwijst, is niet gevonden.
@@ -456,3 +460,25 @@ manifest.budget.exceeded = Het resourcebudget van het manifest is tijdens { $sta
 
 cli.flag.env_allow_var.help = Omgevingsvariabele toegestaan voor de env()-helper van het manifest.
 cli.flag.env_block_var.help = Omgevingsvariabele geblokkeerd voor de env()-helper van het manifest.
+
+# Manifest-analyse (`netsuke check`).
+cli.subcommand.check.about = Analyseer het manifest zonder een build te genereren of uit te voeren.
+cli.subcommand.check.long_about = Onderzoek het gekozen manifest op constructies die weliswaar ontleed worden maar waarschijnlijk onjuist, onveilig, niet-overdraagbaar of cachevijandig zijn.
+cli.subcommand.check.flag.rule.help = De ernst van een regel of categorie instellen, geschreven als NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Ernst waarbij bevindingen het commando laten falen.
+cli.subcommand.check.flag.limit.help = Maximaal aantal gemelde bevindingen; 0 meldt ze allemaal.
+cli.subcommand.check.flag.explain.help = De regelreferentie afdrukken in plaats van een manifest te analyseren.
+check.threshold_exceeded = Bevindingen bereikten de drempel { $severity }: { $failing } van { $reported } gemeld.
+check.threshold_exceeded.help = Los de gemelde bevindingen op, pas --rule aan of versoepel --fail-on.
+check.summary.counts = Analyseresultaten — fouten: { $errors }, waarschuwingen: { $warnings }, adviezen: { $advice }, onderdrukt: { $suppressed }.
+check.summary.clean = Geen bevindingen.
+check.summary.truncated = { $shown ->
+    [one] { $shown } bevinding getoond; --limit liet er nog { $omitted } weg.
+   *[other] { $shown } bevindingen getoond; --limit liet er nog { $omitted } weg.
+}
+check.rule.malformed = Selector { $selector } is niet geschreven als NAME=SEVERITY.
+check.rule.unknown = Selector noemt { $name }, wat noch een regel noch een categorie is.
+check.rule.severity = Selector { $name } noemt ernst { $severity }; verwacht werd een van { $values }.
+check.fail_on.invalid = Onbekende faaldrempel { $value }; verwacht werd een van { $values }.
+check.source_index = Kon { $path } niet indexeren voor diagnostiek op regel { $line }: { $reason }.
+status.tool.check = Controleren

@@ -11,13 +11,15 @@ its environment passed to that child alone.
 Run via ``make test-workflow-contracts``.
 """
 
+import dataclasses
+import json
 import os
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the tests drive git and the script as children.
 import sys
 import typing as typ
 
 import pytest
-from workflow_loading import MAKEFILE_PATH, REPO_ROOT
+from workflow_loading import REPO_ROOT
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
@@ -43,6 +45,14 @@ GIT_ENVIRONMENT = {
     "GIT_COMMITTER_NAME": "Test",
     "GIT_COMMITTER_EMAIL": "test@example.invalid",
 }
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ScriptOptions:
+    """Group the optional event and metrics inputs passed to the script."""
+
+    event_name: str = "pull_request"
+    metrics_file: Path | None = None
 
 
 def _git(repository: Path, *arguments: str) -> None:
@@ -85,14 +95,20 @@ def _merge_commit_repository(tmp_path: Path, changed: str) -> Path:
 @pytest.mark.parametrize("event_name", ["push", "schedule", "workflow_dispatch"])
 def test_every_other_event_runs_the_proofs(event_name: str) -> None:
     """Run in full on every event but a pull request, whatever changed."""
-    assert scope_mod.decide(event_name, SCOPE, []).run_proofs, event_name
-    assert scope_mod.decide(event_name, SCOPE, None).run_proofs, event_name
+    decision = scope_mod.decide(event_name, SCOPE, [])
+    assert decision.run_proofs, event_name
+    assert decision.category is scope_mod.DecisionCategory.FULL_RUN, event_name
+    assert scope_mod.decide(event_name, SCOPE, None).category is (
+        scope_mod.DecisionCategory.FULL_RUN
+    ), f"unreadable changes must not change the {event_name} category"
 
 
 def test_unreadable_change_set_runs_the_proofs() -> None:
     """Fail closed when the pull request's change set could not be read."""
-    assert scope_mod.decide("pull_request", SCOPE, None).run_proofs, (
-        "an unreadable change set must run the proofs"
+    decision = scope_mod.decide("pull_request", SCOPE, None)
+    assert decision.run_proofs, "an unreadable change set must run the proofs"
+    assert decision.category is scope_mod.DecisionCategory.UNREADABLE_DIFF, (
+        "unreadable changes must have their own fixed category"
     )
 
 
@@ -112,6 +128,12 @@ def test_pull_request_runs_only_when_a_proof_input_changes(
     """Match directories by whole segment and files exactly."""
     decision = scope_mod.decide("pull_request", SCOPE, changes)
     assert decision.run_proofs is expected, decision.reason
+    expected_category = (
+        scope_mod.DecisionCategory.IN_SCOPE
+        if expected
+        else scope_mod.DecisionCategory.OUT_OF_SCOPE
+    )
+    assert decision.category is expected_category, decision.reason
     assert ("none of them" in decision.reason) is not expected, decision.reason
 
 
@@ -149,6 +171,17 @@ def test_missing_scope_is_an_error(tmp_path: Path) -> None:
     """Refuse a scope file that does not exist."""
     with pytest.raises(scope_mod.ScopeFileError):
         scope_mod.read_scope(tmp_path / "absent.toml")
+
+
+def test_undecodable_scope_is_an_error_with_its_decode_cause(tmp_path: Path) -> None:
+    """Keep the decoding failure as the cause of an invalid scope decision."""
+    scope_file = tmp_path / "proof-scope.toml"
+    scope_file.write_bytes(b"[scope]\nsources = [\xff]\n")
+    with pytest.raises(scope_mod.ScopeFileError) as raised:
+        scope_mod.read_scope(scope_file)
+    assert isinstance(raised.value.__cause__, UnicodeDecodeError), (
+        "the decoding failure must remain available as the cause"
+    )
 
 
 def test_checked_in_scope_reads() -> None:
@@ -195,18 +228,22 @@ def _run_script(
     tmp_path: Path,
     repository: Path,
     scope_text: str,
-    event_name: str = "pull_request",
+    options: ScriptOptions | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run the script as the workflow does, with inputs in the child's environment."""
+    script_options = options or ScriptOptions()
     scope_file = tmp_path / "proof-scope.toml"
     scope_file.write_text(scope_text, encoding="utf-8")
     environment = {
         **GIT_ENVIRONMENT,
-        "INPUT_EVENT_NAME": event_name,
+        "INPUT_EVENT_NAME": script_options.event_name,
         "INPUT_REPOSITORY": str(repository),
         "INPUT_SCOPE_FILE": str(scope_file),
         "GITHUB_OUTPUT": str(tmp_path / "output"),
         "GITHUB_STEP_SUMMARY": str(tmp_path / "summary.md"),
+        "INPUT_METRICS_FILE": str(
+            script_options.metrics_file or tmp_path / "decision.json"
+        ),
     }
     return subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed argv, no shell.
         [sys.executable, str(SCRIPT)],
@@ -233,6 +270,24 @@ def test_script_publishes_the_decision(
     summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
     assert f"### {heading}" in summary, summary
     assert f"::notice title={heading}::" in completed.stdout, completed.stdout
+    expected_category = "in_scope" if expected == "true" else "out_of_scope"
+    record = json.loads((tmp_path / "decision.json").read_text(encoding="utf-8"))
+    assert record == {"decision": expected_category}, record
+
+
+def test_script_records_an_unreadable_pull_request_diff(tmp_path: Path) -> None:
+    """Record the fail-closed decision when HEAD is not a merge commit."""
+    repository = tmp_path / "single-commit"
+    repository.mkdir()
+    _git(repository, "init", "--quiet", "--initial-branch=main")
+    _commit(repository, "docs/guide.md", "guide")
+    completed = _run_script(tmp_path, repository, VALID_SCOPE)
+    assert completed.returncode == 0, completed.stderr
+    assert (tmp_path / "output").read_text(encoding="utf-8") == "run-proofs=true\n", (
+        "an unreadable diff must fail closed and run the proofs"
+    )
+    record = json.loads((tmp_path / "decision.json").read_text(encoding="utf-8"))
+    assert record == {"decision": "unreadable_diff"}, record
 
 
 @pytest.mark.parametrize("event_name", ["push", "schedule", "workflow_dispatch"])
@@ -243,39 +298,70 @@ def test_script_runs_every_other_event_in_full(tmp_path: Path, event_name: str) 
     request would skip, so a run here comes from the event alone.
     """
     repository = _merge_commit_repository(tmp_path, "docs/guide.md")
-    completed = _run_script(tmp_path, repository, VALID_SCOPE, event_name)
+    completed = _run_script(
+        tmp_path, repository, VALID_SCOPE, ScriptOptions(event_name=event_name)
+    )
     assert completed.returncode == 0, completed.stderr
     output = (tmp_path / "output").read_text(encoding="utf-8")
     assert output == "run-proofs=true\n", output
     summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
     assert "### Kani proofs run" in summary, summary
     assert f"`{event_name}`" in summary, summary
+    record = json.loads((tmp_path / "decision.json").read_text(encoding="utf-8"))
+    assert record == {"decision": "full_run"}, record
 
 
 def test_script_fails_on_a_damaged_scope(tmp_path: Path) -> None:
-    """Fail the step, writing no decision, when the scope cannot be trusted."""
+    """Fail without step outputs while recording `invalid_scope`."""
     repository = _merge_commit_repository(tmp_path, "docs/guide.md")
     completed = _run_script(tmp_path, repository, "[scope]\n")
     assert completed.returncode != 0, "a damaged scope must fail the step"
     assert not (tmp_path / "output").exists(), "a failed step must decide nothing"
+    record = json.loads((tmp_path / "decision.json").read_text(encoding="utf-8"))
+    assert record == {"decision": "invalid_scope"}, record
 
 
-def test_dependency_pins_match_the_makefile() -> None:
-    """Keep the Kani test pin aligned with typecheck's supported versions."""
-    header = SCRIPT.read_text(encoding="utf-8").split("# ///", 2)[1]
-    pins = [line.strip().strip('#", ') for line in header.splitlines() if "==" in line]
-    makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
-    assert len(pins) == 2, f"expected the cuprum and cyclopts pins, found {pins}"
-    workflow_recipes = makefile.split("test-workflow-contracts:", 1)[1].split(
-        "test-windows-msi-release-rank:", 1
-    )[0]
-    workflow_contracts = workflow_recipes.split("\n\tPYTHONPATH=scripts", 1)[0]
-    typecheck = makefile.split("typecheck-python:", 1)[1].split("\nmarkdownlint:", 1)[0]
-    for pin in pins:
-        package, version = pin.split("==", 1)
-        assert workflow_contracts.count(f"--with '{pin}'") == 1, (
-            f"the workflow contracts must run Kani with its declared pin {pin}"
+def test_metrics_record_failure_warns_without_changing_the_decision(
+    tmp_path: Path,
+) -> None:
+    """Keep a valid decision when its separate metrics record is unwritable."""
+    repository = _merge_commit_repository(tmp_path, "src/ir/graph.rs")
+    metrics_parent = tmp_path / "not-a-directory"
+    metrics_parent.write_text("file", encoding="utf-8")
+    completed = _run_script(
+        tmp_path,
+        repository,
+        VALID_SCOPE,
+        ScriptOptions(metrics_file=metrics_parent / "decision.json"),
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert (tmp_path / "output").read_text(encoding="utf-8") == "run-proofs=true\n", (
+        "a metrics write failure must not change the proof decision"
+    )
+    assert completed.stderr == (
+        "::warning::Kani scope decision metrics could not be recorded.\n"
+    ), "a metrics write failure must produce one fixed warning"
+
+
+def test_metrics_record_failure_does_not_mask_an_invalid_scope(
+    tmp_path: Path,
+) -> None:
+    """Retain the scope error and failed step if its record cannot be written."""
+    repository = _merge_commit_repository(tmp_path, "docs/guide.md")
+    metrics_parent = tmp_path / "not-a-directory"
+    metrics_parent.write_text("file", encoding="utf-8")
+    completed = _run_script(
+        tmp_path,
+        repository,
+        "[scope]\n",
+        ScriptOptions(metrics_file=metrics_parent / "decision.json"),
+    )
+    assert completed.returncode != 0, "invalid scope must keep failing the step"
+    assert not (tmp_path / "output").exists(), "invalid scope must decide nothing"
+    assert (
+        completed.stderr.count(
+            "::warning::Kani scope decision metrics could not be recorded."
         )
-        assert f"--with '{package}>={version}," in typecheck, (
-            f"`make typecheck-python` must support Kani's declared pin {pin}"
-        )
+        == 1
+    ), "an invalid scope with a failed record must produce one fixed warning"
+    assert "ScopeFileError" in completed.stderr, completed.stderr

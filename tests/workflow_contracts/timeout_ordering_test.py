@@ -18,11 +18,11 @@ ordering assertion does not.
 
 The per-test allowance is ``period`` multiplied by ``terminate-after``,
 not ``period`` alone. Every period here is 60 seconds and every platform
-uses the same multipliers, so the profile's own five periods give 300 s
-and the mutation compile gate's override gives 600 s. The largest
-allowance is therefore the gate's, and it is that figure the whole-run
-budget has to clear; reading the period as the budget would understate
-either by its multiplier.
+uses the same multipliers, so the profile's own five periods give 300 s,
+and the mutation compile gate gets 600 s.
+The largest allowance is therefore 600 s, and it is that figure the whole-run
+budget has to clear; reading the period as the budget would understate either by its
+multiplier.
 
 See "Test timeouts: the tiers this repository sets" in
 ``docs/developers-guide.md``, and the canonical wording in
@@ -275,7 +275,7 @@ def test_the_termination_allowance_is_the_grace_period_plus_the_margin() -> None
     every grace period below the margin, so adding one of thirty seconds
     to this configuration would demand nothing more of the watchdog above
     it. The ordering assertion that uses this reading has 50 s of slack
-    against the real tree -- the 1,800 s watchdog against a 1,750 s
+    against the real tree -- the 1,980 s watchdog against a 1,930 s
     requirement -- so it would pass on either reading; the test of the
     reading itself is what stands behind the two terms.
     """

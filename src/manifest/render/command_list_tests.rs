@@ -1,7 +1,7 @@
 //! Regression tests for rendering command-list entries.
 
 use super::*;
-use crate::ast::{DependencyOrder, Target};
+use crate::ast::{DependencyOrder, NetsukeManifest, Recipe, Rule, StringOrList, Target, Vars};
 use crate::manifest::budget::ManifestBudget;
 use semver::Version;
 
@@ -85,6 +85,7 @@ fn target_recipe_context_reserves_ins_and_outs_placeholders() -> Result<()> {
             name: "out".into(),
             recipe: Recipe::Command {
                 command: StringOrList::List(vec!["{{ ins }}".into(), "{{ outs }}".into()]),
+                isolation: crate::ast::CommandIsolation::Shared,
             },
             sources: StringOrList::Empty,
             deps: StringOrList::Empty,
@@ -104,12 +105,50 @@ fn target_recipe_context_reserves_ins_and_outs_placeholders() -> Result<()> {
         .targets
         .first()
         .context("rendered target missing")?;
-    let Recipe::Command { command } = &target.recipe else {
+    let Recipe::Command { command, .. } = &target.recipe else {
         anyhow::bail!("expected target command recipe, got {:?}", target.recipe);
     };
     anyhow::ensure!(
         command.to_string_vec() == [crate::ir::INS_TOKEN, crate::ir::OUTS_TOKEN],
         "unexpected rendered target command list: {command:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn command_list_renders_each_entry_with_ins_outs_placeholders() -> Result<()> {
+    let env = Environment::new();
+    let mut vars = Vars::new();
+    vars.insert("ins".into(), ManifestValue::String("caller-ins".into()));
+    vars.insert("outs".into(), ManifestValue::String("caller-outs".into()));
+    let manifest = NetsukeManifest {
+        netsuke_version: Version::parse("1.0.0")?,
+        vars,
+        macros: Vec::new(),
+        rules: vec![Rule {
+            name: "check".into(),
+            recipe: Recipe::Command {
+                command: StringOrList::List(vec![
+                    "echo {{ 1 + 1 }}".into(),
+                    "{{ ins }}".into(),
+                    "{{ outs }}".into(),
+                ]),
+                isolation: crate::ast::CommandIsolation::Shared,
+            },
+            description: None,
+        }],
+        actions: Vec::new(),
+        targets: Vec::new(),
+        defaults: Vec::new(),
+    };
+    let rendered = render_manifest(manifest, &env)?;
+    let rule = rendered.rules.first().context("rendered rule missing")?;
+    let Recipe::Command { command, .. } = &rule.recipe else {
+        anyhow::bail!("expected command recipe, got {:?}", rule.recipe);
+    };
+    anyhow::ensure!(
+        command.to_string_vec() == ["echo 2", crate::ir::INS_TOKEN, crate::ir::OUTS_TOKEN],
+        "unexpected rendered command list: {command:?}"
     );
     Ok(())
 }

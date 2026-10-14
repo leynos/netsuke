@@ -296,10 +296,10 @@ Stop and escalate rather than improvising when any of these is reached.
 ## Decision log
 
 - 2026-09-20 —
-  [ADR-034](../adr-034-preserve-script-in-out-as-shell-variables.md) supersedes
-  EP-M1's script `$in` / `$out` lowering decision. The backend escaping seam
-  and marker lowering remain in force; scripts now preserve `$in` and `$out` as
-  shell variables.
+  [ADR-0034](../adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md)
+  supersedes EP-M1's script `$in` / `$out` lowering decision. The backend
+  escaping seam and marker lowering remain in force; scripts now preserve `$in`
+  and `$out` as shell variables.
 
 - Decision: separate the backend's shell-text construction from its Ninja
   syntax emission with two newtypes, `ShellText` and `NinjaValue`, in a new
@@ -889,7 +889,7 @@ payload instead), and that new emission sites must go through one of these two
 routes. Per `AGENTS.md`, record the new abstraction's scope and re-use policy
 there.
 
-Add `docs/adr-014-backend-text-escaping-seam.md` following
+Add `docs/adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md` following
 `docs/documentation-style-guide.md:421-498`, covering the layering decision,
 the fallible constructor, the rejection of Kani and Verus, and the scope
 boundary including `description`, `depfile`, `deps`, and `pool` escaping at the
@@ -1156,7 +1156,7 @@ routes to `rust-types-and-apis` for the newtype seam, `rust-errors` for the
 fallible constructor, and `rust-unit-testing` for the assertion style;
 `hexagonal-architecture` for the domain-versus-adapter boundary; `proptest` for
 the widened generators; `execplans` for keeping this document current;
-`arch-decision-records` for ADR-014; and `firecrawl-mcp` for any further Ninja
+`arch-decision-records` for ADR-0014; and `firecrawl-mcp` for any further Ninja
 documentation lookup.
 
 `ortho_config` is named in the task brief but is not applicable: this change
@@ -1195,8 +1195,8 @@ findings; this plan is now `COMPLETE`.
 
 2026-08-26 — rebasing the completed implementation onto `origin/main` at
 `1d0cb167` required a deliberate integration with main's Ninja-generation split
-and serial-dependency work. Main now owns ADR-011 through ADR-013, so the
-escaping decision record is renumbered to ADR-014. The resolution keeps main's
+and serial-dependency work. Main now owns ADR-0011 through ADR-0013, so the
+escaping decision record is renumbered to ADR-0014. The resolution keeps main's
 `src/ninja_gen/mod.rs` layout, dyndep/path validation, and relocated
 command-list process tests while retaining the completed shell-text escaping
 seam, script placeholder lowering, required-Ninja CI contract, and migration
@@ -1307,7 +1307,7 @@ command text. This preserves trailing spaces and exposes every other output
 difference. During the same reconciliation, the shared path validator was
 restored to the approved EP-M3 policy for dollar, colon, pipe, and control
 characters across ordinary build lines, defaults, and dyndep sidecars. The
-rebase had retained main's path escaping despite the ExecPlan, ADR-014, and
+rebase had retained main's path escaping despite the ExecPlan, ADR-0014, and
 developers' guide requiring rejection. The revised matrix covers the three
 Ninja metacharacters in every emitted field. Status is `IN PROGRESS` until the
 focused and complete gates and CodeRabbit review pass.

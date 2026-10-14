@@ -301,7 +301,7 @@ fn make_cycle_graph(nodes: &[camino::Utf8PathBuf]) -> BuildGraph {
 }
 
 proptest! {
-    /// detect() returns None for acyclic chains and leaves the stack empty.
+    /// `detect()` returns None for acyclic chains and leaves the stack empty.
     #[test]
     fn detect_acyclic_graph_leaves_stack_empty(count in 2usize..=8) {
         let nodes = sequential_nodes(count);
@@ -314,7 +314,7 @@ proptest! {
         );
     }
 
-    /// detect() returns Some for cyclic graphs and leaves the stack empty.
+    /// `detect()` returns Some for cyclic graphs and leaves the stack empty.
     #[test]
     fn detect_cyclic_graph_leaves_stack_empty(count in 2usize..=8) {
         let nodes = sequential_nodes(count);
@@ -327,7 +327,7 @@ proptest! {
         );
     }
 
-    /// detect() is deterministic: all invocations on the same graph return
+    /// `detect()` is deterministic: all invocations on the same graph return
     /// the same canonical cycle.
     #[test]
     fn detect_is_deterministic_on_cyclic_graphs(count in 2usize..=6) {
@@ -340,7 +340,7 @@ proptest! {
         }
     }
 
-    /// detect() reset semantics hold across cyclic graphs of several sizes.
+    /// `detect()` reset semantics hold across cyclic graphs of several sizes.
     #[test]
     fn repeated_detect_resets_state_for_cyclic_graphs(count in 2usize..=8) {
         let nodes = sequential_nodes(count);

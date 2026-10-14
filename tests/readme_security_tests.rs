@@ -44,7 +44,7 @@ fn lower_recipe_for_shell(source: &str, shell: RecipeShell) -> Result<(String, B
         .next()
         .context("README action is absent")?;
     let recipe = match &action.recipe {
-        Recipe::Command { command } => command.to_string_vec().join("\n"),
+        Recipe::Command { command, .. } => command.to_string_vec().join("\n"),
         Recipe::Script { script } => script.clone(),
         Recipe::Rule { .. } => bail!("README action unexpectedly uses a rule"),
     };
@@ -194,6 +194,38 @@ fn netsuke_owned_path_substitutions_are_quoted() -> Result<()> {
         contains_substring("cat input' file.txt' > output.txt")
     );
     Ok(())
+}
+
+#[test]
+fn readme_documents_power_shell_script_marker_restrictions() {
+    let normalized_readme = include_str!("../README.md")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let readme = normalized_readme.as_str();
+
+    assert_that!(
+        readme,
+        contains_substring("Both PowerShell `command:` and `script:` recipes")
+    );
+    assert_that!(
+        readme,
+        contains_substring("PowerShell scripts have no inert")
+    );
+    assert_that!(readme, contains_substring("immediately after a backtick"));
+    assert_that!(
+        readme,
+        contains_substring("PowerShell quote characters also make later markers fail closed")
+    );
+    assert_that!(
+        readme,
+        contains_substring("plain line-comment text leaves later unquoted markers")
+    );
+    assert_that!(readme, contains_substring("includes block-comment openers"));
+    assert_that!(
+        readme,
+        contains_substring("any mid-token `#` can make later markers fail closed")
+    );
 }
 
 #[rstest]

@@ -469,13 +469,6 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
     );
 
     let steps = steps(kani_job)?;
-    ensure!(
-        !steps
-            .iter()
-            .any(|step| step_has(step, StepField::Uses, "astral-sh/setup-uv@")),
-        "Kani smoke job installs prebuilt archives directly and needs no uv runtime"
-    );
-
     ensure_kani_cache_contract(steps)?;
 
     let install_kani_index = step_index(steps, "Install prebuilt Kani")?;
@@ -492,12 +485,24 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
         "Kani smoke job should install Kani, check its version, then run the bounded harnesses"
     );
     let install_kani = named_step(steps, "Install prebuilt Kani")?;
+    let setup_uv = named_step(steps, "Setup uv")?;
+    let setup_uv_action = mapping_get(setup_uv, YamlKey("uses"))
+        .and_then(Value::as_str)
+        .context("Kani smoke job should set up uv before its installer script")?;
+    ensure!(
+        setup_uv_action.starts_with("astral-sh/setup-uv@"),
+        "Kani smoke job should set up uv before its installer script"
+    );
+    ensure!(
+        step_index(steps, "Setup uv")? < install_kani_index,
+        "Kani smoke job should set up uv before installing Kani through the script"
+    );
     ensure_kani_install_delegates_to_script(install_kani)?;
-    // Thirty, not twenty. The job's last step is the mutation compile gate,
-    // which builds the whole dependency graph through the Kani frontend into a
-    // cold `CARGO_TARGET_DIR`; the ceiling has to contain that on top of the
-    // harness run. Measured locally at 152.952s of gate time over all 18
-    // tracked patches with the graph warm, plus 158s of wall clock for the
+    // Thirty, not twenty. The job includes a mutation compile gate, which
+    // builds the whole dependency graph through the Kani frontend into a cold
+    // `CARGO_TARGET_DIR`; the ceiling has to contain that on top of the harness
+    // run and retained-metrics finalization. The measured warm gate took
+    // 152.952s over all 18 tracked patches, plus 158s of wall clock for the
     // recipe. The cold case is now measured too: run 35796798133 passed the
     // gate at 257.703s, and run 35800582469 at 261.514s, so a cold CI run
     // costs about 105s more than the warm local one rather than the multiple

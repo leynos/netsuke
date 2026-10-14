@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = بدون موضوع، این با `--help` یک
 cli.help.actions_heading = اقدامات:
 cli.help.targets_heading = اهداف:
 cli.help.targets.about = فهرست کردن اهداف و اقدامات در پروندهٔ انتخاب‌شده.
+cli.help.targets.flag.edges.help = یال‌های وابستگی و دستورالعمل‌های خام ساخت را در خروجی JSON بگنجانید.
 cli.help.default_marker = پیش‌فرض
 cli.help.conditional_marker = مشروط
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = بارگذاری مانیفست از { $path } م
 runner.context.build_graph = ساخت گراف از روی مانیفست ممکن نشد.
 runner.context.generate_ninja = تولید مانیفست Ninja ممکن نشد.
 runner.context.render_graph = نمایش فرآوردهٔ گراف ممکن نشد.
+runner.help.targets_edges_require_json = گزینهٔ --edges به --json در سطح اصلی نیاز دارد.
 
 runner.io.create_temp_file = ساخت پروندهٔ موقت Ninja ممکن نشد.
 runner.io.write_temp_ninja = نوشتن در پروندهٔ موقت Ninja ممکن نشد.
@@ -179,6 +181,8 @@ manifest.glob.unknown_pattern_error = خطای الگوی ناشناخته.
 manifest.glob.io_failed = ‏glob برای «{ $pattern }» ناکام ماند: { $detail }.
 manifest.glob.unknown_io_error = خطای ورودی/خروجی ناشناخته.
 manifest.command_list_empty = فیلد «command» نباید خالی باشد: یک رشتهٔ فرمان یا فهرستی ناتهی ارائه دهید.
+manifest.command_isolation_recipe = فیلد «command_isolation» به دستوری با فهرست فرمان‌ها نیاز دارد.
+manifest.command_isolation_scalar = ‏«command_isolation: isolated» به فهرست فرمان‌ها نیاز دارد.
 
 # خطاهای بازنمایی میانی.
 ir.rule_not_found = قاعدهٔ «{ $rule }» که هدف «{ $target }» به آن ارجاع می‌دهد یافت نشد.
@@ -455,3 +459,22 @@ manifest.budget.exceeded = ‏بودجهٔ منابع مانیفست هنگام 
 
 cli.flag.env_allow_var.help = متغیر محیطی مجاز برای دستیار env() مانیفست.
 cli.flag.env_block_var.help = متغیر محیطی مسدودشده برای دستیار env() مانیفست.
+
+# بررسی پروندهٔ مانیفست (`netsuke check`).
+cli.subcommand.check.about = مانیفست را بدون ساخت یا اجرای بیلد بررسی کن.
+cli.subcommand.check.long_about = مانیفست انتخاب‌شده را برای ساختارهایی وارسی کن که تجزیه می‌شوند اما به احتمال زیاد نادرست، ناایمن، ناهمگام با سکوهای دیگر یا زیان‌بار برای حافظهٔ نهان‌اند.
+cli.subcommand.check.flag.rule.help = شدت یک قاعده یا دسته را به شکل NAME=SEVERITY تعیین کن.
+cli.subcommand.check.flag.fail_on.help = شدتی که در آن یافته‌ها فرمان را ناموفق می‌کنند.
+cli.subcommand.check.flag.limit.help = بیشینهٔ یافته‌های گزارش‌شده؛ ۰ همهٔ آن‌ها را گزارش می‌کند.
+cli.subcommand.check.flag.explain.help = به‌جای بررسی مانیفست، مرجع قواعد را چاپ کن.
+check.threshold_exceeded = یافته‌ها به آستانهٔ { $severity } رسیدند: { $failing } از { $reported } یافتهٔ گزارش‌شده.
+check.threshold_exceeded.help = یافته‌های گزارش‌شده را برطرف کنید، ‎--rule را تنظیم کنید یا ‎--fail-on را آسان‌تر بگیرید.
+check.summary.counts = نتایج بررسی — خطاها: { $errors }، هشدارها: { $warnings }، توصیه‌ها: { $advice }، سرکوب‌شده: { $suppressed }.
+check.summary.clean = هیچ یافته‌ای نیست.
+check.summary.truncated = ‏{ $shown } یافته نمایش داده می‌شود؛ ‎--limit تعداد { $omitted } یافتهٔ دیگر را حذف کرد.
+check.rule.malformed = گزینشگر { $selector } به شکل NAME=SEVERITY نوشته نشده است.
+check.rule.unknown = گزینشگر { $name } را نام می‌برد که نه قاعده است و نه دسته.
+check.rule.severity = گزینشگر { $name } شدت { $severity } را نام می‌برد؛ یکی از { $values } انتظار می‌رفت.
+check.fail_on.invalid = آستانهٔ شکست ناشناخته { $value }؛ یکی از { $values } انتظار می‌رفت.
+check.source_index = نمایه‌سازی { $path } برای تشخیص در خط { $line } ممکن نشد: { $reason }.
+status.tool.check = بررسی

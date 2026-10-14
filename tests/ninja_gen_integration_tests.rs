@@ -105,7 +105,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
 })]
 #[case::phony_action_executes_command(NinjaIntegrationCase {
     action: Action {
-        recipe: Recipe::Command { command: "touch action-called.txt".into() },
+        recipe: Recipe::Command { command: "touch action-called.txt".into(), isolation: netsuke::ast::CommandIsolation::Shared },
         description: None,
         depfile: None,
         deps_format: None,
@@ -244,6 +244,7 @@ fn generate_format_error() -> Result<()> {
     let action = Action {
         recipe: Recipe::Command {
             command: "true".into(),
+            isolation: netsuke::ast::CommandIsolation::Shared,
         },
         description: None,
         depfile: None,
@@ -283,6 +284,7 @@ fn serial_graph(command: &str, dependencies: &[&str]) -> Result<BuildGraph> {
     let action = Action {
         recipe: Recipe::Command {
             command: command.into(),
+            isolation: netsuke::ast::CommandIsolation::Shared,
         },
         description: None,
         depfile: None,

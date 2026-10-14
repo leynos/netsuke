@@ -1,0 +1,115 @@
+//! Tests for the migration rules.
+
+use rstest::rstest;
+
+use crate::recipe_shell::RecipeShell;
+
+/// Build a one-target manifest whose command is `command`.
+fn manifest(command: &str) -> String {
+    format!("netsuke_version: \"1.0.0\"\ntargets:\n  - name: out\n    command: {command}\n")
+}
+
+/// Build a one-target manifest whose script body is `body`.
+fn script(body: &str) -> String {
+    format!("netsuke_version: \"1.0.0\"\ntargets:\n  - name: out\n    script: |\n      {body}\n")
+}
+
+#[rstest]
+#[case("\"cp $$SRC {{ outs }}\"")]
+#[case("\"printf %s $${HOME} > {{ outs }}\"")]
+#[case("\"echo $$_private > {{ outs }}\"")]
+fn manual_ninja_escape_reports_a_doubled_dollar(#[case] command: &str) {
+    let findings =
+        crate::lint::test_support::Fixture::for_shell(&manifest(command), RecipeShell::Posix)
+            .only("manual-ninja-escape")
+            .expect("POSIX migration fixture should compile");
+    assert_eq!(findings.len(), 1, "the doubled dollar should be reported");
+}
+
+/// A bare `$$` is the shell's own process identifier, not the retired
+/// escaping workaround, so it must not be reported.
+#[rstest]
+#[case("\"echo $$ > {{ outs }}\"")]
+#[case("\"echo $PATH > {{ outs }}\"")]
+#[case("\"echo 'a $$ b' > {{ outs }}\"")]
+fn manual_ninja_escape_leaves_ordinary_shell_text_alone(#[case] command: &str) {
+    crate::assert_lint_silent!(&manifest(command), "manual-ninja-escape");
+}
+
+#[test]
+fn manual_ninja_escape_points_at_the_doubled_dollar() {
+    assert_eq!(
+        crate::lint_spans!(&manifest("\"cp $$SRC {{ outs }}\""), "manual-ninja-escape"),
+        vec!["$$"]
+    );
+}
+
+#[test]
+fn manual_ninja_escape_is_suppressed_by_a_directive() {
+    let yaml = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  # netsuke-lint: allow manual-ninja-escape -- kept for the legacy runner\n",
+        "  - name: out\n",
+        "    command: \"cp $$SRC {{ outs }}\"\n",
+    );
+    crate::assert_lint_silent!(yaml, "manual-ninja-escape");
+}
+
+#[rstest]
+#[case("cp $in {{ outs }}", 1)]
+#[case("cp {{ ins }} $out", 1)]
+#[case("cp $in $out", 2)]
+fn legacy_placeholder_reports_retired_script_substitutions(
+    #[case] body: &str,
+    #[case] expected: usize,
+) {
+    crate::assert_lint_fires!(&script(body), "legacy-placeholder", expected);
+}
+
+/// `command:` never resolved these names as paths, so the same text is
+/// ordinary shell there. Reporting it would tell the author to fix a recipe
+/// that already works, which is the false positive this rule must avoid.
+#[rstest]
+#[case("\"cp $in $out\"")]
+#[case("\"cp $in {{ outs }}\"")]
+fn legacy_placeholder_ignores_command_recipes(#[case] command: &str) {
+    crate::assert_lint_silent!(&manifest(command), "legacy-placeholder");
+}
+
+/// A longer variable name only starts with the placeholder; a doubled dollar
+/// belongs to `manual-ninja-escape`.
+#[rstest]
+#[case("cp $input {{ outs }}")]
+#[case("cp $output {{ outs }}")]
+#[case("cp $$out {{ outs }}")]
+#[case("cp {{ ins }} {{ outs }}")]
+fn legacy_placeholder_leaves_other_variables_alone(#[case] body: &str) {
+    crate::assert_lint_silent!(&script(body), "legacy-placeholder");
+}
+
+#[test]
+fn legacy_placeholder_names_the_documented_replacement() {
+    let messages = crate::lint_messages!(&script("cp $in $out"), "legacy-placeholder");
+    assert!(
+        messages.iter().any(|message| message.contains("{{ ins }}")),
+        "the finding should name the replacement, got {messages:?}"
+    );
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("{{ outs }}")),
+        "the finding should name the replacement, got {messages:?}"
+    );
+}
+
+#[test]
+fn legacy_placeholder_is_suppressed_by_a_directive() {
+    let yaml = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  - name: out\n",
+        "    script: \"cp $in $out\"  # netsuke-lint: allow legacy-placeholder -- migrating\n",
+    );
+    crate::assert_lint_silent!(yaml, "legacy-placeholder");
+}

@@ -5,6 +5,7 @@ use super::{
     background_operator_count, command_list_entry, command_list_entry_error, exec_boundary,
     shell_single_quote,
 };
+use crate::ast::CommandIsolation;
 use rstest::rstest;
 
 #[rstest]
@@ -80,7 +81,12 @@ fn shell_quotes_each_entry_as_one_literal_argument() {
 
 #[test]
 fn rendered_entry_uses_a_hashed_action_identity_and_one_based_index() {
-    let rendered = command_list_entry(CommandListEntry("false"), ActionId("example"), 3);
+    let rendered = command_list_entry(
+        CommandListEntry("false"),
+        ActionId("example"),
+        3,
+        CommandIsolation::Shared,
+    );
     let expected_identity = "50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c";
     assert_eq!(action_identity(ActionId("example")), expected_identity);
     assert!(
@@ -89,4 +95,31 @@ fn rendered_entry_uses_a_hashed_action_identity_and_one_based_index() {
         )),
         "entry must use the hashed identity and its one-based index: {rendered}"
     );
+}
+
+/// Keep shared-mode failure marker text unconditional for legacy output stability.
+#[test]
+fn shared_entry_keeps_legacy_exit_trap() {
+    let rendered = command_list_entry(
+        CommandListEntry("false"),
+        ActionId("example"),
+        1,
+        CommandIsolation::Shared,
+    );
+    assert!(rendered.contains(
+        "trap '_netsuke_command_status=$?; printf \"%s\\n\" \"netsuke command-list failure: action "
+    ));
+    assert!(!rendered.contains("if [ \"$_netsuke_command_status\" -ne 0 ]"));
+}
+
+/// Suppress isolated-mode markers for successful early shell exits.
+#[test]
+fn isolated_entry_guards_exit_marker_on_failure_status() {
+    let rendered = command_list_entry(
+        CommandListEntry("exit 0"),
+        ActionId("example"),
+        1,
+        CommandIsolation::Isolated,
+    );
+    assert!(rendered.contains("if [ \"$_netsuke_command_status\" -ne 0 ]; then printf \"%s\\n\""));
 }

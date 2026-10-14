@@ -14,16 +14,18 @@ new named execution contexts, and a universal strict mode are not prerequisites.
 
 ## Contract ownership and integration boundaries
 
-- [RFC 0021](rfcs/0021-managed-states-and-probes.md) owns states, built-in and
-  external probes, preparation evidence, and operation semantics.
-- [RFC 0022](rfcs/0022-typed-task-inputs.md) owns optional root inputs and
-  shares parameter validation with RFC 0003, rather than duplicating it.
-- [RFC 0023](rfcs/0023-artefact-ownership-and-scoped-cleanup.md) owns declared
-  artefact scope and standardized cleanup.
-- [RFC 0024](rfcs/0024-named-contention-classes.md) owns public contention
+- [RFC 0021](rfcs/rfc-0021-managed-states-and-functional-probes.md) owns
+  states, built-in and external probes, preparation evidence, and operation
+  semantics.
+- [RFC 0022](rfcs/rfc-0022-optional-typed-task-inputs.md) owns optional root
+  inputs and shares parameter validation with RFC 0003, rather than duplicating
+  it.
+- [RFC 0023](rfcs/rfc-0023-artefact-ownership-and-scoped-cleanup.md) owns
+  declared artefact scope and standardized cleanup.
+- [RFC 0024](rfcs/rfc-0024-named-contention-classes.md) owns public contention
   declarations lowered to Ninja pools.
-- [RFC 0025](rfcs/0025-progressive-enhancement-and-maturity-policies.md) owns
-  shallow-end compatibility and opt-in policy composition.
+- [RFC 0025](rfcs/rfc-0025-progressive-enhancement-and-maturity-policies.md)
+  owns shallow-end compatibility and opt-in policy composition.
 
 RFC 0001 and phases 12 to 14 retain ownership of command parsing, argv,
 execution, process cleanup, capability-scoped paths, and persisted action

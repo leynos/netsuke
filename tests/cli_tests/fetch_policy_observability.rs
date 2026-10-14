@@ -17,6 +17,7 @@ fn reconcile_project(
     let project = tempfile::tempdir().context("create project for observer test")?;
     let config = format!(
         concat!(
+            "extends = \"policy.toml\"\n",
             "fetch_default_deny = {}\n",
             "fetch_allow_scheme = [\"private-scheme\", \"secret-scheme\"]\n",
             "fetch_allow_host = [\"private.example\"]\n",
@@ -24,6 +25,14 @@ fn reconcile_project(
         ),
         project_default
     );
+    test_support::fs::write(
+        project.path().join("policy.toml"),
+        concat!(
+            "fetch_allow_scheme = [\"inherited-private-scheme\"]\n",
+            "fetch_allow_host = [\"inherited.private.example\"]\n",
+        ),
+    )
+    .context("write inherited project request for observer test")?;
     test_support::fs::write(project.path().join(".netsuke.toml"), &config)
         .context("write project request for observer test")?;
     let directory = project.path().to_string_lossy().into_owned();
@@ -69,12 +78,12 @@ fn merge_returns_one_bounded_reconciliation_outcome(
         trusted_project_policy: trusted,
         project_request_present: true,
         default_deny_decision: decision,
-        requested_scheme_grants: 2,
-        requested_host_grants: 1,
-        accepted_scheme_grants: if trusted { 2 } else { 0 },
-        ignored_scheme_grants: if trusted { 0 } else { 2 },
-        accepted_host_grants: usize::from(trusted),
-        ignored_host_grants: usize::from(!trusted),
+        requested_scheme_grants: 3,
+        requested_host_grants: 2,
+        accepted_scheme_grants: if trusted { 3 } else { 0 },
+        ignored_scheme_grants: if trusted { 0 } else { 3 },
+        accepted_host_grants: if trusted { 2 } else { 0 },
+        ignored_host_grants: if trusted { 0 } else { 2 },
     };
     ensure!(
         outcome == &expected,
@@ -124,8 +133,8 @@ fn merge_reports_an_empty_primary_project_request() -> Result<()> {
 }
 
 #[rstest]
-#[case::untrusted(false, "project_tightened", (0, 2), (0, 1))]
-#[case::trusted(true, "trusted_project_override", (2, 0), (1, 0))]
+#[case::untrusted(false, "project_tightened", (0, 3), (0, 2))]
+#[case::trusted(true, "trusted_project_override", (3, 0), (2, 0))]
 fn tracing_records_only_bounded_reconciliation_fields(
     #[case] trusted: bool,
     #[case] decision: &str,
@@ -157,8 +166,8 @@ fn tracing_records_only_bounded_reconciliation_fields(
         concat!(
             "message=reconciled fetch policy trusted_project_policy={} ",
             "project_request_present=true default_deny_decision={:?} ",
-            "requested_scheme_grants=2 accepted_scheme_grants={} ",
-            "ignored_scheme_grants={} requested_host_grants=1 ",
+            "requested_scheme_grants=3 accepted_scheme_grants={} ",
+            "ignored_scheme_grants={} requested_host_grants=2 ",
             "accepted_host_grants={} ignored_host_grants={}"
         ),
         trusted, decision, accepted_schemes, ignored_schemes, accepted_hosts, ignored_hosts
@@ -170,13 +179,51 @@ fn tracing_records_only_bounded_reconciliation_fields(
     for private_value in [
         "private-scheme",
         "secret-scheme",
+        "inherited-private-scheme",
         "private.example",
+        "inherited.private.example",
         "private-manifest.yml",
         &directory,
     ] {
         ensure!(
             captured.iter().all(|entry| !entry.contains(private_value)),
             "observer must not disclose private configuration"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn inherited_grants_count_as_ignored_without_leaking_values() -> Result<()> {
+    let (events, directory) = reconcile_project(false, true, false)?;
+    let outcome = sole_outcome(&events)?;
+    ensure!(
+        outcome.requested_scheme_grants == 3 && outcome.ignored_scheme_grants == 3,
+        "ignored scheme counts must include the inherited grant: {outcome:?}"
+    );
+    ensure!(
+        outcome.requested_host_grants == 2 && outcome.ignored_host_grants == 2,
+        "ignored host counts must include the inherited grant: {outcome:?}"
+    );
+    let captured = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+        let mut observer = TracingMergeObserver;
+        for event in events {
+            observer.observe(event);
+        }
+        captured.snapshot()
+    });
+    for private_value in [
+        "private-scheme",
+        "secret-scheme",
+        "inherited-private-scheme",
+        "private.example",
+        "inherited.private.example",
+        "private-manifest.yml",
+        &directory,
+    ] {
+        ensure!(
+            captured.iter().all(|entry| !entry.contains(private_value)),
+            "reconciliation telemetry must not disclose {private_value}"
         );
     }
     Ok(())

@@ -146,7 +146,7 @@ fn location_failures_are_counted_and_logged_with_four_fields() -> Result<()> {
             "the refusal event must carry {field}: {event}",
         );
     }
-    // Pinning the field *names* is what enforces ADR-023's four-field bound: a
+    // Pinning the field *names* is what enforces ADR-0023's four-field bound: a
     // check for the URL's value alone would still pass if the event named the
     // response in a field of its own.
     for field in ["location=", "url=", "host=", "userinfo="] {

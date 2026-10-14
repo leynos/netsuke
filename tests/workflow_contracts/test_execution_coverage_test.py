@@ -45,16 +45,6 @@ REQUIRED_COVERAGE_INPUTS = {
     "doctests": "true",
 }
 
-#: Ambient-target UI harness builds must share the gate's feature fingerprint.
-#: Isolated fixture and packaging builds intentionally retain shipped defaults.
-GATE_FEATURES_MODULE: Path = REPO_ROOT / "tests" / "support" / "cargo_features.rs"
-TEST_SUPPORT_MANIFEST: Path = REPO_ROOT / "test_support" / "Cargo.toml"
-AMBIENT_TARGET_NESTED_BUILD_SOURCES: tuple[Path, ...] = (
-    REPO_ROOT / "tests" / "support" / "test_support_rlib.rs",
-    REPO_ROOT / "tests" / "command_env_ui_tests.rs",
-    REPO_ROOT / "tests" / "build_module_slice_ui_tests.rs",
-)
-
 #: Every job that measures coverage, and the event it is restricted to. Two
 #: coverage runs against one commit pay twice and give the ratchet baseline
 #: two writers.
@@ -210,30 +200,81 @@ def test_the_local_test_target_still_runs_both_passes() -> None:
         assert "-D warnings" in recipe, f"the local {label} pass must deny warnings"
 
 
-def test_ambient_target_harnesses_match_the_gate_feature_selection() -> None:
-    """Require ambient nested Cargo builds to reuse the gate's artefacts.
+def test_only_the_mutation_gate_has_an_extended_budget() -> None:
+    """Keep every test the default suite runs on the ordinary allowance.
 
-    The direct-rustc UI harnesses build `test_support` or `netsuke-build` in
-    the workspace target directory. Their Cargo feature selection must match
-    `make test-nextest`; otherwise Cargo gives `netsuke-build` a distinct
-    fingerprint and recompiles its graph for each harness.
+    Extended allowances existed for tests that compiled inside their own time
+    budget. ADR-0059 moved that work out of the suite, so the `#[ignore]`-gated
+    mutation compile gate, which runs in its own invocation, is the one test
+    left with a measured cold-build allowance.
     """
-    module = GATE_FEATURES_MODULE.read_text(encoding="utf-8")
-    assert (
-        'pub const GATE_FEATURE_ARGUMENTS: &[&str] = &["--all-features"];' in module
-    ), "the shared Cargo feature module must define the gate's --all-features argument"
-    for source in AMBIENT_TARGET_NESTED_BUILD_SOURCES:
-        text = source.read_text(encoding="utf-8")
-        assert "cargo_features::GATE_FEATURE_ARGUMENTS" in text, (
-            f"{source.relative_to(REPO_ROOT)} must use the shared gate feature "
-            "selection"
-        )
-    manifest = tomllib.loads(TEST_SUPPORT_MANIFEST.read_text(encoding="utf-8"))
-    features = manifest.get("features")
-    assert isinstance(features, dict), "test_support must declare its features"
-    assert features.get("default") == [], "test_support defaults must stay empty"
-    assert features.get("legacy-digests") == ["netsuke/legacy-digests"], (
-        "test_support must forward legacy-digests exactly to netsuke-build"
+    config = tomllib.loads(
+        (REPO_ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8")
+    )
+    profile = config["profile"]["default"]
+    assert profile["slow-timeout"] == {"period": "60s", "terminate-after": 5}, (
+        "ordinary tests must retain their five-minute budget"
+    )
+    configured = {
+        override["filter"]: override["slow-timeout"]
+        for override in profile["overrides"]
+        if "slow-timeout" in override
+    }
+    expected = {
+        (
+            "test(/^compile_guard::"
+            "every_patched_tree_compiles_under_denied_warnings($|::)/)"
+        ): {
+            "period": "60s",
+            "terminate-after": 10,
+        },
+    }
+    assert configured == expected, (
+        "only the mutation compile gate may carry an extended allowance"
+    )
+
+
+def test_packaging_list_check_compiles_nothing() -> None:
+    """Keep the packaging test to the file list, which spawns no build."""
+    source = (REPO_ROOT / "tests" / "packaging_smoke_tests.rs").read_text(
+        encoding="utf-8"
+    )
+    forbidden = (
+        r"\b(?:TempDir|tempdir(?:_in)?)\b|"
+        r'\.env(?:_remove)?\(\s*"CARGO_(?:TARGET_DIR|BUILD_TARGET_DIR|BUILD_BUILD_DIR)"'
+    )
+    assert not re.search(forbidden, source), "preserve Cargo's build placement"
+    assert '"publish"' not in source, (
+        "publish verification compiles the package, so it belongs to "
+        "`make test-package-verify`, not to a timed test"
+    )
+    required = (
+        '.args(["package", "--list", "--allow-dirty", "-p", "netsuke-build"])',
+        "assert_required_paths_present(&packaged_paths, &readme_paths, &source_paths);",
+        "assert_forbidden_roots_absent(&packaged_paths);",
+    )
+    assert all(fragment in source for fragment in required), (
+        "the packaged file-list assertions must remain intact"
+    )
+
+
+def test_package_verification_runs_outside_the_test_suite() -> None:
+    """Keep the verification build in a Makefile target the Linux lane runs."""
+    recipe = expand_makefile_variables(
+        makefile_recipe("test-package-verify"), makefile_definitions(load_makefile())
+    )
+    for fragment in ("publish --dry-run", "-p netsuke-build", "-D warnings"):
+        assert fragment in recipe, f"test-package-verify must pass {fragment!r}"
+    assert "--no-verify" not in recipe, (
+        "the target exists to run the verification build; skipping it would "
+        "leave the packaged crate's compilation untested"
+    )
+    step = named_step(
+        job_steps(load_workflow(WORKFLOW_DIR / "ci.yml"), "build-test"),
+        "Package verification",
+    )
+    assert step.get("run") == "make test-package-verify", (
+        "the Linux gate must run the package verification target"
     )
 
 
@@ -260,7 +301,7 @@ def test_one_coverage_producer_per_event(
 #: in seconds. The shared coverage action defaults to 600, which was sized
 #: against a lane that restored a `target` archive and so never paid for a cold
 #: compile.
-CARGO_WAIT_TIMEOUT = "1800"
+CARGO_WAIT_TIMEOUT = "1980"
 
 
 @pytest.mark.parametrize(

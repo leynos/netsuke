@@ -40,6 +40,11 @@ DIRECT_RUNNER_SOURCES = (
     ("ci-windows.build-test-windows", "ci-windows.yml", "build-test-windows"),
     ("ci-windows.windows-msi-upgrade", "ci-windows.yml", "windows-msi-upgrade"),
     ("ci.kani-smoke", "ci.yml", "kani-smoke"),
+    (
+        "ci-default-features.default-features",
+        "ci-default-features.yml",
+        "default-features",
+    ),
     ("coverage-main.coverage-upload", "coverage-main.yml", "coverage-upload"),
     (
         "delayed-pr-comment.delay_and_comment",

@@ -142,7 +142,7 @@ fn assert_help_targets_telemetry(
     )));
     let ((result, events), snapshot) = recorded(|| {
         with_test_subscriber(LevelFilter::INFO, |captured| {
-            let result = handle_help_targets(cli, &SilentReporter);
+            let result = handle_help_targets(cli, false, &SilentReporter);
             (result, captured.snapshot())
         })
     });

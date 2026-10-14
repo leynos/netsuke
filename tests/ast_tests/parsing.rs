@@ -35,7 +35,7 @@ targets:
     };
     ensure!(name == "hello", "unexpected target name: {name}");
 
-    if let Recipe::Command { command } = &first.recipe {
+    if let Recipe::Command { command, .. } = &first.recipe {
         ensure!(
             *command == StringOrList::String("echo hi".into()),
             "unexpected command: {command:?}"
@@ -113,6 +113,20 @@ fn unknown_fields() -> Result<()> {
             "manifest with unexpected target field should fail"
         );
     }
+
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+            targets:
+              - name: hello
+                command: [echo hi]
+                command_isolaton: isolated
+        "#;
+        ensure!(
+            parse_manifest(yaml).is_err(),
+            "recipe deserialization must continue rejecting unknown fields"
+        );
+    }
     Ok(())
 }
 
@@ -186,7 +200,7 @@ fn vars_section_allows_non_reserved_names() -> Result<()> {
     "#;
     let manifest = parse_manifest(yaml)?;
     let first = manifest.targets.first().context("expected one target")?;
-    let Recipe::Command { command } = &first.recipe else {
+    let Recipe::Command { command, .. } = &first.recipe else {
         bail!("expected a command recipe, got {:?}", first.recipe);
     };
     ensure!(

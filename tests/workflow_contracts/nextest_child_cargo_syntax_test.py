@@ -75,3 +75,31 @@ fn real_fixture_compiles() {
     assert _build_capable_test_names(source) == {"real_fixture_compiles"}, (
         "character literals must not hide child Cargo commands"
     )
+
+
+def test_package_list_is_not_a_build_capable_command() -> None:
+    """Package listing with either flag does not compile the package."""
+    source = """
+#[test]
+fn package_short_listing() {
+    Command::new(cargo()).args(["package", "-l"]);
+}
+
+#[test]
+fn package_long_listing_after_options() {
+    Command::new(cargo()).args(["package", "-p", "netsuke-build", "--list"]);
+}
+
+#[test]
+fn package_chained_listing() {
+    Command::new(cargo()).arg("package").arg("-l");
+}
+
+#[test]
+fn package_verification() {
+    Command::new(cargo()).args(["package", "-p", "netsuke-build"]);
+}
+"""
+    assert _build_capable_test_names(source) == {"package_verification"}, (
+        "only a package command that can verify, and so compile, is build-capable"
+    )

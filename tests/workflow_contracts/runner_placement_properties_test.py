@@ -62,6 +62,8 @@ FORK_FALLBACK_MUTATIONS: typ.Final[tuple[str, ...]] = (
     "valid",
     "arm-dropped",
     "guard-swapped",
+    "dependabot-arm-dropped",
+    "actor-instead-of-author",
     "arms-swapped",
     "wrong-fork-runner",
     "hosted-on-both-arms",

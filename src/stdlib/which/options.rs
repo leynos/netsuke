@@ -38,21 +38,6 @@ fn parse_cwd_mode(value: &str) -> Option<CwdMode> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    //! Unit tests for `cwd_mode` parsing.
-
-    use super::CwdMode;
-
-    #[test]
-    fn parses_workspace_recursive_mode() {
-        assert_eq!(
-            CwdMode::parse("workspace-recursive"),
-            Some(CwdMode::WorkspaceRecursive)
-        );
-    }
-}
-
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 /// Options controlling a single `which` resolution.
 pub(crate) struct WhichOptions {
@@ -108,5 +93,20 @@ impl WhichOptions {
 impl From<minijinja::Error> for ResolveError {
     fn from(value: minijinja::Error) -> Self {
         Self::args(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for `cwd_mode` parsing.
+
+    use super::CwdMode;
+
+    #[test]
+    fn parses_workspace_recursive_mode() {
+        assert_eq!(
+            CwdMode::parse("workspace-recursive"),
+            Some(CwdMode::WorkspaceRecursive)
+        );
     }
 }

@@ -1,8 +1,10 @@
-//! Discovery of configuration file layers.
+//! Discover configuration layers while preserving each root's authority.
 //!
 //! Runs the `OrthoConfig` scan and applies the project-scope second pass, so a
-//! project `.netsuke.toml` outranks user-scope files. Path comparison and its
-//! fallback policy live here because that policy is a discovery decision.
+//! project `.netsuke.toml` outranks user-scope files. Project-chain occurrences
+//! retain project authority through quarantine; the same file reached from an
+//! operator root keeps operator authority. Path comparison and its fallback
+//! policy live here because that policy is a discovery decision.
 
 #[cfg(test)]
 use ortho_config::MapEnv;
@@ -182,8 +184,8 @@ fn merge_project_scope_layers(
                     .position(|layer| layer.path() == Some(project))
             });
         // A shared file reached by both roots has two authorities. Retain both
-        // occurrences so project quarantine cannot consume an operator grant,
-        // and an operator occurrence cannot suppress a project restriction.
+        // occurrences so project-chain quarantine cannot consume an operator
+        // grant, and an operator occurrence cannot suppress a project request.
         let project_is_root =
             project_index.is_some_and(|index| index + 1 == discovered_layer_count);
         let appended_layer_count = if project_is_root {
@@ -218,10 +220,10 @@ fn merge_project_scope_layers(
     }
 }
 
-/// Assign authority to merged discovery roots without discarding shared occurrences.
+/// Assign authority per root occurrence without discarding shared files.
 ///
-/// Only the project-scope merge calls this helper. A project file inherited by
-/// an operator root retains its occurrence before the separate project chain.
+/// The operator root keeps its occurrence as operator-scoped. The separately
+/// loaded project chain scopes its inherited parents through the project file.
 fn scope_merged_layers(
     discovered_layers: Vec<MergeLayer<'static>>,
     project_layers: Vec<MergeLayer<'static>>,
@@ -261,6 +263,8 @@ fn project_scope_layers(project_file: Option<&Path>) -> OrthoResult<Vec<MergeLay
 
 #[cfg(test)]
 mod property_tests;
+#[cfg(test)]
+mod quarantine_trace_tests;
 #[cfg(test)]
 mod replay_tests;
 #[cfg(test)]

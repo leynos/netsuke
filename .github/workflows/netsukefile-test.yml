@@ -29,16 +29,20 @@ jobs:
     # a second condition. Keep the continuation at this indent: a deeper
     # one keeps its break inside the folded scalar and puts a newline in
     # the expression, which GitHub evaluates anyway.
+    # Dependabot pull requests run on the hosted pool too (free on a public
+    # repository). The author is tested, not the actor, which changes when
+    # someone else pushes to the branch.
     runs-on: >-
-      ${{ github.event.pull_request.head.repo.fork
+      ${{ (github.event.pull_request.head.repo.fork
+      || github.event.pull_request.user.login == 'dependabot[bot]')
       && 'ubuntu-22.04' || 'ubicloud-standard-2-ubuntu-2204' }}
     timeout-minutes: 45
     permissions:
       contents: read
     env:
       # Match rust-toolchain.toml: the tree needs the nightly-default Polonius
-      # borrow checker (see docs/adr-006-adopt-polonius-nightly-toolchain.md).
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+      # borrow checker (see docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md).
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-10-22
       # `ubicloud-standard-2-ubuntu-2204` supplies two vCPUs; BUILD_JOBS is
       # derived from that one number.
       LINUX_LANE_VCPUS: '2'

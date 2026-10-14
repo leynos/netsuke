@@ -1,42 +1,53 @@
-//! Direct-rustc UI tests for the production `build.rs` CLI module slice.
+//! Source contracts for the production `build.rs` CLI module slice.
 //!
-//! The fixtures compile the production CLI modules and their direct support
-//! graph, rather than declaration-only stand-ins. A small source assertion
-//! keeps their composition root aligned with the inline `cli` module in
-//! `build.rs`.
+//! Cargo compiles `build_slice_fixture` before test execution. These assertions
+//! keep its composition root and rerun inputs aligned with `build.rs`.
 
-#[path = "support/cargo_artifacts.rs"]
-mod cargo_artifacts;
-#[path = "support/cargo_features.rs"]
-mod cargo_features;
 #[path = "support/build_module_slice_runtime_only_tests.rs"]
 mod runtime_only_rerun_tests;
-#[path = "support/rustc_response_file.rs"]
-mod rustc_response_file;
 
-use std::{
-    io,
-    path::{Path, PathBuf},
-    process::{Command, Output},
-};
+use std::{io, path::PathBuf};
 
-/// The external crates required by the real build-script CLI slice.
-const REQUIRED_EXTERNS: &[&str] = &[
-    "camino",
-    "clap",
-    "ortho_config",
-    "serde",
-    "thiserror",
-    "tracing",
-];
+/// The opening pair that begins the production module slice in either source.
+///
+/// The fixture marks its `cli` module `pub` and imports `../src/`, so the
+/// comparison normalises both spellings to this one before looking for it.
+const SLICE_START: &str = "#[path = \"src/cli\"]\nmod cli {";
 
-/// The exact module declarations that the fixture mirrors from `build.rs`.
-const BUILD_SLICE_MODULES: &[&str] = &[
+/// The declarations inside `build.rs`'s inline `cli` module, in order.
+const CLI_BLOCK_DECLARATIONS: &[&str] = &[
     "pub mod config;",
     "mod validation;",
     "mod help;",
     "mod command;",
+    "pub use command::Cli;",
+    "pub use config::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};",
 ];
+
+/// The path-imported siblings that follow the inline `cli` module, in order.
+///
+/// Order is part of the contract rather than an accident of formatting: each
+/// `#[path = ...]` applies to the declaration beneath it, so a reordered pair
+/// would compile a different file while still naming the same modules.
+const SIBLING_DECLARATIONS: &[&str] = &[
+    "#[path = \"src/cli/localization/mod.rs\"]",
+    "mod cli_localization;",
+    "#[path = \"src/host/pattern.rs\"]",
+    "mod host_pattern;",
+    "#[path = \"src/locale/catalogues.rs\"]",
+    "pub mod locale_catalogues;",
+    "#[path = \"src/localization/mod.rs\"]",
+    "pub mod localization;",
+];
+
+/// The one declaration `build.rs` carries and the fixture deliberately does
+/// not.
+///
+/// `build_l10n_audit` lives beside `build.rs`, declares no `#[path]`, and walks
+/// the generated catalogues at build time rather than exposing production
+/// source. It is therefore outside the slice the fixture stands in for, and
+/// both halves of that exclusion are asserted rather than left implicit.
+const BUILD_SCRIPT_ONLY_DECLARATION: &str = "mod build_l10n_audit;";
 
 /// The CLI source paths that the build-script facade compiles and tracks.
 const BUILD_SLICE_RERUN_PATHS: &[&str] = &[
@@ -76,139 +87,12 @@ fn runtime_only_rerun_paths_exist() -> io::Result<()> {
     Ok(())
 }
 
-/// Verify the production build-script module root and its runtime boundary.
 #[test]
 fn production_build_module_slice_has_expected_boundary() -> io::Result<()> {
     assert_fixture_matches_build_rs()?;
-    let dependencies = BuildSliceDependencies::build()?;
-    let supported = dependencies.compile("tests/ui/build_module_slice_supported.rs")?;
-    if !supported.status.success() {
-        return Err(io::Error::other(format!(
-            "the supported build module slice should compile:\n{}",
-            stderr(&supported),
-        )));
-    }
-
-    let runtime_import =
-        dependencies.compile("tests/ui/build_module_slice_runtime_module_fail.rs")?;
-    let standard_error = stderr(&runtime_import);
-
-    if runtime_import.status.success() {
-        return Err(io::Error::other(
-            "the build module slice should reject a runtime-only module import",
-        ));
-    }
-    if !standard_error.contains("discovery") {
-        return Err(io::Error::other(format!(
-            "the compiler diagnostic should identify discovery as missing:\n{standard_error}",
-        )));
-    }
-    if !standard_error.contains("unresolved import") && !standard_error.contains("could not find") {
-        return Err(io::Error::other(format!(
-            "the compiler diagnostic should explain the unresolved module:\n{standard_error}",
-        )));
-    }
-    Ok(())
-}
-
-/// The direct-rustc dependencies used by the production module fixtures.
-struct BuildSliceDependencies {
-    /// Extern crates explicitly imported by the production module paths.
-    externs: Vec<(&'static str, PathBuf)>,
-    /// Directories containing transitive artefacts rustc resolves from metadata.
-    dependency_dirs: Vec<PathBuf>,
-}
-
-impl BuildSliceDependencies {
-    /// Build the crate and collect the artefacts required by the UI fixtures.
-    fn build() -> io::Result<Self> {
-        let output = Command::new(cargo())
-            .arg("build")
-            .arg("--lib")
-            .arg("--manifest-path")
-            .arg(manifest_dir().join("Cargo.toml"))
-            .arg("--message-format=json")
-            .args(cargo_features::GATE_FEATURE_ARGUMENTS)
-            .output()?;
-        if !output.status.success() {
-            return Err(io::Error::other(format!(
-                "building the production module dependencies failed:\n{}",
-                stderr(&output),
-            )));
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        let externs = REQUIRED_EXTERNS
-            .iter()
-            .map(|name| {
-                let artefact = stdout
-                    .lines()
-                    .filter_map(|line| cargo_artifacts::library_path_in_message(line, name))
-                    .next_back()
-                    .ok_or_else(|| {
-                        io::Error::other(format!(
-                            "cargo reported no {name} artefact for the build-slice fixture"
-                        ))
-                    })?;
-                Ok((*name, artefact))
-            })
-            .collect::<io::Result<Vec<_>>>()?;
-        let mut dependency_dirs = Vec::new();
-        for parent in stdout
-            .lines()
-            .flat_map(cargo_artifacts::dependency_dirs_in_message)
-        {
-            if !dependency_dirs.contains(&parent) {
-                dependency_dirs.push(parent);
-            }
-        }
-        if dependency_dirs.is_empty() {
-            return Err(io::Error::other(
-                "cargo reported no dependency artefact directories for the build-slice fixture",
-            ));
-        }
-
-        Ok(Self {
-            externs,
-            dependency_dirs,
-        })
-    }
-
-    /// Compile one fixture against the production modules with the workspace rustc.
-    fn compile(&self, source: &str) -> io::Result<Output> {
-        let output_dir = tempfile::tempdir_in(manifest_dir().join("target"))?;
-        let mut args = vec![
-            String::from("--edition=2024"),
-            String::from("--crate-type=bin"),
-            String::from("--emit=metadata"),
-            manifest_dir().join(source).to_string_lossy().into_owned(),
-        ];
-        args.extend(self.externs.iter().flat_map(|(name, path)| {
-            [
-                String::from("--extern"),
-                format!("{name}={}", path.display()),
-            ]
-        }));
-        args.extend(
-            self.dependency_dirs
-                .iter()
-                .flat_map(|path| [String::from("-L"), format!("dependency={}", path.display())]),
-        );
-        args.extend([
-            String::from("-o"),
-            output_dir
-                .path()
-                .join("build-module-slice-ui.rmeta")
-                .to_string_lossy()
-                .into_owned(),
-        ]);
-
-        let response =
-            rustc_response_file::write(output_dir.path(), "build-module-slice-ui.args", &args)?;
-        let mut command = Command::new(rustc());
-        command.arg(response).envs(package_environment());
-        command.output()
-    }
+    let fixture =
+        test_support::fs::read_to_string(manifest_dir().join("build_slice_fixture/slice.rs"))?;
+    assert_fixture_matches_build_source(&fixture)
 }
 
 /// Verify the fixture root still mirrors the module declarations in `build.rs`.
@@ -218,56 +102,155 @@ fn assert_fixture_matches_build_rs() -> io::Result<()> {
 }
 
 /// Verify one build-script source text declares exactly the fixture module slice.
+///
+/// Both sources are normalised to one spelling (`../src/` becomes `src/`, and
+/// the fixture's `pub mod cli {` becomes `mod cli {`) before their declarations
+/// are compared in order. The comparison covers the whole slice rather than the
+/// inline `cli` module alone: every path import after it compiles production
+/// source that the fixture must mirror. [`BUILD_SCRIPT_ONLY_DECLARATION`] is
+/// removed first, because it belongs to the build script and is asserted by its
+/// own test.
 fn assert_fixture_matches_build_source(build_script: &str) -> io::Result<()> {
-    let normalised_build_script = build_script.replace("\r\n", "\n");
+    let normalised_build_script = build_script
+        .replace("\r\n", "\n")
+        .replace("../src/", "src/")
+        .replace("pub mod cli {", "mod cli {");
     let slice_start = normalised_build_script
-        .find("#[path = \"src/cli\"]\nmod cli {")
+        .find(SLICE_START)
         .ok_or_else(|| io::Error::other("build.rs no longer declares its inline cli module"))?;
-    let declared_slice = normalised_build_script
-        .get(slice_start..)
-        .and_then(|slice| {
-            slice
-                .find("#[path = \"src/cli/localization/mod.rs\"]")
-                .and_then(|slice_end| slice.get(..slice_end))
-        })
-        .ok_or_else(|| {
-            io::Error::other("could not locate the end of build.rs's cli module slice")
-        })?;
 
-    let mut declared_modules = declared_slice
-        .lines()
-        .map(str::trim)
-        .filter(|line| {
-            (line.starts_with("mod ") || line.starts_with("pub mod ")) && line.ends_with(';')
-        })
+    let declared = slice_declarations(&normalised_build_script, slice_start)
+        .into_iter()
+        .filter(|line| *line != BUILD_SCRIPT_ONLY_DECLARATION)
         .collect::<Vec<_>>();
-    declared_modules.sort_unstable();
-    let mut expected_modules = BUILD_SLICE_MODULES.to_vec();
-    expected_modules.sort_unstable();
-    if declared_modules != expected_modules {
+    let expected = expected_slice_declarations();
+    if declared != expected {
         return Err(io::Error::other(format!(
-            "build.rs's cli slice no longer matches the UI fixture: {declared_modules:?}",
+            "build.rs's module slice no longer matches the UI fixture: {declared:?}, \
+             expected {expected:?}",
         )));
-    }
-    if declared_slice.matches("#[path = ").count() != 1 {
-        return Err(io::Error::other(
-            "build.rs's cli slice contains a different set of path modules than the UI fixture",
-        ));
     }
     Ok(())
 }
 
+/// Return the declarations every source of the slice must carry, in order.
+fn expected_slice_declarations() -> Vec<&'static str> {
+    let mut expected = SLICE_START.lines().collect::<Vec<_>>();
+    expected.extend(CLI_BLOCK_DECLARATIONS);
+    expected.push("}");
+    expected.extend(SIBLING_DECLARATIONS);
+    expected
+}
+
+/// Collect the slice's declaration lines from `source`, starting at `start`.
+///
+/// Blank lines and comments between declarations are skipped. The first line
+/// that is none of the forms [`is_slice_declaration`] allows ends the slice,
+/// because that is where the build script returns to ordinary code — its first
+/// attribute that is not a path import, or its first function.
+fn slice_declarations(source: &str, start: usize) -> Vec<&str> {
+    let mut declarations = Vec::new();
+    for line in source.get(start..).unwrap_or_default().lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("//") {
+            continue;
+        }
+        if !is_slice_declaration(trimmed) {
+            break;
+        }
+        declarations.push(trimmed);
+    }
+    declarations
+}
+
+/// Return whether `line` is one of the declaration forms the slice allows.
+///
+/// A path attribute belongs to whatever follows it, so it is matched as a line
+/// in its own right; the module, re-export, and closing-brace forms are matched
+/// by their shape. Nothing here admits a `use` import or an item definition, so
+/// an unrelated addition cannot be mistaken for slice membership.
+fn is_slice_declaration(line: &str) -> bool {
+    SLICE_DECLARATION_FORMS.iter().any(|is_form| is_form(line))
+}
+
+/// The declaration shapes the slice admits, tried in turn by
+/// [`is_slice_declaration`].
+///
+/// A table rather than a chain of `||`: each shape states its own rule, so
+/// adding a form means writing one predicate, and auditing the admitted set
+/// means reading one list instead of parsing a boolean expression.
+const SLICE_DECLARATION_FORMS: &[fn(&str) -> bool] = &[
+    is_closing_brace,
+    is_path_attribute,
+    is_module_declaration,
+    is_reexport,
+];
+
+/// Return whether `line` closes the inline `cli` module.
+fn is_closing_brace(line: &str) -> bool {
+    line == "}"
+}
+
+/// Return whether `line` is a `#[path = ...]` import for the declaration below.
+fn is_path_attribute(line: &str) -> bool {
+    line.starts_with("#[path = \"") && line.ends_with("\"]")
+}
+
+/// Return whether `line` declares a module, public or private.
+fn is_module_declaration(line: &str) -> bool {
+    let is_module = line.starts_with("mod ") || line.starts_with("pub mod ");
+    is_module && (line.ends_with(';') || line.ends_with('{'))
+}
+
+/// Return whether `line` re-exports a name the slice's consumers rely on.
+fn is_reexport(line: &str) -> bool {
+    line.starts_with("pub use ") && line.ends_with(';')
+}
+
 #[test]
 fn fixture_contract_accepts_crlf_build_script_source() -> io::Result<()> {
-    let mut build_script = String::from("#[path = \"src/cli\"]\r\nmod cli {\r\n");
-    for declaration in BUILD_SLICE_MODULES {
-        build_script.push_str("    ");
-        build_script.push_str(declaration);
+    let mut declarations = expected_slice_declarations();
+    let audit_position = declarations
+        .iter()
+        .position(|line| *line == "#[path = \"src/localization/mod.rs\"]")
+        .ok_or_else(|| io::Error::other("the expected slice lost its localization import"))?;
+    declarations.insert(audit_position, BUILD_SCRIPT_ONLY_DECLARATION);
+
+    let mut build_script = String::new();
+    for line in &declarations {
+        build_script.push_str(line);
         build_script.push_str("\r\n");
     }
-    build_script.push_str("}\r\n#[path = \"src/cli/localization/mod.rs\"]\r\n");
 
     assert_fixture_matches_build_source(&build_script)
+}
+
+/// Assert the localization audit stays a build-script declaration.
+///
+/// `build_l10n_audit` has no `#[path]`, lives beside `build.rs`, and audits the
+/// generated catalogues rather than exposing production source. The fixture
+/// package has no such module, so declaring it there would not compile — but
+/// copying it would also widen what the fixture claims to stand in for. Both
+/// halves are asserted so the exclusion reads as a decision rather than an
+/// omission.
+#[test]
+fn the_localization_audit_stays_out_of_the_production_slice_fixture() -> io::Result<()> {
+    let build_script = test_support::fs::read_to_string(manifest_dir().join("build.rs"))?;
+    if !build_script.contains(BUILD_SCRIPT_ONLY_DECLARATION) {
+        return Err(io::Error::other(format!(
+            "build.rs must keep declaring {BUILD_SCRIPT_ONLY_DECLARATION}",
+        )));
+    }
+
+    let fixture =
+        test_support::fs::read_to_string(manifest_dir().join("build_slice_fixture/slice.rs"))?;
+    if fixture.contains(BUILD_SCRIPT_ONLY_DECLARATION) {
+        return Err(io::Error::other(format!(
+            "slice.rs must not declare {BUILD_SCRIPT_ONLY_DECLARATION}; it is build-script-only \
+             and has no counterpart in the fixture package",
+        )));
+    }
+    Ok(())
 }
 
 /// Reject a runtime child added to the build-script module slice.
@@ -324,6 +307,45 @@ fn build_script_rerun_directives_match_the_compiled_module_slice() -> io::Result
     Ok(())
 }
 
+/// The only environment variable `build.rs` may watch for reruns.
+///
+/// Cargo already tracks package metadata, `TARGET`, and `PROFILE` through
+/// `Cargo.toml` and its own build units, so watching their ambient values
+/// would only invalidate artefacts whenever a caller's environment differs.
+/// `SOURCE_DATE_EPOCH` is the one external input: it stamps the manual page.
+const ENVIRONMENT_RERUN_INPUTS: &[&str] = &["SOURCE_DATE_EPOCH"];
+
+/// Verify `build.rs` reruns for exactly the documented environment input.
+///
+/// Every mention of the directive must be a literal `println!` line, so a
+/// computed directive cannot add an input this source reading never sees.
+#[test]
+fn build_script_watches_only_its_documented_environment_input() -> io::Result<()> {
+    let build_script = test_support::fs::read_to_string(manifest_dir().join("build.rs"))?;
+    let mut watched = Vec::new();
+    for line in build_script
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.contains("cargo:rerun-if-env-changed="))
+    {
+        let name = line
+            .strip_prefix("println!(\"cargo:rerun-if-env-changed=")
+            .and_then(|directive| directive.strip_suffix("\");"))
+            .ok_or_else(|| {
+                io::Error::other(format!(
+                    "build.rs has a non-literal environment rerun directive: {line}",
+                ))
+            })?;
+        watched.push(name);
+    }
+    if watched != ENVIRONMENT_RERUN_INPUTS {
+        return Err(io::Error::other(format!(
+            "build.rs must watch only {ENVIRONMENT_RERUN_INPUTS:?} in the environment; found {watched:?}",
+        )));
+    }
+    Ok(())
+}
+
 /// Reject build-script rerun directives that track runtime-only modules.
 fn reject_runtime_only_rerun_paths(rerun_paths: &[&str]) -> io::Result<()> {
     for &path in RUNTIME_ONLY_RERUN_PATHS {
@@ -348,43 +370,7 @@ fn static_rerun_paths(build_script: &str) -> Vec<&str> {
         .collect()
 }
 
-/// Supply the Cargo package variables consumed by Clap's command derives.
-const fn package_environment() -> [(&'static str, &'static str); 7] {
-    [
-        ("CARGO_PKG_NAME", env!("CARGO_PKG_NAME")),
-        ("CARGO_PKG_VERSION", env!("CARGO_PKG_VERSION")),
-        ("CARGO_PKG_AUTHORS", env!("CARGO_PKG_AUTHORS")),
-        ("CARGO_PKG_DESCRIPTION", env!("CARGO_PKG_DESCRIPTION")),
-        ("CARGO_PKG_HOMEPAGE", env!("CARGO_PKG_HOMEPAGE")),
-        ("CARGO_PKG_REPOSITORY", env!("CARGO_PKG_REPOSITORY")),
-        ("CARGO_PKG_LICENSE", env!("CARGO_PKG_LICENSE")),
-    ]
-}
-
 /// Return the repository root supplied by Cargo for this test target.
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-}
-
-/// Return the Cargo executable selected for the workspace.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "Cargo supplies the executable path for direct UI compilation; the test only reads the tool location"
-)]
-fn cargo() -> PathBuf {
-    std::env::var_os("CARGO").map_or_else(|| Path::new("cargo").to_path_buf(), PathBuf::from)
-}
-
-/// Return the rustc executable selected for the workspace.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "Cargo supplies the rustc path for direct UI compilation; the test only reads the tool location"
-)]
-fn rustc() -> PathBuf {
-    std::env::var_os("RUSTC").map_or_else(|| Path::new("rustc").to_path_buf(), PathBuf::from)
-}
-
-/// Render a compiler invocation's standard error for a test failure.
-fn stderr(output: &Output) -> String {
-    String::from_utf8_lossy(&output.stderr).into_owned()
 }

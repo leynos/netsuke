@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Uden emne svarer dette til `--help`. Brug `help
 cli.help.actions_heading = Handlinger:
 cli.help.targets_heading = Mål:
 cli.help.targets.about = Vis mål og handlinger i det valgte manifest.
+cli.help.targets.flag.edges.help = Medtag afhængighedskanter og rå opskrifter i JSON-outputtet.
 cli.help.default_marker = standard
 cli.help.conditional_marker = betinget
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Manifestet i { $path } kunne ikke indlæses.
 runner.context.build_graph = Grafen kunne ikke bygges ud fra manifestet.
 runner.context.generate_ninja = Ninja-manifestet kunne ikke genereres.
 runner.context.render_graph = Grafartefaktet kunne ikke gengives.
+runner.help.targets_edges_require_json = Indstillingen --edges kræver --json på øverste niveau.
 
 runner.io.create_temp_file = Den midlertidige Ninja-fil kunne ikke oprettes.
 runner.io.write_temp_ninja = Den midlertidige Ninja-fil kunne ikke skrives.
@@ -179,6 +181,8 @@ manifest.glob.unknown_pattern_error = ukendt mønsterfejl.
 manifest.glob.io_failed = Glob mislykkedes for "{ $pattern }": { $detail }.
 manifest.glob.unknown_io_error = ukendt I/O-fejl.
 manifest.command_list_empty = Feltet "command" må ikke være tomt: angiv en kommandostreng eller en ikke-tom liste.
+manifest.command_isolation_recipe = Feltet ‘command_isolation’ kræver en opskrift med en kommandoliste.
+manifest.command_isolation_scalar = ‘command_isolation: isolated’ kræver en kommandoliste.
 
 # Fejl i den interne repræsentation.
 ir.rule_not_found = Reglen "{ $rule }", som målet "{ $target }" henviser til, blev ikke fundet.
@@ -455,3 +459,22 @@ manifest.budget.exceeded = Manifestets ressourcebudget blev opbrugt under { $sta
 
 cli.flag.env_allow_var.help = Miljøvariabel tilladt for manifestets env()-hjælper.
 cli.flag.env_block_var.help = Miljøvariabel blokeret for manifestets env()-hjælper.
+
+# Manifestanalyse (`netsuke check`).
+cli.subcommand.check.about = Analysér manifestet uden at generere eller køre et build.
+cli.subcommand.check.long_about = Undersøg det valgte manifest for konstruktioner, der godt nok kan fortolkes, men sandsynligvis er fejlbehæftede, usikre, ikke-portable eller cachefjendtlige.
+cli.subcommand.check.flag.rule.help = Angiv en regels eller kategoris alvorsgrad, skrevet som NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Alvorsgrad hvor fund får kommandoen til at fejle.
+cli.subcommand.check.flag.limit.help = Højeste antal rapporterede fund; 0 rapporterer dem alle.
+cli.subcommand.check.flag.explain.help = Udskriv regelreferencen i stedet for at analysere et manifest.
+check.threshold_exceeded = Fund nåede tærsklen { $severity }: { $failing } af { $reported } rapporterede.
+check.threshold_exceeded.help = Ret de rapporterede fund, justér --rule, eller slæk --fail-on.
+check.summary.counts = Analyseresultater — fejl: { $errors }, advarsler: { $warnings }, råd: { $advice }, undertrykt: { $suppressed }.
+check.summary.clean = Ingen fund.
+check.summary.truncated = Viser { $shown } fund; --limit udelod yderligere { $omitted }.
+check.rule.malformed = Vælgeren { $selector } er ikke skrevet som NAME=SEVERITY.
+check.rule.unknown = Vælgeren nævner { $name }, som hverken er en regel eller en kategori.
+check.rule.severity = Vælgeren { $name } nævner alvorsgraden { $severity }; forventede en af { $values }.
+check.fail_on.invalid = Ukendt fejltærskel { $value }; forventede en af { $values }.
+check.source_index = Kunne ikke indeksere { $path } til diagnostik på linje { $line }: { $reason }.
+status.tool.check = Kontrol

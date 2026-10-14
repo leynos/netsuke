@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = बिना विषय के यह `--help
 cli.help.actions_heading = क्रियाएँ:
 cli.help.targets_heading = लक्ष्य:
 cli.help.targets.about = चयनित मैनिफेस्ट में लक्ष्यों और क्रियाओं की सूची बनाएँ।
+cli.help.targets.flag.edges.help = JSON आउटपुट में निर्भरता किनारे और कच्ची रेसिपी शामिल करें।
 cli.help.default_marker = डिफ़ॉल्ट
 cli.help.conditional_marker = सशर्त
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = { $path } से मैनिफ़ेस्ट �
 runner.context.build_graph = मैनिफ़ेस्ट से ग्राफ़ नहीं बनाया जा सका।
 runner.context.generate_ninja = Ninja मैनिफ़ेस्ट नहीं बनाया जा सका।
 runner.context.render_graph = ग्राफ़ का उत्पाद प्रस्तुत नहीं किया जा सका।
+runner.help.targets_edges_require_json = --edges विकल्प के लिए शीर्ष स्तर पर --json आवश्यक है।
 
 runner.io.create_temp_file = अस्थायी Ninja फ़ाइल नहीं बनाई जा सकी।
 runner.io.write_temp_ninja = अस्थायी Ninja फ़ाइल में नहीं लिखा जा सका।
@@ -179,6 +181,8 @@ manifest.glob.unknown_pattern_error = अज्ञात प्रतिरू�
 manifest.glob.io_failed = “{ $pattern }” के लिए glob विफल रहा: { $detail }।
 manifest.glob.unknown_io_error = अज्ञात इनपुट/आउटपुट त्रुटि।
 manifest.command_list_empty = “command” फ़ील्ड रिक्त नहीं होना चाहिए: कोई कमांड स्ट्रिंग या ग़ैर-रिक्त सूची दें।
+manifest.command_isolation_recipe = 'command_isolation' फ़ील्ड के लिए कमांड-सूची वाली रेसिपी आवश्यक है।
+manifest.command_isolation_scalar = 'command_isolation: isolated' के लिए कमांड सूची आवश्यक है।
 
 # मध्यवर्ती निरूपण की त्रुटियाँ।
 ir.rule_not_found = लक्ष्य “{ $target }” जिस नियम “{ $rule }” का संदर्भ देता है वह नहीं मिला।
@@ -458,3 +462,25 @@ manifest.budget.exceeded = { $stage } के दौरान { $limit } तक �
 
 cli.flag.env_allow_var.help = मैनिफ़ेस्ट env() सहायक के लिए अनुमत परिवेश चर।
 cli.flag.env_block_var.help = मैनिफ़ेस्ट env() सहायक के लिए अवरुद्ध परिवेश चर।
+
+# मैनिफ़ेस्ट जाँच (`netsuke check`).
+cli.subcommand.check.about = बिल्ड बनाए या चलाए बिना मैनिफ़ेस्ट की जाँच करें।
+cli.subcommand.check.long_about = चुने हुए मैनिफ़ेस्ट में ऐसी संरचनाएँ खोजें जो पार्स तो हो जाती हैं, पर सम्भवतः त्रुटिपूर्ण, असुरक्षित, अपोर्टेबल या कैशिंग के लिए हानिकारक हैं।
+cli.subcommand.check.flag.rule.help = किसी नियम या श्रेणी की गंभीरता NAME=SEVERITY के रूप में निर्धारित करें।
+cli.subcommand.check.flag.fail_on.help = वह गंभीरता जिस पर निष्कर्ष कमांड को विफल कर देते हैं।
+cli.subcommand.check.flag.limit.help = रिपोर्ट किए जाने वाले निष्कर्षों की अधिकतम संख्या; 0 सभी को रिपोर्ट करता है।
+cli.subcommand.check.flag.explain.help = मैनिफ़ेस्ट जाँचने के बजाय नियम-संदर्भ छापें।
+check.threshold_exceeded = निष्कर्ष { $severity } सीमा तक पहुँच गए: रिपोर्ट किए गए { $reported } में से { $failing }।
+check.threshold_exceeded.help = रिपोर्ट किए गए निष्कर्ष ठीक करें, --rule समायोजित करें, या --fail-on ढीला करें।
+check.summary.counts = जाँच परिणाम — त्रुटियाँ: { $errors }, चेतावनियाँ: { $warnings }, सुझाव: { $advice }, दबाए गए: { $suppressed }।
+check.summary.clean = कोई निष्कर्ष नहीं।
+check.summary.truncated = { $shown ->
+    [one] { $shown } निष्कर्ष दिखाया जा रहा है; --limit ने { $omitted } और छोड़ दिए।
+   *[other] { $shown } निष्कर्ष दिखाए जा रहे हैं; --limit ने { $omitted } और छोड़ दिए।
+}
+check.rule.malformed = चयनकर्ता { $selector } NAME=SEVERITY के रूप में नहीं लिखा गया है।
+check.rule.unknown = चयनकर्ता { $name } बताता है, जो न नियम है न श्रेणी।
+check.rule.severity = चयनकर्ता { $name } गंभीरता { $severity } बताता है; { $values } में से एक अपेक्षित था।
+check.fail_on.invalid = अज्ञात विफलता सीमा { $value }; { $values } में से एक अपेक्षित था।
+check.source_index = पंक्ति { $line } पर निदान हेतु { $path } को अनुक्रमित नहीं किया जा सका: { $reason }।
+status.tool.check = जाँच

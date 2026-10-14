@@ -45,6 +45,19 @@ fn render_localized_long_help(locale: &str, subcommand: Option<&str>) -> String 
     normalized
 }
 
+/// Render localized long help for the nested `help targets` topic.
+fn render_localized_help_targets_long_help(locale: &str) -> String {
+    let localizer: Arc<dyn Localizer> = Arc::from(build_localizer(Some(locale)));
+    let mut command = configured_command(Some(&localizer));
+    let help = command
+        .find_subcommand_mut("help")
+        .expect("help subcommand should exist");
+    let targets = help
+        .find_subcommand_mut("targets")
+        .expect("targets topic should exist");
+    normalize_fluent_isolates(&targets.render_long_help().to_string())
+}
+
 /// Verifies localized long help includes `--config <FILE>` and its Fluent-resolved description.
 #[rstest]
 #[case::en_us(
@@ -68,6 +81,37 @@ fn localized_help_includes_config_flag(#[case] locale: &str, #[case] config_help
     );
 }
 
+/// Suffix naming the help snapshot for the compiled feature set.
+///
+/// `netsuke check` exists only with the `lint` feature, so the command list
+/// differs by one line. The unsuffixed snapshots are the default feature set,
+/// which is what release binaries ship.
+const HELP_SNAPSHOT_SUFFIX: &str = if cfg!(feature = "lint") {
+    "_with_lint"
+} else {
+    ""
+};
+
+/// Verifies localized `help targets` output documents the opt-in graph flag.
+#[rstest]
+#[case::en_us("en-US", "Include dependency edges and raw recipes in JSON output.")]
+#[case::es_es(
+    "es-ES",
+    "Incluir aristas de dependencias y recetas sin procesar en la salida JSON."
+)]
+fn localized_help_targets_documents_edges_flag(#[case] locale: &str, #[case] expected: &str) {
+    let rendered_help = render_localized_help_targets_long_help(locale);
+
+    assert!(
+        rendered_help.contains("--edges"),
+        "help targets for {locale} should include --edges"
+    );
+    assert!(
+        rendered_help.contains(expected),
+        "help targets for {locale} should contain {expected:?}: {rendered_help}"
+    );
+}
+
 /// Accept localized long-help snapshots by reading or writing snapshot files on disk.
 #[rstest]
 #[case::en_us("en-US", "help_en_us")]
@@ -76,7 +120,10 @@ fn localized_help_snapshot(#[case] locale: &str, #[case] snapshot_name: &str) {
     let rendered_help = render_localized_long_help(locale, None);
 
     snapshot_settings("cli").bind(|| {
-        assert_snapshot!(snapshot_name, rendered_help);
+        assert_snapshot!(
+            format!("{snapshot_name}{HELP_SNAPSHOT_SUFFIX}"),
+            rendered_help
+        );
     });
 }
 
