@@ -8047,7 +8047,11 @@ new helper forwarding an arbitrary host value to this module inherits it.
 A length the host reports but does not honour is the one part of that
 precondition the module does check: both sequences and mappings are refused with
 `IncompatibleRepresentation` when the number of members yielded disagrees with
-`Value::len()`, because such a host cannot be snapshotted reproducibly.
+`Value::len()`, because such a host cannot be snapshotted reproducibly. The
+check lives in one private `admission::collect_stably` helper that both
+representations forward into with their own iterator, so a further
+representation cannot arrive carrying a second copy of the rule; it is an
+internal seam of the module and is not part of the public surface above.
 Refusals name their location as a JSON-pointer-like path, and a refusal at the
 root value renders a marker rather than an empty location.
 

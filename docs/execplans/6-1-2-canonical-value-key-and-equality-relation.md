@@ -683,6 +683,32 @@ under way; the invocation naming this plan supplies execution approval.
     Decision log records the provenance check that moved it into scope.
   The last of these is the substantive one: it is a reversal of a position this
   plan had recorded as settled, and the head now carries the bump.
+- (2026-10-14) **The first repair above introduced a defect that only the
+  hosted CodeScene check could see.** Making `collect_members` reuse
+  `has_stable_length` closed the reported mapping gap, but it also left
+  `collect_items` and `collect_members` as the same shape: read the host
+  object, pick an iterator, collect, and refuse on a length mismatch.
+  `CodeScene Code Health Review (main)` failed on that candidate for *Code
+  Duplication* in `admission.rs` at a Code Health Impact of 9.39, naming
+  exactly that pair. No local gate covers this: `make lint` runs Clippy and
+  Whitaker over the same bytes, and both linters judge content, not shape, so
+  neither has an opinion about two functions agreeing. The finding was
+  reachable only from CodeScene, and only after a push. Repaired in `a46851c5`
+  by extracting one generic `collect_stably` helper that the two callers
+  forward into, each passing the representation's own iterator
+  (`DynObject::try_iter_pairs`, `DynObject::try_iter`); the shared traversal
+  and length rule now exist once, and the two doc comments that had restated
+  the shared argument were trimmed to what distinguishes their own shape. No
+  suppression is present and no threshold was raised. Measured before and after:
+  `cs delta origin/main HEAD` on the failing candidate returns
+  `Code Health: (9.38)` naming the rule and both functions, and on the repaired
+  tree `cs delta origin/main` reports `no-issues-found` with **24 of 24**
+  code-health-eligible files checked across a 40-file delta, so the clean
+  verdict is a live result rather than an empty scan. Behaviour is unchanged —
+  the same iterator is consulted once, the same `Value::len()` comparison
+  decides, and a disagreement refuses with the same `invalid_traversal` error
+  at the same path — and the focused battery passes 40/40. **The head moved to
+  a new revision purely to carry this repair.**
 
 ## Surprises & discoveries
 
@@ -1063,6 +1089,25 @@ under way; the invocation naming this plan supplies execution approval.
   comment-stripped body byte-identical to `625bc4e7`'s (`sha256 bc6551f5…`) and
   `16 verified, 0 errors` reproduced on the trimmed file, so the assessed proof
   surface is unchanged.
+- **Surprise (measured 2026-10-14, self-inflicted): the repair for a formal
+  review finding introduced a duplication that the hosted CodeScene check
+  caught, and no local gate could have caught it.** The first review repair made
+  `collect_members` apply the same `has_stable_length` predicate
+  `collect_items` already applied. That closed the reported defect — a mapping
+  whose reported length disagreed with what it enumerated was admitted and
+  given a canonical key — but it also made the two functions structurally
+  identical: read the host object, pick an iterator, collect, refuse on a
+  length mismatch. The hosted check reported *Code Duplication* in
+  `src/stdlib/canonical_value/admission.rs` with a Code Health Impact of 9.39,
+  and `CodeScene Code Health Review (main)` failed on it. No target in the
+  repository's gate set measures code health: `make lint` runs Clippy and
+  Whitaker over the same bytes and both are content, so neither has an opinion
+  about two functions sharing a shape. The finding was reachable only from
+  CodeScene, and only after a push. Impact: the measurement is reproducible
+  locally — `cs delta origin/main HEAD` on that candidate returns
+  `Code Health: (9.38)` naming the rule and both functions — so the local
+  reading is a usable instrument and the fix was confirmed before the next push
+  rather than after it. See the Decision log.
 
 ## Decision log
 
@@ -1296,6 +1341,26 @@ under way; the invocation naming this plan supplies execution approval.
   before and after — so no proved statement, lemma, or clause moved, and the
   `16 verified, 0 errors` result still describes the file. Date/Author:
   2026-10-14, implementation.
+- Decision: the two stable-length collectors are unified behind one generic
+  `collect_stably`, with each representation's own iterator passed in as a
+  function pointer, rather than left as two similar functions or silenced with
+  a CodeScene suppression. Rationale: `collect_items` and `collect_members` had
+  become the same shape under the first review repair, and CodeScene scored the
+  module 9.38 for it. The published remedy for this biomarker in this
+  repository is to collapse the parallel shapes so the shared control flow
+  exists exactly once, which is what makes a third representation unable to
+  arrive carrying its own copy of the rule; suppression is the last resort and
+  would leave the next caller free to reintroduce the drift. The signature
+  passes `fn(&DynObject) -> Option<Box<dyn Iterator<Item = T> + Send + Sync>>`
+  rather than taking a closure or an enum, because `DynObject::try_iter` and
+  `DynObject::try_iter_pairs` already have exactly that shape, so no adapter
+  code is introduced and the callers read as the one thing that differs between
+  them. Behaviour is unchanged: the same iterator is consulted once, the same
+  `Value::len()` comparison decides, and a disagreement refuses with the same
+  `invalid_traversal` error at the same path. Two doc comments that had
+  restated the shared stability argument were trimmed to what distinguishes
+  their own shape, so the argument is stated once and the duplication does not
+  reappear in prose. Date/Author: 2026-10-14, implementation.
 
 ## Outcomes & retrospective
 
