@@ -6,13 +6,19 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
-This plan must be approved before implementation begins. No production code may
-change until the user explicitly approves it. Approval also accepts the
+Approved 2026-10-14 by the user, by explicit instruction to proceed with this
+plan under the `sdlc-implementation` workflow. That approval accepts the
 technical-design deviations listed under `Decision log` (entries marked
-"Deviation"). The user has already settled the one open question, about
+"Deviation"). The user had already settled the one open question, about
 file-reading filters under test (see `Decision log`).
+
+The branch was rebased onto `origin/main` (`486b876c`) on 2026-10-14 before any
+work began, because the base had fallen 64 commits behind while the plan sat in
+draft. The rebase applied with zero conflicts and is recorded under
+`Surprises & discoveries`; the plan's paths, base commit, and ADR number were
+corrected to match. No production code had changed before that rebase.
 
 ## Purpose / big picture
 
@@ -89,7 +95,7 @@ Terms used throughout, defined here so that no prior reading is required.
 - **Shadowed function.** The global an overlay replaced, captured at
   registration and handed to the overlay on each call.
 - **Environment reader (`EnvReader`).** The closure type backing the `env()`
-  template helper (`src/manifest/env_reader.rs`). `ManifestEnvironment` bundles
+  template helper (`src/manifest/env/reader.rs`). `ManifestEnvironment` bundles
   a reader with the `EnvAccessPolicy` evaluated before each read.
 - **Clock provider.** The closure type backing `now()`, owned by `StdlibConfig`
   since roadmap 7.1.1 (`src/stdlib/time/clock.rs`).
@@ -126,8 +132,14 @@ Terms used throughout, defined here so that no prior reading is required.
 ## Context and orientation
 
 Assume no prior knowledge of this repository. This section describes the code
-as it stands on `main` at commit `ebcedaef`. Line numbers are indicative;
-anchor on the named items, because line numbers drift.
+as it stands on `main` at commit `486b876c`, which this branch was rebased onto
+on 2026-10-14. Line numbers are indicative; anchor on the named items, because
+line numbers drift.
+
+Module paths were reconciled against that rebase: `main` landed a module-layout
+migration between this plan's draft and its implementation, so several files
+named below are now directory modules. See `Surprises & discoveries` for the
+full reconciliation.
 
 ### The loader core
 
@@ -162,7 +174,7 @@ limits. Its order of work is:
 
 The function body is about 68 lines; `clippy.toml` caps functions at 70 lines
 and cognitive complexity at 9, so it must be split before it grows.
-`src/manifest/budget_adapter.rs::from_str_named` wraps `evaluate_manifest` and
+`src/manifest/budget/adapter.rs::from_str_named` wraps `evaluate_manifest` and
 records budget-exhaustion telemetry except for manifest queries.
 
 ### The entry points
@@ -194,21 +206,28 @@ from a second private enum, `ManifestLoadMode` (`Full(NetworkPolicy)` or
   refusing stubs for `env`, `glob`, `fetch`, `shell`, `grep`, `contents`,
   `which` (function and filter), `command_available`, `now`, `realpath`,
   `expanduser`, `size`, `linecount`, `hash`, and `digest`;
-- `manifest_query_operation_error(operation)` in the same file, which builds
-  the stub error from a hard-coded English marker
-  (`MANIFEST_QUERY_DISABLED_HELPER_MARKER`). The query stubs for `hash`,
-  `digest`, and `contents` accept fewer arguments than the real filters, so a
-  call with keyword arguments fails on arity instead of refusing;
+- `manifest_query_operation_error(operation)`, which builds the stub error from
+  a hard-coded English marker (`MANIFEST_QUERY_DISABLED_HELPER_MARKER`). The
+  query stubs for `hash`, `digest`, and `contents` accept fewer arguments than
+  the real filters, so a call with keyword arguments fails on arity instead of
+  refusing. **Path reconciled at rebase:** `main` already extracted this
+  function, the marker, `is_manifest_query_disabled_error`, and the stub
+  registrations into `src/stdlib/register/query_helpers.rs`, a `#[path]` child
+  of `register.rs`. The remaining `register.rs` re-exports
+  `is_manifest_query_disabled_error` and declares the marker;
 - `is_manifest_query_disabled_error`, which recognizes that marker by
   substring. `classify_query_evaluation` applies it in *every* mode today, and
   a match turns the `when` result into `WhenResolution::Conditional`: the entry
   is kept and marked `conditional: true` (`src/manifest/expand/mod.rs`);
-- `src/manifest/env_reader.rs::disabled_env_reader` (`pub(super)`), a reader
+- `src/manifest/env/reader.rs::disabled_env_reader` (`pub(super)`), a reader
   that answers every lookup with `EnvReadError::NotPresent`.
 
-`src/stdlib/register.rs` is 398 lines and `src/manifest/jinja_macros/mod.rs` is
-394 lines; the repository caps code files at 400 lines, so new code in either
-area needs an extraction first.
+File sizes at `486b876c`: `src/stdlib/register.rs` is 315 lines and its
+`query_helpers.rs` child 151, so EP-M1's extraction there shrinks to relocating
+the stub cluster into the new `restricted_helpers.rs`;
+`src/manifest/jinja_macros/mod.rs` is still 394 lines and remains at the cap,
+so the classifier extraction it needs is unchanged. The repository caps code
+files at 400 lines.
 
 ### What the full stdlib touches on the host
 
@@ -245,7 +264,7 @@ them back into the design.
 | `src/manifest/load_options.rs` (new)                                    | `ManifestLoadOptions`, `from_str_with_options`, host-helper registration |
 | `src/manifest/test_surface.rs` (new)                                    | `TestSurface`, `TemplateOverlays`, `OverlayCallable`, `OverlayCall`      |
 | `src/manifest/mod.rs`                                                   | `StdlibRegistration::{AmbientFull, Test}`; split `evaluate_manifest`     |
-| `src/manifest/budget_adapter.rs`                                        | ask the registration whether to record telemetry                         |
+| `src/manifest/budget/adapter.rs`                                        | ask the registration whether to record telemetry                         |
 | `src/manifest/parse_with_config.rs`, `path_loaders.rs`                  | thin wrappers over the options entry                                     |
 | `src/manifest/query.rs`                                                 | `from_path_with_options`; `ManifestLoadMode` replaced by a factory       |
 | `src/manifest/jinja_macros/query_classification.rs` (new)               | classifier extracted and gated on query mode                             |
@@ -258,7 +277,7 @@ them back into the design.
 | `tests/manifest_load_options_tests.rs`, `tests/manifest_load_options/*` | public differential and property tests                                   |
 | `tests/features/manifest_load_options.feature`, `tests/bdd/…`           | behavioural scenarios, steps, and `TestWorld` slots                      |
 | `tests/ui/manifest_load_options_embedder_pass.rs`                       | compile-pass fixture pinning the public surface                          |
-| `docs/…`                                                                | design, ADR-041, ADR-018 addendum, guides, contents, roadmap             |
+| `docs/…`                                                                | design, ADR-055, ADR-018 addendum, guides, contents, roadmap             |
 
 *Table 1: Files in scope.*
 
@@ -405,7 +424,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
 
 - Risk: technical-design divergence confuses later roadmap items.
   Severity: low. Likelihood: certain. Mitigation: EP-M5 updates the design in
-  the same change set, and ADR-041 records the substantive decisions.
+  the same change set, and ADR-055 records the substantive decisions.
 
 - Risk: a peer session pushes to this branch or `main` moves.
   Severity: low. Likelihood: low. Mitigation: fetch before every push; after
@@ -425,7 +444,13 @@ and YAML fixtures, and were set from the inventory in Table 1.
 - [x] (2026-09-27) User decision on the file-reading filters: extend roadmap
   7.4.1 to root them at the sandbox. Roadmap 7.4.1 and design §5.5 updated in
   the plan's pull request.
-- [ ] User approval of the plan and the listed deviations.
+- [x] (2026-10-14) User approval of the plan and the listed deviations, given
+  by explicit instruction to proceed under the `sdlc-implementation` workflow.
+- [x] (2026-10-14) Rebase onto `origin/main` `486b876c` (64 commits ahead of the
+  plan's base `ebcedaef`); rehearsed in a scratch clone first, applied with
+  zero conflicts, pushed, and local/remote/tracking refs verified equal.
+- [x] (2026-10-14) Plan corrections for the rebase: base commit, module paths
+  after `main`'s layout migration, and ADR-041 renumbered to ADR-055.
 - [ ] EP-M0 — characterization baseline.
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
@@ -439,7 +464,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
   has grown since the design was written: `ManifestEnvironment`,
   `ManifestBudgetLimits`, the manifest root, a private `ManifestParse` bundle,
   and a second private mode enum, `ManifestLoadMode`, all exist. Evidence:
-  `src/manifest/mod.rs`, `src/manifest/query.rs` at `ebcedaef`. Impact:
+  `src/manifest/mod.rs`, `src/manifest/query.rs` at `486b876c`. Impact:
   `ManifestLoadOptions` carries the environment bundle and budget limits, and
   `ManifestLoadMode` is replaced (C5).
 
@@ -481,7 +506,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
 - Observation: loader telemetry other than expansion reports and budget
   exhaustion (template-render and macro metrics, the `env()` lookup counter)
   fires in every mode, including query mode. Evidence:
-  `src/manifest/jinja_macros/telemetry.rs`, `src/manifest/env_reader.rs`.
+  `src/manifest/jinja_macros/telemetry.rs`, `src/manifest/env/reader.rs`.
   Impact: "telemetry-free" was too broad; the predicate is named for exactly
   what it gates.
 
@@ -490,6 +515,55 @@ and YAML fixtures, and were set from the inventory in Table 1.
   Evidence: `src/stdlib/time/clock.rs`. Impact: test mode treats any clock
   supplied through `with_clock` as explicit injection (C4); the field's
   documentation is updated to say it is a policy input.
+
+- Observation: the base had gone stale between planning and implementation. The
+  plan was written against `ebcedaef`; `origin/main` had advanced to
+  `486b876c`, 64 commits ahead, and the merge base was `ebcedaef` itself, so
+  every one of those 64 commits was invisible to the plan's own review rounds.
+  Evidence: `git rev-list --count HEAD..origin/main` = 64;
+  `git merge-base HEAD origin/main` = `ebcedaef`. Impact: the rebase was
+  rehearsed in a scratch clone before the worktree was touched (free, no
+  working-tree risk), and it applied with zero conflicts because this branch's
+  own diff is three Markdown files only.
+
+- Observation: the module-layout migration landed on `main` and moved the very
+  seams EP-M1 names. Evidence:
+  `git diff --stat ebcedaef..486b876c -- src/stdlib/ src/manifest/` shows 160
+  files changed. Reconciled as follows. `src/stdlib/register.rs` fell from 398
+  to 315 lines because `src/stdlib/register/query_helpers.rs` (new, 151 lines)
+  already holds `manifest_query_operation_error`,
+  `MANIFEST_QUERY_DISABLED_HELPER_MARKER`, `is_manifest_query_disabled_error`,
+  and the stub registrations — EP-M1's first extraction is **partly done
+  upstream**, under a different path than the plan's
+  `src/stdlib/restricted_helpers.rs`. Under `src/manifest/`,
+  `budget_adapter.rs` became `budget/adapter.rs`, `env_reader.rs` became
+  `env/reader.rs`, `env_policy/` became `access_policy/`, `expand_tests.rs`
+  became `expand/tests/`, `render.rs` became `render/mod.rs`, and `loading.rs`
+  and `workspace.rs` were added. Impact: the plan's paths in Table 1,
+  `Plan of work`, and `Concrete steps` were corrected to the post-migration
+  names; the EP-M1 outcome now says "relocate the existing stub cluster", not
+  "create it".
+
+- Observation: **ADR-041 is already spent.** Evidence: `origin/main` publishes
+  `docs/adr-041-canonical-recipe-shell-quoting-surface.md`, and a sweep of
+  every remote branch for `docs/adr-[0-9]{3}-` puts the ceiling at **054**
+  (held by `docs/crate-decomposition-programme`). The plan reserved 041 and
+  named it in seven places, and its own `Plan of work` said to re-check at
+  every rebase. Impact: renumbered to **ADR-055**, above the highest
+  allocation, per `docs/documentation-style-guide.md`'s
+  no-renumbering-after-publication rule. A free number inside the existing
+  bracket would not have been safe: 044–053 are unclaimed on `main` but
+  bracketed by open allocations.
+
+- Observation: the plan's governing documents moved substantially on `main`.
+  Evidence: `git diff --stat ebcedaef..486b876c` gives `developers-guide.md`
+  2862 changed lines, `roadmap.md` 293, `netsuke-design.md` 284, `contents.md`
+  59, `polonius.md` 32, `adr-008` 32, the technical design 27, `adr-018` 8, RFC
+  0007 9. Impact: every EP-M5 anchor is re-read from the rebased tree before
+  editing, and every patch is applied by quoted context rather than by line
+  number. The rebase preserved both intents — roadmap 7.4.1 keeps this plan's
+  file-reading-filter extension *and* `main`'s new 7.6 items; technical design
+  §5.5 keeps the file-reading-filter paragraph.
 
 ## Decision log
 
@@ -554,7 +628,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `command_available`, `now`) remain replaceable by overlays; filters and tests
   are not mockable in the first version (UX §8.6). Roadmap 7.4.1 later replaces
   the `glob`, file-test, and file-reading filter stubs with sandbox-rooted
-  adapters. Recorded in ADR-041. Date/Author: 2026-09-27, planning agent.
+  adapters. Recorded in ADR-055. Date/Author: 2026-09-27, planning agent.
 
 - Decision (Deviation from design §5.5): `which` and `expanduser` refuse under
   test, although §5.5's table implies they run against an empty `PATH` and a
@@ -571,7 +645,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `operation`), beginning with the verbatim code
   `[netsuke::jinja::test_mode::unavailable]` in every catalogue, and whose
   source is a typed `TestModeRefusal { operation }`. Code recognizes them by
-  downcasting the source, as `src/manifest/budget_adapter.rs` does for budget
+  downcasting the source, as `src/manifest/budget/adapter.rs` does for budget
   exhaustion. The query marker and its substring check are unchanged.
   Rationale: a translated marker cannot be matched by substring in 34 of 35
   locales (C6); 7.3.2 and 7.5.5 need the operation name as data. Date/Author:
@@ -659,7 +733,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `ortho_config` layering and localized help apply. The developers' guide gains
   the loader-entry convention instead. Date/Author: 2026-09-27, planning agent.
 
-- Decision: a new ADR, ADR-041, records the deny-by-default test surface and
+- Decision: a new ADR, ADR-055, records the deny-by-default test surface and
   the refusal-code contract; telemetry goes to ADR-018 Addendum E; the options
   shape goes to design §4.3 only. Rationale: the surface decision is hard to
   reverse and spans network, process, filesystem, and clock, which ADR-008
@@ -688,7 +762,7 @@ Not started.
 
 ## Conformance basis
 
-Upstream artefacts, at `main` commit `ebcedaef`:
+Upstream artefacts, at `main` commit `486b876c`:
 
 - RFC 0007, `docs/rfcs/0007-netsukefile-testing-framework.md` — scope.
 - Technical design, `docs/netsuke-test-framework-technical-design.md` (status
@@ -855,7 +929,7 @@ through pipeline actions.
 - OBL-7 — `now()` under test.
   Statement: with `with_clock(fixed_clock(t))`, `now()` returns `t`; with
   `with_clock(system_clock())`, `now()` is real (explicit injection, recorded
-  in ADR-041); with the default clock, `now()` refuses with the test code.
+  in ADR-055); with the default clock, `now()` refuses with the test code.
   Method: three named unit tests. Artefact: `src/manifest/tests/test_mode.rs`.
   Evidence: red before EP-M3; green after. Non-vacuity: seeded fault — register
   `now()` unconditionally; the default clock row must fail.
@@ -1026,7 +1100,7 @@ After each milestone, perform the conformance check listed and update
 
 ### EP-M5 — documentation, ADR, and roadmap closure
 
-- Outcome: design §4.2, §4.3, §5.5, and §7 reconciled; ADR-041 written and
+- Outcome: design §4.2, §4.3, §5.5, and §7 reconciled; ADR-055 written and
   indexed in `docs/contents.md`; ADR-018 Addendum E; developers' guide,
   `docs/netsuke-design.md`, and `docs/polonius.md` updated; roadmap 7.1.2 and
   its five bullets ticked; this plan set to `COMPLETE`.
@@ -1043,8 +1117,10 @@ After each milestone, perform the conformance check listed and update
 ### Stage A — orientation (no code changes)
 
 Read the files in `Context and orientation`. Run the full gate set on the
-untouched branch through `scrutineer` and record the baseline. Confirm that
-ADR-041 is still free by listing `docs/adr-*` on every remote branch.
+untouched branch through `scrutineer` and record the baseline. Re-confirm
+ADR-055 is free immediately before minting it, by sweeping `docs/adr-*` across
+every remote branch: the number is only valid at the sweep, and `main` can take
+it while this branch sits open.
 
 ### Stage B — characterization (EP-M0)
 
