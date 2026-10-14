@@ -430,6 +430,17 @@ and YAML fixtures, and were set from the inventory in Table 1.
   Severity: low. Likelihood: low. Mitigation: fetch before every push; after
   any rebase, re-check ADR numbering and rerun every gate.
 
+- Risk: a milestone gate reports red for host load rather than for the
+  candidate, and the red is either committed past or mistaken for a defect.
+  Severity: medium. Likelihood: high — the Stage A baseline already hit it once
+  (`cli_configuration_fixture_compiles` at the 300 s cap with the four-slot
+  compiler pool fully held by peer worktrees). Mitigation: before treating a red
+  `make test` as a defect, read the queue census from its log (compile-slot
+  waits, sccache-unreachable notices, `build-limits:` admission failures) and
+  confirm the diff against `origin/main` does not touch the failing test, its
+  nextest policy, or the crate it builds. Re-run rather than repair; the
+  repository deliberately keeps this budget at five periods.
+
 ## Progress
 
 - [x] (2026-09-27) Renamed the branch to
@@ -451,6 +462,10 @@ and YAML fixtures, and were set from the inventory in Table 1.
   zero conflicts, pushed, and local/remote/tracking refs verified equal.
 - [x] (2026-10-14) Plan corrections for the rebase: base commit, module paths
   after `main`'s layout migration, and ADR-041 renumbered to ADR-055.
+- [x] (2026-10-14) Stage A baseline: the full gate set run sequentially by
+  `scrutineer` against the untouched branch at `0b2a366b`. Six gates pass;
+  `make test` is red from compiler-admission contention, not from this
+  candidate. See `Artefacts and notes`.
 - [ ] EP-M0 — characterization baseline.
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
@@ -554,6 +569,20 @@ and YAML fixtures, and were set from the inventory in Table 1.
   no-renumbering-after-publication rule. A free number inside the existing
   bracket would not have been safe: 044–053 are unclaimed on `main` but
   bracketed by open allocations.
+
+- Observation: the Stage A baseline's `make test` is red, and the cause is
+  compiler-admission contention on this host rather than the candidate.
+  `cli_configuration_fixture_compiles` hit the 300 s `terminate-after` cap
+  while dozens of `build-limits-rustc` processes from peer worktrees held a
+  four-slot pool, and its sibling nested-Cargo fixture passed at 168 s in the
+  same run. Evidence: the baseline table in `Artefacts and notes`; the
+  repository already documents this test's timeout as queue-bound and refuses
+  to widen it. Impact: the doctest half of `make test` is unverified at the
+  baseline and is re-run later. This is a standing hazard for every milestone
+  gate in this plan, not a one-off: the same test can be expected to time out
+  again while the host is loaded, so a red `make test` needs the queue census
+  (slot waits, sccache notices, admission failures) read before it is treated
+  as a defect.
 
 - Observation: the plan's governing documents moved substantially on `main`.
   Evidence: `git diff --stat ebcedaef..486b876c` gives `developers-guide.md`
@@ -1306,6 +1335,59 @@ Never use bare `git stash`; the stash is shared across worktrees.
 Record here, as work proceeds: the baseline gate results; each red transcript;
 each seeded-fault failure (OBL-1, OBL-2, OBL-3, OBL-4, OBL-5, OBL-6, OBL-7,
 OBL-8, OBL-9, OBL-10, OBL-11); and the OBL-5 construct counters.
+
+### Stage A baseline (2026-10-14)
+
+Candidate frozen at `0b2a366b2bd4749fe8688112b8070d3071219b59`;
+`git status --short` empty before the first gate and after every gate. Logs at
+`/tmp/$ACTION-netsuke-7-1-2-options-carrying-manifest-loader-entry-point.out`.
+Gates ran sequentially in the plan's order, under `scrutineer`'s exclusive
+ownership.
+
+| Gate                | Result | Evidence                                             |
+| ------------------- | ------ | ---------------------------------------------------- |
+| `make check-fmt`    | PASS   | ruff 250 files formatted; mdtablefix 183 unchanged   |
+| `make typecheck`    | PASS   | 0 errors, 1144 s                                     |
+| `make lint`         | PASS   | clippy, whitaker, ruff, pylint, yamllint, actionlint |
+| `make doc-coverage` | PASS   | aggregate 4988/5045, 98.87% ≥ 80%                    |
+| `make test`         | RED    | one nextest timeout at 300.012 s; doctest never ran  |
+| `make markdownlint` | PASS   | spelling clean; 0 issues in 183 files                |
+| `make nixie`        | PASS   | all diagrams validated                               |
+
+The red gate, in its own words:
+
+```plaintext
+     TIMEOUT [ 300.012s] (3913/3928) netsuke-build::command_env_ui_tests cli_configuration_fixture_compiles
+  Summary [ 481.703s] 3913/3928 tests run: 3912 passed (1 slow), 1 timed out, 6 skipped
+error: test run failed
+make: *** [Makefile:230: test-nextest] Error 100
+```
+
+This is load attribution, and the awaiting call is **inside** the test body:
+`tests/command_env_ui_tests.rs:86-94` spawns `cargo check` and awaits it with
+`.output()?`, so nextest's per-test clock covers the admission-queue wait. A
+wider allowance would cover the delay; what it cannot do is remove the
+contention. `Tolerances`' `Iterations` trigger does not apply, because there is
+no root cause in this candidate to fix, and `.config/nextest.toml` already
+documents this exact signature for this exact test and deliberately keeps the
+budget at five periods rather than "moving to an allowance the delay can still
+exceed". Four independent checks agree the branch cannot be the cause: the diff
+against `origin/main` is three Markdown files under `docs/`; a diff of the
+failing test, its nextest policy, `src/`, and `tests/` between `origin/main`
+and this head is empty; the gate log holds 60 compile-slot waits, 573
+sccache-unreachable notices and zero admission failures; and
+`build-limits-status` read `capacity 4, held 4, healthy, sccache unreachable`,
+with a foreign `build-limits-rustc` census of 61 to 80 processes across two
+probes around the gate (the pool is shared, so the figure moves second to
+second). Inside the same run, the sibling nested-Cargo fixture
+`build_module_slice_ui_tests::production_build_module_slice_has_expected_boundary`
+passed at 168.114 s, 132 s under the same cap, which measures the contention
+rather than arguing it from history.
+
+**Disposition: OPEN, re-run rather than repaired.** A red gate is not committed
+past; this one is re-run once, at a later milestone, when the host is quieter.
+If it then passes, this record stands as the explanation of the first red. The
+doctest half of `make test` is unverified by this baseline, not failed.
 
 ## Interfaces and dependencies
 
