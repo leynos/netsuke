@@ -98,7 +98,7 @@ Terms used throughout, defined here so that no prior reading is required.
   template helper (`src/manifest/env/reader.rs`). `ManifestEnvironment` bundles
   a reader with the `EnvAccessPolicy` evaluated before each read.
 - **Clock provider.** The closure type backing `now()`, owned by `StdlibConfig`
-  since roadmap 7.1.1 (`src/stdlib/time/clock.rs`).
+  since roadmap 7.1.1 (`src/stdlib/time/clock/mod.rs`).
 - **Query classification.** In `netsuke help targets`, a `when` expression that
   calls a disabled helper does not fail; `classify_query_evaluation`
   (`src/manifest/jinja_macros/mod.rs`) recognizes the query refusal and the
@@ -169,8 +169,8 @@ limits. Its order of work is:
 7. run `expand_foreach_with_budget`, which evaluates `foreach` and `when`
    against the raw value tree;
 8. notify `FinalRendering`; deserialize into `NetsukeManifest`; render string
-   fields (`src/manifest/render.rs`, whose `RenderMode::ManifestQuery` skips
-   command rendering); validate recipes.
+   fields (`src/manifest/render/mod.rs`, whose `RenderMode::ManifestQuery`
+   skips command rendering); validate recipes.
 
 The function body is about 68 lines; `clippy.toml` caps functions at 70 lines
 and cognitive complexity at 9, so it must be split before it grows.
@@ -261,7 +261,7 @@ them back into the design.
 
 | Path                                                                    | Change                                                                   |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `src/manifest/load_options.rs` (new)                                    | `ManifestLoadOptions`, `from_str_with_options`, host-helper registration |
+| `src/manifest/loader_options.rs` (new)                                  | `ManifestLoadOptions`, `from_str_with_options`, host-helper registration |
 | `src/manifest/test_surface.rs` (new)                                    | `TestSurface`, `TemplateOverlays`, `OverlayCallable`, `OverlayCall`      |
 | `src/manifest/mod.rs`                                                   | `StdlibRegistration::{AmbientFull, Test}`; split `evaluate_manifest`     |
 | `src/manifest/budget/adapter.rs`                                        | ask the registration whether to record telemetry                         |
@@ -269,11 +269,11 @@ them back into the design.
 | `src/manifest/query.rs`                                                 | `from_path_with_options`; `ManifestLoadMode` replaced by a factory       |
 | `src/manifest/jinja_macros/query_classification.rs` (new)               | classifier extracted and gated on query mode                             |
 | `src/manifest/jinja_macros/mod.rs`, `src/manifest/expand/*`             | pass the query-classification flag                                       |
-| `src/stdlib/restricted_helpers.rs` (new)                                | surface inventory, query and test refusing stubs                         |
+| `src/stdlib/restricted_helpers/mod.rs` (new)                            | surface inventory, query and test refusing stubs                         |
 | `src/stdlib/register.rs`, `src/stdlib/mod.rs`                           | delegate restricted registration; `register_for_test`                    |
-| `src/stdlib/time/clock.rs`                                              | re-document `WallClock::is_system` as a policy input                     |
+| `src/stdlib/time/clock/mod.rs`                                          | re-document `WallClock::is_system` as a policy input                     |
 | `src/localization/keys.rs`, `locales/*/messages.ftl`                    | two new keys                                                             |
-| `src/manifest/tests/*.rs`, `src/stdlib/restricted_helpers_tests.rs`     | unit, inventory, and internal differential tests                         |
+| `src/manifest/tests/*.rs`, `src/stdlib/restricted_helpers/tests.rs`     | unit, inventory, and internal differential tests                         |
 | `tests/manifest_load_options_tests.rs`, `tests/manifest_load_options/*` | public differential and property tests                                   |
 | `tests/features/manifest_load_options.feature`, `tests/bdd/…`           | behavioural scenarios, steps, and `TestWorld` slots                      |
 | `tests/ui/manifest_load_options_embedder_pass.rs`                       | compile-pass fixture pinning the public surface                          |
@@ -506,10 +506,10 @@ and YAML fixtures, and were set from the inventory in Table 1.
   §7's statement that MiniJinja "offers no such retrieval" is wrong for
   functions (filters and tests remain unlistable). Evidence:
   `minijinja-2.24.0/src/environment.rs` (`add_function`, `add_global`,
-  `globals`, `pub(crate) fn get_filter`), `src/value/mod.rs` (`Value::call`).
-  Impact: overlays receive the shadowed function now (spy passthrough), and the
-  surface inventory must be source-scanned rather than read from the
-  environment. EP-M5 corrects design §7.
+  `globals`, `pub(crate) fn get_filter`), `minijinja-2.24.0/src/value/mod.rs`
+  (`Value::call`). Impact: overlays receive the shadowed function now (spy
+  passthrough), and the surface inventory must be source-scanned rather than
+  read from the environment. EP-M5 corrects design §7.
 
 - Observation: a query refusal inside `when` does not drop an entry; it keeps
   it with `conditional: true`, and the classifier runs in every mode. Evidence:
@@ -527,7 +527,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
 
 - Observation: `WallClock::is_system` is documented as "recorded for
   diagnostics", and `with_clock(system_clock())` yields `is_system == false`.
-  Evidence: `src/stdlib/time/clock.rs`. Impact: test mode treats any clock
+  Evidence: `src/stdlib/time/clock/mod.rs`. Impact: test mode treats any clock
   supplied through `with_clock` as explicit injection (C4); the field's
   documentation is updated to say it is a policy input.
 
@@ -558,6 +558,33 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `Plan of work`, and `Concrete steps` were corrected to the post-migration
   names; the EP-M1 outcome now says "relocate the existing stub cluster", not
   "create it".
+
+- Observation: the same migration landed a layout contract, and **three of the
+  plan's new module paths violate it**. Evidence:
+  `tests/workflow_contracts/rust_module_layout_test.py` groups siblings by the
+  first `_`-separated token of the module name
+  (`module_name.partition("_")[0]`) and treats a directory as a module only
+  when it holds `mod.rs`; a group of two or more siblings is an
+  `unrecorded prefix group`, and `DISPARATE_PREFIX_EXCEPTIONS` is `{}`. Probed
+  against this tree with the contract's own functions:
+  `src/stdlib/register_query_snapshots.rs` forms `('stdlib', 'register')` with
+  `register.rs`; `src/stdlib/restricted_helpers.rs` plus
+  `restricted_helpers_tests.rs` forms `('stdlib', 'restricted')`; and
+  `src/manifest/load_options.rs` forms `('manifest', 'load')` with the
+  pre-existing `load_stage.rs`. Impact: the three paths were renamed to
+  `src/stdlib/register/refusal_snapshots.rs`,
+  `src/stdlib/restricted_helpers/{mod.rs,tests.rs}`, and
+  `src/manifest/loader_options.rs`; each was re-probed clean. The rename is a
+  placement decision, not a scope one: every artefact, row, and milestone keeps
+  its identity, and EP-M1's move of the snapshot rows into the new module is
+  unchanged. Three further citations named a module by its bare stem where the
+  module is a directory with a `mod.rs`, so they were corrected to the
+  `/mod.rs` form: `src/manifest/render/`, `src/manifest/tests/budget/`, and
+  `src/stdlib/time/clock/`. Two more were wrong for unrelated reasons:
+  `src/ninja_gen_property_tests/ninja_oracle.rs` is really
+  `src/ninja_gen/property_tests/ninja_oracle.rs` (the same migration), and
+  `src/value/mod.rs` is a path inside the `minijinja` crate, not this one, and
+  now says so.
 
 - Observation: **ADR-041 is already spent.** Evidence: `origin/main` publishes
   `docs/adr-041-canonical-recipe-shell-quoting-surface.md`, and a sweep of
@@ -879,7 +906,7 @@ through pipeline actions.
   the `register_legacy_boolean_formatter` call in
   `src/stdlib/register.rs::register_with_config`, and separately route
   `render_manifest_with_budget` through `RenderMode::ManifestQuery` in
-  `src/manifest/render.rs`; each must fail a named row. Revert both.
+  `src/manifest/render/mod.rs`; each must fail a named row. Revert both.
 
 - OBL-2 — mode decision table.
   Statement: for each registration (`AmbientFull`, `Full`, `ManifestQuery`,
@@ -888,10 +915,10 @@ through pipeline actions.
   "may carry overlays" are exactly as in `Decision log`. Method: exhaustive
   `rstest` table over the four variants. Rationale: finite and small; the table
   is exhaustive, so bounded model checking would add nothing. Artefact:
-  `src/manifest/tests/load_options.rs`. Evidence: red (compile failure) before
-  EP-M2; green after. Non-vacuity: every row asserts all six outputs; swapping
-  the `Test` and `Full` arms of `records_expansion_and_budget_telemetry` fails
-  two rows.
+  `src/manifest/tests/loader_options.rs`. Evidence: red (compile failure)
+  before EP-M2; green after. Non-vacuity: every row asserts all six outputs;
+  swapping the `Test` and `Full` arms of
+  `records_expansion_and_budget_telemetry` fails two rows.
 
 - OBL-3 — surface inventory completeness.
   Statement: every helper name registered anywhere under `src/stdlib/` appears
@@ -904,7 +931,7 @@ through pipeline actions.
   `SURFACE`; plus an `rstest` probe per inventory row loading a one-line
   manifest through `from_str_with_options` in test mode. Rationale: MiniJinja
   cannot list filters or tests, so the source is the only complete witness.
-  Artefact: `src/stdlib/restricted_helpers_tests.rs`. Evidence: red before
+  Artefact: `src/stdlib/restricted_helpers/tests.rs`. Evidence: red before
   EP-M3; green after. Non-vacuity: add a scratch `env.add_filter("scratch", …)`
   to `src/stdlib/collections` and confirm the scan fails naming it; delete the
   `digest` stub and confirm its probe fails with `UnknownFilter`. Revert both.
@@ -919,7 +946,7 @@ through pipeline actions.
   snapshot of the en-US text for one helper using the `en_localizer` fixture and
   `normalize_fluent_isolates`; one row under a non-en-US locale asserting the
   code; one behavioural scenario. Artefact:
-  `src/stdlib/restricted_helpers_tests.rs`, `src/manifest/tests/test_mode.rs`,
+  `src/stdlib/restricted_helpers/tests.rs`, `src/manifest/tests/test_mode.rs`,
   `tests/features/manifest_load_options.feature`. Evidence: red before EP-M3;
   green after. Non-vacuity: seeded faults — (a) build the test stub with the
   query marker text and remove the query-only gate: the `when` row must fail
@@ -933,7 +960,7 @@ through pipeline actions.
   `GraphView` projection), and the Ninja text from `Full` equal those from
   `Test`. Method: `proptest` via a manually driven `TestRunner` with
   `ProptestConfig { cases: 128, .. }`, as in
-  `src/ninja_gen_property_tests/ninja_oracle.rs`, over a grammar valid by
+  `src/ninja_gen/property_tests/ninja_oracle.rs`, over a grammar valid by
   construction: one to four targets, optional `vars`, one optional macro,
   `foreach` over literal lists of up to three strings, `when` comparisons,
   Boolean interpolation, lexical path filters, collection filters, `timedelta`,
@@ -992,9 +1019,9 @@ through pipeline actions.
   row per helper), written with a fixed `set_snapshot_path` so EP-M1's move
   does not rename them, plus the existing `tests/runner_help_targets_tests.rs`
   and `tests/features/help_targets.feature`. Artefact: EP-M0 places the rows in
-  `src/stdlib/register_query_snapshots.rs` (a `#[path]` test child of
+  `src/stdlib/register/refusal_snapshots.rs` (a `#[path]` test child of
   `register.rs`); EP-M1 moves them unchanged into
-  `src/stdlib/restricted_helpers_tests.rs`. Evidence: green at EP-M0 and under
+  `src/stdlib/restricted_helpers/tests.rs`. Evidence: green at EP-M0 and under
   C12 afterwards. Non-vacuity: change one character of the query marker; the
   rows must fail.
 
@@ -1024,9 +1051,9 @@ through pipeline actions.
   Non-vacuity: the fixture exercises every public constructor and accessor.
 
 Telemetry wiring: `src/manifest/tests/expansion_telemetry.rs` and
-`src/manifest/tests/budget.rs` already observe the full and query paths; EP-M3
-adds one `DebuggingRecorder` row showing a test load emits no expansion or
-budget metric.
+`src/manifest/tests/budget/mod.rs` already observe the full and query paths;
+EP-M3 adds one `DebuggingRecorder` row showing a test load emits no expansion
+or budget metric.
 
 ### Methods deliberately not used
 
@@ -1162,15 +1189,15 @@ applicable fixtures, snapshotting canonical JSON or the error chain with the
 insta settings from OBL-1. Path entries copy fixtures into a `tempfile`
 directory. Add the crate-internal query rows in
 `src/manifest/tests/wrapper_equivalence.rs` and the query-refusal rows in
-`src/stdlib/register_query_snapshots.rs`. Review every new snapshot by reading
-it, then accept it with `cargo insta accept`; this is the only acceptance the
-characterization snapshots ever receive.
+`src/stdlib/register/refusal_snapshots.rs`. Review every new snapshot by
+reading it, then accept it with `cargo insta accept`; this is the only
+acceptance the characterization snapshots ever receive.
 
 ### Stage C — implementation (EP-M1 to EP-M4)
 
 EP-M1. Move the query stubs, `manifest_query_operation_error`,
 `is_manifest_query_disabled_error`, and the marker from
-`src/stdlib/register.rs` to `src/stdlib/restricted_helpers.rs`. Introduce
+`src/stdlib/register.rs` to `src/stdlib/restricted_helpers/mod.rs`. Introduce
 `const SURFACE: &[HelperEntry]` (name, kind — function, filter, or test — and
 dispositions for query and test) and a private
 `enum RestrictedSurface { ManifestQuery }` whose stub registration iterates
@@ -1180,12 +1207,13 @@ dispositions for query and test) and a private
 `classify_query_evaluation` and `QueryEvaluation` to
 `src/manifest/jinja_macros/query_classification.rs`.
 
-EP-M2. Red: add `src/manifest/tests/load_options.rs` (OBL-2 rows for the three
-existing modes), the `from_str_with_options` doctest, and the OBL-12 fixture;
-observe compile failures. Green: create `src/manifest/load_options.rs` with
-`ManifestLoadOptions`, its constructors and builders, `from_str_with_options`,
-and `register_host_helpers(env, registration, environment, manifest_root)`,
-which registers `env()` and `glob()` per C5. Rename the private
+EP-M2. Red: add `src/manifest/tests/loader_options.rs` (OBL-2 rows for the
+three existing modes), the `from_str_with_options` doctest, and the OBL-12
+fixture; observe compile failures. Green: create
+`src/manifest/loader_options.rs` with `ManifestLoadOptions`, its constructors
+and builders, `from_str_with_options`, and
+`register_host_helpers(env, registration, environment, manifest_root)`, which
+registers `env()` and `glob()` per C5. Rename the private
 `StdlibRegistration::None`-equivalent to `AmbientFull` and add the query
 methods. Remove `env`/`glob` from `RestrictedSurface::ManifestQuery`. Change
 `ManifestParse` to hold `name`, `manifest_root`, and a `ManifestLoadOptions`.
@@ -1203,9 +1231,9 @@ observe failures. Green: add `TestSurface` (config and optional reader) and
 `StdlibRegistration::Test(Box<TestSurface>)`; add `TestModeRefusal` and
 `RestrictedSurface::Test`, whose stubs take `Rest<Value>` so any call shape
 reaches the refusal; add `pub(crate) fn register_for_test(env, config)` in
-`src/stdlib/restricted_helpers.rs` installing the Boolean formatter, the pure
-helpers, `now()` when `!config.clock().is_system()`, and the test stubs from
-`SURFACE`. Update `WallClock::is_system`'s documentation. Add
+`src/stdlib/restricted_helpers/mod.rs` installing the Boolean formatter, the
+pure helpers, `now()` when `!config.clock().is_system()`, and the test stubs
+from `SURFACE`. Update `WallClock::is_system`'s documentation. Add
 `STDLIB_TEST_MODE_HELPER_UNAVAILABLE` to `src/localization/keys.rs` and the
 message to all 35 catalogues in the same commit, following the translators'
 guide (keep `netsuke test`, helper names, and the bracketed code untranslated;
@@ -1488,7 +1516,7 @@ Crate-internal additions: the `StdlibRegistration` variants `AmbientFull` and
 `Test(Box<TestSurface>)` and its methods
 `records_expansion_and_budget_telemetry` and `classifies_query_refusals`;
 `ManifestLoadOptions::{ambient, manifest_query}`;
-`query::from_path_with_options`; `load_options::register_host_helpers`;
+`query::from_path_with_options`; `loader_options::register_host_helpers`;
 `restricted_helpers::{SURFACE, RestrictedSurface, register_for_test, TestModeRefusal}`;
 `jinja_macros::query_classification`; and the Fluent keys
 `stdlib.test_mode.helper_unavailable` and `manifest.overlay.name_collision`.
