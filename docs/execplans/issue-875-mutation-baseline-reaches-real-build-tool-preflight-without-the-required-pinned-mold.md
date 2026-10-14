@@ -6,7 +6,14 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
+
+All four milestones are closed and draft pull request #911 carries the work.
+The status describes this plan, not the issue: one of the issue's four
+acceptance criteria — that required linker selection remains intact — is unmet
+under its strict reading and is **recorded as an upstream gap rather than
+resolved**, because the fix needs a `rustflags` input on the shared reusable
+workflow that no revision of it declares. See *Outcomes & retrospective*.
 
 ## Purpose / big picture
 
@@ -889,10 +896,13 @@ Every stopping point is documented here. Timestamps are UTC.
   three workflows (`CI` `38492475380`, `Netsukefile Build Test` `38492475298`,
   `Release Dry Run` `38492475387`).
 
-  The PR body's CI section is deliberately held at `52084776`: `009cbf02`'s run
-  set was still `in_progress` when the section was last edited, and a
-  conclusion is not carried across a push. Folding `009cbf02` into the body is
-  the last editing step before the draft flag clears.
+  The PR body's CI section is deliberately written as an invariant rather than
+  as a claim about one head: `009cbf02`'s run set was still `in_progress` when
+  the section was last edited, and a conclusion is not carried across a push.
+  The body therefore names the last *concluded* run set and states that every
+  later head is docs-only on top of the green `52084776`, rather than saying
+  "the current head" — a phrase written once and falsified by the next push
+  within a single turn.
 - [x] (2026-10-14 05:20Z) **`df475f2e` is gated, and the plan stops editing
   itself here.** `df475f2e` records the `009cbf02` entry above and passes the
   same byte-identity test: `git diff --name-only 52084776 df475f2e` names this
@@ -930,13 +940,18 @@ Every stopping point is documented here. Timestamps are UTC.
   so the Rust-bearing gates' green result carries) and names the last
   *concluded* run set rather than saying "the current head" — a phrase that was
   written once and falsified by the next push within a single turn.
-- [ ] Milestone 4: ExecPlan finalized, `coderabbit review --agent` clean, CI
-  green, PR marked ready. **`coderabbit review --agent` cannot be reported
-  clean while the fourth acceptance criterion is unmet:** every pass re-raises
-  the mold-selection finding as `major`, correctly, and four probes have
-  confirmed the underlying condition rather than resolved it. Milestone 4 is
-  therefore gated on CI green and on the pull request stating the unmet
-  criterion, not on a zero-finding review.
+- [x] Milestone 4: ExecPlan finalized, `coderabbit review --agent` passes
+  dispositioned, CI green, draft pull request open.
+  **`coderabbit review --agent` cannot be reported clean while the fourth
+  acceptance criterion is unmet:** every pass re-raises the mold-selection
+  finding as `major`, correctly, and four probes have confirmed the underlying
+  condition rather than resolved it. Milestone 4 is therefore discharged by CI
+  green plus a dispositioned review and a pull request stating the unmet
+  criterion, not by a zero-finding review — which is what the seven passes
+  delivered: five prose defects fixed, two load-bearing findings dispositioned
+  as recorded gaps. **The pull request stays a draft**, as instructed; "marked
+  ready" appeared in an earlier version of this line and was the plan
+  overreaching its brief.
 
   **The PR-description half is done.** PR #911's body now carries a section
   headed "One acceptance criterion is unmet, and it is recorded rather than
@@ -965,23 +980,30 @@ Every stopping point is documented here. Timestamps are UTC.
   CodeRabbit passes were bound to, so CI and the local evidence describe the
   same bytes.
 
-  **And green on `009cbf02`**, the head the draft flag will be cleared on: `CI`
-  `38492475380`, `Netsukefile Build Test` `38492475298`, `Release Dry Run`
-  `38492475387`, each `completed success`. `009cbf02` differs from the
-  eight-gate revision `52084776` by exactly one file, the ExecPlan this
-  document is, and its non-Markdown tree is byte-identical to it, so the
-  Rust-bearing gates were not re-run against it while the Markdown-sensitive
-  gates and `test-workflow-contracts` were. `make check-fmt`,
-  `make markdownlint` (which runs `spelling` as its prerequisite), `make nixie`
-  and `make test-workflow-contracts` each exit 0, with the revision hash read
-  immediately before the first gate and immediately after the last and
-  identical both times. The four Rust-bearing gates (`test`, `lint`,
-  `typecheck`, `doc-coverage`) are covered by their green result on `52084776`,
-  whose non-Markdown tree is byte-identical.
+  **And green on `009cbf02`**: `CI` `38492475380`, `Netsukefile Build Test`
+  `38492475298`, `Release Dry Run` `38492475387`, each `completed success`.
+  `009cbf02` differs from the eight-gate revision `52084776` by exactly one
+  file, the ExecPlan this document is, and its non-Markdown tree is
+  byte-identical to it, so the Rust-bearing gates were not re-run against it
+  while the Markdown-sensitive gates and `test-workflow-contracts` were.
+  `make check-fmt`, `make markdownlint` (which runs `spelling` as its
+  prerequisite), `make nixie` and `make test-workflow-contracts` each exit 0,
+  with the revision hash read immediately before the first gate and immediately
+  after the last and identical both times. The four Rust-bearing gates (`test`,
+  `lint`, `typecheck`, `doc-coverage`) are covered by their green result on
+  `52084776`, whose non-Markdown tree is byte-identical.
 
-  The remaining gate is clearing the draft flag, which itself suppresses
-  CodeRabbit's GitHub review
-  (`success CodeRabbit Review skipped: draft pull request`).
+  **There is no remaining gate: a draft pull request is the instructed end
+  state, not a step on the way to a ready one.** This entry previously said the
+  remaining gate was "clearing the draft flag". That was wrong, and it is
+  corrected here rather than delivered: the request that opened this work asked
+  for a draft pull request, and nothing in it asks for one marked ready.
+  Clearing the flag would also contradict what this plan itself records — the
+  fourth acceptance criterion is unmet, and a ready-for-review pull request is
+  a merge signal. CodeRabbit's GitHub-side review is suppressed on a draft
+  (`success CodeRabbit Review skipped: draft pull request`), which is why the
+  review evidence on this branch comes from seven foregrounded
+  `coderabbit review --agent` passes rather than from the app's own check.
 
 ## Surprises & discoveries
 
@@ -1447,12 +1469,13 @@ therefore an environment condition, not a property of the change. The two jobs
 that were red on `172dd4ff` (`build-test` and `Windows / lint-windows`) were
 confirmed repaired at `d8e03753`; because every commit after that one touches
 Markdown only, their re-run is a formality, and the standing requirement is
-that CI be green on the final head before the pull request leaves draft.
-CodeRabbit has run seven passes over this branch. Five findings were prose or
-evidence defects and were fixed — first-person pronouns in this plan, a
-flag-precedence claim stated inaccurately, a reproduction recipe that could not
-work, an acceptance line demanding evidence that was never obtainable, and a
-conformance check naming `.github/actions/...` where the caller pins
+that CI be green on every head, including the draft pull request's final one.
+That requirement is met on the freeze head `8c0490eb`. CodeRabbit has run seven
+passes over this branch. Five findings were prose or evidence defects and were
+fixed — first-person pronouns in this plan, a flag-precedence claim stated
+inaccurately, a reproduction recipe that could not work, an acceptance line
+demanding evidence that was never obtainable, and a conformance check naming
+`.github/actions/...` where the caller pins
 `.github/workflows/mutation-cargo.yml`. Two were load-bearing and both stand as
 recorded gaps: the mold-selection finding, raised on every pass that finds
 anything, which is confirmed as diagnosed and confirmed as not actionable from
@@ -1973,6 +1996,15 @@ not required.
 Revisions, 2026-10-14. Recorded the seven-pass CodeRabbit tally and the 0-and-2
 sampling measurement over the frozen revision `52084776`; fixed the M2
 conformance check to name the caller's real `uses:` target; and extended the
-CI-green record to `009cbf02`, the head the draft flag clears on, whose only
-delta from the fully-gated `52084776` is this document and which is therefore
-gated by the three Markdown-sensitive gates plus `test-workflow-contracts`.
+CI-green record to `009cbf02`, whose only delta from the fully-gated `52084776`
+is this document and which is therefore gated by the three Markdown-sensitive
+gates plus `test-workflow-contracts`.
+
+Revisions, 2026-10-14 (final). Consolidated the plan onto its instructed end
+state. Milestone 4 is closed: the draft pull request #911 is the deliverable,
+CI is green on the freeze head `8c0490eb`, and the review outcome is a
+disposition per finding rather than a clean count. Corrected a Milestone 4 line
+that named "PR marked ready" as a gate — the brief asked for a *draft* pull
+request, and a ready one would contradict this plan's own recorded gap — and
+the three sentences elsewhere that had inherited the same assumption. The plan
+stops editing itself at the commit carrying this note.
