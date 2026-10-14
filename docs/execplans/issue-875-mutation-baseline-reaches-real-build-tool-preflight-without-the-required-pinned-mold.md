@@ -893,6 +893,43 @@ Every stopping point is documented here. Timestamps are UTC.
   set was still `in_progress` when the section was last edited, and a
   conclusion is not carried across a push. Folding `009cbf02` into the body is
   the last editing step before the draft flag clears.
+- [x] (2026-10-14 05:20Z) **`df475f2e` is gated, and the plan stops editing
+  itself here.** `df475f2e` records the `009cbf02` entry above and passes the
+  same byte-identity test: `git diff --name-only 52084776 df475f2e` names this
+  document alone and the same diff excluding `*.md` is empty. The four non-Rust
+  gates were re-run against it and all exit 0 — `check-fmt` 2 s, `markdownlint`
+  30 s (with `spelling` inside it), `nixie` 2 s and `test-workflow-contracts`
+  109 s reporting `1266 passed, 3 skipped` plus `27 passed` — with the revision
+  hash read before the first gate and after the last and identical at both
+  points, and `git status --porcelain` empty at both.
+
+  **The commit that carries this entry is the freeze head, and its gate
+  evidence belongs in the pull request description rather than in this
+  document.** The reason is a regress that this entry exists to stop: editing
+  the document produces a new head, and a new head needs its own gate run to
+  record, which edits the document again. The terminating move is to put the
+  remaining evidence on a surface that does not move the revision. So this
+  entry is the last plan edit unless a review finding requires one, and the
+  freeze head's gate logs are cited by path from the PR description, with the
+  logs themselves under `/tmp`.
+
+  **Two citation errors were made in the `009cbf02` version of the entry above
+  and fixed in the `df475f2e` commit.** That version cited "the delta rule in
+  *Constraints*" for the narrowing; no such rule exists in *Constraints*, whose
+  entries are all scope and invariant constraints. The real basis is the
+  byte-identity test the `3d761c8d` entry states, and the entry above now names
+  that test instead. It also called the Markdown-sensitive set "four gates";
+  there are **three** (`check-fmt`, `markdownlint`, `nixie`) plus
+  `test-workflow-contracts`, which is its own target rather than
+  Markdown-sensitive. Both are prose defects of the kind the plan's *Surprises
+  & discoveries* entry describes — a number or a provenance written from memory
+  rather than read from the artefact — and neither changes a verdict.
+
+  **The PR body is written to survive the head advancing.** It states the
+  invariant (the non-Markdown tree is byte-identical to the green `52084776`,
+  so the Rust-bearing gates' green result carries) and names the last
+  *concluded* run set rather than saying "the current head" — a phrase that was
+  written once and falsified by the next push within a single turn.
 - [ ] Milestone 4: ExecPlan finalized, `coderabbit review --agent` clean, CI
   green, PR marked ready. **`coderabbit review --agent` cannot be reported
   clean while the fourth acceptance criterion is unmet:** every pass re-raises
