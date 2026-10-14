@@ -575,10 +575,10 @@ its relative stream paths from the same normalized directory.
 
 Two consequences follow from the lifetime rules above:
 
-- a relative stream path under a stage-scoped `cwd: { tempdir: {} }` resolves
-  inside the secure temporary directory, which is removed when the stage
-  finishes. Such a path must be treated as scratch data, because the file is
-  deleted with the directory; and
+- a relative stream path under an unnamed `cwd: { tempdir: {} }` resolves
+  inside the secure temporary directory, which is removed when the enclosing
+  execution unit finishes. Such a path must be treated as scratch data, because
+  the file is deleted with the directory; and
 - a relative stream path under a named sequence-scoped tempdir resolves inside
   that directory and therefore disappears when the sequence finishes, for the
   same reason.
@@ -685,15 +685,15 @@ to later units, and stores nothing in the action plan.
 
 The two facilities may appear on one block, and they then behave as follows:
 
-| Aspect                    | `temp_dir: true`                        | `cwd: { tempdir: ... }`                        |
-| ------------------------- | --------------------------------------- | ---------------------------------------------- |
-| Process working directory | unchanged                               | set to the secure temporary directory          |
-| Conventional variables    | bound to the stage-private directory    | not rewritten                                  |
-| Child-visible environment | `TMPDIR`, `TMP`, `TEMP` only            | the named binding, when `env` is present       |
-| Visible to later units    | never                                   | only when `env` is present                     |
-| Lifetime                  | one stage, including its relays         | one stage, or one complete sequence when named |
-| Serialized in the plan    | no generated path                       | binding name and lifecycle scope, no path      |
-| Directory relationship    | outside the workspace unless configured | outside the workspace by design                |
+| Aspect                    | `temp_dir: true`                        | `cwd: { tempdir: ... }`                                 |
+| ------------------------- | --------------------------------------- | ------------------------------------------------------- |
+| Process working directory | unchanged                               | set to the secure temporary directory                   |
+| Conventional variables    | bound to the stage-private directory    | not rewritten                                           |
+| Child-visible environment | `TMPDIR`, `TMP`, `TEMP` only            | the named binding, when `env` is present                |
+| Visible to later units    | never                                   | only when `env` is present                              |
+| Lifetime                  | one stage, including its relays         | one execution unit, or one complete sequence when named |
+| Serialized in the plan    | no generated path                       | binding name and lifecycle scope, no path               |
+| Directory relationship    | outside the workspace unless configured | outside the workspace by design                         |
 
 _Table 3: Combined temporary-directory behaviour._
 

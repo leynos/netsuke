@@ -9308,15 +9308,20 @@ is the figure the ordering below is written against, not the 300 s most tests
 get.
 
 The second of those is scoped to one test deliberately, and the distinction is
-about where the cost falls rather than about how slow the two look. Their
+about what a budget can buy rather than about how slow the two look. Their
 sibling `cli_configuration_fixture_compiles` spawns a nested Cargo build too
 and shares the same `test-group`, but its child `cargo check` runs in the same
 four-slot compiler-admission pool as every other build on the host, so its wall
-clock is the queue's to decide and not a budget's to bound: it has finished in
-171.4 s on a quiet run and been terminated at the 300 s cap on a contended one,
-with the sccache server unreachable and every slot held by peer worktrees. A
-wider allowance cannot reach a cost incurred before the compiler starts.
-Sharing a serialization group is a statement about resource contention, not
+clock is decided by the queue rather than by the build. The child is awaited
+with `.output()` inside the test body, so that wait counts towards the test's
+allowance and a wider budget would cover it; a wider budget would not remove
+the contention that produces it. What makes covering it unreliable is the
+spread: the same test has finished in 171.4 s on a quiet run, been terminated
+at the 300 s cap on a contended one with the sccache server unreachable and
+every slot held by peer worktrees, and measured 709.2 s inside the test body on
+a cold per-run tree. The ordering caps an allowance at 720 s, which is roughly
+11 s above that measured cost, so widening would buy a margin too thin to rely
+on. Sharing a serialization group is a statement about resource contention, not
 about budget; the two were briefly treated as one case and are not one.
 
 Those overrides are the targeted, written-rationale case

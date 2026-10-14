@@ -847,9 +847,12 @@ the runner's bounded result and diagnostics until the unit completes; they are
 then discarded and cannot be consumed by a later unit.
 
 `capture_stdout` is an ephemeral sink. It creates no binding, is never visible
-to a later execution unit, and is not serialized into the action plan. A
-manifest that needs a value to outlive its producer uses the named
-`stdout: { env: NAME }` form defined by
+to a later execution unit, and is not serialized into the action plan. It is
+the captured bytes that are excluded, not the facility: the declared byte limit
+is stored in the plan, because the action runner reads its configuration from
+the plan it is handed and could not enforce a bound it cannot see. What the
+plan never carries is the captured content. A manifest that needs a value to
+outlive its producer uses the named `stdout: { env: NAME }` form defined by
 [RFC 0010](0010-runtime-bindings-and-secure-tempdirs.md) section 6.1, which
 commits a sequence-local runtime binding. The two forms are different
 facilities with different lifetimes, and a stage selects at most one of them.
@@ -1293,15 +1296,15 @@ Action-plan lifetime depends on how the Ninja manifest was produced:
   ends, with bounded stale-file cleanup after abnormal termination.
 - For `netsuke generate --output <manifest>`, generation does not launch Ninja,
   so a temporary plan cannot be removed when generation exits. Netsuke instead
-  publishes each plan as a private sidecar associated with the generated output
-  and records the association in a versioned manifest-local index. Publication
-  is atomic: acquire an exclusive lease for the output, write and validate the
-  new sidecar, then atomically replace the index that names the complete
-  sidecar set. The sidecar remains available for later Ninja invocations and is
-  protected by the same owner-only permissions. Replacing or deleting the
-  generated output releases its lease and removes its associated sidecars;
-  bounded stale-sidecar cleanup handles interrupted publication and abandoned
-  leases without scanning unbounded paths.
+  publishes each plan as a private sidecar in a dedicated sidecar directory
+  associated with the generated output, and records the association in a
+  versioned manifest-local index. Publication is atomic: acquire an exclusive
+  lease for the output, write and validate the new sidecar, then atomically
+  replace the index that names the complete sidecar set. The sidecar remains
+  available for later Ninja invocations and is protected by the same owner-only
+  permissions. Replacing or deleting the generated output releases its lease
+  and removes its associated sidecars; bounded stale-sidecar cleanup handles
+  interrupted publication and abandoned leases without scanning unbounded paths.
 
 The generated-output association must not allow a manifest or action identifier
 to select a plan outside its private sidecar set. A later `netsuke generate`
@@ -1314,12 +1317,22 @@ Stale-plan cleanup is bounded in both arms:
   exclusive lease is no longer held, but only within the private temporary
   directory Netsuke created for that build. It does not scan an arbitrary
   directory, and it never removes a plan whose lease is still held.
-- **Persistent sidecars.** Cleanup follows the recorded manifest-local index
-  rather than walking the filesystem. A sidecar named by the current index, or
-  protected by a live lease, is retained; an interrupted publication leaves the
-  previous complete association usable, as above. An abandoned lease is
-  reclaimed only through the index and only after the lease's recorded owner
-  can no longer be running.
+- **Persistent sidecars.** Cleanup enumerates the output's private sidecar
+  directory, which holds the complete sidecar set for one generated output and
+  nothing else. That directory is the bounded root, and the recorded
+  manifest-local index decides which members are live rather than which are
+  visible: a sidecar named by the current index, or protected by a live lease,
+  is retained, and every other member of the directory is a publication orphan.
+  The index alone cannot serve as the enumeration set, because interrupted
+  publication is exactly the case that leaves a member outside it. A new
+  sidecar written before the index replacement is absent from the current
+  index, and a superseded sidecar from the previous set is absent from the
+  replacing one, so neither is discoverable by following the index and both are
+  discoverable within the directory. Cleanup still does not walk the
+  filesystem, because the directory is reached by name rather than by search.
+  An interrupted publication leaves the previous complete association usable,
+  as above, and an abandoned lease is reclaimed only after the lease's recorded
+  owner can no longer be running.
 
 A cleanup pass therefore touches a bounded, enumerable set of paths and fails
 closed: when it cannot establish that a plan is unreferenced and unleased, it

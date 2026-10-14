@@ -57,11 +57,17 @@ success-output = "immediate"
 # This test keeps the profile's own five periods, and deliberately so. Its
 # child `cargo check` runs in the same four-slot compiler-admission pool as
 # every other build on the host, so its wall clock is the queue's to decide
-# rather than the test's: it has finished in 171.4 s on a quiet run and been
-# terminated at the 300 s cap on a contended one, with 3,484 "sccache server
-# is unreachable" lines in that gate's log and every slot held by peer
-# worktrees. A wider allowance cannot reach a cost incurred before the
-# compiler starts, so this budget stays where the ordering below bounds it.
+# rather than the test's. That wait falls inside the running test, because the
+# child is awaited with `.output()` in the test body, so it counts towards this
+# allowance: a wider budget would cover the delay, and would not remove the
+# contention that causes it. The spread is what makes covering it unreliable.
+# The same test has finished in 171.4 s on a quiet run, been terminated at the
+# 300 s cap on a contended one with 3,484 "sccache server is unreachable" lines
+# in that gate's log and every slot held by peer worktrees, and measured 709.2 s
+# inside the test body on a cold per-run tree. The ordering below admits at most
+# 720 s at 60 s periods, so widening to the largest allowance the file may hold
+# would leave about 11 s against that measured cost. This budget stays at five
+# periods rather than moving to an allowance the delay can still exceed.
 
 [[profile.default.overrides]]
 # `cargo publish --dry-run` builds into a fresh target directory and measured
