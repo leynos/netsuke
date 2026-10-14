@@ -873,6 +873,26 @@ Every stopping point is documented here. Timestamps are UTC.
   revision, reviewed twice, produced 0 and 2 findings. Any claim that this
   branch "reviewed clean" holds only for a particular sample, which is why the
   plan states the disposition of each finding rather than a count.
+- [x] (2026-10-14 04:20Z) **The docs-only delta on `009cbf02` is gated and CI is
+  green there.** `009cbf02` changes one file against the fully-gated
+  `52084776` — this ExecPlan — and the non-Markdown source is byte-identical:
+  `git diff --name-only 52084776 009cbf02 -- . ':(exclude)*.md'` prints
+  nothing, the same identity test the `3d761c8d` entry uses. The four non-Rust
+  gates — the three Markdown-sensitive ones, `check-fmt`, `markdownlint` and
+  `nixie`, plus `test-workflow-contracts` — were therefore re-run in place of
+  the full set, and the Rust-bearing four were not. All four non-Rust gates
+  exit 0, with `test-workflow-contracts` reporting `1266 passed, 3 skipped` in
+  `tests/workflow_contracts` plus `27 passed` in the scripts suite — a complete
+  run rather than the previously aborted one. The revision hash was read before
+  the first gate and after the last and is unchanged, so the gates describe the
+  committed bytes and not a dirty tree. CI on `009cbf02` is green across all
+  three workflows (`CI` `38492475380`, `Netsukefile Build Test` `38492475298`,
+  `Release Dry Run` `38492475387`).
+
+  The PR body's CI section is deliberately held at `52084776`: `009cbf02`'s run
+  set was still `in_progress` when the section was last edited, and a
+  conclusion is not carried across a push. Folding `009cbf02` into the body is
+  the last editing step before the draft flag clears.
 - [ ] Milestone 4: ExecPlan finalized, `coderabbit review --agent` clean, CI
   green, PR marked ready. **`coderabbit review --agent` cannot be reported
   clean while the fourth acceptance criterion is unmet:** every pass re-raises
@@ -907,6 +927,20 @@ Every stopping point is documented here. Timestamps are UTC.
   `completed success`. This is the revision the eight-gate run and both
   CodeRabbit passes were bound to, so CI and the local evidence describe the
   same bytes.
+
+  **And green on `009cbf02`**, the head the draft flag will be cleared on: `CI`
+  `38492475380`, `Netsukefile Build Test` `38492475298`, `Release Dry Run`
+  `38492475387`, each `completed success`. `009cbf02` differs from the
+  eight-gate revision `52084776` by exactly one file, the ExecPlan this
+  document is, and its non-Markdown tree is byte-identical to it, so the
+  Rust-bearing gates were not re-run against it while the Markdown-sensitive
+  gates and `test-workflow-contracts` were. `make check-fmt`,
+  `make markdownlint` (which runs `spelling` as its prerequisite), `make nixie`
+  and `make test-workflow-contracts` each exit 0, with the revision hash read
+  immediately before the first gate and immediately after the last and
+  identical both times. The four Rust-bearing gates (`test`, `lint`,
+  `typecheck`, `doc-coverage`) are covered by their green result on `52084776`,
+  whose non-Markdown tree is byte-identical.
 
   The remaining gate is clearing the draft flag, which itself suppresses
   CodeRabbit's GitHub review
@@ -1898,3 +1932,10 @@ spell-check. The first dispatched mutation run of this revision reused the
 existing shared-workflow pin: the pinned revision already declares both
 `install-mold` and `setup-commands`, so the issue's conditional pin bump was
 not required.
+
+Revisions, 2026-10-14. Recorded the seven-pass CodeRabbit tally and the 0-and-2
+sampling measurement over the frozen revision `52084776`; fixed the M2
+conformance check to name the caller's real `uses:` target; and extended the
+CI-green record to `009cbf02`, the head the draft flag clears on, whose only
+delta from the fully-gated `52084776` is this document and which is therefore
+gated by the three Markdown-sensitive gates plus `test-workflow-contracts`.
