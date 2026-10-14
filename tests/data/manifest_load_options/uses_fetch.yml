@@ -1,0 +1,16 @@
+# `fetch()` against a scheme the default policy refuses.
+#
+# `NetworkPolicy::default()` is `https_only()`, and `NetworkPolicy::evaluate`
+# checks the scheme allowlist before it does anything else, so this fixture
+# fails with `SchemeNotAllowed` without opening a socket. That is deliberate:
+# the wrapper-equivalence rows load it on every entry that reaches the build
+# surface, and a fixture that actually performed a request would put a network
+# dependency inside a characterization test.
+#
+# The `http://` scheme is therefore load-bearing, not an oversight. Changing it
+# to `https://` would make this fixture reach the network.
+netsuke_version: "1.0.0"
+targets:
+  - name: fetched
+    description: "{{ fetch('http://127.0.0.1:1/toolchain.json') }}"
+    command: "echo fetched"

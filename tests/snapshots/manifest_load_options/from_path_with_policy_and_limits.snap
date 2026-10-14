@@ -1,0 +1,15 @@
+---
+source: tests/manifest_load_options/wrapper_equivalence.rs
+expression: document
+---
+=== pure ===
+invalid operation: Manifest resource budget exhausted during ⁨source⁩ after reaching ⁨8⁩.: manifest resource budget exhausted at Source (limit 8)
+
+=== malformed_yaml ===
+invalid operation: Manifest resource budget exhausted during ⁨source⁩ after reaching ⁨8⁩.: manifest resource budget exhausted at Source (limit 8)
+
+=== boolean_interpolation ===
+invalid operation: Manifest resource budget exhausted during ⁨source⁩ after reaching ⁨8⁩.: manifest resource budget exhausted at Source (limit 8)
+
+=== glob_corpus ===
+invalid operation: Manifest resource budget exhausted during ⁨source⁩ after reaching ⁨8⁩.: manifest resource budget exhausted at Source (limit 8)

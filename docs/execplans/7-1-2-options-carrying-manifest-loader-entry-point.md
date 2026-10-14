@@ -466,7 +466,19 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `scrutineer` against the untouched branch at `0b2a366b`. Six gates pass;
   `make test` is red from compiler-admission contention, not from this
   candidate. See `Artefacts and notes`.
-- [ ] EP-M0 — characterization baseline.
+- [x] (2026-10-15) EP-M0 — characterization baseline. Seven new fixtures under
+  `tests/data/manifest_load_options/` (the four planned plus three recorded as
+  a deviation), plus the reused `tests/data/glob.yml`; the public suite
+  (`tests/manifest_load_options_tests.rs`, `tests/manifest_load_options/`) with
+  12 rows over the nine public entry points; the crate-internal rows in
+  `src/manifest/tests/wrapper_equivalence.rs` and
+  `src/stdlib/register/refusal_snapshots.rs`. Every snapshot reviewed by
+  reading before acceptance. No production file changed: the one source edit
+  outside tests is `stable_snapshot_settings` in
+  `src/snapshot_test_support.rs`, which `src/lib.rs:30` gates behind
+  `#[cfg(test)]`, and `src/stdlib/register.rs` gains only a `#[cfg(test)]`
+  child declaration. Gate evidence pending the `scrutineer` run for this
+  milestone's commit.
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
@@ -777,6 +789,19 @@ and YAML fixtures, and were set from the inventory in Table 1.
   point it at `examples/`. Rationale: panel scope review; roadmap 7.1.4 owns the
   `examples/` run and its RFC evidence. Date/Author: 2026-09-27, planning
   agent after panel review.
+
+- Deviation: three further fixtures join the corpus, taking the new set to
+  seven. `pure.yml` is the baseline an ordinary load is read against;
+  `malformed.yml` pins the parse-failure path, which no existing fixture
+  exercises through the *loader* rather than through a schema check; and
+  `reads_env.yml` pins the injected-reader plumbing, which no existing
+  `jinja_env*.yml` fixture does because those are shaped for helper-level tests
+  rather than for a loader that supplies its own reader. Rationale: the corpus
+  is what the equivalence oracle compares, so a path with no fixture is a path
+  the refactor can change unobserved — the three additions close paths the
+  original four left open. `uses_shell.yml` is used only where the surface
+  refuses `shell`, so no row executes a command. Date/Author: 2026-10-15,
+  implementation agent under the `sdlc-implementation` workflow.
 
 - Decision: invariant I7 is discharged here at the loader level: the build
   cannot carry overlays, and every wrapper's canonical output is unchanged. The
