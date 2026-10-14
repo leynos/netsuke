@@ -1992,7 +1992,7 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       recording: `use super::RecipeShell;` sorts *above*
       `use super::command_list::…`, because byte order puts the capital `R`
       before the lowercase `c` and rustfmt does not case-fold a grouped
-      import. A hand-written ordering that reads more naturally is still a
+      import. A handwritten ordering that reads more naturally is still a
       gate failure.
       Of the two `markdownlint` failures, one was a real authoring defect
       rather than a reflow. A `Progress` bullet inserted by a later commit had
