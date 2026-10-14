@@ -58,8 +58,9 @@ in Netsuke.
 - POSIX and Bash use a subshell around each existing entry wrapper. PowerShell
   starts a fresh `powershell.exe` for each entry, using the existing UTF-16LE
   Base64 transport and response-file path for an oversized parent recipe.
-- Reject a generated PowerShell child command line above 32,766 characters;
-  keep the existing 1 MiB limit on parent recipe text, including child payloads.
+- Reject statically oversized PowerShell child command lines during
+  generation, and check the expanded `$PSHOME` executable path before each
+  child launch; keep the 1 MiB limit on parent recipe text, including payloads.
 - The manifest format version remains unchanged. Adding a public field to
   `Recipe::Command` is an accepted Rust source break for the unstable v0.1 API.
 
@@ -113,10 +114,11 @@ Each PowerShell entry runs in a new child process from the parent action's
 initial directory and environment. The child sets `$ErrorActionPreference` to
 `Stop`, resets `$LASTEXITCODE`, executes one entry, and propagates a non-zero
 native exit. A successful `exit` ends only that child and the parent proceeds
-to the next entry. Native stderr remains connected to Ninja's stderr. The
-generated child command line is bounded at 32,766 characters; larger parent
-recipes continue through Ninja's response-file transport, up to the existing 1
-MiB recipe-text ceiling.
+to the next entry. Native stderr remains connected to Ninja's stderr.
+Generation rejects statically oversized child command lines, and the parent
+checks the expanded executable path before launch so the final child command
+line stays within 32,766 characters. Larger parent recipes continue through
+Ninja's response-file transport, up to the existing 1 MiB recipe-text ceiling.
 
 The default `shared` mode is omitted from serialized actions, preserving legacy
 hashes. The `isolated` value is serialized and therefore produces a distinct

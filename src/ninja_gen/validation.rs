@@ -2,7 +2,7 @@
 
 use super::command_list::{CommandListEntry, CommandListEntryError, command_list_entry_error};
 use super::{NinjaGenError, RecipeShell, escape::validate_ninja_value};
-use crate::ast::{Recipe, StringOrList};
+use crate::ast::{CommandIsolation, Recipe, StringOrList};
 
 /// Reject recipes the generated shell cannot execute with stable semantics.
 pub(super) fn validate_action_recipe(
@@ -10,10 +10,16 @@ pub(super) fn validate_action_recipe(
     action_index: usize,
     shell: RecipeShell,
 ) -> Result<(), NinjaGenError> {
-    if let Recipe::Command { command } = &action.recipe
-        && command.is_empty_content()
+    if let Recipe::Command {
+        command, isolation, ..
+    } = &action.recipe
     {
-        return Err(NinjaGenError::EmptyCommandRecipe { action_index });
+        if *isolation == CommandIsolation::Isolated && !matches!(command, StringOrList::List(_)) {
+            return Err(NinjaGenError::InvalidCommandIsolation { action_index });
+        }
+        if command.is_empty_content() {
+            return Err(NinjaGenError::EmptyCommandRecipe { action_index });
+        }
     }
     if shell == RecipeShell::PowerShell {
         return Ok(());
@@ -21,12 +27,15 @@ pub(super) fn validate_action_recipe(
     match &action.recipe {
         Recipe::Command {
             command: StringOrList::String(command),
+            ..
         } => validate_scalar_command(command),
         Recipe::Command {
             command: StringOrList::List(entries),
+            ..
         } => validate_posix_command_list(entries, action_index),
         Recipe::Command {
             command: StringOrList::Empty,
+            ..
         }
         | Recipe::Script { .. }
         | Recipe::Rule { .. } => Ok(()),
@@ -96,13 +105,16 @@ mod tests {
     //! Verifies shell-specific recipe validation boundaries.
 
     use super::{NinjaGenError, RecipeShell, validate_action_recipe};
-    use crate::ast::{Recipe, StringOrList};
+    use crate::ast::{CommandIsolation, Recipe, StringOrList};
     use crate::ir::Action;
 
     /// Construct one action with a supplied command recipe for validation tests.
     fn command_action(command: StringOrList) -> Action {
         Action {
-            recipe: Recipe::Command { command },
+            recipe: Recipe::Command {
+                command,
+                isolation: CommandIsolation::Shared,
+            },
             description: None,
             depfile: None,
             deps_format: None,
@@ -138,6 +150,28 @@ mod tests {
         assert!(matches!(
             validate_action_recipe(&action, 1, RecipeShell::PowerShell),
             Err(NinjaGenError::EmptyCommandRecipe { .. })
+        ));
+    }
+
+    /// Reject programmatic isolated scalar and dependency-only recipes.
+    #[rstest::rstest]
+    #[case::scalar(StringOrList::String("echo hi".into()))]
+    #[case::dependency_marker(StringOrList::Empty)]
+    fn isolated_mode_requires_a_non_empty_command_list(#[case] command: StringOrList) {
+        let action = Action {
+            recipe: Recipe::Command {
+                command,
+                isolation: CommandIsolation::Isolated,
+            },
+            description: None,
+            depfile: None,
+            deps_format: None,
+            pool: None,
+            restat: false,
+        };
+        assert!(matches!(
+            validate_action_recipe(&action, 1, RecipeShell::PowerShell),
+            Err(NinjaGenError::InvalidCommandIsolation { action_index: 1 })
         ));
     }
 }

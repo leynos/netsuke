@@ -301,6 +301,7 @@ fn catalogue_target(
         name: crate::ast::StringOrList::List(names),
         recipe: crate::ast::Recipe::Command {
             command: crate::ast::StringOrList::String("true".to_owned()),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         sources: crate::ast::StringOrList::Empty,
         deps: crate::ast::StringOrList::Empty,

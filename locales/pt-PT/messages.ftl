@@ -180,6 +180,8 @@ manifest.glob.unknown_pattern_error = erro de padrão desconhecido.
 manifest.glob.io_failed = O glob falhou para «{ $pattern }»: { $detail }.
 manifest.glob.unknown_io_error = erro de E/S desconhecido.
 manifest.command_list_empty = O campo «command» não pode estar vazio: forneça uma cadeia de comando ou uma lista não vazia.
+manifest.command_isolation_recipe = O campo ‘command_isolation’ exige uma receita com uma lista de comandos.
+manifest.command_isolation_scalar = ‘command_isolation: isolated’ exige uma lista de comandos.
 
 # Erros da representação intermédia.
 ir.rule_not_found = A regra «{ $rule }» referenciada pelo alvo «{ $target }» não foi encontrada.

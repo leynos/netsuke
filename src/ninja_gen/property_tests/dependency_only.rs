@@ -17,6 +17,7 @@ fn dependency_only_graph(dependencies: &[String], order: DependencyOrder) -> Bui
         Action {
             recipe: Recipe::Command {
                 command: StringOrList::Empty,
+                isolation: crate::ast::CommandIsolation::Shared,
             },
             description: None,
             depfile: None,

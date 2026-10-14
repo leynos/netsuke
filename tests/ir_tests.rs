@@ -24,6 +24,7 @@ fn create_action_and_edge() {
     let action = Action {
         recipe: Recipe::Command {
             command: "echo".into(),
+            isolation: netsuke::ast::CommandIsolation::Shared,
         },
         description: Some("desc".into()),
         depfile: Some("$out.d".into()),
@@ -57,6 +58,7 @@ fn build_graph_duplicate_action_ids() {
     let action1 = Action {
         recipe: Recipe::Command {
             command: "one".into(),
+            isolation: netsuke::ast::CommandIsolation::Shared,
         },
         description: None,
         depfile: None,
@@ -67,6 +69,7 @@ fn build_graph_duplicate_action_ids() {
     let action2 = Action {
         recipe: Recipe::Command {
             command: "two".into(),
+            isolation: netsuke::ast::CommandIsolation::Shared,
         },
         description: None,
         depfile: None,
@@ -82,7 +85,7 @@ fn build_graph_duplicate_action_ids() {
     let Some(action) = graph.actions.get("a") else {
         panic!("expected action for id 'a'");
     };
-    if let Recipe::Command { command } = &action.recipe {
+    if let Recipe::Command { command, .. } = &action.recipe {
         assert_eq!(command.as_single(), Some("two"));
     } else {
         panic!("unexpected recipe type");

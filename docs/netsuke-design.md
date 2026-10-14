@@ -308,21 +308,26 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   such as escaping and validation. On Unix and the explicit Windows Bash
   compatibility route, a list is lowered to brace groups that evaluate each
   entry through a shell-quoted `eval` payload and are joined by `&&`. The
-  groups run in declaration order in one shell process and stop at the first
-  non-zero exit, so working directory, environment, and shell variables carry
-  forward. The `eval` boundary keeps an entry's inline comments or trailing
-  control operators from consuming the generated group terminator. A failed
-  entry emits a bounded action/entry marker for the runner to include in the
-  failure diagnostic. The resulting POSIX command must be parsable by
-  [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). On Windows with
-  the default PowerShell route, the list is instead one encoded PowerShell
-  script that checks `$LASTEXITCODE` after each generated list entry and stops
-  before a later entry can overwrite the failure. An entry remains opaque
-  recipe text, so multiple native commands separated by semicolons inside one
-  entry are not checked individually. An empty command list is rejected during
-  manifest deserialization. Plain command strings remain shell text; authors
-  should use structured recipes or explicit quoting helpers for arbitrary
-  variables.
+  literal `command_isolation` field selects `shared` or `isolated` and defaults
+  to `shared`; it is serialized with the command recipe, preserved during
+  rendering, rule resolution, and interpolation, and is not templated. Shared
+  groups run in the current shell, so working directory, environment, and shell
+  variables carry forward. Isolated groups run in subshells from the action
+  baseline. The `eval` boundary keeps an entry's inline comments or trailing
+  control operators from consuming the generated group terminator. Entries
+  remain ordered and fail fast. In isolated mode, a successful `exit` or direct
+  `exec` ends only that entry; in shared mode it ends the remaining chain. A
+  failed POSIX/Bash entry emits a bounded action/entry marker for the runner to
+  include in the failure diagnostic. The resulting POSIX command must be
+  parsable by [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). On
+  Windows with the default PowerShell route, shared lists use one encoded
+  script, while isolated lists launch one new encoded `powershell.exe` process
+  per entry. Both modes check `$LASTEXITCODE` and stop on a non-zero status. An
+  entry remains opaque recipe text, so multiple native commands separated by
+  semicolons inside one entry are not checked individually. An empty command
+  list is rejected during manifest deserialization. Plain command strings
+  remain shell text; authors should use structured recipes or explicit quoting
+  helpers for arbitrary variables.
 
 - `script`: A multi-line script declared with the YAML `|` block style. The
   entire block is passed to the selected recipe interpreter. On Unix, the POSIX
@@ -605,6 +610,14 @@ The string-based recipe model lets authors write ordinary shell syntax without
 leaking Ninja syntax into manifests. A shell fallback such as `${CARGO:-cargo}`
 is written exactly that way; Netsuke owns the chosen backend and escapes its
 file format when it emits `build.ninja`.
+
+Command-list recipes also carry the typed, literal `command_isolation` field.
+Its `shared` default preserves legacy execution, while `isolated` gives each
+entry the action's working-directory and environment baseline on every route.
+The field does not make shell text portable: POSIX `${VAR:-default}` expansion
+is unavailable on the default Windows PowerShell route. See
+[ADR-043](adr-043-isolate-command-list-entries.md) for the decision and
+compatibility constraints.
 
 Netsuke should add four complementary capabilities.
 
@@ -924,10 +937,27 @@ pub struct Rule {
     // to map to more advanced Ninja features.
 }
 
+/// Select whether ordered command-list entries share shell state.
+#[derive(Default)]
+#[serde(rename_all = "lowercase")]
+pub enum CommandIsolation {
+    #[default]
+    Shared,
+    Isolated,
+}
+
 /// A union of execution styles for both rules and targets.
 #[serde(untagged)]
 pub enum Recipe {
-    Command { command: StringOrList },
+    Command {
+        command: StringOrList,
+        #[serde(
+            rename = "command_isolation",
+            default,
+            skip_serializing_if = "CommandIsolation::is_shared"
+        )]
+        isolation: CommandIsolation,
+    },
     Script { script: String },
     Rule { rule: StringOrList },
     // FUTURE: planned Recipe::Exec extension; not present in src/ast/mod.rs yet.
@@ -2467,22 +2497,29 @@ Windows, `NETSUKE_WINDOWS_SHELL=bash` selects the explicit Bash compatibility
 route; the runner verifies `bash.exe --version` before build or Ninja-tool
 execution and reports an actionable error when the runtime is unavailable.
 
-The PowerShell route gives each scalar command and script a fresh process. An
-ordered command list uses one shared process, checks `$LASTEXITCODE`
-immediately after each generated list entry, and exits on the first non-zero
-status; terminating PowerShell errors have the same fail-fast effect. Multiple
-native commands inside one entry are not individually instrumented. The POSIX
-and Bash routes retain the brace-group, `eval`, background-job, and `exec`
-validation and rendering rules. Target discovery and generation do not execute
+The PowerShell route gives each scalar command and script a fresh process. A
+shared command list uses one process and checks `$LASTEXITCODE` immediately
+after each generated list entry. An isolated list starts a fresh
+`powershell.exe` per entry from the action's working-directory and environment
+baseline. Both modes stop on the first non-zero status; a successful `exit` or
+direct `exec` ends only an isolated entry, while it ends the shared chain.
+Terminating PowerShell errors also fail the recipe. Multiple native commands
+inside one entry are not individually instrumented. POSIX and Bash use the same
+brace-group and `eval` wrapper: shared groups carry current-shell state, while
+isolated groups run in subshells. The background-job and `exec` validation
+rules apply to both POSIX modes. Target discovery and generation do not execute
 recipes, so they do not require the optional Bash runtime.
 
 PowerShell recipes that fit within the 32,766-character Windows command-line
-limit use `-EncodedCommand`. For larger recipes, Netsuke emits Ninja's per-edge
-`rspfile` and `rspfile_content` bindings instead: Ninja writes the unique
-`$out`-derived `.ps1` response file immediately before the action. It contains
-an ASCII PowerShell bootstrap and the Base64 UTF-16LE recipe payload. The
-command invokes it with `powershell.exe -File "$rspfile"`; PowerShell decodes
-the payload, and the bootstrap removes its own `$PSCommandPath` in a `finally`
+limit use `-EncodedCommand`. Each isolated child command line is checked
+against that same limit, with an error naming the one-based entry and measured
+length. The 1 MiB bound applies to the complete parent script, including its
+encoded child payloads. Larger parent recipes use Ninja's per-edge `rspfile` and
+`rspfile_content` bindings instead: Ninja writes the unique `$out`-derived
+`.ps1` response file immediately before the action. It contains an ASCII
+PowerShell bootstrap and the Base64 UTF-16LE recipe payload. The command
+invokes it with `powershell.exe -File "$rspfile"`; PowerShell decodes the
+payload, and the bootstrap removes its own `$PSCommandPath` in a `finally`
 block after the recipe succeeds or fails. The per-edge name isolates concurrent
 actions in the build working directory; generation and target-discovery queries
 create no response files.

@@ -99,6 +99,7 @@ fn serial_graph(dependencies: Vec<Utf8PathBuf>) -> BuildGraph {
         Action {
             recipe: Recipe::Command {
                 command: "touch aggregate".into(),
+                isolation: crate::ast::CommandIsolation::Shared,
             },
             description: None,
             depfile: None,

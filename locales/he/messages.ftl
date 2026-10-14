@@ -179,6 +179,8 @@ manifest.glob.unknown_pattern_error = שגיאת תבנית לא ידועה.
 manifest.glob.io_failed = ‏glob נכשל עבור „{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = שגיאת קלט/פלט לא ידועה.
 manifest.command_list_empty = השדה „command” אינו יכול להיות ריק: יש לספק מחרוזת פקודה או רשימה שאינה ריקה.
+manifest.command_isolation_recipe = השדה ‘command_isolation’ מחייב מתכון עם רשימת פקודות.
+manifest.command_isolation_scalar = ‏‘command_isolation: isolated’ מחייב רשימת פקודות.
 
 # שגיאות הייצוג הביניימי.
 ir.rule_not_found = הכלל „{ $rule }” שאליו מפנה היעד „{ $target }” לא נמצא.

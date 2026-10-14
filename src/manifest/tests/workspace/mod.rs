@@ -183,7 +183,7 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
 
     let first_target = manifest.targets.first().context("target missing")?;
     match &first_target.recipe {
-        Recipe::Command { command } => anyhow::ensure!(
+        Recipe::Command { command, .. } => anyhow::ensure!(
             command.as_single() == Some("workspace-body"),
             "unexpected recipe output: {command:?}"
         ),
@@ -318,7 +318,7 @@ targets: []
     let Some(action) = manifest.actions.first() else {
         anyhow::bail!("query fixture should retain its action");
     };
-    let Recipe::Command { command } = &action.recipe else {
+    let Recipe::Command { command, .. } = &action.recipe else {
         anyhow::bail!("query fixture action should retain its command recipe");
     };
     ensure!(

@@ -179,6 +179,8 @@ manifest.glob.unknown_pattern_error = ข้อผิดพลาดของร
 manifest.glob.io_failed = glob ล้มเหลวสำหรับ “{ $pattern }”: { $detail }
 manifest.glob.unknown_io_error = ข้อผิดพลาดรับส่งข้อมูลที่ไม่รู้จัก
 manifest.command_list_empty = ฟิลด์ “command” ต้องไม่ว่าง: ระบุสตริงคำสั่งหรือรายการที่ไม่ว่าง
+manifest.command_isolation_recipe = ฟิลด์ “command_isolation” ต้องใช้สูตรที่มีรายการคำสั่ง
+manifest.command_isolation_scalar = “command_isolation: isolated” ต้องใช้รายการคำสั่ง
 
 # ข้อผิดพลาดของรูปแทนระดับกลาง
 ir.rule_not_found = ไม่พบกฎ “{ $rule }” ที่เป้าหมาย “{ $target }” อ้างถึง

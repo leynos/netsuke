@@ -179,6 +179,8 @@ manifest.glob.unknown_pattern_error = अज्ञात प्रतिरू�
 manifest.glob.io_failed = “{ $pattern }” के लिए glob विफल रहा: { $detail }।
 manifest.glob.unknown_io_error = अज्ञात इनपुट/आउटपुट त्रुटि।
 manifest.command_list_empty = “command” फ़ील्ड रिक्त नहीं होना चाहिए: कोई कमांड स्ट्रिंग या ग़ैर-रिक्त सूची दें।
+manifest.command_isolation_recipe = 'command_isolation' फ़ील्ड के लिए कमांड-सूची वाली रेसिपी आवश्यक है।
+manifest.command_isolation_scalar = 'command_isolation: isolated' के लिए कमांड सूची आवश्यक है।
 
 # मध्यवर्ती निरूपण की त्रुटियाँ।
 ir.rule_not_found = लक्ष्य “{ $target }” जिस नियम “{ $rule }” का संदर्भ देता है वह नहीं मिला।

@@ -17,6 +17,7 @@ fn large_command_list_prepares_path_bindings_once() {
         &mut actions,
         Recipe::Command {
             command: StringOrList::List(entries),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         None,
         ActionBindings {
@@ -45,7 +46,7 @@ proptest! {
         let mut actions = IrHashMap::default();
         let action_id = register_action(
             &mut actions,
-            Recipe::Command { command: StringOrList::List(entries) },
+            Recipe::Command { command: StringOrList::List(entries), isolation: crate::ast::CommandIsolation::Shared },
             None,
             ActionBindings {
                 inputs: &[Utf8PathBuf::from("input")],
@@ -54,7 +55,7 @@ proptest! {
             },
         ).expect("shell-safe generated entries should interpolate");
         let action = actions.get(&action_id).expect("registered action should be available");
-        let Recipe::Command { command } = &action.recipe else {
+        let Recipe::Command { command, .. } = &action.recipe else {
             prop_assert!(false, "registered command list should remain a command recipe");
             return Ok(());
         };

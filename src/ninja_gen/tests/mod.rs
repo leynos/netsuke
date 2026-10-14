@@ -4,7 +4,7 @@ use super::{
     NamedAction, NinjaGenError, RecipeShell, generate, generate_bundle, generate_into,
     generate_into_with_shell,
 };
-use crate::ast::{Recipe, StringOrList};
+use crate::ast::{CommandIsolation, Recipe, StringOrList};
 use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
@@ -71,6 +71,7 @@ fn generate_simple_ninja() -> Result<()> {
     let action = Action {
         recipe: Recipe::Command {
             command: "echo hi".into(),
+            isolation: CommandIsolation::Shared,
         },
         description: None,
         depfile: None,
@@ -390,4 +391,6 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     Ok(ninja)
 }
 
+mod isolated_command_list;
 mod power_shell;
+mod power_shell_isolated;
