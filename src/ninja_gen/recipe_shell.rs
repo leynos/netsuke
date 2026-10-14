@@ -119,40 +119,12 @@ impl RecipeShell {
                 return Err(NinjaGenError::UnsafeNinjaValue);
             }
             let payload = encode_power_shell_script(&child_script);
-            let argument_characters = ISOLATED_POWER_SHELL_CHILD_ARGUMENT_PREFIX
-                .encode_utf16()
-                .count()
-                .saturating_add(payload.encode_utf16().count());
-            let actual_characters = ISOLATED_POWER_SHELL_CHILD_EXECUTABLE
-                .encode_utf16()
-                .count()
-                .saturating_add(1)
-                .saturating_add(argument_characters);
-            if actual_characters > MAX_POWER_SHELL_COMMAND_LINE {
-                return Err(NinjaGenError::PowerShellCommandLineTooLong {
-                    entry_index: entry_index + 1,
-                    actual_characters,
-                    maximum_characters: MAX_POWER_SHELL_COMMAND_LINE,
-                });
-            }
-            // `$PSHOME` expands in PowerShell, after generation. Check its actual
-            // path length at run time as well as the statically known command text.
-            script.push_str("$netsukeChildExecutable = \"$PSHOME\\powershell.exe\"\n");
-            script.push_str(
-                "$netsukeChildCommandLineLength = 2 + $netsukeChildExecutable.Length + 1 + ",
-            );
-            script.push_str(&argument_characters.to_string());
-            script.push('\n');
-            script.push_str("if ($netsukeChildCommandLineLength -gt ");
-            script.push_str(&MAX_POWER_SHELL_COMMAND_LINE.to_string());
-            script.push_str(
-                ") {\n    [Console]::Error.WriteLine('Netsuke: isolated PowerShell command-list entry ",
-            );
-            script.push_str(&(entry_index + 1).to_string());
-            script.push_str(" exceeds the ");
-            script.push_str(&MAX_POWER_SHELL_COMMAND_LINE.to_string());
-            script.push_str(
-                "-character child command-line limit (' + $netsukeChildCommandLineLength + ' characters).')\n    exit 1\n}\n",
+            let argument_characters = Self::isolated_child_argument_characters(&payload);
+            Self::validate_isolated_child_command_line(entry_index + 1, argument_characters)?;
+            Self::push_isolated_child_runtime_length_guard(
+                &mut script,
+                entry_index + 1,
+                argument_characters,
             );
             script.push_str("$LASTEXITCODE = 0\n& $netsukeChildExecutable ");
             script.push_str(ISOLATED_POWER_SHELL_CHILD_ARGUMENT_PREFIX);
@@ -160,6 +132,60 @@ impl RecipeShell {
             script.push_str("\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n");
         }
         Ok(Some(script))
+    }
+
+    /// Measure the fixed arguments passed to one isolated PowerShell child.
+    fn isolated_child_argument_characters(payload: &str) -> usize {
+        ISOLATED_POWER_SHELL_CHILD_ARGUMENT_PREFIX
+            .encode_utf16()
+            .count()
+            .saturating_add(payload.encode_utf16().count())
+    }
+
+    /// Reject an isolated child command that exceeds Windows' command-line limit.
+    fn validate_isolated_child_command_line(
+        entry_index: usize,
+        argument_characters: usize,
+    ) -> Result<(), NinjaGenError> {
+        let actual_characters = ISOLATED_POWER_SHELL_CHILD_EXECUTABLE
+            .encode_utf16()
+            .count()
+            .saturating_add(1)
+            .saturating_add(argument_characters);
+        if actual_characters > MAX_POWER_SHELL_COMMAND_LINE {
+            return Err(NinjaGenError::PowerShellCommandLineTooLong {
+                entry_index,
+                actual_characters,
+                maximum_characters: MAX_POWER_SHELL_COMMAND_LINE,
+            });
+        }
+        Ok(())
+    }
+
+    /// Append a runtime guard for the expanded PowerShell executable path.
+    ///
+    /// The generated parent cannot know `$PSHOME` until PowerShell evaluates it.
+    fn push_isolated_child_runtime_length_guard(
+        script: &mut String,
+        entry_index: usize,
+        argument_characters: usize,
+    ) {
+        script.push_str("$netsukeChildExecutable = \"$PSHOME\\powershell.exe\"\n");
+        script
+            .push_str("$netsukeChildCommandLineLength = 2 + $netsukeChildExecutable.Length + 1 + ");
+        script.push_str(&argument_characters.to_string());
+        script.push('\n');
+        script.push_str("if ($netsukeChildCommandLineLength -gt ");
+        script.push_str(&MAX_POWER_SHELL_COMMAND_LINE.to_string());
+        script.push_str(
+            ") {\n    [Console]::Error.WriteLine('Netsuke: isolated PowerShell command-list entry ",
+        );
+        script.push_str(&entry_index.to_string());
+        script.push_str(" exceeds the ");
+        script.push_str(&MAX_POWER_SHELL_COMMAND_LINE.to_string());
+        script.push_str(
+            "-character child command-line limit (' + $netsukeChildCommandLineLength + ' characters).')\n    exit 1\n}\n",
+        );
     }
 
     /// Apply the existing PowerShell policy to one isolated child entry.

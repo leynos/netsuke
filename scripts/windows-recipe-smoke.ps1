@@ -212,10 +212,15 @@ function Test-ExplicitBashIsolation {
     }
     $env:NETSUKE_WINDOWS_SHELL = 'bash'
     $env:NETSUKE_BASH_BASELINE = $bashBaseline.Trim()
-    Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'bash-isolated-state')
-    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'bash-isolated-state.txt') `
-        -Expected 'isolated' -Message 'Windows Bash did not isolate command-list shell state'
-    Remove-Item Env:NETSUKE_WINDOWS_SHELL -ErrorAction SilentlyContinue
+    try {
+        Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'bash-isolated-state')
+        Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'bash-isolated-state.txt') `
+            -Expected 'isolated' -Message 'Windows Bash did not isolate command-list shell state'
+    }
+    finally {
+        Remove-Item Env:NETSUKE_WINDOWS_SHELL -ErrorAction SilentlyContinue
+        Remove-Item Env:NETSUKE_BASH_BASELINE -ErrorAction SilentlyContinue
+    }
 }
 
 function Test-DependencyOrdering {

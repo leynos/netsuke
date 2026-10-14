@@ -234,16 +234,16 @@ impl<'de> Deserialize<'de> for Recipe {
             rule: rule_field,
             command_isolation,
         } = raw;
-        if command_isolation.is_some() {
-            if command_field.is_none() {
-                return Err(serde::de::Error::custom(COMMAND_ISOLATION_RECIPE_ERROR));
-            }
-            if script_field.is_some() {
-                return Err(serde::de::Error::custom(COMMAND_ISOLATION_RECIPE_ERROR));
-            }
-            if rule_field.is_some() {
-                return Err(serde::de::Error::custom(COMMAND_ISOLATION_RECIPE_ERROR));
-            }
+        let is_command_recipe = matches!(
+            (
+                command_field.as_ref(),
+                script_field.as_ref(),
+                rule_field.as_ref()
+            ),
+            (Some(_), None, None)
+        );
+        if command_isolation.is_some() && !is_command_recipe {
+            return Err(serde::de::Error::custom(COMMAND_ISOLATION_RECIPE_ERROR));
         }
         match (command_field, script_field, rule_field) {
             (Some(command), None, None) => {
