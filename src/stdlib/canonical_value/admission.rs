@@ -127,6 +127,13 @@ fn admit_mapping(value: &Value, path: &SnapshotPath) -> Result<SnapshotNode, Can
 }
 
 /// Collect the members of a mapping representation exactly once.
+///
+/// The host enumerator is consulted once and its self-reported length is
+/// checked against what it actually yielded. A length that disagrees means the
+/// host object is not stable, which the caller's precondition excludes. A
+/// mapping needs this check for the same reason a sequence does: a canonical
+/// key derived from one reading of a host that would enumerate differently the
+/// second time is not a key for its value.
 fn collect_members(
     value: &Value,
     path: &SnapshotPath,
@@ -137,7 +144,12 @@ fn collect_members(
     let members = object
         .try_iter_pairs()
         .ok_or_else(|| CanonicalValueError::invalid_traversal(path))?;
-    Ok(members.collect())
+    let collected: Vec<(Value, Value)> = members.collect();
+    if has_stable_length(value, collected.len()) {
+        Ok(collected)
+    } else {
+        Err(CanonicalValueError::invalid_traversal(path))
+    }
 }
 
 /// Collect the items of a sequence representation exactly once.

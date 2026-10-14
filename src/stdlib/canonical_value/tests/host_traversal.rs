@@ -77,16 +77,33 @@ fn a_host_object_is_enumerated_once_per_derivation() -> Result<()> {
 }
 
 /// Verify a length that disagrees with what the host yields is refused.
+///
+/// Both representations are checked, because each is collected by its own
+/// function: a stability check written into one collector leaves the other
+/// admitting a host object it cannot snapshot reproducibly.
 #[rstest]
 fn a_length_that_disagrees_with_the_enumeration_is_refused() -> Result<()> {
-    let (lying, _) = fixture(ObjectRepr::Seq, Some(5), Materialized::Seeded);
-    let refusal = canonical_key(&lying).expect_err("a lying length is refused");
-    ensure!(
-        matches!(
-            refusal,
-            CanonicalValueError::IncompatibleRepresentation { .. }
+    let lying = [
+        (ObjectRepr::Seq, Some(5), Materialized::Seeded),
+        (
+            ObjectRepr::Map,
+            Some(1),
+            Materialized::Pairs(vec![
+                (Value::from("a"), Value::from(1)),
+                (Value::from("b"), Value::from(2)),
+            ]),
         ),
-        "a length that disagrees with the enumeration must be refused, got {refusal}",
-    );
+    ];
+    for (repr, len, materialized) in lying {
+        let (probe, _) = fixture(repr, len, materialized);
+        let refusal = canonical_key(&probe).expect_err("a lying length is refused");
+        ensure!(
+            matches!(
+                refusal,
+                CanonicalValueError::IncompatibleRepresentation { .. }
+            ),
+            "a {repr:?} length that disagrees with the enumeration must be refused, got {refusal}",
+        );
+    }
     Ok(())
 }

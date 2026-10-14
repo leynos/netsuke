@@ -101,6 +101,30 @@ fn non_finite_numbers_are_refused_at_any_depth() -> Result<()> {
     Ok(())
 }
 
+/// Verify a refusal at the root names a location rather than trailing off.
+///
+/// The root is the commonest refusal site, because a top-level value is decided
+/// before any host object is traversed, and the path of the root is reached by
+/// no edge at all.
+#[rstest]
+fn a_root_refusal_still_names_its_location() -> Result<()> {
+    let refusal = canonical_key(&Value::from_bytes(vec![1])).expect_err("bytes are refused");
+    let rendered = refusal.to_string();
+    ensure!(
+        refusal.kind() == Some(ValueKind::Bytes),
+        "a root refusal must still name the kind, got {rendered}",
+    );
+    ensure!(
+        rendered.contains("<root>"),
+        "a root refusal must name the root as its location, got {rendered}",
+    );
+    ensure!(
+        !rendered.ends_with("at "),
+        "a root refusal must not trail off after its preposition, got {rendered}",
+    );
+    Ok(())
+}
+
 /// Verify a mapping key that is not a string is refused at any depth, before
 /// any coercion could let it collide with its quoted spelling.
 #[rstest]

@@ -300,9 +300,11 @@ fn rebuild(value: &Value) -> Value {
 ///
 /// This case counts and de-duplicates; it says nothing about the order the
 /// representatives come back in, nor about which of two equal values was kept.
-/// Both are checked by the independent oracle in the sibling `oracle` battery,
-/// whose [`deduplication_agrees_with_the_independent_oracle`] fixes the retained
-/// values' identity and order against a quadratic first-index expectation.
+/// Both are checked against the independent oracle by
+/// [`super::sweep::deduplication_agrees_with_the_independent_oracle`], the
+/// `sweep` battery's case that fixes the retained values' identity and order
+/// against a quadratic first-index expectation; the oracle it checks against
+/// is the sibling `oracle` battery.
 #[test]
 fn deduplication_keeps_the_first_representative() -> Result<()> {
     let mut runner = law_runner();

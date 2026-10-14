@@ -8044,6 +8044,13 @@ traversal steps, or that contains a cycle, is a caller error the module does
 not detect. This is a precondition on the caller, not a runtime check, and a
 new helper forwarding an arbitrary host value to this module inherits it.
 
+A length the host reports but does not honour is the one part of that
+precondition the module does check: both sequences and mappings are refused with
+`IncompatibleRepresentation` when the number of members yielded disagrees with
+`Value::len()`, because such a host cannot be snapshotted reproducibly.
+Refusals name their location as a JSON-pointer-like path, and a refusal at the
+root value renders a marker rather than an empty location.
+
 Refusals are errors, not `false`. Values outside the supported domain —
 undefined, invalid, bytes, plain objects, iterables, callables, non-string
 mapping keys at any depth, and non-finite floats — raise a typed

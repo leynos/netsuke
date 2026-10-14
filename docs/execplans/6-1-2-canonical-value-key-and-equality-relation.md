@@ -507,11 +507,15 @@ under way; the invocation naming this plan supplies execution approval.
   space that precedes it, is literal text compiled into the binary, so no
   environment change removes it. Substituting only `PROVER_TOOLS_SOURCE` for
   upstream `2ba17da6…` ("Accept indented Verus toolchain output (#108)") makes
-  the same `make verus` invocation exit **0** with the same 16/0, which is what
-  the file edit would achieve. That edit is outside this milestone's scope, so
-  it is reported rather than made. Both negative controls were demonstrated red
-  and reverted. A last-wins variant, `for value in values.iter().rev()` into
-  the same `HashSet`, fails the oracle at `oracle.rs:83`
+  the same `make verus` invocation exit **0** with the same 16/0. That
+  substitution was first reported rather than made, on the reasoning that the
+  pin is repository-wide configuration and therefore outside this milestone; a
+  formal-review finding later established that this branch introduced the pinned
+  `tools/verus/VERSION` that the stale parser cannot read, so the pin was
+  bumped after all. See the Decision log for the provenance check. Both
+  negative controls were demonstrated red and reverted. A last-wins variant,
+  `for value in values.iter().rev()` into the same `HashSet`, fails the oracle
+  at `oracle.rs:83`
   (`position 0 must be the original at input index 0, not a copy`). A
   membership-order variant, which keeps the first occurrence of each key and
   then emits them in a pinned `HashSet<usize>` iteration order, fails the same
@@ -658,6 +662,27 @@ under way; the invocation naming this plan supplies execution approval.
   36/36. **The head moved to a new revision purely to carry these repairs**, so
   the GATE7 verdict recorded above describes `f511e8fe…` and neither of these
   two comment-only edits invalidates it.
+- (2026-10-14) Formal review on `8ff58e80…`, after readiness. CodeRabbit
+  requested changes and posted two findings; `chatgpt-codex-connector` reviewed
+  the same commit and posted two more, so **four** inline findings were open
+  and **none was rejected**:
+  - **`admission.rs` — the mapping path skipped the stable-length check (P2).**
+    `collect_items` applied `has_stable_length`; `collect_members` did not, so a
+    map reporting one length while enumerating another was admitted. The
+    invariant was already asserted in prose by `host_traversal.rs:79` and
+    exercised only for `ObjectRepr::Seq`. Repaired by reusing the existing
+    predicate, with the test extended to the mapping representation.
+  - **`error.rs` — the root path rendered empty (P2).** Every top-level refusal
+    ended in a dangling `at`, and the root is the most common refusal site.
+    Repaired with an explicit root marker.
+  - **`tests/properties.rs` — wrong battery named, unresolvable doc link.**
+    Comment-only repair.
+  - **`tools/verus/VERSION` — the pinned parser cannot read the pinned Verus
+    banner.** Repaired by bumping `PROVER_TOOLS_SOURCE`, which **supersedes**
+    the earlier entry that had reported the mismatch instead of fixing it; the
+    Decision log records the provenance check that moved it into scope.
+  The last of these is the substantive one: it is a reversal of a position this
+  plan had recorded as settled, and the head now carries the bump.
 
 ## Surprises & discoveries
 
@@ -1161,6 +1186,16 @@ under way; the invocation naming this plan supplies execution approval.
   rule is that a valid finding must be repaired, pushed, and its affected
   follow-up confirmed before readiness, so a repair that never lands blocks its
   readiness gate. Date/Author: 2026-10-13, implementation.
+- Decision: the formal review's four findings are repaired in the implementation
+  skill's scope, on the same reasoning as the entry above and against a
+  stronger case. The review carries `CHANGES_REQUESTED` on `8ff58e80…`, and two
+  of its findings are P2 defects in production code this branch added.
+  Rationale: the lifecycle skill's order is to repair valid findings, push, and
+  re-gate, and a change request that never lands leaves the PR unmergeable;
+  none of the four findings was rejected, so there was no disposition to
+  debate. One of them reverses a position this plan had recorded as settled —
+  see the superseding pin entry — which is why the reversal is recorded in two
+  places rather than quietly applied. Date/Author: 2026-10-14, review response.
 - Decision: `Seq<u64>` stays as the proof's key type and the claim is narrowed
   in prose, rather than converting the kernel to an arbitrary key type.
   Rationale: the assessment's own verdict is to keep the claim at abstract
@@ -1189,6 +1224,42 @@ under way; the invocation naming this plan supplies execution approval.
   as a known limitation in the PR body and as an open item in this plan. The
   escalation of *whether* to bump it is with the user and is not decided here.
   Date/Author: 2026-10-13, implementation.
+- Decision (**supersedes the entry above**): the `PROVER_TOOLS_SOURCE` pin at
+  `Makefile:201` **is** bumped, from `b07ef696…` to `2ba17da6…`, in response to
+  a formal-review finding on `tools/verus/VERSION:1`. Rationale: the entry
+  above reasoned that the pin is repository-wide configuration, so changing it
+  under a feature branch would widen this change's scope. That reasoning holds
+  only while the mismatch is external to the branch, and it is not. Provenance
+  settles it: `tools/verus/VERSION` does not exist at the merge base `b14bde20`
+  (`git cat-file -t b14bde20:tools/verus/VERSION` reports that the path exists
+  on disk but not in that revision) and was added by this branch in `aa32c294`.
+  Upstream `rust_prover_tools/verus/models.py:32` reads exactly
+  `tools/verus/VERSION`, and `versions.py:read_required_file:63-65` raises when
+  it is absent. The branch added neither the pin nor the invocation — the pin
+  comes from `14918d8d` on `origin/main` (`Makefile:202` there), and the
+  `verus` and `install-verus` targets are byte-identical between `origin/main`
+  and this head — but it did add the version file, which **moved the failure**:
+  `run_verus` calls `read_verus_version` first (`verus/run.py:115`), so on
+  `origin/main` the run dies at `version file '…' does not exist` and never
+  reaches the banner, while here the read succeeds and the failure moves
+  downstream to the `Toolchain:` line parse. The file this branch adds is
+  therefore incompatible with the repository's default tooling, and that
+  incompatibility is reachable only through this branch, which is what puts it
+  in scope to repair rather than report. That last step is a scope judgement,
+  not a provenance fact, and an earlier revision of this entry overstated it as
+  "branch-introduced"; the inheritance is recorded here so the reasoning can be
+  checked rather than taken on trust. Note also that the bump does **not**
+  repair `origin/main`, whose `make verus` still fails at the missing version
+  file. The finding's alternative remedy — pinning a compatible Verus release —
+  would downgrade the repository's pinned verifier to suit a stale parser, so
+  the parser moves instead. Bump safety was verified in a clone of
+  `leynos/rust-prover-tools`: the range `b07ef696..2ba17da6` changes one line of
+  `versions.py` (the `TOOLCHAIN_LINE` regex) and adds one unit-test case, and
+  touches no Kani file, so the shared `install-kani` and `kani-check` targets
+  are unaffected even though `PROVER_TOOLS_SOURCE` feeds all four prover
+  targets. The escalation of *whether* to bump the pin remains recorded rather
+  than overridden: no user instruction decided this, and the change is
+  trivially revertible. Date/Author: 2026-10-14, review response.
 - Decision: the identity sentence in this plan's EP-V3 is corrected to say the
   runtime tests check Rust reference identity (`std::ptr::eq`), not that they
   check only source-index identity. Rationale: the earlier wording asserted the
@@ -1298,9 +1369,11 @@ Closeout record, as this section required before the roadmap tick:
   current-state section was replaced with measured fact; and the parity doc
   comment that was false in both directions was corrected.
 - **Residual resource risks:** `make verus` depends on a `PROVER_TOOLS_SOURCE`
-  pin that predates an upstream fix for indented toolchain output. That is
-  recorded as an open item rather than corrected here; see the plan's
-  Verification plan and the delivery ledger.
+  pin that names a source fetched over the network. The pin formerly predated
+  an upstream fix for indented toolchain output, which made the default
+  invocation fail before compiling; it was bumped to the fixed revision in
+  response to a formal-review finding, so that risk is retired. See the
+  Decision log and the delivery ledger.
 
 ## Context and orientation
 

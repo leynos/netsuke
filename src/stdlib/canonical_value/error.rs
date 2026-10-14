@@ -54,6 +54,8 @@ impl SnapshotPath {
     const RENDER_LIMIT: usize = 8;
     /// Edge count kept at each end of an elided path.
     const RENDER_EDGE: usize = 3;
+    /// Location rendered in place of the empty path of the snapshot root.
+    const ROOT_MARKER: &str = "<root>";
 
     /// Return the path of the root value.
     pub(super) const fn root() -> Self {
@@ -79,12 +81,21 @@ impl SnapshotPath {
 
     /// Render the path for a diagnostic message, eliding its middle if long.
     ///
+    /// An empty path names the root, which is the most common refusal site and
+    /// the one every other path is written relative to. It therefore renders as
+    /// [`Self::ROOT_MARKER`] rather than as nothing: every refusal message
+    /// places this rendering after a preposition, so an empty one would leave
+    /// the message trailing off exactly where the caller needs the location.
+    ///
     /// The elision fires only past [`Self::RENDER_LIMIT`] edges, which is more
     /// than twice [`Self::RENDER_EDGE`], so both ends of an abbreviated path are
     /// always present. The slice accessors still report absence rather than
     /// panicking, because a `Display` implementation must not abort a render.
     fn render_abbreviated(&self) -> String {
         let count = self.steps.len();
+        if count == 0 {
+            return Self::ROOT_MARKER.to_owned();
+        }
         if count <= Self::RENDER_LIMIT {
             return render_steps(&self.steps);
         }
