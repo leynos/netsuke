@@ -718,6 +718,18 @@ Every stopping point is documented here. Timestamps are UTC.
   recorded as a hypothesis. The lesson is to treat a correlation between an
   environment diagnostic and a symptom as a hypothesis to test by counter-run,
   which this run provided by accident.
+
+  **Refined at 2026-10-14 03:10Z by direct probe.** Warming the outer `target/`
+  is only part of it, and not the part that decides this test. Probed with a
+  1500 s allowance, `command_env_ui_tests::cli_configuration_fixture_compiles`
+  passes in 977 s wall: 4 m 28 s to compile the test binary, then **709 s**
+  inside the test body, where it spawns a child `cargo check` against a fresh
+  `target/.tmp…/cli_configuration_pass/` tree. `build-limits-status` mid-run
+  read `capacity 4, held 4` with a peer worktree's crates queued behind it, so
+  the dominant term is admission-queue latency on a cold *per-run* tree — which
+  a warm outer `target/` cannot remove. The earlier `timeout 400` probe's
+  `rc 124` is thereby explained rather than merely superseded: 268 s compile,
+  the rest queue.
 - [x] (2026-10-13 09:05Z) **Two numbers in the committed text were wrong, and
   re-deriving them from the source rather than from the plan's own summary
   caught both.** Neither was caught by a gate: `make check-fmt`,
@@ -811,6 +823,56 @@ Every stopping point is documented here. Timestamps are UTC.
   plus the `88`/`2` distributed results) and stage 3 of
   `make test-workflow-contracts` (`27 passed in 13.21s`). The remaining stages
   of each suite had already passed in the same run.
+- [x] (2026-10-14 03:10Z) **The third nested-Cargo timeout — the one that
+  aborted `gate 8`'s second run — is admission-queue latency, and the test it
+  killed passes when the queue clears.** The verification re-run on `52084776`
+  terminated `command_env_ui_tests::cli_configuration_fixture_compiles` at
+  `TIMEOUT [300.008s]`. Probed directly with a 1500 s allowance, the same test
+  binary reports `test result: ok. 1 passed; 0 failed … finished in 709.20s`,
+  rc 0, 977 s wall. The split is the finding:
+
+  - **4 m 28 s compiling** the test binary itself, on a host reporting every
+    crate as `the managed sccache server is unreachable; compiling without the
+    cache`.
+  - **709 s in the test body**, because the test spawns its own child
+    `cargo check` against a **fresh** `target/.tmp…/cli_configuration_pass/`
+    tree. `build-limits-status` during the run read
+    `capacity 4, held 4, healthy, sccache unreachable, compiling directly`
+    with 20+ crates from a peer worktree queued behind it. The child compile
+    was the wait, not the test's own work.
+
+  So the earlier `timeout 400` probe (`rc 124`) is now explained rather than
+  merely superseded: 268 s of it was compile and the rest was queue. The three
+  local timeouts across this branch's gate runs are one environmental story — a
+  cold sccache plus a four-slot admission pool shared with other agents — and
+  none of them is a property of the diff. The ExecPlan's 08:15Z entry named the
+  plausible cause as a warm `target/`; the probe refines that to the fixture's
+  per-run *cold* child tree plus queue depth, which warming the outer `target/`
+  cannot fix. No allowance was widened and no retry added; CI is the oracle for
+  this test, as recorded in *Constraints*.
+- [x] (2026-10-14 03:10Z) **All three workflows are green on `52084776`, and
+  the CodeRabbit re-pass found one further documentation defect.** CI
+  `38489674825`, Netsukefile Build Test `38489674558` and Release Dry Run
+  `38489674799` each conclude `success`, with `CI`'s five jobs — `build-test`,
+  `kani-smoke`, `Windows / build-test-windows`, `Windows / lint-windows`,
+  `Windows / windows-msi-upgrade` — all `completed success`. That is CI on the
+  exact bytes the gates ran against.
+
+  Two CodeRabbit passes over the frozen revision, per the sampling caveat that
+  a single zero-finding pass proves nothing: the first returned **0 findings**,
+  the second returned 2. The new finding was real and is fixed — the M2
+  conformance check said the caller must "still pin the `.github/actions/...`
+  shape", but the caller is `.github/workflows/mutation-testing.yml` and the
+  path it pins is `leynos/shared-actions/.github/workflows/mutation-cargo.yml`;
+  no `.github/actions/` path exists anywhere in this branch. The check now
+  names the real workflow path and the 40-character SHA shape the contract test
+  asserts. The other finding is the standing mold-selection gap, dispositioned
+  unchanged in *Decision log*.
+
+  The pass count also confirms the sampling behaviour directly: the same
+  revision, reviewed twice, produced 0 and 2 findings. Any claim that this
+  branch "reviewed clean" holds only for a particular sample, which is why the
+  plan states the disposition of each finding rather than a count.
 - [ ] Milestone 4: ExecPlan finalized, `coderabbit review --agent` clean, CI
   green, PR marked ready. **`coderabbit review --agent` cannot be reported
   clean while the fourth acceptance criterion is unmet:** every pass re-raises
@@ -838,6 +900,13 @@ Every stopping point is documented here. Timestamps are UTC.
   **Still green on `35473e8e`**, the head as of this entry: `CI` `38372699508`,
   `Netsukefile Build Test` `38372699186`, `Release Dry Run` `38372700780`, all
   `completed success`, with `CI`'s five jobs each `completed success`.
+
+  **And green on `52084776`**, the head as of 2026-10-14 03:10Z: `CI`
+  `38489674825`, `Netsukefile Build Test` `38489674558`, `Release Dry Run`
+  `38489674799`, each `completed success`, with `CI`'s five jobs each
+  `completed success`. This is the revision the eight-gate run and both
+  CodeRabbit passes were bound to, so CI and the local evidence describe the
+  same bytes.
 
   The remaining gate is clearing the draft flag, which itself suppresses
   CodeRabbit's GitHub review
@@ -1308,16 +1377,24 @@ that were red on `172dd4ff` (`build-test` and `Windows / lint-windows`) were
 confirmed repaired at `d8e03753`; because every commit after that one touches
 Markdown only, their re-run is a formality, and the standing requirement is
 that CI be green on the final head before the pull request leaves draft.
-CodeRabbit has run five passes over this branch. Four findings were prose or
+CodeRabbit has run seven passes over this branch. Five findings were prose or
 evidence defects and were fixed — first-person pronouns in this plan, a
 flag-precedence claim stated inaccurately, a reproduction recipe that could not
-work, and an acceptance line demanding evidence that was never obtainable. Two
-were load-bearing and both stand as recorded gaps: the mold-selection finding,
-raised on every pass, which is confirmed as diagnosed and confirmed as not
-actionable from a caller; and the empty-`RUSTFLAGS` reading, which the plan now
-states correctly. A zero-finding review is not reachable while the fourth
-criterion is unmet, and treating one as the exit condition would mean either
-deleting the finding or writing a workaround the issue forbids.
+work, an acceptance line demanding evidence that was never obtainable, and a
+conformance check naming `.github/actions/...` where the caller pins
+`.github/workflows/mutation-cargo.yml`. Two were load-bearing and both stand as
+recorded gaps: the mold-selection finding, raised on every pass that finds
+anything, which is confirmed as diagnosed and confirmed as not actionable from
+a caller; and the empty-`RUSTFLAGS` reading, which the plan now states
+correctly. A zero-finding review is not reachable while the fourth criterion is
+unmet, and treating one as the exit condition would mean either deleting the
+finding or writing a workaround the issue forbids.
+
+Two of those seven passes were run back to back over the identical frozen
+revision `52084776`, and they returned **0 and 2** findings. That is the
+sampling behaviour stated as a measurement rather than a caveat: a "clean
+review" is a property of one sample, so the exit condition this plan uses is a
+stated disposition per finding, not a finding count.
 
 **Upstream, unresolved by design.** shared-actions#544 remains open with no
 fixing revision, so a caller still cannot both request mold and keep the
@@ -1447,9 +1524,10 @@ name the missing input, not merely differ in `repr`.
   `make check-build-tools` at run time.
 - The SHA-format, permission, concurrency, and trigger tests are unchanged.
 
-**Conformance check.** Does the caller still pin the `.github/actions/...`
-shape, keep `permissions: {}` at the top level and exactly `contents: read` +
-`id-token: write` on the job, and keep
+**Conformance check.** Does the caller still pin its `uses:` reference to
+`leynos/shared-actions/.github/workflows/mutation-cargo.yml` at a full
+40-character commit SHA, keep `permissions: {}` at the top level and exactly
+`contents: read` + `id-token: write` on the job, and keep
 `concurrency.group: mutation-testing-${{ github.ref }}` and
 `cancel-in-progress: false`? All four tests must still pass.
 
