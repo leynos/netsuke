@@ -200,7 +200,7 @@ error a multi-fault graph reports is insertion-order dependent.
 
 ### Prior art in this repository
 
-`src/graph_view/tests_property.rs` already contains
+`src/graph_view/tests/property.rs` already contains
 `graphview_is_insertion_order_invariant`: it builds the same logical graph
 twice with reversed insertion order, projects both through
 `GraphView::from_build_graph`, and asserts equality of the view and two
@@ -232,7 +232,7 @@ suites in sibling files wired from the production module with
 `#[cfg(test)] #[path = ...]`; committed regression seeds.
 
 One deviation is already established:
-`src/ninja_gen_property_tests/ninja_oracle.rs` drives `TestRunner::run`
+`src/ninja_gen/property_tests/ninja_oracle.rs` drives `TestRunner::run`
 directly rather than using the macro, because it must skip when the `ninja`
 binary is absent. This plan reuses that pattern wherever a post-run assertion
 or a conditional skip is needed.
@@ -288,8 +288,8 @@ missed and none of which is optional reading:
 
 - `tests/kani_mutation_evidence_tests.rs` — the contract governing
   `docs/verification/mutations/`. Read before writing any patch.
-- `src/graph_view/tests_property.rs` — the prior-art insertion-order property.
-- `src/ninja_gen_property_tests/ninja_oracle.rs` — the `TestRunner::run` and
+- `src/graph_view/tests/property.rs` — the prior-art insertion-order property.
+- `src/ninja_gen/property_tests/ninja_oracle.rs` — the `TestRunner::run` and
   skip-when-absent pattern.
 - `test_support/src/ninja.rs` — `ninja_is_required` and the
   `NETSUKE_REQUIRE_NINJA` escalation, set in `.github/workflows/ci.yml:78` and
@@ -403,7 +403,7 @@ question.
 9. Assertions inside `proptest!` bodies use `prop_assert*`. Where a property
    needs a post-run assertion or a conditional skip, it uses the
    `TestRunner::run` form established in
-   `src/ninja_gen_property_tests/ninja_oracle.rs`, and ordinary assertions are
+   `src/ninja_gen/property_tests/ninja_oracle.rs`, and ordinary assertions are
    permitted *after* the runner returns.
 10. Generated graphs stay within the roadmap bound of 50 actions and 100 edges,
     **and** within a total of 200 explicit outputs. The second bound is a
@@ -1124,7 +1124,7 @@ permutations.
 - Only one `RecipeShell` is exercised per machine, since every entry point takes
   `RecipeShell::host_default()`. The determinism properties pin
   `RecipeShell::Posix` explicitly, as the existing suite does
-  (`src/ninja_gen_property_tests.rs:79`), so results are comparable across
+  (`src/ninja_gen/property_tests/mod.rs:79`), so results are comparable across
   developer machines; the PowerShell `rspfile` branch is therefore covered only
   on the Windows lane and only by existing tests.
 - Determinism of **error paths** is not claimed and not tested. Both rejection
@@ -1478,7 +1478,7 @@ compile from `src/`-side tests (proven; see `EP-M0` question 7). They go in
 `src/ninja_gen/determinism/strategy/`, wired `#[cfg(test)]`, and are reachable
 by every library-side suite in this plan.
 
-Absorb or explicitly diverge from `src/graph_view/tests_property.rs`'s
+Absorb or explicitly diverge from `src/graph_view/tests/property.rs`'s
 `arb_graph_inputs`. If the new strategy supersedes it, migrate that test onto
 it in this milestone; if not, record in `Decision log` why two `BuildGraph`
 generators are justified. Leaving both unreconciled is the decay path.
@@ -2559,6 +2559,45 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 
 ## Surprises & discoveries
 
+- (2026-10-14) **Seven path citations in this plan had gone stale, and every one
+  of them pointed at code the reader is instructed to *go and read*.** `main`'s
+  `#811`/`#813` migration grouped prefix-named modules under directory modules
+  and dropped the parent prefix from each child filename, so
+  `src/ninja_gen_property_tests/ninja_oracle.rs` is now
+  `src/ninja_gen/property_tests/ninja_oracle.rs`,
+  `src/ninja_gen_property_tests.rs` (cited with a line number) is now
+  `src/ninja_gen/property_tests/mod.rs`, and `src/graph_view/tests_property.rs`
+  is now `src/graph_view/tests/property.rs`.
+
+  The failure mode is worth naming because it is silent: a stale citation does
+  not break the build, fail a gate, or appear in any diff, so nothing catches
+  it until an implementer tries to follow it. Six of the seven were
+  forward-looking and have been corrected — the prior-art description, the
+  required-reading list, `EP-M3`'s absorb-or-diverge directive, and two
+  obligation statements. The seventh sits in a dated 2026-09-09 entry in this
+  section and is left verbatim, because a historical record that names the path
+  *as it was* is correct as written; only the present-tense citations are
+  defects.
+
+  Two of the corrected citations carried line numbers, and both line numbers
+  still resolved correctly at the new path. That is the useful signal: the
+  migration moved files without reflowing them, so a citation whose *path* is
+  stale may still have an accurate *line*.
+
+- (2026-10-14) **`EP-M3`'s artefact list names a module layout this repository
+  does not use.** The plan specifies
+  `src/ir/graph_property_tests/{mod, duplicates,cycles}.rs` and
+  `src/ir/action_hash_property_tests.rs`, but the established house shape is
+  the property-test *directory* nested inside the module it tests —
+  `src/ir/cmd_interpolate/property_tests/` and `src/ir/cycle/property_tests/`
+  both exist, and `src/ir/graph/` has no tests directory at all. The
+  sibling-prefix form the plan names is the layout `#811` retired. Creating it
+  would satisfy the plan literally while contradicting the convention the repo
+  enforces, so `EP-M3` must use `src/ir/graph/property_tests/`. This is a
+  documentation defect in the plan, not a code defect, and it is corrected at
+  implementation time rather than pre-emptively rewritten here, because the
+  milestone owns its own file list.
+
 - (2026-10-13) **An ExecPlan's header `Status:` is derived, not remembered, and
   this plan's had been wrong for eight revisions.** The field read `DRAFT` from
   the first revision onward while the document beneath it recorded a passed
@@ -2880,6 +2919,48 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   entry may cite a gate outcome that is not already in a log file.
 
 ## Decision log
+
+- Decision: `EP-M3`'s shared graph strategy **explicitly diverges** from
+  `graph_view`'s `arb_graph_inputs` rather than absorbing it, and the
+  divergence is recorded here as `EP-M3`'s acceptance requires. The plan left
+  `EP-M3` the choice — "absorb or explicitly diverge" — with the instruction
+  that leaving both generators unreconciled is the decay path. Divergence is
+  the measured answer, on four grounds, all re-verified against the tree on
+  2026-10-14 rather than carried over from the planning pass:
+
+  1. **Different return type, so nothing can be absorbed.** The existing
+     strategy returns a tuple of loose specifications —
+     `(Vec<(String, Option<String>)>, Vec<EdgeSpec>)` — and never constructs a
+     `BuildGraph`. `EP-M3` needs `materialize(&self, order: &[usize]) ->
+     BuildGraph`, which is the whole point of the milestone: the properties
+     perturb the *insertion order* of a real graph.
+  2. **The type is unreachable from a sibling module.** `struct EdgeSpec` is
+     declared without `pub` at `src/graph_view/tests/property.rs:13`, and its
+     owning module is a private `#[cfg(test)] mod tests;` at
+     `src/graph_view/mod.rs:299`. No sibling can name `EdgeSpec`, so no
+     `src/`-side strategy could accept or return one even if the shape matched.
+  3. **It filters where `EP-M3` requires construction.**
+     `retain_disjoint_output_edges` at `src/graph_view/tests/property.rs:62` is
+     applied at line 148 to discard edges that collide on an output path. The
+     plan requires well-formedness *by construction* — a pre-numbered output
+     namespace with contiguous, non-overlapping slices — because a filter that
+     silently drops cases is precisely the generator defect the plan's
+     non-vacuity argument forbids.
+  4. **Its perturbation is too weak for the property `EP-M3` must state.** The
+     prior art reverses the action and edge vectors
+     (`src/graph_view/tests/property.rs:151,153`). `EP-M0` measured that
+     independently drawn orders frequently coincide, which is why the plan
+     derives `first_order` and `second_order` from one another and *checks them
+     distinct*, redrawing on coincidence rather than relying on a shuffle that a
+     short input can return unchanged.
+
+  Migrating `graph_view` onto the new strategy was considered and rejected: it
+  would couple a view-layer test to `ninja_gen`, which is a layering inversion
+  for no gain, since the two properties test different guarantees. The
+  three-item reconciliation the plan asks for is therefore: **diverge, and say
+  why** — which is what this entry does. The plan's own text at the absorb
+  directive has been left intact, because it correctly states the obligation;
+  this entry is its discharge.
 
 - Decision: `make proptest`'s selector lives in the **Makefile recipe**, not in
   `.config/nextest.toml`, and this is **forced by measurement** rather than
