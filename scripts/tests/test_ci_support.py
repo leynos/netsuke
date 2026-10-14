@@ -22,8 +22,17 @@ REDIRECTING_BODY = b"redirected-payload"
 
 
 @contextlib.contextmanager
-def redirecting_server(location: str) -> cabc.Iterator[str]:
+def redirecting_server(location: str, header: str = "Location") -> cabc.Iterator[str]:
     """Serve a 302 to ``location`` at ``/redirect`` and a body at ``/target``.
+
+    Parameters
+    ----------
+    location
+        The redirect target, written into ``header``.
+    header
+        The header naming the target. CPython's ``http_error_302`` reads
+        ``URI`` when ``Location`` is absent, so both spellings must be
+        refused.
 
     Yields
     ------
@@ -41,7 +50,7 @@ def redirecting_server(location: str) -> cabc.Iterator[str]:
             """Answer the redirect, or the payload the redirect points at."""
             if self.path == "/redirect":
                 self.send_response(302)
-                self.send_header("Location", location)
+                self.send_header(header, location)
                 self.end_headers()
                 return
             self.send_response(200)
@@ -199,8 +208,9 @@ def test_download_reports_a_missing_source(tmp_path: pathlib.Path) -> None:
         support.download(url, tmp_path / "dest.bin")
 
 
+@pytest.mark.parametrize("header", ["Location", "URI"])
 def test_download_refuses_a_redirect_outside_the_allowed_schemes(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    header: str, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A redirect target is allowlisted too, not only the URL asked for.
 
@@ -208,12 +218,16 @@ def test_download_refuses_a_redirect_outside_the_allowed_schemes(
     it would let a release URL be answered with a redirect to plain ``ftp://``
     and the archive would be fetched from there. The scheme set is narrowed
     here only so the loopback server below can be the origin.
+
+    Both header spellings are covered because ``http_error_302`` accepts
+    ``URI`` when ``Location`` is absent, so a check that read only ``Location``
+    would let the second case through.
     """
     monkeypatch.setattr(support, "ALLOWED_URL_SCHEMES", frozenset({"http", "file"}))
 
     with (
-        redirecting_server("ftp://example.invalid/archive.tar.gz") as base,
-        pytest.raises(support.CiScriptError, match="redirected to"),
+        redirecting_server("ftp://example.invalid/archive.tar.gz", header) as base,
+        pytest.raises(support.CiScriptError, match="refusing to open"),
     ):
         support.download(f"{base}/redirect", tmp_path / "dest.bin")
 
