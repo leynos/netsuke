@@ -152,6 +152,7 @@ fn command_control_characters_are_rejected(#[case] command: &str) -> Result<()> 
     let result = generate_posix(&graph(
         Recipe::Command {
             command: command.into(),
+            isolation: netsuke::ast::CommandIsolation::Shared,
         },
         "in",
         "out",
@@ -176,6 +177,7 @@ fn unsafe_paths_are_rejected(#[case] input: &str) -> Result<()> {
     let result = generate_posix(&graph(
         Recipe::Command {
             command: format!("cat {INS_TOKEN} > {OUTS_TOKEN}").into(),
+            isolation: netsuke::ast::CommandIsolation::Shared,
         },
         input,
         "out",
@@ -193,6 +195,7 @@ fn dollar_free_commands_remain_byte_identical() -> Result<()> {
     let ninja = generate_posix(&graph(
         Recipe::Command {
             command: "echo hi".into(),
+            isolation: netsuke::ast::CommandIsolation::Shared,
         },
         "in",
         "out",

@@ -205,7 +205,7 @@ struct RecipeRenderContext<'env, 'a> {
 /// script cannot be evaluated.
 fn render_recipe(recipe: &mut Recipe, context: &RecipeRenderContext<'_, '_>) -> Result<()> {
     match recipe {
-        Recipe::Command { command } => render_command_recipe(command, context),
+        Recipe::Command { command, .. } => render_command_recipe(command, context),
         Recipe::Script { script } => render_script_recipe(script, context),
         Recipe::Rule { rule } => render_string_or_list(
             rule,

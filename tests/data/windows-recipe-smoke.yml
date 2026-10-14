@@ -17,6 +17,36 @@ actions:
     command:
       - "cmd.exe /d /c exit 27"
       - "Set-Content -NoNewline -LiteralPath 'must not exist.txt' -Value second-entry-ran"
+  - name: isolated-state
+    description: Reset PowerShell location and variables for every isolated entry
+    command_isolation: isolated
+    command:
+      - "$null = New-Item -ItemType Directory -Force -Path 'isolated nested'; Set-Location 'isolated nested'; $env:NETSUKE_ISOLATED_ENV = 'leaked'; $script:NETSUKE_ISOLATED_VARIABLE = 'leaked'"
+      - "if ((Get-Location).Path -ne $env:NETSUKE_ISOLATION_ROOT) { exit 76 }; if ($env:NETSUKE_ISOLATED_ENV) { exit 77 }; if (Get-Variable NETSUKE_ISOLATED_VARIABLE -Scope Script -ErrorAction SilentlyContinue) { exit 78 }; Set-Content -NoNewline -LiteralPath 'isolated state.txt' -Value 'baseline'"
+  - name: isolated-exit-zero
+    description: Continue after a successful exit in an isolated entry
+    command_isolation: isolated
+    command:
+      - "exit 0"
+      - "Set-Content -NoNewline -LiteralPath 'isolated exit zero.txt' -Value continued"
+  - name: isolated-list-fails
+    description: Stop isolated PowerShell entries after native command failure
+    command_isolation: isolated
+    command:
+      - "cmd.exe /d /c exit 29"
+      - "Set-Content -NoNewline -LiteralPath 'isolated must not exist.txt' -Value second-entry-ran"
+  - name: isolated-large-list
+    description: Use the response file for a large isolated PowerShell list
+    command_isolation: isolated
+    command:
+      - "$largeRecipePadding = '{{ 'x' * 5000 }}'; $env:NETSUKE_ISOLATED_LARGE = 'first'"
+      - "$largeRecipePadding = '{{ 'y' * 5000 }}'; if ($env:NETSUKE_ISOLATED_LARGE) { exit 79 }; Set-Content -NoNewline -LiteralPath 'isolated large list.txt' -Value 'second'"
+  - name: isolated-native-stderr
+    description: Pass native stderr through isolated PowerShell children
+    command_isolation: isolated
+    command:
+      - "cmd.exe /d /c 'echo isolated-native-stderr 1>&2'"
+      - "Set-Content -NoNewline -LiteralPath 'isolated stderr.txt' -Value complete"
   - name: script
     description: Prove script recipes use Windows PowerShell
     script: |
@@ -33,6 +63,12 @@ actions:
     deps:
       - dependency-first
       - dependency-second
+  - name: bash-isolated-state
+    description: Reset POSIX shell state for isolated entries on Windows Bash
+    command_isolation: isolated
+    command:
+      - "mkdir -p nested && cd nested && export NETSUKE_BASH_ENV=leaked && NETSUKE_BASH_VARIABLE=leaked"
+      - "test \"$PWD\" = \"$NETSUKE_BASH_BASELINE\" && test -z \"${NETSUKE_BASH_ENV-}\" && test -z \"${NETSUKE_BASH_VARIABLE-}\" && echo isolated > bash-isolated-state.txt"
   - name: large-scalar
     description: Execute a scalar recipe beyond the Windows command-line limit
     command: "$largeRecipePadding = '{{ 'x' * 12500 }}'; Set-Content -NoNewline -LiteralPath 'large scalar.txt' -Value scalar"

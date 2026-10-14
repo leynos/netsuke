@@ -237,6 +237,36 @@ fn multi_command_manifest_ninja_snapshot() -> Result<()> {
     Ok(())
 }
 
+/// Snapshot an isolated command list inherited from a rule.
+#[test]
+fn isolated_command_list_manifest_ninja_snapshot() -> Result<()> {
+    let fixture_dir = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
+        .context("open repository root to read tests/data/isolated_command_list.yml")?;
+    let manifest_yaml = fixture_dir
+        .read_to_string("tests/data/isolated_command_list.yml")
+        .context("read tests/data/isolated_command_list.yml")?;
+
+    let manifest = manifest::from_str(&manifest_yaml)?;
+    let ir = BuildGraph::from_manifest_for_shell(&manifest, ninja_gen::RecipeShell::Posix)?;
+    let ninja_content = generate_posix(&ir)?;
+    ensure!(
+        ninja_content.contains("command = ( { _netsuke_background_before=")
+            && ninja_content.contains("} )"),
+        "isolated entries should be emitted in per-entry subshells:\n{ninja_content}"
+    );
+
+    let mut settings = Settings::new();
+    settings.set_snapshot_path(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/snapshots/ninja"
+    ));
+    settings.bind(|| {
+        assert_snapshot!("isolated_command_list_manifest_ninja", ninja_content);
+    });
+
+    Ok(())
+}
+
 /// Snapshot Ninja's implicit-dependency separator for manifest dependencies.
 #[test]
 fn implicit_deps_manifest_ninja_snapshot() -> Result<()> {

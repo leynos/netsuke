@@ -179,6 +179,8 @@ manifest.glob.unknown_pattern_error = неизвестная ошибка шаб
 manifest.glob.io_failed = Сбой glob для «{ $pattern }»: { $detail }.
 manifest.glob.unknown_io_error = неизвестная ошибка ввода-вывода.
 manifest.command_list_empty = Поле «command» не должно быть пустым: укажите строку команды или непустой список.
+manifest.command_isolation_recipe = Поле «command_isolation» требует рецепт со списком команд.
+manifest.command_isolation_scalar = «command_isolation: isolated» требует список команд.
 
 # Ошибки промежуточного представления.
 ir.rule_not_found = Правило «{ $rule }», на которое ссылается цель «{ $target }», не найдено.

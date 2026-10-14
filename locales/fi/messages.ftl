@@ -179,6 +179,8 @@ manifest.glob.unknown_pattern_error = tuntematon hahmovirhe.
 manifest.glob.io_failed = Glob epäonnistui hahmolle ”{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = tuntematon siirräntävirhe.
 manifest.command_list_empty = Kenttä ”command” ei saa olla tyhjä: anna komentomerkkijono tai ei-tyhjä luettelo.
+manifest.command_isolation_recipe = Kenttä ”command_isolation” edellyttää komentoluetteloreseptiä.
+manifest.command_isolation_scalar = ”command_isolation: isolated” edellyttää komentoluetteloa.
 
 # Välimuotoesityksen virheet.
 ir.rule_not_found = Sääntöä ”{ $rule }”, johon kohde ”{ $target }” viittaa, ei löytynyt.

@@ -179,6 +179,8 @@ manifest.glob.unknown_pattern_error = 不明なパターンエラー。
 manifest.glob.io_failed = 「{ $pattern }」の glob に失敗しました: { $detail }。
 manifest.glob.unknown_io_error = 不明な入出力エラー。
 manifest.command_list_empty = 「command」フィールドは空にできません: コマンド文字列または空でないリストを指定してください。
+manifest.command_isolation_recipe = 「command_isolation」フィールドにはコマンドリストのレシピが必要です。
+manifest.command_isolation_scalar = 「command_isolation: isolated」にはコマンドリストが必要です。
 
 # 中間表現のエラー。
 ir.rule_not_found = ターゲット「{ $target }」が参照する規則「{ $rule }」が見つかりません。

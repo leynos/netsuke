@@ -99,7 +99,7 @@ fn manifest_deps_do_not_contribute_to_recipe_inputs() -> Result<()> {
         .actions
         .get(&edge.action_id)
         .context("expected action for out/app")?;
-    let Recipe::Command { command } = &action.recipe else {
+    let Recipe::Command { command, .. } = &action.recipe else {
         bail!("expected command recipe");
     };
 

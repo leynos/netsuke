@@ -56,7 +56,7 @@ use anyhow::Result;
 ///
 /// assert!(matches!(
 ///     &manifest.targets[0].recipe,
-///     Recipe::Command { command } if command.as_single() == Some("echo release")
+///     Recipe::Command { command, .. } if command.as_single() == Some("echo release")
 /// ));
 /// ```
 pub fn from_str_with_env_and_config(

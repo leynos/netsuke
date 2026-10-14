@@ -30,7 +30,7 @@ fn command_words(body: &str) -> Result<Vec<String>> {
         .values()
         .next()
         .context("manifest should contain at least one action")?;
-    let Recipe::Command { command } = &action.recipe else {
+    let Recipe::Command { command, .. } = &action.recipe else {
         bail!("expected command recipe, got: {:?}", action.recipe);
     };
     let command_str = command.as_single().context("command should be a scalar")?;

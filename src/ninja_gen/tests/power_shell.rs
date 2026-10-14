@@ -103,6 +103,7 @@ fn large_power_shell_recipes_use_ninja_response_files() -> Result<()> {
     assert_large_recipe_uses_ninja_response_file(
         Recipe::Command {
             command: StringOrList::String(format!("# {padding}\nWrite-Output large-scalar")),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         "Write-Output large-scalar",
     )?;
@@ -118,6 +119,7 @@ fn large_power_shell_recipes_use_ninja_response_files() -> Result<()> {
                 format!("# {padding}\n$env:NETSUKE_LARGE = 'shared'"),
                 "if ($env:NETSUKE_LARGE -ne 'shared') { exit 1 }; Write-Output large-list".into(),
             ]),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         "Write-Output large-list",
     )
@@ -129,6 +131,7 @@ fn large_power_shell_rules_use_distinct_response_files() -> Result<()> {
     let action = Action {
         recipe: Recipe::Command {
             command: StringOrList::String("x".repeat(12_500)),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         description: None,
         depfile: None,

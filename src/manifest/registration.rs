@@ -13,7 +13,9 @@ use super::{
     map_data_error,
 };
 use crate::{
-    ast::EMPTY_COMMAND_LIST_ERROR,
+    ast::{
+        COMMAND_ISOLATION_RECIPE_ERROR, COMMAND_ISOLATION_SCALAR_ERROR, EMPTY_COMMAND_LIST_ERROR,
+    },
     localization::{self, keys},
 };
 use camino::Utf8PathBuf;
@@ -114,13 +116,23 @@ pub(super) fn register_glob_function(
 
 /// Translate schema-only recipe errors at the manifest adapter boundary.
 pub(super) fn localize_recipe_error(error: serde_json::Error) -> serde_json::Error {
-    if error.to_string().starts_with(EMPTY_COMMAND_LIST_ERROR) {
-        serde_json::Error::custom(
-            localization::message(keys::MANIFEST_COMMAND_LIST_EMPTY).to_string(),
-        )
+    let error_message = error.to_string();
+    let localized_message = if error_message.starts_with(EMPTY_COMMAND_LIST_ERROR) {
+        Some(localization::message(keys::MANIFEST_COMMAND_LIST_EMPTY))
+    } else if error_message.starts_with(COMMAND_ISOLATION_RECIPE_ERROR) {
+        Some(localization::message(
+            keys::MANIFEST_COMMAND_ISOLATION_RECIPE,
+        ))
+    } else if error_message.starts_with(COMMAND_ISOLATION_SCALAR_ERROR) {
+        Some(localization::message(
+            keys::MANIFEST_COMMAND_ISOLATION_SCALAR,
+        ))
     } else {
-        error
-    }
+        None
+    };
+    localized_message.map_or(error, |message| {
+        serde_json::Error::custom(message.to_string())
+    })
 }
 
 /// Expose the manifest's `vars` section as Jinja globals.

@@ -51,7 +51,7 @@ fn rendered_command_with_policy(
         .targets
         .first()
         .context("manifest should contain a target")?;
-    let Recipe::Command { command } = &target.recipe else {
+    let Recipe::Command { command, .. } = &target.recipe else {
         return Err(anyhow!("expected command recipe, got {:?}", target.recipe));
     };
     command

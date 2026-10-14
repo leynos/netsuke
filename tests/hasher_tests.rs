@@ -1,7 +1,7 @@
 //! Tests for action hashing utilities.
 
 use anyhow::{Result, ensure};
-use netsuke::ast::{Recipe, StringOrList};
+use netsuke::ast::{CommandIsolation, Recipe, StringOrList};
 use netsuke::hasher::ActionHasher;
 use netsuke::ir::Action;
 use rstest::rstest;
@@ -9,7 +9,10 @@ use rstest::rstest;
 #[rstest]
 #[case(
     Action {
-        recipe: Recipe::Command { command: "echo".into() },
+        recipe: Recipe::Command {
+            command: "echo".into(),
+            isolation: CommandIsolation::Shared,
+        },
         description: Some("desc".into()),
         depfile: Some("$out.d".into()),
         deps_format: Some("gcc".into()),
@@ -33,6 +36,7 @@ use rstest::rstest;
     Action {
         recipe: Recipe::Command {
             command: StringOrList::String(String::new()),
+            isolation: CommandIsolation::Shared,
         },
         description: None,
         depfile: None,
@@ -55,7 +59,10 @@ use rstest::rstest;
 )]
 #[case(
     Action {
-        recipe: Recipe::Command { command: "特殊字符!@#$%^&*()".into() },
+        recipe: Recipe::Command {
+            command: "特殊字符!@#$%^&*()".into(),
+            isolation: CommandIsolation::Shared,
+        },
         description: Some("desc\nwith\nnewlines".into()),
         depfile: Some(String::new()),
         deps_format: None,
@@ -81,6 +88,38 @@ fn hash_action_is_stable(#[case] action: Action, #[case] expected: &str) -> Resu
     ensure!(
         digest == expected,
         "unexpected digest: expected {expected}, got {digest}"
+    );
+    Ok(())
+}
+
+#[test]
+fn isolated_command_list_has_a_distinct_action_hash() -> Result<()> {
+    let shared = Action {
+        recipe: Recipe::Command {
+            command: StringOrList::List(vec!["cargo fmt".into()]),
+            isolation: CommandIsolation::Shared,
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let isolated = Action {
+        recipe: Recipe::Command {
+            command: StringOrList::List(vec!["cargo fmt".into()]),
+            isolation: CommandIsolation::Isolated,
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+
+    ensure!(
+        ActionHasher::hash(&shared)? != ActionHasher::hash(&isolated)?,
+        "action identity must include an isolated command-list mode"
     );
     Ok(())
 }

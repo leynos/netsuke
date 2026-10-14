@@ -35,10 +35,12 @@ use std::collections::HashMap;
 #[cfg(kani)]
 use std::{collections::hash_map::DefaultHasher, hash::BuildHasherDefault};
 
+mod command_isolation;
 mod dependency_order;
 mod string_or_list;
 mod target;
 
+pub use command_isolation::CommandIsolation;
 pub use dependency_order::DependencyOrder;
 pub use string_or_list::StringOrList;
 pub use target::Target;
@@ -156,9 +158,16 @@ pub enum Recipe {
     /// A shell command, given as a scalar or an ordered list executed by the
     /// selected interpreter's fail-fast sequence.
     Command {
+        /// Whether ordered command-list entries share shell state.
+        #[serde(
+            default,
+            rename = "command_isolation",
+            skip_serializing_if = "CommandIsolation::is_shared"
+        )]
+        isolation: CommandIsolation,
         /// A scalar command and each list entry are rendered for the selected
         /// legacy-recipe interpreter. An empty value is reserved for
-        /// dependency-only manifest entries.
+        /// dependency-only manifest entries and must use shared isolation.
         #[serde(skip_serializing_if = "StringOrList::is_empty_marker")]
         command: StringOrList,
     },
@@ -177,11 +186,25 @@ pub enum Recipe {
 /// Preserve the established diagnostic for entries without a recipe or deps.
 pub(crate) const MISSING_RECIPE_ERROR: &str = "missing one of command, script, or rule";
 
+/// Neutral schema error for modes that do not accompany a command list.
+pub(crate) const COMMAND_ISOLATION_RECIPE_ERROR: &str =
+    "command_isolation requires a command-list recipe";
+
+/// Neutral schema error for isolated scalar commands.
+pub(crate) const COMMAND_ISOLATION_SCALAR_ERROR: &str =
+    "command_isolation isolated commands require command lists";
+
 impl Recipe {
     /// Report whether this recipe lowers to a dependency-only Ninja node.
     #[must_use]
     pub(crate) const fn is_dependency_only(&self) -> bool {
-        matches!(self, Self::Command { command } if command.is_empty_marker())
+        matches!(
+            self,
+            Self::Command {
+                command,
+                isolation: CommandIsolation::Shared,
+            } if command.is_empty_marker()
+        )
     }
 }
 
@@ -195,6 +218,8 @@ struct RawRecipe {
     script: Option<String>,
     /// Optional referenced rule name or names.
     rule: Option<StringOrList>,
+    /// Optional state policy for an ordered command list.
+    command_isolation: Option<CommandIsolation>,
 }
 
 impl<'de> Deserialize<'de> for Recipe {
@@ -207,19 +232,39 @@ impl<'de> Deserialize<'de> for Recipe {
             command: command_field,
             script: script_field,
             rule: rule_field,
+            command_isolation,
         } = raw;
+        if command_isolation.is_some() {
+            if command_field.is_none() {
+                return Err(serde::de::Error::custom(COMMAND_ISOLATION_RECIPE_ERROR));
+            }
+            if script_field.is_some() {
+                return Err(serde::de::Error::custom(COMMAND_ISOLATION_RECIPE_ERROR));
+            }
+            if rule_field.is_some() {
+                return Err(serde::de::Error::custom(COMMAND_ISOLATION_RECIPE_ERROR));
+            }
+        }
         match (command_field, script_field, rule_field) {
-            (Some(command), None, None) => match command {
-                empty if empty.is_empty_content() => {
-                    Err(serde::de::Error::custom(EMPTY_COMMAND_LIST_ERROR))
+            (Some(command), None, None) => {
+                let isolation = command_isolation.unwrap_or_default();
+                match command {
+                    empty if empty.is_empty_content() => {
+                        Err(serde::de::Error::custom(EMPTY_COMMAND_LIST_ERROR))
+                    }
+                    StringOrList::String(_) if isolation == CommandIsolation::Isolated => {
+                        Err(serde::de::Error::custom(COMMAND_ISOLATION_SCALAR_ERROR))
+                    }
+                    command_value => Ok(Self::Command {
+                        isolation,
+                        command: command_value,
+                    }),
                 }
-                command_value => Ok(Self::Command {
-                    command: command_value,
-                }),
-            },
+            }
             (None, Some(script), None) => Ok(Self::Script { script }),
             (None, None, Some(rule)) => Ok(Self::Rule { rule }),
             (None, None, None) => Ok(Self::Command {
+                isolation: CommandIsolation::Shared,
                 command: StringOrList::Empty,
             }),
             (command_opt, script_opt, rule_opt) => {
