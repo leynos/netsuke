@@ -6,10 +6,12 @@
 """Install the pinned actionlint release, reusing a cached binary that matches.
 
 The Linux gate cache owns ``./actionlint``. A warm run finds it present and,
-when it reports the pinned version, keeps it. Otherwise the pinned Linux amd64
-release archive is downloaded, its SHA-256 is verified against the pin, and
-the single ``actionlint`` member is extracted as a regular executable. No
-upstream installer script runs: the archive is the whole artefact, and the
+when it reports the pinned version, keeps it. A binary that is present but
+cannot answer its version probe fails the step instead of being replaced, so a
+broken cache is reported rather than silently repaired. Otherwise the pinned
+Linux amd64 release archive is downloaded, its SHA-256 is verified against the
+pin, and the single ``actionlint`` member is extracted as a regular executable.
+No upstream installer script runs: the archive is the whole artefact, and the
 checksum is what makes it trusted.
 
 Parameters arrive from the environment: ``INPUT_ACTIONLINT_VERSION`` and
@@ -85,22 +87,67 @@ class Release:
         return (self.install_dir / BINARY_NAME).resolve()
 
 
-def reported_version(binary: pathlib.Path) -> str | None:
-    """Return the version ``binary --version`` reports, or ``None`` if it fails."""
+@dataclasses.dataclass(frozen=True, slots=True)
+class Probe:
+    """The outcome of asking a binary for its version.
+
+    Three states, and the caller reads them in this order:
+
+    - ``failure`` set: the binary is there but cannot answer, so the cache is
+      broken and the step must fail rather than paper over it.
+    - ``version`` set: the binary answered with that version.
+    - neither set: there is nothing to ask, which is an empty cache.
+
+    The first and last are the pair worth keeping apart. An empty cache is what
+    the cold path exists for; a binary that runs and cannot report a version is
+    a different fact, and a caller that cannot tell them apart has to guess --
+    and the guess that replaces a broken binary hides the breakage behind a
+    green step.
+    """
+
+    version: str | None = None
+    failure: str | None = None
+
+
+def probe_version(binary: pathlib.Path) -> Probe:
+    """Ask ``binary --version`` what it reports, and why if it cannot say.
+
+    A binary that is absent, or present and not executable, is an empty cache:
+    there is nothing to run, so the caller installs. A binary that runs and
+    exits non-zero, or exits cleanly without printing a version, is broken,
+    and the returned ``Probe`` carries the diagnostic. The two are distinct
+    because a reinstall would repair neither silently: it would hide the
+    second behind a green step and leave the cache volume holding an entry
+    nobody knows is wrong.
+
+    Returns
+    -------
+    Probe
+        The version the binary reported, or the reason it could not report
+        one. Neither field is set when there was nothing to ask, which is the
+        empty-cache case the cold path exists for.
+    """
     if not is_executable_file(binary):
-        return None
+        return Probe()
     spec = RunSpec(catalogue(str(binary)), echo=False)
     result = run(str(binary), "--version", spec=spec)
     if not result.ok or not result.stdout:
-        return None
-    return result.stdout.splitlines()[0].strip()
+        return Probe(failure=describe_failure(result))
+    return Probe(version=result.stdout.splitlines()[0].strip())
 
 
 def install(release: Release, scratch: pathlib.Path) -> None:
-    """Download, verify, and extract the pinned archive over ``release.binary``."""
+    """Download, verify, and extract the pinned archive over ``release.binary``.
+
+    ``INPUT_INSTALL_DIR`` may name a directory that does not exist yet, and
+    extraction writes into the destination rather than creating it, so the
+    directory is made here. It is made after verification rather than before
+    so a checksum failure leaves no install directory behind.
+    """
     archive = scratch / pathlib.PurePosixPath(release.url).name
     download(release.url, archive)
     verify_sha256(archive, release.sha256)
+    release.binary.parent.mkdir(parents=True, exist_ok=True)
     extract_members(archive, release.binary.parent, (BINARY_NAME,))
 
 
@@ -115,23 +162,68 @@ def ensure_installed_version(binary: pathlib.Path, expected: str) -> str:
     Raises
     ------
     CiScriptError
-        If the freshly extracted binary does not report the pinned version.
+        If the freshly extracted binary cannot be asked for its version, or
+        reports a different one. The failure detail comes from the same probe
+        the comparison used, so the diagnostic costs no second invocation.
     """
-    installed = reported_version(binary)
-    if installed == expected:
-        return installed
-    spec = RunSpec(catalogue(str(binary)), echo=False)
-    result = run(str(binary), "--version", spec=spec)
+    probe = probe_version(binary)
+    if probe.version == expected:
+        return expected
+    detail = f" ({probe.failure})" if probe.failure else ""
     message = (
-        f"installed {BINARY_NAME} reports {installed!r}, expected "
-        f"{expected!r} ({describe_failure(result)})"
+        f"installed {BINARY_NAME} reports {probe.version!r}, expected "
+        f"{expected!r}{detail}"
     )
     raise CiScriptError(message)
+
+
+def reuse_or_install(release: Release) -> str:
+    """Return the report line for the pinned binary, installing it if needed.
+
+    The cache probe decides the whole branch, so it lives here rather than in
+    the entry point. The entry point's job is to turn a failure into an exit
+    status, and the branch that reports a broken cache has to raise to do it;
+    raising from inside the entry point's own ``try`` makes the decision and
+    its handling one tangle, and leaves the branch untestable without going
+    through the exit status.
+
+    Returns
+    -------
+    str
+        The line to print, naming either the reused cache entry or the freshly
+        installed binary.
+
+    Raises
+    ------
+    CiScriptError
+        If the cached binary is present but cannot report a version, or if the
+        freshly extracted binary reports one other than ``release.version``.
+        A broken cache entry fails the step rather than being replaced, so it
+        is reported where its diagnostic can name the binary; silently
+        reinstalling would hide it behind a green step.
+    """
+    probe = probe_version(release.binary)
+    if probe.failure is not None:
+        message = f"the cached {BINARY_NAME} cannot be used: {probe.failure}"
+        raise CiScriptError(message)
+    if probe.version == release.version:
+        return f"{BINARY_NAME} {release.version} restored from the cache volume"
+    with tempfile.TemporaryDirectory(dir=release.runner_temp) as scratch:
+        install(release, pathlib.Path(scratch))
+    installed = ensure_installed_version(release.binary, release.version)
+    return f"installed {BINARY_NAME} {installed} from {release.url}"
 
 
 @app.default
 def main(*, release: Release) -> int:
     """Ensure ``release.install_dir/actionlint`` is the pinned release.
+
+    A cached binary that cannot be asked for its version fails the step rather
+    than being replaced. Reinstalling would hide the failure behind a green
+    step, and the cache volume would keep the broken entry until the version
+    pin changed, so the failure would return with nothing recorded to explain
+    it. An absent or non-executable binary is the ordinary empty-cache case and
+    is still replaced.
 
     Returns
     -------
@@ -139,13 +231,7 @@ def main(*, release: Release) -> int:
         ``0`` when the pinned binary is in place, ``1`` otherwise.
     """
     try:
-        if reported_version(release.binary) == release.version:
-            print(f"{BINARY_NAME} {release.version} restored from the cache volume")
-            return 0
-        with tempfile.TemporaryDirectory(dir=release.runner_temp) as scratch:
-            install(release, pathlib.Path(scratch))
-        installed = ensure_installed_version(release.binary, release.version)
-        print(f"installed {BINARY_NAME} {installed} from {release.url}")
+        print(reuse_or_install(release))
     except (CiScriptError, OSError) as error:
         print(f"install_actionlint: {error}", file=sys.stderr)
         return 1

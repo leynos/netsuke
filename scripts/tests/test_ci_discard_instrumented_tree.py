@@ -26,11 +26,16 @@ def target(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> pathlib.P
     return target
 
 
-def _df(cmd_mox: CmdMox, *, exit_code: int = 0) -> None:
-    """Mock the ``df -h .`` free-space pre-flight the script runs twice."""
+def _df(cmd_mox: CmdMox, *, exit_code: int = 0, expected_calls: int = 2) -> None:
+    """Mock the ``df -h .`` free-space pre-flight the script runs twice.
+
+    ``expected_calls`` is what cmd-mox verifies at teardown, so a case whose
+    run stops between the two calls passes ``1``: the count is an assertion
+    about how far the script got, not a fixture detail.
+    """
     cmd_mox.mock("df").with_args("-h", ".").returns(
         stdout="Filesystem 1%\n", exit_code=exit_code
-    ).times(2)
+    ).times(expected_calls)
 
 
 def test_removes_the_instrumented_trees_and_keeps_the_rest(
@@ -95,6 +100,37 @@ def test_subtrees_input_overrides_the_default_names(
     assert not (target / "debug").exists(), "expected: not (target / 'debug').exists()"
     assert not (target / "llvm-cov").exists(), (
         "expected: not (target / 'llvm-cov').exists()"
+    )
+    assert (target / "llvm-cov-target").is_dir(), (
+        "expected: (target / 'llvm-cov-target').is_dir()"
+    )
+
+
+def test_a_bad_name_removes_nothing_at_all(
+    cmd_mox: CmdMox,
+    target: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A bad name fails the step before the first tree is removed.
+
+    The name after the bad one is valid, so a removal loop that validated as
+    it went would delete ``llvm-cov`` and then raise: the step would fail, but
+    a tree the caller never agreed to lose would already be gone. Every name
+    is resolved before the first removal so the failure is total.
+    """
+    monkeypatch.setenv("INPUT_SUBTREES", "llvm-cov ..")
+    # The run stops before the post-removal df, so only the pre-flight is made.
+    _df(cmd_mox, expected_calls=1)
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 1, "expected: exit_code == 1"
+    assert "refusing to remove '..'" in capsys.readouterr().err, (
+        "expected: the diagnostic to name the refused component"
+    )
+    assert (target / "llvm-cov").is_dir(), (
+        "the valid name ahead of the bad one must survive"
     )
     assert (target / "llvm-cov-target").is_dir(), (
         "expected: (target / 'llvm-cov-target').is_dir()"
