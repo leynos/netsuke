@@ -101,7 +101,10 @@ def test_summary_section_terminates_unterminated_text() -> None:
 
 
 def test_names_the_backend_the_lane_selected(
-    cmd_mox: CmdMox, summary: pathlib.Path, tmp_path: pathlib.Path, monkeypatch
+    cmd_mox: CmdMox,
+    summary: pathlib.Path,
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`SCCACHE_BACKEND` puts a backend line above the statistics.
 

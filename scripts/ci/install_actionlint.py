@@ -62,12 +62,12 @@ class Release:
     sha256: typ.Annotated[
         str, Parameter(env_var="INPUT_ACTIONLINT_SHA256", required=True)
     ]
-    install_dir: typ.Annotated[
-        pathlib.Path, Parameter(env_var="INPUT_INSTALL_DIR")
-    ] = pathlib.Path()
-    release_root: typ.Annotated[
-        str, Parameter(env_var="INPUT_RELEASE_ROOT")
-    ] = DEFAULT_RELEASE_ROOT
+    install_dir: typ.Annotated[pathlib.Path, Parameter(env_var="INPUT_INSTALL_DIR")] = (
+        pathlib.Path()
+    )
+    release_root: typ.Annotated[str, Parameter(env_var="INPUT_RELEASE_ROOT")] = (
+        DEFAULT_RELEASE_ROOT
+    )
     platform: typ.Annotated[str, Parameter(env_var="INPUT_PLATFORM")] = DEFAULT_PLATFORM
     runner_temp: typ.Annotated[
         pathlib.Path | None, Parameter(env_var="RUNNER_TEMP")

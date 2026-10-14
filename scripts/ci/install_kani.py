@@ -21,7 +21,6 @@ variables. The version must equal ``tools/kani/VERSION`` so the cache key,
 the Makefile, and this installer cannot drift.
 """
 
-import collections.abc
 import dataclasses
 import pathlib
 import sys
@@ -43,6 +42,9 @@ from ci_support import (
 
 import cyclopts
 from cyclopts import App, Parameter
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
 
 CARGO = "cargo"
 ALLOWED = catalogue(CARGO)
@@ -147,9 +149,9 @@ class Release:
     quickinstall_root: typ.Annotated[
         str, Parameter(env_var="INPUT_QUICKINSTALL_ROOT")
     ] = DEFAULT_QUICKINSTALL_ROOT
-    upstream_root: typ.Annotated[
-        str, Parameter(env_var="INPUT_UPSTREAM_ROOT")
-    ] = DEFAULT_UPSTREAM_ROOT
+    upstream_root: typ.Annotated[str, Parameter(env_var="INPUT_UPSTREAM_ROOT")] = (
+        DEFAULT_UPSTREAM_ROOT
+    )
 
     def frontend(self) -> Payload:
         """Return the cargo-quickinstall front-end payload for this release."""
@@ -213,9 +215,9 @@ class InstallStep:
 
     label: str
     destination: pathlib.Path
-    is_present: collections.abc.Callable[[], bool]
+    is_present: cabc.Callable[[], bool]
     payload: Payload
-    install: collections.abc.Callable[[pathlib.Path], None]
+    install: cabc.Callable[[pathlib.Path], None]
 
 
 def install_step(step: InstallStep, release: Release, job: JobEnvironment) -> None:
