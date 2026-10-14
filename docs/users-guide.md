@@ -402,16 +402,18 @@ recipe interpreter. This is a Windows PowerShell contract, not a PowerShell Core
 
 Scalar commands and scripts each receive a fresh PowerShell process. A `shared`
 command list receives one PowerShell process: entries run in declaration order,
-and each generated entry is followed immediately by a `$LASTEXITCODE` check.
-Later entries see PowerShell variables, `$env:` assignments, and locations left
-by earlier entries. With `command_isolation: isolated`, Netsuke starts a fresh
+and each generated entry is followed immediately by a `$LASTEXITCODE` check;
+shared lists retain the existing PowerShell error policy. Later entries see
+PowerShell variables, `$env:` assignments, and locations left by earlier
+entries. With `command_isolation: isolated`, Netsuke starts a fresh
 `powershell.exe` for each entry from the action's unchanged working-directory
-and environment baseline. Each child receives the existing error policy and an
-immediate `$LASTEXITCODE` check; a successful `exit` ends only that child,
-while a non-zero status stops the list. PowerShell terminating errors also fail
-the recipe. In both modes, an entry remains opaque recipe text, so multiple
-native commands separated by semicolons inside one entry are not checked
-individually. State does not cross action or target boundaries.
+and environment baseline. Each child passes through native stderr from
+successful commands and applies a default `ErrorAction` of `Stop` to cmdlets.
+An immediate `$LASTEXITCODE` check stops on a non-zero native status, and a
+successful `exit` ends only that child. Cmdlet errors also fail the recipe. In
+both modes, an entry remains opaque recipe text, so multiple native commands
+separated by semicolons inside one entry are not checked individually. State
+does not cross action or target boundaries.
 
 Use PowerShell syntax in the default route. `$name` is a PowerShell variable and
 `$env:NAME` reads an environment variable. PowerShell parses the braced
@@ -492,14 +494,16 @@ For the Unix default and the explicit Bash route, each list entry is evaluated
 inside its own brace group and the groups are joined with `&&`. The entry is
 passed to `eval` as a shell-quoted payload, so an inline `#` comment or a
 trailing control operator such as `&` cannot consume the generated group's
-closing boundary. Brace groups run in the current shell rather than a subshell:
-a changed working directory, environment assignment, or shell variable can
-therefore be used by later entries. A failed entry stops the chain, and the
-diagnostic identifies the generated action and one-based list-entry positions,
-for example `netsuke command-list failure: action HASH, entry 2`. These
-brace-group, `eval`, background-job, and `exec` restrictions apply only to the
-Unix renderer and the explicit Windows Bash compatibility route; the Windows
-PowerShell route uses its native-command and error checks instead.
+closing boundary. In `shared` mode, brace groups run in the current shell
+rather than a subshell, so a changed working directory, environment assignment,
+or shell variable can be used by later entries. In `isolated` mode, each
+brace/eval wrapper runs inside a subshell and its state changes do not reach
+later entries. A failed entry stops the chain, and the diagnostic identifies
+the generated action and one-based list-entry positions, for example
+`netsuke command-list failure: action HASH, entry 2`. These brace-group,
+`eval`, background-job, and `exec` restrictions apply only to the Unix renderer
+and the explicit Windows Bash compatibility route; the Windows PowerShell route
+uses its native-command and error checks instead.
 
 <!-- tested-example: guide-command-list -->
 
@@ -1920,9 +1924,10 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   from the action's working-directory and environment baseline; a successful
   `exit` ends only that entry. Netsuke checks `$LASTEXITCODE` after each entry
   and stops before a later entry can overwrite a failure. Multiple native
-  commands inside one entry are not individually instrumented; terminating
-  PowerShell errors also stop the list. The POSIX brace-group, `eval`,
-  background-job, and `exec` restrictions do not apply to this route.
+  commands inside one entry are not individually instrumented; isolated
+  children keep cmdlet errors fail-fast while native stderr alone does not stop
+  the list. The POSIX brace-group, `eval`, background-job, and `exec`
+  restrictions do not apply to this route.
 - Write shell dollar expressions normally. `$PATH`, `$RUSTFLAGS`, `$in`,
   `$out`, `$ins`, and `$outs` are literal shell variables in both `command:` and
   `script:` recipes; PowerShell routes use `$name` or `$env:NAME`. Netsuke

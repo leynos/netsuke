@@ -47,6 +47,12 @@ actions:
     command:
       - "cmd.exe /d /c 'echo isolated-native-stderr 1>&2'"
       - "Set-Content -NoNewline -LiteralPath 'isolated stderr.txt' -Value complete"
+  - name: isolated-powershell-error
+    description: Keep PowerShell cmdlet errors fail-fast in isolated children
+    command_isolation: isolated
+    command:
+      - "Write-Error 'isolated-powershell-error'; Set-Content -NoNewline -LiteralPath 'isolated powershell error.txt' -Value unexpected"
+      - "Set-Content -NoNewline -LiteralPath 'isolated powershell error.txt' -Value unexpected"
   - name: script
     description: Prove script recipes use Windows PowerShell
     script: |

@@ -13,7 +13,7 @@ use dyndep::reject_reserved_paths;
 pub use dyndep::{GeneratedDyndep, GeneratedNinja, generate_bundle};
 pub(crate) use path_syntax::{reject_unsupported_path_characters, validated_ninja_path};
 
-use crate::ast::{Recipe, StringOrList};
+use crate::ast::{CommandIsolation, Recipe, StringOrList};
 use crate::ir::{BuildEdge, BuildGraph};
 use crate::localization::{self, keys};
 use camino::Utf8PathBuf;
@@ -358,7 +358,17 @@ impl NamedAction<'_> {
     }
     /// Writes this action's Ninja rule, escaping only the shell-text boundary.
     fn write_into<W: Write>(&self, output: &mut W) -> Result<(), NinjaGenError> {
-        let command = self.shell.command_value(&self.shell_text()?)?;
+        let shell_text = self.shell_text()?;
+        let command = match (&self.action.recipe, self.shell) {
+            (
+                Recipe::Command {
+                    command: StringOrList::List(_),
+                    isolation: CommandIsolation::Isolated,
+                },
+                RecipeShell::PowerShell,
+            ) => self.shell.isolated_command_list_value(&shell_text)?,
+            _ => self.shell.command_value(&shell_text)?,
+        };
         writeln!(output, "rule {}", self.id)?;
         writeln!(output, "  command = {}", command.command())?;
         if let Some(content) = command.response_file_content() {

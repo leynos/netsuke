@@ -185,6 +185,14 @@ function Test-IsolatedPowerShellLists {
     }
     Test-ExpectedRecipeFailure -Netsuke $Netsuke -Failure $expectedFailure
 
+    $expectedPowerShellFailure = [pscustomobject]@{
+        Target = 'isolated-powershell-error'
+        NotCreatedPath = 'isolated powershell error.txt'
+        ExitCodeMessage = "A terminating PowerShell cmdlet error should become Netsuke's documented failure exit code 1"
+        UnexpectedExecutionMessage = 'A command after the isolated PowerShell error ran'
+    }
+    Test-ExpectedRecipeFailure -Netsuke $Netsuke -Failure $expectedPowerShellFailure
+
     $nativeError = & $Netsuke build isolated-native-stderr 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "The isolated native-stderr target failed with ${LASTEXITCODE}: $nativeError"

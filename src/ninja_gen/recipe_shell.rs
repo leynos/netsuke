@@ -43,6 +43,25 @@ const POWER_SHELL_RESPONSE_FILE_SCRIPT_SUFFIX: &str = concat!(
     "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
 );
 
+/// Select how an isolated PowerShell process treats native stderr.
+#[derive(Clone, Copy)]
+enum PowerShellErrorAction {
+    /// Stop on PowerShell non-terminating errors.
+    Stop,
+    /// Pass native stderr through while cmdlet defaults and exit checks fail fast.
+    ContinueNativeStderr,
+}
+
+impl PowerShellErrorAction {
+    /// Return the preference assigned before the generated recipe runs.
+    const fn preference(self) -> &'static str {
+        match self {
+            Self::Stop => "Stop",
+            Self::ContinueNativeStderr => "Continue",
+        }
+    }
+}
+
 /// Represent one Ninja command binding and its optional response-file payload.
 pub(super) enum RenderedRecipeCommand {
     /// Run the command directly from the Ninja command binding.
@@ -79,10 +98,32 @@ impl RecipeShell {
         self,
         script: &ShellText,
     ) -> Result<RenderedRecipeCommand, NinjaGenError> {
+        self.command_value_with_error_action(script, PowerShellErrorAction::Stop)
+    }
+
+    /// Render a recipe with the error policy required by isolated PowerShell lists.
+    pub(super) fn isolated_command_list_value(
+        self,
+        script: &ShellText,
+    ) -> Result<RenderedRecipeCommand, NinjaGenError> {
+        self.command_value_with_error_action(script, PowerShellErrorAction::ContinueNativeStderr)
+    }
+
+    /// Render a command after selecting its PowerShell error policy.
+    fn command_value_with_error_action(
+        self,
+        script: &ShellText,
+        error_action: PowerShellErrorAction,
+    ) -> Result<RenderedRecipeCommand, NinjaGenError> {
         match self {
             Self::Posix => escape_ninja_value(script).map(RenderedRecipeCommand::Direct),
             Self::PowerShell => {
-                let power_shell_script = Self::power_shell_script(script);
+                let power_shell_script = match error_action {
+                    PowerShellErrorAction::Stop => Self::power_shell_script(script),
+                    PowerShellErrorAction::ContinueNativeStderr => {
+                        Self::power_shell_script_with_error_action(script, error_action)
+                    }
+                };
                 Self::validate_power_shell_recipe_size(&power_shell_script)?;
                 Self::power_shell_command(&power_shell_script)
             }
@@ -188,17 +229,26 @@ impl RecipeShell {
         );
     }
 
-    /// Apply the existing PowerShell policy to one isolated child entry.
+    /// Keep native stderr informational and cmdlet errors fail-fast for one entry.
     fn power_shell_script_for_entry(entry: &str) -> String {
         format!(
-            "$ErrorActionPreference = 'Stop'\n$LASTEXITCODE = 0\n{entry}\nif ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}"
+            "$ErrorActionPreference = 'Continue'\n$PSDefaultParameterValues['*:ErrorAction'] = 'Stop'\n$LASTEXITCODE = 0\n{entry}\nif ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}"
         )
     }
 
     /// Add PowerShell's terminating-error and native-process exit policy.
     fn power_shell_script(script: &ShellText) -> ShellText {
+        Self::power_shell_script_with_error_action(script, PowerShellErrorAction::Stop)
+    }
+
+    /// Apply the chosen PowerShell error and native-process exit policies.
+    fn power_shell_script_with_error_action(
+        script: &ShellText,
+        error_action: PowerShellErrorAction,
+    ) -> ShellText {
         ShellText::new(format!(
-            "$ErrorActionPreference = 'Stop'\n$LASTEXITCODE = 0\n{}\nif ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
+            "$ErrorActionPreference = '{}'\n$LASTEXITCODE = 0\n{}\nif ($LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}",
+            error_action.preference(),
             script.as_str()
         ))
     }
