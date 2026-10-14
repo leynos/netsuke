@@ -959,8 +959,8 @@ Every stopping point is documented here. Timestamps are UTC.
   finding as `major`, correctly, and four probes have confirmed the underlying
   condition rather than resolved it. Milestone 4 is therefore discharged by CI
   green plus a dispositioned review and a pull request stating the unmet
-  criterion, not by a zero-finding review — which is what the seven passes
-  delivered: five prose defects fixed, two load-bearing findings dispositioned
+  criterion, not by a zero-finding review — which is what the nine passes
+  delivered: six prose defects fixed, two load-bearing findings dispositioned
   as recorded gaps. **The pull request stays a draft**, as instructed; "marked
   ready" appeared in an earlier version of this line and was the plan
   overreaching its brief.
@@ -1484,20 +1484,23 @@ Markdown only, their re-run is a formality, and the standing requirement is
 that CI be green on every head, including the draft pull request's final one.
 That requirement is met on `8c0490eb` and on every head after it, each of which
 is docs-only on top of the byte-identical non-Markdown tree of the green
-`52084776`. CodeRabbit has run seven passes over this branch. Five findings
-were prose or evidence defects and were fixed — first-person pronouns in this
-plan, a flag-precedence claim stated inaccurately, a reproduction recipe that
-could not work, an acceptance line demanding evidence that was never
-obtainable, and a conformance check naming `.github/actions/...` where the
-caller pins `.github/workflows/mutation-cargo.yml`. Two were load-bearing and
-both stand as recorded gaps: the mold-selection finding, raised on every pass
-that finds anything, which is confirmed as diagnosed and confirmed as not
-actionable from a caller; and the empty-`RUSTFLAGS` reading, which the plan now
-states correctly. A zero-finding review is not reachable while the fourth
-criterion is unmet, and treating one as the exit condition would mean either
-deleting the finding or writing a workaround the issue forbids.
+`52084776`. CodeRabbit has run nine passes over this branch. Six findings were
+prose or evidence defects and were fixed — first-person pronouns in this plan,
+a flag-precedence claim stated inaccurately, a reproduction recipe that could
+not work, an acceptance line demanding evidence that was never obtainable, a
+conformance check naming `.github/actions/...` where the caller pins
+`.github/workflows/mutation-cargo.yml`, and (pass 8) a *Context and
+orientation* section still describing the caller's `with:` block and the
+rustdoc tests as they stood before this branch changed them. Two were
+load-bearing and both stand as recorded gaps: the mold-selection finding,
+raised on every pass that finds anything, which is confirmed as diagnosed and
+confirmed as not actionable from a caller; and the empty-`RUSTFLAGS` reading,
+which the plan now states correctly. A zero-finding review is not reachable
+while the fourth criterion is unmet, and treating one as the exit condition
+would mean either deleting the finding or writing a workaround the issue
+forbids.
 
-Two of those seven passes were run back to back over the identical frozen
+Two of those nine passes were run back to back over the identical frozen
 revision `52084776`, and they returned **0 and 2** findings. That is the
 sampling behaviour stated as a measurement rather than a caveat: a "clean
 review" is a property of one sample, so the exit condition this plan uses is a
