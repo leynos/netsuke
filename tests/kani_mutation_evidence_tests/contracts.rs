@@ -140,20 +140,22 @@ fn supplemental_property_location_resolves_directory_and_file_modules() -> Resul
     )
     .context("write single-file module")?;
 
-    let resolved = supplemental_property_location(
+    let directory_resolved = supplemental_property_location(
         &root,
         "ninja_gen__property_tests__emission_is_deterministic",
     )?;
     ensure!(
-        resolved == Utf8Path::new("src/ninja_gen/property_tests/mod.rs"),
-        "a ninja_gen-rooted patch must resolve to its directory module, got {resolved}",
+        directory_resolved == Utf8Path::new("src/ninja_gen/property_tests/mod.rs"),
+        "a ninja_gen-rooted patch must resolve to its directory module, got \
+         {directory_resolved}",
     );
 
-    let resolved =
+    let single_file_resolved =
         supplemental_property_location(&root, "hex__property_tests__encoding_round_trips")?;
     ensure!(
-        resolved == Utf8Path::new("src/hex/property_tests.rs"),
-        "a single-file property module must resolve to its own source, got {resolved}",
+        single_file_resolved == Utf8Path::new("src/hex/property_tests.rs"),
+        "a single-file property module must resolve to its own source, got \
+         {single_file_resolved}",
     );
 
     let missing = supplemental_property_location(&root, "ninja_gen__property_tests__absent")
