@@ -2947,8 +2947,10 @@ the JSON form.
 `scripts/ci/ci_support.py` holds what they share: the catalogue, a synchronous
 runner, `GITHUB_PATH` publication, and checksum-verified download and
 extraction of release archives. Downloads accept `https://` and `file://` URLs
-only; the tests serve release fixtures over `file://` so the real download,
-verification, and extraction path runs without a network.
+only, and apply the same allowlist to every redirect target before following
+it, so a release URL cannot be answered with a redirect to a scheme the
+downloader refuses; the tests serve release fixtures over `file://` so the real
+download, verification, and extraction path runs without a network.
 
 `make test-ci-scripts` runs their suite, the `test_ci_*.py` modules under
 `scripts/tests/`, with pytest and [cmd-mox](https://github.com/leynos/cmd-mox),
