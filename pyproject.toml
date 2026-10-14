@@ -84,6 +84,9 @@ extend-ignore = [
 # literal expectations; those idioms are the point of a test, not a smell.
 "scripts/tests/*.py" = ["assert", "too-many-arguments", "too-many-positional-arguments", "magic-value-comparison", "no-self-use"]
 "tests/workflow_contracts/*.py" = ["assert", "too-many-arguments", "too-many-positional-arguments", "magic-value-comparison", "no-self-use"]
+# Cyclopts entry points declare one keyword-only parameter per environment
+# input by design, so the argument-count ceilings do not apply to them.
+"scripts/ci/*.py" = ["too-many-arguments", "too-many-positional-arguments"]
 
 [tool.ruff.lint.flake8-import-conventions]
 # Declare the banned `from` imports.

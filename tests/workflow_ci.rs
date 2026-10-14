@@ -179,37 +179,59 @@ fn ensure_kani_cache_contract(steps: &[Value]) -> Result<()> {
     Ok(())
 }
 
-/// Require each Kani archive's checksum to gate that same archive's use.
+/// The checked-in installer the Kani smoke job delegates to.
 ///
-/// A bare `sha256sum --check` substring would also be satisfied by verifying
-/// an unrelated file, so each assertion names the archive shell variable and
-/// requires the verification to precede the extraction or setup that consumes
-/// it.
-fn ensure_kani_archives_are_verified_before_use(install_command: &str) -> Result<()> {
-    let checked_uses = [
-        (
-            "\"${frontend_archive}\" | sha256sum --check --",
-            "tar --extract --gzip --file \"${frontend_archive}\"",
-            "front-end archive",
-        ),
-        (
-            "\"${bundle}\" | sha256sum --check --",
-            "cargo kani setup --use-local-bundle \"${bundle}\"",
-            "verifier bundle",
-        ),
-    ];
-    for (check, use_site, label) in checked_uses {
-        let check_index = install_command
-            .find(check)
-            .with_context(|| format!("Kani {label} should be checksum-verified by name"))?;
-        let use_index = install_command
-            .find(use_site)
-            .with_context(|| format!("Kani {label} should be unpacked by name"))?;
-        ensure!(
-            check_index < use_index,
-            "Kani {label} should be verified before it is unpacked"
-        );
-    }
+/// The job's install logic lives in Python so it can be exercised at the
+/// process boundary; see "CI helper scripts" in `docs/developers-guide.md`.
+/// `tests/workflow_contracts/kani_cache_test.py` holds the same contract from
+/// the YAML side, and `scripts/tests/test_ci_install_kani.py` proves each
+/// archive's checksum gates that archive's use.
+const KANI_INSTALL_SCRIPT: &str = "scripts/ci/install_kani.py";
+
+/// The pins the install step must hand the installer, one row per concern.
+///
+/// Each is a checksum the script enforces before unpacking the archive it
+/// describes, so a mismatch must name the payload it belongs to rather than
+/// reporting a generic failure.
+const KANI_INSTALL_PINS: [(&str, &str); 2] = [
+    ("INPUT_FRONTEND_SHA256", "ed2bafc239b834e14c6b66fc4838e342"),
+    ("INPUT_BUNDLE_SHA256", "3b5f7afd3b51603ee720db7bc1bc4fe4"),
+];
+
+/// Require the Kani install step to delegate to the installer, with its pins.
+///
+/// The step must run the checked-in script and nothing else, and must pass a
+/// non-empty version plus both archive checksums. A regression that dropped a
+/// pin would otherwise leave the script's `Parameter(required=True)` to fail
+/// the job at run time rather than in review.
+fn ensure_kani_install_delegates_to_script(install_step: &Mapping) -> Result<()> {
+    let command = mapping_get(install_step, YamlKey("run"))
+        .and_then(Value::as_str)
+        .context("Kani release installation should delegate to a script")?;
+    ensure!(
+        command.trim() == format!("uv run --script {KANI_INSTALL_SCRIPT}"),
+        "Kani smoke job should install through {KANI_INSTALL_SCRIPT}, not inline shell"
+    );
+    ensure!(
+        !command.contains("cargo install"),
+        "Kani smoke job should never compile the verifier from source"
+    );
+    let env = mapping_get(install_step, YamlKey("env"))
+        .context("the Kani install step should declare the pins it passes")
+        .and_then(|value| value_mapping(value, "Kani install step env"))?;
+    let missing: Vec<String> = std::iter::once(("INPUT_KANI_VERSION", ""))
+        .chain(KANI_INSTALL_PINS.iter().copied())
+        .filter(|(key, prefix)| {
+            mapping_get(env, YamlKey(key))
+                .and_then(Value::as_str)
+                .is_none_or(|value| !value.starts_with(prefix))
+        })
+        .map(|(key, _)| key.to_owned())
+        .collect();
+    ensure!(
+        missing.is_empty(),
+        "Kani's binary-only cached installation is missing: {missing:?}"
+    );
     Ok(())
 }
 
@@ -470,20 +492,7 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
         "Kani smoke job should install Kani, check its version, then run the bounded harnesses"
     );
     let install_kani = named_step(steps, "Install prebuilt Kani")?;
-    let install_command = mapping_get(install_kani, YamlKey("run"))
-        .and_then(Value::as_str)
-        .context("Kani release installation should be a shell command")?;
-    ensure!(
-        !install_command.contains("cargo install"),
-        "Kani smoke job should never compile the verifier from source"
-    );
-    ensure!(
-        install_command.contains("frontend_bin=\"${CARGO_HOME}/frontend/kani-${kani_version}\"")
-            && install_command.contains("kani_dir=\"${KANI_HOME}/kani-${kani_version}\""),
-        "Kani payloads should live under version-qualified directories so a version bump \
-         cannot be satisfied by a stale cached binary"
-    );
-    ensure_kani_archives_are_verified_before_use(install_command)?;
+    ensure_kani_install_delegates_to_script(install_kani)?;
     // Thirty, not twenty. The job's last step is the mutation compile gate,
     // which builds the whole dependency graph through the Kani frontend into a
     // cold `CARGO_TARGET_DIR`; the ceiling has to contain that on top of the

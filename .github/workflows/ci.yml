@@ -122,20 +122,20 @@ jobs:
         uses: ./.github/actions/linux-gate-cache
         with:
           mode: restore
+      - name: Setup uv
+        # First, because the CI helper scripts under scripts/ci run through
+        # `uv run --script` from the next step on, and the uv-driven Ruff,
+        # Pylint, and df12 gates need it before Format.
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          python-version: ${{ env.PYTHON_BASELINE }}
+          # The gate cache already owns the uv download and tool stores, and
+          # the shim directory the yamllint step writes into.
+          enable-cache: 'false'
       - name: Install test shell dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends gawk
-          # Ubuntu exposes awk through an alternatives symlink the sandbox
-          # probe cannot follow, so expose the packaged binary on PATH.
-          test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"
-          mkdir --parents "${test_shell_bin}"
-          install --mode=0755 "$(command -v gawk)" "${test_shell_bin}/awk"
-          echo "${test_shell_bin}" >> "${GITHUB_PATH}"
-          export PATH="${test_shell_bin}:${PATH}"
-
-          command -v awk
-          awk --version
+        # Installs gawk and stages a regular-file `awk` the sandbox probe can
+        # follow; see the script's docstring and scripts/tests/test_ci_stage_test_shell.py.
+        run: uv run --script scripts/ci/stage_test_shell.py
       - name: Setup Rust
         id: setup-rust
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
@@ -171,63 +171,26 @@ jobs:
         # The gate cache owns `~/.local/bin`, so a warm run finds it present.
         with:
           version: ${{ env.MDTABLEFIX_VERSION }}
-      - name: Setup uv
-        # Before Format: the uv-driven Ruff, Pylint, and df12 gates need it.
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
-        with:
-          python-version: ${{ env.PYTHON_BASELINE }}
-          # The gate cache already owns the uv download and tool stores, and
-          # the shim directory the next step writes into.
-          enable-cache: 'false'
       - name: Install yamllint
         run: |
           uv tool install "yamllint==${YAMLLINT_VERSION}"
           echo "${UV_TOOL_BIN_DIR}" >> "$GITHUB_PATH"
       - name: Download actionlint
         id: get_actionlint
-        # The gate cache owns `actionlint`; reuse it only at the pinned
-        # version, so a bump cannot reuse a stale executable.
-        run: |
-          set -euo pipefail
-          readonly ACTIONLINT_VERSION='1.7.12'
-          if [[ -x ./actionlint ]] \
-            && [[ "$(./actionlint --version | head --lines=1)" == "${ACTIONLINT_VERSION}" ]]; then
-            echo "actionlint ${ACTIONLINT_VERSION} restored from the cache volume"
-            exit 0
-          fi
-          readonly ACTIONLINT_SHA256='8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
-          readonly ACTIONLINT_INSTALLER_COMMIT='914e7df21a07ef503a81201c76d2b11c789d3fca'
-          readonly ACTIONLINT_ARCHIVE="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          readonly ACTIONLINT_RAW_BASE='https://raw.githubusercontent.com/rhysd/actionlint'
-          readonly ACTIONLINT_SCRIPT='scripts/download-actionlint.bash'
-          readonly ACTIONLINT_INSTALLER_URL="${ACTIONLINT_RAW_BASE}/${ACTIONLINT_INSTALLER_COMMIT}/${ACTIONLINT_SCRIPT}"
-          readonly ACTIONLINT_RELEASE_ROOT='https://github.com/rhysd/actionlint/releases/download'
-          readonly ACTIONLINT_RELEASE_BASE="${ACTIONLINT_RELEASE_ROOT}/v${ACTIONLINT_VERSION}"
-          readonly ACTIONLINT_RELEASE_URL="${ACTIONLINT_RELEASE_BASE}/${ACTIONLINT_ARCHIVE}"
-          ACTIONLINT_INSTALLER_PATH="$(mktemp)"
-          ACTIONLINT_ARCHIVE_PATH="$(mktemp)"
-          trap 'rm -f "${ACTIONLINT_INSTALLER_PATH}" "${ACTIONLINT_ARCHIVE_PATH}"' EXIT
-          # Feed the verified archive to reviewed installer without second download.
-          curl() {
-            if [[ "${*: -1}" == "${ACTIONLINT_RELEASE_URL}" ]]; then
-              cat "${ACTIONLINT_ARCHIVE_PATH}"
-            else
-              command curl "$@"
-            fi
-          }
-          export -f curl
-          command curl --fail --location --show-error --output "${ACTIONLINT_INSTALLER_PATH}" \
-            "${ACTIONLINT_INSTALLER_URL}"
-          command curl --fail --location --show-error --output "${ACTIONLINT_ARCHIVE_PATH}" \
-            "${ACTIONLINT_RELEASE_URL}"
-          printf '%s  %s\n' "${ACTIONLINT_SHA256}" "${ACTIONLINT_ARCHIVE_PATH}" | sha256sum --check --
-          bash "${ACTIONLINT_INSTALLER_PATH}" "${ACTIONLINT_VERSION}"
-        shell: bash
+        # The gate cache owns `actionlint`; the script reuses it only at the
+        # pinned version, so a bump cannot reuse a stale executable, and
+        # otherwise installs the checksum-verified release archive.
+        env:
+          INPUT_ACTIONLINT_VERSION: '1.7.12'
+          INPUT_ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: uv run --script scripts/ci/install_actionlint.py
       - name: Install Nixie
         uses: >-
           leynos/shared-actions/.github/actions/install-nixie@2f58fab140cc8dfe69756aaa6a3bbb987c426023
         with:
           python-version: '3.14'
+      - name: CI helper script tests
+        run: make test-ci-scripts
       - name: Format
         run: make check-fmt
       - name: Lint Markdown
@@ -319,29 +282,18 @@ jobs:
         # this repository's Python project or write to its lockfile.
         run: uv run --no-project --python 3.14 .github/scripts/verify_nextest_anchored_filters.py
       - name: Show sccache statistics
-        # A server that fell back (setup-rust's sccache-status) never started and
-        # has no statistics: with no server the pinned sccache returns mostly
-        # empty statistics, so the guard keeps an uncached build from producing
-        # a misleading report.
+        # A server that fell back never started, so it has no statistics; the
+        # guard keeps an uncached build from reporting misleadingly.
         if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         env:
           SCCACHE_BACKEND: ${{ steps.setup-rust.outputs.cache-backend }}
-        run: |
-          sccache --show-stats | tee sccache-stats.txt
-          sccache --show-stats --stats-format=json > sccache-stats.json
-          {
-            printf '### sccache\n\n- backend: %s\n\n```text\n' "${SCCACHE_BACKEND:-none}"
-            cat sccache-stats.txt
-            printf '```\n'
-          } >> "$GITHUB_STEP_SUMMARY"
+        # Text and JSON files plus a step-summary section, from one script.
+        run: uv run --script scripts/ci/report_sccache_stats.py
       - name: Discard the instrumented build tree
         # No consumer once the report exists, and the second tree on a volume
         # a sibling repository exhausted. Removed before any cache save.
         if: always()
-        run: |
-          df -h .
-          rm --recursive --force target/llvm-cov-target target/llvm-cov
-          df -h .
+        run: uv run --script scripts/ci/discard_instrumented_tree.py
       - name: Report peak resource use
         if: always()
         uses: ./.github/actions/memory-sampler
@@ -513,44 +465,12 @@ jobs:
         if: steps.scope.outputs.run-proofs == 'true'
         # Two payloads from pinned checksummed archives under
         # version-qualified directories, so a bump cannot reuse a stale one.
-        run: |
-          set -euo pipefail
-          kani_version="$(tr -d '\r\n' < tools/kani/VERSION)"
-          test "${kani_version}" = '0.67.0'
-          frontend_bin="${CARGO_HOME}/frontend/kani-${kani_version}"
-          kani_dir="${KANI_HOME}/kani-${kani_version}"
-          mkdir --parents "${frontend_bin}" "${KANI_HOME}" "${RUSTUP_HOME}"
-          export PATH="${frontend_bin}:${PATH}"
-          echo "${frontend_bin}" >> "$GITHUB_PATH"
-
-          target='x86_64-unknown-linux-gnu'
-          quickinstall='https://github.com/cargo-bins/cargo-quickinstall'
-          upstream='https://github.com/model-checking/kani'
-
-          if [[ ! -x "${frontend_bin}/cargo-kani" || ! -x "${frontend_bin}/kani" ]]; then
-            frontend_name="kani-verifier-${kani_version}-${target}.tar.gz"
-            frontend_archive="${RUNNER_TEMP}/${frontend_name}"
-            curl --fail --location --proto '=https' --tlsv1.2 \
-              "${quickinstall}/releases/download/kani-verifier-${kani_version}/${frontend_name}" \
-              --output "${frontend_archive}"
-            printf '%s  %s\n' \
-              'ed2bafc239b834e14c6b66fc4838e342e3bc0b814e548e72ea30e84f83dc0974' \
-              "${frontend_archive}" | sha256sum --check --
-            tar --extract --gzip --file "${frontend_archive}" \
-              --directory "${frontend_bin}" cargo-kani kani
-          fi
-
-          if [[ ! -x "${kani_dir}/bin/kani-driver" ]]; then
-            bundle_name="kani-${kani_version}-${target}.tar.gz"
-            bundle="${RUNNER_TEMP}/${bundle_name}"
-            curl --fail --location --proto '=https' --tlsv1.2 \
-              "${upstream}/releases/download/kani-${kani_version}/${bundle_name}" \
-              --output "${bundle}"
-            printf '%s  %s\n' \
-              '3b5f7afd3b51603ee720db7bc1bc4fe46b5a4f5d36daad9939c4b4c658b51ac0' \
-              "${bundle}" | sha256sum --check --
-            cargo kani setup --use-local-bundle "${bundle}"
-          fi
+        # The version must equal tools/kani/VERSION, which the cache key reads.
+        env:
+          INPUT_KANI_VERSION: '0.67.0'
+          INPUT_FRONTEND_SHA256: ed2bafc239b834e14c6b66fc4838e342e3bc0b814e548e72ea30e84f83dc0974
+          INPUT_BUNDLE_SHA256: 3b5f7afd3b51603ee720db7bc1bc4fe46b5a4f5d36daad9939c4b4c658b51ac0
+        run: uv run --script scripts/ci/install_kani.py
       - name: Kani version check
         if: steps.scope.outputs.run-proofs == 'true'
         run: cargo kani --version | grep --fixed-strings "0.67.0"
