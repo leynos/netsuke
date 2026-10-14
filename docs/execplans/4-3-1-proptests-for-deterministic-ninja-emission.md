@@ -1959,6 +1959,27 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
 
+- [x] (2026-10-14T00:00:00Z) The second `EP-M2` gate pass cleared
+      `make check-fmt` (exit 0, 4s) but failed `make lint` (exit 2, 2789s):
+      `clippy::shadow_unrelated` at
+      `tests/kani_mutation_evidence_tests/contracts.rs:152`, where a second
+      `let resolved` shadowed the earlier, unrelated binding at :143. The
+      denial has been present since the test landed in `0efaea38`; the
+      rustfmt remediation in `b7cfa1e4` moved it from line 147 to 152 and so
+      brought it into the transcript. Fixed by renaming both bindings to name
+      the module shape each pins — `directory_resolved` and
+      `single_file_resolved` — which removes the shadow without a
+      suppression, as `Lints must not be silenced except as a **last
+      resort**` requires.
+      Clippy aborts `make lint` at `Makefile:364`, so the Whitaker,
+      `lint-python`, `yamllint` and `actionlint` legs have **no evidence** for
+      any revision on this branch yet; they run in the next pass.
+      Also corrected a stale denominator three lines into the `make proptest`
+      Decision entry below: it read *0 of the 86 tests*, quoting the
+      pre-`--workspace` corpus while the same entry's discharge measures the
+      recipe's own flags (corpus 3924, 90 matches). The corrected sentence
+      drops the denominator, since 0 holds under either corpus and naming one
+      of them contradicted the paragraph beneath it.
 - [x] (2026-10-13T00:00:00Z) Ran the first `EP-M2` gate pass and it failed
       `make check-fmt` on **nine** rustfmt diffs and two `mdtablefix` reflows,
       so the milestone had been committed unformatted. This is the concrete
@@ -2806,10 +2827,11 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   stated procedure instead — replaying it through real nextest and reading
   every testcase's `filter-match.status`. Note the plan's **suggested spelling
   was wrong** and is corrected here:
-  `test(/^property_tests($|::)/) | test(/^proptests($|::)/)` selects **0** of
-  the 86 tests, because the `^` anchor names a leading segment and the suites
-  are reached through a module path (`ir::cmd_interpolate::property_tests::…`).
-  The corrected shape anchors the *segment*:
+  `test(/^property_tests($|::)/) | test(/^proptests($|::)/)` selects **0**
+  tests — under either corpus, with or without `--workspace` — because the `^`
+  anchor names a leading segment and the suites are reached through a module
+  path (`ir::cmd_interpolate::property_tests::…`). The corrected shape anchors
+  the *segment*:
   `test(/(^|::)[a-z0-9_]*proptests($|::)/) | test(/(^|::)[a-z0-9_]*property_tests($|::)/)`.
   Affected identifiers: `EP-M2`, `Constraint 4`, `Constraint 7`. Date/Author:
   2026-10-13 / implementing agent.
