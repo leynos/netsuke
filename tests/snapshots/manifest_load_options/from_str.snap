@@ -1,0 +1,63 @@
+---
+source: tests/manifest_load_options/wrapper_equivalence.rs
+expression: document
+---
+=== pure ===
+{
+  "actions": [],
+  "defaults": [],
+  "macros": [],
+  "netsuke_version": "1.0.0",
+  "rules": [],
+  "targets": [
+    {
+      "Command": {
+        "command": "echo pure"
+      },
+      "always": false,
+      "conditional": false,
+      "dependency_order": "parallel",
+      "deps": null,
+      "description": "joined a-b",
+      "name": "pure",
+      "order_only_deps": null,
+      "phony": false,
+      "sources": null,
+      "vars": {}
+    }
+  ],
+  "vars": {}
+}
+
+=== malformed_yaml ===
+Manifest parse failed.: YAML parse error at line ⁨4⁩, column ⁨11⁩: ⁨unclosed bracket '{' at line 4, column 11⁩: unclosed bracket '{' at line 4, column 11
+
+=== boolean_interpolation ===
+{
+  "actions": [],
+  "defaults": [],
+  "macros": [],
+  "netsuke_version": "1.0.0",
+  "rules": [],
+  "targets": [
+    {
+      "Command": {
+        "command": "echo true false"
+      },
+      "always": false,
+      "conditional": false,
+      "dependency_order": "parallel",
+      "deps": null,
+      "description": "literals: true/false",
+      "name": "booleans",
+      "order_only_deps": null,
+      "phony": false,
+      "sources": null,
+      "vars": {
+        "disabled": "false",
+        "enabled": "true"
+      }
+    }
+  ],
+  "vars": {}
+}

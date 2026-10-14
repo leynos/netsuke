@@ -29,6 +29,16 @@ mod query_helpers;
 pub(crate) use query_helpers::is_manifest_query_disabled_error;
 use query_helpers::register_disabled_query_helpers;
 
+/// Characterization rows for the query refusals this module registers.
+///
+/// The rows live in a child file because the parent sits at AGENTS.md's
+/// 400-line cap. They are a `#[path]` child rather than a directory module
+/// because `register/` deliberately holds no `mod.rs`: `register.rs` owns the
+/// registrations and `register/` holds only the files it declares.
+#[cfg(test)]
+#[path = "register/refusal_snapshots.rs"]
+mod refusal_snapshots;
+
 /// A template file test: a registration name paired with a capability file
 /// type predicate.
 type FileTest = (&'static str, fn(fs::FileType) -> bool);

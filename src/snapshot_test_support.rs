@@ -35,6 +35,46 @@ pub(crate) fn snapshot_settings(subdir: &str) -> Settings {
     settings
 }
 
+/// Build snapshot settings rooted at `src/snapshots/<subdir>` with the module
+/// path left out of the snapshot name.
+///
+/// [`snapshot_settings`] keeps insta's module-prefixed names, which is right for
+/// a suite whose modules are settled. It is wrong for a suite that a later
+/// milestone moves between modules: the prefix changes with the module, so the
+/// snapshot would be renamed — and a rename during a pure move reads as a
+/// behaviour change. Removing the prefix makes the name depend only on the
+/// assertion, so the rows survive being relocated.
+///
+/// Both of a snapshot's incidental inputs are neutralized here, because both
+/// would otherwise vary without the code under test varying: the module path
+/// names the file, and a temporary directory reaches the text whenever a row
+/// stages a workspace and an error names it.
+///
+/// Callers pass a directory unique to their suite, because two rows in
+/// different modules sharing one name would silently overwrite each other.
+pub(crate) fn stable_snapshot_settings(subdir: &str) -> Settings {
+    let mut settings = snapshot_settings(subdir);
+    settings.set_prepend_module_to_snapshot(false);
+    add_temp_dir_filter(&mut settings);
+    settings
+}
+
+/// Replace the temporary-directory prefix of any absolute path with a
+/// placeholder.
+///
+/// The prefix is escaped before it becomes a pattern, and the pattern then
+/// requires a separator, so a directory that merely starts with the same
+/// characters is left alone. An unescaped, unanchored pattern would rewrite an
+/// unrelated component that happened to share the prefix.
+///
+/// The placeholder is the same on every platform, which matters because the
+/// snapshots are checked in: a row that records only `[TMP]` reads the same
+/// whichever machine recorded it.
+fn add_temp_dir_filter(settings: &mut Settings) {
+    let prefix = regex::escape(&std::env::temp_dir().display().to_string());
+    settings.add_filter(&format!(r#"{prefix}/[^\s"']*"#), "[TMP]");
+}
+
 /// Add a redaction filter for the Netsuke generator version.
 ///
 /// Anchor the filter on the enclosing generator object so unrelated versioned
