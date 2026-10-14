@@ -11,10 +11,10 @@
 //! # Why one document rather than one snapshot per helper
 //!
 //! The build surface's characterization groups every fixture into one document
-//! per entry point, and this follows it for the same reason. Twenty-two
-//! messages that differ only in their leading word are read *comparatively*: a
-//! reviewer checking that every name is spelled as the helper registers it
-//! needs the rows side by side, which one file gives and twenty-two do not.
+//! per entry point, and this follows it for the same reason. Messages that
+//! differ only in their leading word are read *comparatively*: a reviewer
+//! checking that every name is spelled as the helper registers it needs the
+//! rows side by side, which one file gives and one file per helper does not.
 //! Every row also shares the marker tail, so a rewording anywhere changes this
 //! one file — the per-helper split would buy no extra visibility for the
 //! change that actually matters.
@@ -71,10 +71,21 @@ struct Refusal {
 /// `which` appears twice, once as a filter and once as a function. Both
 /// registrations are separate calls in the implementation, so a change that
 /// dropped one would leave the other green.
+///
+/// Every row here is a helper the surface *refuses*, which is a different set
+/// from the helpers `FILE_TESTS` names. Completeness is the requirement — a
+/// refusal with no row is a message that can be reworded unobserved — so when
+/// adding a stub to `query_helpers.rs`, add its row here too. This list drifted
+/// once already: `glob` was registered but unrowed until it was found by
+/// enumerating the registrations against this table.
 const REFUSALS: &[Refusal] = &[
     Refusal {
         name: "env",
         template: "{{ env('PATH') }}",
+    },
+    Refusal {
+        name: "glob",
+        template: "{{ glob('glob_files/*.txt') }}",
     },
     Refusal {
         name: "fetch",

@@ -224,7 +224,7 @@ from a second private enum, `ManifestLoadMode` (`Full(NetworkPolicy)` or
 
 File sizes at `486b876c`: `src/stdlib/register.rs` is 315 lines and its
 `query_helpers.rs` child 151, so EP-M1's extraction there shrinks to relocating
-the stub cluster into the new `restricted_helpers.rs`;
+the stub cluster into the new `restricted_helpers/`;
 `src/manifest/jinja_macros/mod.rs` is still 394 lines and remains at the cap,
 so the classifier extraction it needs is unchanged. The repository caps code
 files at 400 lines.
@@ -487,6 +487,42 @@ and YAML fixtures, and were set from the inventory in Table 1.
 
 ## Surprises & discoveries
 
+- Observation: the EP-M1 moves touch `tools/kani/proof-scope.toml`, a file the
+  plan never mentions. Its `sources` list names
+  `src/stdlib/register/query_helpers.rs:162` and `src/stdlib/register.rs:161`;
+  the contract at `tests/workflow_contracts/kani_proof_scope_test.py` rejects
+  both a closure file missing from the scope (`:126-135`) and a scope entry
+  covering nothing (`:180-189`), and both rules are live in the file. Impact:
+  relocating `query_helpers.rs` *provably* forces an edit in the same commit —
+  the file ceases to exist, so its entry becomes dead and the new path, if the
+  harnesses reach it, is uncovered. The `jinja_macros` extraction is weaker:
+  `mod.rs` survives it and stays reached, so only the new child's coverage is
+  in question, and the contract decides that. Do not pre-emptively edit that
+  entry. Evidence: `wyvern` recon at `c4ca78b8`, both contract rules read and
+  confirmed live. Date/Author: 2026-10-15, implementation agent.
+
+- Observation: `glob` is a query refusal but absent from the EP-M0 refusal
+  inventory, so the OBL-10 baseline is incomplete. The stub file registers six
+  always-disabled helpers (`env`, `glob`, `fetch`, `shell`, `grep`,
+  `contents`), seven file tests, and ten host-dependent helpers — 23 rows
+  against the table's 22. `glob` is the omission, and it is also the one
+  refusal the `RestrictedSurface` inventory must eventually describe as a
+  *host* helper rather than a stub, since EP-M2 moves `env`/`glob` registration
+  into the loader. Impact: an incomplete oracle for a requirement that says
+  "every query refusal message"; the row must be added before EP-M1 relocates
+  the table. Evidence: `src/stdlib/register/query_helpers.rs:30-33` against
+  `src/stdlib/register/refusal_snapshots.rs` at `c4ca78b8`. Date/Author:
+  2026-10-15, implementation agent.
+
+- Observation: `FILE_TESTS` is shared across the EP-M1 move boundary.
+  `src/stdlib/register/query_helpers.rs:16` imports it to build the file-test
+  stubs, and `src/stdlib/register.rs:252-264` consumes it to register the real
+  tests. It is currently a private `const` in the parent, so the move forces a
+  visibility change or subsumption by the new `SURFACE` inventory — which is
+  the point of `SURFACE`: one list, so a test added to one surface cannot stay
+  silently unregistered on the other. Evidence: `wyvern` recon at `c4ca78b8`.
+  Date/Author: 2026-10-15, implementation agent.
+
 - Observation: the technical design's line citations are stale, and the loader
   has grown since the design was written: `ManifestEnvironment`,
   `ManifestBudgetLimits`, the manifest root, a private `ManifestParse` bundle,
@@ -562,7 +598,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `MANIFEST_QUERY_DISABLED_HELPER_MARKER`, `is_manifest_query_disabled_error`,
   and the stub registrations — EP-M1's first extraction is **partly done
   upstream**, under a different path than the plan's
-  `src/stdlib/restricted_helpers.rs`. Under `src/manifest/`,
+  `src/stdlib/restricted_helpers/mod.rs`. Under `src/manifest/`,
   `budget_adapter.rs` became `budget/adapter.rs`, `env_reader.rs` became
   `env/reader.rs`, `env_policy/` became `access_policy/`, `expand_tests.rs`
   became `expand/tests/`, `render.rs` became `render/mod.rs`, and `loading.rs`
@@ -1120,11 +1156,15 @@ After each milestone, perform the conformance check listed and update
 ### EP-M1 — extractions
 
 - Outcome: query stubs and the surface inventory live in
-  `src/stdlib/restricted_helpers.rs` behind a private `RestrictedSurface`
+  `src/stdlib/restricted_helpers/mod.rs` behind a private `RestrictedSurface`
   (initially `ManifestQuery` only); `classify_query_evaluation` and
   `QueryEvaluation` live in
-  `src/manifest/jinja_macros/query_classification.rs`. Behaviour is
-  byte-identical.
+  `src/manifest/jinja_macros/query_classification.rs`. The query-refusal rows
+  move unchanged to `src/stdlib/restricted_helpers/tests.rs`. Behaviour is
+  byte-identical. The directory form, not the flat `restricted_helpers.rs` the
+  earlier draft named, is required by the layout contract: a flat file plus a
+  sibling `restricted_helpers/tests.rs` fails
+  `prefixed_files_beside_directory()`.
 - Requirements: RM-c (mechanism made reusable); C10 headroom.
 - Acceptance evidence: gates green; C12 diff clean; both source files well
   under 400 lines.
@@ -1203,9 +1243,10 @@ ADR-055 is free immediately before minting it, by sweeping `docs/adr-*` across
 every remote branch: the number is only valid at the sweep, and `main` can take
 it while this branch sits open.
 
-### Stage B — characterization (EP-M0)
+### Stage B — characterization (EP-M0) — complete
 
-Add the four new fixtures under `tests/data/manifest_load_options/`. Create
+Add the new fixtures under `tests/data/manifest_load_options/` (the four
+planned plus three recorded as a deviation; see `Decision log`). Create
 `tests/manifest_load_options_tests.rs` declaring `mod manifest_load_options;`
 and `tests/manifest_load_options/mod.rs` declaring `wrapper_equivalence` (later
 also `fidelity_property` and `corpus_fidelity`), each file under 400 lines. In
@@ -1215,8 +1256,14 @@ insta settings from OBL-1. Path entries copy fixtures into a `tempfile`
 directory. Add the crate-internal query rows in
 `src/manifest/tests/wrapper_equivalence.rs` and the query-refusal rows in
 `src/stdlib/register/refusal_snapshots.rs`. Review every new snapshot by
-reading it, then accept it with `cargo insta accept`; this is the only
-acceptance the characterization snapshots ever receive.
+reading it, then accept it; this is the only acceptance the characterization
+snapshots ever receive. The refusal rows record one document rather than one
+snapshot per helper, so a reviewer reading for "does every row name the helper
+it should?" can read them comparatively — twenty-two files differing only in
+their leading word would hide the one thing worth seeing. Both internal modules
+are `#[path]` children rather than directory modules: their parents sit at or
+near the 400-line cap, and neither `register/` nor `manifest/tests/` holds a
+`mod.rs`, so the layout contract does not treat either as a module of its own.
 
 ### Stage C — implementation (EP-M1 to EP-M4)
 
