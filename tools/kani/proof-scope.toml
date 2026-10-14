@@ -10,7 +10,7 @@
 # recomputes from the source on every run: the contract fails when a file the
 # harnesses reach is missing here, and when an entry covers a file they cannot
 # reach. When it fails, it prints the files to add or remove. See
-# docs/adr-039-change-scoped-kani-gate.md for the derivation rules.
+# docs/adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md for the derivation rules.
 
 [scope]
 sources = [
@@ -121,6 +121,10 @@ sources = [
   "src/output/prefs/mod.rs",
   "src/recipe_shell.rs",
   "src/shell_word.rs",
+  "src/stdlib/canonical_value/admission.rs",
+  "src/stdlib/canonical_value/error.rs",
+  "src/stdlib/canonical_value/mod.rs",
+  "src/stdlib/canonical_value/node.rs",
   "src/stdlib/collections.rs",
   "src/stdlib/command/child_argument.rs",
   "src/stdlib/command/config/mod.rs",
@@ -193,6 +197,7 @@ infrastructure = [
   "docs/verification/mutations/",
   "rust-toolchain.toml",
   "scripts/kani_proof_scope.py",
+  "scripts/kani_smoke_metrics.py",
   "tests/kani_mutation_evidence_tests.rs",
   "tests/kani_mutation_evidence_tests/",
   "tests/kani_scope_wrapper_e2e_tests.rs",

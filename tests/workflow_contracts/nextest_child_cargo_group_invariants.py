@@ -55,7 +55,6 @@ NESTED_CARGO_BUILD_TESTS = (
     "legacy_recipe_telemetry_public_api_fixture_compiles",
     "config_cached_discovery_embedder_fixture_compiles",
     "verbose_timing_reporter_embedder_fixture_compiles",
-    "production_build_module_slice_has_expected_boundary",
     "stub_env_default_does_not_compile",
     "stub_env_builders_compile_under_the_same_harness",
     "split_build_fixture_compiles_through_the_direct_rustc_harness",

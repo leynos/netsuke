@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Χωρίς θέμα, αυτό ταιριάζε�
 cli.help.actions_heading = Ενέργειες:
 cli.help.targets_heading = Στόχοι:
 cli.help.targets.about = Παράθεση στόχων και ενεργειών στο επιλεγμένο δηλωτικό.
+cli.help.targets.flag.edges.help = Συμπερίληψη ακμών εξαρτήσεων και ακατέργαστων συνταγών στην έξοδο JSON.
 cli.help.default_marker = προεπιλογή
 cli.help.conditional_marker = υπό όρους
 
@@ -101,6 +102,7 @@ runner.context.load_manifest = Δεν ήταν δυνατή η φόρτωση τ
 runner.context.build_graph = Δεν ήταν δυνατή η κατασκευή γραφήματος από το δηλωτικό.
 runner.context.generate_ninja = Δεν ήταν δυνατή η δημιουργία του δηλωτικού Ninja.
 runner.context.render_graph = Δεν ήταν δυνατή η απόδοση του τεχνουργήματος γραφήματος.
+runner.help.targets_edges_require_json = Η επιλογή --edges απαιτεί το --json στο ανώτατο επίπεδο.
 
 runner.io.create_temp_file = Δεν ήταν δυνατή η δημιουργία του προσωρινού αρχείου Ninja.
 runner.io.write_temp_ninja = Δεν ήταν δυνατή η εγγραφή του προσωρινού αρχείου Ninja.
@@ -180,6 +182,8 @@ manifest.glob.unknown_pattern_error = άγνωστο σφάλμα μοτίβου
 manifest.glob.io_failed = Το glob απέτυχε για «{ $pattern }»: { $detail }.
 manifest.glob.unknown_io_error = άγνωστο σφάλμα εισόδου/εξόδου.
 manifest.command_list_empty = Το πεδίο «command» δεν πρέπει να είναι κενό: δώστε μια συμβολοσειρά εντολής ή μια μη κενή λίστα.
+manifest.command_isolation_recipe = Το πεδίο ‘command_isolation’ απαιτεί συνταγή με λίστα εντολών.
+manifest.command_isolation_scalar = Το ‘command_isolation: isolated’ απαιτεί λίστα εντολών.
 
 # Σφάλματα της ενδιάμεσης αναπαράστασης.
 ir.rule_not_found = Ο κανόνας «{ $rule }» στον οποίο παραπέμπει ο στόχος «{ $target }» δεν βρέθηκε.
@@ -457,3 +461,25 @@ manifest.budget.exceeded = Ο προϋπολογισμός πόρων του δ�
 
 cli.flag.env_allow_var.help = Μεταβλητή περιβάλλοντος που επιτρέπεται στον βοηθό env() του δηλωτικού.
 cli.flag.env_block_var.help = Μεταβλητή περιβάλλοντος που αποκλείεται από τον βοηθό env() του δηλωτικού.
+
+# Έλεγχος μανιφέστου (`netsuke check`).
+cli.subcommand.check.about = Ανάλυση του μανιφέστου χωρίς δημιουργία ή εκτέλεση κατασκευής.
+cli.subcommand.check.long_about = Εξέταση του επιλεγμένου μανιφέστου για δομές που μεν αναλύονται, αλλά πιθανότατα είναι εσφαλμένες, μη ασφαλείς, μη φορητές ή εχθρικές προς την προσωρινή μνήμη.
+cli.subcommand.check.flag.rule.help = Ορισμός της σοβαρότητας ενός κανόνα ή μιας κατηγορίας, γραμμένης ως NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Σοβαρότητα στην οποία τα ευρήματα προκαλούν αποτυχία της εντολής.
+cli.subcommand.check.flag.limit.help = Μέγιστος αριθμός αναφερόμενων ευρημάτων· το 0 τα αναφέρει όλα.
+cli.subcommand.check.flag.explain.help = Εκτύπωση της αναφοράς κανόνων αντί για ανάλυση μανιφέστου.
+check.threshold_exceeded = Τα ευρήματα έφτασαν το κατώφλι { $severity }: { $failing } από { $reported } αναφερόμενα.
+check.threshold_exceeded.help = Διορθώστε τα αναφερόμενα ευρήματα, προσαρμόστε το --rule ή χαλαρώστε το --fail-on.
+check.summary.counts = Αποτελέσματα ανάλυσης — σφάλματα: { $errors }, προειδοποιήσεις: { $warnings }, συμβουλές: { $advice }, κατεσταλμένα: { $suppressed }.
+check.summary.clean = Κανένα εύρημα.
+check.summary.truncated = { $shown ->
+    [one] Εμφανίζεται { $shown } εύρημα· το --limit παρέλειψε άλλα { $omitted }.
+   *[other] Εμφανίζονται { $shown } ευρήματα· το --limit παρέλειψε άλλα { $omitted }.
+}
+check.rule.malformed = Ο επιλογέας { $selector } δεν είναι γραμμένος ως NAME=SEVERITY.
+check.rule.unknown = Ο επιλογέας ονομάζει { $name }, που δεν είναι ούτε κανόνας ούτε κατηγορία.
+check.rule.severity = Ο επιλογέας { $name } ονομάζει τη σοβαρότητα { $severity }· αναμενόταν μία από { $values }.
+check.fail_on.invalid = Άγνωστο κατώφλι αποτυχίας { $value }· αναμενόταν ένα από { $values }.
+check.source_index = Δεν ήταν δυνατή η ευρετηρίαση του { $path } για διαγνωστικά στη γραμμή { $line }: { $reason }.
+status.tool.check = Έλεγχος

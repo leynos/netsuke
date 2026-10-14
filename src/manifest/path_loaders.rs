@@ -104,7 +104,7 @@ pub fn from_path_with_policy_and_limits(
 ///
 /// assert!(matches!(
 ///     &manifest.targets[0].recipe,
-///     Recipe::Command { command } if command.as_single() == Some("echo offline")
+///     Recipe::Command { command, .. } if command.as_single() == Some("echo offline")
 /// ));
 /// ```
 pub fn from_path_with_policy_and_env(

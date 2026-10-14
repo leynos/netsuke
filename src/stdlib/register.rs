@@ -22,7 +22,7 @@ use minijinja::{
 use std::sync::Arc;
 
 use crate::localization::{self, keys};
-use crate::recipe_shell::RecipeShell;
+use crate::shell_word::ShellDialect;
 
 #[path = "register/query_helpers.rs"]
 mod query_helpers;
@@ -184,19 +184,14 @@ fn register_read_only_helpers(env: &mut Environment<'_>, config: &StdlibConfig) 
 
 /// Register the allowlisted helpers for manifest discovery queries.
 ///
-/// The recipe-text filters quote for [`RecipeShell::host_default`] rather than
-/// for the shell the build will resolve. **This divergence is deliberate.** A
-/// query renders discovery metadata that is never executed, and reading the
-/// configured shell here would mean resolving `NETSUKE_WINDOWS_SHELL` above the
-/// early return in `src/runner/mod.rs`, which would make `netsuke help targets`
-/// fail outright on a host whose shell setting is malformed. Rendering
-/// different quoting from the build for the same expression is the lesser
-/// trade; `tests/stdlib_manifest_query_tests.rs` pins it so it stays a decision
-/// rather than a surprise.
+/// Query metadata uses a fixed POSIX quoting dialect so its rendered values do
+/// not depend on the host or on build-shell configuration. Query metadata is
+/// never executed; full manifest rendering continues to use the selected
+/// recipe shell.
 fn register_query_helpers(env: &mut Environment<'_>) {
     path::register_query_filters(env);
     collections::register_filters(env);
-    recipe_text::register_filters(env, RecipeShell::host_default().dialect());
+    recipe_text::register_filters(env, ShellDialect::Sh);
 }
 
 /// Convert UTF-8 or fall back to bytes for byte-oriented network helpers.

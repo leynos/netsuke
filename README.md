@@ -56,7 +56,7 @@ Netsuke currently requires:
   automatically in a checkout). Netsuke builds with the Polonius borrow
   checker, which nightly enables by default and which stays nightly-only until
   it stabilizes; see
-  [ADR-006](docs/adr-006-adopt-polonius-nightly-toolchain.md).
+  [ADR-0006](docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md).
 
 ### Installation
 
@@ -181,6 +181,12 @@ Netsuke v0.1.0-beta4's core build-system compiler provides:
   progress reporting, stage timings, and versioned JSON results or diagnostics;
 - bounded manifest evaluation, operator-controlled network and `env()` access
   policies, and bounded file-reading filters;
+- read-only `netsuke check` semantic analysis for likely manifest errors,
+  portability problems, and cache or determinism hazards, opt-in behind the
+  `lint` Cargo feature until v0.2.0 and absent from v0.1.0 release binaries;
+  see the
+  [users' guide](docs/users-guide.md#lint-a-manifest-with-netsuke-check) for
+  rules, policy, suppressions, and JSON output;
 - unit, behavioural, integration, property, snapshot, and initial Kani
   verification coverage.
 
@@ -223,10 +229,24 @@ active recipe text; see the note below).
 
 [^inert]: On POSIX and Bash routes, markers in comments and heredoc bodies
     remain internal tokens instead of becoming paths; markers in heredoc
-    delimiters are expanded. `script:` recipes use the same POSIX-aware scanner,
-    including on PowerShell, while PowerShell `command:` recipes use separate
-    interpolation rules. Keep markers out of comments and heredoc bodies: internal
-    tokens there can remain in the generated recipe.
+    delimiters are expanded. Both PowerShell `command:` and `script:` recipes
+    reject markers in single-quoted strings, double-quoted strings, here-strings,
+    `$()` and immediately after a backtick. A marker touching any PowerShell
+    single-quote character, including typographic forms, or another marker is
+    also rejected: standalone
+    single-quoted literals could merge with adjacent string or argument text.
+    PowerShell scripts have no inert comment region: plain line-comment text
+    leaves later unquoted markers
+    eligible for interpolation, but scanner-sensitive syntax after a comment
+    boundary or any mid-token `#` can make later markers fail closed. This
+    includes block-comment openers, quotes, backticks and substitution syntax.
+    An apostrophe in a comment can make a later marker fail closed too. Typographic
+    PowerShell quote characters also make later markers fail closed. An unquoted
+    `--%` stop-parsing token rejects markers in its raw native-command region
+    through the next newline or pipeline; scanning resumes after that boundary
+    (a semicolon does not end the region). Keep
+    markers out of POSIX and Bash comments and heredoc bodies:
+    internal tokens there can remain in the generated recipe.
 
 For example, with an existing `input.txt`, this POSIX manifest copies its
 contents to `output.txt` and checks that the shell's `PATH` is non-empty:
@@ -244,9 +264,11 @@ defaults: [output.txt]
 
 **What Netsuke quotes.** Only its own path substitutions receive automatic
 shell quoting. POSIX and Bash use `shell-quote` and context-aware encoding;
-PowerShell uses its own literal encoding and rejects markers in quoted regions.
-With an existing `input file.txt`, this POSIX example passes the input path as
-one argument, producing `output.txt`:
+PowerShell uses a single-quoted path literal only at unquoted insertion sites.
+That literal is not safe inside an existing PowerShell string, so PowerShell
+`command:` and `script:` recipes reject quoted markers. With an existing
+`input file.txt`, this POSIX example passes the input path as one argument,
+producing `output.txt`:
 
 <!-- tested-example: readme-quoted-path-manifest -->
 
@@ -261,9 +283,10 @@ defaults: [output.txt]
 
 **Backticks and command substitution.** Netsuke rejects markers inside backtick
 command substitutions on POSIX and Bash, and inside `$( … )` on all shell
-routes, in both recipe kinds. PowerShell uses backticks as escapes, so it is
-outside the backtick restriction, but still rejects markers in `$( … )`. This
-marker boundary is a promised invariant.
+routes, in both recipe kinds. In PowerShell, a marker immediately after a
+backtick is rejected because the backtick escapes the next character; markers
+inside `$( … )` are also rejected in both recipe kinds. This marker boundary is
+a promised invariant.
 
 Separately, POSIX and Bash `command:` recipes currently reject an odd total
 count of backticks after substitution. This conservative count includes
@@ -304,7 +327,8 @@ the changelog, not a policy change.
 change. The scoped guarantees above do not make arbitrary recipes safe. See the
 [users' guide safety boundary](docs/users-guide.md#review-the-safety-boundary)
 for shell-route mechanics and
-[ADR-027](docs/adr-027-command-placeholder-contract.md) for these decisions.
+[ADR-0027](docs/adrs/adr-0027-command-placeholder-contract.md) for these
+decisions.
 
 ______________________________________________________________________
 

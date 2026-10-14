@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Sans sujet, ceci correspond à `--help`. Utilis
 cli.help.actions_heading = Actions :
 cli.help.targets_heading = Cibles :
 cli.help.targets.about = Lister les cibles et actions du manifeste sélectionné.
+cli.help.targets.flag.edges.help = Inclure les arêtes de dépendance et les recettes brutes dans la sortie JSON.
 cli.help.default_marker = par défaut
 cli.help.conditional_marker = conditionnel
 
@@ -101,6 +102,7 @@ runner.context.load_manifest = Impossible de charger le manifeste depuis { $path
 runner.context.build_graph = Impossible de construire le graphe à partir du manifeste.
 runner.context.generate_ninja = Impossible de générer le manifeste Ninja.
 runner.context.render_graph = Impossible de restituer l'artefact de graphe.
+runner.help.targets_edges_require_json = L’option --edges nécessite --json au niveau racine.
 
 runner.io.create_temp_file = Impossible de créer le fichier Ninja temporaire.
 runner.io.write_temp_ninja = Impossible d'écrire le fichier Ninja temporaire.
@@ -180,6 +182,8 @@ manifest.glob.unknown_pattern_error = erreur de motif inconnue.
 manifest.glob.io_failed = Échec du glob pour « { $pattern } » : { $detail }.
 manifest.glob.unknown_io_error = erreur d'E/S inconnue.
 manifest.command_list_empty = Le champ « command » ne doit pas être vide : indiquez une chaîne de commande ou une liste non vide.
+manifest.command_isolation_recipe = Le champ « command_isolation » exige une recette avec une liste de commandes.
+manifest.command_isolation_scalar = « command_isolation: isolated » exige une liste de commandes.
 
 # Erreurs de la représentation intermédiaire.
 ir.rule_not_found = La règle « { $rule } » référencée par la cible « { $target } » est introuvable.
@@ -457,3 +461,25 @@ manifest.budget.exceeded = Le budget de ressources du manifeste a été épuisé
 
 cli.flag.env_allow_var.help = Variable d’environnement autorisée pour l’assistant env() du manifeste.
 cli.flag.env_block_var.help = Variable d’environnement bloquée pour l’assistant env() du manifeste.
+
+# Analyse statique du manifeste (`netsuke check`).
+cli.subcommand.check.about = Analyser le manifeste sans générer ni exécuter de build.
+cli.subcommand.check.long_about = Analyser le manifeste sélectionné à la recherche de constructions qui s'analysent correctement mais sont probablement erronées, dangereuses, non portables ou hostiles au cache.
+cli.subcommand.check.flag.rule.help = Définir la sévérité d'une règle ou d'une catégorie, écrite NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Sévérité à partir de laquelle les constats font échouer la commande.
+cli.subcommand.check.flag.limit.help = Nombre maximal de constats signalés ; 0 les signale tous.
+cli.subcommand.check.flag.explain.help = Afficher la référence des règles au lieu d'analyser un manifeste.
+check.threshold_exceeded = Les constats ont atteint le seuil { $severity } : { $failing } sur { $reported } signalés.
+check.threshold_exceeded.help = Corrigez les constats signalés, ajustez --rule ou assouplissez --fail-on.
+check.summary.counts = Résultats de l'analyse — erreurs : { $errors }, avertissements : { $warnings }, conseils : { $advice }, supprimés : { $suppressed }.
+check.summary.clean = Aucun constat.
+check.summary.truncated = { $shown ->
+    [one] { $shown } constat affiché ; --limit en a omis { $omitted } autres.
+   *[other] { $shown } constats affichés ; --limit en a omis { $omitted } autres.
+}
+check.rule.malformed = Le sélecteur { $selector } n'est pas écrit sous la forme NAME=SEVERITY.
+check.rule.unknown = Le sélecteur nomme { $name }, qui n'est ni une règle ni une catégorie.
+check.rule.severity = Le sélecteur { $name } nomme la sévérité { $severity } ; attendu l'une de { $values }.
+check.fail_on.invalid = Seuil d'échec inconnu { $value } ; attendu l'un de { $values }.
+check.source_index = Impossible d'indexer { $path } pour les diagnostics à la ligne { $line } : { $reason }.
+status.tool.check = Vérification

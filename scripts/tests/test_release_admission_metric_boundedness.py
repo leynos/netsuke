@@ -2,243 +2,79 @@ r"""Verify release-admission metrics stay bounded.
 
 The fixed failure-category matrix pins operation and category pairs to bounded
 labels. The Hypothesis property uses canonical Git object IDs to reach commit
-and workflow-run requests, then keeps generated identifiers out of metric
-labels and trace fields.
+and workflow-run requests, has the doubled API answer the run query with a
+generated identifier so that value reaches the gate through production, keeps
+generated identifiers out of metric labels, trace fields, and diagnostics, and
+asserts the run's record shape first so that the exclusion cannot hold
+vacuously on an empty artefact. The bound the gate places on its own adapters is
+exercised separately, against a real child that refuses to leave, in
+:mod:`test_release_admission_process_bounds`.
+
+The property's mechanism -- its strategies, the run it drives, and the claims
+it makes about one run -- lives in
+:mod:`release_admission_test_boundedness`, split out when this module reached
+the project's file-size ceiling. What remains here is the two tests and the
+argument for each.
 
 Example (run from the repository root)::
 
     PYTHONPATH=scripts uv run --no-project --python 3.14 \
         --with pytest==9.0.2 --with hypothesis==6.151.9 \
+        --with 'cmd-mox==0.2.0' --with 'cuprum==0.1.0' --with 'cyclopts==4.25.3' \
         python -m pytest \
         scripts/tests/test_release_admission_metric_boundedness.py \
         -c /dev/null --rootdir=. -p no:cacheprovider
 """
 
-import tempfile
 import typing as typ
-from pathlib import Path
 
 import pytest
 from hypothesis import given, settings
-from hypothesis import strategies as st
+from release_admission_test_boundedness import (
+    GIT_OBJECT_ID,
+    IDENTIFIER_TEXT,
+    assert_gate_run_is_valid,
+    assert_identifiers_crossed_only_the_environment,
+    assert_identifiers_never_reached_the_records,
+    assert_revision_reached_the_boundaries,
+    run_under_generated_identifiers,
+    stored_identifier,
+)
+from release_admission_test_cases import FAILURE_CASES
+from release_admission_test_scenarios import FailureCase, install_case
 from release_admission_test_support import (
     CANARY_BY_OPERATION,
-    GITHUB_REPOSITORY,
     METRICS_VALIDATOR,
-    FailureCase,
-    _run_gate,
     assert_failure_trace_sequence,
-    assert_identifiers_excluded_from_records,
     expected_gate_labels,
     expected_operation_labels,
     operation_duration,
     operation_records,
+    run_gate,
 )
 
-IDENTIFIER_TEXT = st.text(
-    alphabet=st.characters(blacklist_categories=("Cs",), blacklist_characters="\x00"),
-    min_size=1,
-    max_size=32,
-)
-GIT_OBJECT_ID = st.one_of(
-    st.text(alphabet="0123456789abcdef", min_size=40, max_size=40),
-    st.text(alphabet="0123456789abcdef", min_size=64, max_size=64),
-)
+pytest_plugins = ("cmd_mox.pytest_plugin",)
+
+if typ.TYPE_CHECKING:
+    import pathlib
+
+    from cmd_mox import CmdMox
 
 
-def _assert_diagnostics_cross_boundaries(
-    calls: list[dict[str, object]],
-    expected_diagnostics: dict[str, str],
-) -> None:
-    """Verify generated path and URL diagnostics cross every fake boundary."""
-    assert calls, "the fake command adapters must be invoked"
-    assert all(call["diagnostics"] == expected_diagnostics for call in calls), (
-        "generated paths and URLs must cross each fake command boundary"
-    )
-
-
-def _assert_github_requests_cross_boundary(
-    calls: list[dict[str, object]],
-    repository: str,
-    revision: str,
-    error_category: str,
-) -> None:
-    """Verify exact GitHub requests reach the fake GitHub boundary."""
-    github_calls = [call for call in calls if call["command"] == "gh"]
-    github_arguments = [
-        typ.cast("list[str]", call["arguments"]) for call in github_calls
-    ]
-    diagnostic = (
-        f"gh call log: {github_calls!r}; final gate error category: {error_category!r}"
-    )
-    assert error_category == "missing_evidence", (
-        f"the request-success path must reach the expected evidence check; {diagnostic}"
-    )
-    assert github_arguments[:1] == [
-        ["api", f"repos/{repository}/commits/{revision}", "--jq", ".sha"]
-    ], f"the exact commit-resolution request must cross the boundary; {diagnostic}"
-    assert github_arguments[1:] == [
-        [
-            "api",
-            f"repos/{repository}/actions/runs?head_sha={revision}&per_page=1",
-            "--jq",
-            ".workflow_runs[0].id // empty",
-        ]
-    ], f"the exact workflow-run request must cross the boundary; {diagnostic}"
-
-
-def _assert_identifiers_are_excluded(
-    metrics: list[dict[str, object]],
-    traces: list[dict[str, object]],
-    identifiers: set[str],
-) -> None:
-    """Verify generated identifiers are absent from metric labels and traces."""
-    assert_identifiers_excluded_from_records(
-        metrics, traces, identifiers, subject="generated identifiers"
-    )
-
-
-@pytest.mark.parametrize(
-    "case",
-    [
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {"NETSUKE_FAKE_GH_FAILURE": "true"},
-                "resolve_tag_commit",
-                "api_error",
-            ),
-            id="api-error",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {"NETSUKE_FAKE_RESOLVED_REVISION": "b" * 40},
-                "resolve_tag_commit",
-                "mismatch",
-            ),
-            id="candidate-mismatch",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {"NETSUKE_FAKE_GIT_FAILURE": "true"},
-                "fetch_candidate_revision",
-                "fetch_error",
-            ),
-            id="fetch-error",
-        ),
-        pytest.param(
-            FailureCase("stale", {}, "check_scan_freshness", "stale_evidence"),
-            id="stale-evidence",
-        ),
-        pytest.param(
-            FailureCase("missing", {}, "check_scan_freshness", "missing_evidence"),
-            id="missing-evidence",
-        ),
-        pytest.param(
-            FailureCase("unexpected", {}, "check_scan_freshness", "unknown"),
-            id="unknown-evidence",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {},
-                "verify_evidence",
-                "missing_evidence",
-            ),
-            id="enforcement-rejects-environment-freshness",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {
-                    "NETSUKE_FAKE_GH_DELAY_SECONDS": "2",
-                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
-                },
-                "resolve_tag_commit",
-                "timeout",
-            ),
-            id="operation-timeout",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {
-                    "NETSUKE_FAKE_GH_IGNORE_TERM": "true",
-                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
-                },
-                "resolve_tag_commit",
-                "timeout",
-            ),
-            id="term-ignoring-timeout",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {"NETSUKE_FAKE_WORKFLOW_RUN_ID": ""},
-                "verify_evidence",
-                "missing_evidence",
-                enforce=False,
-            ),
-            id="missing-workflow-run-observation",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {"NETSUKE_FAKE_GH_WORKFLOW_FAILURE": "true"},
-                "fetch_workflow_run",
-                "api_error",
-            ),
-            id="workflow-run-api-error-enforcement",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {"NETSUKE_FAKE_GH_WORKFLOW_FAILURE": "true"},
-                "fetch_workflow_run",
-                "api_error",
-                enforce=False,
-            ),
-            id="workflow-run-api-error-observation",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {
-                    "NETSUKE_FAKE_GH_WORKFLOW_DELAY_SECONDS": "2",
-                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
-                },
-                "fetch_workflow_run",
-                "timeout",
-            ),
-            id="workflow-run-timeout-enforcement",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {
-                    "NETSUKE_FAKE_GH_WORKFLOW_DELAY_SECONDS": "2",
-                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
-                },
-                "fetch_workflow_run",
-                "timeout",
-                enforce=False,
-            ),
-            id="workflow-run-timeout-observation",
-        ),
-    ],
-)
+@pytest.mark.parametrize("case", FAILURE_CASES)
 def test_gate_emits_fixed_categories_for_failure_paths(
-    tmp_path: Path,
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
     case: FailureCase,
 ) -> None:
     """Verify every controlled failure retains a bounded metric category.
 
     Parameters
     ----------
+    cmd_mox
+        Active controller whose shims stand in for every adapter.
     tmp_path
-        Isolated fake-command and output directory.
+        Isolated output directory for the gate.
     case
         One failure input and its documented fixed category.
 
@@ -247,50 +83,46 @@ def test_gate_emits_fixed_categories_for_failure_paths(
     Every failure must emit operation, gate, and workflow-output results before
     the admission script exits unsuccessfully.
     """
-    result, metrics, traces, _, outputs = _run_gate(
+    install_case(cmd_mox, case)
+    run = run_gate(
+        cmd_mox,
         tmp_path,
         evidence_state=case.evidence_state,
-        extra_environment={
-            "NETSUKE_RELEASE_ADMISSION_ENFORCE": str(case.enforce).lower(),
-            **case.extra_environment,
-        },
+        extra_environment=case.environment_for(),
     )
 
-    assert result.returncode == (1 if case.enforce else 0), (
+    assert run.result.returncode == (1 if case.enforce else 0), (
         "enforcement must fail closed while observation must retain diagnostics"
     )
-    METRICS_VALIDATOR.validate_metrics(metrics)
-    METRICS_VALIDATOR.validate_traces(traces)
-    record = operation_records(metrics, case.operation)[-1]
+    METRICS_VALIDATOR.validate_metrics(run.metrics)
+    METRICS_VALIDATOR.validate_traces(run.traces)
+    record = operation_records(run.metrics, case.operation)[-1]
     assert record["labels"] == expected_operation_labels(
         CANARY_BY_OPERATION[case.operation],
         case.operation,
         "failure",
         case.error_category,
     ), f"{case.operation} must retain its fixed error category"
-    assert metrics[-1]["labels"] == expected_gate_labels(
+    assert run.metrics[-1]["labels"] == expected_gate_labels(
         "failure", case.error_category
     ), "the gate must retain the operation's error category"
-    assert outputs["gate-outcome"] == "failure", (
+    assert run.outputs["gate-outcome"] == "failure", (
         "failed operations must reach the workflow summary output"
     )
-    assert outputs["gate-error-category"] == case.error_category, (
+    assert run.outputs["gate-error-category"] == case.error_category, (
         "failed operations must retain their bounded category in workflow output"
     )
-    assert_failure_trace_sequence(traces, case.operation, case.error_category)
-    if (
-        "NETSUKE_FAKE_WORKFLOW_RUN_ID" in case.extra_environment
-        and not case.extra_environment["NETSUKE_FAKE_WORKFLOW_RUN_ID"]
-    ):
-        workflow_run_record = operation_records(metrics, "fetch_workflow_run")[-1]
-        assert workflow_run_record["labels"] == expected_operation_labels(
+    assert_failure_trace_sequence(run.traces, case.operation, case.error_category)
+    if case.run_lookup_succeeds:
+        lookup = operation_records(run.metrics, "fetch_workflow_run")[-1]
+        assert lookup["labels"] == expected_operation_labels(
             CANARY_BY_OPERATION["fetch_workflow_run"],
             "fetch_workflow_run",
             "success",
             "none",
         ), "an empty run identifier must reach evidence verification"
     if case.error_category == "timeout":
-        assert operation_duration(metrics, case.operation) > 0, (
+        assert operation_duration(run.metrics, case.operation) > 0, (
             "timed-out operations must retain a positive measured duration"
         )
 
@@ -308,57 +140,66 @@ def test_identifiers_never_become_metric_labels(
     path: str,
     url: str,
 ) -> None:
-    """Verify canonical revisions and arbitrary identifiers stay out of labels.
+    """Verify generated identifiers stay out of the gate's records.
 
     Parameters
     ----------
     revision
         A canonical 40-character SHA-1 or 64-character SHA-256 object ID.
-    run_id, path, url
-        Generated unbounded identifiers that must not become labels.
+    run_id
+        A generated identifier the workflow-run query answers with.
+    path, url
+        Generated identifiers carried in the child's environment.
 
     Notes
     -----
-    This property exercises the success path through request construction and
-    lookup with canonical Git object IDs. The gate then reports missing
-    evidence because the fixture supplies no evidence provider.
-    Newline-terminated revisions are covered by the failure suite: command
-    substitution strips trailing newlines from the resolved SHA before the
-    SHA-equality check compares it with the original ``GITHUB_SHA``. Run IDs,
-    paths, and URLs remain arbitrary Unicode cardinality probes because they
-    do not construct requests.
-    """
-    identifiers = {
-        revision,
-        f"run-{run_id}",
-        f"path-{path}",
-        f"url-{url}",
-    }
-    with tempfile.TemporaryDirectory() as directory_name:
-        result, metrics, traces, calls, outputs = _run_gate(
-            Path(directory_name),
-            evidence_state="fresh",
-            extra_environment={
-                "GITHUB_SHA": revision,
-                "NETSUKE_RELEASE_ADMISSION_ENFORCE": "false",
-                "NETSUKE_FAKE_WORKFLOW_RUN_ID": f"run-{run_id}",
-                "NETSUKE_FAKE_PATH": f"path-{path}",
-                "NETSUKE_FAKE_URL": f"url-{url}",
-            },
-        )
+    **The workflow-run identifier is generated and returned by the double, so
+    it reaches the gate through production code rather than through an
+    environment variable production ignores.** The gate's
+    :func:`commands.github_find_workflow_run` captures the API's single line,
+    strips every trailing newline, and stores it on the gate result, so the
+    value the exclusion set carries is the value the gate stored. The generated
+    identifier ends in the marker precisely so that strip cannot change it: a
+    value ending in a newline would be stored as a different string from the one
+    searched for, and a leak of the stored value would slip through the
+    exclusion unmatched.
 
-    assert result.returncode == 0, result.stderr
-    METRICS_VALIDATOR.validate_metrics(metrics)
-    METRICS_VALIDATOR.validate_traces(traces)
-    expected_diagnostics = {
-        "path": f"path-{path}",
-        "url": f"url-{url}",
-    }
-    _assert_diagnostics_cross_boundaries(calls, expected_diagnostics)
-    _assert_github_requests_cross_boundary(
-        calls,
-        GITHUB_REPOSITORY,
-        revision,
-        outputs["gate-error-category"],
-    )
-    _assert_identifiers_are_excluded(metrics, traces, identifiers)
+    This is a safety property in the ordinary sense. The stored identifier
+    *does* reach a consumer -- ``gate._dispatch`` passes it as the
+    ``workflow_run_id`` argument of :func:`policy.classify_evidence` -- but
+    ``classify_evidence`` only ever *evaluates* it on a path this run does not
+    reach: for ``fresh`` its disjunction satisfies on the first operand, and
+    every non-fresh state stops earlier still, at ``check_scan_freshness``.
+    Argument delivery and truthiness evaluation are different boundaries, and
+    only the second is unreached here. A future change that copies the stored
+    identifier into telemetry is exactly what this case detects.
+
+    ``path`` and ``url`` make the weaker claim and are labelled as such: their
+    variable names have no consumer anywhere under ``.github/scripts``, so they
+    establish transport only. They are retained because they generate arbitrary
+    text over the same domain, which the revision (restricted to hex object
+    IDs) and the run identifier (one per example) do not.
+
+    The exclusion set carries the run identifier **both as generated and as
+    production stores it**. The generated value's trailing marker makes the two
+    identical, but asserting both makes the exclusion cover the stored value
+    even if the strategy changes: a value ending in a newline is stored
+    normalized, so searching for the raw value alone would let a leak of the
+    stored one pass unmatched. That is the dangerous direction for an exclusion
+    assertion, and it is silent.
+
+    The property exercises the success path through request construction and
+    lookup with canonical Git object IDs, then reports missing evidence because
+    the fixture supplies no evidence provider. Newline-terminated revisions are
+    covered by the failure suite: the gate strips trailing newlines from the
+    resolved SHA before the equality check, so a newline revision mismatches the
+    raw ``GITHUB_SHA`` it was given.
+    """
+    identifiers: set[str] = {revision, run_id, stored_identifier(run_id)}
+    identifiers |= {f"path-{path}", f"url-{url}"}
+    run, boundaries = run_under_generated_identifiers(revision, run_id, path, url)
+
+    assert_gate_run_is_valid(run)
+    assert_revision_reached_the_boundaries(boundaries, revision)
+    assert_identifiers_crossed_only_the_environment(boundaries, path, url)
+    assert_identifiers_never_reached_the_records(run, identifiers)

@@ -24,6 +24,7 @@ fn action(command: impl Into<StringOrList>) -> Action {
     Action {
         recipe: Recipe::Command {
             command: command.into(),
+            isolation: netsuke::ast::CommandIsolation::Shared,
         },
         description: None,
         depfile: None,

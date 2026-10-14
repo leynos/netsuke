@@ -71,10 +71,10 @@ def command_lines(run: str) -> list[str]:
 @pytest.mark.parametrize(
     ("run", "expected"),
     [
-        ("cargo build --locked --bin netsuke", ["cargo build --locked --bin netsuke"]),
-        ("# cargo build --locked --bin netsuke", []),
-        ("<#\ncargo build --locked --bin netsuke\n#>", []),
-        ("<# cargo build --locked --bin netsuke #>", []),
+        ("cargo build --workspace --locked", ["cargo build --workspace --locked"]),
+        ("# cargo build --workspace --locked", []),
+        ("<#\ncargo build --workspace --locked\n#>", []),
+        ("<# cargo build --workspace --locked #>", []),
         (
             "<#\nfirst --commented\n#>\nsecond --live\n<#\nthird --commented\n#>",
             ["second --live"],
@@ -139,7 +139,7 @@ def test_the_direct_windows_build_keeps_the_parallel_frontend(
 
     lines = command_lines(run)
     assignment = '$env:RUSTFLAGS = "$env:RUSTFLAGS -Zthreads=8"'
-    build = "cargo build --locked --bin netsuke"
+    build = "cargo build --workspace --locked"
     assert assignment in lines, (
         f"{step_name} must append the standard's frontend flag to the inherited "
         f"RUSTFLAGS, which the `setup-rust` action exports and which otherwise "
@@ -181,7 +181,7 @@ def test_windows_job_runs_the_native_recipe_smoke_after_the_test_gate(
     )
 
     for step_name, fragments in (
-        ("Build Netsuke", ("cargo build --locked --bin netsuke",)),
+        ("Build Netsuke", ("cargo build --workspace --locked",)),
         (
             "Exercise native Windows recipes",
             (

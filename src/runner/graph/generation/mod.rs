@@ -9,10 +9,11 @@ mod telemetry;
 use super::super::manifest_structure_telemetry::record_manifest_structure;
 use super::super::{
     Cli, Context, LocalizationKey, PipelineStage, Result, StatusReporter, dyndep, generation,
-    load_manifest_with_stage_reporting, path_helpers, recipe_shell, report_pipeline_stage,
+    load_manifest_with_stage_reporting, path_helpers, report_pipeline_stage,
 };
 use crate::localization::{self, keys};
 use crate::ninja_gen;
+use crate::recipe_shell::BashExecutable;
 use monotony::MonotonicClock;
 
 /// Supply the dependencies that select and measure graph generation.
@@ -22,8 +23,25 @@ use monotony::MonotonicClock;
 pub(in crate::runner) struct GraphGenerationContext<'a> {
     /// Select the legacy-recipe interpreter used during graph generation.
     pub(in crate::runner) recipe_shell: crate::recipe_shell::RecipeShell,
+    /// Bind builds to the Bash executable that passed runner preflight.
+    pub(in crate::runner) bash_executable: Option<BashExecutable>,
     /// Measure graph generation with a runner-provided monotonic clock.
     pub(in crate::runner) clock: &'a dyn MonotonicClock,
+}
+
+impl GraphGenerationContext<'_> {
+    /// Attach the Bash executable resolved for one build or Ninja-tool operation.
+    #[must_use]
+    pub(in crate::runner) fn with_bash_executable(
+        &self,
+        bash_executable: Option<BashExecutable>,
+    ) -> Self {
+        GraphGenerationContext {
+            recipe_shell: self.recipe_shell,
+            bash_executable,
+            clock: self.clock,
+        }
+    }
 }
 
 /// Generate a Ninja bundle from the manifest referenced by `cli`.
@@ -45,7 +63,6 @@ pub(in crate::runner) fn generate_ninja_with_shell(
     tool_key: Option<LocalizationKey>,
     graph_generation: &GraphGenerationContext<'_>,
 ) -> Result<ninja_gen::GeneratedNinja> {
-    recipe_shell::validate_recipe_shell(graph_generation.recipe_shell)?;
     let manifest_path = path_helpers::resolve_manifest_path(cli)?;
     path_helpers::ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
 
@@ -67,7 +84,11 @@ pub(in crate::runner) fn generate_ninja_with_shell(
         tool_key,
     );
     dyndep::generation_telemetry::instrument_bundle_generation(&graph, || {
-        generation::ninja_text_for_shell(&graph, graph_generation.recipe_shell)
+        generation::ninja_text_for_shell_with_bash(
+            &graph,
+            graph_generation.recipe_shell,
+            graph_generation.bash_executable.as_ref(),
+        )
     })
     .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))
 }

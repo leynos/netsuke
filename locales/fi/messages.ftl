@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Ilman aihetta tämä vastaa `--help`-komentoa. 
 cli.help.actions_heading = Toiminnot:
 cli.help.targets_heading = Kohteet:
 cli.help.targets.about = Luettele valitun tiedoston kohteet ja toiminnot.
+cli.help.targets.flag.edges.help = Sisällytä riippuvuuskaaret ja käsittelemättömät reseptit JSON-tulosteeseen.
 cli.help.default_marker = oletus
 cli.help.conditional_marker = ehdollinen
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Manifestia ei voitu ladata polusta { $path }.
 runner.context.build_graph = Graafia ei voitu muodostaa manifestista.
 runner.context.generate_ninja = Ninja-manifestia ei voitu luoda.
 runner.context.render_graph = Graafituotosta ei voitu hahmontaa.
+runner.help.targets_edges_require_json = --edges-valinta edellyttää ylimmän tason --json-valintaa.
 
 runner.io.create_temp_file = Väliaikaista Ninja-tiedostoa ei voitu luoda.
 runner.io.write_temp_ninja = Väliaikaista Ninja-tiedostoa ei voitu kirjoittaa.
@@ -179,6 +181,8 @@ manifest.glob.unknown_pattern_error = tuntematon hahmovirhe.
 manifest.glob.io_failed = Glob epäonnistui hahmolle ”{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = tuntematon siirräntävirhe.
 manifest.command_list_empty = Kenttä ”command” ei saa olla tyhjä: anna komentomerkkijono tai ei-tyhjä luettelo.
+manifest.command_isolation_recipe = Kenttä ”command_isolation” edellyttää komentoluetteloreseptiä.
+manifest.command_isolation_scalar = ”command_isolation: isolated” edellyttää komentoluetteloa.
 
 # Välimuotoesityksen virheet.
 ir.rule_not_found = Sääntöä ”{ $rule }”, johon kohde ”{ $target }” viittaa, ei löytynyt.
@@ -457,3 +461,25 @@ manifest.budget.exceeded = Manifestin resurssibudjetti loppui vaiheen { $stage }
 
 cli.flag.env_allow_var.help = Manifestin env()-avustajalle sallittu ympäristömuuttuja.
 cli.flag.env_block_var.help = Manifestin env()-avustajalta estetty ympäristömuuttuja.
+
+# Manifestin tarkistus (`netsuke check`).
+cli.subcommand.check.about = Tarkista manifesti luomatta tai suorittamatta koontia.
+cli.subcommand.check.long_about = Tutki valittu manifesti sellaisten rakenteiden varalta, jotka jäsentyvät mutta ovat todennäköisesti virheellisiä, turvattomia, siirrettävyydeltään heikkoja tai välimuistille haitallisia.
+cli.subcommand.check.flag.rule.help = Aseta säännön tai luokan vakavuus muodossa NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Vakavuus, jolla havainnot kaatavat komennon.
+cli.subcommand.check.flag.limit.help = Raportoitavien havaintojen enimmäismäärä; 0 raportoi kaikki.
+cli.subcommand.check.flag.explain.help = Tulosta sääntöviite manifestin tarkistamisen sijaan.
+check.threshold_exceeded = Havainnot saavuttivat kynnyksen { $severity }: { $failing } / { $reported } raportoitua.
+check.threshold_exceeded.help = Korjaa raportoidut havainnot, säädä --rule tai löysennä --fail-on.
+check.summary.counts = Tarkistuksen tulokset — virheet: { $errors }, varoitukset: { $warnings }, ohjeet: { $advice }, vaimennetut: { $suppressed }.
+check.summary.clean = Ei havaintoja.
+check.summary.truncated = { $shown ->
+    [one] Näytetään { $shown } havainto; --limit jätti pois { $omitted } muuta.
+   *[other] Näytetään { $shown } havaintoa; --limit jätti pois { $omitted } muuta.
+}
+check.rule.malformed = Valitsin { $selector } ei ole muodossa NAME=SEVERITY.
+check.rule.unknown = Valitsin nimeää kohteen { $name }, joka ei ole sääntö eikä luokka.
+check.rule.severity = Valitsin { $name } nimeää vakavuuden { $severity }; odotettiin jotakin näistä: { $values }.
+check.fail_on.invalid = Tuntematon virhekynnys { $value }; odotettiin jotakin näistä: { $values }.
+check.source_index = Kohdetta { $path } ei voitu indeksoida diagnostiikkaa varten rivillä { $line }: { $reason }.
+status.tool.check = Tarkistus

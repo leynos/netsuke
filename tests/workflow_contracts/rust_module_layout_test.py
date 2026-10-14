@@ -17,7 +17,16 @@ IGNORED_MODULE_NAMES = frozenset({"lib", "main", "mod"})
 
 # Keyed by the directory relative to src/ and the shared first prefix.
 # Every entry must carry the exact sibling set and a disparate-concern rationale.
-DISPARATE_PREFIX_EXCEPTIONS: dict[tuple[str, str], tuple[frozenset[str], str]] = {}
+DISPARATE_PREFIX_EXCEPTIONS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
+    (".", "shell"): (
+        frozenset({"shell_selection/", "shell_word.rs"}),
+        (
+            "Public data-only shell selection and registry vocabulary is independent "
+            "of recipe shell-word encoding for named dialects; neither concern "
+            "is a child of the other."
+        ),
+    ),
+}
 
 
 def sibling_prefix_groups(source_root: Path) -> dict[tuple[str, str], frozenset[str]]:
@@ -167,3 +176,45 @@ def test_exception_requires_exact_files_and_reason(tmp_path: Path) -> None:
     exception = {(".", "widget"): (frozenset({"widget_a.rs"}), "distinct concerns")}
     with pytest.raises(AssertionError, match="stale or unjustified"):
         assert_module_layout(source_root, exception)
+
+
+@pytest.mark.parametrize(
+    ("module_names", "expected_error"),
+    [
+        pytest.param(
+            ("shell_selection/", "shell_word.rs"),
+            None,
+            id="accept-exact-selection-and-word-pair",
+        ),
+        pytest.param(
+            ("shell_selection/", "shell_word.rs", "shell_extra.rs"),
+            "stale or unjustified prefix exception",
+            id="reject-additional-shell-module",
+        ),
+        pytest.param(
+            ("shell_selection/",),
+            "stale prefix exception",
+            id="reject-missing-word-module",
+        ),
+    ],
+)
+def test_shell_prefix_exception_is_exact(
+    tmp_path: Path,
+    module_names: tuple[str, ...],
+    expected_error: str | None,
+) -> None:
+    """Keep the unrelated selection and word modules an exact exception."""
+    source_root = tmp_path / "src"
+    source_root.mkdir()
+    for name in module_names:
+        if name.endswith("/"):
+            directory = source_root / name
+            directory.mkdir()
+            (directory / "mod.rs").touch()
+        else:
+            (source_root / name).touch()
+    if expected_error is None:
+        assert_module_layout(source_root, DISPARATE_PREFIX_EXCEPTIONS)
+    else:
+        with pytest.raises(AssertionError, match=expected_error):
+            assert_module_layout(source_root, DISPARATE_PREFIX_EXCEPTIONS)

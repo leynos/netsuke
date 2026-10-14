@@ -23,6 +23,9 @@ use std::time::{Duration, Instant};
 use test_support::fluent::normalize_fluent_isolates;
 use test_support::{localizer::LOCALIZER_TEST_LOCK, localizer_test_lock};
 
+#[path = "graph_json/tests.rs"]
+mod graph_json_tests;
+
 /// Parse the fixed fixture manifest used by the catalogue snapshots.
 fn fixture_manifest() -> Result<NetsukeManifest> {
     let yaml = r#"netsuke_version: "1.0.0"
@@ -152,7 +155,7 @@ fn render_catalogue_with_locale(
 fn catalogue_rendering_releases_localizer_lock_before_snapshot_work() -> Result<()> {
     let manifest = fixture_manifest()?;
     let rendered = render_catalogue_with_locale("en-US", &manifest, |parsed_manifest| {
-        render_json(&build_catalogue(parsed_manifest))
+        render_json(&build_catalogue(parsed_manifest), None)
     })?;
     let (acquired, confirmed) = mpsc::sync_channel(1);
     thread::scope(|scope| -> Result<()> {
@@ -205,7 +208,7 @@ fn json_catalogue_snapshot() -> Result<()> {
         "en-US",
         "json_catalogue",
         &help_targets_json_snapshot_settings(),
-        |manifest| render_json(&build_catalogue(manifest)),
+        |manifest| render_json(&build_catalogue(manifest), None),
     )
 }
 
@@ -301,6 +304,7 @@ fn catalogue_target(
         name: crate::ast::StringOrList::List(names),
         recipe: crate::ast::Recipe::Command {
             command: crate::ast::StringOrList::String("true".to_owned()),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         sources: crate::ast::StringOrList::Empty,
         deps: crate::ast::StringOrList::Empty,

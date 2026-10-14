@@ -50,14 +50,44 @@ Netsuke’s philosophy that error messages should guide the user constructively.
 
 From the very first run, Netsuke aims to be welcoming. The **help output**
 (invoked via `netsuke --help` or `netsuke help`) will be **concise and
-useful**, listing available subcommands (e.g. `build`, `clean`, `graph`,
-`generate`) with one-line descriptions of each. Clap auto-generates this usage
-text, and the wording remains newcomer-friendly. For example, the help summary
-for the default `build` command might say: “`build` – Build specified targets
-(or the default targets defined in the Netsukefile).” A **“Hello World”**
-example should appear in documentation: for instance, creating a minimal
-Netsukefile and running `netsuke` to show how quickly the tool produces a
-result. This immediate feedback is crucial for a positive first impression.
+useful**, listing available subcommands (e.g. `build`, `check`, `clean`,
+`graph`, `generate`) with one-line descriptions of each. Clap auto-generates
+this usage text, and the wording remains newcomer-friendly. For example, the
+help summary for the default `build` command might say: “`build` – Build
+specified targets (or the default targets defined in the Netsukefile).” A
+**“Hello World”** example should appear in documentation: for instance,
+creating a minimal Netsukefile and running `netsuke` to show how quickly the
+tool produces a result. This immediate feedback is crucial for a positive first
+impression.
+
+### Check a manifest before building it
+
+`netsuke check` analyses the selected manifest for constructs that parse and
+lower cleanly but are likely erroneous, unsafe, non-portable, or hostile to
+caching. It uses the same manifest-query loading path as
+`netsuke help targets`, so it evaluates no impure helper, runs no recipe, and
+creates no build output.
+
+Findings are the command's result rather than its failure mode. `--fail-on`
+sets the severity at which they fail the command, defaulting to `error`, so an
+advisory can be surfaced without blocking a pipeline and a project can tighten
+the threshold when it is ready to. `--rule NAME=SEVERITY` configures one rule
+or a whole category, `--limit` bounds the report, and `--explain` prints the
+rule reference instead of analysing a manifest.
+
+In JSON mode a run below the threshold writes a result document whose
+`result.findings` array holds the reported findings, at most `--limit` of them
+in source order, while its summary counts every finding before truncation; a
+run at or above it writes a diagnostic document whose top-level entry is the
+threshold summary and whose `related` array holds the same reported findings.
+Both use the same per-finding shape as every other Netsuke diagnostic, so the
+envelope contract is unchanged and a consumer parses one representation.
+
+The [manifest linter design](netsuke-linter-design.md) specifies the rule model
+and the output schemas, and
+[ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md) records why
+linting lives under `check` rather than under a new noun. The subcommand exists
+only in builds with the `lint` Cargo feature enabled until v0.2.0.
 
 ### Discover manifest operations
 
@@ -95,6 +125,13 @@ the boolean `conditional` JSON field. Full rendering for normal builds retains
 its full standard library and behaviour; these restrictions apply only to
 manifest-query rendering. Existing manifests remain compatible when they omit
 the optional descriptions.
+
+The opt-in `netsuke --json help targets --edges` form also exports a versioned
+graph projection from the same restricted query. It records declaration-level
+nodes, authored edge arrays and defaults, rules, conditional flags, and raw
+legacy recipe text.
+[ADR-0044](adrs/adr-0044-hermetic-help-targets-graph-json.md) defines its v1
+schema and inherited validation limits.
 
 Intuitive **defaults** further contribute to a smooth UX. As noted, if no
 subcommand is given, `netsuke build` is assumed by default. Similarly, common
@@ -318,13 +355,13 @@ detail how Netsuke’s CLI will meet key accessibility criteria:
   by default, but `netsuke graph --html` (shipped in milestone 3.4.5) produces
   a self-contained HTML visualization for sighted users; the HTML page also
   embeds a `<details>` textual outline so screen-reader users get a structured
-  fallback. A `--json` view of the same graph data is the open follow-up
-  (roadmap item `3.15.6`); when it ships, screen-reader users will be able to
-  take that JSON and navigate the structure with a JSON viewer, or script
-  custom queries, rather than parsing the visually-structured DOT text dump.
-  Documentation describes the structure of such outputs clearly so users know
-  what to expect (e.g., which fields appear in the JSON), per Recommendation 3
-  about documenting output structure in advance.
+  fallback. A `--json` view of the same graph data is the open follow-up while
+  `netsuke --json help targets --edges` provides a hermetic, versioned
+  manifest-query projection with raw recipes (ADR-0044). The graph subcommand
+  itself remains a full-loader DOT/HTML renderer; a JSON form of that rendered
+  graph is a separate design question. Documentation describes the help-targets
+  schema, so users know what to expect, per Recommendation 3 about documenting
+  output structure in advance.
 
 - **Accessible Documentation:** Netsuke ensures that all documentation is
   available in an accessible format, not solely within the CLI. Unix release

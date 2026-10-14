@@ -11,6 +11,7 @@ fn action(command: &str) -> Action {
     Action {
         recipe: Recipe::Command {
             command: command.into(),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         description: None,
         depfile: None,
@@ -162,6 +163,7 @@ fn bundle_rejects_an_empty_command_list() -> Result<()> {
         .context("test graph must contain its action")?
         .recipe = Recipe::Command {
         command: StringOrList::List(Vec::new()),
+        isolation: crate::ast::CommandIsolation::Shared,
     };
 
     let error = generate_bundle(&graph)

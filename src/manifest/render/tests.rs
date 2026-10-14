@@ -1,6 +1,6 @@
 //! Unit tests for manifest template rendering.
 
-use super::{ManifestValue, render_manifest, render_manifest_for_manifest_query};
+use super::{ManifestValue, render_manifest};
 use crate::ast::{DependencyOrder, NetsukeManifest, Recipe, Rule, StringOrList, Target, Vars};
 use anyhow::{Context, Result};
 use minijinja::Environment;
@@ -19,6 +19,7 @@ fn sample_manifest() -> Result<NetsukeManifest> {
         name: StringOrList::String("{{ message }}!".into()),
         recipe: Recipe::Command {
             command: "{{ message }}".into(),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         sources: StringOrList::List(vec!["{{ subject }}.txt".into()]),
         deps: StringOrList::Empty,
@@ -35,6 +36,7 @@ fn sample_manifest() -> Result<NetsukeManifest> {
         name: "example".into(),
         recipe: Recipe::Command {
             command: "{{ 2 + 2 }}".into(),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         description: Some("{{ 1 + 1 }}".into()),
     };
@@ -84,7 +86,7 @@ fn expect_list(value: &StringOrList, label: impl std::fmt::Display) -> &[String]
 #[expect(clippy::panic, reason = "panic for clearer test failures")]
 fn expect_command(recipe: &Recipe, label: impl std::fmt::Display) -> &str {
     match recipe {
-        Recipe::Command { command } => match command {
+        Recipe::Command { command, .. } => match command {
             StringOrList::String(item) => item,
             other => panic!("expected {label} command as a scalar, got {other:?}"),
         },
@@ -129,7 +131,7 @@ fn assert_rendered_target(target: &Target) {
 fn assert_rendered_rule(rule: &Rule) {
     assert_eq!(rule.description.as_deref(), Some("2"));
     match &rule.recipe {
-        Recipe::Command { command } => assert_eq!(command.as_single(), Some("4")),
+        Recipe::Command { command, .. } => assert_eq!(command.as_single(), Some("4")),
         other => panic!("expected command recipe, got {other:?}"),
     }
 }
@@ -150,43 +152,6 @@ fn render_manifest_renders_targets_and_rules() -> Result<()> {
 }
 
 #[test]
-fn command_list_renders_each_entry_with_ins_outs_placeholders() -> Result<()> {
-    let env = Environment::new();
-    let mut vars = Vars::new();
-    vars.insert("ins".into(), ManifestValue::String("caller-ins".into()));
-    vars.insert("outs".into(), ManifestValue::String("caller-outs".into()));
-    let manifest = NetsukeManifest {
-        netsuke_version: Version::parse("1.0.0")?,
-        vars,
-        macros: Vec::new(),
-        rules: vec![Rule {
-            name: "check".into(),
-            recipe: Recipe::Command {
-                command: StringOrList::List(vec![
-                    "echo {{ 1 + 1 }}".into(),
-                    "{{ ins }}".into(),
-                    "{{ outs }}".into(),
-                ]),
-            },
-            description: None,
-        }],
-        actions: Vec::new(),
-        targets: Vec::new(),
-        defaults: Vec::new(),
-    };
-    let rendered = render_manifest(manifest, &env)?;
-    let rule = rendered.rules.first().context("rendered rule missing")?;
-    let Recipe::Command { command } = &rule.recipe else {
-        anyhow::bail!("expected command recipe, got {:?}", rule.recipe);
-    };
-    anyhow::ensure!(
-        command.to_string_vec() == ["echo 2", crate::ir::INS_TOKEN, crate::ir::OUTS_TOKEN],
-        "unexpected rendered command list: {command:?}"
-    );
-    Ok(())
-}
-
-#[test]
 fn command_list_render_failure_names_the_failing_entry() -> Result<()> {
     let env = Environment::new();
     let manifest = NetsukeManifest {
@@ -197,6 +162,7 @@ fn command_list_render_failure_names_the_failing_entry() -> Result<()> {
             name: "check".into(),
             recipe: Recipe::Command {
                 command: StringOrList::List(vec!["echo ok".into(), "echo {{ 1 + }}".into()]),
+                isolation: crate::ast::CommandIsolation::Shared,
             },
             description: None,
         }],
@@ -282,119 +248,5 @@ fn render_manifest_renders_script_and_rule_ref_recipes() -> Result<()> {
     Ok(())
 }
 
-/// Create a manifest fixture with an action recipe using the build-only `command_available` helper.
-fn manifest_with_build_only_recipe_helper() -> Result<NetsukeManifest> {
-    let mut action_vars = Vars::new();
-    action_vars.insert(
-        "description".into(),
-        ManifestValue::String("Run tests".into()),
-    );
-    Ok(NetsukeManifest {
-        netsuke_version: Version::parse("1.0.0")?,
-        vars: Vars::new(),
-        macros: Vec::new(),
-        rules: Vec::new(),
-        actions: vec![Target {
-            name: "test".into(),
-            recipe: Recipe::Command {
-                command: concat!(
-                    "cargo {% if command_available(\"cargo-nextest\") %}",
-                    "nextest run{% else %}test{% endif %} --all-targets"
-                )
-                .into(),
-            },
-            sources: StringOrList::Empty,
-            deps: StringOrList::Empty,
-            dependency_order: DependencyOrder::Parallel,
-            order_only_deps: StringOrList::Empty,
-            vars: action_vars,
-            phony: true,
-            always: false,
-            conditional: false,
-            description: Some("{{ description }}".into()),
-        }],
-        targets: Vec::new(),
-        defaults: Vec::new(),
-    })
-}
-
-/// Verify that query rendering preserves build-only command helpers.
-#[test]
-fn manifest_query_keeps_build_only_recipe_helpers_unrendered() -> Result<()> {
-    let manifest = manifest_with_build_only_recipe_helper()?;
-    let rendered = render_manifest_for_manifest_query(manifest, &Environment::new())?;
-    let action = rendered
-        .actions
-        .first()
-        .context("rendered action missing")?;
-
-    anyhow::ensure!(
-        expect_command(&action.recipe, "query action").contains("command_available"),
-        "manifest query should leave build-only recipe helpers unrendered"
-    );
-    anyhow::ensure!(
-        action.description.as_deref() == Some("Run tests"),
-        "manifest query should still render discovery descriptions"
-    );
-    Ok(())
-}
-/// Verify that full rendering evaluates build-only command helpers.
-#[test]
-fn full_render_evaluates_build_only_recipe_helpers() -> Result<()> {
-    let mut env = Environment::new();
-    env.add_function("command_available", |_command: String| true);
-    let manifest = manifest_with_build_only_recipe_helper()?;
-    let rendered = render_manifest(manifest, &env)?;
-    let action = rendered
-        .actions
-        .first()
-        .context("rendered action missing")?;
-
-    anyhow::ensure!(
-        expect_command(&action.recipe, "full action") == "cargo nextest run --all-targets",
-        "full rendering should evaluate build-only recipe helpers"
-    );
-    Ok(())
-}
-/// Render the build-only-helper fixture with a replacement recipe in query mode.
-fn render_fixture_recipe_in_manifest_query(recipe: Recipe) -> Result<Target> {
-    let mut manifest = manifest_with_build_only_recipe_helper()?;
-    let action = manifest
-        .actions
-        .first_mut()
-        .context("fixture action missing")?;
-    action.recipe = recipe;
-    render_manifest_for_manifest_query(manifest, &Environment::new())?
-        .actions
-        .into_iter()
-        .next()
-        .context("rendered action missing")
-}
-/// Verify that query rendering preserves build-only script helpers.
-#[test]
-fn manifest_query_keeps_build_only_script_helpers_unrendered() -> Result<()> {
-    let script = "echo {{ command_available(\"cargo-nextest\") }}";
-    let action = render_fixture_recipe_in_manifest_query(Recipe::Script {
-        script: script.into(),
-    })?;
-    anyhow::ensure!(
-        expect_script(&action.recipe, "query action")? == script,
-        "manifest query should leave build-only script helpers unrendered"
-    );
-    Ok(())
-}
-/// Verify that query rendering resolves structural rule selectors.
-#[test]
-fn manifest_query_renders_rule_recipe_selectors() -> Result<()> {
-    let action = render_fixture_recipe_in_manifest_query(Recipe::Rule {
-        rule: "{{ description }}".into(),
-    })?;
-    anyhow::ensure!(
-        expect_string(
-            expect_rule_ref(&action.recipe, "query action rule reference")?,
-            "query action rule reference",
-        ) == "Run tests",
-        "manifest query should render rule recipe selectors"
-    );
-    Ok(())
-}
+#[path = "tests/query.rs"]
+mod query;

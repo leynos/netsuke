@@ -3,8 +3,10 @@
 use super::*;
 use crate::ir::cmd_interpolate::{binding_preparations, reset_binding_preparations};
 use crate::ir::{INS_TOKEN, OUTS_TOKEN};
+use crate::manifest;
 use crate::recipe_shell::RecipeShell;
 use proptest::prelude::*;
+use rstest::rstest;
 
 #[test]
 fn large_command_list_prepares_path_bindings_once() {
@@ -17,6 +19,7 @@ fn large_command_list_prepares_path_bindings_once() {
         &mut actions,
         Recipe::Command {
             command: StringOrList::List(entries),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         None,
         ActionBindings {
@@ -33,6 +36,31 @@ fn large_command_list_prepares_path_bindings_once() {
     );
 }
 
+#[rstest]
+#[case::script("script")]
+#[case::command("command")]
+fn power_shell_manifest_rejects_quoted_input_marker(#[case] recipe_kind: &str) {
+    let source = format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: output\n    sources: \"; New-Item pwned; Write-Output x\"\n    {recipe_kind}: \"Write-Output '{{{{ ins }}}}' > {{{{ outs }}}}\"\n"
+    );
+    let manifest = manifest::render_manifest(
+        manifest::from_str(&source).expect("the manifest should parse"),
+        &minijinja::Environment::new(),
+    )
+    .expect("the manifest template should render");
+    let error = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)
+        .expect_err("quoted PowerShell recipe markers must fail during IR lowering");
+
+    assert!(
+        matches!(
+            &error,
+            crate::ir::IrGenError::InvalidCommand { command, .. }
+                if command.contains(crate::ir::INS_TOKEN)
+        ),
+        "expected the quoted-marker rejection, got {error:?}"
+    );
+}
+
 proptest! {
     #[test]
     fn command_list_placeholder_interpolation_preserves_entry_order(
@@ -45,7 +73,7 @@ proptest! {
         let mut actions = IrHashMap::default();
         let action_id = register_action(
             &mut actions,
-            Recipe::Command { command: StringOrList::List(entries) },
+            Recipe::Command { command: StringOrList::List(entries), isolation: crate::ast::CommandIsolation::Shared },
             None,
             ActionBindings {
                 inputs: &[Utf8PathBuf::from("input")],
@@ -54,7 +82,7 @@ proptest! {
             },
         ).expect("shell-safe generated entries should interpolate");
         let action = actions.get(&action_id).expect("registered action should be available");
-        let Recipe::Command { command } = &action.recipe else {
+        let Recipe::Command { command, .. } = &action.recipe else {
             prop_assert!(false, "registered command list should remain a command recipe");
             return Ok(());
         };

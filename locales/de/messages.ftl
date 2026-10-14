@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Ohne Thema entspricht dies `--help`. Verwenden 
 cli.help.actions_heading = Aktionen:
 cli.help.targets_heading = Ziele:
 cli.help.targets.about = Ziele und Aktionen im ausgewählten Manifest auflisten.
+cli.help.targets.flag.edges.help = Abhängigkeitskanten und unverarbeitete Rezepte in die JSON-Ausgabe aufnehmen.
 cli.help.default_marker = Standard
 cli.help.conditional_marker = bedingt
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Das Manifest unter { $path } konnte nicht geladen
 runner.context.build_graph = Aus dem Manifest konnte kein Graph erstellt werden.
 runner.context.generate_ninja = Das Ninja-Manifest konnte nicht erzeugt werden.
 runner.context.render_graph = Das Graph-Artefakt konnte nicht gerendert werden.
+runner.help.targets_edges_require_json = Die Option --edges erfordert --json auf oberster Ebene.
 
 runner.io.create_temp_file = Die temporäre Ninja-Datei konnte nicht erstellt werden.
 runner.io.write_temp_ninja = Die temporäre Ninja-Datei konnte nicht geschrieben werden.
@@ -179,6 +181,8 @@ manifest.glob.unknown_pattern_error = unbekannter Musterfehler.
 manifest.glob.io_failed = Glob für „{ $pattern }“ fehlgeschlagen: { $detail }.
 manifest.glob.unknown_io_error = unbekannter E/A-Fehler.
 manifest.command_list_empty = Das Feld „command“ darf nicht leer sein: Geben Sie eine Befehlszeichenkette oder eine nicht leere Liste an.
+manifest.command_isolation_recipe = Das Feld „command_isolation“ erfordert ein Rezept mit einer Befehlsliste.
+manifest.command_isolation_scalar = „command_isolation: isolated“ erfordert eine Befehlsliste.
 
 # Fehler der Zwischendarstellung.
 ir.rule_not_found = Die vom Ziel „{ $target }“ referenzierte Regel „{ $rule }“ wurde nicht gefunden.
@@ -455,3 +459,25 @@ manifest.budget.exceeded = Das Ressourcenbudget des Manifests wurde während { $
 
 cli.flag.env_allow_var.help = Für den env()-Helfer des Manifests erlaubte Umgebungsvariable.
 cli.flag.env_block_var.help = Für den env()-Helfer des Manifests gesperrte Umgebungsvariable.
+
+# Manifest-Linting (`netsuke check`).
+cli.subcommand.check.about = Das Manifest prüfen, ohne einen Build zu erzeugen oder auszuführen.
+cli.subcommand.check.long_about = Das gewählte Manifest auf Konstrukte prüfen, die zwar geparst werden, aber vermutlich fehlerhaft, unsicher, nicht portabel oder cachefeindlich sind.
+cli.subcommand.check.flag.rule.help = Den Schweregrad einer Regel oder Kategorie setzen, geschrieben als NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Schweregrad, ab dem Befunde den Befehl scheitern lassen.
+cli.subcommand.check.flag.limit.help = Höchstzahl gemeldeter Befunde; 0 meldet alle.
+cli.subcommand.check.flag.explain.help = Die Regelreferenz ausgeben, statt ein Manifest zu prüfen.
+check.threshold_exceeded = Lint-Befunde haben die Schwelle { $severity } erreicht: { $failing } von { $reported } gemeldet.
+check.threshold_exceeded.help = Beheben Sie die gemeldeten Befunde, passen Sie --rule an oder lockern Sie --fail-on.
+check.summary.counts = Lint-Ergebnisse — Fehler: { $errors }, Warnungen: { $warnings }, Hinweise: { $advice }, unterdrückt: { $suppressed }.
+check.summary.clean = Keine Lint-Befunde.
+check.summary.truncated = { $shown ->
+    [one] { $shown } Befund wird angezeigt; --limit hat { $omitted } weitere ausgelassen.
+   *[other] { $shown } Befunde werden angezeigt; --limit hat { $omitted } weitere ausgelassen.
+}
+check.rule.malformed = Der Lint-Selektor { $selector } ist nicht als NAME=SEVERITY geschrieben.
+check.rule.unknown = Der Lint-Selektor nennt { $name }, was weder eine Regel noch eine Kategorie ist.
+check.rule.severity = Der Lint-Selektor { $name } nennt den Schweregrad { $severity }; erwartet wurde einer von { $values }.
+check.fail_on.invalid = Unbekannte Fehlerschwelle { $value }; erwartet wurde einer von { $values }.
+check.source_index = { $path } konnte für Lint-Diagnosen in Zeile { $line } nicht indiziert werden: { $reason }.
+status.tool.check = Prüfung

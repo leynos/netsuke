@@ -81,7 +81,7 @@ jobs:
       SCCACHE_DIR: ${{ github.workspace }}/.sccache
       SCCACHE_CACHE_SIZE: 4G
       # The tree requires the Polonius borrow checker, which nightly enables by
-      # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
+      # default (see docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md), so CI
       # builds with the dated nightly pinned in rust-toolchain.toml.
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
     defaults:
@@ -114,7 +114,7 @@ jobs:
             exit $LASTEXITCODE
           }
       - name: Install sccache
-        uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a  # v2.87.25
+        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe  # v2.87.27
         with:
           tool: sccache@0.16.0
           fallback: none
@@ -146,7 +146,7 @@ jobs:
       - name: Setup uv
         # `make check-fmt` runs the uv-driven Ruff format check on every
         # platform, so the Windows job needs uv on the PATH as well.
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
           enable-cache: 'false'
@@ -156,6 +156,11 @@ jobs:
         # Clippy and `cargo doc` over the whole workspace under `-D warnings`,
         # including the `#[cfg(windows)]` arms.
         run: make SHELL=bash lint-clippy
+      - name: Lint (Clippy, default features)
+        # The same checks over the default feature set, which is what release
+        # binaries build and which excludes `lint` until v0.2.0. The Linux
+        # counterpart is `ci-default-features.yml`.
+        run: make SHELL=bash lint-default-features
       - name: Install Whitaker
         uses: >-
           leynos/shared-actions/.github/actions/install-whitaker@6dea5677a84fec60ca51b07202570e3af12ffdb4
@@ -240,7 +245,7 @@ jobs:
       SCCACHE_DIR: ${{ github.workspace }}/.sccache
       SCCACHE_CACHE_SIZE: 4G
       # The tree requires the Polonius borrow checker, which nightly enables by
-      # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
+      # default (see docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md), so CI
       # builds with the dated nightly pinned in rust-toolchain.toml.
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
     defaults:
@@ -280,7 +285,7 @@ jobs:
             exit $LASTEXITCODE
           }
       - name: Install sccache
-        uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a  # v2.87.25
+        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe  # v2.87.27
         with:
           tool: sccache@0.16.0
           fallback: none
@@ -295,7 +300,7 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a  # v2.87.25
+        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe  # v2.87.27
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Reset sccache statistics
@@ -335,8 +340,14 @@ jobs:
           # the one build here not compiled with the parallel frontend. mold is
           # Linux-only, so its flag stays absent. Same assignment, and same
           # reason, as `Lint (Whitaker)` above.
+          #
+          # `--workspace` rather than `--bin netsuke`: the workspace has no
+          # `default-members`, so a package-scoped build never compiles
+          # `build_slice_fixture`, the member that compiles the production
+          # build-script module slice. The binary this step exists to smoke-test
+          # is still built, as `--workspace` selects every member including it.
           $env:RUSTFLAGS = "$env:RUSTFLAGS -Zthreads=8"
-          cargo build --locked --bin netsuke
+          cargo build --workspace --locked
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
@@ -388,7 +399,7 @@ jobs:
           "MSI_VALIDATION_DIRECTORY=$(Join-Path $env:RUNNER_TEMP 'netsuke-msi-upgrade-validation')" |
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Setup Python
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: ${{ env.PYTHON_BASELINE }}
           enable-cache: 'false'
@@ -403,7 +414,7 @@ jobs:
         uses: ./.github/actions/windows-msi-upgrade-validation
       - name: Upload Windows MSI validation logs
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: windows-msi-upgrade-validation-logs
           path: ${{ env.MSI_VALIDATION_DIRECTORY }}/*.log

@@ -59,11 +59,12 @@ const DISCOVERY_ENV_KEYS: [&str; 7] = [
     "LOCALAPPDATA",
 ];
 
-/// Project-scoped fetch-policy restrictions captured before generic merging.
+/// Fetch-policy requests captured from project-chain occurrences before merging.
 ///
 /// Project configuration is untrusted relative to operator configuration. The
-/// merge boundary uses this request to preserve restrictions without allowing
-/// the project layer to widen operator grants.
+/// merge boundary combines dependency-first requests while preserving
+/// restrictions and preventing project occurrences from widening operator
+/// grants without an operator opt-in.
 #[derive(Debug, Default)]
 pub(crate) struct ProjectFetchPolicyRequest {
     /// Optional request to deny every host by default.
@@ -72,6 +73,17 @@ pub(crate) struct ProjectFetchPolicyRequest {
     pub(crate) allow_scheme: Vec<String>,
     /// Additional hosts requested by the project configuration.
     pub(crate) allow_host: Vec<HostPattern>,
+}
+
+impl ProjectFetchPolicyRequest {
+    /// Append a later project-chain request after this dependency's request.
+    pub(crate) fn append_with(&mut self, later: Self) {
+        self.allow_scheme.extend(later.allow_scheme);
+        self.allow_host.extend(later.allow_host);
+        if later.default_deny.is_some() {
+            self.default_deny = later.default_deny;
+        }
+    }
 }
 
 /// File layers and loading errors produced by one discovery pass.
@@ -84,7 +96,7 @@ pub struct DiscoveredLayers {
     layers: Vec<MergeLayer<'static>>,
     /// Whether any discovered layer requested JSON output.
     json_preference: bool,
-    /// Restriction request quarantined from the primary project layer.
+    /// Combined request quarantined from project-chain occurrences.
     project_fetch_policy_request: Option<ProjectFetchPolicyRequest>,
     /// Manifest-budget restrictions quarantined before generic merging.
     project_manifest_budget_request: ProjectManifestBudgetRequest,
@@ -183,13 +195,15 @@ fn discover_file_layers_with_normalizer(
     let layers = match outcome {
         Ok(discovered_layers) => {
             let resolved = layers::retain_layers_and_resolve_json(discovered_layers);
+            let resolved_diagnostics =
+                diagnostics.with_env_grant_quarantine(resolved.env_grant_quarantine);
             DiscoveredLayers {
                 layers: resolved.layers,
                 json_preference: resolved.json_preference,
                 project_fetch_policy_request: resolved.project_request,
                 project_manifest_budget_request: resolved.project_budget_request,
                 errors: resolved.errors,
-                diagnostics,
+                diagnostics: resolved_diagnostics,
             }
         }
         Err(error) => DiscoveredLayers {

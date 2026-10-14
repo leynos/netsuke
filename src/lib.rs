@@ -16,6 +16,8 @@ pub(crate) use host::matching as host_matching;
 pub use host::pattern as host_pattern;
 pub mod ir;
 mod json_envelope;
+#[cfg(feature = "lint")]
+pub mod lint;
 mod locale;
 pub use locale::{catalogues as locale_catalogues, resolution as locale_resolution};
 pub mod localization;
@@ -26,6 +28,7 @@ pub use output::{mode as output_mode, prefs as output_prefs};
 pub mod recipe_shell;
 mod result_json;
 pub mod runner;
+pub mod shell_selection;
 mod shell_word;
 #[cfg(test)]
 mod snapshot_test_support;

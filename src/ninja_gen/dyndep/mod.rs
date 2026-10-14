@@ -14,13 +14,16 @@
 //! rejects graphs that require a bundle.
 //!
 //! ```rust
-//! use netsuke::ast::Recipe;
+//! use netsuke::ast::{CommandIsolation, Recipe};
 //! use netsuke::ir::{BuildEdge, BuildGraph, DependencyOrder};
 //! use netsuke::ninja_gen::generate_bundle;
 //! use camino::Utf8PathBuf;
 //!
 //! let action = netsuke::ir::Action {
-//!     recipe: Recipe::Command { command: "echo done".into() },
+//!     recipe: Recipe::Command {
+//!         command: "echo done".into(),
+//!         isolation: CommandIsolation::Shared,
+//!     },
 //!     description: None,
 //!     depfile: None,
 //!     deps_format: None,
@@ -58,6 +61,7 @@ use crate::ninja_gen::{
     NinjaGenError, RecipeShell, edge_requires_gates, graph_requires_dyndep, join, path_key,
     reject_unsupported_path_characters, write_action_rules,
 };
+use crate::recipe_shell::BashExecutable;
 use camino::Utf8PathBuf;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -98,7 +102,21 @@ pub(crate) fn generate_bundle_for_shell(
     graph: &BuildGraph,
     shell: RecipeShell,
 ) -> Result<GeneratedNinja, NinjaGenError> {
-    generate_bundle_inner(graph, shell)
+    generate_bundle_for_shell_with_bash(graph, shell, None)
+}
+
+/// Generate one bundle with an optional runner-selected Bash executable.
+///
+/// # Errors
+///
+/// Returns [`NinjaGenError`] when the graph cannot be represented safely or
+/// the generated bundle cannot be written.
+pub(crate) fn generate_bundle_for_shell_with_bash(
+    graph: &BuildGraph,
+    shell: RecipeShell,
+    bash_executable: Option<&BashExecutable>,
+) -> Result<GeneratedNinja, NinjaGenError> {
+    generate_bundle_inner(graph, shell, bash_executable)
 }
 
 /// Construct the [`GeneratedNinja`] bundle for `graph`.
@@ -120,6 +138,7 @@ pub(crate) fn generate_bundle_for_shell(
 fn generate_bundle_inner(
     graph: &BuildGraph,
     shell: RecipeShell,
+    bash_executable: Option<&BashExecutable>,
 ) -> Result<GeneratedNinja, NinjaGenError> {
     reject_unsupported_path_characters(graph)?;
     reject_reserved_paths(graph)?;
@@ -130,7 +149,7 @@ fn generate_bundle_inner(
         writeln!(out, "ninja_required_version = 1.10\n")?;
     }
 
-    write_action_rules(graph, &mut out, shell)?;
+    write_action_rules(graph, &mut out, shell, bash_executable)?;
 
     let mut stages = SerialStages::default();
     render_edges(graph, &mut out, &mut stages)?;

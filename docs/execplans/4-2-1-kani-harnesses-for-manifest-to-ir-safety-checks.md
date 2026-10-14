@@ -79,7 +79,7 @@ requires explicit user approval before implementation begins.
   `docs/formal-verification-methods-in-netsuke.md` only to add a footnote
   explaining the Proptest hand-off; do not rewrite its recommendation.
 - Add an Architecture Decision Record (ADR) using the existing
-  `docs/adr-NNN-<slug>.md` convention and the template in
+  `docs/adrs/adr-nnnn-title-slug.md` convention and the template in
   [`docs/documentation-style-guide.md`](../documentation-style-guide.md). The
   next free number is `004`. The ADR title is "Bound Kani IR harnesses to small
   N with Proptest hand-off at larger N".
@@ -103,9 +103,10 @@ requires explicit user approval before implementation begins.
   `Cargo.toml`, `Makefile` (to add the tiered `kani-ir` alias), `src/ir/mod.rs`,
   `src/ir/from_manifest.rs`, `src/ir/cycle.rs`, `docs/developers-guide.md`,
   `docs/formal-verification-methods-in-netsuke.md`,
-  `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`, `docs/contents.md` (to
-  index the new ADR), `docs/roadmap.md`, the per-harness mutation patch files
-  under `docs/verification/mutations/`, and this ExecPlan.
+  `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`,
+  `docs/contents.md` (to index the new ADR), `docs/roadmap.md`, the
+  per-harness mutation patch files under `docs/verification/mutations/`, and
+  this ExecPlan.
 - Interface: if any change to the public API of `netsuke::ir` (or any
   other crate-public symbol) becomes necessary to make the harnesses compile,
   stop and present options. `pub(crate)` and `#[cfg(kani)] pub(crate)` are the
@@ -232,7 +233,7 @@ requires explicit user approval before implementation begins.
       each 🔴/🟡 finding (Stage B scaffold, stubbing as contract
       decision, tiered Kani targets, mutation patches, rule-error
       harness collapse, duplicate-output assertion shape, 3-node
-      fallback wiring, ADR-004 Options Considered, hexagonal-
+      fallback wiring, ADR-0047 Options Considered, hexagonal-
       architecture rhetorical seasoning).
 - [x] (2026-06-11T22:16:38Z) Stage A: reviewed this draft with the user by
       implementation instruction, resolved the open questions using the plan's
@@ -273,7 +274,7 @@ requires explicit user approval before implementation begins.
       its budget in target-map lookup, so the harness was narrowed to the pure
       duplicate-output error constructor. Message argument formatting is also
       skipped under `cfg(kani)`. Recorded the changed proof boundary in
-      `docs/developers-guide.md` and ADR-004.
+      `docs/developers-guide.md` and ADR-0047.
 - [x] (2026-06-11T23:21:44Z) Stage C duplicate-output focused Kani run passed:
       `duplicate_output_always_rejected` verified successfully with zero
       failed checks and 0.59 seconds reported verification time.
@@ -357,8 +358,8 @@ requires explicit user approval before implementation begins.
       add the harness inventory to `docs/developers-guide.md`, add the
       Proptest hand-off footnote to
       `docs/formal-verification-methods-in-netsuke.md`, and add
-      `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`. Update
-      `docs/contents.md` to index the new ADR.
+      `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`.
+      Update `docs/contents.md` to index the new ADR.
 - [x] Stage E (validate and review): run mutation discipline per
       harness, run `make check-fmt`, `make lint`, `make test`,
       `make markdownlint`, `make nixie`, and `make kani-full`. Run
@@ -597,11 +598,11 @@ requires explicit user approval before implementation begins.
   duplicate-output rejection is delegated to the Proptest coverage scheduled
   under roadmap item `4.3.1`. The closing-the-risk relationship is documented
   in three places to avoid silent rot: in
-  `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` (a Known Risk with a
-  re-evaluation trigger), in the developers' guide harness inventory, and as a
-  sub-bullet under roadmap `4.2.1` that states "Kani at N=1-3; Proptest at
-  `4.3.1` closes the larger-N coverage". Date/Author: 2026-06-07 / planning
-  agent. **Awaits user approval at Stage A.**
+  `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+  (a Known Risk with a re-evaluation trigger), in the developers' guide
+  harness inventory, and as a sub-bullet under roadmap `4.2.1` that states
+  "Kani at N=1-3; Proptest at `4.3.1` closes the larger-N coverage".
+  Date/Author: 2026-06-07 / planning agent. **Awaits user approval at Stage A.**
 
 - Decision: harnesses prefer `Recipe::Rule` manifests so that only one
   `Action` is hashed per run, deferring `Recipe::Command`/ interpolation
@@ -617,7 +618,7 @@ requires explicit user approval before implementation begins.
   are rejected in production" — it proves "duplicate outputs are rejected given
   a collision-free hasher". If Stage C exceeds the five-minute tolerance and
   the stub becomes necessary, the harness inventory in the developers' guide
-  and the Known Risks section of ADR-004 must record the changed contract in
+  and the Known Risks section of ADR-0047 must record the changed contract in
   the same commit as the stub. The unchanged contract remains available via the
   alternative escape hatch — harnessing `find_duplicates` and `process_targets`
   directly without going through `from_manifest`. Stage A approval picks
@@ -681,7 +682,7 @@ requires explicit user approval before implementation begins.
   emergency. Date/Author: 2026-06-07 / planning agent with Logisphere review
   input.
 
-- Decision: revise ADR-004 to record the accepted private `IrHashMap`
+- Decision: revise ADR-0047 to record the accepted private `IrHashMap`
   compatibility layer and the production `contains_cycle` proof boundary.
   Rationale: the original ADR rejected all verification collection ports and
   described a harness-side cycle substitute. The final implementation keeps the
@@ -766,7 +767,7 @@ The relevant repository files are:
   documents the formal-verification tooling already established by `4.1.1`-
   `4.1.3`. This plan adds a "Harness inventory" subsection.
 - [`docs/documentation-style-guide.md`](../documentation-style-guide.md):
-  contains the ADR template used for ADR-004.
+  contains the ADR template used for ADR-0047.
 
 Architectural rules this plan applies (stated as concrete invariants, not
 pattern transplant): the IR is the part of the codebase with no input/output of
@@ -788,7 +789,7 @@ Use these skills while implementing this plan:
 - `hexagonal-architecture`: protect the IR domain boundary by
   forbidding any public-API widening for verification; use the skill to police
   drift rather than as a pattern source.
-- `arch-decision-records`: write ADR-004 using the project's Y-
+- `arch-decision-records`: write ADR-0047 using the project's Y-
   statement template.
 - `rust-types-and-apis`: confirm that no public API widening is
   required and that any `pub(crate)` exposure is minimal.
@@ -1053,7 +1054,8 @@ output to a separate `/tmp` log per the `tee` template. Run
    §Kani for the IR core noting that "up to 10 nodes" is delivered by Proptest
    in future roadmap item `4.3.x`, and that Kani covers the same properties
    exhaustively at 1-3 nodes.
-4. Create `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`
+4. Create
+   `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
    using the ADR template in
    [`docs/documentation-style-guide.md`](../documentation-style-guide.md).
    Capture the bound reconciliation, the accepted private `IrHashMap`
@@ -1222,10 +1224,10 @@ The implementation is accepted only when all of these behaviours are true:
 - `docs/developers-guide.md` documents the harness inventory and
   the new `cfg(kani)` lint convention.
 - `docs/formal-verification-methods-in-netsuke.md` references
-  ADR-004 and the Proptest hand-off.
-- `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` exists,
-  follows the ADR template in the documentation style guide, and is indexed from
-  `docs/contents.md`.
+  ADR-0047 and the Proptest hand-off.
+- `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+  exists, follows the ADR template in the documentation style guide, and is
+  indexed from `docs/contents.md`.
 - `docs/roadmap.md` marks `4.2.1` and its four sub-items as done.
 - The branch tracks
   `origin/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks`.
@@ -1266,7 +1268,7 @@ These questions must be resolved at Stage A before implementation begins:
    1-3 nodes, with the larger "up to 10 nodes, depth limit 20 edges" property
    delivered by Proptest under roadmap item `4.3.1` (and `4.3.1` treated as the
    *closing* commitment on the bound-reduction risk, not a sibling concern)?
-   The alternatives recorded in ADR-004 are Option B (harness narrow pure leaf
+   The alternatives recorded in ADR-0047 are Option B (harness narrow pure leaf
    functions instead of `BuildGraph::from_manifest`, trading end-to-end
    coverage of `process_targets` glue for larger N without a hand-off) and
    Option C (a private `IrHashMap` compatibility layer accepted under
@@ -1277,7 +1279,7 @@ These questions must be resolved at Stage A before implementation begins:
    preferred escape hatch in advance. Hatch (i): a `#[cfg(kani)]`-only
    constant-return stub for `ActionHasher::hash`, accepting that the harness
    then proves "duplicate-output rejection given a collision-free hasher" and
-   that the changed contract is recorded in the harness inventory and ADR-004.
+   that the changed contract is recorded in the harness inventory and ADR-0047.
    Hatch (ii): drop end-to-end coverage of this property and harness
    `find_duplicates` and `process_targets` directly, accepting the loss of
    `register_action` glue coverage. Pre-committing to one of these avoids a
@@ -1316,7 +1318,7 @@ The description must:
 - summarize the eight (or revised) named harnesses, the bound
   reconciliation, and the Proptest hand-off;
 - include the captured validation evidence;
-- reference ADR-004; and
+- reference ADR-0047; and
 - include a `## References` section with the Lody session link.
 
 Run the following and embed its result in the references section:
@@ -1345,12 +1347,12 @@ The references section should include:
   patch files under `docs/verification/mutations/`. Rule-error harness trio
   collapsed into one parameterized symbolic harness. Duplicate output assertion
   restated in input-shape terms. 3-node cycle fallback escalated as a `4.3.1`
-  blocker. Verification-only collection port recast as Option C in ADR-004 with
-  a tightened rejection rationale. Hexagonal-architecture seasoning trimmed
-  from Decision Log and Context; the skill is retained as a boundary-policing
-  tool in Skills. Cumulative solver-budget estimate added to Tolerances. The
-  plan remains in DRAFT and approval-gated; remaining work is Stage A approval
-  and then implementation.
+  blocker. Verification-only collection port recast as Option C in ADR-0047
+  with a tightened rejection rationale. Hexagonal-architecture seasoning
+  trimmed from Decision Log and Context; the skill is retained as a
+  boundary-policing tool in Skills. Cumulative solver-budget estimate added to
+  Tolerances. The plan remains in DRAFT and approval-gated; remaining work is
+  Stage A approval and then implementation.
 - 2026-06-11: Implementation approved by user instruction. Status moved to
   IMPLEMENTING, Stage A marked complete, and recommended answers to the open
   questions recorded in the Decision Log.
@@ -1394,7 +1396,7 @@ The references section should include:
 - 2026-06-13: Review remediation aligned the code and documents with the
   production-code testing rule. Cycle proofs now drive production
   `contains_cycle`; rule-selection and duplicate-output proofs use symbolic
-  bounded inputs against production helpers; ADR-004 accepts the private
+  bounded inputs against production helpers; ADR-0047 accepts the private
   `cfg(kani)` `IrHashMap` compatibility layer while continuing to reject public
   verification ports. Mutation patch artefacts were added under
   `docs/verification/mutations/`.

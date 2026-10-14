@@ -133,9 +133,17 @@ fn the_debug_build_applies_the_standard_without_denying_warnings(
         "build should not impose the gates' warning policy, got `{:?}`",
         invocation.rustflags()
     );
+    // The workspace selection is load-bearing rather than stylistic: with no
+    // `default-members`, a package-scoped build omits `build_slice_fixture`,
+    // the member that compiles the production build-script module slice.
     ensure!(
-        invocation.contains_sequence(&["build", "--bin", PROBE_APP]),
-        "build should build the binary, got `{:?}`",
+        invocation.contains_sequence(&["build", "--workspace"]),
+        "build should select the workspace so the slice fixture compiles, got `{:?}`",
+        invocation.arguments()
+    );
+    ensure!(
+        !invocation.contains_sequence(&["--bin", PROBE_APP]),
+        "build should not narrow itself to one binary, got `{:?}`",
         invocation.arguments()
     );
     Ok(())
@@ -166,8 +174,13 @@ fn the_release_build_assigns_rustflags_and_takes_neither_flag(
         );
     }
     ensure!(
-        invocation.contains_sequence(&["--release", "--bin", PROBE_APP]),
-        "release should build the release binary, got `{:?}`",
+        invocation.contains_sequence(&["--workspace", "--release"]),
+        "release should build the release workspace, got `{:?}`",
+        invocation.arguments()
+    );
+    ensure!(
+        !invocation.contains_sequence(&["--bin", PROBE_APP]),
+        "release should not narrow itself to one binary, got `{:?}`",
         invocation.arguments()
     );
     Ok(())

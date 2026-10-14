@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Без теми це відповідає `--he
 cli.help.actions_heading = Дії:
 cli.help.targets_heading = Цілі:
 cli.help.targets.about = Вивести список цілей і дій у вибраному маніфесті.
+cli.help.targets.flag.edges.help = Додати ребра залежностей і необроблені рецепти до виводу JSON.
 cli.help.default_marker = за замовчуванням
 cli.help.conditional_marker = умовний
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Не вдалося завантажити ман
 runner.context.build_graph = Не вдалося побудувати граф за маніфестом.
 runner.context.generate_ninja = Не вдалося створити маніфест Ninja.
 runner.context.render_graph = Не вдалося відобразити артефакт графа.
+runner.help.targets_edges_require_json = Параметр --edges потребує --json на верхньому рівні.
 
 runner.io.create_temp_file = Не вдалося створити тимчасовий файл Ninja.
 runner.io.write_temp_ninja = Не вдалося записати тимчасовий файл Ninja.
@@ -179,6 +181,8 @@ manifest.glob.unknown_pattern_error = невідома помилка шабло
 manifest.glob.io_failed = Збій glob для «{ $pattern }»: { $detail }.
 manifest.glob.unknown_io_error = невідома помилка вводу-виводу.
 manifest.command_list_empty = Поле «command» не має бути порожнім: укажіть рядок команди або непорожній список.
+manifest.command_isolation_recipe = Поле «command_isolation» потребує рецепта зі списком команд.
+manifest.command_isolation_scalar = «command_isolation: isolated» потребує списку команд.
 
 # Помилки проміжного подання.
 ir.rule_not_found = Правило «{ $rule }», на яке посилається ціль «{ $target }», не знайдено.
@@ -462,3 +466,22 @@ manifest.budget.exceeded = Бюджет ресурсів маніфесту ви
 
 cli.flag.env_allow_var.help = Змінна середовища, дозволена для помічника env() маніфесту.
 cli.flag.env_block_var.help = Змінна середовища, заблокована для помічника env() маніфесту.
+
+# Перевірка маніфесту (`netsuke check`).
+cli.subcommand.check.about = Перевірити маніфест без створення та запуску збірки.
+cli.subcommand.check.long_about = Проаналізувати обраний маніфест на конструкції, які розбираються, але, ймовірно, є хибними, небезпечними, непереносними або шкідливими для кешування.
+cli.subcommand.check.flag.rule.help = Задати важливість правила або категорії у вигляді NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Важливість, за якої знахідки спричиняють невдачу команди.
+cli.subcommand.check.flag.limit.help = Найбільша кількість повідомлених знахідок; 0 повідомляє про всі.
+cli.subcommand.check.flag.explain.help = Вивести довідник правил замість аналізу маніфесту.
+check.threshold_exceeded = Знахідки досягли порога { $severity }: { $failing } із { $reported } повідомлених.
+check.threshold_exceeded.help = Виправте повідомлені знахідки, змініть --rule або послабте --fail-on.
+check.summary.counts = Результати перевірки — помилки: { $errors }, попередження: { $warnings }, поради: { $advice }, придушено: { $suppressed }.
+check.summary.clean = Знахідок немає.
+check.summary.truncated = Показано знахідок: { $shown }; --limit пропустив ще { $omitted }.
+check.rule.malformed = Селектор { $selector } записано не у вигляді NAME=SEVERITY.
+check.rule.unknown = Селектор вказує { $name }, що не є ні правилом, ні категорією.
+check.rule.severity = Селектор { $name } вказує важливість { $severity }; очікувалося одне з { $values }.
+check.fail_on.invalid = Невідомий поріг невдачі { $value }; очікувалося одне з { $values }.
+check.source_index = Не вдалося проіндексувати { $path } для діагностики в рядку { $line }: { $reason }.
+status.tool.check = Перевірка

@@ -19,6 +19,8 @@ use std::time::Duration;
 use test_support::{localizer_test_lock, set_en_localizer};
 use tracing_subscriber::filter::LevelFilter;
 
+#[cfg(feature = "lint")]
+mod check_dispatch_tests;
 mod manifest_structure_telemetry_tests;
 
 #[path = "shell_seam_tests.rs"]
@@ -89,6 +91,7 @@ impl GraphGenerationFixture {
     fn graph_generation_context(&self) -> GraphGenerationContext<'_> {
         GraphGenerationContext {
             recipe_shell: RecipeShell::host_default(),
+            bash_executable: None,
             clock: &self.clock,
         }
     }
@@ -352,14 +355,17 @@ proptest! {
     }
 }
 
-#[test]
-fn help_targets_bypasses_ninja_program_resolution() -> Result<()> {
+#[rstest]
+#[case::catalogue(false)]
+#[case::graph_export(true)]
+fn help_targets_bypasses_ninja_program_resolution(#[case] edges: bool) -> Result<()> {
     let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
     let _guard = set_en_localizer();
     let cli = Cli {
         file: Utf8PathBuf::from("missing-help-targets-manifest.yml"),
+        json: edges,
         command: Some(Commands::Help(HelpArgs {
-            topic: Some(HelpTopic::Targets),
+            topic: Some(HelpTopic::Targets(crate::cli::HelpTargetsArgs { edges })),
         })),
         ..Cli::default()
     };

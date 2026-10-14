@@ -16,7 +16,7 @@ Run via ``make test-workflow-contracts``.
 import pytest
 from fork_fallback import (
     FORK_FALLBACK_RUNNER,
-    FORK_GUARD,
+    HOSTED_GUARD,
     Placement,
     fork_fallback_offences,
     owned_runner,
@@ -27,7 +27,7 @@ from workflow_loading import load_workflow, workflow_job
 
 #: A declaration of the deployed shape, over an arbitrary owned label.
 DEPLOYED = (
-    f"${{{{ {FORK_GUARD} && '{FORK_FALLBACK_RUNNER}' "
+    f"${{{{ {HOSTED_GUARD} && '{FORK_FALLBACK_RUNNER}' "
     "|| 'ubicloud-standard-2-ubuntu-2404' }}"
 )
 
@@ -60,7 +60,7 @@ def test_every_lane_declares_the_arm_it_should_and_no_other() -> None:
     offences = fork_fallback_offences(_checked_in_declarations())
     assert not offences, (
         f"these lanes declare the wrong placement: {offences}; a lane serving "
-        f"pull requests must branch on {FORK_GUARD} to {FORK_FALLBACK_RUNNER}, "
+        f"pull requests must branch on {HOSTED_GUARD} to {FORK_FALLBACK_RUNNER}, "
         f"and every other lane must name its runner outright"
     )
 
@@ -91,7 +91,7 @@ def test_no_runs_on_declaration_carries_a_line_break() -> None:
         pytest.param(
             DEPLOYED,
             Placement(
-                FORK_GUARD, FORK_FALLBACK_RUNNER, "ubicloud-standard-2-ubuntu-2404"
+                HOSTED_GUARD, FORK_FALLBACK_RUNNER, "ubicloud-standard-2-ubuntu-2404"
             ),
             id="the-deployed-shape",
         ),

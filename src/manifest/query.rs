@@ -35,6 +35,26 @@ pub(crate) fn from_path_for_manifest_query_with_limits(
     budget_limits: ManifestBudgetLimits,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
+    from_path_for_manifest_query_with_source(path, budget_limits, on_stage)
+        .map(|loaded| loaded.manifest)
+}
+
+/// Load a manifest for a discovery query, keeping the source text it came from.
+///
+/// The linter needs the exact bytes the manifest was parsed from so its span
+/// index cannot disagree with the compiler's. Returning them from the same
+/// capability-scoped read is what guarantees that; reading the path again
+/// would open a second, unscoped view of the filesystem.
+///
+/// # Errors
+///
+/// Returns an error if the manifest cannot be read, rendered, or parsed, if it
+/// exceeds `budget_limits`, or if it invokes an impure template helper.
+pub(crate) fn from_path_for_manifest_query_with_source(
+    path: impl AsRef<Path>,
+    budget_limits: ManifestBudgetLimits,
+    on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
+) -> Result<LoadedManifest> {
     let env_reader = disabled_env_reader();
     let environment = ManifestEnvironment::new(&env_reader, EnvAccessPolicy::default());
     from_path_with_registration(ManifestLoadRequest {
@@ -74,6 +94,22 @@ pub(super) fn from_path_with_policy_and_environment_and_limits(
             recipe_shell,
         },
     })
+    .map(|loaded| loaded.manifest)
+}
+
+/// A rendered manifest together with the source text it was parsed from.
+///
+/// The source and its display name are kept only for the linter's span index;
+/// a build without the `lint` feature has no reader for them.
+pub(crate) struct LoadedManifest {
+    /// The expanded and rendered manifest.
+    pub(crate) manifest: NetsukeManifest,
+    /// The manifest source, exactly as read.
+    #[cfg(feature = "lint")]
+    pub(crate) source: String,
+    /// The display name the diagnostics label the source with.
+    #[cfg(feature = "lint")]
+    pub(crate) name: String,
 }
 
 /// Select the standard-library boundary for a manifest load.
@@ -88,14 +124,10 @@ enum ManifestLoadMode {
     },
     /// A metadata-only load that must not construct an ambient stdlib config.
     ///
-    /// The query surface quotes recipe text for the host default interpreter
-    /// rather than for the shell the build will resolve. **This divergence is
-    /// deliberate**: `resolve_recipe_shell` sits behind the runner's command
-    /// dispatch, and reaching it from here would make `netsuke help targets`
-    /// fail on a host whose `NETSUKE_WINDOWS_SHELL` is malformed — turning a
-    /// metadata query into a command that can error on configuration it never
-    /// uses. `tests/stdlib_manifest_query_tests.rs` pins the divergence so it
-    /// stays a decision rather than becoming a surprise.
+    /// Query-rendered metadata uses a fixed `sh` dialect for shell quoting,
+    /// independent of the host and build-shell configuration. Resolving the
+    /// build shell here would make a metadata query inspect a setting it does
+    /// not use and could make help fail on an unrelated malformed override.
     ManifestQuery,
 }
 
@@ -116,7 +148,7 @@ struct ManifestLoadRequest<'path, 'env, 'stage> {
 /// Read a manifest and render it with the selected stdlib registration.
 fn from_path_with_registration(
     mut request: ManifestLoadRequest<'_, '_, '_>,
-) -> Result<NetsukeManifest> {
+) -> Result<LoadedManifest> {
     notify_stage(&mut request.on_stage, ManifestLoadStage::ManifestIngestion);
     let workspace = open_manifest_workspace(request.path, None)?;
     let data = workspace
@@ -146,7 +178,7 @@ fn from_path_with_registration(
         ManifestLoadMode::ManifestQuery => (StdlibRegistration::ManifestQuery, None),
     };
     let manifest_root = Some(workspace.root);
-    from_str_named(
+    let manifest = from_str_named(
         &data,
         ManifestParse {
             name: &name,
@@ -158,5 +190,12 @@ fn from_path_with_registration(
             budget_limits: request.budget_limits,
         },
         &mut request.on_stage,
-    )
+    )?;
+    Ok(LoadedManifest {
+        manifest,
+        #[cfg(feature = "lint")]
+        source: data,
+        #[cfg(feature = "lint")]
+        name: name.as_ref().to_owned(),
+    })
 }

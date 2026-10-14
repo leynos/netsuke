@@ -9,10 +9,13 @@
 //! ```
 //! use netsuke::hasher::ActionHasher;
 //! use netsuke::ir::Action;
-//! use netsuke::ast::{Recipe, StringOrList};
+//! use netsuke::ast::{CommandIsolation, Recipe, StringOrList};
 //!
 //! let action = Action {
-//!     recipe: Recipe::Command { command: "echo".into() },
+//!     recipe: Recipe::Command {
+//!         command: "echo".into(),
+//!         isolation: CommandIsolation::Shared,
+//!     },
 //!     description: None,
 //!     depfile: None,
 //!     deps_format: None,

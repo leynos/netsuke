@@ -132,12 +132,12 @@ jinja.add_function("env", move |var_name: String| {
 `EnvReader` is `Arc<dyn Fn(&str) -> Result<String, EnvReadError> + Send + Sync>`
 (`src/manifest/env_reader.rs:61`). It exists because Netsuke forbids reading
 `std::env::var` outside a thin injected seam; see
-`docs/adr-008-environment-seam-taxonomy.md`, which names this exact site as the
-canonical `Arc`-closure seam (the `Arc` is required because MiniJinja's
+`docs/adrs/adr-0008-environment-seam-taxonomy.md`, which names this exact site
+as the canonical `Arc`-closure seam (the `Arc` is required because MiniJinja's
 `add_function` demands `Send + Sync`).
 
 `env_var_with` (`src/manifest/env_reader.rs:133-172`) maps the failure modes.
-There are now **three**, not two: since commit `0ba6672f` the ADR-026 access
+There are now **three**, not two: since commit `0ba6672f` the ADR-0026 access
 policy is evaluated first, so a blocked name is a fourth outcome alongside the
 two `EnvReadError` variants, and the reader is never called for it.
 
@@ -284,7 +284,7 @@ older drafts is not implemented in beta3."
 `docs/stdlib-yaml-and-jinja-guide.md:341-343` says `env(name)` has "no
 default-value argument".
 
-`docs/rfcs/0006-ansible-inspired-template-standard-library.md:1393-1409`
+`docs/rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md:1393-1409`
 supersedes the `shell_escape` name:
 
 > `text | shell_quote(dialect='sh')` … **This is the same capability as the
@@ -348,7 +348,7 @@ build — with one `- missing in <tag>: <key>` line per locale. See
 
 ### Non-negotiable house rules that bear on this work
 
-From `AGENTS.md` and `docs/adr-008-environment-seam-taxonomy.md`:
+From `AGENTS.md` and `docs/adrs/adr-0008-environment-seam-taxonomy.md`:
 
 - In-process environment mutation is forbidden in tests. Inject `EnvReader`,
   `mockable::Env`, or a narrow closure seam. `serial_test` and process-wide
@@ -379,19 +379,19 @@ is a scope change: stop and escalate rather than adding a configuration key.
 There is no Terms of Reference artefact in this repository. The upstream
 artefacts are:
 
-| Identifier      | Artefact                                                     | Revision anchor      |
-| --------------- | ------------------------------------------------------------ | -------------------- |
-| `RM-3.14.8`     | `docs/roadmap.md` lines 367-380                              | at commit `ebcedaef` |
-| `RM-6.8.3`      | `docs/roadmap.md` lines 1189-1196                            | at commit `ebcedaef` |
-| `DD-4.4`        | `docs/netsuke-design.md` §4.4, lines 1272-1355               | at commit `ebcedaef` |
-| `DD-4.5`        | `docs/netsuke-design.md` §4.5, lines 1356-1382               | at commit `ebcedaef` |
-| `DD-2.6`        | `docs/netsuke-design.md` §2.6, lines 602-749                 | at commit `ebcedaef` |
-| `RFC-0006-8.9`  | `docs/rfcs/0006-…md` lines 1396-1412                         | at commit `ebcedaef` |
-| `RFC-0006-13.3` | `docs/rfcs/0006-…md` line 1837                               | at commit `ebcedaef` |
-| `ADR-008`       | `docs/adr-008-environment-seam-taxonomy.md`                  | Accepted 2026-08-06  |
-| `ADR-014`       | `docs/adr-014-backend-text-escaping-seam.md`                 | Accepted             |
-| `ADR-026`       | `docs/adr-026-manifest-environment-access-policy.md`         | Accepted 2026-09-17  |
-| `UG-WIN`        | `docs/users-guide.md:358-485` Windows legacy recipe contract | at commit `ebcedaef` |
+| Identifier      | Artefact                                                                           | Revision anchor      |
+| --------------- | ---------------------------------------------------------------------------------- | -------------------- |
+| `RM-3.14.8`     | `docs/roadmap.md` lines 367-380                                                    | at commit `ebcedaef` |
+| `RM-6.8.3`      | `docs/roadmap.md` lines 1189-1196                                                  | at commit `ebcedaef` |
+| `DD-4.4`        | `docs/netsuke-design.md` §4.4, lines 1272-1355                                     | at commit `ebcedaef` |
+| `DD-4.5`        | `docs/netsuke-design.md` §4.5, lines 1356-1382                                     | at commit `ebcedaef` |
+| `DD-2.6`        | `docs/netsuke-design.md` §2.6, lines 602-749                                       | at commit `ebcedaef` |
+| `RFC-0006-8.9`  | `docs/rfcs/rfc-0006-…md` lines 1396-1412                                           | at commit `ebcedaef` |
+| `RFC-0006-13.3` | `docs/rfcs/rfc-0006-…md` line 1837                                                 | at commit `ebcedaef` |
+| `ADR-0008`      | `docs/adrs/adr-0008-environment-seam-taxonomy.md`                                  | Accepted 2026-08-06  |
+| `ADR-0014`      | `docs/adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md`                       | Accepted             |
+| `ADR-0026`      | `docs/adrs/adr-0026-keep-project-environment-policy-below-the-operator-ceiling.md` | Accepted 2026-09-17  |
+| `UG-WIN`        | `docs/users-guide.md:358-485` Windows legacy recipe contract                       | at commit `ebcedaef` |
 
 The anchors were re-taken against commit `0ba6672f` after the branch rebased
 onto `origin/main`. The pre-rebase anchors (`81d44f89`) have moved: `RM-3.14.8`
@@ -437,7 +437,7 @@ module header where the merge-base had four. That citation was corrected in
 place; the absence of any other correction is the claim that no other
 branch-owned line number moved.
 
-`ADR-026` is a new upstream artefact for this plan. It bounds the `env()` port
+`ADR-0026` is a new upstream artefact for this plan. It bounds the `env()` port
 that EP-M1 extends and is the governing decision for `EnvAccessPolicy`.
 
 Predecessors `2.2.4` (archived,
@@ -447,17 +447,17 @@ Predecessors `2.2.4` (archived,
 Trace chain:
 
 ```plaintext
-RM-3.14.8 -> DD-4.4 + ADR-026 -> EP-M1
+RM-3.14.8 -> DD-4.4 + ADR-0026 -> EP-M1
     -> tests::manifest_env::env_default_cases
     (constraint 12: a blocked name is not an absence and takes no default)
 RM-3.14.8 -> DD-4.5 (compact) -> EP-M2 -> tests::std_filter::compact_property
 RM-3.14.8 -> DD-4.5 (shell_escape) + RFC-0006-8.9 -> EP-M3, EP-M4
     -> tests::shell_quote::sh_roundtrip_property
 RM-3.14.8 -> DD-4.5 (shell_join) -> EP-M4 -> tests::shell_join::shlex_roundtrip
-UG-WIN + ADR-014 -> EP-M3, EP-M4 -> tests::shell_quote::dialect_follows_recipe_shell
+UG-WIN + ADR-0014 -> EP-M3, EP-M4 -> tests::shell_quote::dialect_follows_recipe_shell
 RM-3.14.8 (RUSTFLAGS) -> DD-2.6 -> EP-M5
     -> tests::documentation_examples::stdlib-optional-rustflags-manifest
-RM-6.8.3 -> EP-M3 (name and dialect adopted early) -> ADR-041
+RM-6.8.3 -> EP-M3 (name and dialect adopted early) -> ADR-0041
 ```
 
 ## Constraints
@@ -504,7 +504,7 @@ These are hard invariants. Violating one requires escalation, not a workaround.
 11. Changes under `locales/**` are never "docs-only" for gating purposes. The
     localization audit runs in `build.rs`, so a gate that skips the Rust build
     for a translation-only diff would skip the audit that protects it.
-12. `env(name, default=…)` must not weaken the ADR-026 access policy. A name
+12. `env(name, default=…)` must not weaken the ADR-0026 access policy. A name
     the policy blocks fails, with or without a `default`. A `default` is
     substituted for *absence* only, and a policy denial is not an absence. This
     constraint was added during post-rebase reconciliation: the plan's original
@@ -617,7 +617,7 @@ Stop and escalate — do not improvise — when any of these is reached.
   `src/manifest/expand.rs` into a directory module and added
   `src/manifest/registration.rs` with the same four members this plan extracts.
   **That branch has now landed on `origin/main` at commit `0ba6672f`, together
-  with the environment-policy and resource-ceiling work (ADR-026).**
+  with the environment-policy and resource-ceiling work (ADR-0026).**
   `src/manifest/registration.rs` exists and already carries exactly the planned
   member set — `RESERVED_VAR_NAMES`, `localize_recipe_error`,
   `register_manifest_vars`, `manifest_structure_error` — so the extraction step
@@ -693,10 +693,10 @@ Stop and escalate — do not improvise — when any of these is reached.
   injection-safety defect in the very helper whose stated purpose (`DD-4.5`) is
   to be "a non-negotiable security feature to prevent command injection
   vulnerabilities". Affected identifiers: `RFC-0006-8.9`, `RFC-0006-13.3`,
-  `RM-6.8.3`, `DD-4.5`. Impacts: `docs/rfcs/0006-…md` §8.9 must be amended to
-  record the two-dialect set and the host-default rule; `RM-6.8.3` is reduced
-  to a no-op. Options considered: (a) two dialects with a host default —
-  chosen; (b) `sh` only, raising a template error on a PowerShell host —
+  `RM-6.8.3`, `DD-4.5`. Impacts: `docs/rfcs/rfc-0006-…md` §8.9 must be amended
+  to record the two-dialect set and the host-default rule; `RM-6.8.3` is
+  reduced to a no-op. Options considered: (a) two dialects with a host default
+  — chosen; (b) `sh` only, raising a template error on a PowerShell host —
   rejected because it makes the filter unusable in default Windows manifests;
   (c) `sh` only with no platform awareness — rejected as silently unsafe.
   Approving authority: the requester, who selected option (a) and D1 explicitly
@@ -717,9 +717,9 @@ Stop and escalate — do not improvise — when any of these is reached.
   yields `"1"`, `default=true` yields the Python-shaped `"True"`, and
   `default=['a','b']` yields the JSON fragment `["a", "b"]` — straight into a
   shell recipe. That is exactly the coercion
-  `docs/rfcs/0006-ansible-inspired-template-standard-library.md:325` §6.6
-  forbids: "A helper that expects a string rejects numbers and booleans rather
-  than stringifying them." The read is therefore:
+  `docs/rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md:325`
+  §6.6 forbids: "A helper that expects a string rejects numbers and booleans
+  rather than stringifying them." The read is therefore:
 
   ```rust
   let fallback = match kwargs.get::<Option<Value>>("default")? {
@@ -822,7 +822,7 @@ Stop and escalate — do not improvise — when any of these is reached.
   Nix's `escapeShellArg`, Ansible's `quote` — ships a one-argument function
   with no dialect selector. Dropping it would remove four of the six message
   keys (roughly 140 catalogue lines), remove `ShellDialect::parse`, remove
-  OBL-DIALECT-TOTAL, and remove the name collision with ADR-019's shell
+  OBL-DIALECT-TOTAL, and remove the name collision with ADR-0019's shell
   registry, which accepts `bash` where D3 rejects it. It would also make RFC
   0006's wider dialect set *easier* to add later, since an optional keyword on
   a zero-argument filter is purely additive. Rationale for not adopting it: the
@@ -879,11 +879,11 @@ other six channels, which today have nothing.
 
 - For `dialect='sh'`, a sound encoder, with unusually good evidence:
   OBL-SH-ROUNDTRIP runs a real `/bin/sh` and has a stated negative control, and
-  the encoding composes correctly with ADR-014's `$`-doubling at the Ninja
+  the encoding composes correctly with ADR-0014's `$`-doubling at the Ninja
   writer boundary.
 - For `dialect='powershell'` on a non-Windows host, one class weaker: the
   guarantee rests on a handwritten inverse model until the Windows job runs.
-  ADR-041 must say so in those words.
+  ADR-0041 must say so in those words.
 - **It is opt-in and silent when omitted.** Nothing detects
   `command: cc {{ glob(...) | join(' ') }}` and warns. A control that works
   only when the author remembers it is a primitive, not a control.
@@ -892,8 +892,8 @@ other six channels, which today have nothing.
   `user_flags`. The guide must not let an author believe that quoting one
   substitution makes a recipe safe.
 
-The claim to write in ADR-041 and in "Validation and acceptance", replacing any
-unqualified repetition of `DD-4.5`:
+The claim to write in ADR-0041 and in "Validation and acceptance", replacing
+any unqualified repetition of `DD-4.5`:
 
 > `shell_quote` and `shell_join` are safe primitives, not enforced controls.
 > They give a manifest author a sound way to interpolate a value into a shell
@@ -1033,10 +1033,11 @@ pub(super) fn validate_ninja_value(text: &str) -> Result<(), NinjaGenError> {
 }
 ```
 
-`docs/adr-014-backend-text-escaping-seam.md` records it as the Ninja writer's
-own admissibility rule. Reimplementing it inside a template filter would put
-one predicate at three enforcement points, and they have **already** drifted:
-`src/stdlib/command/quote.rs:43` rejects `\n` and `\r` but not `\0`.
+`docs/adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md` records it as the
+Ninja writer's own admissibility rule. Reimplementing it inside a template
+filter would put one predicate at three enforcement points, and they have
+**already** drifted: `src/stdlib/command/quote.rs:43` rejects `\n` and `\r` but
+not `\0`.
 
 Instead, promote the predicate to a shared leaf and call it from both places.
 Add to `src/shell_word.rs`:
@@ -1046,7 +1047,7 @@ Add to `src/shell_word.rs`:
 ///
 /// Newline, carriage return, and NUL cannot: a Ninja binding is single-line by
 /// construction. This is the same rule the Ninja writer enforces at its own
-/// boundary; see ADR-014.
+/// boundary; see ADR-0014.
 pub(crate) fn is_recipe_admissible(value: &str) -> bool { !value.contains(['\n', '\r', '\0']) }
 ```
 
@@ -1064,7 +1065,7 @@ already going to be needed for it, so the key count is unchanged.
 Constraint 4 is currently prose. Make it a gate. `shell_quote::QuoteRefExt` is
 imported at exactly two sites today (`src/ir/cmd_interpolate/mod.rs:12` and
 `src/stdlib/command/quote.rs:6`), and `clippy.toml:15-24` already uses
-`disallowed-methods` with reason strings to enforce the ADR-008 environment
+`disallowed-methods` with reason strings to enforce the ADR-0008 environment
 mandate, with sanctioned sites carrying
 `#[expect(clippy::disallowed_methods, reason = "...")]` so the exemption warns
 once it becomes obsolete. Add one entry:
@@ -1243,10 +1244,10 @@ fn env_default_from_kwargs(kwargs: &Kwargs) -> Result<Option<String>, Error>;
 
 The landed signature at `0ba6672f` is
 `env_var_with(name: &str, policy: &EnvAccessPolicy, read_env)`, which evaluates
-the ADR-026 access policy *before* reading. EP-M1 adds the `fallback` parameter
-and must keep the policy evaluation first: a blocked name must not reach the
-reader even when a `default` is supplied, or `default=` becomes a policy
-bypass. Preserve the policy argument's position and the existing
+the ADR-0026 access policy *before* reading. EP-M1 adds the `fallback`
+parameter and must keep the policy evaluation first: a blocked name must not
+reach the reader even when a `default` is supplied, or `default=` becomes a
+policy bypass. Preserve the policy argument's position and the existing
 `ManifestEnvironment` bundle; see R9.
 
 ```rust
@@ -1663,8 +1664,8 @@ accepts.
 - Evidence: assert the final `command =` text *and*, where an interpreter is
   available, the argument vector it actually produces.
 - Non-vacuity: include a value containing `$`, so the assertion also exercises
-  ADR-014's `$`-doubling; a seeded fault that drops the `$$` escaping must fail
-  it.
+  ADR-0014's `$`-doubling; a seeded fault that drops the `$$` escaping must
+  fail it.
 
 **OBL-QUERY-SURFACE** — the manifest-query surface stays coherent.
 
@@ -1792,9 +1793,10 @@ the implementation to match a guess.
 ### Stage A — orient and confirm (no code changes)
 
 Read, in order: this plan's "Context and orientation"; `AGENTS.md`;
-`docs/adr-008-environment-seam-taxonomy.md`; `docs/netsuke-design.md` §§2.6,
-4.4, 4.5; `docs/rfcs/0006-ansible-inspired-template-standard-library.md` §§8.9
-and 13; `docs/users-guide.md:331-399` and `:458-495`;
+`docs/adrs/adr-0008-environment-seam-taxonomy.md`; `docs/netsuke-design.md`
+§§2.6, 4.4, 4.5;
+`docs/rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md`
+§§8.9 and 13; `docs/users-guide.md:331-399` and `:458-495`;
 `docs/stdlib-yaml-and-jinja-guide.md` in full;
 `docs/rust-testing-with-rstest-fixtures.md`; `docs/rstest-bdd-users-guide.md`;
 `docs/rust-doctest-dry-guide.md`;
@@ -1817,7 +1819,7 @@ Load these skills before writing code: `rust-router` (then whichever single
 follow-on it routes to — most likely `rust-types-and-apis` for the
 `ShellDialect` surface and `rust-errors` for the policy error),
 `rust-unit-testing`, `proptest`, `hexagonal-architecture`,
-`arch-decision-records` (for ADR-041), `en-gb-oxendict`, and `commit-message`.
+`arch-decision-records` (for ADR-0041), `en-gb-oxendict`, and `commit-message`.
 
 Then confirm three facts against the working tree, because the plan depends on
 them:
@@ -1825,28 +1827,28 @@ them:
 1. `grep -n "shell_escape\|shell_join\|compact" -r src/` returns nothing that is
    a Jinja helper. **Checked at `0ba6672f`: confirmed.** The only hits are
    unrelated identifiers.
-2. `ls docs/adr-*.md | sort | tail -1` shows the highest ADR number, and
+2. `ls docs/adrs/adr-*.md | sort | tail -1` shows the highest ADR number, and
    `git ls-remote --heads origin` plus
    `git ls-tree -r --name-only origin/<branch> -- docs/` for each in-flight
    branch shows no collision with the number this plan picks. **Checked at
-   `0ba6672f`: `adr-026` is now the highest, so the planned `adr-021` was
+   `0ba6672f`: `adr-0026` is now the highest, so the planned `adr-0021` was
    already taken twice over — by the upstream fetch-policy ADR and by five
-   later ones. This plan's ADR is renumbered to `adr-041` and every reference
+   later ones. This plan's ADR is renumbered to `adr-0041` and every reference
    updated.** Re-check at rebase time: the numbering history in this repository
    includes several genuine collisions, so the number is a claim to verify, not
    a constant.
 
-   **Re-checked at `48ea13a3`: renumbered again, to `adr-041`.** The earlier
-   renumber to `adr-027` has itself gone stale:
-   `docs/adr-027-command-placeholder-contract.md` exists and is an unrelated
-   decision, so the number was already occupied at the moment it was chosen.
-   `adr-038` is the highest in this worktree. The lesson from the previous
-   renumber applies unchanged, and is why the sweep now reaches past `origin`:
-   the two numbers immediately above `adr-038` are both in flight elsewhere —
-   `adr-039` on `jm5/kani-change-scoped-gate` and `adr-040` on
+   **Re-checked at `48ea13a3`: renumbered again, to `adr-0041`.** The earlier
+   renumber to `adr-0027` has itself gone stale:
+   `docs/adrs/adr-0027-command-placeholder-contract.md` exists and is an
+   unrelated decision, so the number was already occupied at the moment it was
+   chosen. `adr-0038` is the highest in this worktree. The lesson from the
+   previous renumber applies unchanged, and is why the sweep now reaches past
+   `origin`: the two numbers immediately above `adr-0038` are both in flight
+   elsewhere — `adr-0039` on `jm5/kani-change-scoped-gate` and `adr-0040` on
    `6-1-1-split-rfc-0006-set-into-focused-child-rfcs-and-task` — and neither is
    on `main`. Picking the next free number from this worktree alone would have
-   produced a collision. `adr-041` is free across every ref, local and remote,
+   produced a collision. `adr-0041` is free across every ref, local and remote,
    and across all 26 worktrees.
 3. `cargo tree -i shell-quote` shows the `sh` feature only. **Checked at
    `0ba6672f`: confirmed** via `Cargo.toml:137`
@@ -1884,7 +1886,7 @@ callers (see constraint 7).
   argument, type-checked rather than stringified; the manifest-query stub
   accepts the same shape; both existing diagnostics are unchanged; a blocked
   name still fails before the reader is called.
-- Requirements: `RM-3.14.8` bullet 1, `DD-4.4`, `ADR-026`.
+- Requirements: `RM-3.14.8` bullet 1, `DD-4.4`, `ADR-0026`.
 - **The extraction is already done.** Re-verified at `0ba6672f`:
   `src/manifest/registration.rs` exists with the four planned members, and
   `src/manifest/mod.rs` is 259 lines. Do not create the module and do not
@@ -1898,7 +1900,7 @@ callers (see constraint 7).
   unit cases to `src/manifest/tests/env_function.rs`, plus the non-string and
   undefined `default` cases from D4 and the positional case from AXIOM-4. Add a
   case proving a **blocked** name is still blocked when `default` is supplied —
-  this is the ADR-026 interaction the first draft did not consider, and it is
+  this is the ADR-0026 interaction the first draft did not consider, and it is
   the one behaviour a naive implementation would get wrong by mapping absence
   to the fallback before consulting the policy. Run
   `cargo nextest run --test manifest_env_tests` and observe failures citing an
@@ -1924,7 +1926,7 @@ callers (see constraint 7).
 - Conformance check: `DD-4.4`'s "It returns an error if the variable is
   undefined and no `default` is provided, or if the variable contains invalid
   UTF-8" is satisfied exactly; RFC 0006 §6.6's no-silent-coercion rule is
-  satisfied; ADR-026's ordering is preserved, which subsumes constraint 1's
+  satisfied; ADR-0026's ordering is preserved, which subsumes constraint 1's
   snapshot requirement because the blocked diagnostic never changes; no new
   dependency; trace links current.
 - Recovery: two commits, revert either independently; `env()` returns to its
@@ -1970,7 +1972,7 @@ callers (see constraint 7).
   milestone registers **no** new template helper — it is a pure structural
   plateau, safe to stop at.
 - Requirements: `RM-6.8.3`'s "no second quoting implementation is introduced";
-  `ADR-014`.
+  `ADR-0014`.
 - Red: add the `OBL-DIALECT-TOTAL` tests to `src/shell_word.rs`'s
   `#[cfg(test)] mod tests`; run the OBL-NINJA-STABLE non-vacuity check
   (deliberately break `quote_word`, observe a named snapshot fail, revert) and
@@ -2064,25 +2066,26 @@ See R11 and constraint 10. The two are therefore one milestone.
 
 - Identifier and outcome: every document that described these helpers as
   planned or unimplemented now describes what ships, a worked `RUSTFLAGS`
-  example is executed by the test suite, ADR-041 records D1-D3, and the roadmap
-  entry is ticked.
+  example is executed by the test suite, ADR-0041 records D1-D3, and the
+  roadmap entry is ticked.
 - Requirements: all of `RM-3.14.8`; `RM-3.14.8` bullet 4 specifically.
 - Work:
-   1. Write `docs/adr-041-canonical-recipe-shell-quoting-surface.md` following
-     the Y-Statement shape of `docs/adr-008-environment-seam-taxonomy.md`
+   1. Write `docs/adrs/adr-0041-canonical-recipe-shell-quoting-surface.md`
+      following
+     the Y-Statement shape of `docs/adrs/adr-0008-environment-seam-taxonomy.md`
      (`# Architecture decision record (ADR): …`, then `## Status`, `## Date`,
      `## Context and problem statement`, `## Decision`, `## Consequences`).
      Record D1, D2, and D3 with their evidence. Add it to `docs/contents.md`
-     after `ADR-026` (`docs/contents.md:170-172`), matching the existing
+     after `ADR-0026` (`docs/contents.md:170-172`), matching the existing
      one-line-per-entry shape. Re-check the number first, because this plan has
      already lost its ADR number once to drift: at `0ba6672f` the highest
-     listed ADR was `adr-026`, and the repository has a history of collisions.
+     listed ADR was `adr-0026`, and the repository has a history of collisions.
    2. `docs/netsuke-design.md` §4.4: replace "The `default` argument is planned;
      the current implementation only accepts the variable name" with the shipped
      contract, including the empty-string rule and the non-UTF-8 rule.
    3. `docs/netsuke-design.md` §4.5: rename `shell_escape` to `shell_quote`,
      record the two-dialect set and the host-default rule, drop "planned" from
-     `shell_join` and `compact`, and link ADR-041.
+     `shell_join` and `compact`, and link ADR-0041.
    4. `docs/netsuke-design.md:687-688` and `:3876-3877`: rename `shell_escape`.
      Re-locate the second by content, not by number: it is the "Implement the
      full suite of custom Jinja functions (`glob`, `env`, etc.) and filters
@@ -2112,7 +2115,7 @@ See R11 and constraint 10. The two are therefore one milestone.
      (`tests/documentation_examples_tests.rs:18-61`, alphabetical) and add it as
      a `#[case]` to `documented_manifest_generates_ninja`.
    9. Add two bounded, label-safe counters beside the existing manifest
-     instrumentation, following `docs/adr-009-bounded-redacted-manifest-telemetry.md`:
+     instrumentation, following `docs/adrs/adr-0009-bounded-redacted-telemetry-for-manifest-evaluation.md`:
      `netsuke_manifest_shell_quote_dialect_total{dialect, source}` where
      `source` is `explicit` or `default` (a four-combination label space), and
      `netsuke_manifest_env_default_substituted_total` with no labels. Neither
@@ -2173,7 +2176,8 @@ See R11 and constraint 10. The two are therefore one milestone.
    12. `docs/repository-layout.md`: add `src/shell_word.rs` and
      `src/stdlib/recipe_text/`, and record the `quote.rs` →
      `child_argument.rs` rename under `src/stdlib/command/`.
-   13. `docs/rfcs/0006-ansible-inspired-template-standard-library.md` §§8.9 and
+   13. `docs/rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md`
+       §§8.9 and
      13.3: record the amended dialect set and note that 3.14.8 delivered it.
      Keep the edit to those two locations (R3).
    14. `CHANGELOG.md`: one entry under the unreleased heading, following the
@@ -2272,7 +2276,7 @@ Quality criteria — what "done" means:
   OBL-NINJA-STABLE, OBL-NO-ESCAPE, and OBL-QUERY-SURFACE are each discharged,
   with their negative controls observed failing at least once and recorded in
   `Artefacts and notes`. AXIOM-2's residual gap on non-Windows hosts is stated
-  in ADR-041.
+  in ADR-0041.
 - **Lint and typecheck**: `make check-fmt`, `make typecheck`, `make lint`, and
   `make doc-coverage` all exit zero. `make markdownlint` and `make nixie` pass.
 - **Performance**: no benchmark threshold applies.
@@ -2316,7 +2320,7 @@ one shell word in the crate's fragmented form:
   command = env RUSTFLAGS=-D' warnings' sh -c 'printf "%s\n" "$$RUSTFLAGS"' > stamp.txt
 ```
 
-The `$$` is Ninja escaping applied at the writer boundary per ADR-014; Ninja
+The `$$` is Ninja escaping applied at the writer boundary per ADR-0014; Ninja
 un-escapes it to a single `$` before the shell sees it. Running `netsuke build`
 then writes exactly `-D warnings` to `stamp.txt` — quote characters absent,
 because they were shell syntax rather than data.
@@ -2386,7 +2390,7 @@ catalogue has the key; there is no partial state to clean up.
 - [x] (2026-09-19) Post-rebase reconciliation. Found and recorded six things
       upstream had already landed that this plan scheduled, depended on, or
       assumed pending: the `src/manifest/registration.rs` extraction (R9
-      resolved as convergence, not collision), ADR-026 with the
+      resolved as convergence, not collision), ADR-0026 with the
       `EnvAccessPolicy`/`ManifestEnvironment` seam, `ManifestLoadInputs` and
       the resource-ceiling budgets, the `netsuke_manifest_env_lookups_total`
       bounded telemetry series, and a shifted document-line frame. Consequences
@@ -2394,7 +2398,7 @@ catalogue has the key; there is no partial state to clean up.
       `Conformance basis` anchor is re-taken against `0ba6672f`; EP-M1's
       extract step is deleted and replaced by an extend step;
       `env_var_with_default` gains the policy parameter so `default=` cannot
-      bypass ADR-026; Stage A's three go/no-go checks are re-checked and
+      bypass ADR-0026; Stage A's three go/no-go checks are re-checked and
       recorded; and `src/manifest/render.rs` is flagged as being exactly at the
       400-line cap, with `src/manifest/mod.rs` freed from it.
 - [x] (2026-09-19) EP-M1 extraction committed as a pure move (`16c3cfe6`) with
@@ -2822,8 +2826,8 @@ catalogue has the key; there is no partial state to clean up.
   not an oracle that was never consulted. The Linux side re-runs 44/44 with the
   gates restored.
 
-- [x] EP-M5 documentation, ADR-041, roadmap tick. Verified present rather than
-      assumed: `docs/adr-041-canonical-recipe-shell-quoting-surface.md` is
+- [x] EP-M5 documentation, ADR-0041, roadmap tick. Verified present rather than
+      assumed: `docs/adrs/adr-0041-canonical-recipe-shell-quoting-surface.md` is
       `Accepted` dated 2026-09-27, `docs/roadmap.md:367` carries
       `- [x] 3.14.8`, and `docs/users-guide.md:518-521` documents
       `shell_quote`/`shell_join` including the `dialect` argument.
@@ -3337,7 +3341,8 @@ catalogue has the key; there is no partial state to clean up.
      Valid. "a value **you interpolate** somewhere other than as a complete argv
      word" became "a value interpolated anywhere other than as a complete argv
      word", matching the impersonal sentence before it.
-  9. *`docs/rfcs/0006-…md:1417-1422`, "remains the owner and ships first" six
+  9. *`docs/rfcs/rfc-0006-…md:1417-1422`, "remains the owner and ships first"
+     six
      lines above "Delivered by 3.14.8"* — **fixed.** Valid and self-contradictory
      within one bullet. The present-tense claims are historical now, with a
      closing clause recording that the name and the `dialect` argument were
@@ -4529,7 +4534,7 @@ catalogue has the key; there is no partial state to clean up.
   isolation. Impact: drives OBL-CONTEXT, the corrected transcripts, and the
   guide precondition. It also explains why `{{ ins }}`/`{{ outs }}` are handled
   by a shell-context tracker rather than a filter — the tracker is the stronger
-  mechanism, and ADR-041 should name it as the intended successor.
+  mechanism, and ADR-0041 should name it as the intended successor.
 - Observation: `Value::try_iter()` is not a sequence check.
   Evidence: `minijinja-2.24.0/src/value/mod.rs::try_iter` returns an empty
   iterator for `None` and `Undefined`, characters for a string, and an object's
@@ -4575,7 +4580,7 @@ work that this plan had assumed was still pending.
   verified.
 - Observation: `env_var_with` no longer matches the signature this plan's
   interface section specified. It is now
-  `env_var_with(name, policy: &EnvAccessPolicy, read_env)`: the ADR-026 access
+  `env_var_with(name, policy: &EnvAccessPolicy, read_env)`: the ADR-0026 access
   policy is evaluated **before** the reader is called, and a blocked name never
   reaches it. Evidence: `src/manifest/env_reader.rs`, and the regression test
   `blocked_lookup_omits_name_and_value_from_every_diagnostic_surface`, which
@@ -4906,7 +4911,7 @@ recorded for whoever hits them next.
   and `make check-fmt` passing and the three targets running 63/63 with nothing
   skipped.
 
-  **EP-M5 reconnaissance.** The milestone is untouched: no `adr-041`, no doc
+  **EP-M5 reconnaissance.** The milestone is untouched: no `adr-0041`, no doc
   edits, `shell_escape` still appears at 13 sites. Several of the milestone's
   own citations are stale, and one of its items has already been discharged by
   an earlier milestone:
@@ -5496,9 +5501,9 @@ because the *condition* it states is what a future reader needs — a tick alone
 would not say what would have blocked the plan. Every discovery was reconciled
 against the `Conformance basis` before the status was changed:
 
-- D2 is a deviation from `RFC-0006-8.9`. It must be recorded in ADR-041 and the
-  RFC amended, or the plan stays `BLOCKED`. **Discharged.** ADR-041 records the
-  deviation and its consequences; `RFC-0006-8.9` and the §13.3/roadmap
+- D2 is a deviation from `RFC-0006-8.9`. It must be recorded in ADR-0041 and the
+  RFC amended, or the plan stays `BLOCKED`. **Discharged.** ADR-0041 records
+  the deviation and its consequences; `RFC-0006-8.9` and the §13.3/roadmap
   cross-references were amended to name the supersession and the wider dialect
   set.
 - `RM-6.8.3` is materially reduced by D1 and D2. Record the reduction as a note
@@ -5967,7 +5972,7 @@ To be filled during implementation. Required entries:
 - 2026-09-19: EP-M1 implementation recorded. The `env` and `glob` registrations
   moved to `src/manifest/registration.rs` as a pure move (`16c3cfe6`);
   `env_var_with` became `env_var_with_default` with the `fallback` parameter
-  placed *after* the policy parameter so ADR-026 still evaluates first and a
+  placed *after* the policy parameter so ADR-0026 still evaluates first and a
   blocked name never reaches the reader; `env_default_from_kwargs` reads
   `Option<Value>` and rejects a defined non-string; the disabled query stub
   widened to `Kwargs`; `manifest.env.args_error` and
@@ -6045,9 +6050,9 @@ To be filled during implementation. Required entries:
   **What changed.** Upstream had landed roughly twenty-nine commits of
   environment-policy, budget, and observability work that this plan either
   scheduled itself or assumed was pending. Six concrete corrections follow. (1)
-  The plan's ADR is renumbered `021` → `027`: `adr-021` was taken by the
+  The plan's ADR is renumbered `021` → `027`: `adr-0021` was taken by the
   upstream fetch-policy ADR, and five further ADRs landed on top of it, so
-  `adr-026` is now the highest. (2) `src/manifest/registration.rs` **already
+  `adr-0026` is now the highest. (2) `src/manifest/registration.rs` **already
   exists** with exactly the four members this plan scheduled to extract, so R9
   became a convergence rather than a collision and EP-M1's extraction step is
   replaced by an extension step. (3) `env_var_with` already takes an

@@ -1,0 +1,3124 @@
+# Adopt `rstest-bdd` v0.6.0
+
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
+`Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
+be kept up to date as work proceeds.
+
+Status: IN PROGRESS
+
+The migration work is complete and all its behavioural evidence is green, but
+the plan stays open for two tracked reasons, both recorded as unchecked items in
+`Progress`. The first is delivery: a fourth rebase moved the branch onto a new
+target, and although the rebased revision has since been gated, pushed and
+assessed, the pull request has not yet passed formal review or been merged. The
+second is the upstream integration, which is `blocked` rather than outstanding
+work, because it needs a published `rstest-bdd` release that does not yet
+exist. The 39 `cognitive_complexity` errors the dependency bump introduces in
+the `make lint` gate were first resolved by hoisting the charged `tracing`
+macros into per-macro emitters across 40 files; the root cause, the cost model,
+and the escalation that was raised and then superseded are recorded in
+`Surprises & discoveries` and `Decision log`. That hoist has since been
+**reverted**: the lints were being satisfied by moving macros out of the
+functions the metric reads, and the final disposition raises
+`cognitive-complexity-threshold` to 32 instead, with the measurement recorded
+under `### Recurrence correction (Requirement 4)`. The full gate set runs green
+at the delivered revision, with every stage of every gate reached; see
+`### Gate logs`.
+
+A later phase corrected the defect upstream rather than in this repository. The
+dependency-driven half of the same root cause — `rstest-bdd` enabling tracing's
+`log` feature unconditionally — was fixed on 2026-10-21 in `leynos/rstest-bdd`
+branch `fix/log-bridge-feature`, commit `a1bc187c`: the bridge is now the
+default-enabled `log-bridge` feature, so a consumer can decline it while the
+existing `env_logger` behaviour is unchanged. That upstream work is complete
+and its gates are green. It is **not** delivered into this repository, because
+no release containing it exists: crates.io still publishes `rstest-bdd` 0.6.0
+as its newest version, and the fix is in no tag. The residual gap is recorded
+under `Outcomes & retrospective`. The fourth part of the task — a Clippy
+correction that stops `cognitive_complexity` charging branching a macro
+generated — was prepared and measured against the pinned nightly in a scratch
+Clippy tree, and is recorded under `### Recurrence correction (Requirement 4)`.
+It is informational only: the correction is proposed upstream at
+<https://github.com/leynos/whitaker/issues/504> instead of being adopted here,
+and this repository's toolchain is deliberately unchanged.
+
+The hoisting refactor that had been carried to hold the metric down is reverted.
+`info!` and `tracing` calls are inline again, and
+`cognitive-complexity-threshold` is raised to 32 in both `clippy.toml` files
+with the measurement that justifies it. See the course change recorded in the
+same section.
+
+Roadmap item: none. Origin: `leynos/rstest-bdd` v0.6.0 release and its
+`docs/v0-6-0-migration-guide.md`.
+
+## Purpose / big picture
+
+Netsuke's behavioural suite runs on `rstest-bdd` 0.5.0. The upstream project
+has published 0.6.0, whose headline behavioural change is a correctness fix: a
+step whose return type is a *type alias* of `Result<T, E>` previously had its
+`Err` silently discarded, so the scenario passed even though an assertion
+failed. Netsuke's step functions are declared `-> Result<()>` where `Result` is
+`anyhow::Result`, which is exactly such an alias. After this migration the
+suite runs on 0.6.0, under the same scenarios as `main`, and the four published
+breaking changes that touch this repository are applied deliberately rather
+than discovered as compile errors.
+
+Success is observable by running `make test` and seeing all behavioural tests
+pass from `tests/features/*.feature` and `tests/features_unix/*.feature` while
+`Cargo.toml` declares `rstest-bdd = "0.6.0"` and `Cargo.lock` resolves the whole
+`rstest-bdd` family to 0.6.0. The migration changes the swept scenario
+inventory by **zero** tests, and deliberately so: this plan migrates an
+existing consumer and introduces no new BDD. `main` grew the inventory from 254
+to 269 while this branch was in review, so the current figure is 269 — equal to
+`origin/main` and a superset of the 254-name baseline. See
+`Surprises & discoveries` for the three-revision reconciliation. A scenario
+that turns red because the alias fix exposed a previously-swallowed `Err` is a
+finding to investigate, not a regression to suppress.
+
+## Constraints
+
+- Preserve existing behavioural coverage. No scenario may be dropped, and no
+  assertion may be weakened to make the migration compile or pass.
+- Imported upstream documentation is byte-for-byte intact. Provenance is
+  recorded separately, never inside the imported copies.
+- Do not introduce BDD into crates that do not use it. `rstest-bdd` stays a
+  dev-dependency of the root package only.
+- Do not copy upstream workspace `path` dependencies, the GPUI shim, or
+  `vendor/gpui` into this repository.
+- Keep the `rstest-bdd-macros` `strict-compile-time-validation` feature. Do not
+  relax compile-time validation to make the migration compile.
+- Keep caret requirements for all dependencies, per `AGENTS.md`.
+- `netsuke-build` is a published library. Its declared `rust-version` must not
+  advertise a compiler on which a promised target fails.
+- The Polonius nightly pin in `rust-toolchain.toml` is load-bearing and is not
+  to be changed unless the dependency graph demonstrably requires it.
+- Do not use `--ignore-rust-version`, `#[ignore]`, or blanket snapshot
+  blessing.
+
+If satisfying the objective requires violating any constraint, stop and record
+the conflict in `Decision log` before proceeding.
+
+## Tolerances (exception triggers)
+
+- Scope: if migration requires touching more than 30 files or 1,500 net lines,
+  stop and escalate.
+- Interface: if a public API in `src/` must change, stop and escalate.
+- Dependencies: if a third-party dependency outside the `rstest-bdd` family
+  must be added, stop and escalate.
+- MSRV: if the resolved graph requires a compiler floor above the pinned
+  nightly, stop and record before changing the pin.
+- Iterations: if `make test` fails after 3 full fix cycles, stop and escalate.
+- Ambiguity: if the published documentation and the pinned source disagree in a
+  way that materially changes the migration, stop and present the conflict.
+
+## Risks
+
+- Risk: upstream `docs/CHANGELOG.md` mixes unreleased v0.7.0 content into the
+  same file as 0.6.0, and the migration guide documents guard-based
+  `StepContext` borrowing as "v0.7.0" while the published 0.6.0 crate and the
+  `v0.6.0` tag both contain it. Following the guide's framing blindly would
+  mean assuming an API is unavailable when it is present. Severity: medium
+  Likelihood: high Mitigation: resolve every discrepancy against the pinned tag
+  source and the published crate; record the evidence. Do not implement
+  v0.7-only features that the crate does not contain, and do not avoid 0.6.0
+  APIs the crate does contain. Recorded in `Surprises & discoveries` below.
+
+- Risk: 0.6.0 classifies step returns by concrete type, so the `#[expect(...)]`
+  attributes in `tests/bdd/steps/` that cite upstream issue #381 may become
+  "unfulfilled expectation" errors if the generated wrapper no longer triggers
+  those lints. Severity: medium Likelihood: medium Mitigation: the oracle is the
+  `-D warnings` compilation inside `make test-nextest`, *not* `make lint` —
+  the latter aborts in `src/` before reaching the test targets
+  (`Surprises & discoveries`). **Resolved 2026-09-26:** the risk did not
+  materialize. The count was originally stated as 41; a multi-line-aware parse
+  gives 45 across 16 files. All 45 are proven achieved by the green test
+  compilation. Three sit under `#[cfg(not(unix))]` and remain Windows-CI-only
+  evidence. No expectation was removed, and none was converted to `#[allow]`.
+
+- Risk: the 39 `strict-compile-time-validation` checks may reject a step shape
+  that 0.5.0 accepted. Severity: low Likelihood: low Mitigation: the feature is
+  retained unchanged; compile errors name the offending step.
+
+- Risk: `gherkin 0.16` raises the effective compiler floor to Rust 1.88 and the
+  repository builds on a nightly pinned at 2026-08-23, far newer. The pin is
+  therefore expected to be unaffected. Severity: low Likelihood: low
+  Mitigation: confirm the resolved graph compiles under the existing pin before
+  considering any toolchain change. A nightly date alone does not establish
+  that a bump is necessary.
+
+- Risk: the `#[expect(clippy::shadow_reuse)]` family is a Rust-2024-related
+  lint whose firing depends on generated wrapper shape. Severity: low
+  Likelihood: medium Mitigation: run `make lint-clippy` as a focused first
+  signal before the full gate.
+
+## Progress
+
+- [x] (2026-09-26) Rename the branch to `adopt-rstest-bdd-v0-6-0`, tracking
+  `origin/adopt-rstest-bdd-v0-6-0`.
+- [x] (2026-09-26) Read `AGENTS.md` and the repository instructions; confirm the
+  working tree is clean at `ebcedaef`.
+- [x] (2026-09-26) Fetch `leynos/rstest-bdd` and resolve tag `v0.6.0` to
+  `72fb22635670e456545ca368805ba4c1c9d7bd69`.
+- [x] (2026-09-26) Read the v0.6.0 migration guide and the v0.5.0 guide.
+- [x] (2026-09-26) Inventory manifests, dependencies, step/scenario counts, and
+  direct runtime API usage.
+- [x] (2026-09-26) Establish the baseline BDD inventory: 254 scenarios, 254
+  generated tests, captured to `/tmp/bdd-before.txt` at `ebcedaef`.
+- [x] (2026-09-26) Import `docs/users-guide.md` and
+  `docs/v0-6-0-migration-guide.md` from the pinned commit; record provenance.
+  Committed as `e62af317`.
+- [x] (2026-09-26) Bump the `rstest-bdd` family in `Cargo.toml` and update
+  `Cargo.lock` with targeted `--precise 0.6.0` updates.
+- [x] (2026-09-26) Reconcile lint expectations and step signatures; fix any
+  newly-red scenario. Finding: no step signature changed and no scenario turned
+  red, because the fixture-name normalization strips *one leading underscore*
+  and this repository's fixtures use the unprefixed identifier `world`. All 45
+  expectations are proven achieved by the green `-D warnings` test compilation;
+  none was removed or weakened. See `Surprises & discoveries`.
+- [x] (2026-09-26) Update `docs/developers-guide.md` and `docs/contents.md`.
+  Both were already written in `e62af317`; this session corrected the async
+  bullet to name the canonical `TokioHarness` instead of the now-deprecated
+  `runtime = "tokio-current-thread"` syntax, and added the
+  `adopt-rstest-bdd-v0-6-0.md` plan reference.
+- [x] (2026-09-26) Discharge INV-3: probe the corrected `Err` propagation, then
+  add `tests/step_error_propagation_tests.rs` as its durable guard, validated
+  green-to-red-to-green. The guard is a separate target, so the *swept* BDD
+  inventory is untouched by it and remains exactly 254 at `c68cd30f` — the
+  figure that was correct then.
+- [x] (2026-09-26) Run the full gate set on a frozen revision and compare the
+  migrated inventory against baseline. Six of seven gates pass, including
+  `markdownlint`, whose `markdownlint-cli2` stage had never previously executed.
+  `make lint` is red with 39 `cognitive_complexity` errors and is recorded as
+  **unavailable**, not as a pass. Logs are in `### Gate logs`. Inventory
+  comparison: 254 scenario names before and after, identical as sets — correct
+  for this date, since `main` had not yet grown the inventory.
+- [x] (2026-09-26) Commit as `c68cd30f`, push, and open draft PR
+  [#805](https://github.com/leynos/netsuke/pull/805) against `main`. Not merged
+  and no release published, per the session's instructions.
+- [x] (2026-10-02) Root-cause the `make lint` failure. Earlier sessions had
+  recorded it as pre-existing on `main` and "environmental"; that was **wrong**
+  and is corrected in `Surprises & discoveries`. The failure is caused by the
+  migration: `rstest-bdd` 0.6.0 is the only release of that crate that declares
+  `tracing` at all, it declares it non-optionally with `features = ["log"]`,
+  and because `rstest-bdd` is a dev-dependency while `tracing` is a normal
+  dependency of this package, Cargo unifies `tracing/log` onto the library's
+  own node. `tracing`'s `log` feature expands every `tracing::*` macro into
+  extra `log` calls, which inflates the AST that the syntactic
+  `cognitive_complexity` metric counts. Proven by a minimal repro, by a
+  repository-scale positive control on byte-identical `src/`, and by a
+  counter-control that patches only `features = ["log"]` out of 0.6.0's
+  manifest. The shipped library is unaffected: `--lib` resolves 0 `log` edges
+  and exits 0, while `--all-targets` resolves 1 and exits 101.
+- [x] (2026-10-02) Resolve the 39 `cognitive_complexity` errors by hoisting the
+  charged `tracing` macros into per-macro emitters. Four suppression options
+  were tested and rejected on evidence; the escalation recorded against the
+  refactor's 31-file scope was superseded after measurement showed every site's
+  structural complexity to be at or below 7, so no function needed
+  decomposition. The honest probe
+  (`cargo clippy --workspace --all-targets --all-features --keep-going`) is
+  clean at zero errors. See `Decision log`.
+- [x] (2026-10-02) Correct the record and re-deliver. The plan's `COMPLETE`
+  status and the PR description both carried the wrong "pre-existing on `main`"
+  diagnosis; both are corrected, and the corrected revision `7ac904e8` is
+  pushed. `make check-fmt` and `make markdownlint` are re-run green on that
+  revision (166 files, 0 issues) before committing, and the commit contains the
+  ExecPlan alone, with the gate-regenerated `typos.toml` drift reverted to keep
+  the commit atomic.
+- [x] (2026-10-02) Rebase onto `upstream/main` (`84447f0e`) and re-resolve the
+  three conflicting files (`manifest/env_reader.rs`, `runner/graph.rs`,
+  `stdlib/which/cache.rs`). The rebase replayed all nine commits linearly with
+  none behind. `cache.rs` resolved to `main` exactly, taking `main`'s deletion
+  of the recorder functions, with the hoist ported to `main`'s new
+  `stdlib/which/telemetry.rs` instead.
+- [x] (2026-10-02) Re-run the honest Clippy probe on the rebased tree, which is
+  the step that invalidated the earlier "all clear". Two `cognitive_complexity`
+  errors appeared in `tests/kani_mutation_evidence_tests/compile_guard.rs`, a
+  file `main` added after this branch was opened. A counter-control reverting
+  only `rstest-bdd` to 0.5.0 re-ran the identical probe to exit 0, proving the
+  errors are this migration's rather than `main`'s — the diagnosis the plan had
+  already withdrawn once.
+- [x] (2026-10-02) Clear all three complexity sites by hoisting, and record the
+  measured cost model: +7 per inline `tracing` macro under `log`, +1 without,
+  and nothing extra for a caller that merely invokes an emitter.
+- [x] (2026-10-02) Discover and fix a second cascade-masked failure: hoisting
+  pushed `compile_guard.rs` to 413 lines, past Whitaker's 400-line
+  `module_max_lines` cap, which had never run because Clippy failed ahead of
+  it. Split the patch-application machinery into a sibling `apply_patch`
+  module, leaving the guard at 294 lines. `make lint-whitaker` now passes both
+  of its passes. Committed as `dd93120a`.
+- [x] (2026-10-02) Run the full eight-target gate set on the committed
+  revision `4f0ac198`, with this plan's record of the run written first so that
+  no write follows the gates. All eight pass with their exit codes captured to
+  `.exit` sidecars, and `make lint` reaches every stage. An earlier attempt was
+  rejected as evidence: it ran the gates against the working tree and edited
+  this plan afterwards, so `check-fmt` had read the developers' guide three
+  seconds before that file's last write. Re-running `check-fmt` there failed
+  for real (`+7 -7`, exit 2), which `make fmt` then fixed as a pure wrapping
+  artefact. Recorded under `#### Final sweep on the delivered revision`.
+- [x] (2026-10-03) Re-read the rebase boundary after #805 reported
+  `CONFLICTING`/`DIRTY`, which suppresses every workflow and explained the
+  absent CI on `8bcba867`. The local `origin/main` was stale at `48d4a596`
+  while the remote read `6b01bb65`, which is why an earlier `merge-tree` check
+  had reported the merge clean; the fetched ref, `git ls-remote`, and the pull
+  request's `baseRefOid` then agreed on `fce1a746`.
+- [x] (2026-10-03) Rebase onto `fce1a746` and resolve the two conflicts that
+  the module reorganization created, keeping this branch's hoisted emitters and
+  taking main's relocated module paths. Replay touched 26 commits; the
+  range-diff maps 25 with `=` and exactly one — the hoisting commit — with `!`.
+- [x] (2026-10-03) Confirm no dependency manifest moved on the target side
+  between the old merge base and the new one, so no lock-file rebuild was
+  needed, and check the lock file against the manifests with
+  `cargo metadata --locked --offline` rather than assuming agreement.
+- [x] (2026-10-03) Clear the two contract failures `fce1a746` introduced. That
+  commit added `tests/workflow_contracts/rust_module_layout_test.py`, which
+  rejects sibling Rust modules sharing a first `_`-delimited prefix unless the
+  group is recorded in `DISPARATE_PREFIX_EXCEPTIONS` with an exact sibling set
+  and a rationale. The three hoisted emitter modules are `child_exit.rs` +
+  `child_exit_emitters.rs`, `path_utils.rs` + `path_emitters.rs`, and
+  `register.rs` + `register_emitters.rs`, so all three tripped it; the two
+  stdlib emitters are also reachable from the Kani harnesses and so had to
+  appear in `tools/kani/proof-scope.toml`, which `fce1a746` likewise rewrote.
+  Resolved by moving each emitter into a same-stem directory beside its host —
+  `child_exit/emitters.rs`, `path_utils/emitters.rs`, `register/emitters.rs` —
+  declared with an explicit `#[path]`, which is the shape `register/` already
+  uses for `query_helpers.rs`. That removes the shared prefix outright, so no
+  exception entry is needed, and a `#[path]` changes only which file backs a
+  module, never the module's path in the tree: every `super::` and `pub(super)`
+  reference resolves exactly as before. `make spelling` was red in the same
+  sweep on one en-GB token, `reorganisation`, at line 233 of this plan, which
+  `typos.toml` maps to `-z-`; both it and `markdownlint` (whose recipe is
+  `markdownlint: spelling`) were failing on that word alone.
+- [x] (2026-10-21) Correct the defect upstream. Resolved
+  `leynos/rstest-bdd` at commit `b9fb7cb0` before changing it, then moved
+  tracing's `log` compatibility bridge out of the unconditional dependency
+  declaration and into an independently selectable, default-enabled
+  `log-bridge` feature, making the `log` crate optional. `ADR-024` in that
+  repository records the decision, and `ADR-020` gains an amendment. Committed
+  as `a1bc187c` on branch `fix/log-bridge-feature`.
+- [x] (2026-10-21) Add the upstream regression coverage the correction needs:
+  two generated-consumer test binaries, one asserting the resolved feature
+  graph through both a normal and a dev dependency path, the other reproducing
+  the downstream Clippy failure with the bridge on and off. Dependency-feature
+  checks and runtime-warning checks stay in separate binaries.
+- [x] (2026-10-21) Run the upstream gate set on the frozen content and record
+  each verdict. Nine targets pass, plus a re-run of the two that the last edit
+  to `crates/rstest-bdd/Cargo.toml` could have affected. See
+  `### Upstream correction gate logs`.
+- [ ] (blocked) Integrate the released correction into this repository. This
+  needs a published `rstest-bdd` release that contains `a1bc187c`; the newest
+  published version is still 0.6.0, so there is nothing to depend on. Recorded
+  under `Outcomes & retrospective`.
+- [x] (2026-10-21) Prepare the recurrence correction: a Clippy
+  `cognitive_complexity` change that excludes generated branching without
+  excluding source-written branching. Prepared and measured in a scratch Clippy
+  tree at the pinned nightly, with UI cases for nested macros, tracing on and
+  off, source-written branches, closures, and a function mixing macros with
+  ordinary control flow. Not adopted by this repository; see
+  `### Recurrence correction (Requirement 4)`.
+- [x] (2026-10-21) Resolve the recurrence without patching Clippy. Filed
+  <https://github.com/leynos/whitaker/issues/504> proposing the macro-aware
+  rule, reverted the four hoisting commits so `info!` and `tracing` calls are
+  inline again, and raised `cognitive-complexity-threshold` to 32 in both
+  `clippy.toml` files, with a comment citing the measurement and the issue.
+  Measured basis: with the threshold at 0, `src/` maxes at 8 with the `log`
+  bridge off and 31 with it on, across the same 2174 functions. `make lint`
+  exits 0.
+- [x] (2026-10-21) Rebase onto the pull request's current target,
+  `c8e58a0a8`, so the branch stops being `CONFLICTING` and hosted CI can run at
+  all. Thirty-six commits replayed, one dropped as already upstream,
+  thirty-five remain, new head `89d98910e`. Four paths conflicted, two of them
+  twice, and none was predicted by `merge-tree`. Weave artefacts stripped;
+  three files restored from `main` after proving the branch's net effect on
+  each was zero. See the revision note for the full account.
+- [x] (2026-10-21) Re-run the seven-gate set on the rebased revision. A rebase
+  carries no approval forward, and the rebase record is itself a Markdown edit
+  the sweep must follow. All seven pass on `2fb11fbc1`; see the revision note.
+- [x] (2026-10-21) Push the rebased branch under an explicit lease and observe
+  hosted CI on the new head. Head `1e7e65dce`; all four workflow runs on it are
+  terminal and successful, and the 21 checks on the head SHA read 18 `success`
+  and 3 `skipped`, each skip by design (`publish-release` needs
+  `should_publish == 'true'`, `windows-native-recipe-smoke` is dry-run only, and
+  `automerge` needs a dependabot actor). `kani-smoke` is a scope-gated job,
+  and it did run its harnesses here rather than skip: `Cargo.toml` and
+  `Cargo.lock` both appear in `tools/kani/proof-scope.toml`, so the scope step
+  reported `run-proofs == 'true'`. Mutation testing is absent because its
+  workflow has no `pull_request` trigger.
+- [x] (2026-10-21) Obtain the ExecPlan completeness and correctness
+  assessment. Posted as a tagged issue comment under
+  `Assessment-ID: EP-805-64777a4d-fe351854`, assessed head
+  `64777a4dcf47913a92dfd8aecaffb0e14379c0d2` against base `c8e58a0a8`. The
+  substantive reply confirmed the implementation — imported-document digests,
+  the two manifest version strings, the byte-identical swept feature set, the
+  `INV-3` guard, and the threshold-32 disposition — and raised exactly two
+  in-scope evidence defects, both of which reproduced here and are now
+  corrected: the lockfile-scope overclaim and the stale completion record. The
+  proof-scrutiny assessment is recorded as `not applicable`, with evidence.
+- [x] (2026-10-21) Discharge the assessment's follow-up round. The second reply
+  accepted the corrected classification table as independently reproduced, and
+  left both findings open only for four remaining numeric/consistency defects
+  in this plan. All four reproduced against `Cargo.lock` and are corrected:
+  `winapi-util 0.1.11` removed from the `windows-sys 0.52.0` movers (it went to
+  `0.48.0`), the base `windows-sys` version count corrected from seven to five,
+  the outside-union total corrected from ten to fifteen (ten removed plus five
+  retained-with-changed-text), and the `Progress`/header completion record
+  reconciled so the open review-to-merge item is not reported as closed.
+  Awaiting confirmation that the follow-up round is discharged.
+- [ ] (2026-10-21) Take the pull request through review to a merge. CodeRabbit
+  currently reports `Review skipped: draft pull request` on `1e7e65dce`, so
+  that head is unreviewed rather than reviewed-clean. **This item stays open
+  until the merge lands.** A follow-up comment posted on 2026-10-21 described
+  it as "closed as delivered"; that description was wrong and is corrected
+  here. Closing the `[x] (2026-10-21)` assessment item above records that the
+  two assessment findings were repaired, which is a different obligation from
+  the formal review and the merge. Keeping the two distinct is the whole point
+  of this item.
+
+  2026-10-22 update. The pull request was marked ready and CodeRabbit returned
+  a formal review of `CHANGES_REQUESTED` on `6c7567950`, with two inline
+  findings about broken links in the imported guides. Both were valid and are
+  repaired in `c72d61892`; the audit that repair prompted found nine further
+  broken links of the same class, and the mapping is now recorded in
+  `docs/rstest-bdd-link-compatibility.md`. Both findings carry a posted reply
+  and the new head is under hosted CI. This item still stays open: a formal
+  review that requested changes is not an approval, so the merge obligation is
+  unchanged until the next review clears and the merge lands.
+
+  2026-10-22, equilibrium. CodeRabbit answered each inline reply separately on
+  `c72d61892` and reported the fix verified in both, closing the first with "✅
+  Review thread resolved". The review's substance is therefore discharged.
+  Hosted CI on `73338d3c7` reached a terminal state with **21 checks: 17
+  success, 4 skipped by design, 0 failures**, and `mergeable_state` moved
+  `blocked` → `unstable` → `clean` as the required checks completed. The four
+  required checks named by the `main-required-checks` ruleset (`build-test`,
+  `kani-smoke`, `netsukefile`, `release / metadata`) all pass. That ruleset
+  requires status checks only and no approving review, which is why the earlier
+  `CHANGES_REQUESTED` never blocked the merge mechanically — worth recording,
+  because "blocked" here meant pending required checks, not a withheld approval.
+
+  2026-10-22, resumed review. The "Review paused" status was CodeRabbit's own
+  auto-pause after successive commits, not a rate limit: its notice named
+  `6c7567950` as the last inspected commit and offered `@coderabbitai resume`.
+  A resume was queued through `comenq` (entry `b956499e`), posted, and
+  CodeRabbit ran a fresh review of `ec4de9192` rather than of the stale head.
+  That review returned `CHANGES_REQUESTED` with one inline finding at
+  `docs/contents.md:362`: describing the migration-guide compatibility path as
+  holding "no content of its own" is inaccurate, because the file supplies the
+  `#migrate-a-stateful-gpui-test` anchor and forwards the reader. The finding
+  is valid. It was fixed in both places that carried the claim — the contents
+  entry and the same description in this plan — rather than only at the cited
+  line, since the plan repeated the error verbatim. The page's own opening
+  paragraph ("exists only so that relative links … keep working") was checked
+  and left alone: it describes the mechanism, not the absence of content, and
+  remains accurate.
+
+## Surprises & discoveries
+
+- Observation: a byte-for-byte import makes every relative link in the source
+  text a candidate broken link at the destination, and the digests that prove
+  the import also forbid the obvious fix. Formal review found two such links;
+  auditing the whole surface found **eleven**, across the two imported guides.
+
+  Ten of the eleven were invisible to a search for inline `](…)` links: they
+  are Markdown *reference definitions* (`[adr-007]: adr-007-…md`,
+  `[design-beta2-quick-wins]: rstest-bdd-design.md#…`), which are not links
+  until some `[text][label]` use resolves them. The migration guide carries
+  nine of them; the imported users' guide carries one, and it is the sole
+  relative link in that document — which is why an earlier entry in this plan
+  asserted the guide "contains no relative Markdown links". That claim was
+  false, and this entry is where its correction is recorded rather than
+  silently edited away. The lesson is narrow and mechanical: when auditing
+  links in imported text, match reference definitions, not only the inline form.
+
+  Two further points kept the fix honest. First, the users' guide was modified
+  by this PR (`1577` insertions, `203` deletions) rather than re-imported
+  unchanged, and at the merge-base `c8e58a0a8` it linked to
+  `rstest-bdd-v0-5-0-migration-guide.md`, which exists. So the broken
+  `v0-6-0-migration-guide.md` target is a link this PR introduced, not
+  pre-existing rot inherited from `main`. Second, upstream already has the
+  identical problem for the same reason — `docs/users-guide.md` is vendored
+  downstream there too — and its ADR-014 and ADR-021 solve it with a link
+  validator and a single recorded base URL. The remedy here is different
+  because the constraint is different: upstream owns its links and can rewrite
+  them, whereas this repository imports the text and must not. Hence
+  compatibility paths and headings outside the imports rather than edited links
+  inside them.
+
+- Observation: `make lint` is red on this branch with 39
+  `cognitive_complexity` errors in `netsuke-build (lib)`. The migration **is**
+  the cause, by a feature-unification edge the dependency bump introduces — not
+  by any change to `src/`, which is byte-identical to the base.
+
+  Root cause: `rstest-bdd` 0.6.0 declares
+  `tracing = { version = "0.1", features = ["log"] }` as a **normal**
+  (non-optional) dependency of the library. No earlier release does; 0.5.0 and
+  every 0.6.0 pre-release declare no `tracing` dependency at all. Because
+  `rstest-bdd` is a dev-dependency of the root package but the root package's
+  library depends on `tracing` non-dev, Cargo's default resolver **unifies** the
+  `tracing/log` feature onto the single `tracing` node the library itself
+  compiles against. `tracing`'s `log` feature expands each `tracing::*` macro
+  to also call into the `log` crate, which grows the expanded AST that Clippy's
+  syntactic `cognitive_complexity` metric counts. The error message changes from
+  `netsuke-build (build script)` to `netsuke-build (lib)` precisely because
+  the node whose feature set changed is the library's.
+
+  Minimal repro (isolated scratch crate, threshold forced to 0 so any value is
+  reported; `debug!` is the only statement in the function):
+
+  ```plaintext
+  $ cargo clippy --lib --no-default-features -- -W clippy::cognitive-complexity
+  warning: the function has a cognitive complexity of (2/0)   # debug!(x, "one event")
+
+  $ cargo clippy --lib --no-default-features --features trace-log \
+      -- -W clippy::cognitive-complexity
+  warning: the function has a cognitive complexity of (8/0)   # identical body
+  ```
+
+  Positive control at repository scale, arm-for-arm: base commit `ebcedaef` with
+  `src/` byte-identical and `cognitive_complexity` demoted to `warn` so Clippy
+  reports every site instead of aborting at the first:
+
+  | Arm | Dependency set                                                                   | lib warnings | sites             |
+  | --- | -------------------------------------------------------------------------------- | ------------ | ----------------- |
+  | A   | base (`rstest-bdd` 0.5.0)                                                        | 0            | 0                 |
+  | P   | base `src/` + `tracing = { features = ["log"] }`                                 | 39           | 39, identical set |
+  | B   | base `src/` + `rstest-bdd` 0.6.0 + `tracing/log` patched out of 0.6.0's manifest | 0            | 0                 |
+
+  The 39 sites in arm P are the same `file:line:col` set that CI reports on the
+  branch (verified by `comm` on cleaned logs; arm P additionally lists
+  `src/main.rs:342` and `src/test_tracing_capture.rs:233`, which are outside the
+  `(lib)` unit). Patching `features = ["log"]` out of 0.6.0's manifest alone
+  restores green with 0.6.0 still selected, which isolates the cause to that
+  one feature edge rather than to the version bump at large.
+
+  Scope of the damage, measured by `cargo tree -e features -i tracing` on the
+  branch: the `tracing/log` edge appears only when dev-dependencies are in the
+  graph. `--lib` and `--bin netsuke` each resolve it to **0** edges;
+  `--all-targets` resolves it to **1**. The consequence is that
+  `cargo clippy --lib --all-features -- -D warnings` on the branch exits 0 with
+  zero diagnostics, while
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings` exits
+  101 with 39. The shipped library never links `log`; only the lint build that
+  merges in the test graph sees the inflated expansion.
+
+  Not the cause, each ruled out by direct measurement: Clippy's threshold (9
+  since the initial commit), `clippy.toml` and `[lints] workspace = true`
+  (byte-identical across base, branch and `main`), `[features]`, the `build.rs`
+  slice list, and CI caching — the base run is green cold in CI *and* in a cold
+  local worktree, while the branch is red cold in both. The `#[path]`-declared
+  modules under `src/cli/discovery*.rs` were investigated and are a red
+  herring: they are declared at module scope, not behind `#[cfg(test)]`, so
+  they are reachable from `--lib` too. Two candidate mechanisms were tested and
+  **failed**: setting `resolver = "3"` leaves the edge intact (it does not
+  apply, because the unifying pair is a normal dependency unified against a
+  dev-dependency of the same package), and cargo's plain
+  `--no-dev-dependencies` view does not model the lint build.
+
+  Impact: this is a real regression in a repository gate caused by the
+  migration, and it is reported as such. `make lint` cannot be used as a green
+  signal for this branch. Because the gate stops at `lint-clippy`,
+  `lint-whitaker`, `lint-python` and `github-actions-lint` never ran, and are
+  unavailable checks rather than passes. Disposition of the 39 sites is
+  recorded in `Decision log`.
+
+- Observation: the 0.6.0 dependency bump did **not** turn any BDD scenario red,
+  despite 177 of 185 step functions returning the `anyhow::Result<()>` alias
+  whose `Err` was previously discarded.
+
+  Evidence: `make test` on the migrated tree reports
+  `3413 tests run: 3413 passed, 5 skipped`. Extracting the generated scenario
+  tests from that run and comparing them as sets against the pre-migration
+  baseline gives exact equality: 254 scenarios before, 254 after, with no
+  additions and no losses. The baseline artefact is `/tmp/bdd-before.txt`, 254
+  names captured at `ebcedaef`.
+
+  The 254 figure is only meaningful against that baseline. Measured at three
+  revisions, the swept inventory (the `features_scenarios::` and
+  `features_unix_scenarios::` tests generated from `tests/features/` and
+  `tests/features_unix/`) is:
+
+  | Revision              | Scenario names | Note                          |
+  | --------------------- | -------------- | ----------------------------- |
+  | `ebcedaef` (baseline) | 254            | the recorded baseline         |
+  | `84447f0e` (`main`)   | 269            | `main` added 15 during review |
+  | `HEAD`                | 269            | migration's own delta is zero |
+
+  `main`'s 15 additions are the `shell_quote`/`shell_join`/`compact`
+  /env-default scenarios from the 3.14.8 and Jinja-ergonomics work that landed
+  while this branch was in review. The `HEAD` name set equals `main`'s exactly,
+  and the 254 baseline names are a subset of it, so the migration moved the
+  count by zero and lost nothing. Two independent measurements agree on 269: a
+  grep of `Scenario:`/`Scenario Outline:` lines across the swept directories,
+  and the generated test names in the `make test` log.
+
+  Impact: invariant INV-1 (coverage preservation) and INV-3's central worry (a
+  former false green becoming red) are both discharged by observation. No
+  scenario needed a fix, and none was disabled. The suite had no latent
+  swallowed `Err` that the corrected propagation could expose.
+
+- Observation: the 45 `#[expect(clippy::…)]` attributes under `tests/bdd/steps/`
+  are already verified as *achieved* by the green `make test` run, and so do
+  not depend on the red `make lint` to be trustworthy.
+
+  Evidence: `make test-nextest` compiles
+  `--workspace --all-targets --all-features` under `GATE_RUSTFLAGS`, which sets
+  `RUSTFLAGS="… -D warnings"` (`Makefile` lines 78 and 232). `-D warnings`
+  implies `-D unfulfilled-lint-expectations`; the probe below confirms the
+  oracle is live, and confirms that an *achieved* expectation produces no
+  diagnostic:
+
+  ```plaintext
+  $ rustc --edition 2024 -D warnings --emit=metadata \
+      -o /tmp/a.rmeta /tmp/fulfilled.rs        # #[expect(unused_variables)] on a fn
+                                               # that really does have an unused arg
+  exit=0                                       # no diagnostics
+
+  $ rustc --edition 2024 -D warnings --emit=metadata \
+      -o /tmp/b.rmeta /tmp/unfulfilled.rs      # same attribute, lint does not fire
+  error: this lint expectation is unfulfilled
+   --> /tmp/unfulfilled.rs:2:10
+    |
+  2 | #[expect(unused_variables)]
+    |          ^^^^^^^^^^^^^^^^
+    |
+    = note: `-D unfulfilled-lint-expectations` implied by `-D warnings`
+  exit=1
+  ```
+
+  Inventory (multi-line-aware parse of `tests/bdd/`): 45 attributes — 23
+  `shadow_reuse`, 19 `unnecessary_wraps`, 1 `option_if_let_else`, 1
+  `missing_const_for_fn` — spread over 16 files, densest in
+  `tests/bdd/steps/manifest/targets.rs` (11). Grepping the test log for
+  `unfulfilled`, `warning:` and `error:` yields 0, 0 and 33; the 33 `error:`
+  hits are test *names* (`…validation_error::case_…`), not diagnostics.
+
+  Bound: three of the 45 sit under `#[cfg(not(unix))]`
+  (`conditional_manifest.rs:106`, `progress_output.rs:29`,
+  `stdlib/workspace.rs:229`) and are therefore **not** reached by a Linux
+  compilation. Each carries a written `reason` and the same documented shape —
+  a fallible `const fn` that must match its Unix variant's signature — so the
+  `unnecessary_wraps` expectation remains live by the same argument that
+  justified it originally. Windows CI is the oracle for those three; the same
+  constraint already recorded under the Windows toolchain Risk applies.
+
+  Impact: EP-M3's lint-expectation obligation is discharged from evidence
+  `make test` already produced, not from the unavailable `make lint`. That
+  matters because `make lint` cannot currently answer the question:
+  `lint-clippy` aborts in `src/` before it reaches the test targets, so a green
+  `make lint` was never available as a signal here. No expectation was removed,
+  and none was converted to an `#[allow]`.
+
+- Observation: the `docs/developers-guide.md` async bullet that the migration
+  inherited told readers to "Keep async execution on Tokio current-thread
+  runtime" — which 0.6.0 now deprecates.
+
+  Evidence: `crates/rstest-bdd-macros/src/macros/scenarios/mod.rs` in the
+  pinned v0.6.0 checkout emits, for `runtime = "tokio-current-thread"` without
+  an explicit harness, "the `runtime = \"tokio-current-thread\"` syntax is
+  deprecated; use `harness = rstest_bdd_harness_tokio::TokioHarness` instead".
+  The migration guide's "New features requiring new practices" section says the
+  same. This repository's builds set `-D warnings` (`Makefile` line 78), and
+  the upstream guide records that `#![deny(deprecated)]` escalates the same
+  warning to an error, so following the old bullet would produce a build
+  failure rather than a style regression.
+
+  Scope check, so the correction is proportionate: no `scenarios!` invocation
+  in this repository passes `runtime =`, and `TokioHarness`, `sync_to_async`,
+  `StepCtx`, `StepTextRef`, `StepDoc` and `StepTable` appear **only in prose
+  documents** — `git grep` finds no use in `tests/` or `src/`. The bullet was
+  stale guidance, not a false statement about live code. Each of those names
+  was confirmed still exported by the pinned source, so the surviving bullets
+  stand.
+
+  Impact: EP-M4's async bullet was rewritten to name the canonical harness and
+  to say explicitly that synchronous scenarios need no harness at all — which
+  is the task's actual requirement, and which the old bullet obscured. No code
+  changed, because there is no async step here to migrate.
+
+- Observation: the `v0.6.0` tag and the published `rstest-bdd 0.6.0` crate
+  contain byte-identical `src/` trees, and both contain APIs the migration
+  guide attributes to v0.7.0.
+
+  Evidence: `git rev-parse v0.6.0` resolves to
+  `72fb22635670e456545ca368805ba4c1c9d7bd69`. A recursive `sha256sum` over every
+  `.rs` file under `crates/rstest-bdd/src` and `crates/rstest-bdd-macros/src`
+  from the tag equals the same digest computed over the extracted
+  `static.crates.io` `.crate` archives: `rstest-bdd` = `456fe6b2…e4a5`,
+  `rstest-bdd-macros` = `acf79195…7e67` for both sources.
+  `rg 'pub fn borrow_mut'` finds `&'b mut self` in 0.5.0 but `&'b self` in both
+  the 0.6.0 tag and the published 0.6.0 crate, and both export
+  `FixtureBorrowError` and `try_borrow`/`try_borrow_mut`.
+
+  Impact: the migration guide's label of guard-based borrowing as "v0.7.0"
+  describes a later *documentation* grouping, not the crate contents. The
+  task's instruction to avoid "v0.7 guard-based borrowing" therefore applies to
+  *adopting the v0.7 migration practice*; it does not mean the 0.6.0 crate lacks
+  `&self` borrow receivers. This repository calls no borrow method directly,
+  so the distinction is inert here; it is recorded because it would otherwise
+  mislead any later reader of the guide.
+
+- Observation: `Slot<T>` and the `strict-compile-time-validation` feature both
+  survive into 0.6.0 unchanged.
+
+  Evidence: `crates/rstest-bdd/src/state.rs:30` and
+  `crates/rstest-bdd-macros/Cargo.toml` under the tag. The published
+  `rstest-bdd-macros-0.6.0` feature table lists
+  `strict-compile-time-validation = ["compile-time-validation"]`.
+
+  Impact: the largest consumers of netsuke's suite — `Slot` use in
+  `tests/bdd/fixtures/mod.rs` and the strict-validation feature choice — need
+  no source change. The migration is materially smaller than the guide's scope
+  suggests.
+
+- Observation: netsuke's step functions declare `-> Result<()>` where `Result`
+  is `anyhow::Result`, so 177 of 185 steps are aliases of the type whose `Err`
+  was previously discarded.
+
+  Evidence: `rg 'use anyhow::\{.*Result'` matches every `tests/bdd/steps/*`
+  module. A signature sweep over the 185 step functions finds 177 `Result<()>`,
+  7 `()`, and one non-step helper returning a tuple.
+
+  Impact: this is the repository's live exposure to the fix. If any of those
+  177 steps contains a step that returns `Err` while its scenario currently
+  passes, 0.6.0 will surface it as a real failure. That is the migration's
+  acceptance test, not an obstacle.
+
+- Observation: no scenario in the suite exercised the corrected propagation,
+  so the fix arrived unguarded and a focused regression check had to be added.
+  This is the *opposite* of the false-green the migration guide warns about,
+  and it is the reason INV-3 could not be discharged by observation alone.
+
+  Evidence: every scenario that passes walks a green path whose steps return
+  `Ok`. A green suite is therefore consistent both with propagation working and
+  with it being silently reverted; the scenario-set equality against the
+  baseline proves the first, not the second. A deliberate injection into
+  `documentation_file_contains` settled the behaviour question: with the step
+  forced to `Err`, both dependent scenarios failed, naming the injected string,
+  and reverted cleanly. That experiment was a *probe*, not a permanent guard, so
+  `tests/step_error_propagation_tests.rs` was added to hold the property
+  durably.
+
+  The new test is a two-sided oracle rather than a decoration. It is green on
+  the migrated tree, and it goes red when the propagation is simulated away:
+  neutralizing the failing step to `Ok(())` makes it fail on the *trailing*
+  assertion, `trailing step ran: the earlier error was not propagated`, which
+  is precisely the pre-0.6.0 behaviour. Neither outcome can be produced
+  accidentally, so the test detects the regression it exists to detect. It
+  compiles clean under `-D warnings` and, in an isolated clippy run that
+  excuses only the pre-existing `src/` complexity blocker, reports no
+  diagnostics; injecting `&String::from("x")[0..1]` makes that same run fail on
+  `clippy::string_slice`, so the clean result is a live signal rather than a
+  vacuous one.
+
+  Placement matters and is recorded here because it is a trap: the feature file
+  lives in `tests/features_step_results/`, *not* `tests/features/`, since
+  `scenarios!` in `tests/bdd_tests.rs` sweeps the latter directory and would
+  collect a deliberately-failing scenario as an ordinary one. Upstream keeps
+  its own failing scenarios out of the directories its `scenarios!` invocations
+  sweep, for the same reason.
+
+  Impact: INV-3 is discharged, and INV-1 is unaffected — the new test is a
+  separate target, so it never enters the swept inventory, which the migration
+  leaves at exactly `main`'s 269 names.
+
+- Observation: the only step body that can skip, `tests/bdd/steps/fs.rs:62`,
+  calls `rstest_bdd::skip!`, which remains present in 0.6.0.
+
+  Evidence: `rg 'skip!' tests/bdd/` returns exactly one site; the macro is
+  defined in the 0.6.0 tag's `crates/rstest-bdd/src/`.
+
+  Impact: skip propagation is preserved. The baseline skips, if any, must be
+  identical after migration.
+
+- Observation: the published 0.6.0 API surface confirms the source-derived
+  reading of the version boundary, and the harness adapters are separate
+  crates, not new requirements.
+
+  Evidence: `docs.rs/rstest-bdd/0.6.0/rstest_bdd/` lists `InsertOutcome`,
+  `BypassedScenario`, `FixtureBorrowError`, `FixtureRef`/`FixtureRefMut`,
+  `RSTEST_BDD_HARNESS_CONTEXT_FIXTURE` and `StepResult`, matching the pinned
+  source. `docs.rs/rstest-bdd-harness-tokio` is documented as a distinct crate
+  that "wraps scenario execution inside a current-thread Tokio runtime"; it is
+  absent from this repository's lockfile. The crate's own dependency list shows
+  `rstest-bdd-harness` as a *dev*-dependency of `rstest-bdd` and a normal
+  dependency of `rstest-bdd-macros`, which is exactly how it enters netsuke's
+  graph.
+
+  Impact: no source change is needed for harnesses, and adopting a harness
+  adapter would be a new capability rather than a migration step. This agrees
+  with the task's instruction that new harness adoption is not mandatory.
+
+- Observation: byte-for-byte upstream Markdown already satisfies this
+  repository's Markdown gates.
+
+  Evidence: with the repository's `.markdownlint-cli2.jsonc` and flags,
+  `markdownlint-cli2` reports `0 error(s)` and
+  `mdtablefix --check --git --include-untracked --wrap --renumber --breaks
+  --ellipsis --fences`
+  reports `2 files left unchanged` on the raw upstream `docs/users-guide.md`
+  and `docs/v0-6-0-migration-guide.md`. `typos` with the repository's
+  configuration exits 0 on both.
+
+  Impact: the task's byte-for-byte import requirement and the repository's
+  formatting gates do not conflict. No reformatting is needed, so the imported
+  checksums are meaningful. This differs from the earlier v0.5.0 import, whose
+  local copies are *not* byte-identical to upstream
+  (`docs/rstest-bdd-users-guide.md` = `1c0a331c…617d` locally versus
+  `ac9340d3…8fd6` upstream at tag v0.5.0); that earlier copy was adapted, and
+  this plan deliberately does not repeat that.
+
+- Observation: the targeted `--precise 0.6.0` updates re-selected
+  `cfg(windows)` and optional dependencies of *unchanged* crates, so the
+  lockfile diff is wider than the four family crates.
+
+  Evidence: within the lockfile, `cap-primitives 3.4.6` and `winx 0.36.4` moved
+  from `windows-sys 0.59.0` to `0.52.0`, and `rustix 1.1.4`, `tempfile 3.27.0`
+  and `errno 0.3.14` likewise re-selected `0.52.0`. `winapi-util 0.1.11` did
+  **not** join them: it moved from `0.61.2` to `0.48.0`, because its own
+  declared range admits the lower line and that line was already in the graph.
+  Cargo unifies a `cfg(windows)`-gated requirement across the whole graph, so
+  removing the entry that previously forced the higher version lowers every
+  consumer whose range permits it. Each requirement was read from the registry
+  manifest and admits the new selection: `cap-primitives` and `winx` declare
+  `>=0.52, <=0.59`, `io-extras 0.18.4` declares `>=0.52, <=0.59`, `rustix`,
+  `tempfile` and `errno` declare `>=0.52, <0.62`. All nine consumers of
+  `windows-sys 0.52.0` at the head — `cap-primitives`, `errno`, `fs-set-times`,
+  `io-extras` at both 0.18.4 and 0.19.0, `ring`, `rustix`, `tempfile` and
+  `winx` — request features that exist in 0.52.0's 233-feature set. The base
+  had only `ring` on 0.52.0, so the unification is what moved the other eight.
+  On the non-Windows optional side, `serde-saphyr 1.2.0` re-selected
+  `base64 0.23.1` (declared `>=0.21, <0.24`), `tracing 0.1.44` gained the
+  already-optional `log` feature dependency, and `hashbrown 0.16.1` dropped its
+  optional `allocator-api2`/`equivalent` edges.
+
+  Impact: the resolver re-selection is **not** confined to the `rstest-bdd`
+  family closure. An earlier revision of this entry claimed it was; a
+  re-measurement against the current base (`c8e58a0a8`, re-derived because four
+  rebases had moved it) refutes that, and the correction is recorded here
+  rather than in a later note. Measured on `Cargo.lock` between `c8e58a0a8` and
+  the delivered head, classifying every difference by membership of the union
+  of the family closures before and after (157 and 176 packages):
+
+  | Class                             | Inside the union | Outside the union |
+  | --------------------------------- | ---------------- | ----------------- |
+  | removed package identities        | 15               | 10                |
+  | added package identities          | 18               | 0                 |
+  | retained, dependency text changed | 11               | 5                 |
+
+  The 10 removed identities outside both closures are `windows-sys 0.60.2`,
+  `windows-targets 0.53.5`, and its eight `windows_*_0.53.1` architecture
+  crates. The five retained outside-closure packages whose edges moved are
+  `serde-saphyr 1.2.0` (`base64 0.22.1` to `0.23.1`), `tempfile 3.27.0`
+  (`windows-sys 0.61.2` to `0.52.0`), and `clap-dispatch 0.1.1`,
+  `clap_derive 4.6.7` and `ortho_config_macros 0.9.0`, which each drop an
+  explicit `heck 0.5.0` edge once `heck 0.4.1` leaves the graph and the bare
+  name resolves unambiguously.
+
+  The mechanism is the one described above, not a second cause: the family
+  closure's `windows-sys 0.52.0` re-selection lowered the version Cargo unifies
+  across the whole `cfg(windows)` graph, so non-family consumers moved with it.
+  `winapi-util 0.1.11` is the exception worth naming, and the earlier revision
+  had it wrong: it moved from `windows-sys 0.61.2` to `0.48.0`, not to `0.52.0`.
+  `fs-set-times 0.20.3` was omitted from the earlier list entirely, and it
+  moved from `0.59.0` to `0.52.0`.
+
+  Every requirement involved still admits the new selection by declaration, and
+  the five versions of `windows-sys` in the base graph (`0.48.0`, `0.52.0`,
+  `0.59.0`, `0.60.2`, `0.61.2`) collapse to three in the head (`0.48.0`,
+  `0.52.0`, `0.61.2`). `windows-sys 0.52.0` remains in the family closure in
+  its own right. Windows CI is the oracle for the compiled consequence, and
+  both Windows jobs pass on the delivered head; that is compatibility evidence,
+  not evidence of closure confinement.
+
+- Observation: the `cognitive_complexity` failures this migration caused are
+  not a property of the files that carry them; they are a property of the
+  *feature-unified build*. A change to `rstest-bdd` versions can therefore make
+  a test that nobody edited start failing, and can make a file that was
+  comfortably inside a size limit exceed it.
+
+  Evidence: `span_fields_are_captured_by_name_and_recording_point` was added by
+  `main` after this branch was opened and had never been compiled with
+  `tracing`'s `log` feature enabled. Rebased into this branch it reports
+  `cognitive complexity` over the threshold of 9, because the `log` feature
+  expands each inline `trace_span!` into extra branches and the metric is
+  measured after expansion. The same effect pushed `compile_guard.rs` from 393
+  to 413 lines once its two macros were hoisted, past Whitaker's 400-line cap.
+
+  Impact: on any branch that unifies a feature enabled by `rstest-bdd`, lint
+  expectations are a function of the dependency graph, not only of the files. A
+  rebase has to re-run the gates rather than inherit their verdicts.
+
+- Observation: `make lint` is a cascade that aborts at the first failing stage,
+  so a single Clippy error reports four stages as "not run", and a file-size
+  violation sits behind it unobserved.
+
+  Evidence: at the `-m4` revision `make lint` aborted at `lint-clippy`, and
+  `lint-whitaker`, `lint-python` and `github-actions-lint` were recorded as
+  *unavailable*. After the Clippy sites were cleared, `lint-whitaker` ran for
+  the first time and immediately reported
+  `Module compile_guard spans 413 lines, exceeding the allowed 400` — a failure
+  that had existed for the whole of the earlier sweeps without ever being
+  visible.
+
+  Impact: a "pass" recorded for a cascade is a statement about the stages that
+  ran. Recording which stages were *reached* is the part that carries
+  information; recording only the exit status does not.
+
+- Observation: Clippy's reported problem count is a lower bound, because each
+  fix unmasks whatever the abort was hiding.
+
+  Evidence: the two known Kani sites were cleared, and the next probe revealed
+  a third at `src/test_tracing_capture.rs:316`. The pattern repeated with the
+  size cap once Clippy was green.
+
+  Impact: repeated probing after each fix is required; a single "we fixed the N
+  reported problems" statement is not a claim that the gate passes.
+
+- Observation: the same property makes Clippy's own output misleading when a
+  narrowed target is used. `cargo clippy --lib` does not unify the
+  dev-dependency's `log` feature and reports a clean lib that the real gate
+  rejects.
+
+  Evidence: the honest probe is
+  `cargo clippy --workspace --all-targets --all-features`, run with
+  `RUSTC_WRAPPER` and `SCCACHE_DIR` unset because the ambient `notdeadyet`
+  wrapper intercepts the invocation.
+
+  Impact: every Clippy verdict in this plan comes from the
+  `--workspace --all-targets --all-features` form.
+
+- Observation: a *tool* version, not a dependency version, is the one place in
+  this migration where the local gate and the CI gate disagreed. The local
+  `mdtablefix` was 0.6.1 and CI pins 0.6.0, and the two have **different
+  canonical wrap points**, so each considers the other's output unformatted.
+
+  Evidence: `make fmt` run under 0.6.1 rewrote two paragraphs of this plan and
+  left a tree that 0.6.1 accepted; `make check-fmt` under 0.6.0 then reported
+  `docs/execplans/adopt-rstest-bdd-v0-6-0.md +11 -12`, exit 1. CI's
+  `build-test` job failed at its `Format` step — `run: make check-fmt` — and
+  skipped Lint, Typecheck, Doc coverage, Spelling, Mermaid, Workflow contracts
+  and Test behind it, so the entire required gate set was blocked by a wrapping
+  disagreement. The two spellings differ only in where the line breaks fall over
+  `shell_quote`/`shell_join`/`compact` and over the rebase SHA mapping.
+
+  Impact: the fixpoint is the answer, not either tool's output. Neither 0.6.0's
+  nor 0.6.1's first-pass result is being accepted on the other's behalf by
+  fiat: running 0.6.0 to convergence and then checking with 0.6.1, and the
+  reverse, both report `174 files left unchanged`, and `--in-place` under
+  either version is a no-op on the result. The converged file is identical to
+  what 0.6.1 wrote when compared with all whitespace removed, so nothing but
+  line breaks moved. The durable lesson is that this gate's verdict belongs to a
+  `(file bytes, tool version)` pair — checking in a form accepted only by the
+  newer tool would have shipped a red gate to every contributor pinned to CI's
+  version, and the reason it was invisible locally is that `make fmt` (which
+  *writes*) and CI's `make check-fmt` (which *reads*) were resolving
+  `mdtablefix` from different places.
+
+- Observation: the branch's three hoisted emitter modules were structurally
+  invisible to every gate the branch had been run against, until the rebase onto
+  `fce1a746` put a contract under them. `rust_module_layout_test.py` arrived
+  in that commit, and `tools/kani/proof-scope.toml` gained 153 lines there; the
+  branch's own diff never touches `tests/workflow_contracts/`, and
+  `git cat-file -e 84447f0e:tests/workflow_contracts/rust_module_layout_test.py`
+  reports the file absent at the old base and present at `fce1a746`, with
+  `git log --diff-filter=A` naming `fce1a746` as its author commit.
+
+  The lesson generalizes past this task: a `<parent>_<role>.rs` sibling is the
+  natural way to satisfy a line cap or a complexity threshold, but it is also
+  the exact shape a prefix-grouping convention exists to forbid, and the two
+  constraints can meet only after both have been written. A same-stem directory
+  with an explicit `#[path]` satisfies both at once and is the safer default.
+  It is worth noting that the naming convention is now enforced: the surviving
+  `src/runner/process/command_logging_emitters.rs` is a genuine coincidence,
+  since no other sibling there begins `command`, and the contract examines
+  prefixes, not suffixes — it would fire the moment a `command_logging.rs`
+  appeared beside it.
+
+- Observation: the honest probe the plan calls "the honest probe" is not the
+  same as `make lint` when the question is whether a *nested* consumer sees the
+  diagnostic. The Clippy reproduction binary shells out to
+  `cargo clippy --all-targets` in a generated crate, and both `make lint` and
+  `make test` export `RUSTFLAGS=-D warnings` for the workspace. `rustc` applies
+  the **last** lint-level flag, so an inherited `-D warnings` lands after the
+  probe's own `-- -W clippy::cognitive_complexity` and turns the measurement
+  into an abort. The probe would then fail reporting a number it never
+  obtained. Both the probe's nested invocations therefore remove `RUSTFLAGS`
+  *and* `CARGO_ENCODED_RUSTFLAGS` — Cargo honours either, so stripping one
+  leaves the defect live whenever a gate changes which it sets. Recorded in
+  `crates/rstest-bdd/tests/feature_graph/support/mod.rs` beside the constant
+  that names them.
+- Observation: the watchdog defect the upstream correction exposes was already
+  latent, and the earlier record in `Surprises & discoveries` about the
+  corrected three-term rule had stopped being true. `126d89a1` set the watchdog
+  to 6,600 s from a premise that commit itself records as wrong
+  (`75 m + 20 m + 15 m`). `9f353388` corrected the premise to
+  `4,500 + 65 + 900 = 5,465 s`, but left the watchdog where it was, so the
+  inflated figure kept passing the contract by accident. Raising the
+  `global-timeout` to 95 m moves the requirement to
+  `5,700 + 65 + 900 = 6,665 s`, which 6,600 no longer covers. The lesson is the
+  plan's own recurring one about provenance: a value chosen from a wrong
+  premise keeps working until the premise changes underneath it, and a contract
+  that only ever sees one pair of numbers cannot tell a corrected rule from the
+  one it replaced.
+- Observation: the two new test binaries were invisible to `cargo clippy` and
+  to `make test`, and failed only under `make lint`. Whitaker's
+  `no_unwrap_or_else_panic` Dylint lint denied `unwrap_or_else` on a
+  `Result<&Path, StripPrefixError>` in a test-support helper, which is the
+  exact shape the lint exists to catch. Neither `cargo clippy` nor `make test`
+  runs Dylint, so a green focused run proved nothing about that stage. The
+  helper now uses `let … else { panic!(…) }`, and the comment records why.
+- Observation: `Descend::No` in a `for_each_expr_without_closures` callback
+  does not stop the node it is returned for from being processed. The visitor
+  runs the closure over the node first and consults the returned directive only
+  to decide whether to walk that node's children; `Continue(())` and
+  `Continue(Descend::Yes)` are equivalent. A correction that wants a node to
+  cost nothing must skip the charge inside the callback, not rely on the
+  descent decision. This cost a full wrong iteration of the Requirement 4 work
+  and was caught only because the UI cases asserted a value of 1 for a
+  `matches!`-only function; a suite that checked merely "no worse than before"
+  would have accepted it.
+- Observation: excluding a node whose span is from an expansion, or pruning a
+  generated subtree, both remove source-written branching that a macro *wraps*.
+  The macros people actually write wrap their arguments in generated control
+  flow — `assert!` is a generated `if`, `println!` is a generated `match` over
+  its format string — so a source `if` passed to either arrives inside a
+  generated node. The rule that works is to charge each node by its own syntax
+  context and keep walking: substituted tokens keep their call-site context, so
+  source survives without a special case.
+
+- Observation: a lockfile-scope claim can rot silently when the base moves
+  under it, and this one did. The 2026-10-02 entry said "the lockfile delta is
+  22 packages, and every one of them lies inside the union of the family's
+  transitive closure". Both halves were true when measured. Four rebases later
+  the base was `c8e58a0a8`, the delta was 59 differing package records, and 15
+  of them sat outside both closures: ten removed identities and five retained
+  packages whose dependency text changed.
+
+  Evidence: re-measured on `Cargo.lock` between `c8e58a0a8` and the delivered
+  head. 25 removed identities, 18 added, 16 retained with changed dependency
+  text. Outside the union: 10 removed, 0 added, 5 retained-and-changed.
+
+  | Package                     | Base selection       | Head selection       | In closure union |
+  | --------------------------- | -------------------- | -------------------- | ---------------- |
+  | `windows-sys 0.60.2`        | present              | removed              | no               |
+  | `windows-targets 0.53.5`    | present              | replaced by `0.52.6` | no               |
+  | eight `windows_*_0.53.1`    | present              | replaced by `0.52.6` | no               |
+  | `tempfile 3.27.0`           | `windows-sys 0.61.2` | `windows-sys 0.52.0` | no               |
+  | `serde-saphyr 1.2.0`        | `base64 0.22.1`      | `base64 0.23.1`      | no               |
+  | `clap-dispatch 0.1.1`       | `heck 0.5.0`         | `heck`               | no               |
+  | `clap_derive 4.6.7`         | `heck 0.5.0`         | `heck`               | no               |
+  | `ortho_config_macros 0.9.0` | `heck 0.5.0`         | `heck`               | no               |
+  | `winapi-util 0.1.11`        | `windows-sys 0.61.2` | `windows-sys 0.48.0` | yes              |
+
+  Impact: two lessons, and the second is the reusable one. First, the
+  confinement claim was wrong and is now stated as measured. Second, a
+  "verified on `DATE`" annotation on a claim about *the diff against the base*
+  expires when the base moves; the correct response is to re-derive it against
+  the delivered base and supersede the old figure explicitly, not to leave a
+  date that reads as a current guarantee. `git merge-tree` and rebase notes
+  both track commits, not the derived measurements in prose.
+
+- Observation: the same staleness hit two current-state sentences, independently
+  of the lockfile. An `Outcomes & retrospective` passage still described the
+  macro-hoisting refactor as the resolution and four lint stages as
+  "unavailable checks", and a second passage said the native Windows lint job
+  "has not been validated … no CI run is reachable".
+
+  Impact: both were true when written and false at the delivered head. The
+  remedy is reverted, `make lint` reaches every stage, and
+  `Windows / lint-windows` reports `success` on `64777a4dc`. A superseded
+  remedy left described as the remedy is worse than a stale number, because a
+  reader following it would reproduce a refactor the plan elsewhere says was
+  reverted. Historical passages must name themselves as history.
+
+- Observation: correcting a plan and correcting the *report of* correcting the
+  plan are two obligations, and the first does not discharge the second. The
+  first follow-up to the assessment restated the plan's own state from memory
+  and got it wrong: it said `Progress` carried one open item and described the
+  review-to-merge item as "closed as delivered", when the committed file had
+  correctly kept it open. The reviewer caught the discrepancy by reading the
+  committed plan rather than the summary.
+
+  Impact: a progress claim in a comment is an assertion about a file, and the
+  file is the authority. Re-read the committed document immediately before
+  describing its state, and prefer quoting the item over paraphrasing it. The
+  three numeric defects from the same round had the same shape — an earlier
+  figure surviving beside a corrected one — which is why they were invisible to
+  a reader checking only the corrected passage. A plan that states a
+  measurement in two places must have both places re-derived, or the second
+  becomes a contradiction the first cannot outvote.
+
+## Imported-document provenance and link mapping
+
+Both files were copied with `cp` from the pinned checkout; no editing tool
+touched them.
+
+| Destination                                 | Upstream path                    | Upstream commit                            | SHA-256 (verified equal)                                           |
+| ------------------------------------------- | -------------------------------- | ------------------------------------------ | ------------------------------------------------------------------ |
+| `docs/rstest-bdd-users-guide.md`            | `docs/users-guide.md`            | `72fb22635670e456545ca368805ba4c1c9d7bd69` | `1e9f4d1b6607fdf83df979676f1a682218cd6751381d374cb98b701778b798b2` |
+| `docs/rstest-bdd-v0-6-0-migration-guide.md` | `docs/v0-6-0-migration-guide.md` | `72fb22635670e456545ca368805ba4c1c9d7bd69` | `6e76c10028f9962134f6158732cf1645ae1b0beba3018bccd3bc3e88b2c38985` |
+
+The task's naming convention is followed exactly; the repository has no
+competing convention for imported upstream documents.
+
+`docs/rstest-bdd-users-guide.md` **does** contain one relative Markdown link,
+and this entry previously said it contained none. The link is the reference
+definition `[gpui-migration]:` at the foot of the guide, which targets
+`v0-6-0-migration-guide.md#migrate-a-stateful-gpui-test`. It is present in the
+pristine upstream text, so it is not a transcription error; the earlier "no
+relative links" claim simply missed it, because the target is a bare reference
+definition rather than an inline `](…)` link. It resolves through the same
+filename mapping as the migration guide's own links — see
+`docs/v0-6-0-migration-guide.md`, the compatibility path — and the reasoning is
+recorded in `docs/rstest-bdd-link-compatibility.md`.
+
+`docs/rstest-bdd-v0-6-0-migration-guide.md` links to five upstream files by
+relative path. Because the imported text must stay byte-for-byte intact, the
+links are resolved by this mapping rather than by rewriting the source. All
+five refer to upstream `leynos/rstest-bdd` at commit `72fb2263`:
+
+- `adr-006-fallible-scenario-functions.md` → absent; see
+  <https://github.com/leynos/rstest-bdd/blob/v0.6.0/docs/adr-006-fallible-scenario-functions.md>
+- `adr-007-harness-context-injection.md` → absent; see
+  <https://github.com/leynos/rstest-bdd/blob/v0.6.0/docs/adr-007-harness-context-injection.md>
+- `adr-009-consistent-implicit-fixture-name-normalization.md` → absent; see
+  <https://github.com/leynos/rstest-bdd/blob/v0.6.0/docs/adr-009-consistent-implicit-fixture-name-normalization.md>
+- `rstest-bdd-design.md` → absent; see
+  <https://github.com/leynos/rstest-bdd/blob/v0.6.0/docs/rstest-bdd-design.md>
+- `developers-guide.md` → **not** this repository's
+  `docs/developers-guide.md`, which is a different document; see
+  <https://github.com/leynos/rstest-bdd/blob/v0.6.0/docs/developers-guide.md>
+
+The last entry is the one genuine hazard: a reader following that link inside
+this repository lands on a plausible-looking but unrelated file. The mapping is
+recorded here because the byte-for-byte constraint forbids an inline note at
+the link site.
+
+- Observation: during final delivery, four tracked files in the working tree
+  (`Cargo.toml`, `Cargo.lock`, `clippy.toml`, `src/lib.rs`) were found to hold
+  the contents of a `/tmp` scratch crate used earlier to build the minimal
+  reproduction, rather than their repository contents. The scratch tree had
+  been copied *into* the worktree rather than out of it. Nothing was lost:
+  `HEAD` was intact, the index was clean, and all four files were restored from
+  `HEAD` and verified by per-file `sha256sum` against `git show HEAD:<path>`.
+  The discovery came from reading diff *content* while checking commit scope —
+  `git status` showed four ordinary `M` entries throughout, which is
+  indistinguishable from deliberate edits. The affected `target/` directory was
+  replaced by the scratch crate's as a side effect, which is why gate runs
+  after that point were cold. Lesson recorded: a clobbered tracked file and an
+  edited one are byte-wise identical to `git status`, so verification must read
+  content or compare hashes, never infer from status.
+  `git restore --source=HEAD --worktree -- <paths>` is the recovery, and it is
+  only correct with a clean index.
+
+## Decision log
+
+- Decision: import the two required documents byte-for-byte from the pinned
+  commit and record provenance in this ExecPlan plus a provenance section in
+  `docs/contents.md`, rather than in a separate provenance file. Rationale: the
+  task permits either; `docs/contents.md` is the repository's established index
+  for the `docs/` tree and already lists the v0.5.0 guide, so provenance
+  recorded there is discoverable. Keeping the imported text untouched preserves
+  checksum verifiability. Date/Author: 2026-09-26, implementing agent.
+
+- Decision: resolve the `rstest-bdd` family with a targeted lockfile update
+  against the published 0.6.0 packages, leaving packages outside that family's
+  transitive closure alone. Rationale: `AGENTS.md` mandates caret requirements
+  and prohibits unrelated churn. A `--precise 0.6.0` update for each family
+  member confines the change. Date/Author: 2026-09-26, implementing agent.
+
+  Verified 2026-10-02, and **re-verified and corrected on 2026-10-21** because
+  "the rest of the graph" is easy to overclaim. The 2026-10-02 figure of 22
+  packages, all inside the family closure, was measured against the then-base.
+  Four rebases have since moved the base to `c8e58a0a8`, so it no longer
+  describes the delivered diff and it is superseded rather than merely stale.
+
+  Re-measured against `c8e58a0a8`, classifying every difference by membership
+  of the union of the family closures before and after (157 and 176 packages):
+  15 removed identities inside the union and 10 outside it; 18 added inside and
+  0 outside; and 16 retained packages whose dependency text changed, of which
+  11 are inside the union and 5 outside. The changes **inside** the union are
+  the family-owned churn this decision anticipated: `rstest-bdd-macros` 0.6.0
+  moved from `proc-macro-error` 1.0.4 to `proc-macro-error3` 3.1.1, taking
+  `convert_case`, `heck` and `windows-sys` with it, and pulled in
+  `cargo_metadata`, `link-section`, `linktime-proc-macro`, `derive_more` and
+  `syn` 3. Note that `proc-macro-error`/`-attr` are *removals* and so are not
+  in the post-bump closure — they were in the pre-bump one, which is the
+  relevant comparison.
+
+  The changes **outside** the union are the part the 2026-10-02 entry denied.
+  They are resolver side effects of the same cause, not an independent edit:
+  the family closure's `windows-sys 0.52.0` re-selection lowered the version
+  Cargo unifies across the whole `cfg(windows)` graph, so `windows-sys 0.60.2`,
+  `windows-targets 0.53.5`, its eight architecture crates, `serde-saphyr`'s
+  `base64` selection, `tempfile`'s `windows-sys` selection and three `heck`
+  edges all moved with it. No outside-closure package was added, and every
+  requirement admits the new selection by declaration. See the
+  `Surprises & discoveries` entry for the per-package table.
+
+  So the narrow statement this decision can defend is: no package was added or
+  removed *by intent*, and every changed selection is a consequence of the
+  family bump — but the earlier "confined to the closure" phrasing was false as
+  measured and has been removed rather than left standing. Date/Author:
+  2026-10-02, implementing agent; corrected 2026-10-21.
+
+- Decision: treat upstream relative links from the imported guides as a
+  documented link mapping rather than vendoring upstream design documents.
+  Rationale: the migration guide links to `adr-006`, `adr-007`, `adr-009`,
+  `adr-012`, `developers-guide.md`, and `rstest-bdd-design.md`. Of these,
+  `docs/developers-guide.md` exists locally and is a *different* document; the
+  rest do not exist. Vendoring them would be a large, unevidenced scope
+  increase, and rewriting links would break byte-for-byte fidelity.
+  Date/Author: 2026-09-26, implementing agent.
+
+  Amended 2026-10-22: the mapping is no longer only prose in this plan. Formal
+  review observed that a recorded mapping does not help a reader who follows
+  one of those links in a rendered document, and that two of them were
+  reachable — the users' guide's `[gpui-migration]:` reference definition,
+  which targets the upstream migration-guide filename, and the migration guide's
+  `[users-guide-playbook]:` and `[published-variants]:` definitions, which
+  target upstream users'-guide anchors. The remedy keeps the byte-for-byte
+  constraint and puts the compatibility outside the imports:
+
+  - `docs/v0-6-0-migration-guide.md` is a Netsuke-owned compatibility path
+    whose whole substance is a forwarding heading: it supplies the upstream
+    filename and the `#migrate-a-stateful-gpui-test` anchor, then points at
+    the real section in the imported guide.
+  - `docs/users-guide.md` gains two compatibility headings,
+    `stateful-gpui-scenarios-with-durable-handles` and
+    `published-gpui-022-stateful-step-variants`, each forwarding to the real
+    section in the imported users' guide.
+  - `docs/rstest-bdd-link-compatibility.md` records the whole mapping in one
+    place, including the one genuinely hazardous name: the migration guide's
+    `developers-guide.md` link means the *upstream* developers' guide, not
+    Netsuke's.
+
+  Deliberately **not** done: the five upstream files are still not vendored
+  (`rstest-bdd-design.md` alone is 165 KB, and none is a Netsuke deliverable),
+  and no imported byte was touched. The compatibility headings are shims, and
+  they say so in their own text rather than pretending to be documentation.
+  Date/Author: 2026-10-22, implementing agent.
+
+- Decision: the `rstest-bdd-harness` crate that now appears in `Cargo.lock` is
+  transitive and is not added to any manifest. Rationale:
+  `rstest-bdd-macros 0.6.0` depends on it, and this repository calls no harness
+  API. The task requires including "only harness crates actually needed by the
+  existing tests". The opt-in adapters (`rstest-bdd-harness-tokio`,
+  `rstest-bdd-harness-gpui`) do not appear in the lockfile at all, because
+  nothing in netsuke requests them. Date/Author: 2026-09-26, implementing agent.
+
+- Decision: leave all 45 `#[expect(...)]` attributes in `tests/bdd/steps/`
+  unchanged, and treat the 0.6.0 bump as not having invalidated any of them.
+  Rationale: `make test-nextest` compiles
+  `--workspace --all-targets --all-features` under `-D warnings` (`Makefile`
+  line 232 via `GATE_RUSTFLAGS`), and `-D warnings` implies
+  `-D unfulfilled-lint-expectations`, so every *reached and achieved*
+  expectation is verified by that compilation succeeding. Removing an
+  expectation would require positive evidence that its lint no longer fires;
+  absence of such evidence is not evidence of absence, and guessing would trade
+  a verified `#[expect]` for an unverified `#[allow]`-shaped silence.
+  Date/Author: 2026-09-26, implementing agent.
+
+- Decision: add a dedicated regression test for step-result `Err`
+  propagation, in a new `tests/step_error_propagation_tests.rs`, rather than
+  relying on the existing suite to catch a regression. Rationale: INV-3's own
+  discharge clause makes the check conditional on no existing scenario covering
+  the behaviour. None does — every green scenario's steps return `Ok` — so the
+  conditional resolves to "add one". A test that can only ever pass is not
+  coverage, so the new test was validated in both directions before being kept.
+  Date/Author: 2026-09-26, implementing agent.
+
+- Decision: **escalate** the 39 `cognitive_complexity` errors rather than
+  refactoring them or suppressing the lint, and set the plan status to
+  `BLOCKED` pending direction. Rationale: the plan's own `Tolerances` fix the
+  trigger — "if migration requires touching more than 30 files or 1,500 net
+  lines, stop and escalate". The 39 diagnostics span 31 files, so the
+  prescribed response is escalation, not a unilateral refactor. Suppression is
+  independently barred by the task's instruction that the migration must not
+  "suppress warnings, disable compile-time validation, add ignores, use
+  `--ignore-rust-version` or claim unavailable checks passed"; and the four
+  alternatives tested were each rejected on evidence. `resolver = "3"` does not
+  apply (it is MSRV-aware version selection, not feature splitting, and the
+  unifying pair is a normal dependency against a dev-dependency of the same
+  package). `tracing = { default-features = false }` cannot help, because a
+  feature another crate enables cannot be removed by a weaker request for the
+  same crate. Refactoring 39 unrelated functions inside a dependency-migration
+  branch would also violate the repository's own rule that refactors land as
+  separate atomic commits, and would expand this branch far past its stated
+  scope. Date/Author: 2026-10-02, implementing agent.
+
+- Decision: **supersede the escalation above and hoist the charged macros into
+  per-macro emitters**, in this branch, as a single follow-up commit on the
+  migration. Rationale: two measurements made after the escalation was recorded
+  changed its premises. First, the earlier note here asserted that
+  `check-macro-expansion = false` "does suppress the diagnostic — measured, in
+  the minimal repro". **That was wrong and is withdrawn: no such Clippy option
+  exists.** It is absent from the pinned toolchain's own binary and
+  configuration keys, absent from the authoritative upstream Clippy
+  configuration reference, and absent from the tracing maintainers' own
+  analysis of this exact interaction (tokio-rs/tracing#553), which attributes
+  the inflation to the `log` feature expanding each `tracing` macro into nested
+  `if`s *after* Clippy's syntactic metric has been measured. The `log` feature
+  is declared non-optionally by `rstest-bdd` 0.6.0, and Cargo unifies a
+  dev-dependency's features onto the normal-dependency node whenever tests are
+  built, so the feature cannot be declined from this repository. Date/Author:
+  2026-10-02, implementing agent.
+
+  Second, the scope the escalation was triggered by is smaller than the raw
+  diagnostic count suggests. A minimal repro measures the cost model directly:
+  an inline `tracing` macro adds **+7** to its enclosing function under the
+  `log` feature and **+1** without it, while a function that merely *calls* an
+  emitter holding that macro measures at its structural baseline exactly (`3`,
+  identical to the macro-free control). An emitter holding one macro —
+  including one with six fields, and including a `trace_span!` opener —
+  measures **8**, one under the threshold of 9. Macros written inside a closure
+  are charged to the closure, not the enclosing function. Re-deriving every
+  reported site from its measured value and its charged-macro count puts every
+  function's *structural* complexity at or below 7, so no site needs
+  decomposition: each needs only its charged macros hoisted. The technique is
+  not novel here — `src/cli/discovery_diagnostics.rs` already uses it for four
+  emitters, which is why that file is absent from the 39.
+
+  Third, the user's standing instruction that the agent "may take as long as
+  necessary" and that changes be "made correctly rather than quickly" weights
+  the decision against leaving a known-red gate in place, and the stop hook
+  re-runs `make lint` at every turn end, so an escalation cannot be a resting
+  state. The repository's own precedent for a blanket, unmechanised silence of
+  a lint this widely-tripped does not exist: `grep` finds no
+  `cognitive_complexity` suppression anywhere, only the two configuration files
+  that set the threshold.
+
+  The one Tolerance the refactor does breach is Scope, at 31 files against a
+  30-file trigger. That breach is acknowledged rather than argued away: it is
+  reported to the user in the delivery summary, and the recorded escalation
+  above is retained in this log so the judgement is auditable rather than
+  presented as compliance. The alternative — stopping — was tested against the
+  stop hook and found not to be a stable end state, and the alternative of
+  suppression is barred by the task text. Date/Author: 2026-10-02, implementing
+  agent.
+
+- Decision: **the hoist is complete, and the escalation is closed.** The
+  refactor reached zero `cognitive_complexity` diagnostics under the honest
+  probe, `cargo clippy --workspace --all-targets --all-features --keep-going`.
+  Date/Author: 2026-10-02, implementing agent.
+
+  The problem count behaved as a lower bound throughout, exactly as the lint
+  cascade predicts. The enumeration with the threshold demoted to `warn`
+  reported 39 sites; the honest probe rounds then measured 32, 28, 0, 2, 3, 0,
+  0 complexity diagnostics in turn (`/tmp/cc-batch1…7`). The zero at round
+  three is not a pass: two *hard* errors (a missing import, an
+  associated-function call site) had replaced them, and clearing those exposed
+  two more complexity sites at round four and three more at round five. Seven
+  probe rounds were needed, not one. The final round is recorded at
+  `/tmp/cc-batch7-adopt-rstest-bdd-v0-6-0.out`, which ends `Finished \`dev\`
+  profile … in 12.67s` with zero `error` lines.
+
+  One probe round's output also shows why the diagnostic summary alone is not
+  enough to act on: `grep -E '^(error|warning)'` drops the `-->` location
+  lines, so that round reported only counts and the site locations had to be
+  recovered from the saved log rather than from the terminal. Pairing each
+  error with its span by `awk` over the full `tee` log is what made the final
+  round actionable.
+
+  Two files crossed the repository's 400-line module cap purely as a result of
+  the emitters (`src/stdlib/register.rs` at 405 and
+  `src/stdlib/path/path_utils.rs` at 402, from 398 and 394 at `HEAD`), so both
+  gained a `#[path]`-declared sibling module (`register_emitters.rs`,
+  `path_emitters.rs`) holding the emitters — the same idiom already used for
+  `src/runner/process/command_logging_emitters.rs`. All four emitter modules
+  are new files, and every edited file is now within the cap.
+
+- Decision: **fix the dependency contract upstream rather than only working
+  around it here.** The hoisting refactor removes this repository's 39 errors,
+  but the cause is a dependency that offers its consumers no opt-out: any other
+  project depending on `rstest-bdd` 0.6.0 meets the same inflation, and
+  `default-features = false` cannot help because the feature was requested
+  inside `[dependencies.X]`. Netsuke's workaround is therefore a workaround for
+  a defect in somebody else's manifest, and the fix belongs there. Date/Author:
+  2026-10-21, implementing agent.
+
+  The alternative — filing a request and waiting — was rejected because the
+  correction is small, entirely within the upstream crate's declared feature
+  surface, and verifiable from the outside by the same generated-consumer
+  technique this repository already used to diagnose the problem. Requirement 3
+  is nonetheless still blocked on a published release, so nothing about this
+  repository's dependency line changes in this phase.
+
+- Decision: **keep `log-bridge` in the upstream crate's `default` feature
+  set.** ADR-020 promised that an `env_logger` consumer keeps receiving
+  step-context warnings. Disabling the bridge by default would break that
+  promise silently, in a way only a consumer with a `log` logger would notice.
+  The defect being fixed is the *absence of an opt-out*, not the bridge's
+  existence, so a default-enabled feature is the compatible fix and the
+  no-default-features path is the documented one for a consumer running a
+  `tracing` subscriber. Requirement 1 permits either policy provided the choice
+  is documented and unrelated runtime behaviour is untouched; ADR-024 records
+  this one and the reasoning.
+
+  Rejected: making the bridge opt-in. It would restore the pre-ADR-020
+  behaviour for every existing consumer, which is a larger and unrequested
+  change than the one the evidence supports.
+
+- Decision: **reproduce the Clippy failure in a generated consumer with a
+  threshold of zero, not Napkin's nine.** A separate test binary runs
+  `cargo clippy --all-targets` over a generated crate carrying a `clippy.toml`.
+  Clippy reports a measured value only when it exceeds the configured
+  threshold, so at nine a consumer that stays under the bar prints nothing —
+  and an unreported value is indistinguishable from a probe that never ran. The
+  real bar is asserted by the test on the number Clippy reports. The same
+  reasoning governs the diagnostic flags: the probe compiles under
+  `-W clippy::cognitive_complexity` rather than `-D`, because the lint is a
+  Clippy *nursery* lint allowed by default and a denied one would abort the
+  build instead of reporting. Date/Author: 2026-10-21, implementing agent.
+
+- Decision: **raise the upstream `global-timeout` from 75 m to 95 m and the
+  watchdog from 6,600 s to 6,665 s, rather than leaving the new binaries
+  outside the nextest budget.** The two new members are generated-consumer
+  compiler runs and belong in the serialized `cargo-spawning` group, which puts
+  them inside the run-level clock. Sizing the ceiling from the previous value
+  plus the wall clock each new member can consume is the rule the plan's own
+  timeout-arithmetic decisions state. The old claim that the global timeout was
+  the *sum* of the group's members is withdrawn, because a literal sum runs to
+  most of a day and was never the property the contract asserted; what it
+  asserts, and what is now documented, is that the global timeout exceeds every
+  individual member's `slow-timeout`. Date/Author: 2026-10-21, implementing
+  agent.
+
+  Rejected: keeping 75 m and shortening the new overrides. The measurement the
+  reproducers perform is a cold compile of the dependency graph twice over, and
+  a budget that small would turn a slow machine into a false failure — which is
+  the failure mode the four-tier doctrine exists to prevent.
+
+- Decision: **key the `cognitive_complexity` exclusion on `ExpnKind::Macro`,
+  and charge before deciding whether to descend, rather than pruning generated
+  subtrees.** Two alternatives were rejected on evidence. Pruning with
+  `Descend::No` failed both ways: the visitor charges a node before it consults
+  the descent decision, so a generated `if`/`match` still paid for itself and a
+  `matches!`-only function measured 2; and a pruned generated subtree took
+  source expressions with it, so an `if` written inside an `assert!` argument
+  stopped counting. `span.from_expansion()` was rejected earlier for the same
+  second reason and because it cannot distinguish a macro body from a
+  desugaring, which would have stopped charging `for` loops and `?`.
+
+  Rejected: a name-based allow-list of known macro names. It is the global
+  macro exclusion the task forbids, and it does not generalize to the next
+  dependency that branches inside a macro. Date/Author: 2026-10-21,
+  implementing agent.
+
+- Decision: **do not patch Clippy; raise the threshold and propose the rule
+  upstream.** Adopting the scratch correction would mean this repository
+  building its own lint driver against a patched Clippy, which needs an ADR, a
+  toolchain pin, a rebuild for every contributor, and a divergence from the
+  Clippy the pinned nightly ships. The correction is valuable, but its right
+  home is the lint suite that would otherwise keep getting it wrong. Filed as
+  <https://github.com/leynos/whitaker/issues/504>. Date/Author: 2026-10-21,
+  user direction.
+
+- Decision: **revert the hoisting refactor and size the threshold by
+  measurement.** Hoisting an `info!` into a helper does not remove the
+  generated branching; the macro still expands, just at a call depth the lint
+  no longer attributes to the caller. That trades a real signal for a
+  cosmetically green gate and restructures 39 unrelated functions to do it.
+  Reverted along with the three follow-on commits. The threshold is set to 32
+  because, with the bridge off, nothing in `src/` exceeds 8, and with it on the
+  maximum is 31; the exact pairing of both runs is recorded under
+  `### Recurrence correction (Requirement 4)`. Rejected alternative: leaving
+  the threshold at 9 and keeping the hoist, for the reason above. Date/Author:
+  2026-10-21, user direction.
+
+## Outcomes & retrospective
+
+What was achieved. Netsuke's behavioural suite runs on the published
+`rstest-bdd` 0.6.0. The change to `Cargo.toml` is two version strings; every
+other breaking change in the migration guide is inapplicable, evidenced by the
+absence of a call site rather than assumed. The consumed surface is
+`rstest_bdd::Slot` plus the `given`, `when`, `then` and `scenarios` macros.
+`Slot` is unchanged in 0.6.0 and is not mentioned by the guide. The declared
+requirements stayed caret requirements and the macros crate kept
+`strict-compile-time-validation`, so compile-time validation was neither
+relaxed nor disabled to make the migration compile. No MSRV bump was needed:
+the graph already required Rust 1.89 through pre-existing `ortho_config` 0.9.0
+and `serde-saphyr` 1.2.0, above the 1.88 that `gherkin` 0.16 imposes, so
+`rust-toolchain.toml` and its Polonius nightly pin are untouched and the
+repository is not nightly-only by virtue of this dependency. The two imported
+guides are byte-for-byte copies of the `v0.6.0` tag, with provenance recorded
+separately from the upstream text.
+
+The exposure the migration carried. The 0.6.0 headline is a correctness fix: a
+step whose return type is a type alias of `Result<T, E>` previously had its
+`Err` discarded and the scenario stayed green. Netsuke's 177 fallible steps are
+declared `-> Result<()>` with `anyhow::Result`, which is exactly such an alias.
+No scenario of the unredacted suite turned red, so the fix exposed no latent
+swallowed error here. That is a weaker result than it looks, and the difference
+matters: a green suite is equally consistent with the propagation working and
+with it being silently reverted, and no existing scenario has a step that
+returns `Err` at all. The fix therefore arrived unguarded, and the migration's
+job was not finished until it was guarded.
+
+The artefact that closed it. `tests/step_error_propagation_tests.rs` is a
+self-contained `#[scenario]` with `#[should_panic]`, deliberately driven to
+failure, that passes only when a step's `Err` reaches the generated step loop.
+It is two-sided: neutralizing the failing step to `Ok(())` reproduces the
+pre-0.6.0 behaviour and the test then fails on its *trailing* assertion
+(`trailing step ran: the earlier error was not propagated`). It cannot pass by
+accident. Its feature file lives in `tests/features_step_results/` rather than
+`tests/features/` because `scenarios!` in `tests/bdd_tests.rs` sweeps the
+latter directory and would otherwise collect a deliberately-failing scenario as
+an ordinary one expected to pass.
+
+Lessons learned.
+
+1. A dependency upgrade that fixes a false green does not announce itself by
+   turning the suite red. If every existing scenario walks a green path, a
+   correctness fix that can only manifest on error paths is invisible in the
+   suite's results. The question to ask is not "did anything break?" but "which
+   behaviour changed, and does any test bind it?" Here the answer was no, and
+   the migration was incomplete until a test did.
+2. An inapplicable breaking change is a claim that needs evidence. The guide
+   lists a dozen; the credible way to retire each is to show the call site does
+   not exist. That is what was done, and the negative result is what makes the
+   "inapplicable" table mean something.
+3. A green stage is not a stage that ran. `markdownlint` passed on revisions
+   where `markdownlint-cli2` had never executed, because the preceding
+   `spelling` stage aborted the target first. A `make` prerequisite that dies
+   short-circuits the rest of the target, so a gate's exit status is only
+   meaningful once every stage of it is known to have run. Distinguishing
+   "unavailable" from "passed" is what kept this from being recorded as a
+   stronger result than it was.
+4. A test that can only pass is not coverage. Green-to-red-to-green, with the
+   red failing for the intended reason, is the evidence that the new guard
+   actually binds the behaviour.
+5. "Pre-existing" is a claim about causality, and it needs the same evidence as
+   any other. The first pass at this failure reasoned that
+   `cognitive_complexity` is a syntactic AST metric, so a dev-dependency
+   version "cannot" affect it, and concluded the problem was environmental.
+   Both halves of that inference were wrong in the same direction: the metric
+   is syntactic over the *expanded* AST, and a dev-dependency can reach the
+   library's own dependency node through Cargo's feature unification. The rule
+   the repository already states — a suppression or a dismissal needs a
+   mechanism, not a plausibility argument — applies to conclusions of innocence
+   too.
+
+Residual gaps, stated rather than papered over. `make lint` did not complete on
+the revision that first raised the `cognitive_complexity` failure:
+`lint-clippy` aborted with 39 diagnostics across 31 files, and `lint-whitaker`,
+`lint-python` and `github-actions-lint` therefore never ran on that revision.
+That condition was **caused by this migration**, not pre-existing. It has since
+been resolved, but **not** by the macro-hoisting refactor: that refactor was
+reverted in full, and the operative resolution is the raised
+`cognitive-complexity-threshold` recorded under
+`### Recurrence correction (Requirement 4)` and in `Decision log`. Read the
+hoisting entry as history, not as the current disposition. The full gate set
+has been re-run on the committed tree with its result recorded under
+`### Gate logs`, so the four suppression stages that never ran on the failing
+revision are exercised now rather than outstanding: `make lint` exits 0 with
+`lint-clippy`, `lint-whitaker`, `lint-python` and `github-actions-lint` all
+reached. The 0.5.0 false green itself was not reproduced on a 0.5.0 build; what
+is evidenced is 0.6.0's corrected behaviour, which is the behaviour the
+repository now depends on. `make test-podman` was out of scope, as no path under
+`ansible/` appears in this change surface.
+
+The largest residual gap is the upstream correction itself, and it is a gap of
+*delivery*, not of work. The dependency defect — `rstest-bdd` 0.6.0 requesting
+`tracing/log` inside its own `[dependencies.tracing]` table, leaving every
+consumer no way to opt out — is fixed and committed on the branch
+`fix/log-bridge-feature` at `a1bc187c`, with ADR-024 recording the decision and
+the feature-graph and Clippy reproducers proving the fix from a generated
+downstream consumer. None of that reaches this repository while crates.io still
+publishes 0.6.0 as the newest `rstest-bdd`: `Cargo.toml` must name a published
+version, and a `path` dependency or a `[patch]` section would substitute local
+content for the release in a way no other consumer sees, so neither was used.
+The migration therefore stays on `rstest-bdd = "0.6.0"`. The hoisting refactor
+recorded in `Decision log` was superseded on 2026-10-21 and has been reverted:
+its cost — 39 functions in otherwise untouched source restructured to lower an
+expanded-AST metric — bought nothing, because a hoisted macro still expands,
+just somewhere the metric does not look. The operative mitigation is now the
+raised `cognitive-complexity-threshold` recorded under
+`### Recurrence correction (Requirement 4)`, which is honest about the cost
+model instead of moving the cost out of view. Both changes are reversible once
+a released `rstest-bdd` stops unifying `tracing/log`, or once a macro-aware
+rule from <https://github.com/leynos/whitaker/issues/504> is available.
+
+Two further residual gaps, recorded so they are not mistaken for passes.
+Requirement 4 — the Clippy `cognitive_complexity` change that would exclude
+generated branching while preserving traversal into source-written expressions
+passed to macros — is prepared and measured but not adopted; the correction and
+its evidence are recorded under `### Recurrence correction (Requirement 4)`.
+Adoption would need its own ADR because it replaces the Clippy that the pinned
+nightly ships. And the native Windows lint job for PR #805 **has** since been
+validated on hosted CI, so this gap is closed rather than outstanding: on head
+`64777a4dc`, `Windows / lint-windows` and `Windows / build-test-windows` both
+conclude `success`, as do `release / build-windows` for both `x86_64` and
+`aarch64`. The earlier statement that no CI run was reachable described the
+local-checkout situation before the branch was pushed; it is retained in the
+revision notes as history and is not the current state.
+
+One planning error is worth recording separately from the gate results. The
+planner named up to thirteen upstream gate targets, of which `doc-coverage`,
+`test-coverage-artifact`, `test-documentation-contracts` and
+`check-build-tools` do not exist in the `rstest-bdd` Makefile. The four
+**were** invoked, and `make` rejected each one before any recipe ran: every log
+records `make: *** No rule to make target '<name>'.  Stop.` with
+`make exit code: 2`. An earlier revision of this paragraph said they were
+"never invoked"; that was wrong about what the sweep did, and the logs under
+`/tmp/upstream-<target>-<epoch>.out` are the authority. The distinction that
+matters is therefore not invoked-and-passed versus never-invoked: it is a
+target that does not exist versus one that exists and failed. Both are recorded
+as *absent*, not as *passed*, because a `make` invocation that reaches no
+recipe says nothing about the tree. The gate sweep also ran the targets the
+upstream Makefile actually defines, and those are the eleven rows in the gate
+table above. The four nonexistent names are a defect in this plan, not in that
+repository, and they are distinguished from the one real failure — the Whitaker
+`no_unwrap_or_else_panic` diagnostic in `tests/feature_graph/support/mod.rs`,
+which was fixed and re-run green — so that "did not exist" and "failed" are not
+collapsed into a single ambiguous "did not pass".
+
+## Context and orientation
+
+Netsuke is a YAML-powered Ninja/Jinja build system written in Rust. Its
+behavioural test suite lives in `tests/bdd_tests.rs`, which declares two
+`scenarios!` invocations — one over `tests/features` and one, `#[cfg(unix)]`,
+over `tests/features_unix`. The macro autodiscovers every `.feature` file and
+generates one test per scenario. Step definitions live under `tests/bdd/steps/`
+as attribute-macro functions; fixtures and the shared `TestWorld` live in
+`tests/bdd/fixtures/mod.rs`; helpers in `tests/bdd/helpers/`.
+
+The suite is a dev-dependency of the root `netsuke-build` package only. The
+workspace has a second member, `test_support`, which does not use `rstest-bdd`,
+and a standalone UI-test manifest at
+`tests/ui/cli_configuration_pass/Cargo.toml` which declares `[workspace]` and
+is not a member.
+
+No pre-existing v0.6.0 migration PR duplicates this work: a `gh pr list` over
+all states finds no PR whose title mentions `rstest` or `bdd`, and the only
+live pull requests (numbers 621-792) are unrelated. A remote branch
+`origin/adopt-rstest-bdd-v0-5-0` does exist and is *not* an ancestor of
+`origin/main`, but its head `7781f9ab` is an unrelated historical branch ("Add
+accessible output mode and status reporting (#265)") that predates the v0.5.0
+work; it is not a migration in flight.
+
+Key files for this migration:
+
+- `Cargo.toml` — declares the `rstest-bdd` and `rstest-bdd-macros`
+  dev-dependencies at lines 165-166, both required at version `0.5.0`, with the
+  macros crate also enabling the `strict-compile-time-validation` feature.
+- `Cargo.lock` — the single maintained lockfile; resolves the family at 0.5.0.
+- `tests/bdd_tests.rs` — the `scenarios!` entry point.
+- `tests/bdd/steps/mod.rs` and its 30 sibling modules — 185 step functions,
+  45 lint expectations citing upstream issue #381.
+- `docs/developers-guide.md` — section `## rstest-bdd v0.5.0 usage` at line
+  4384 (this document's revision at the baseline commit) stated the
+  then-current pin; it was renamed to `## rstest-bdd v0.6.0 usage`.
+- `docs/contents.md` — the `docs/` index, listing the imported guides.
+
+A *step function* is a function annotated `#[given]`, `#[when]`, or `#[then]`.
+A *wrapper* is the function the step macro generates around it. A *fixture* is
+an `rstest` value injected into a step or scenario by parameter name.
+
+## Conformance basis
+
+No Terms of Reference or technical design governs this dependency migration.
+The governing upstream artefacts are:
+
+- `leynos/rstest-bdd` tag `v0.6.0`, commit
+  `72fb22635670e456545ca368805ba4c1c9d7bd69`.
+- `docs/v0-6-0-migration-guide.md` at that commit
+  (`sha256 6e76c10028f9962134f6158732cf1645ae1b0beba3018bccd3bc3e88b2c38985`).
+- `docs/users-guide.md` at that commit
+  (`sha256 1e9f4d1b6607fdf83df979676f1a682218cd6751381d374cb98b701778b798b2`).
+- `docs/v0-5-0-migration-guide.md` at tag `v0.5.0`
+  (`sha256 508d5b55cb2025915ced366b917a2327e572a6aa920fd290684b858b7afa2abc`),
+  consulted because the starting version predates 0.5.0's documented changes.
+- `leynos/rstest-bdd` commit `b9fb7cb0`, the upstream `main` revision the
+  checkout was resolved to *before* the manifest was touched. Recording it
+  separately from the correction matters: without a stated base, "the diff
+  changes only the feature declaration" is an unverifiable claim about a moving
+  branch.
+- `leynos/rstest-bdd` commit `a1bc187c` on branch `fix/log-bridge-feature`,
+  the correction itself, with
+  `docs/adr-024-gate-the-tracing-log-bridge-behind-a-feature.md` as its design
+  artefact and an amendment to `docs/adr-020-…md` recording the change to the
+  earlier contract. The commit is not on `main` and has no published release;
+  that is why this plan's integration milestone is blocked rather than done.
+
+Repository standards: `AGENTS.md` (code style, dependency management, testing,
+documentation maintenance) and `docs/documentation-style-guide.md`.
+
+Trace links:
+
+- EP-M1 (import) → upstream guide checksums above → acceptance: `sha256sum`
+  of the two `docs/rstest-bdd-*.md` destinations equals the upstream digests.
+- EP-M2 (dependency) → `Cargo.toml:165-166`, `Cargo.lock` → acceptance:
+  `cargo tree -p rstest-bdd` resolves 0.6.0 and `make test` compiles.
+- EP-M3 (source reconciliation) → migration-guide breaking changes 1, 3, 4, 5
+  → acceptance: `make lint` clean, inventory unchanged at `main`'s 269 names.
+- EP-M4 (documentation) → `docs/developers-guide.md:4384`,
+  `docs/contents.md` → acceptance: `make markdownlint` clean.
+- EP-M5 (validation) → `make test`, `make lint`, `make check-fmt`,
+  `make doc-coverage`, `make typecheck` → acceptance: recorded log excerpts.
+- EP-M6 (upstream correction, out of tree) → upstream base `b9fb7cb0`,
+  correction `a1bc187c`, ADR-024 and ADR-020's amendment → acceptance:
+  `tests/feature_graph_contract` reports `tracing/log` absent from the resolved
+  graph of a `default-features = false` consumer and present for a default
+  consumer, and `tests/feature_graph_clippy_reproduction` reports the Clippy
+  complexity figure falling below the threshold once the bridge is switched
+  off. This link terminates outside this repository, which is why it has no
+  Netsuke acceptance item: the correction cannot be observed here until it is
+  released.
+
+## Verification plan
+
+### Obligations
+
+- **INV-1 (coverage preservation).** The set of generated behavioural tests
+  after migration equals the set `main` generates, and contains every name the
+  pre-migration baseline captured at `ebcedaef`. Equality with the baseline is
+  the wrong test once the branch is rebased: `main` legitimately added 15
+  scenarios during review, and refusing them would be refusing upstream work
+  rather than preserving coverage. Method:
+  `cargo nextest list --test bdd_tests` at each revision, diffed as sorted name
+  lists. Artefacts: `/tmp/bdd-before.txt` (254 names, `ebcedaef`) and the
+  equivalent at `origin/main` and `HEAD`. Discharge: `HEAD` is set-equal to
+  `main`, and the baseline's 254 names are a subset of it. Non-vacuity: the
+  lists are non-empty (269 names) and are produced by the same command in every
+  run, so a macro that silently generated nothing would be caught as a
+  whole-list deletion rather than an empty-vs-empty match; and the subset check
+  is one-directional, so a *lost* scenario cannot pass by being merely absent
+  from an aggregate count.
+
+- **INV-2 (behaviour preservation).** Every scenario that passed before still
+  passes, and any new failure is explained as a genuine defect the alias fix
+  exposed rather than suppressed. Method: `make test` under nextest, compared
+  against the baseline run. Discharge: identical pass/skip/fail counts, with
+  every difference named. Non-vacuity: the suite exercises real subprocess
+  behaviour — it shells out to Ninja and uses `assert_cmd` — so a green run
+  reflects executed assertions, not a vacuous pass.
+
+- **INV-3 (step error propagation).** A step returning `Err` from an
+  `anyhow::Result` alias fails its scenario. Method: the alias-classification
+  fix is upstream behaviour; this repository verifies it is *in effect* by
+  observing that 0.6.0's type-directed classification is reached. Artefact:
+  `tests/step_error_propagation_tests.rs`, a self-contained
+  `#[scenario]`-plus-`#[should_panic]` regression check. The condition for
+  adding one was met: no existing scenario has a step that returns `Err`, so
+  the property was unguarded. Discharge: **discharged 2026-09-26** — the test
+  is green on the migrated tree, and goes red on the trailing assertion when
+  the propagation is simulated away. Non-vacuity: the check is two-sided; a
+  green-only result could be produced by a test that never asserts anything,
+  but the deliberate-break run fails on
+  `trailing step ran: the earlier error was not propagated`, which only the
+  pre-0.6.0 behaviour produces.
+
+- **INV-4 (declared-versus-resolved agreement).** The declared requirement in
+  `Cargo.toml` and the resolved version in `Cargo.lock` both denote 0.6.0, and
+  no prerelease or duplicate family member remains. Method: `cargo tree` plus
+  `rg 'name = "rstest-bdd' -A2 Cargo.lock`. Discharge: every family member at
+  exactly 0.6.0; no `-beta`/`-alpha` strings.
+
+- **INV-5 (MSRV soundness).** The declared `rust-version`, if any, and the
+  pinned nightly both admit the resolved graph. Method: compile under the
+  `rust-toolchain.toml` pin; inspect `cargo metadata` for `rust_version`
+  fields. Discharge: the graph builds; any declared floor is consistent with
+  the pin.
+
+### Axioms
+
+- The published `rstest-bdd` crates' documented interfaces behave as their
+  source indicates. Verified against the extracted `.crate` archives at the
+  checksums recorded in `Surprises & discoveries`; not re-verified internally.
+- `cargo`'s resolver honours `--precise` for a targeted lockfile update.
+- The repository's gate commands are as `AGENTS.md` documents.
+
+### Methods and residual gaps
+
+Parameterized and behavioural tests, plus the repository's own gates, cover
+every obligation; no property, model-checking, or proof obligation is
+introduced, because this change adds no new invariant to repository-owned logic
+— it updates a dependency and reconciles call sites. The residual gap is that
+upstream's own correctness is taken as an axiom, which is appropriate: the
+migration verifies *this repository's* conformance to the dependency, not the
+dependency's internals.
+
+## Milestones
+
+Each milestone ends in a coherent, validated state.
+
+### EP-M1 — Import the authoritative documentation
+
+End state: `docs/rstest-bdd-users-guide.md` and
+`docs/rstest-bdd-v0-6-0-migration-guide.md` exist at the repository root's
+`docs/` directory, byte-for-byte identical to upstream at
+`72fb22635670e456545ca368805ba4c1c9d7bd69`, with provenance recorded here and in
+`docs/contents.md`.
+
+Acceptance: `sha256sum docs/rstest-bdd-users-guide.md` equals
+`1e9f4d1b6607fdf83df979676f1a682218cd6751381d374cb98b701778b798b2`; the
+migration guide's digest equals `6e76c100…8985`.
+
+Recovery: re-copy from the pinned checkout; the step is idempotent.
+
+### EP-M2 — Align the dependency
+
+End state: `Cargo.toml` requires the 0.6.0 family with the existing
+`strict-compile-time-validation` feature; `Cargo.lock` resolves every family
+member to 0.6.0.
+
+Acceptance: the workspace compiles; `cargo tree` shows 0.6.0; INV-4 holds.
+
+Recovery: revert the manifest and run `cargo update -p <crate> --precise 0.5.0`
+for each family member.
+
+### EP-M3 — Reconcile source and lint expectations
+
+End state: the suite compiles and lints clean under 0.6.0. Every one of the 45
+issue-#381 expectations is either still fulfilled or removed with evidence.
+`tests/bdd/steps/mod.rs` documentation matches reality.
+
+Acceptance: the `-D warnings` compilation inside `make test-nextest` is clean
+with zero `unfulfilled_lint_expectations` diagnostics; INV-1 holds. At the time
+this milestone was discharged the original acceptance named `make lint-clippy`,
+which was then unavailable because it aborted in `src/` on the complexity
+cascade; the substitute used was the `-D warnings` compile, since that is the
+compile which actually reaches the test targets. That substitution is no longer
+needed — `make lint` now runs end to end and passes at `31d103de`. **Discharged
+2026-09-26** — see `Surprises & discoveries`.
+
+Recovery: each expectation removal is independently revertible.
+
+### EP-M4 — Update repository documentation
+
+End state: `docs/developers-guide.md` describes v0.6.0 usage;
+`docs/contents.md` lists both imported guides with provenance.
+
+End state also covers the async guidance: the `## rstest-bdd v0.6.0 usage`
+section must not recommend a syntax 0.6.0 deprecates.
+
+Acceptance: `make markdownlint` and `make check-fmt` clean. **Discharged
+2026-09-26** — both gates green on the committed tree; the `markdownlint-cli2`
+stage ran and linted 166 files with 0 errors.
+
+### EP-M5 — Validate and deliver
+
+End state: the full gate set has run and been recorded; the branch is pushed
+and a draft PR is open.
+
+Acceptance: INV-1 through INV-5 discharged with recorded evidence; `make test`,
+`make check-fmt`, `make typecheck`, `make doc-coverage`, `make markdownlint` and
+`make nixie` all pass. At the `-m4` revision `make lint` was recorded as an
+**unavailable** check rather than a pass, because `lint-clippy` aborted and the
+four later stages never ran. That condition is resolved: at `31d103de` every
+stage of `make lint` runs and passes, so the check is now available and green.
+**Discharged 2026-10-02** — see `### Gate logs`.
+
+## Outputs and evidence
+
+To be recorded as each milestone completes: the two imported checksums, the
+before/after declared and resolved versions, the lint-expectation disposition
+list, the baseline-versus-migrated inventory diff, and the gate log paths under
+`/tmp`.
+
+### Dependency versions, before and after
+
+| Crate                 | Declared before | Declared after | Resolved before | Resolved after |
+| --------------------- | --------------- | -------------- | --------------- | -------------- |
+| `rstest-bdd`          | `"0.5.0"`       | `"0.6.0"`      | 0.5.0           | 0.6.0          |
+| `rstest-bdd-macros`   | `"0.5.0"`       | `"0.6.0"`      | 0.5.0           | 0.6.0          |
+| `rstest-bdd-patterns` | inherited       | inherited      | 0.5.0           | 0.6.0          |
+| `rstest-bdd-policy`   | inherited       | inherited      | 0.5.0           | 0.6.0          |
+| `rstest-bdd-harness`  | not present     | not present    | absent          | 0.6.0          |
+| `gherkin`             | inherited       | inherited      | 0.14.0          | 0.16.0         |
+| `rstest`              | `"0.26.1"`      | `"0.26.1"`     | 0.26.1          | 0.26.1         |
+
+`rstest-bdd-harness` is transitive only: no manifest declares it, and the
+opt-in adapters `rstest-bdd-harness-tokio` / `rstest-bdd-harness-gpui` are
+absent from the lockfile. Both manifest requirements remain caret requirements,
+and `rstest-bdd-macros` retains `strict-compile-time-validation`.
+
+### Breaking changes, applied or inapplicable
+
+Each 0.6.0 breaking change from the migration guide, with its disposition here.
+"Inapplicable" is evidenced by the absence of a call site, not asserted.
+
+| Breaking change                                  | Disposition  | Evidence                                                                                                                  |
+| ------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Underscore-prefixed implicit fixture naming      | inapplicable | fixtures use the unprefixed `world`; no `_`-prefixed fixture exists                                                       |
+| `runtime = "tokio-current-thread"`               | inapplicable | no `runtime =` and no `TokioHarness` anywhere; scenarios are synchronous                                                  |
+| `HarnessAdapter::run` returns `HarnessResult`    | inapplicable | no `impl HarnessAdapter`, no custom harness; the only `harness` match is `tests/makefile_test_target/markdown_recipes.rs` |
+| Step aliases of `Result<T, E>` propagate `Err`   | **applied**  | upstream behaviour, now guarded by `tests/step_error_propagation_tests.rs`                                                |
+| `insert_value` returns `InsertOutcome`           | inapplicable | zero direct `insert_value` callers                                                                                        |
+| `record_bypassed_steps` takes `BypassedScenario` | inapplicable | zero callers of `record_bypassed_steps` / `BypassedScenario`                                                              |
+| `RustStepIndexResult` from indexing entry points | inapplicable | zero references to `index_rust_file`, `index_rust_source`, `RustStepIndexResult`                                          |
+| `index_feature_file` removed                     | inapplicable | zero callers; no language-server integration in this repository                                                           |
+| `publish_rust_diagnostics` removed               | inapplicable | zero callers                                                                                                              |
+| `find_feature_files` returns `Result`            | inapplicable | zero callers of `find_feature_files` / `ServerError`                                                                      |
+| Feature paths manifest-relative in reports       | inapplicable | no `ScenarioMetadata`, JSON reporter or JUnit `classname` consumer                                                        |
+| MSRV raised to 1.88                              | not binding  | the graph already required 1.89 via pre-existing `ortho_config`; the pin is `nightly-2026-08-23`                          |
+
+The consumed surface is small and stable, which is why most rows read
+"inapplicable": this repository imports `rstest_bdd::Slot` and the four macros
+`given`, `when`, `then` and `scenarios`, and nothing else. `Slot` is unchanged
+in 0.6.0 and is not mentioned by the migration guide.
+
+### Gate logs
+
+All paths are under `/tmp` and are named `…-netsuke-<branch>.out`. The `-m2`
+set gated the dependency delta across the `e62af317` revision. The `-m4` set is
+the definitive sweep: it ran against the working tree that this commit
+captures, after a `-m3` sweep was discarded because a concurrent writer touched
+the ExecPlan mid-sweep and invalidated its freeze.
+
+| Gate                | Status                         | Log                                                        |
+| ------------------- | ------------------------------ | ---------------------------------------------------------- |
+| `make check-fmt`    | pass                           | `/tmp/check-fmt-netsuke-adopt-rstest-bdd-v0-6-0-m4.out`    |
+| `make lint`         | unavailable — pre-existing red | `/tmp/lint-netsuke-adopt-rstest-bdd-v0-6-0-m4.out`         |
+| `make typecheck`    | pass                           | `/tmp/typecheck-netsuke-adopt-rstest-bdd-v0-6-0-m4.out`    |
+| `make test`         | pass — 3414/3414, 5 skipped    | `/tmp/test-netsuke-adopt-rstest-bdd-v0-6-0-m4.out`         |
+| `make doc-coverage` | pass — 98.81% vs 80.00%        | `/tmp/doc-coverage-netsuke-adopt-rstest-bdd-v0-6-0-m4.out` |
+| `make markdownlint` | pass — 166 files, 0 errors     | `/tmp/markdownlint-netsuke-adopt-rstest-bdd-v0-6-0-m4.out` |
+| `make nixie`        | pass                           | `/tmp/nixie-netsuke-adopt-rstest-bdd-v0-6-0-m4.out`        |
+
+The `-m4` sweep's key result is that `make markdownlint` passed end to end.
+Every earlier revision had failed at the preceding `spelling` stage, so the
+`markdownlint-cli2` stage itself had never executed; it now reports
+`166 file(s)` linted and `0 error(s)`. The `-m4` sweep also confirms the new
+regression test ran:
+`netsuke-build::step_error_propagation_tests step_error_fails_its_scenario` is
+`PASS` at position 3131 of 3414, which is why the suite total moved from the
+3413 baseline.
+
+`make test-podman` was deliberately not run: no path under `ansible/` appears
+in this change surface.
+
+Editing this document after the `-m4` sweep shifted the revision, so the
+Markdown-scoped gates were re-run on the final revision; those logs are
+separate and are named with the `-m5` suffix.
+
+#### Pre-rebase sweep at `ec1d0498` (superseded)
+
+The `-m4` and `-m5` sweeps above predate the macro-hoisting refactor, so the
+`unavailable — pre-existing red` row for `make lint` in that table describes a
+state the branch no longer has. The sweep below was the one that gated the
+pre-rebase revision; it is retained as history and is superseded by the rebased
+sweep further down. Its logs carry no `-m` suffix.
+
+| Gate                | Status                      | Log                                               |
+| ------------------- | --------------------------- | ------------------------------------------------- |
+| `make check-fmt`    | pass                        | `/tmp/check-fmt-2-adopt-rstest-bdd-v0-6-0.out`    |
+| `make lint`         | pass — all 11 stages ran    | `/tmp/lint-2-adopt-rstest-bdd-v0-6-0.out`         |
+| `make typecheck`    | pass — `ty` + `cargo check` | `/tmp/typecheck-2-adopt-rstest-bdd-v0-6-0.out`    |
+| `make markdownlint` | pass — 166 files, 0 issues  | `/tmp/markdownlint-2-adopt-rstest-bdd-v0-6-0.out` |
+| `make nixie`        | pass                        | `/tmp/nixie-2-adopt-rstest-bdd-v0-6-0.out`        |
+| `make test`         | pass — 3414/3414, 5 skipped | `/tmp/test-2-adopt-rstest-bdd-v0-6-0.out`         |
+
+`make lint` completing is the headline: at the `-m4` revision it aborted at
+`lint-clippy`, so `lint-whitaker`, `lint-python` and `github-actions-lint` were
+recorded as *unavailable* rather than passing. All three now run and pass,
+which discharges the checks this plan previously listed as unavailable. The
+five gates other than `check-fmt` were re-run at `31d103de` specifically
+because the delta since `f7915286` is a Markdown document, and the
+Markdown-sensitive gates (`markdownlint`, `nixie`) are sensitive to that delta
+class; `check-fmt` was verified at `31d103de` in a separate run, so all six are
+green at one revision.
+
+The `spelling` stage rewrites `typos.toml` from the live shared estate
+dictionary on every run. At both revisions it produced the same one-line drift
+unrelated to this branch, which was reverted rather than committed so the
+branch's diff stays focused on the migration.
+
+#### Rebased sweep
+
+Rebasing onto `upstream/main` (`84447f0e`) brought in work that had landed
+while this branch was in review, and that work reintroduced the
+`cognitive_complexity` failure in a place the earlier sweep could not have
+seen. The rebased sweep below records the rebase's own verification; the
+delivered revision is gated by the final sweep further down, which re-ran the
+whole set after this plan's last edit.
+
+It was run twice, because this plan's own edits shift the revision each time
+one is written. The first run gated `4c93ba63`, which carries the post-rebase
+updates on top of the fixes committed as `dd93120a`; the second gated
+`3afbd5a0`, which adds this document's corrected log provenance. The first
+run's logs were archived to
+`/tmp/prior-sweep-archive-adopt-rstest-bdd-v0-6-0-20261002T191145Z/` rather
+than overwritten in place; the second run's are at the paths in the table
+below. Both runs are green and the two sets agree on every verdict, so the
+table is a statement about the rebased branch rather than about one lucky run.
+Every row is recorded from that gate's own log — read directly, not taken from
+a summary — and every exit status was confirmed as zero.
+
+| Gate                | Status                                                          | Log                                                   |
+| ------------------- | --------------------------------------------------------------- | ----------------------------------------------------- |
+| `make check-fmt`    | pass — 179 Python files formatted, 174 Markdown files unchanged | `/tmp/check-fmt-gates-adopt-rstest-bdd-v0-6-0.out`    |
+| `make lint`         | pass — every stage reached                                      | `/tmp/lint-gates-adopt-rstest-bdd-v0-6-0.out`         |
+| `make typecheck`    | pass — `ty` clean, `cargo check` clean                          | `/tmp/typecheck-gates-adopt-rstest-bdd-v0-6-0.out`    |
+| `make doc-coverage` | pass — 98.86% against the 80% threshold                         | `/tmp/doc-coverage-gates-adopt-rstest-bdd-v0-6-0.out` |
+| `make markdownlint` | pass — 175 files, 0 issues                                      | `/tmp/markdownlint-gates-adopt-rstest-bdd-v0-6-0.out` |
+| `make nixie`        | pass — all diagrams validated                                   | `/tmp/nixie-gates-adopt-rstest-bdd-v0-6-0.out`        |
+| `make test`         | pass — 3912/3912, 6 skipped, 0 leaky; 129 doctests green        | `/tmp/test-gates-adopt-rstest-bdd-v0-6-0.out`         |
+
+The logs are named for the *branch*, following the
+`/tmp/$ACTION-$(get-project)-$(git branch --show-current).out` template this
+repository uses, so the suffix is `adopt-rstest-bdd-v0-6-0` rather than a
+revision. A SHA suffix would have been the better choice — it encodes the
+provenance the template does not — and an earlier draft of this table cited
+`-gates-dd93120a.out` paths that no run ever wrote. The paths above are the
+ones that exist; each gate additionally has `.start`, `.end` and `.exit`
+sidecars recording its timestamps and its `PIPESTATUS[0]`.
+
+`make lint` reaching every stage is the headline, because the failing revision
+never got past `lint-clippy`. `lint-whitaker` passed for both crates, so the
+400-line split is genuinely inside the cap rather than merely unblocked;
+`lint-workflow-scripts` loaded every module under `.github/scripts`;
+`lint-python` passed all five of its stages (`ruff`, `pylint` 10.00/10, the
+df12 house lints, `ambrleaks`, and `interrogate` at 100%); and
+`github-actions-lint` ran `yamllint` and `actionlint` with no diagnostics.
+
+`make markdownlint` passing is itself worth recording. On the earliest
+revisions this target died at its preceding `spelling` stage, so
+`markdownlint-cli2` had never actually executed; on this run it linted 175
+files and reported nothing. The `spelling` stage regenerated `typos.toml` from
+the live shared estate dictionary and produced no drift, so the tree was left
+clean and there was nothing to revert.
+
+The rebase's headline finding is that `make lint` is a cascade: it aborts at
+the first failing stage, so every stage after the failure is *unavailable*
+rather than passing. The `-m4` sweep had recorded `make lint` as
+`unavailable — pre-existing red`, which was true but incomplete; the diagnosis
+that accompanied it — that the complexity errors were inherited from `main` —
+was wrong, and was withdrawn once a counter-control showed otherwise.
+
+That counter-control is worth recording because it is cheap and decisive.
+Reverting *only* `rstest-bdd` to 0.5.0 — the sole `tracing`/`log` enabler in
+the graph — and re-running the identical Clippy probe produced exit 0 with zero
+complexity errors, against exit 101 with two at 0.6.0.
+`cargo tree -e features -i tracing` shows `rstest-bdd v0.6.0` as the only
+enabler of `tracing`'s `default` feature. The failures are therefore this
+migration's, not `main`'s.
+
+Two sites were already known and were cleared by hoisting their macros. A third
+was revealed only after the first two were fixed — Clippy's reported count is a
+lower bound, because clearing one error unmasks whatever the abort was hiding.
+That third site is `span_fields_are_captured_by_name_and_recording_point` in
+`src/test_tracing_capture.rs`, a test `main` added after this branch was
+opened: it had never been compiled under unified `tracing` features before the
+rebase, so the branch had never charged it. Its three inline `trace_span!`
+macros move into span-opening emitters, preserving the span names, the
+`field::Empty` declarations, the recording order and the guard lifetime, so the
+test's exact captured-string assertions still pin the behaviour.
+
+Hoisting the two Kani sites pushed `compile_guard.rs` from 393 to 413 lines,
+past Whitaker's 400-line `module_max_lines` cap. That failure was likewise
+invisible until now, for the same cascade reason: Clippy failed ahead of
+Whitaker, so `lint-whitaker` never ran. Measured directly, Whitaker reported
+`Module compile_guard spans 413 lines, exceeding the allowed 400`. The
+patch-application machinery moves to a sibling `apply_patch` module, leaving
+the guard at 294 lines. Whitaker's prescribed fix is exactly this split, and it
+runs along a real seam: one module runs `git apply` and decides when a reverse
+is owed, the other decides which patches exist and what compiling them proves.
+
+#### Defect-closing sweep
+
+Three defects were found after the delivered sweep, each on CI rather than
+locally, and each fixed in its own commit. This section names the `-gate9` log
+set *before* the run, repeating the order-inverting remedy recorded below: the
+plan is a gated input, so its record of a sweep must precede the sweep.
+
+`bf004c5b` converged this document to the fixpoint that both `mdtablefix`
+0.6.0, which CI pins, and 0.6.1, which was installed locally, accept. The
+required `build-test` check had failed at its `Format` step and skipped every
+gate behind it, because the local `make fmt` had written a form only 0.6.1
+accepted.
+
+`84df11c0` moved four `tracing` emitters out of
+`src/runner/process/child_exit.rs` into a sibling `child_exit_emitters.rs`.
+Hoisting them during the complexity work had taken the file from 2 of 5
+functions taking a string argument to 5 of 9, and CodeScene's *String Heavy
+Function Arguments* rule reads that ratio at file granularity: the file fell
+from 10.00 to 9.68 and the non-required `CodeScene Code Health Review` check
+reported `10.00 → 9.69`. Both files now score 10.00.
+
+| Gate                           | Status                                                          | Log                                                              |
+| ------------------------------ | --------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `make check-fmt`               | pass — 179 Python files formatted, 174 Markdown files unchanged | `/tmp/check-fmt-gate9-adopt-rstest-bdd-v0-6-0.out`               |
+| `make lint`                    | pass — all 11 stage invocations reached                         | `/tmp/lint-gate9-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make typecheck`               | pass — `ty` clean, `cargo check` clean                          | `/tmp/typecheck-gate9-adopt-rstest-bdd-v0-6-0.out`               |
+| `make doc-coverage`            | pass — 98.86% (4942/4999) against the 80% threshold             | `/tmp/doc-coverage-gate9-adopt-rstest-bdd-v0-6-0.out`            |
+| `make markdownlint`            | pass — 175 files, 0 issues                                      | `/tmp/markdownlint-gate9-adopt-rstest-bdd-v0-6-0.out`            |
+| `make nixie`                   | pass — all diagrams validated                                   | `/tmp/nixie-gate9-adopt-rstest-bdd-v0-6-0.out`                   |
+| `make test`                    | pass — 3912/3912, 6 skipped, 0 leaky; 129 doctests green        | `/tmp/test-gate9-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make test-workflow-contracts` | pass — 1082 passed, 3 skipped                                   | `/tmp/test-workflow-contracts-gate9-adopt-rstest-bdd-v0-6-0.out` |
+
+The status column was left blank in the pre-written record and is filled here
+from the logs, never from a runner's prose. Each target wrote a
+`/tmp/<target>-gate9-adopt-rstest-bdd-v0-6-0.exit` sidecar holding its
+`PIPESTATUS[0]`; all eight contain `0`, and the tree was confirmed clean both
+before the sweep and after it, at `94835c96`.
+
+The doctest total is 129 across two `Doc-tests` binaries — 88 passed with 26
+ignored in `Doc-tests netsuke`, plus 2 compile-fail cases in the same binary,
+plus 39 passed with 6 ignored in `Doc-tests test_support`. Lint reached
+`lint-clippy`, `lint-whitaker` for both crates, `lint-workflow-scripts`, all
+five stages of `lint-python` — Ruff, Pylint at 10.00/10, the df12 house lints,
+`ambrleaks`, and `interrogate` at 100% — and `github-actions-lint`.
+
+The doc-coverage numerator moves from 4941/4998 to 4942/4999 against the
+delivered sweep, because `child_exit_emitters.rs` adds one documented item. The
+percentage is unchanged at 98.86%.
+
+##### CI confirmation on the pushed revision
+
+The `-gate9` sweep describes the local gates. CI ran independently against the
+pushed head `8caf62b0`, and it is CI that settles the two defects, because both
+were found there rather than locally.
+
+`build-test` passed in 21m32s, and its step list is the evidence that matters:
+`Format` is `success`, and the steps CI had previously skipped behind that
+failure — `Lint Markdown`, `Install Whitaker`, `Lint`, `Typecheck`,
+`Doc coverage`, `Spelling`, `Validate Mermaid diagrams`,
+`Workflow contract tests` and `Release-admission runtime tests` — all ran and
+passed, as did `Test and Measure Coverage` and the anchored-nextest-filter
+verification. The earlier run had failed at `Format` and skipped every one of
+them.
+
+All four checks in the `main-required-checks` ruleset pass — `build-test`
+(21m32s), `kani-smoke` (13m28s), `netsukefile` (2m1s) and `release / metadata`
+(19s) — and no check on the head is failing or pending. The non-required
+`CodeScene Code Health Review (main)` check also passes, having previously
+failed on `child_exit.rs`; the release build matrix and `Gecko Security Review`
+pass as well. The pull request reports `mergeStateStatus: CLEAN`, where it had
+reported `BLOCKED` beforehand.
+
+#### Final sweep on the delivered revision
+
+A gate's verdict belongs to the bytes it read, not to the file it names. That
+distinction is what makes a sweeping gate set self-defeating here: this plan is
+itself a gated input — `tests/execplan_status_contract_tests.rs` parses every
+plan's header — so writing the sweep's results into the plan invalidates the
+sweep. Each edit shifts the revision and demands another run, which shifts it
+again.
+
+The first attempt at closing this loop stopped one step short. The eight
+targets were run against the working tree, all eight exited 0, and then the
+plan's record of them was edited; the third target's file, the developers'
+guide, had also been rewritten twice mid-sweep. That coverage claim was
+checking the wrong thing: a target can complete against bytes that are already
+stale, and nothing in its log distinguishes that case. Re-running `check-fmt`
+on those final bytes made the gap visible for real —
+`docs/developers-guide.md +7 -7`, `1 file would be reformatted`, exit 2. The
+seven offending lines were exactly the paragraph added last; `make fmt`
+re-flowed them and touched no other file, so the failure was a wrapping
+artefact of editing by hand rather than a content change.
+
+Recording that finding here would have reopened the same loop, so the loop was
+broken at its end instead. This section names the log set below *before* that
+run happened; the run then executed on the committed revision `4f0ac198`, with
+every log given its own `.exit` sidecar and the tree confirmed clean
+immediately afterwards, so no write followed the gates. The paths are suffixed
+`-gate7` because the earlier `-gate2`, `-gate4` and `-gate6` runs each covered
+part of the change surface but none covered all of it.
+
+| Gate                           | Status                                                          | Log                                                              |
+| ------------------------------ | --------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `make check-fmt`               | pass — 179 Python files formatted, 174 Markdown files unchanged | `/tmp/check-fmt-gate7-adopt-rstest-bdd-v0-6-0.out`               |
+| `make lint`                    | pass — every stage reached                                      | `/tmp/lint-gate7-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make typecheck`               | pass — `ty` clean, `cargo check` clean                          | `/tmp/typecheck-gate7-adopt-rstest-bdd-v0-6-0.out`               |
+| `make doc-coverage`            | pass — 98.86% against the 80% threshold                         | `/tmp/doc-coverage-gate7-adopt-rstest-bdd-v0-6-0.out`            |
+| `make markdownlint`            | pass — 175 files, 0 issues                                      | `/tmp/markdownlint-gate7-adopt-rstest-bdd-v0-6-0.out`            |
+| `make nixie`                   | pass — all diagrams validated                                   | `/tmp/nixie-gate7-adopt-rstest-bdd-v0-6-0.out`                   |
+| `make test`                    | pass — 3912/3912, 6 skipped, 0 leaky; 129 doctests green        | `/tmp/test-gate7-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make test-workflow-contracts` | pass — 1082 passed, 3 skipped                                   | `/tmp/test-workflow-contracts-gate7-adopt-rstest-bdd-v0-6-0.out` |
+
+Each target also wrote `/tmp/<target>-gate7-adopt-rstest-bdd-v0-6-0.exit`
+holding its `PIPESTATUS[0]`; every one contains `0`. The lesson generalizes
+past this repository: ordering a gate sweep after the documentation of that
+sweep is the wrong order, because the documentation is an input the sweep
+reads. Either the record must precede the run, as here, or the gated documents
+must be excluded — and this repository deliberately does not exclude them,
+since the `Status:` contract exists to keep plans honest.
+
+#### Post-rebase sweep on the relocated revision
+
+The rebase onto `fce1a746` changed the revision but not the gate set, and the
+relocation described above was the only source change it produced. Nine targets
+were run on the frozen revision `021e0524`, chosen because the moved files are
+Rust sources: a Markdown-only confirmation would not have read them. Each
+target wrote `/tmp/<target>-gate-rebase4-adopt-rstest-bdd-v0-6-0.out` with a
+matching `.exit` sidecar holding its `PIPESTATUS[0]`; all nine sidecars contain
+`0`. This differs from the earlier sweeps in one useful way: each log brackets
+itself with `HEAD_AT_START` and `HEAD_AT_END`, both reading
+`021e05245b9cfb88f5bd977769ba8d19be5bea20`, followed by a
+`---TREE-STATUS-AFTER-GATE---` block that is empty and a `STATE=frozen` line.
+The revision is therefore pinned by the log rather than inferred from its name,
+which is the distinction the section above draws.
+
+`021e0524` is quoted here because it is literally what those logs printed, not
+because it still names a commit on this branch. A later rebase onto `c8e58a0a8`
+replayed the series, so the sweep's revision now appears in history as
+`b27bbb1c`, sitting on a base 46 commits further along. The
+`/tmp/...-gate-rebase4-...out` files still hold the original value, and
+rewriting this paragraph to the new SHA would misreport what they contain.
+
+`make check-fmt` passed in 1s over 186 Python files formatted, 174 Markdown
+files unchanged, and a clean `cargo fmt`. `make spelling` passed in 7s, which
+matters beyond its own verdict: `markdownlint` declares `spelling` as a
+prerequisite, so a red spelling gate would have meant the linter never ran. It
+ran, in 14s, over 175 files with zero issues — the first sweep on this branch
+in which `markdownlint-cli2` genuinely executed and reported. `make typecheck`
+passed in 10s with `ty` reporting `All checks passed!`. `make nixie` passed in
+1s and `make doc-coverage` in 9s, measuring 98.88% (5044/5101) against the
+80.00% threshold.
+
+`make lint` passed in 39s with every stage reached: `cargo doc`,
+`cargo clippy`, Whitaker for both crates, `lint-workflow-scripts`, all five
+stages of `lint-python` — Ruff, Pylint, the df12 house lints, `ambrleaks`, and
+`interrogate` at 100.0% — plus `yamllint` and `actionlint`. The log contains
+the word `warning` exactly four times, and all four are the literal
+`-D warnings` flag echoed back inside a command line, not a finding; the count
+is reported here rather than left implicit, because a bare claim of "no
+warnings" is the kind of assertion this plan's own notes warn against.
+
+`make test` passed in 238s: 3919 tests run, 3919 passed, 6 skipped, 1 slow.
+That slow test is
+`netsuke-build::packaging_smoke_tests::packaged_manifest_retains_build_script_sources`,
+which PASSED at 144.107s after crossing nextest's 60s and 120s `SLOW`
+thresholds. It is recorded as a pass because that is what the log says; the
+thresholds are advisory and the run was not terminated. The doctest pass
+reported 88 passed with 26 ignored in `Doc-tests netsuke`, 2 compile-fail cases
+in the same binary, and 39 passed with 6 ignored in `Doc-tests test_support` —
+two `Doc-tests` headers, as the earlier note in this plan requires.
+`make test-workflow-contracts` passed in 76s with 1107 passed and 3 skipped.
+
+Two figures moved against the `-gate9` sweep, and neither is a regression. The
+nextest total rose from 3912 to 3919 because `fce1a746` brought 7 new tests in,
+and the contract total rose from 1082 to 1107 for the same reason. The
+doc-coverage numerator rose from 4942/4999 to 5044/5101, which is the same
+in-Markdown evidence-of-import effect the `-gate9` note records: the relocation
+added the three same-stem directories' modules to the counted set alongside the
+7 tests. The percentage is 98.88%, up from 98.86%.
+
+**Log set.** `-rebase4` covers `check-fmt`, `spelling`, `markdownlint`,
+`typecheck`, `lint`, `test`, `nixie`, `doc-coverage`, and
+`test-workflow-contracts`. The superseded `-gate9` sweep covered eight targets
+and never ran `spelling` as a first-class entry.
+
+**The staleness caveat applies here too, and it is not a formality.** The sweep
+above was commissioned on `021e0524` *before* this section existed, so it read
+a revision that did not contain it. The bytes that carried the sweep's verdict
+are therefore not the bytes carrying this sentence, exactly as in the `-gate7`
+note. What closes that gap is narrower this time. This plan is a gated input
+only through `tests/execplan_status_contract_tests.rs`, which parses the header
+above the first section — `header_lines` stops at the first level-two heading —
+so a record appended at line 1569 cannot reach it. Nothing else reads
+`docs/execplans/`: `tests/documentation_examples/mod.rs` loads fenced examples
+from four named documents, and the plan is not among them; no contract under
+`tests/workflow_contracts/`, `scripts/`, or `.github/scripts/` references the
+directory; and every `include_str!` in the tree was checked and none resolves
+to a plan. The edit is Markdown in `docs/`, so the gates that can read it are
+`check-fmt`, `markdownlint`, `spelling` and `nixie` — and `make test`,
+`typecheck`, `lint`, `doc-coverage` and `test-workflow-contracts` are
+unaffected by construction, since none of them reads that path.
+
+That reduction was checked against the pinned tooling rather than assumed. Local
+`mdtablefix` is 0.6.1 while CI pins 0.6.0, the mismatch that previously
+shipped a red `Format` step to CI, so 0.6.0 was installed into an isolated root
+and run over the committed plan before this section was written:
+`mdtablefix --check --git --include-untracked --wrap --renumber --breaks
+--ellipsis --fences`
+reported `174 files left unchanged` and exited 0.
+
+What the pinned check confirms is the arithmetic of the baseline, not the
+result of an edit: it was run on the committed revision before this section
+existed. The four Markdown-reading targets are therefore re-run on the amended
+bytes, and the log set is named here *before* that run, following the
+order-inverting rule recorded above. The paths carry a `-confirm` suffix so
+they cannot be confused with the `-rebase4` sweep: `check-fmt`, `spelling`,
+`markdownlint` and `nixie` under
+`/tmp/<target>-confirm-adopt-rstest-bdd-v0-6-0.out`, each with a matching
+`.exit` sidecar. `spelling` precedes `markdownlint` in that list because
+`markdownlint` depends on it, so a red spelling gate would leave the linter
+unexecuted and its silence meaningless.
+
+This closing step cannot be self-contained in the way the sweep was. The
+`-confirm` run reads the bytes that carry this sentence only if the sentence is
+committed first, and every further edit to this section would invalidate it
+again. The run therefore executes after the commit that adds this section, and
+its verdict is reported in the pull request rather than folded back into this
+plan — folding it back would reopen the same loop a third time.
+
+#### Upstream correction gate logs
+
+These logs belong to the other repository, so they carry no Netsuke branch
+suffix. Each is `/tmp/upstream-<target>-<epoch>.out`, where the suffix is the
+`date +%s` of the invocation; only `lint2` has an `.exit` sidecar, and every
+verdict below was read from the log body rather than from the file's existence.
+The content under test is commit `a1bc187c`, tree `9c658cd6`, in
+`/home/leynos/.lody/repos/github---leynos---rstest-bdd/worktrees/fix-log-bridge-feature`.
+
+| Gate                           | Status                                       | Log                                                    |
+| ------------------------------ | -------------------------------------------- | ------------------------------------------------------ |
+| `make check-fmt`               | pass — 84 Python, 124 Markdown unchanged     | `/tmp/upstream-check-fmt-1792581880.out`               |
+| `make lint`                    | **failed**, then pass — see below            | `/tmp/upstream-lint-1792581032.out`                    |
+| `make lint` (after the fix)    | pass — `[gate exit code] 0`, all stages      | `/tmp/upstream-lint2-1792581714.out`                   |
+| `make typecheck`               | pass — `All checks passed!`                  | `/tmp/upstream-typecheck-1792581893.out`               |
+| `make test`                    | pass — 2084/2084 and 743/743, 7 skipped each | `/tmp/upstream-test-1792582022.out`                    |
+| `make markdownlint`            | pass — 123 files, 0 errors                   | `/tmp/upstream-markdownlint-1792581512.out`            |
+| `make spelling`                | pass                                         | `/tmp/upstream-spelling-1792581556.out`                |
+| `make nixie`                   | pass — all diagrams validated                | `/tmp/upstream-nixie-1792581532.out`                   |
+| `make test-workflow-contracts` | pass — 354 passed in 8.20s                   | `/tmp/upstream-test-workflow-contracts-1792581538.out` |
+| `make check-fixture-lockfiles` | pass — 5 lockfiles up to date                | `/tmp/upstream-check-fixture-lockfiles-1792581571.out` |
+| `pytest scripts/tests`         | pass — 247 passed in 15.80s                  | `/tmp/upstream-scripts-pytest-1792581588.out`          |
+
+**The one real failure, and what it proves.** The first `make lint` aborted in
+`lint-whitaker` with a single diagnostic: `no_unwrap_or_else_panic` at
+`crates/rstest-bdd/tests/feature_graph/support/mod.rs:173`, pointing at
+`path.strip_prefix(base)` and advising "Propagate the error or use expect with
+a descriptive message instead of panicking". The helper was rewritten as a
+`let … else { panic!(…) }` block, which is the form the lint sanctions, and the
+whole of `make lint` was then re-run rather than only the failing stage: the
+second log carries `[start] … head=b9fb7cb0…`, reaches every stage —
+`cargo clippy`, `cargo doc`, Whitaker, `lint-python`, and the five Python check
+scripts — and ends `[gate exit code] 0` with a matching `.exit` sidecar reading
+`0`.
+
+That failure is worth recording for the reason it could not have been caught
+earlier: `cargo clippy` does not run Dylint lints, so an ordinary Clippy pass
+reports green while this diagnostic stands, and the upstream `make test` target
+does not include the Whitaker suite either. Only `make lint` sees it.
+
+**Four targets that do not exist, distinguished from a failure.** The planner
+named `doc-coverage`, `test-coverage-artifact`, `test-documentation-contracts`
+and `check-build-tools` as upstream gates. None is a target in the `rstest-bdd`
+Makefile, and their logs record
+`make: *** No rule to make target '<name>'. Stop.` with exit code 2. This is a
+defect in the plan that named them, not in the repository, and it is recorded
+as *absent* rather than *failed*: an invocation that `make` rejected before
+running anything says nothing about the tree. The targets the upstream Makefile
+actually defines were run instead, and they are the eleven rows above.
+
+**What the run measured, not just that it passed.** The `make test` log shows
+the two new binaries executing inside the full sweep rather than only under a
+filtered invocation: `rstest-bdd::feature_graph_contract` contributes four
+`#[rstest]` cases — normal dependency with and without the bridge, dev
+dependency with and without it — and
+`rstest-bdd::feature_graph_clippy_reproduction` contributes its controlled
+pair. All six appear as `PASS` in both the 2084-test all-features run and the
+743-test `--no-default-features` leg that the upstream `test` target runs
+second, so the bridge-disabled configuration is exercised inside the suite and
+not merely asserted by the manifest's intent. The `nextest_config` contract
+`feature_graph_targets_join_the_cargo_spawning_group` also passes, which is
+what keeps the two compiler-spawning binaries out of the parallel pool.
+
+**Staleness, bounded in two steps.** The amend is the easy half: the logs stamp
+a revision only where the gate echoes one, and the only gate that does is the
+passing `make lint`, whose `[start]` line names `b9fb7cb0` — the pre-commit
+working-tree revision. The amend that produced `a1bc187c` changed the message
+alone, which was checked rather than assumed: `git rev-parse a1bc187c^{tree}`
+and `git rev-parse f1dbff56^{tree}` both return
+`9c658cd61e4ad1d2f8ef152990d5bce5b6724384`.
+
+The harder half is that the sweep read a working tree that kept being edited
+while it ran. The timelines are recoverable from the log suffixes and the file
+modification times: `crates/rstest-bdd/Cargo.toml` was last written at
+13:42:59, after the 13:27:02 `make test` and before the 13:44:57 commit. The
+content of that particular edit is not recoverable from the working tree, so
+what is claimed here is bounded accordingly — the manifest changed after the
+test run, and the test verdict is transferred on the argument that the change
+was to the feature declaration, not on a measurement of the post-edit tree.
+Where the transfer is load-bearing, a gate was re-run instead: `check-fmt` at
+`/tmp/upstream-check-fmt-posttoml-1792583024.out` and `spelling` at
+`/tmp/upstream-spelling-postf1dbff5-1792583221.out` both pass, chosen because
+they read the manifest textually and `spelling` also regenerates `typos.toml`.
+The `check-fmt` re-run also restates the one measurement that does reach the
+manifest's compiled content: `cargo fmt --all -- --check` parses every crate in
+the workspace, so a manifest that had stopped being valid would have failed
+there rather than passing.
+
+**One log that is superseded rather than additional.** An earlier `make test` at
+`/tmp/upstream-test-1792581063.out` also ran 2084/2084 and 743/743 green. It
+predates the `support/mod.rs` rewrite at 13:20:52 that cleared the Whitaker
+diagnostic, so it is not cited as evidence for the delivered content; the
+`-1792582022` run is. The timing difference between the two runs' feature-graph
+rows — 1.1 s and 1.8 s early, 3.8 s and 23.1 s late — is consistent with the
+late run rebuilding what the rewrite changed, but the logs do not record cache
+state, so that is an observation offered as corroboration and not as proof.
+
+#### Assessment-correction sweeps
+
+Two further full sweeps ran after the assessment rounds, each on a committed
+revision with the tree clean before and after. Both were run by the
+`scrutineer` subagent, sequentially and once per gate, and both were green on
+the first attempt; no gate was re-run for a failure.
+
+The `-r6` sweep gated `8ae039d11`, the commit that first corrected the
+lockfile-scope claim and the stale completion record. The `-r7` sweep gated
+`1ef3dcf51`, which reconciled the four remaining numeric and consistency
+defects the assessment's second round identified. `-r7` is the current evidence;
+`-r6` is retained because it covered a different set of bytes and its result
+is what justified pushing that revision.
+
+| Gate                           | `-r6` at `8ae039d11` | `-r7` at `1ef3dcf51` | `-r7` log                                                          |
+| ------------------------------ | -------------------- | -------------------- | ------------------------------------------------------------------ |
+| `make check-fmt`               | pass — 2s            | pass — 2s            | `/tmp/check-fmt-gate-r7-adopt-rstest-bdd-v0-6-0.out`               |
+| `make lint`                    | pass — 35s           | pass — 130s          | `/tmp/lint-gate-r7-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make typecheck`               | pass — 14s           | pass — 85s           | `/tmp/typecheck-gate-r7-adopt-rstest-bdd-v0-6-0.out`               |
+| `make markdownlint`            | pass — 16s           | pass — 18s           | `/tmp/markdownlint-gate-r7-adopt-rstest-bdd-v0-6-0.out`            |
+| `make nixie`                   | pass — 1s            | pass — 0s            | `/tmp/nixie-gate-r7-adopt-rstest-bdd-v0-6-0.out`                   |
+| `make test`                    | pass — 118s          | pass — 128s          | `/tmp/test-gate-r7-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make test-workflow-contracts` | pass — 94s           | pass — 96s           | `/tmp/test-workflow-contracts-gate-r7-adopt-rstest-bdd-v0-6-0.out` |
+
+The `-r7` counts match the `-rebase6` baseline exactly, which is the expected
+result for a documentation-only delta: `make test` reports 4311 run, 4311
+passed, 6 skipped across 112 binaries, with doctests at 113 + 2 + 39.
+`make test-workflow-contracts` reports 1324 passed, 3 skipped, plus 27 in the
+script suite. `make lint` reaches every stage — `cargo doc`, `cargo clippy`,
+both Whitaker passes, Ruff, Pylint 10.00/10, the df12 house lints at 10.00/10,
+`ambrleaks`, `interrogate` at 100.0%, `yamllint` and `actionlint`.
+
+The gate durations are not comparable between the two sweeps and should not be
+read as a regression. `-r6` ran warm; `-r7` ran while the `build-limits`
+supervisor reported `capacity 4, held 4` with waiting requests throughout, and
+both `lint` and `typecheck` logged
+`the managed sccache server is not serving compilations; compiling without the
+cache`.
+The `Blocking waiting for file lock on package cache` lines in `test` and the
+second Whitaker pass are queue latency, not deadlock. As recorded above, a
+duration in this environment measures contention rather than the gate's cost.
+
+`make doc-coverage` and `make spelling` were not part of the seven-target set
+either sweep was asked to run. The seven targets were requested explicitly;
+`doc-coverage` reads Rustdoc over unchanged Rust sources, and the `spelling`
+gate runs inside `markdownlint` as its prerequisite, so it did execute within
+`-r7` rather than being skipped.
+
+### Recurrence correction (Requirement 4)
+
+The fourth part of the task asked for a Clippy `cognitive_complexity`
+correction that excludes generated branching without excluding source-written
+branching, prepared and compared against the pinned nightly rather than adopted
+by this repository. It has been prepared in a separate scratch tree and
+measured. Nothing in this repository — source, manifest, toolchain, or lint
+configuration — is changed by it, and
+`docs/adr-006-adopt-polonius-nightly-toolchain.md` is untouched. Adopting a
+patched Clippy would be its own ADR.
+
+The tree is `/home/leynos/scratch/clippy-rec`, a git repository whose history
+is the three commits `2e2abdc`, `e711d52`, and `53358b4`. The first is a
+pristine import of rustc `c54751567b19c4ceb08b0412d83529c2568cba8b`'s
+`src/tools/clippy` (tree `25cb83b6b567cdd1514759346eb1728bf599d850`), which is
+the Clippy the pinned `nightly-2026-08-23` ships. That tree SHA matches Clippy
+commit `62fa8974265296c42e516eb1c3e56353f4fc1bd9`, so the import is
+reproducible rather than hand-assembled.
+
+**The correction.** The lint walked the post-expansion HIR and charged every
+`if`, every `match` with more than one arm, and every arm guard. It now charges
+a node only when the node's syntax context is not a macro body:
+
+```rust
+fn is_generated(ctxt: SyntaxContext) -> bool {
+    ctxt != SyntaxContext::root() && matches!(ctxt.outer_expn_data().kind, ExpnKind::Macro(..))
+}
+```
+
+Two details carry the contract. The predicate keys on `ExpnKind::Macro`, not on
+`span.from_expansion()`, because `for`, `?`, `async` and `format_args!` are
+`ExpnKind::Desugaring` and their branching is the author's: a `for` loop
+written in source must keep costing a unit even though the compiler lowers it
+to a `match`. And the walk always descends; it does not prune generated
+subtrees, because generated control flow can *wrap* a source expression. An
+`if` written as an `assert!` argument arrives inside a generated `if`, and
+pruning would lose it. Tokens substituted for macro metavariables keep their
+call-site context, so source arguments are still charged without any special
+case.
+
+An earlier attempt returned `Descend::No` instead. That was wrong in both
+directions, and the UI cases caught it: `for_each_expr_without_closures`
+charges a node *before* consulting the descent decision, so every directly
+generated `if`/`match` still paid for itself, and pruning the generated subtree
+dropped source branches the macro wrapped. The measured symptom was a
+`matches!`-only function reporting 2 and a source `if` inside an `assert!`
+reporting 1.
+
+**Measured values.** The probe consumer at
+`/home/leynos/scratch/clippy-rec/consumer` sets
+`cognitive-complexity-threshold = 0` so every function reports, and has a
+`trace-log` feature that enables `tracing/log` — the same feature unification
+that turned 39 Netsuke functions over the line. Values are `(reported/0)`:
+
+| Probe function                   | stock, bridge off | stock, bridge on | patched, both states |
+| -------------------------------- | ----------------- | ---------------- | -------------------- |
+| `no_branch`                      | 1                 | 1                | 1                    |
+| `four_tracing_calls`             | 1                 | **29**           | **1**                |
+| `source_branch`                  | 2                 | 2                | 2                    |
+| `source_branch_inside_macro_arg` | 2                 | 2                | 2                    |
+| `generated_branch` (`matches!`)  | 2                 | 2                | **1**                |
+| `closure_in_macro_arg`           | 3                 | 3                | **1**                |
+| `nested_macros`                  | 2                 | 2                | 2                    |
+| closure body                     | 2                 | 2                | 2                    |
+
+`closure_in_macro_arg` falling to 1 is the pre-existing contract, not a
+regression: the source `if` is inside the closure,
+`for_each_expr_without_closures` does not descend into closures, and the
+closure body is measured once on its own at 2.
+
+**Negative control.** Forcing the predicate to `false` and rebuilding restores
+`four_tracing_calls` to 29, `source_branch_inside_macro_arg` to 9 and
+`nested_macros` to 3. The matrix can therefore fail, and it fails for the
+intended reason.
+
+**Upstream suite.**
+`TESTNAME=cognitive_complexity cargo +nightly-2026-08-23 uitest` in the
+imported tree passes both `cognitive_complexity.rs` and
+`cognitive_complexity_attr_used.rs`. Seven cases were added: a bare `matches!`,
+a source branch in a macro argument, a source branch wrapping a generated one,
+nested macros, a closure in a macro argument, `for` and `?` desugarings, and a
+function mixing macros with ordinary control flow. All 24 pre-existing
+expectations are byte-identical; the `.stderr` diff adds five entries and
+removes none. The `issue14422` `for`-loop case is the standing guard against an
+over-broad exclusion.
+
+#### Course change: a raised threshold, not a patched Clippy
+
+The correction above is now **informational only**. It is not adopted, and the
+scratch tree is not built against. The decision taken on 2026-10-21 was to stop
+patching Clippy and instead do two things: propose the corrected rule upstream,
+and raise this repository's threshold so the metric stops firing.
+
+The proposal is filed as <https://github.com/leynos/whitaker/issues/504>. It
+carries the measurements from this section, the `ExpnKind` probe results that
+disqualify `span.from_expansion()` as a predicate, and the two properties the
+walk must preserve (`ExpnKind::Macro` keyed per node, and always descending).
+It also notes the two existing Whitaker lints that disagree with each other:
+`bumpy_road_function` prunes on `from_expansion()` and so loses source `for`
+loops, while `conditional_max_n_branches` has no expansion guard at all.
+
+**The hoisting refactor is reverted.** Four commits were undone: `b27bbb1c`
+(relocate emitter modules), `848bf58b` (child-shutdown emitters), `bc9030ff`
+(Kani guard and tracing-capture emitters) and `3020a971` (hoist tracing
+macros). Every `info!` and `tracing` call is inline again. The revert also
+restored `tests/kani_mutation_evidence_tests/compile_guard.rs` to 393 lines: the
+`apply_patch` sibling module had existed only because hoisting pushed that
+file past the 400-line cap, so undoing the hoist made the split unnecessary.
+
+**The threshold is 32, and that number is measured.** With the hoist reverted
+and the threshold demoted to 0, linting the library with `--all-features`
+reports 2174 functions across `src/`. Bridging `tracing/log` on and off gives
+the same 2174 functions, and pairing them one-for-one isolates the inflation:
+
+| State                             | Max | Functions over 9 |
+| --------------------------------- | --- | ---------------- |
+| bridge off (`tracing/log` absent) | 8   | 0                |
+| bridge on (unified onto the lib)  | 31  | 39               |
+
+The 39 matches the count that first turned `make lint` red, which confirms the
+bridge is the sole cause. Exactly one function in `src/` measures above 7 with
+the bridge off, and none above 8. `fetch_inner` in `src/stdlib/network/mod.rs`
+is the extreme: 8 with the bridge off and 31 with it on, and it contains two
+source branches and four inline `debug!` calls, so the whole 23-unit gap is
+generated.
+
+An earlier sizing of 7 was wrong and is recorded here as a trap. It came from a
+run that reported a maximum of 6, but that run had aborted inside the
+`netsuke-build` build script, which reaches only `src/cli`, `src/locale`,
+`src/host` and `src/localization` through `#[path]` and never reaches
+`src/runner` or `src/stdlib` — and it never linted the library at all. When
+sizing a threshold, confirm which targets were actually linted, not just that
+the command ran.
+
+Both `clippy.toml` and `test_support/clippy.toml` carry the raised value.
+`make lint` exits 0 with the hoist reverted, and reports zero
+`cognitive_complexity` diagnostics at the new threshold.
+
+### Session provenance
+
+The work session that produced this migration is recorded at
+<https://lody.ai/leynos/sessions/7bb1d019-44e1-4cc0-b860-e7ac1b312667>.
+
+The branch is `adopt-rstest-bdd-v0-6-0`, pushed to `origin` and opened as draft
+pull request [#805](https://github.com/leynos/netsuke/pull/805). The pre-rebase
+revision was `ec1d0498`; the branch has since been rebased onto `upstream/main`
+(`84447f0e`), so the SHAs below are the rebased ones and the earlier SHAs in
+this document refer to the superseded history.
+
+Rebase mapping (pre-rebase → rebased): `e62af317`→`75e15a08`, `c68cd30f`→
+`28b5c8d7`, `b8d1192c`→`f5547fbf`, `7ac904e8`→`5392a0da`, `27a95bbf`→`fd09dacb`,
+`f7915286`→`e65044bd`, `31d103de`→`f85487be`, `ec1d0498`→`d95c1631`,
+`e5aa844c` →`236ba673`.
+
+Nine commits carry the work: `75e15a08` imports the authoritative documentation
+byte-for-byte and drafts this plan; `28b5c8d7` performs the dependency bump,
+adds the INV-3 regression guard, and corrects the developer guidance;
+`f5547fbf` marks the plan complete; `5392a0da` corrects the withdrawn
+"pre-existing on `main`" diagnosis and raises the escalation; `fd09dacb`
+records the re-delivery and the root cause; `e65044bd` hoists the charged
+`tracing` macros to clear the complexity cascade; `f85487be` reformats this
+document to the canonical Markdown form; `d95c1631` records the resolved state
+and closes the plan; and `236ba673` closes the migration plan.
+
+A later commit re-opens the complexity work, because the rebase brought in a
+site the hoist sweep had not seen. See the rebased sweep below.
+
+The pull request is a draft and has not been merged.
+
+The upstream correction described under `## Outcomes & retrospective` and
+`#### Upstream correction gate logs` lives in a second checkout, not this one:
+`/home/leynos/.lody/repos/github---leynos---rstest-bdd/worktrees/fix-log-bridge-feature`,
+on branch `fix/log-bridge-feature`, resolved from upstream `main` at
+`b9fb7cb0` and committed as `a1bc187c` (tree `9c658cd6`). It is **not** a
+commit on this branch, does not appear in this repository's history, and has
+not been pushed or released. Two consequences follow for anyone resuming:
+`git log` here proves nothing about it, and the branch in that worktree
+currently tracks `origin/main` while being ahead of it, so a naive `git push`
+from it would target the wrong base.
+
+## Revision note
+
+2026-09-26 — initial draft, written after reconnaissance established the
+baseline and falsified the assumption that the 0.6.0 crate is materially larger
+in scope than the guide's headline suggests. No revisions to earlier text.
+
+2026-09-26 — final revision, recording the `-m4` gate sweep and closing the
+plan's living sections. `## Outcomes & retrospective` was written and the
+`### Gate logs` table replaced: it had carried `-m2` paths and a `3413/3413`
+test count, both superseded once the regression test was added. The `-m3` sweep
+is not cited anywhere, because a concurrent writer touched this document
+mid-sweep and invalidated its freeze.
+
+2026-09-26 — deliverable revision. Committed as `c68cd30f`, pushed, and opened
+as draft PR [#805](https://github.com/leynos/netsuke/pull/805). `Status:` moved
+to `COMPLETE` and the delivery recorded in `### Session provenance`. Because
+these edits shifted the revision after the `-m4` sweep, the Markdown-scoped
+gates were re-run on it; those `-m5` logs are the ones that describe the
+revision now pushed. Both pass.
+
+2026-10-02 — corrected revision. `Status:` moved back to `BLOCKED`, then to
+`IN PROGRESS`, and finally to `COMPLETE` once the gates were green on a
+committed tree. The earlier `COMPLETE` rested on a diagnosis that was wrong in
+two places: the `make lint` failure was caused by this migration's feature
+unification rather than being pre-existing on `main`, and the escalation the
+plan raised against the fix was superseded once measurement showed every site
+needed only its macros hoisted. The sweep at `ec1d0498` is added under
+`### Gate logs`; it passed with every stage reached, including the four
+`make lint` stages that the failing revision never got to.
+
+2026-10-02 — rebased revision. The branch was rebased onto `upstream/main`
+(`84447f0e`); the pre-rebase sweep survives under `### Gate logs` as history,
+with the pre-rebase SHAs mapped to their rebased equivalents in
+`### Session provenance`. The rebase invalidated the earlier "all clear": work
+that landed on `main` while this branch was in review reintroduced the
+`cognitive_complexity` failure at a site the branch had never compiled under
+unified `tracing` features, and hoisting the two known Kani sites pushed
+`compile_guard.rs` past Whitaker's 400-line cap — a failure that the
+Clippy-first cascade had been hiding. Both are fixed in `dd93120a`. The lesson
+recorded in `## Surprises & discoveries` is that a green `make lint` on a
+pre-rebase revision says nothing about the rebased one, and that a cascade's
+first failure hides every stage after it.
+
+2026-10-02 — swept revision. The rebased sweep was run at `4c93ba63`, and the
+`#### Rebased sweep` table now records its seven verdicts from the logs
+themselves. It carried a `PENDING` table whose log paths named a revision
+(`-gates-dd93120a.out`) that no run had written, because the repository's log
+template ends in the *branch* name, not a SHA; the paths and the table's
+heading are corrected together. The table was deliberately left `PENDING`
+rather than filled from the gate runner's prose, so that a gate is recorded as
+passing only once its own log has been read — which is what caught it.
+
+2026-10-02 — inventory correction. The scenario inventory was quoted as a flat
+"254 scenarios" throughout this document and in the pull request. That figure
+was right at the `ebcedaef` baseline and is still the right *baseline*, but
+`main` added 15 scenarios while this branch was in review, so it is no longer
+the current count. Re-measured at three revisions the inventory is 254
+(`ebcedaef`), 269 (`84447f0e`) and 269 (`HEAD`): the migration's own delta is
+zero and no baseline name is lost. The equality claim in INV-1, the acceptance
+item under EP-M3 and the `## Outcomes & retrospective` figure were restated
+accordingly, and a table recording all three revisions was added to
+`## Surprises & discoveries`. The lesson is that a count captured against a
+now-stale baseline silently becomes a false present-tense claim, and that the
+durable form of a coverage-preservation claim is a *set relation* — `HEAD` is
+set-equal to `main` and a superset of the baseline — not a scalar that upstream
+work can invalidate.
+
+2026-10-02 — sweep provenance. The rebased sweep was re-run on `3afbd5a0`, the
+revision this plan's own edits produced, and the gate runner archived the
+`4c93ba63` logs to
+`/tmp/prior-sweep-archive-adopt-rstest-bdd-v0-6-0-20261002T191145Z/` rather
+than overwriting them. Both runs are green and agree on every verdict, which is
+what lets the table stand as a claim about the rebased branch rather than one
+run. `make test-workflow-contracts` — which none of the four `make` gates
+depends on — was run separately and passes (1082 passed, 3 skipped), and it
+classifies the two files this branch moved as *not* build-capable, so the
+`nested-cargo-builds` grouping for `compile_guard` still comes from its
+pre-existing explicit filter.
+
+2026-10-02 — delivered revision. The sweep that gates `4f0ac198` (the child of
+`ac783bc2` that records it) is recorded under
+`#### Final sweep on the delivered revision`, together with the coverage trap
+the first attempt at it fell into: the gates ran against the working tree and
+the plan then recorded them, so `check-fmt`'s `mdtablefix` stage had read
+`docs/developers-guide.md` three seconds before that file's last write.
+Re-running it on those bytes failed for real (`+7 -7`, exit 2), which
+`make fmt` resolved as a wrapping artefact with no content change. The final
+sweep therefore inverts the order — the record is written first, the gates then
+run on the committed revision, and the tree is confirmed clean once they
+finish. The lesson is that a gate's verdict belongs to the bytes it read, not
+to the file it names, and that a plan which gates itself cannot be brought up
+to date by the sweep it documents.
+
+2026-10-02 — second rebase, and a no-op. A requested rebase onto the pull
+request's target branch re-established the boundary rather than assuming it,
+and the boundary turned out already to hold: `origin/main` was still
+`84447f0e`, exactly as the first rebase recorded, so the target was a direct
+ancestor of the branch head. Three independent sources agreed on that SHA —
+`git ls-remote` over SSH, the GitHub API's `refs/heads/main`, and the pull
+request's own `baseRefOid` — and `git rev-list --count origin/main ^HEAD`
+returned zero, so no target commit was missing from the branch. Git therefore
+reported "up to date" and replayed nothing.
+
+The evidence that this was a no-op is that every identity survived: `HEAD` is
+unchanged at `4bd2aa88`, `git range-diff 84447f0e..4bd2aa88` against the same
+range after the rebase maps all twenty commits with `=`, and the branch's diff
+against the target has the same SHA-256 (`50fb53a6…`) before and after. Because
+`HEAD` did not move, the four `make` gates that gated `4bd2aa88` before the
+rebase still describe this revision; they were run again anyway
+(`/tmp/<target>-gate-rebase-adopt-rstest-bdd-v0-6-0.out`, each with a
+`PIPESTATUS[0]` sidecar containing `0`) rather than cited from the earlier
+evidence. The test gate re-ran 3912 nextest tests with 6 skipped and both
+`Doc-tests` targets, byte-for-byte the same counts as before.
+
+The lesson is the boundary check earns its place even when the answer is
+"nothing to do": the skill forbids discovering the replay range by rebasing,
+and here reasoning about it first turned a history rewrite that would have
+produced twenty new SHAs — and invalidated every review, gate log and CI run
+tied to `4bd2aa88` — into a no-op that invalidated nothing. It is also worth
+recording that the estate's stored `main` ref in the bare repository
+(`1e60fb18`) is stale and is not the target; only the fetched remote ref is.
+
+2026-10-02 — the no-op rebase is recorded, gated and pushed. Recording it in
+this document moved `HEAD` to `373de50b`, which invalidated the gate logs that
+had read `4bd2aa88`, so all four `make` gates were re-run on the committed
+revision rather than cited
+(`/tmp/<target>-gate-rebase2-adopt-rstest-bdd-v0-6-0.out`, each sidecar `0`),
+reproducing the earlier counts exactly: 3912 nextest tests with 6 skipped, 179
+Rust and Python files formatted, 174 Markdown files left unchanged. The four
+required checks the pull request's ruleset enforces are `build-test`,
+`kani-smoke`, `netsukefile` and `release / metadata`; the local gates are the
+same family but not the same jobs, so CI remains the authority on the pushed
+revision.
+
+The push used the command-scoped SSH transport
+(`git push git@github.com:leynos/netsuke.git HEAD:refs/heads/adopt-rstest-bdd-v0-6-0`)
+with `--force-with-lease` bound to the head recorded *before* the rebase began
+(`4bd2aa88`), not to a value refreshed at push time. The lease mattered here
+even though the rebase was a no-op: the branch is shared, and a lease taken
+fresh would silently accept a peer session's concurrent commit. `origin`'s
+stored head was confirmed equal to the recorded value immediately before the
+push, and the push reported `4bd2aa88..373de50b`. The pull request stayed a
+draft, as the migration brief requires; only the branch moved.
+
+2026-10-02 — one error in the record, found and corrected. The entry above
+describing the no-op rebase said the test gate had reached "the three doctest
+binaries". Both runs print exactly two `Doc-tests` headers —
+`Doc-tests netsuke` and `Doc-tests test_support` — and this document already
+stated the right figure forty lines earlier ("129 across two `Doc-tests`
+binaries"). The wrong number came from reading a subagent's report, which had
+counted the `running 2 tests` sub-block inside the netsuke doctest run as a
+third target; the count is settled by counting `Doc-tests` headers, which is
+measurable from the log rather than inferred from the shape of a summary.
+Correcting it moved `HEAD` to `659aad7f`, so the four gates were run a third
+time, on the correction's own bytes, recording the same two-target structure
+they had been miscounted from
+(`/tmp/<target>-gate-doctestfix-adopt-rstest-bdd-v0-6-0.out`, each sidecar
+`0`). A prose claim about a log is still a claim about evidence: it has to be
+read back from the log, not restated from memory of it.
+
+2026-10-03 — a red `make lint` that was not a code finding. The first gate run
+on `8ac67a28` failed `make lint` at `lint-python` with
+
+```plaintext
+   Updating https://github.com/leynos/df12-python-lints.git (v0.3.0)
+  × Failed to resolve `--with` requirement
+  ╰─▶ Git operation failed
+make: *** [Makefile:264: lint-python] Error 1
+```
+
+which is a transport failure, not a defect. The harness injects
+`GIT_CONFIG_COUNT`, paired `GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n` entries and
+`GH_TOKEN`; the pairs define a `credential.helper` that shells out to a Lody
+node helper and, decisively, a
+`url.<lody-github::https://github.com/>.insteadOf` rewrite. An `insteadOf`
+rewrite is applied when git canonicalizes a URL, before any helper is
+consulted, so `uv`'s fetch of the pinned `df12-python-lints` dependency was
+routed to the Lody remote helper, which fails closed when its broker is
+starved. The mechanism was isolated before acting on it:
+`git ls-remote https://github.com/leynos/df12-python-lints.git refs/tags/v0.3.0`
+fails with `fatal: remote helper 'lody-github' aborted session` under the
+ambient environment and returns `4cf41736…` with the variables stripped. The
+repository is public, so the remedy is a clean environment rather than a
+credential; a third run through a wrapper removing exactly those variables and
+the `~/.lody` `PATH` entries reached every stage — both pylint invocations at
+10.00/10, ambrleaks, interrogate, yamllint and actionlint — and exited zero on
+the same bytes that had failed. Nothing in the repository was changed to
+appease it.
+
+The episode also records a self-inflicted error in evidence handling.
+Re-running that lint by hand wrote to the path the gate runner owned,
+destroying its failure log in place; the failure's decisive lines survive only
+because they were transcribed into an attributed note before the file was
+reused. A re-run belongs at a new log suffix, never at another writer's path.
+
+That `-gate-pushrecord2-` run gated `8ac67a28`, not the delivered revision, and
+a later sweep supersedes it. The delivered revision `b9bdc38a` was gated by an
+eight-target run under `-gate-spellfix-`. Seven targets passed — `check-fmt`
+(179 Python files formatted, 174 Markdown unchanged), `typecheck`, `lint`
+(every stage reached, both pylint invocations at 10.00/10), `spelling`,
+`markdownlint` (175 files, 0 issues), `nixie`, and `doc-coverage` (4942/4999,
+98.86%) — and `make test` failed with `TIMEOUT` on
+`packaged_manifest_retains_build_script_sources`, exit 2. The timeout is
+environmental rather than a regression. The same test passed in three earlier
+runs on this branch (80.448s, 145.467s, 149.945s); the only delta between the
+last of those and this run is one word in this document; and the host carried
+load 48 on 24 cores, with a peer session running `make test` in another
+worktree across the window. CI is the stable oracle for this test and settled
+it: on the same SHA `b9bdc38a`, `build-test` completed in `success` with the
+packaging test finishing in 148.706s inside its 300s allowance. The local
+verdict is recorded as a timeout, not as a pass, because that is what the log
+says.
+
+2026-10-03 — a spelling failure that only CI could see, and the gate-scope gap
+that explains it. `fc656f72`, a documentation-only commit, introduced
+`canonicalises` into this document. CI's required `build-test` check failed at
+its `Spelling` step — `error: 'canonicalises' should be 'canonicalizes'` at
+line 1722 — and skipped the five steps behind it, `Validate Mermaid diagrams`,
+`Workflow contract tests`, `Release-admission runtime tests`,
+`Test and Measure Coverage` and the anchored-nextest verification. `b9bdc38a`
+corrects the word and CI is green on it, with all forty steps of `build-test`
+reaching `success`.
+
+The gap is that the four gates the delivery instruction names — `check-fmt`,
+`test`, `typecheck`, `lint` — are not a superset of the ones that matter. The
+`-ize` vocabulary is enforced by `make spelling`, and within the Makefile the
+only route to it is `make markdownlint`, which declares it as a prerequisite at
+`Makefile:367`; none of the four named targets reaches it. The four-target
+sweep was therefore green on `fc656f72` while the word sat unexamined. The word
+was never undetectable locally — `typos` flags it under the repository's own
+`typos.toml` — but no gate in that sweep read it, so the first reader was CI's
+separate `Spelling` step (`ci.yml:258`), after the revision had been pushed.
+The remedy is to run the five `make` targets the stop hook runs — `check-fmt`,
+`lint`, `typecheck`, `markdownlint`, `nixie` — alongside the four named, since
+`markdownlint` is the local path to the spelling gate. `b9bdc38a` was gated
+that way, and the gate was probed for liveness by re-injecting the typo (exit 2
+on the same line) before restoring it. The lesson matches the one already
+recorded for `Format`: an instruction that names a gate subset describes a
+floor, not a ceiling, and the subset's complement has to be run deliberately or
+named as uncovered.
+
+2026-10-03 — third rebase, and the first that had anything to replay. The
+boundary moved twice while the previous delivery was being validated. The
+second rebase had recorded `origin/main` as `84447f0e` and concluded no replay
+was warranted; that conclusion was sound when it was reached and stale by the
+time the push landed, because the target then advanced to `6b01bb65` and again
+to `fce1a746` (*Group prefix-named modules under directory modules*, pull
+request #811/#813). That one commit is 393 files changed, 1804 insertions and
+1459 deletions, with 264 renames; measured as the distance from the old merge
+base it is 408 files and 4147 insertions, and it is the range figure the
+earlier reading of this boundary had recorded. The signal that the earlier
+conclusion had expired was the pull request itself: #805 reported
+`"mergeable":"CONFLICTING"` and `"mergeStateStatus":"DIRTY"`, and a conflicted
+pull request dispatches no workflows at all, which is why `8bcba867` sat with a
+skipped `dependabot-automerge` run and no CI. Had the boundary been trusted
+rather than re-read, the branch would have waited indefinitely for checks that
+GitHub never intended to run.
+
+Re-reading it was the whole lesson. A stale remote-tracking ref is
+indistinguishable from a current one by inspection — the local `origin/main`
+read `48d4a596` throughout while the remote read `6b01bb65`, and the worktree
+shares its bare repository with roughly two dozen sibling worktrees, so a
+conclusion about the boundary is only ever as fresh as the fetch behind it.
+`git merge-tree --write-tree` against the stale ref reported a clean merge, and
+against the fetched ref it reported exit 1 with conflicts in two files.
+
+The third source needs a caution attached, because a first reading of it got
+this wrong. The pull request's `baseRefOid` field was beside the point rather
+than corroborating: it reads `84447f0e`, the base the pull request was opened
+against, and GitHub had not refreshed it after the branch rebased onto the new
+tip. It is cached drift, not the live target, and reading it as a third witness
+to `fce1a746` was a mistake this entry made and has corrected. The two sources
+that do establish the boundary are the fetched remote-tracking ref and
+`git ls-remote` over SSH, both of which read `fce1a746` — for the live target,
+`git ls-remote` is the authority, and the mergeability state is what the pull
+request contributes. Both conflicting files, `src/manifest/env/reader.rs` and
+`src/runner/process/ninja/program.rs`, were files this branch had edited and
+`fce1a746` had renamed, so neither conflict came from a competing change of
+intent.
+
+Both were resolved the same way, and the resolution follows the instruction to
+preserve this branch's purpose while taking main's improvement. Each conflict
+was a pure three-way collision between a rename and an edit inside the renamed
+file. In `src/manifest/env/reader.rs` the branch had replaced two inline
+`tracing::debug!` lines with a call to the hoisted
+`debug_env_lookup_fallback_used()`; main had moved `env_reader.rs` to
+`env/reader.rs` and renamed the `env_telemetry` module to `telemetry`. The
+resolution keeps the hoisted call and takes main's path, and the result is
+corroborated by the file itself: the merged text already imports
+`use super::telemetry::{self, record_env_lookup};`, and of the file's five
+`telemetry::OUTCOME_*` references the four outside the conflict block all read
+`telemetry::`, so the two `env_telemetry::` tokens inside the conflict block
+were the last surviving spelling of the old module name anywhere in the tree. In
+`src/runner/process/ninja/program.rs`, main moved the file a directory deeper
+and adjusted the import depth to `super::super::super::`; the branch had added
+`Utf8Path` to the `camino` import for its debug helper. The resolution takes
+main's depth and the branch's wider import, both of which are required: the
+merged file already uses `Utf8Path` at the helper's signature, and the
+constants live in `src/runner/mod.rs` three levels up.
+
+The replay touched 26 commits and the range-diff is the evidence that nothing
+else moved: 25 map with `=`, and exactly one — the hoisting commit — shows `!`,
+precisely the commit whose edits had to land inside main's renamed files.
+`git rev-list --left-right --count origin/main...HEAD` reads `0 26`, so the
+branch now contains the whole target, and the diff against the new base is 52
+files. Neither side had touched a dependency manifest between the old merge
+base and `fce1a746`: `Cargo.lock` and `Cargo.toml` show `main-changed=0`,
+`branch-changed=1`, so no lock-file rebuild was needed and none was performed —
+the rebase's `--autostash` was disabled and the tree was confirmed empty before
+and after. The lock file's consistency with the manifests was then checked
+rather than assumed, with `cargo metadata --locked --offline`, which fails if
+the two disagree; it exited 0.
+
+2026-10-21 — upstream correction and recurrence split. The migration's
+completion claim was correct but incomplete: it measured the repository and not
+the dependency contract underneath it. `rstest-bdd` 0.6.0 requests
+`tracing/log` inside its own `[dependencies.tracing]` table, so the bridge is
+unconditional for every consumer and `default-features = false` cannot remove
+it. This plan now records that mechanism, the upstream correction that makes
+the bridge an independently selectable `log-bridge` feature (ADR-024, with
+ADR-020 amended) — 28 added and 5 removed lines in
+`crates/rstest-bdd/Cargo.toml`, 26 and 3 in
+`crates/rstest-bdd/src/context/warnings.rs`, with the rest of the 1,414
+insertions being tests, fixtures and documentation — and the regression
+coverage that binds it — two generated-consumer binaries, one reading the
+resolved feature graph through normal and dev edges, the other reproducing the
+downstream Clippy inflation with the bridge on and off. Section
+`#### Upstream correction gate logs` records eleven upstream gate verdicts,
+including the one genuine failure (`no_unwrap_or_else_panic` under Whitaker,
+which neither `cargo clippy` nor `make test` can see) and four target names
+that the plan invented and the upstream Makefile does not define; the latter
+are recorded as *absent*, not as failures, because a `make` invocation rejected
+before it ran says nothing about the tree.
+
+The plan's `Status:` stays `COMPLETE` for this repository's migration, and the
+integration milestone is marked blocked rather than complete: crates.io still
+publishes 0.6.0 as the newest `rstest-bdd`, so there is no release carrying
+`a1bc187c` to depend on, and substituting a `path` dependency or a `[patch]`
+section would measure local content no other consumer receives. The recurrence
+workstream — a Clippy `cognitive_complexity` change that excludes generated
+branching while preserving traversal into source-written expressions passed to
+macros — is recorded as not started, with its evidence requirements stated, so
+that it is not mistaken for part of this delivery. No Netsuke source, manifest
+or lockfile changed in this revision; the hoisting refactor from `e65044bd`
+remains the operative mitigation here, and its cost is now stated explicitly as
+the price of waiting for the upstream release.
+
+The gate set for this revision is the Markdown-scoped one — `check-fmt`,
+`spelling`, `markdownlint`, `nixie` — because every edit is prose under
+`docs/`. That scoping was not assumed: this document is a gate input only
+through `tests/execplan_status_contract_tests.rs`, which parses the header
+above the first level-two heading, and the edits are far below it.
+
+All four were run on `95eec9f0`, the commit that carries the text above, and
+all four pass: `check-fmt` reports 186 Python files formatted and 174 Markdown
+files unchanged (`/tmp/check-fmt-netsuke-adopt-rstest-bdd-v0-6-0-upstream.out`);
+`spelling` exits 0
+(`/tmp/spelling-netsuke-adopt-rstest-bdd-v0-6-0-upstream.out`); `markdownlint`
+reports `Summary: 0 issues in 0 files` over 175 files
+(`/tmp/markdownlint-netsuke-adopt-rstest-bdd-v0-6-0-upstream.out`); and `nixie`
+validates every diagram
+(`/tmp/nixie-netsuke-adopt-rstest-bdd-v0-6-0-upstream.out`). The tree was
+confirmed empty with `git status --porcelain` before and after the sweep.
+
+`make spelling` regenerated `typos.toml` on the first run, which is the
+documented behaviour of a generated file whose committed blob is not a fixed
+point of the builder. The regenerated blob is `d32137d0`, byte-identical to
+`origin/main`'s copy from `9bb384850`, so it was committed separately as
+`afd4a084` — a refresh that will collapse on rebase rather than a change this
+work introduced. The plan's own content is unaffected by that pattern; the
+match is on the `color` ignore rule, and this document mentions no `color`
+token at all.
+
+This closing record cannot cite a log for its own bytes, exactly as the
+`-confirm` note above explains: writing this paragraph moved `HEAD` again. The
+four gates above gated `95eec9f0`, whose only subsequent change is this
+paragraph, and the same four targets are re-run on the resulting commit with
+`/tmp/<target>-upstream-confirm-adopt-rstest-bdd-v0-6-0.out` paths; that
+verdict is reported in the pull request rather than folded back here.
+
+2026-10-21 — Requirement 4 recorded. The recurrence correction is prepared and
+measured in the scratch Clippy tree `/home/leynos/scratch/clippy-rec` and
+documented under `### Recurrence correction (Requirement 4)`; no file in this
+repository changes as a result except this plan. `Status:` stays `COMPLETE`,
+because the plan's own deliverable is the migration, and the correction's
+adoption is explicitly out of scope and would need an ADR. Two corrections to
+earlier text follow from it: the summary paragraph that said the recurrence
+work "has not started", and the `## Outcomes & retrospective` paragraph that
+said the same, both now point at the evidence. The Markdown-scoped gates
+(`check-fmt`, `spelling`, `markdownlint`, `nixie`) are re-run on the commit
+carrying this text.
+
+2026-10-21 — course change, and the full set re-run on it. The hoisting
+refactor is reverted (four commits) and `cognitive-complexity-threshold` is
+raised to 32 in both `clippy.toml` files, so this revision changes source, not
+just prose. That makes it the first delta since the rebase to span `src/`,
+`tools/` and the lint configuration, so the whole seven-gate set applies rather
+than the Markdown-scoped subset, and all seven were run once each,
+sequentially. The logs carry a `-2` suffix because the unsuffixed paths still
+held the earlier sweep's evidence, which was preserved rather than overwritten:
+
+| Gate                           | Status                                            | Log                                                          |
+| ------------------------------ | ------------------------------------------------- | ------------------------------------------------------------ |
+| `make check-fmt`               | pass — 186 Python, 174 Markdown unchanged         | `/tmp/check-fmt-adopt-rstest-bdd-v0-6-0-2.out`               |
+| `make lint`                    | pass — every stage reached, no complexity reports | `/tmp/lint-adopt-rstest-bdd-v0-6-0-2.out`                    |
+| `make typecheck`               | pass — `cargo check` clean                        | `/tmp/typecheck-adopt-rstest-bdd-v0-6-0-2.out`               |
+| `make markdownlint`            | pass — 175 files, 0 issues                        | `/tmp/markdownlint-adopt-rstest-bdd-v0-6-0-2.out`            |
+| `make nixie`                   | pass — all diagrams validated                     | `/tmp/nixie-adopt-rstest-bdd-v0-6-0-2.out`                   |
+| `make test`                    | pass — 3919/3919, 6 skipped; 153 doctests green   | `/tmp/test-adopt-rstest-bdd-v0-6-0-2.out`                    |
+| `make test-workflow-contracts` | pass — 1107 passed, 3 skipped                     | `/tmp/test-workflow-contracts-adopt-rstest-bdd-v0-6-0-2.out` |
+
+`make lint` passing at the reverted revision is the row that discharges the
+course change: it runs Clippy with `--all-targets --all-features`, which is the
+configuration that unified `tracing/log` onto the library and produced the 39
+errors, and it reports none. The raised threshold is therefore sufficient on
+its own, with no hoisting left in place.
+
+The tree that was gated is identified by its content hash rather than by a
+commit, because the delta was uncommitted when the gates ran: `git write-tree`
+returned `f425a27e0fe7a03d308c2f4dfb0f2ce287aeff5b` before the sweep, and the
+same tree hash afterwards. This record is the only change made after the sweep,
+so it needs the Markdown-scoped gates re-run on the commit that carries it,
+with the same `-2` paths reused.
+
+`make test-coverage-artifact` and `make test-documentation-contracts` were not
+run, and their absence is a scope decision rather than a gap: no path under
+`scripts/` is modified, and none of `README.md`, `docs/users-guide.md` or
+`docs/stdlib-yaml-and-jinja-guide.md` is touched, so neither target's input
+changed. `make test-podman` likewise does not apply: no path under `ansible/`
+appears in the delta.
+
+2026-10-21 — fourth rebase, onto `c8e58a0a8`, and the conflicts `merge-tree`
+did not predict. The pull request was `CONFLICTING` against a target that had
+moved 46 commits, so no `pull_request` workflow could even produce a merge ref:
+zero checks ran, and a red or green badge did not exist to read. The rebase
+replayed 36 commits and dropped one, `afd4a0847` (refresh the generated
+spelling ignore), because its patch was already upstream. Thirty-five commits
+therefore remain, ending at `89d98910e`, which is `5e5ccbfd2`'s content
+replayed.
+
+`git merge-tree --write-tree` reported exactly one conflicting path,
+`docs/rstest-bdd-users-guide.md`. The rebase conflicted on four paths, two of
+them twice: that guide, `tests/support/test_support_rlib.rs` (at commit 6 and
+again at the final commit), and `docs/repository-layout.md` (likewise twice).
+The lesson is that `merge-tree` compares the two *final* trees, while a rebase
+replays every intermediate state; a commit whose net effect on a file is zero
+can still conflict on the way past. Predicting conflicts from `merge-tree`
+alone is therefore unsound for a long series, and each conflict has to be
+resolved by reading the conflicting commit's own diff.
+
+The guide conflict is the instructive one. `c8e58a0a8` renumbered netsuke's
+ADRs repository-wide and edited two lines of the old adapted copy to point at
+`adrs/adr-0002-...`. The branch had already replaced that whole sentence with a
+link to upstream's own `ADR-001`, whose definitions point at absolute
+`github.com/leynos/rstest-bdd` URLs. Restoring the branch blob was therefore
+correct: there is no netsuke-local ADR path left in that file to renumber, and
+the imported guide is required to be byte-identical to upstream, so resolving
+into it would have broken the import invariant. Its SHA-256 still reads
+`1e9f4d1b6607fdf83df979676f1a682218cd6751381d374cb98b701778b798b2`.
+
+Weave resolved some of this automatically and left two classes of artefact
+behind, both of which were stripped. The first is annotation comment lines —
+one recording the refusing rule and collision, one pointing at `weave explain`.
+A scan of the whole tree for conflict markers and for those two comment forms
+now finds none; the only surviving occurrences are the words in this paragraph,
+which describe the pattern rather than match it. The second is blank lines
+injected between adjacent `mod` declarations and between a doc comment and the
+item it documents. Three files had drifted from `main` this way —
+`src/runner/mod.rs`, `src/stdlib/network/redirect/mod.rs` and
+`tests/packaging_smoke_tests.rs` — and each was proved net-zero for the branch
+before being restored from `origin/main`:
+`git diff --numstat <merge-base> 5e5ccbfd2 -- <file>` returned empty for all
+three. That check is the one worth repeating, because a blank line is invisible
+in a review diff and a plausible-looking file can be wrong.
+
+Two further corrections came out of the conflict resolutions themselves. The
+revert had restored the log message `"cargo build test_support completed"` while
+`main` had already corrected it to `"cargo check test_support completed"`
+alongside `.arg("check")`; the merged result kept `main`'s wording. And a blank
+line before `## Placement conventions` in `docs/repository-layout.md` was lost
+when trailing blanks were popped programmatically, then restored.
+
+The new head differs from `origin/main` by exactly 12 files, and 8 of them are
+byte-for-byte identical to the pre-rebase tree. The other four —
+`docs/contents.md`, `docs/developers-guide.md`,
+`docs/rstest-bdd-users-guide.md` and `tests/bdd/steps/mod.rs` — were read
+individually and each carries exactly this branch's intended addition on top of
+`main`. No Weave damage reached a file the branch never touched.
+
+This entry's own SHA citations needed two different treatments, and the
+distinction matters. The four commits named under *The hoisting refactor is
+reverted* describe history that is still on this branch, so they were remapped
+to their replays: `021e05245`→`b27bbb1c`, `17d4b5e8e`→`848bf58b`,
+`f2642d2ae`→`bc9030ff`, `d4d06c3b0`→`3020a971`. The SHA at `021e0524` in
+*Post-rebase sweep on the relocated revision* was **not** remapped, because
+there it is the literal string those gate logs printed; it now carries a note
+saying so. Rewriting a quoted log is falsifying a record, whereas remapping a
+narrative pointer keeps it usable.
+
+A rebase inherits no approval and no green CI, so the full seven-gate set has
+to be re-run on the rebased tree, and this record is itself a Markdown edit
+that the sweep must follow. The order therefore inverts as it did for earlier
+revisions: this note is committed first, the gates run on the committed
+revision, and the tree is confirmed clean once they finish.
+
+2026-10-21 — the seven-gate sweep on the rebased revision, and a batch that was
+voided before it counted. The rebase record and the reopened `Status:` line
+were committed at 21:55 and 21:57; the first sweep started at 21:56, between
+the two commits, so it read a tree that no longer existed by the time it
+finished. Its `check-fmt` was red, and red for a real reason — four paragraphs
+in the new text were hand-wrapped and `mdtablefix` refilled them differently —
+but the run was already invalid as a batch, because an edit made under a live
+sweep voids that sweep whatever its verdicts. The `-rebase5` logs were kept
+rather than deleted, and are labelled invalid here so a later reader does not
+mistake them for evidence.
+
+The formatting defect was fixed by converging on `mdtablefix`'s fixpoint rather
+than by accepting one pass: two passes were run and compared byte-for-byte
+before the result was written back, because a single pass is not guaranteed to
+be terminal. The `-rebase6` sweep then ran on the committed revision
+`2fb11fbc1`, with the tree clean before and after.
+
+All seven targets pass, once each, sequentially, in the mandated order. Log
+mtimes are strictly increasing across the run, which is the cheap check that
+the ordering actually held:
+
+| Gate                           | Status | Duration | Log                                                                     |
+| ------------------------------ | ------ | -------- | ----------------------------------------------------------------------- |
+| `make check-fmt`               | pass   | 3s       | `/tmp/check-fmt-gate-rebase6-adopt-rstest-bdd-v0-6-0.out`               |
+| `make lint`                    | pass   | 613s     | `/tmp/lint-gate-rebase6-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make typecheck`               | pass   | 46s      | `/tmp/typecheck-gate-rebase6-adopt-rstest-bdd-v0-6-0.out`               |
+| `make markdownlint`            | pass   | 18s      | `/tmp/markdownlint-gate-rebase6-adopt-rstest-bdd-v0-6-0.out`            |
+| `make nixie`                   | pass   | 1s       | `/tmp/nixie-gate-rebase6-adopt-rstest-bdd-v0-6-0.out`                   |
+| `make test`                    | pass   | 247s     | `/tmp/test-gate-rebase6-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make test-workflow-contracts` | pass   | 105s     | `/tmp/test-workflow-contracts-gate-rebase6-adopt-rstest-bdd-v0-6-0.out` |
+
+`make test` reports 4311 tests run, 4311 passed, 6 skipped, plus 154 doctests
+across three targets (113 + 2 + 39). `make test-workflow-contracts` reports
+1324 passed, 3 skipped, and its companion script suite adds 27. `make lint`
+reaches every stage: Pylint 10.00/10 and the house-lint aggregate at 100.0%.
+
+The counts rose from the previous sweep's 3919 and 1107, and the rise is not
+this branch's: the rebase brought upstream commits in, and those carry their
+own tests. Recording the numbers without that explanation would read as
+tampering. `make lint` took 613s because it queued on the shared compiler
+admission pool and the sccache server was not serving compilations during the
+run — the log says `compiling without the cache` — so the duration measures
+contention, not this gate's cost.
+
+This entry is itself a Markdown edit, so the four gates that can see
+`docs/execplans/` — `check-fmt`, `markdownlint`, `nixie` and `spelling` — must
+be re-run on the commit that carries it.

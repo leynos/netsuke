@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Fără subiect, acest lucru corespunde cu `--he
 cli.help.actions_heading = Acțiuni:
 cli.help.targets_heading = Ținte:
 cli.help.targets.about = Listează țintele și acțiunile din fișierul selectat.
+cli.help.targets.flag.edges.help = Include muchiile dependențelor și rețetele neprelucrate în ieșirea JSON.
 cli.help.default_marker = implicit
 cli.help.conditional_marker = condițional
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Manifestul din { $path } nu a putut fi încărcat
 runner.context.build_graph = Graful nu a putut fi construit din manifest.
 runner.context.generate_ninja = Manifestul Ninja nu a putut fi generat.
 runner.context.render_graph = Artefactul grafului nu a putut fi redat.
+runner.help.targets_edges_require_json = Opțiunea --edges necesită --json la nivelul rădăcină.
 
 runner.io.create_temp_file = Fișierul Ninja temporar nu a putut fi creat.
 runner.io.write_temp_ninja = Fișierul Ninja temporar nu a putut fi scris.
@@ -179,6 +181,8 @@ manifest.glob.unknown_pattern_error = eroare de tipar necunoscută.
 manifest.glob.io_failed = Glob a eșuat pentru „{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = eroare de intrare/ieșire necunoscută.
 manifest.command_list_empty = Câmpul „command” nu trebuie să fie gol: furnizați un șir de comandă sau o listă nevidă.
+manifest.command_isolation_recipe = Câmpul „command_isolation” necesită o rețetă cu o listă de comenzi.
+manifest.command_isolation_scalar = „command_isolation: isolated” necesită o listă de comenzi.
 
 # Erori ale reprezentării intermediare.
 ir.rule_not_found = Regula „{ $rule }” la care face referire ținta „{ $target }” nu a fost găsită.
@@ -459,3 +463,26 @@ manifest.budget.exceeded = Bugetul de resurse al manifestului s-a epuizat în ti
 
 cli.flag.env_allow_var.help = Variabilă de mediu permisă pentru ajutorul env() al manifestului.
 cli.flag.env_block_var.help = Variabilă de mediu blocată pentru ajutorul env() al manifestului.
+
+# Analiza manifestului (`netsuke check`).
+cli.subcommand.check.about = Analizează manifestul fără a genera sau rula o compilare.
+cli.subcommand.check.long_about = Examinează manifestul selectat pentru construcții care se analizează corect, dar sunt probabil eronate, nesigure, neportabile sau ostile memoriei cache.
+cli.subcommand.check.flag.rule.help = Stabilește severitatea unei reguli sau categorii, scrisă ca NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Severitatea de la care constatările fac comanda să eșueze.
+cli.subcommand.check.flag.limit.help = Numărul maxim de constatări raportate; 0 le raportează pe toate.
+cli.subcommand.check.flag.explain.help = Afișează referința regulilor în loc să analizeze un manifest.
+check.threshold_exceeded = Constatările au atins pragul { $severity }: { $failing } din { $reported } raportate.
+check.threshold_exceeded.help = Remediați constatările raportate, ajustați --rule sau relaxați --fail-on.
+check.summary.counts = Rezultatele analizei — erori: { $errors }, avertismente: { $warnings }, sfaturi: { $advice }, suprimate: { $suppressed }.
+check.summary.clean = Nicio constatare.
+check.summary.truncated = { $shown ->
+    [one] Se afișează { $shown } constatare; --limit a omis încă { $omitted }.
+    [few] Se afișează { $shown } constatări; --limit a omis încă { $omitted }.
+   *[other] Se afișează { $shown } de constatări; --limit a omis încă { $omitted }.
+}
+check.rule.malformed = Selectorul { $selector } nu este scris ca NAME=SEVERITY.
+check.rule.unknown = Selectorul indică { $name }, care nu este nici regulă, nici categorie.
+check.rule.severity = Selectorul { $name } indică severitatea { $severity }; se aștepta una dintre { $values }.
+check.fail_on.invalid = Prag de eșec necunoscut { $value }; se aștepta unul dintre { $values }.
+check.source_index = Nu s-a putut indexa { $path } pentru diagnostice la linia { $line }: { $reason }.
+status.tool.check = Verificare

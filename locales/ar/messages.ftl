@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = بدون موضوع، يطابق هذا `--help
 cli.help.actions_heading = الإجراءات:
 cli.help.targets_heading = الأهداف:
 cli.help.targets.about = سرد الأهداف والإجراءات في الملف المحدد.
+cli.help.targets.flag.edges.help = تضمين حواف التبعيات والوصفات الخام في مخرجات JSON.
 cli.help.default_marker = الافتراضي
 cli.help.conditional_marker = مشروط
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = تعذّر تحميل ملف البيانات م�
 runner.context.build_graph = تعذّر بناء الرسم من ملف البيانات.
 runner.context.generate_ninja = تعذّر توليد ملف بيانات Ninja.
 runner.context.render_graph = تعذّر عرض مخرج الرسم.
+runner.help.targets_edges_require_json = يتطلب الخيار --edges وجود --json على المستوى الأعلى.
 
 runner.io.create_temp_file = تعذّر إنشاء ملف Ninja المؤقت.
 runner.io.write_temp_ninja = تعذّرت الكتابة إلى ملف Ninja المؤقت.
@@ -179,6 +181,8 @@ manifest.glob.unknown_pattern_error = خطأ نمط غير معروف.
 manifest.glob.io_failed = فشل glob للنمط «{ $pattern }»: { $detail }.
 manifest.glob.unknown_io_error = خطأ إدخال/إخراج غير معروف.
 manifest.command_list_empty = يجب ألّا يكون الحقل «command» فارغًا: قدِّم سلسلة أمر أو قائمة غير فارغة.
+manifest.command_isolation_recipe = يتطلب الحقل «command_isolation» وصفةً تتضمن قائمة أوامر.
+manifest.command_isolation_scalar = يتطلب «command_isolation: isolated» قائمة أوامر.
 
 # أخطاء التمثيل الوسيط.
 ir.rule_not_found = تعذّر العثور على القاعدة «{ $rule }» التي يشير إليها الهدف «{ $target }».
@@ -463,3 +467,28 @@ manifest.budget.exceeded = ‏استُنفدت ميزانية موارد الب�
 
 cli.flag.env_allow_var.help = متغير البيئة المسموح به لمساعد env() في البيان.
 cli.flag.env_block_var.help = متغير البيئة المحظور على مساعد env() في البيان.
+
+# فحص ملف البيان (`netsuke check`).
+cli.subcommand.check.about = افحص ملف البيان دون توليد بناء أو تشغيله.
+cli.subcommand.check.long_about = افحص ملف البيان المحدد بحثًا عن تراكيب تُحلَّل نحويًا لكنها على الأرجح خاطئة أو غير آمنة أو غير قابلة للنقل أو ضارة بالتخزين المؤقت.
+cli.subcommand.check.flag.rule.help = اضبط درجة خطورة قاعدة أو فئة، مكتوبة بالصيغة NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = درجة الخطورة التي تجعل النتائج تُفشل الأمر.
+cli.subcommand.check.flag.limit.help = الحد الأقصى للنتائج المُبلَّغ عنها؛ القيمة 0 تُبلغ عنها جميعًا.
+cli.subcommand.check.flag.explain.help = اطبع مرجع القواعد بدلًا من فحص ملف بيان.
+check.threshold_exceeded = بلغت النتائج عتبة { $severity }: { $failing } من أصل { $reported } نتيجة مُبلَّغ عنها.
+check.threshold_exceeded.help = أصلح النتائج المُبلَّغ عنها، أو عدّل ‎--rule، أو خفّف ‎--fail-on.
+check.summary.counts = نتائج الفحص — أخطاء: { $errors }، تحذيرات: { $warnings }، إرشادات: { $advice }، مكبوتة: { $suppressed }.
+check.summary.clean = لا توجد نتائج.
+check.summary.truncated = { $shown ->
+    [one] يجري عرض نتيجة واحدة؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+    [two] يجري عرض نتيجتين؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+    [few] يجري عرض { $shown } نتائج؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+    [many] يجري عرض { $shown } نتيجةً؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+   *[other] يجري عرض { $shown } نتيجة؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+}
+check.rule.malformed = المُحدِّد { $selector } غير مكتوب بالصيغة NAME=SEVERITY.
+check.rule.unknown = يسمي المُحدِّد { $name }، وهو ليس قاعدة ولا فئة.
+check.rule.severity = يسمي المُحدِّد { $name } درجة الخطورة { $severity }؛ كان المتوقع إحدى القيم { $values }.
+check.fail_on.invalid = عتبة إخفاق غير معروفة { $value }؛ كان المتوقع إحدى القيم { $values }.
+check.source_index = تعذّرت فهرسة { $path } للتشخيص عند السطر { $line }: { $reason }.
+status.tool.check = فحص

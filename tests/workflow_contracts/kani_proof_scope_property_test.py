@@ -77,8 +77,17 @@ def test_a_pull_request_runs_exactly_when_a_change_is_in_scope(
     reordered = tuple(data.draw(st.permutations(scope)))
     decision = scope_mod.decide("pull_request", scope, changes)
     assert decision.run_proofs is expected, f"{changes} against {scope}"
+    expected_category = (
+        scope_mod.DecisionCategory.IN_SCOPE
+        if expected
+        else scope_mod.DecisionCategory.OUT_OF_SCOPE
+    )
+    assert decision.category is expected_category, f"{changes} against {scope}"
     again = scope_mod.decide("pull_request", reordered, shuffled)
     assert again.run_proofs is expected, f"order changed the decision for {scope}"
+    assert again.category is decision.category, (
+        f"order changed the category for {scope} and {changes}"
+    )
 
 
 @PROPERTY
@@ -87,6 +96,9 @@ def test_an_unreadable_change_set_runs_the_proofs(scope: tuple[str, ...]) -> Non
     """Run every harness when the diff is unreadable, never skip on a guess."""
     decision = scope_mod.decide("pull_request", scope, None)
     assert decision.run_proofs is True, f"an unreadable diff skipped for {scope}"
+    assert decision.category is scope_mod.DecisionCategory.UNREADABLE_DIFF, (
+        f"an unreadable diff got {decision.category} for {scope}"
+    )
 
 
 @PROPERTY
@@ -97,3 +109,6 @@ def test_every_event_but_a_pull_request_runs_the_proofs(
     """Run every harness on a push, schedule or dispatch whatever it changes."""
     decision = scope_mod.decide(event, scope, changes)
     assert decision.run_proofs is True, f"a `{event}` run skipped the proofs"
+    assert decision.category is scope_mod.DecisionCategory.FULL_RUN, (
+        f"a non-pull-request event got {decision.category} for {event}"
+    )

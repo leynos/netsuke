@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Bez tematu odpowiada to `--help`. Użyj `help t
 cli.help.actions_heading = Akcje:
 cli.help.targets_heading = Cele:
 cli.help.targets.about = Wyświetl cele i akcje w wybranym manifeście.
+cli.help.targets.flag.edges.help = Uwzględnij krawędzie zależności i nieprzetworzone receptury w wyjściu JSON.
 cli.help.default_marker = domyślny
 cli.help.conditional_marker = warunkowy
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Nie udało się wczytać manifestu z { $path }.
 runner.context.build_graph = Nie udało się zbudować grafu na podstawie manifestu.
 runner.context.generate_ninja = Nie udało się wygenerować manifestu Ninja.
 runner.context.render_graph = Nie udało się wyrenderować artefaktu grafu.
+runner.help.targets_edges_require_json = Opcja --edges wymaga --json na najwyższym poziomie.
 
 runner.io.create_temp_file = Nie udało się utworzyć tymczasowego pliku Ninja.
 runner.io.write_temp_ninja = Nie udało się zapisać tymczasowego pliku Ninja.
@@ -179,6 +181,8 @@ manifest.glob.unknown_pattern_error = nieznany błąd wzorca.
 manifest.glob.io_failed = Wzorzec glob „{ $pattern }” zawiódł: { $detail }.
 manifest.glob.unknown_io_error = nieznany błąd wejścia/wyjścia.
 manifest.command_list_empty = Pole „command” nie może być puste: podaj łańcuch polecenia lub niepustą listę.
+manifest.command_isolation_recipe = Pole „command_isolation” wymaga receptury z listą poleceń.
+manifest.command_isolation_scalar = „command_isolation: isolated” wymaga listy poleceń.
 
 # Błędy reprezentacji pośredniej.
 ir.rule_not_found = Nie znaleziono reguły „{ $rule }”, do której odwołuje się cel „{ $target }”.
@@ -461,3 +465,33 @@ manifest.budget.exceeded = Budżet zasobów manifestu został wyczerpany. Etap: 
 
 cli.flag.env_allow_var.help = Zmienna środowiskowa dozwolona dla pomocnika env() manifestu.
 cli.flag.env_block_var.help = Zmienna środowiskowa zablokowana dla pomocnika env() manifestu.
+
+# Analiza manifestu (`netsuke check`).
+cli.subcommand.check.about = Przeanalizuj manifest bez generowania ani uruchamiania kompilacji.
+cli.subcommand.check.long_about = Zbadaj wybrany manifest pod kątem konstrukcji, które wprawdzie się parsują, ale prawdopodobnie są błędne, niebezpieczne, nieprzenośne lub szkodliwe dla pamięci podręcznej.
+cli.subcommand.check.flag.rule.help = Ustaw ważność reguły lub kategorii, zapisaną jako NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Ważność, przy której ustalenia powodują niepowodzenie polecenia.
+cli.subcommand.check.flag.limit.help = Maksymalna liczba zgłaszanych ustaleń; 0 zgłasza wszystkie.
+cli.subcommand.check.flag.explain.help = Wypisz opis reguł zamiast analizować manifest.
+check.threshold_exceeded = Ustalenia osiągnęły próg { $severity }: { $failing } z { $reported } zgłoszonych.
+check.threshold_exceeded.help = Popraw zgłoszone ustalenia, dostosuj --rule lub złagodź --fail-on.
+check.summary.counts = Wyniki analizy — błędy: { $errors }, ostrzeżenia: { $warnings }, porady: { $advice }, wyciszone: { $suppressed }.
+check.summary.clean = Brak ustaleń.
+check.summary.truncated =
+    { $shown ->
+        [one] Pokazano { $shown } ustalenie
+        [few] Pokazano { $shown } ustalenia
+        [many] Pokazano { $shown } ustaleń
+       *[other] Pokazano { $shown } ustalenia
+    }; --limit pominął { $omitted ->
+        [one] jeszcze { $omitted } ustalenie.
+        [few] kolejne { $omitted } ustalenia.
+        [many] kolejnych { $omitted } ustaleń.
+       *[other] kolejne { $omitted } ustalenia.
+    }
+check.rule.malformed = Selektor { $selector } nie jest zapisany jako NAME=SEVERITY.
+check.rule.unknown = Selektor wskazuje { $name }, co nie jest ani regułą, ani kategorią.
+check.rule.severity = Selektor { $name } wskazuje ważność { $severity }; oczekiwano jednej z { $values }.
+check.fail_on.invalid = Nieznany próg niepowodzenia { $value }; oczekiwano jednego z { $values }.
+check.source_index = Nie udało się zindeksować { $path } dla diagnostyki w wierszu { $line }: { $reason }.
+status.tool.check = Sprawdzanie

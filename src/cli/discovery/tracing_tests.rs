@@ -148,7 +148,7 @@ fn explicit_config_path_logs_selected_selector(#[case] scenario: ConfigPathScena
 
 /// The removed `NETSUKE_CONFIG_PATH` alias must not select a config file.
 ///
-/// ADR-004 keeps `NETSUKE_CONFIG` as the only environment selector, and #427
+/// ADR-0048 keeps `NETSUKE_CONFIG` as the only environment selector, and #427
 /// removed the legacy alias. Setting it alone therefore resolves to `none`, and
 /// only `NETSUKE_CONFIG` is ever looked up.
 #[test]

@@ -18,6 +18,7 @@ from fork_fallback import (
     FORK_FALLBACK_RUNNER,
     FORK_FALLBACK_RUNNERS,
     FORK_GUARD,
+    HOSTED_GUARD,
 )
 from runner_placement_invariants import (
     REQUIRED_RUNNER_ASSIGNMENTS,
@@ -218,7 +219,7 @@ def valid_fork_fallback_declarations() -> dict[str, str]:
     """
     return {
         key: (
-            _declaration(FORK_GUARD, FORK_FALLBACK_RUNNERS[key], runner)
+            _declaration(HOSTED_GUARD, FORK_FALLBACK_RUNNERS[key], runner)
             if key in FORK_FALLBACK_KEYS
             else runner
         )
@@ -242,7 +243,7 @@ def _apply_guard_swapped_mutation(declarations: dict[str, str], key: str) -> Non
 def _apply_arms_swapped_mutation(declarations: dict[str, str], key: str) -> None:
     """Send the fork to Ubicloud, which is the runner it cannot obtain."""
     declarations[key] = _declaration(
-        FORK_GUARD, REQUIRED_RUNNER_ASSIGNMENTS[key], FORK_FALLBACK_RUNNERS[key]
+        HOSTED_GUARD, REQUIRED_RUNNER_ASSIGNMENTS[key], FORK_FALLBACK_RUNNERS[key]
     )
 
 
@@ -255,14 +256,33 @@ def _apply_wrong_fork_runner_mutation(declarations: dict[str, str], key: str) ->
     case can see.
     """
     declarations[key] = _declaration(
-        FORK_GUARD, "windows-latest", REQUIRED_RUNNER_ASSIGNMENTS[key]
+        HOSTED_GUARD, "windows-latest", REQUIRED_RUNNER_ASSIGNMENTS[key]
     )
 
 
 def _apply_hosted_on_both_arms_mutation(declarations: dict[str, str], key: str) -> None:
     """Fall back on both arms, so the lane quietly stops using Ubicloud."""
     declarations[key] = _declaration(
-        FORK_GUARD, FORK_FALLBACK_RUNNERS[key], FORK_FALLBACK_RUNNERS[key]
+        HOSTED_GUARD, FORK_FALLBACK_RUNNERS[key], FORK_FALLBACK_RUNNERS[key]
+    )
+
+
+def _apply_dependabot_arm_dropped_mutation(
+    declarations: dict[str, str], key: str
+) -> None:
+    """Guard on the fork field alone, so Dependabot's pull requests stay on Ubicloud."""
+    declarations[key] = _declaration(
+        FORK_GUARD, FORK_FALLBACK_RUNNERS[key], REQUIRED_RUNNER_ASSIGNMENTS[key]
+    )
+
+
+def _apply_actor_instead_of_author_mutation(
+    declarations: dict[str, str], key: str
+) -> None:
+    """Test `github.actor`, which is whoever triggered the run, not the author."""
+    guard = HOSTED_GUARD.replace("github.event.pull_request.user.login", "github.actor")
+    declarations[key] = _declaration(
+        guard, FORK_FALLBACK_RUNNERS[key], REQUIRED_RUNNER_ASSIGNMENTS[key]
     )
 
 
@@ -272,7 +292,7 @@ def _apply_arm_where_no_fork_reaches_mutation(
     """Give the coverage upload lane an arm no event can ever take."""
     target = "coverage-main.coverage-upload"
     declarations[target] = _declaration(
-        FORK_GUARD, FORK_FALLBACK_RUNNER, REQUIRED_RUNNER_ASSIGNMENTS[target]
+        HOSTED_GUARD, FORK_FALLBACK_RUNNER, REQUIRED_RUNNER_ASSIGNMENTS[target]
     )
 
 
@@ -287,14 +307,14 @@ def _apply_wrong_fork_image_mutation(declarations: dict[str, str], key: str) -> 
     """
     target = "netsukefile-test.netsukefile"
     declarations[target] = _declaration(
-        FORK_GUARD, FORK_FALLBACK_RUNNER, REQUIRED_RUNNER_ASSIGNMENTS[target]
+        HOSTED_GUARD, FORK_FALLBACK_RUNNER, REQUIRED_RUNNER_ASSIGNMENTS[target]
     )
 
 
 def _apply_line_break_mutation(declarations: dict[str, str], key: str) -> None:
     """Indent the continuation deeper, which keeps the break in the value."""
     declarations[key] = _declaration(
-        FORK_GUARD, FORK_FALLBACK_RUNNERS[key], REQUIRED_RUNNER_ASSIGNMENTS[key]
+        HOSTED_GUARD, FORK_FALLBACK_RUNNERS[key], REQUIRED_RUNNER_ASSIGNMENTS[key]
     ).replace(" && ", "\n&& ", 1)
 
 
@@ -302,6 +322,8 @@ def _apply_line_break_mutation(declarations: dict[str, str], key: str) -> None:
 _FORK_FALLBACK_MUTATIONS = {
     "arm-dropped": _apply_arm_dropped_mutation,
     "guard-swapped": _apply_guard_swapped_mutation,
+    "dependabot-arm-dropped": _apply_dependabot_arm_dropped_mutation,
+    "actor-instead-of-author": _apply_actor_instead_of_author_mutation,
     "arms-swapped": _apply_arms_swapped_mutation,
     "wrong-fork-runner": _apply_wrong_fork_runner_mutation,
     "hosted-on-both-arms": _apply_hosted_on_both_arms_mutation,

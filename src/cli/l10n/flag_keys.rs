@@ -53,6 +53,17 @@ pub(super) fn build_flag_help_key(arg_id: &str) -> Option<&'static str> {
     }
 }
 
+/// Return the help key for a `check` subcommand flag, when one is known.
+pub(super) fn check_flag_help_key(arg_id: &str) -> Option<&'static str> {
+    match arg_id {
+        "rule" => Some(keys::CLI_SUBCOMMAND_CHECK_FLAG_RULE_HELP),
+        "fail_on" => Some(keys::CLI_SUBCOMMAND_CHECK_FLAG_FAIL_ON_HELP),
+        "limit" => Some(keys::CLI_SUBCOMMAND_CHECK_FLAG_LIMIT_HELP),
+        "explain" => Some(keys::CLI_SUBCOMMAND_CHECK_FLAG_EXPLAIN_HELP),
+        _ => None,
+    }
+}
+
 /// Return the help key for a `graph` subcommand flag, when one is known.
 pub(super) fn graph_flag_help_key(arg_id: &str) -> Option<&'static str> {
     match arg_id {

@@ -1,13 +1,11 @@
 //! Fluent message identifiers used by Netsuke.
+//!
+//! This file holds only the key table: the build-time localization audit
+//! parses its `define_keys!` invocation, and the macro itself is defined in
+//! the parent module. The `netsuke check` keys live in `check_keys.rs` and
+//! are re-exported here, so every key is still reached as `keys::NAME`.
 
-/// Declare Fluent message keys and their stable string identifiers.
-macro_rules! define_keys {
-    ($($name:ident => $value:literal,)+) => {
-        $(#[doc = "Fluent message key."] pub const $name: &str = $value;)+
-        /// All Fluent message keys referenced by Netsuke.
-        pub const ALL_KEYS: &[&str] = &[$($name),+];
-    };
-}
+pub use super::check_keys::*;
 
 define_keys! {
     CLI_ABOUT => "cli.about",
@@ -54,6 +52,7 @@ define_keys! {
     CLI_HELP_ACTIONS_HEADING => "cli.help.actions_heading",
     CLI_HELP_TARGETS_HEADING => "cli.help.targets_heading",
     CLI_HELP_TARGETS_ABOUT => "cli.help.targets.about",
+    CLI_HELP_TARGETS_FLAG_EDGES_HELP => "cli.help.targets.flag.edges.help",
     CLI_HELP_DEFAULT_MARKER => "cli.help.default_marker",
     CLI_HELP_CONDITIONAL_MARKER => "cli.help.conditional_marker",
     CLI_SUBCOMMAND_BUILD_FLAG_TARGETS_HELP => "cli.subcommand.build.flag.targets.help",
@@ -91,6 +90,7 @@ define_keys! {
     RUNNER_CONTEXT_BUILD_GRAPH => "runner.context.build_graph",
     RUNNER_CONTEXT_GENERATE_NINJA => "runner.context.generate_ninja",
     RUNNER_CONTEXT_RENDER_GRAPH => "runner.context.render_graph",
+    RUNNER_HELP_TARGETS_EDGES_REQUIRE_JSON => "runner.help.targets_edges_require_json",
     RUNNER_IO_CREATE_TEMP_FILE => "runner.io.create_temp_file",
     RUNNER_IO_WRITE_TEMP_NINJA => "runner.io.write_temp_ninja",
     RUNNER_IO_FLUSH_TEMP_NINJA => "runner.io.flush_temp_ninja",
@@ -164,6 +164,8 @@ define_keys! {
     MANIFEST_GLOB_IO_FAILED => "manifest.glob.io_failed",
     MANIFEST_GLOB_UNKNOWN_IO_ERROR => "manifest.glob.unknown_io_error",
     MANIFEST_COMMAND_LIST_EMPTY => "manifest.command_list_empty",
+    MANIFEST_COMMAND_ISOLATION_RECIPE => "manifest.command_isolation_recipe",
+    MANIFEST_COMMAND_ISOLATION_SCALAR => "manifest.command_isolation_scalar",
     IR_RULE_NOT_FOUND => "ir.rule_not_found",
     IR_MULTIPLE_RULES => "ir.multiple_rules",
     IR_EMPTY_RULE => "ir.empty_rule",

@@ -9,7 +9,7 @@
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use netsuke::ast::{Recipe, StringOrList};
+use netsuke::ast::{CommandIsolation, Recipe, StringOrList};
 use netsuke::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
 use netsuke::ninja_gen::generate;
 use rstest::{fixture, rstest};
@@ -31,6 +31,7 @@ struct CommandListRun {
 fn run_command_list(
     workspace: Option<TempDir>,
     entries: &[&str],
+    isolation: CommandIsolation,
 ) -> Result<Option<CommandListRun>> {
     let Some(tempdir) = workspace else {
         return Ok(None);
@@ -40,6 +41,7 @@ fn run_command_list(
     let action = Action {
         recipe: Recipe::Command {
             command: StringOrList::List(entries.iter().map(|entry| (*entry).into()).collect()),
+            isolation,
         },
         description: None,
         depfile: None,
@@ -88,6 +90,7 @@ fn command_list_fails_fast_at_first_nonzero_exit(
     let Some(run) = run_command_list(
         ninja_integration_setup,
         &["echo one > first.txt", "false", "echo never > last.txt"],
+        CommandIsolation::Shared,
     )?
     else {
         return Ok(());
@@ -95,6 +98,15 @@ fn command_list_fails_fast_at_first_nonzero_exit(
     ensure!(
         !run.output.status.success(),
         "command chain should fail when an entry exits non-zero"
+    );
+    let diagnostics = format!(
+        "{}{}",
+        String::from_utf8_lossy(&run.output.stdout),
+        String::from_utf8_lossy(&run.output.stderr)
+    );
+    ensure!(
+        diagnostics.contains("netsuke command-list failure:") && diagnostics.contains(", entry 2"),
+        "failure should identify the one-based failing entry: {diagnostics}"
     );
     let first = run
         .dir
@@ -121,6 +133,7 @@ fn command_list_entry_control_flow_cannot_mask_an_earlier_failure(
     let Some(run) = run_command_list(
         ninja_integration_setup,
         &["false", "false || echo recovered > recovered.txt"],
+        CommandIsolation::Shared,
     )?
     else {
         return Ok(());
@@ -151,6 +164,7 @@ fn command_list_entries_share_one_shell_process(
             "export NETSUKE_SHARED=yes",
             "test \"$NETSUKE_SHARED\" = yes && echo ok > shared.txt",
         ],
+        CommandIsolation::Shared,
     )?
     else {
         return Ok(());
@@ -167,6 +181,150 @@ fn command_list_entries_share_one_shell_process(
     ensure!(
         shared.trim() == "ok",
         "unexpected shared.txt content: {shared}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn shared_command_list_carries_working_directory_between_entries(
+    ninja_integration_setup: Option<TempDir>,
+) -> Result<()> {
+    let Some(run) = run_command_list(
+        ninja_integration_setup,
+        &["mkdir nested && cd nested", "pwd > shared-cwd.txt"],
+        CommandIsolation::Shared,
+    )?
+    else {
+        return Ok(());
+    };
+    ensure!(
+        run.output.status.success(),
+        "shared `cd` chain should succeed"
+    );
+    let nested = run
+        .dir
+        .read_to_string("nested/shared-cwd.txt")
+        .context("later shared entry should write from the changed directory")?;
+    ensure!(
+        nested.trim_end().ends_with("/nested"),
+        "later entry should inherit the changed working directory: {nested}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn isolated_command_list_resets_location_environment_and_shell_variables(
+    ninja_integration_setup: Option<TempDir>,
+) -> Result<()> {
+    let Some(run) = run_command_list(
+        ninja_integration_setup,
+        &[
+            "mkdir nested && cd nested && export NETSUKE_ISOLATED_ENV=leaked && NETSUKE_ISOLATED_VAR=leaked",
+            "printf '%s|%s|%s' \"${NETSUKE_ISOLATED_ENV-unset}\" \"${NETSUKE_ISOLATED_VAR-unset}\" \"$PWD\" > isolated-state.txt",
+        ],
+        CommandIsolation::Isolated,
+    )?
+    else {
+        return Ok(());
+    };
+    ensure!(
+        run.output.status.success(),
+        "isolated entries should succeed"
+    );
+    let state = run
+        .dir
+        .read_to_string("isolated-state.txt")
+        .context("second isolated entry should write in the action directory")?;
+    ensure!(
+        state.starts_with("unset|unset|"),
+        "later entry should not inherit the earlier environment or shell variable: {state}"
+    );
+    ensure!(
+        !state.ends_with("/nested"),
+        "later entry should start from the action's working directory: {state}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn isolated_successful_exit_has_no_failure_marker_and_allows_the_next_entry(
+    ninja_integration_setup: Option<TempDir>,
+) -> Result<()> {
+    let Some(run) = run_command_list(
+        ninja_integration_setup,
+        &["exit 0", "echo continued > continued.txt"],
+        CommandIsolation::Isolated,
+    )?
+    else {
+        return Ok(());
+    };
+    ensure!(
+        run.output.status.success(),
+        "isolated successful exit should allow later entries: {:?}",
+        run.output
+    );
+    let stderr = String::from_utf8_lossy(&run.output.stderr);
+    ensure!(
+        !stderr.contains("netsuke command-list failure:"),
+        "successful early exit must not leave a failure marker: {stderr}"
+    );
+    ensure!(
+        run.dir.try_exists("continued.txt")?,
+        "later isolated entry should run after exit 0"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn isolated_direct_exec_is_entry_only_and_allows_later_entries(
+    ninja_integration_setup: Option<TempDir>,
+) -> Result<()> {
+    let Some(run) = run_command_list(
+        ninja_integration_setup,
+        &[
+            "exec sh -c 'echo replaced > replaced.txt'",
+            "echo continued > later.txt",
+        ],
+        CommandIsolation::Isolated,
+    )?
+    else {
+        return Ok(());
+    };
+    ensure!(
+        run.output.status.success(),
+        "successful direct exec should succeed"
+    );
+    ensure!(run.dir.try_exists("replaced.txt")?, "exec child should run");
+    ensure!(
+        run.dir.try_exists("later.txt")?,
+        "successful direct exec should end only its isolated entry"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn isolated_command_list_waits_for_its_single_background_job(
+    ninja_integration_setup: Option<TempDir>,
+) -> Result<()> {
+    let Some(run) = run_command_list(
+        ninja_integration_setup,
+        &[
+            "(sleep 0.1 && echo waited > background.txt) &",
+            "test -f background.txt && echo later > later.txt",
+        ],
+        CommandIsolation::Isolated,
+    )?
+    else {
+        return Ok(());
+    };
+    ensure!(
+        run.output.status.success(),
+        "isolated background job should complete before the next entry: {:?}",
+        run.output
+    );
+    ensure!(
+        run.dir.try_exists("later.txt")?,
+        "later isolated entry should run"
     );
     Ok(())
 }

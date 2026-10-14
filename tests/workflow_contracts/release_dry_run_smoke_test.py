@@ -52,7 +52,7 @@ DRY_RUN_SKIP = (
 )
 
 #: The only condition `ci.yml` may put on its Windows gate. The nightly
-#: schedule exists for the Kani proofs alone (ADR-039), and this expression is
+#: schedule exists for the Kani proofs alone (ADR-0039), and this expression is
 #: true on every other event, so every pull request still calls the gate.
 #: Compared whole, so any other condition fails.
 WINDOWS_GATE_CONDITION = "github.event_name != 'schedule'"
