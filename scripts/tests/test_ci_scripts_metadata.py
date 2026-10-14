@@ -11,8 +11,13 @@ if typ.TYPE_CHECKING:
 
 REPO_ROOT = CI_SCRIPT_DIRECTORY.parents[1]
 MAKEFILE = REPO_ROOT / "Makefile"
+#: Modules the scripts import rather than run: they are libraries, so they
+#: carry no PEP 723 block and no Cyclopts entry point to hold to that shape.
+SUPPORT_MODULES = frozenset({"ci_archive.py", "ci_support.py"})
 SCRIPTS = sorted(
-    path for path in CI_SCRIPT_DIRECTORY.glob("*.py") if path.name != "ci_support.py"
+    path
+    for path in CI_SCRIPT_DIRECTORY.glob("*.py")
+    if path.name not in SUPPORT_MODULES
 )
 
 

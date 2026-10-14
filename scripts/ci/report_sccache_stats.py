@@ -97,13 +97,16 @@ def main(
     try:
         text = show_stats(echo=True)
         machine = show_stats("--stats-format=json", echo=False)
-    except CiScriptError as error:
+        # The writes share the handler with the reads: an unwritable output
+        # directory or step-summary file is reported as a diagnostic naming
+        # the failure, not as a traceback out of the workflow step.
+        (output_dir / TEXT_NAME).write_text(text, encoding="utf-8")
+        (output_dir / JSON_NAME).write_text(machine, encoding="utf-8")
+        with github_step_summary.open("a", encoding="utf-8") as handle:
+            handle.write(summary_section(text, backend))
+    except (CiScriptError, OSError) as error:
         print(f"report_sccache_stats: {error}", file=sys.stderr)
         return 1
-    (output_dir / TEXT_NAME).write_text(text, encoding="utf-8")
-    (output_dir / JSON_NAME).write_text(machine, encoding="utf-8")
-    with github_step_summary.open("a", encoding="utf-8") as handle:
-        handle.write(summary_section(text, backend))
     return 0
 
 
