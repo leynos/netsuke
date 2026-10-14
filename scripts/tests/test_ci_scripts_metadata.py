@@ -17,6 +17,7 @@ SCRIPTS = sorted(
 
 
 def _makefile_variable(name: str) -> str:
+    """Return the sole ``?=`` default the Makefile declares for ``name``."""
     text = MAKEFILE.read_text(encoding="utf-8")
     matches = re.findall(rf"^{re.escape(name)} \?= (\S+)$", text, flags=re.MULTILINE)
     assert len(matches) == 1, f"the Makefile must declare {name} exactly once"

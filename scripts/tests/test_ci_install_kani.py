@@ -128,6 +128,7 @@ def kani(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> Harness:
 
 
 def _mock_setup(cmd_mox: CmdMox, bundle: pathlib.Path, *, exit_code: int = 0) -> None:
+    """Mock ``cargo kani setup`` for ``bundle``, optionally failing it."""
     cmd_mox.mock("cargo").with_args(
         "kani", "setup", "--use-local-bundle", str(bundle)
     ).returns(exit_code=exit_code)
