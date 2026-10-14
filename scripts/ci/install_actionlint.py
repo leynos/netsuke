@@ -23,16 +23,14 @@ import sys
 import tempfile
 import typing as typ
 
+from ci_archive import download, extract_members, verify_sha256
 from ci_support import (
     CiScriptError,
     RunSpec,
     catalogue,
     describe_failure,
-    download,
-    extract_members,
     is_executable_file,
     run,
-    verify_sha256,
 )
 
 import cyclopts
@@ -148,7 +146,7 @@ def main(*, release: Release) -> int:
             install(release, pathlib.Path(scratch))
         installed = ensure_installed_version(release.binary, release.version)
         print(f"installed {BINARY_NAME} {installed} from {release.url}")
-    except CiScriptError as error:
+    except (CiScriptError, OSError) as error:
         print(f"install_actionlint: {error}", file=sys.stderr)
         return 1
     return 0

@@ -43,17 +43,37 @@ def system_gawk(
     return gawk
 
 
-def _apt_get(cmd_mox: CmdMox, *, install_exit: int = 0) -> list[list[str]]:
-    """Mock ``sudo apt-get`` twice, recording the argument lists it received."""
+def _apt_get(
+    cmd_mox: CmdMox,
+    *,
+    update_exit: int = 0,
+    install_exit: int = 0,
+    expected_calls: int = 2,
+) -> list[list[str]]:
+    """Mock ``sudo apt-get``, recording the argument lists it received.
+
+    The two subcommands fail independently, so a test can prove that an
+    ``update`` failure is not masked by the ``install`` that would follow it,
+    and vice versa. ``expected_calls`` is what cmd-mox verifies at teardown, so
+    a failure that stops the script early passes ``1``: the count is an
+    assertion about how far the script got, not a fixture detail.
+
+    Returns
+    -------
+    list[list[str]]
+        The argument lists recorded so far, which the live mock appends to as
+        the script runs.
+    """
     calls: list[list[str]] = []
 
     def handle(invocation: Invocation) -> tuple[str, str, int]:
-        """Record the call and fail only the ``install`` subcommand."""
+        """Record the call and fail the subcommand the test selected."""
         calls.append(list(invocation.args))
-        exit_code = install_exit if "install" in invocation.args else 0
-        return ("", "E: install failed\n" if exit_code else "", exit_code)
+        subcommand = "install" if "install" in invocation.args else "update"
+        exit_code = install_exit if subcommand == "install" else update_exit
+        return ("", f"E: {subcommand} failed\n" if exit_code else "", exit_code)
 
-    cmd_mox.mock("sudo").runs(handle).times(2)
+    cmd_mox.mock("sudo").runs(handle).times(expected_calls)
     return calls
 
 
@@ -112,6 +132,80 @@ def test_reports_a_failed_package_install_and_stages_nothing(
     assert not (workflow_env / "github-path").read_text(encoding="utf-8"), (
         "expected: not (workflow_env / 'github-path').read_text(encoding='ut..."
     )
+
+
+def test_reports_a_failed_package_index_update_and_stages_nothing(
+    cmd_mox: CmdMox,
+    workflow_env: pathlib.Path,
+    system_gawk: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An ``apt-get update`` failure stops the step before ``install`` runs.
+
+    The update is the first call, so this is the failure that reaches the
+    least code. Folding it into the ``install`` case would let an update that
+    is ignored entirely -- and an install attempted against a stale index --
+    pass unnoticed, which is why the two are separate cases.
+    """
+    calls = _apt_get(cmd_mox, update_exit=100, expected_calls=1)
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 1, "expected: exit_code == 1"
+    assert calls == [["apt-get", "update"]], (
+        "a failed update must stop the step before install runs"
+    )
+    captured = capsys.readouterr()
+    assert "installing gawk failed" in captured.err, (
+        "expected: 'installing gawk failed' in captured.err"
+    )
+    assert "update failed" in captured.err, (
+        "expected: the diagnostic to name the failing subcommand"
+    )
+    assert not (workflow_env / "runner-temp" / "netsuke-test-bin").exists(), (
+        "expected: a failed update stages nothing"
+    )
+    assert not (workflow_env / "github-path").read_text(encoding="utf-8"), (
+        "expected: a failed update publishes nothing"
+    )
+
+
+def test_reports_a_staged_copy_that_does_not_run(
+    cmd_mox: CmdMox,
+    workflow_env: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A staged copy that fails ``awk --version`` fails the step and is named.
+
+    Staging is a byte copy of a binary the script did not build, so the
+    verification run is the only evidence the sandbox will be able to execute
+    it. A copy that lands but does not run must fail here, where the diagnostic
+    names the file, rather than later inside the test sandbox.
+
+    ``workflow_env`` is the temporary directory itself, so the fake system
+    ``gawk`` is staged inside it alongside the workflow files rather than in a
+    second directory that would need its own cleanup.
+    """
+    system_bin = workflow_env / "usr-bin"
+    # `shutil.which` finds it and the copy succeeds; running the copy does not.
+    write_executable(system_bin / "gawk", "exit 3")
+    monkeypatch.setenv("PATH", f"{system_bin}{os.pathsep}{os.environ['PATH']}")
+    _apt_get(cmd_mox)
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 1, "expected: exit_code == 1"
+    captured = capsys.readouterr()
+    assert "the staged awk does not run" in captured.err, (
+        "expected: 'the staged awk does not run' in captured.err"
+    )
+    assert "exited 3" in captured.err, "expected: the diagnostic to carry the exit code"
+    staged = workflow_env / "runner-temp" / "netsuke-test-bin" / "awk"
+    assert staged.is_file(), "the staged copy itself is left in place"
+    assert (workflow_env / "github-path").read_text(encoding="utf-8") == (
+        f"{staged.parent}\n"
+    ), "the directory is published before verification, so it stays published"
 
 
 def test_reports_a_package_that_leaves_no_binary_on_path(

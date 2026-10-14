@@ -39,11 +39,82 @@ def show_disk_usage() -> None:
         raise CiScriptError(message)
 
 
+def _names_a_plain_component(name: str) -> bool:
+    """Return whether ``name`` is one ordinary path component.
+
+    Absolute names, names carrying a separator, and the three names that do not
+    denote a distinct child -- the empty string, ``.`` and ``..`` -- are all
+    rejected, so an accepted name always denotes one entry directly beneath the
+    directory it is joined to.
+
+    Returns
+    -------
+    bool
+        ``True`` only for a name that resolves to one ordinary component.
+    """
+    component = pathlib.PurePosixPath(name)
+    return (
+        not component.is_absolute()
+        and len(component.parts) == 1
+        and component.parts[0] not in {"", ".", ".."}
+    )
+
+
+def _child_of(target_dir: pathlib.Path, name: str) -> pathlib.Path:
+    """Return ``name`` as a direct child of ``target_dir``, or refuse it.
+
+    The removal below is destructive, so the name is resolved through this
+    check rather than trusted. A bare ``target_dir / name`` is not enough:
+    an absolute ``name`` discards ``target_dir`` entirely, ``..`` walks out of
+    it, and ``.`` or an empty name resolves to ``target_dir`` itself, which
+    would remove the whole Cargo target directory rather than one instrumented
+    tree inside it. Requiring a single plain path component makes "beneath
+    ``target_dir``" a property of the path's shape instead of a claim about the
+    caller's input.
+
+    Parameters
+    ----------
+    target_dir
+        The Cargo target directory the removal is confined to.
+    name
+        One subtree name, which must be a plain path component.
+
+    Returns
+    -------
+    pathlib.Path
+        ``target_dir`` joined with ``name``.
+
+    Raises
+    ------
+    CiScriptError
+        If ``name`` is not a single plain path component.
+    """
+    if not _names_a_plain_component(name):
+        message = (
+            f"refusing to remove {name!r}: a subtree name must be a single "
+            f"plain path component beneath {target_dir}"
+        )
+        raise CiScriptError(message)
+    return target_dir / name
+
+
 def discard(target_dir: pathlib.Path, subtrees: tuple[str, ...]) -> list[pathlib.Path]:
-    """Remove each existing subtree under ``target_dir`` and return them."""
+    """Remove each existing subtree under ``target_dir`` and return them.
+
+    Each name is validated by :func:`_child_of` before anything is touched, so
+    the removal cannot reach outside ``target_dir``; a name that is not a
+    single plain path component therefore propagates that function's
+    ``CiScriptError`` before any removal happens.
+
+    Returns
+    -------
+    list[pathlib.Path]
+        The paths that were removed, in ``subtrees`` order. A name with
+        nothing at it is skipped rather than reported.
+    """
     removed = []
     for name in subtrees:
-        tree = target_dir / name
+        tree = _child_of(target_dir, name)
         if tree.is_symlink() or tree.is_file():
             tree.unlink()
             removed.append(tree)

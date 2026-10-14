@@ -132,7 +132,7 @@ def main(
         staged = stage_copy(source, runner_temp / staging_name)
         append_github_path(staged.parent, github_path)
         print(f"staged {source} as {staged}: {verify_staged(staged)}")
-    except CiScriptError as error:
+    except (CiScriptError, OSError) as error:
         print(f"stage_test_shell: {error}", file=sys.stderr)
         return 1
     return 0
