@@ -115,6 +115,11 @@ initial directory and environment. The child sets `$ErrorActionPreference` to
 `Stop`, resets `$LASTEXITCODE`, executes one entry, and propagates a non-zero
 native exit. A successful `exit` ends only that child and the parent proceeds
 to the next entry. Native stderr remains connected to Ninja's stderr.
+
+This runtime baseline is distinct from manifest-load `env()` access, which
+remains governed by [ADR-026](adr-026-manifest-environment-access-policy.md);
+command isolation does not grant or change manifest environment access.
+
 Generation rejects statically oversized child command lines, and the parent
 checks the expanded executable path before launch so the final child command
 line stays within 32,766 characters. Larger parent recipes continue through
