@@ -2731,7 +2731,98 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
       `make proptest`. **Implementation complete and gate-verified as of
       `c517f6fd` (12/13 green, the thirteenth environmental); awaiting
       milestone CodeRabbit review and publication.**
-- [ ] `EP-M3`: shared strategy and compact `Debug`.
+- [x] (2026-10-14T00:00:00Z) **`EP-M3` implemented: the shared bounded graph
+      strategy and the compact `Debug`.** Eight files under
+      `src/ninja_gen/determinism/`, wired by one `#[cfg(test)] mod determinism;`
+      line in `src/ninja_gen/mod.rs`:
+
+  | File                                           | Purpose                            | Lines |
+  | ---------------------------------------------- | ---------------------------------- | ----- |
+  | `determinism/mod.rs`                           | module docs and wiring             | 21    |
+  | `determinism/strategy/mod.rs`                  | re-exports and the divergence note | 18    |
+  | `determinism/strategy/graph/mod.rs`            | `GraphSpec` and the strategy       | 354   |
+  | `determinism/strategy/graph/blueprint.rs`      | drawn values resolved into a spec  | 210   |
+  | `determinism/strategy/classification.rs`       | per-case shape counts              | 196   |
+  | `determinism/property_tests/mod.rs`            | selector-segment rationale         | 12    |
+  | `determinism/property_tests/strategy/mod.rs`   | scope line for the checks below    | 13    |
+  | `determinism/property_tests/strategy/graph.rs` | the four properties                | 207   |
+
+  Each is under the 400-line cap. `GraphSpec` holds a graph's parts unresolved
+  so one specification materializes under several insertion orders, which is
+  what makes an order-independence claim falsifiable rather than plausible.
+
+- [x] (2026-10-14T00:00:00Z) **`EP-M3` acceptance, all three arms, with
+      evidence.** The first arm is compilation; the second and third are
+      measured below.
+
+  *Arm 1 — the strategy compiles and is exercised by a smoke property.*
+  `cargo check --lib --all-features --tests` is clean (0 errors, 0 warnings
+  after two self-caught fixes: a `From`-in-`const fn` call and an `as_str`
+  method-path).
+  `cargo nextest run --lib --all-features -E 'test(/determinism/)'` → **4 of 4
+  pass**, 0.160 s, log
+  `/tmp/test-netsuke-4-3-1-proptests-for-deterministic-ninja-emission.out`.
+
+  *Arm 2 — classification counts reproduce `EP-M0` question 1.* Reproduced, and
+  the sharpest evidence is a **single** case's printed diagnostic, taken from
+  the deliberate-failure probe below:
+
+  ```plaintext
+  classes: Classification { actions: 38, edges: 73, explicit_outputs: 148,
+  implicit_outputs: 20, multi_output_edges: 38, phony_edges: 50,
+  dyndep_staged_edges: 8, always_edges: 27, phony_flag_edges: 31,
+  restat_actions: 19, default_targets: 6, distinct_default_targets: 6,
+  always_restat_seen: 15 }
+  ```
+
+  `always_restat_seen: 15` is `0b1111`: all four combinations of `edge.always`
+  and `action.restat` occurred in **one** case, which is `OBL-ORDER`'s
+  four-combination non-vacuity requirement met by construction rather than by
+  hope. `dyndep_staged_edges: 8` is non-zero, so the `edge_requires_gates` path
+  is exercised. The run-wide tally additionally asserts
+  `intersection_cases > 0`: **some case carried multi-output edges, phony
+  edges, dyndep-staged edges, and non-empty defaults together**, which is the
+  intersection `OBL-ORDER` names and which no marginal tally could show.
+
+  *Arm 3 — a deliberately failed assertion prints a counter-example that fits
+  on a screen.* Discharged by a temporary probe property (since removed), whose
+  rendered counter-example measured **363 characters** against
+  `MAX_DEBUG_CHARS = 4_000`:
+
+  ```plaintext
+  minimal failing input: spec = GraphSpec { digest: aea438d0c0c2385b, classes:
+  Classification { actions: 38, edges: 73, explicit_outputs: 148, ... } }
+  ```
+
+  Proptest renders it through `{:#?}` (`TestError`'s `Display` uses the
+  alternate marker), so the `Debug` impl deliberately ignores the alternate
+  flag and writes one line regardless — measured, not assumed. The probe's
+  `proptest-regressions/ninja_gen/...graph.txt` artefact was **deleted** rather
+  than committed: it records a deliberate failure for a test that does not
+  exist in the committed tree, and committing it would replay a fabricated
+  failure forever.
+
+- [x] (2026-10-14T00:00:00Z) **`EP-M3`'s selector question is proved by
+      evaluation, not asserted.** `make proptest` selects suites by a module
+      segment, and the plan warns that a selector matching nothing still exits
+      0. Measured by reading `filter-match.status` from the real target's filter
+      expression (`Makefile:264`, `$$` intact):
+      **selected 75, unselected 1400**, and all four new tests report `matches`:
+
+  ```plaintext
+  matches  ninja_gen::determinism::property_tests::strategy::graph::generated_specs_stay_within_the_roadmap_bounds
+  matches  ninja_gen::determinism::property_tests::strategy::graph::the_compact_debug_stays_within_a_screen
+  matches  ninja_gen::determinism::property_tests::strategy::graph::the_generator_reaches_every_required_class_across_a_run
+  matches  ninja_gen::determinism::property_tests::strategy::graph::the_two_orders_preserve_the_specification_while_differing
+  ```
+
+  The `property_tests` path segment is therefore load-bearing, exactly as
+  `determinism/property_tests/mod.rs` records: a suite declared outside one of
+  those two segments is never run by `make proptest` at all. `make proptest`
+  additionally passes `--no-tests fail`, so an empty selection is a hard
+  failure rather than a silent pass.
+
+- [ ] `EP-M3` milestone gates and CodeRabbit review: pending.
 - [ ] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [ ] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [ ] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
@@ -2739,6 +2830,69 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 - [ ] `EP-M8`: `OBL-NINJA`, documentation, evidence sweep, roadmap.
 
 ## Surprises & discoveries
+
+- (2026-10-14) **The 400-line file cap is a *live* gate on Rust sources, and
+  `GraphSpec` alone exceeded it at 538 lines.** `AGENTS.md` states "No single
+  code file may be longer than 400 lines", and the enforcement is Whitaker's
+  `module_max_lines` dylint rule, run by `make lint` — not the Clippy
+  `too-many-lines-threshold = 70` in `clippy.toml`, which bounds a single
+  *function* and is a different check. The generator was written as one
+  `graph.rs` and would have failed the gate on first run. The split follows the
+  house shape `foo/mod.rs` + `mod child;`: `strategy/graph/mod.rs` keeps the
+  specification, its `Debug`, the strategy and the rotation helper, and
+  `strategy/graph/blueprint.rs` keeps `Blueprint`, the pool allocation, and the
+  resolution helpers. Max is now 354. **Lesson:**
+  `find src -name '*.rs' -exec wc -l {} +` before writing, not after — every
+  other file in `src/` is under 400, so the tree itself is the oracle for
+  whether a cap is live.
+
+- (2026-10-14) **`TestRunner::run` takes an `Fn`, not an `FnMut`, so a run-wide
+  tally cannot be a captured `mut` binding — and the house answer is a
+  `Cell`.** The natural way to write "assert some case in this run reached
+  class X" is to fold cases into a local accumulator, which does not compile:
+  the closure may not mutate its captures. `Cell<T>` is the shape already used
+  for exactly this in the repository —
+  `tests/shell_filter_property_tests/round_trip_through_an_oracle.rs:108` holds
+  a `Cell<Corpus>` with the comment "The tallies live in a `Cell` because
+  `TestRunner::run` takes an `Fn`", and two further suites do the same — so the
+  pattern is house style rather than a local workaround. Worth recording
+  because the failure is a borrow-checker diagnostic that reads like a
+  closure-capture mistake and is really a signature constraint.
+- (2026-10-14) **`usize::from(bool)` cannot be called in a `const fn` on this
+  toolchain, and the arithmetic cast that would work is denied
+  workspace-wide.** Building a four-way truth-table mask from two booleans wants
+  `1u8 << (usize::from(always) * 2 + usize::from(restat))`; `From` is not yet
+  stable as a const trait, so this fails with `E0658` and suggests the nightly
+  feature `const_convert`. `as usize` is the obvious alternative and is denied
+  by `cast_*` in the workspace lints. The resolution is two branches —
+  `if always { 2 } else { 0 } + if restat { 1 } else { 0 }` — which is `const`,
+  cast-free, and arguably clearer than the arithmetic it replaces.
+- (2026-10-14) **A generated counter-example that *looks* short can be measured,
+  and the measurement is what makes `EP-M3`'s third acceptance arm evidence
+  rather than assertion.** "Fits on a screen" is a claim about rendered output,
+  and the output only exists when a property fails. A temporary probe property
+  produced a real one: **363 characters**, against a `MAX_DEBUG_CHARS = 4_000`
+  bound asserted by a permanent test. Two details fall out of doing it that
+  reasoning alone would not have produced. Proptest formats the failing input
+  through `{:#?}` — `TestError`'s `Display` writes
+  `minimal failing input: {:#?}` — so a `Debug` impl that honoured the
+  alternate flag would have been pretty-printed across many lines and the
+  boundary would be a *line* budget, not a character budget; `GraphSpec`'s impl
+  therefore ignores the formatter's alternate flag and writes exactly one line.
+  And the probe left a `proptest-regressions` artefact recording a *deliberate*
+  failure; committing it would replay a fabricated failure on every future run,
+  so it was deleted. A probe that is removed must take its side effects with it.
+- (2026-10-14) **The plan's "re-draw on the rare coincidence" mechanism is
+  unnecessary once the second order is a rotation, and the check that replaces
+  it is stronger.** The plan anticipated that independently drawn orders would
+  sometimes coincide and specified a redraw loop. A rotation of a permutation
+  of two or more elements can never equal that permutation, so the coincidence
+  the loop defends against cannot arise; what remains is a *check*, asserted in
+  the property, that the rotation did what it claims. This is recorded in the
+  `Decision log` as a deviation because it replaces a mechanism the plan names
+  rather than merely implementing it, and the difference is the kind that
+  should not be silently absorbed: the redraw spends case budget on rejection
+  and can exhaust an attempt budget, which rotation cannot.
 
 - (2026-10-14) **`mdtablefix --wrap` can need two passes to converge, so one
   canonicalization is not enough to clear `make check-fmt`.** After a hand-edit
@@ -3271,6 +3425,59 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   why** — which is what this entry does. The plan's own text at the absorb
   directive has been left intact, because it correctly states the obligation;
   this entry is its discharge.
+
+- Decision: the second insertion order is a **rotation** of the first, not an
+  independently drawn shuffle re-drawn until it differs. The plan (at
+  `OBL-ORDER`'s core arm) requires the two orders to be "derived from one
+  another and then checked to be distinct, re-drawing on the rare coincidence
+  rather than asserting it". Rotation is a strictly stronger mechanism than the
+  redraw it replaces, and it is recorded here as a deliberate deviation because
+  it changes the *shape* of the guarantee rather than only its implementation.
+  `rotate_left(offset.min(last_index).max(1))` cannot return its input for any
+  permutation of two or more elements and any `offset` in `1..len`, so
+  distinctness holds by construction and the redraw path is unreachable — the
+  generator spends no case budget on rejection and cannot exhaust an attempt
+  budget the way `prop_shuffle` alone was measured to (`MIN_ACTIONS`' doc
+  records the 200/200-at-one-key and 23/200-at-two-keys figures that motivated
+  raising the domain's floor to five). The property still *asserts* divergence
+  rather than assuming it:
+  `the_two_orders_preserve_the_specification_while_differing` fails if a
+  rotation of a two-or-more-element permutation equals its input, so the
+  guarantee is checked at the place it is used and not merely argued. For a
+  one-element permutation no second arrangement exists, so the rotation is the
+  identity and the property's assertion is conditioned on `edge_count() > 1`;
+  `MIN_EDGES = 5` means that branch is unreachable in practice, and leaving it
+  explicit rather than relying on the floor keeps the helper correct on its own
+  terms.
+
+- Decision: `GraphSpec`'s digest uses
+  `std::collections::hash_map::DefaultHasher`, **not** the crate's
+  `ActionHasher`. The plan specifies "a stable digest" and does not name an
+  implementation. `ActionHasher::hash` is a SHA-256 over a JSON serialization
+  (`src/hasher.rs`), which would cost up to 750 serializations per generated
+  case at the `MAX_ACTIONS`/`MAX_EDGES` bound; the digest's only job is to let
+  a reader tell whether two `Debug` renderings describe the same value, and the
+  property that consumes it (`the_compact_debug_stays_within_a_screen`) asserts
+  the *length and presence* of the rendered diagnostic, not the digest's
+  cryptographic strength. There is no `Hash` impl to lean on — `Action` and
+  `BuildEdge` derive `PartialEq` but not `Hash` — and hashing their `Debug`
+  output would fold formatting into the value, so `GraphSpec::digest` walks
+  each observable field explicitly. Two consequences are stated rather than
+  discovered later: the digest is stable only within a build (Rust does not
+  guarantee `DefaultHasher`'s algorithm across versions), which is sufficient
+  for a failure diagnostic and is deliberately *not* used as an assertion; and
+  `hash_paths` mixes in each list's length so that `[]` and `[""]` cannot
+  collide.
+
+- Decision: `strategy/manifest.rs` is **deferred to `EP-M6`**, and only the two
+  modules the `EP-M3` acceptance needs are delivered now. The plan's file
+  layout lists a `manifest.rs` beside `graph.rs` and `classification.rs`, but
+  its only consumer is `OBL-E2E`, which is assigned to `EP-M6`, so building it
+  in `EP-M3` would ship a generator with no property exercising it — against
+  `Constraint 7`'s requirement that every generator be mutation-audited. The
+  deferral keeps this milestone's plateau honest: every artefact delivered here
+  is exercised by a property that runs in `make proptest`. `EP-M6` inherits the
+  obligation to add the file *and* the property that falsifies it.
 
 - Decision: `make proptest`'s selector lives in the **Makefile recipe**, not in
   `.config/nextest.toml`, and this is **forced by measurement** rather than

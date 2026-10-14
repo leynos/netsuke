@@ -238,6 +238,8 @@ pub(crate) fn edge_requires_gates(edge: &BuildEdge) -> bool {
     edge.dependency_order == crate::ir::DependencyOrder::Serial && edge.implicit_deps.len() > 1
 }
 #[cfg(test)]
+mod determinism;
+#[cfg(test)]
 mod property_tests;
 #[cfg(test)]
 mod test_support;
