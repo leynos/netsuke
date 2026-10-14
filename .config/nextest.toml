@@ -54,11 +54,37 @@ max-threads = 1
 filter = 'test(/^cli_configuration_fixture_compiles($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
+# This test keeps the profile's own five periods, and deliberately so. Its
+# child `cargo check` runs in the same four-slot compiler-admission pool as
+# every other build on the host, so its wall clock is the queue's to decide
+# rather than the test's. That wait falls inside the running test, because the
+# child is awaited with `.output()` in the test body, so it counts towards this
+# allowance: a wider budget would cover the delay, and would not remove the
+# contention that causes it. The spread is what makes covering it unreliable.
+# The same test has finished in 171.4 s on a quiet run, been terminated at the
+# 300 s cap on a contended one with 3,484 "sccache server is unreachable" lines
+# in that gate's log and every slot held by peer worktrees, and measured 709.2 s
+# inside the test body on a cold per-run tree. The ordering below admits at most
+# 720 s at 60 s periods, so widening to the largest allowance the file may hold
+# would leave about 11 s against that measured cost. This budget stays at five
+# periods rather than moving to an allowance the delay can still exceed.
 
 [[profile.default.overrides]]
 # `cargo publish --dry-run` builds into a fresh target directory and measured
 # nearly five warning periods locally. Allow ten periods for shared-cache and
 # compiler-queue delays without widening unrelated tests or adding retries.
+#
+# Measured against the 300 s allowance on a loaded local host, in a run that
+# passed: 259.5 s, leaving 40 s of margin. It has also passed at 145 s and been
+# terminated at 300.047 s on one head whose only change between the two runs
+# was a word in a plan, so the spread belongs to the host rather than to the
+# test. A margin of 40 s is not a budget. The failure names nextest's cap
+# rather than the nested build that was slow, so the cost reads as the test's
+# when it is the host's to decide. 600 s is a chosen figure inside the ordering
+# rather than at its edge: the ceiling `global-timeout > largest per-test
+# allowance` permits at 60 s periods is 720 s under the 780 s CI budget, and
+# this value does not raise the largest allowance in the file because the
+# mutation gate already sits at 600 s.
 filter = 'test(/^packaged_manifest_retains_build_script_sources($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
@@ -142,8 +168,9 @@ success-output = "immediate"
 # this file bounds it and its own cargo watchdog does.
 #
 # The 13-minute global timeout is above the 600s largest per-test allowance,
-# which is the mutation compile gate's widened budget rather than the 300s
-# `[profile.default]` gives its own tests. Both comparisons hold:
+# which is the widened budget the mutation compile gate and the cold package
+# publish check share rather than the 300s `[profile.default]` gives its own
+# tests. Both comparisons hold:
 #
 #   global-timeout > largest per-test allowance
 #   780 s          > 600 s

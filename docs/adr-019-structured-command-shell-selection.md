@@ -42,8 +42,18 @@ Rule and script items remain execution and stream boundaries.
 Named shell blocks retain all Netsuke-managed environment, working-directory,
 standard-stream, capture, temporary-directory, sequencing, and pipeline
 semantics from RFC 0001 sections 10.3 to 14. Each stage resolves its own
-working directory and stream bindings. Shell process state never carries to a
-neighbouring structured stage.
+working directory and stream bindings, and a relative stream path resolves
+against that stage's resolved `cwd` exactly as it does for a direct or
+`shell: true` block. Shell process state never carries to a neighbouring
+structured stage.
+
+The stream-path base, the ephemeral-versus-named capture distinction, and the
+relationship between the two temporary-directory spellings are consolidated in
+[ADR-043](adr-043-consolidated-structured-command-execution-contract.md), which
+roadmap task 12.1.1 requires this decision to be read alongside. That
+consolidation does not change the selection contract, the registry, the
+lowering, or the safety model recorded above; it fixes the semantics that every
+shell mode shares.
 
 ### Built-in registry
 

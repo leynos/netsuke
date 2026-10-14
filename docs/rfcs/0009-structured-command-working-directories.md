@@ -80,7 +80,9 @@ This amendment does not:
 - permit arbitrary directory escape outside the effective workspace;
 - create a missing directory;
 - search upward for a workspace, manifest, or tool configuration;
-- change the base used to resolve `stdin`, `stdout`, `stderr`, or `tee` paths;
+- make a resolving stream path, `PATH` entry, or executable lookup depend on a
+  directory other than the effective `-C` directory, its resolved `cwd`, or the
+  effective child `PATH` as already defined;
 - define a directory stack; or
 - add per-rule, per-target, or per-action enclosing working directories.
 
@@ -137,6 +139,14 @@ after CLI `-C` processing. It is not resolved relative to:
 The initial structured-command surface accepts only working directories that
 resolve within the effective workspace capability. Absolute paths and lexical
 or symlink escapes are rejected.
+
+RFC 0001 section 9 previously said that an absolute `cwd` "remains absolute".
+That sentence was inconsistent with the confinement rule here, and
+[ADR-043](../adr-043-consolidated-structured-command-execution-contract.md)
+resolves the inconsistency in favour of rejection. A rendered string must not
+expand the process's ambient filesystem authority; an explicit external
+directory handle remains the designed extension in section 5 above. RFC 0001
+section 9 has been amended to match.
 
 This confinement is deliberate. A later capability RFC may allow an explicit
 external directory handle, but a rendered string must not silently expand the
@@ -212,6 +222,11 @@ The shell sees its ordinary working-directory variables and built-ins after
 startup. Any `cd` performed inside that shell process remains local to the
 execution unit.
 
+Shell mode selects only how `invoke` is interpreted. It does not change the
+stream-path base, the child working directory, or the confinement rules; the
+named shells of [RFC 0011](0011-allow-listed-structured-command-shells.md)
+follow the same contract as `shell: true`.
+
 ## 9. Command-list boundaries
 
 Each structured block receives its own `cwd`. The value does not carry into a
@@ -265,12 +280,21 @@ the affected stage.
 
 ## 11. Stream-path relationship
 
-RFC 0001 section 12 currently resolves `stdin`, `stdout`, `stderr`, and `tee`
-paths relative to Netsuke's effective working directory after CLI `-C`
-processing.
+RFC 0001 section 12.1 resolves `stdin`, `stdout`, `stderr`, and `tee` paths
+relative to the block's resolved `cwd`, falling back to Netsuke's effective
+working directory after CLI `-C` processing when `cwd` is absent. Section 9 of
+that RFC states the same rule for the process working directory: the block or
+stage directory is the base for all relative stream paths. This amendment
+confirms that rule for the field it adds. Stream paths **are** relative to
+`cwd`, and each stage resolves its own paths against its own resolved `cwd`.
 
-This amendment preserves that rule. Stream paths do **not** become relative to
-`cwd`.
+An earlier revision of this section asserted the opposite and described RFC
+0001 section 12.1 as resolving stream paths against the effective workspace
+root. That description was wrong. Issue
+[#803](https://github.com/leynos/netsuke/issues/803) recorded the
+contradiction, and roadmap task 12.1.1 consolidated the contract:
+[ADR-043](../adr-043-consolidated-structured-command-execution-contract.md)
+records the accepted rule.
 
 Example:
 
@@ -281,19 +305,52 @@ command:
   stdout: artefacts/rust-extension-test.log
 ```
 
-The child runs in `rust_extension`, while the output path resolves from the
-effective workspace root.
+The child runs in `rust_extension`, and the output path resolves from
+`rust_extension` as well. The declaration renders at manifest compilation time,
+so the normalized result is
+`<effective -C directory>/rust_extension/artefacts/rust-extension-test.log`.
 
-Keeping these bases distinct has three advantages:
+The base composes exactly once. A relative `cwd` resolves against the effective
+`-C` directory, and a relative stream path then resolves against that normalized
+`cwd`. A relative `cwd` always resolves inside the effective workspace
+capability, and the confinement rules in section 5 apply to `cwd` as inscribed
+there. [RFC 0010](0010-runtime-bindings-and-secure-tempdirs.md) section 6.4
+extends `cwd` with a secure-temporary form that deliberately resolves outside
+the workspace, and section 9.5 of that RFC states how a relative stream path
+behaves under it.
 
-- graph-facing artefact paths do not silently change when command placement
-  changes;
-- stream collision validation remains one workspace-relative operation; and
-- a reviewer can reason about generated files without mentally applying each
-  process directory.
+One consequence is deliberate. Stream destinations are workspace artefacts, and
+they now follow the directory a stage was placed in. A command moved to a
+different subdirectory writes its output to a different path unless it names
+the artefact from the effective `-C` directory. That is the same behaviour as a
+shell redirect, and it is what makes `cwd` reusable as a single declaration:
 
-A future object-valued path syntax may allow `relative_to: cwd` explicitly, but
-that is outside this amendment.
+```yaml
+command:
+  - invoke: generator --format json
+    cwd: producer
+    stdout: generated/items.json
+  - invoke: validator ../producer/generated/items.json
+    cwd: consumer
+```
+
+The first stage writes under `producer`. The second runs under `consumer`, so
+its own relative base is `consumer`; it reaches the artefact only because it
+names the producer's directory explicitly. Each stage is self-consistent, and
+neither inherits the other's directory.
+
+A consumer's argument is not rewritten. Section 7 states that Netsuke passes
+relative path arguments unchanged, because only the called program knows their
+grammar, so the argument is interpreted from the consumer's working directory
+and must be spelled to match. Declaring the artefact from the effective `-C`
+directory instead would also work and would spare the consumer any knowledge of
+where the producer was placed, at the cost of pinning the pipeline to one
+layout.
+
+Keeping the bases distinct was considered and rejected by ADR-043. It would let
+a stage write outside the directory it was placed in while the child still ran
+inside it, which makes a relocated command silently produce a different graph
+artefact than the one an author reading the block expects.
 
 ## 12. Bundle and include relationship
 
@@ -464,7 +521,9 @@ RFC 0001's test strategy gains:
 - independent directories across adjacent structured blocks;
 - distinct directories across pipeline stages;
 - pipeline cleanup when a later stage has an invalid directory;
-- stream paths remaining workspace-relative rather than `cwd`-relative;
+- stream paths resolving against the stage's `cwd` rather than the effective
+  workspace root, including adjacent stages with different `cwd` values and a
+  relative `cwd` composed once with a relative stream path;
 - fragment and bundle declarations using parameterized directories;
 - Windows drive, separator, and case behaviour; and
 - action-plan schema compatibility and provenance snapshots.
@@ -485,11 +544,16 @@ Some command sequences need different directories per stage, and a rule-level
 field creates inheritance and precedence questions before the primitive exists.
 Rejected as the initial surface.
 
-### 20.3 Resolve stream paths relative to `cwd`
+### 20.3 Keep stream paths relative to the effective workspace root
 
-This resembles shell redirection but makes graph artefact locations depend on
-process placement and complicates collision checks. Rejected for the initial
-field; an explicit future path object may opt in.
+This keeps graph artefact locations independent of process placement, at the
+cost of making a relocated stage read and write beside its previous location
+while its child runs somewhere else. It also contradicts RFC 0001 sections 9
+and 12.1, which already resolve relative stream paths against the block's
+resolved `cwd`. Rejected by
+[ADR-043](../adr-043-consolidated-structured-command-execution-contract.md), so
+that `cwd` is one declaration covering both the child's directory and the
+stage's relative artefacts.
 
 ### 20.4 Resolve `cwd` relative to the declaring fragment
 

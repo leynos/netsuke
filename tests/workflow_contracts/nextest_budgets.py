@@ -10,7 +10,7 @@ per ``period`` and terminates after ``terminate-after`` of them, so the
 budget is their product. Every period in this repository is 60 s, so a
 reader taking the period alone would report a 60 s allowance where the
 real figure is 600 s: five periods on the profile's own allowance, and
-ten on the one override that widens it. The reading takes the largest,
+ten on the overrides that widen it. The reading takes the largest,
 because that is the budget a whole-run cap has to sit above. A
 ``slow-timeout`` naming no ``terminate-after`` terminates nothing at
 all, so that form is refused rather than read as a single period.
@@ -141,11 +141,12 @@ def largest_test_allowance(config_text: str) -> fractions.Fraction:
     nextest warns once per ``period`` and terminates after
     ``terminate-after`` of them, so the budget is their product. This
     repository sets five 60 s periods on the profile's own allowance, so it
-    gives every test it matches 300 s, and one override widens that to ten
-    periods for the mutation compile gate. The largest allowance in the
-    file is therefore 600 s, and it is that figure, not the profile's own,
-    that a whole-run budget has to stay above. Reading the period alone
-    would understate either by its multiplier.
+    gives every test it matches 300 s, and two overrides widen that to ten
+    periods: the mutation compile gate and the cold package publish check.
+    The largest allowance in the file is therefore 600 s, and it is that
+    figure, not the profile's own, that a whole-run budget has to stay
+    above. Reading the period alone would understate either by its
+    multiplier.
 
     Parameters
     ----------
