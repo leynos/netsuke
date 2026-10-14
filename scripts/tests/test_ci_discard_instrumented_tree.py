@@ -9,6 +9,7 @@ if typ.TYPE_CHECKING:
     import pathlib
 
     from cmd_mox import CmdMox
+    from cmd_mox.ipc import Invocation
 
 script = load_ci_script("discard_instrumented_tree")
 
@@ -97,6 +98,52 @@ def test_subtrees_input_overrides_the_default_names(
     )
     assert (target / "llvm-cov-target").is_dir(), (
         "expected: (target / 'llvm-cov-target').is_dir()"
+    )
+
+
+def test_a_failing_post_removal_df_fails_the_step_after_removing(
+    cmd_mox: CmdMox, target: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The second ``df`` failing fails the step, with the removal already done.
+
+    The pre-flight ``df`` has its own case. This is the other call, and it
+    reports what the removal freed -- the number a lane reads to decide whether
+    the cache save will fit. A step that swallowed this failure would report
+    success while leaving that number unrecorded, so the removal stands and the
+    step still fails.
+
+    One mock answers both calls and fails only the second, because the two are
+    distinguished by when they happen rather than by what they ask for: both
+    run ``df -h .``, so nothing in the arguments could tell two separate mocks
+    apart.
+    """
+    calls: list[list[str]] = []
+
+    def handle(invocation: Invocation) -> tuple[str, str, int]:
+        """Succeed the pre-flight ``df`` and fail the post-removal one."""
+        calls.append(list(invocation.args))
+        if len(calls) == 1:
+            return ("Filesystem 1%\n", "", 0)
+        return ("", "df: cannot read\n", 1)
+
+    cmd_mox.mock("df").runs(handle).times(2)
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 1, "expected: exit_code == 1"
+    assert len(calls) == 2, "both disk-usage calls must have been made"
+    captured = capsys.readouterr()
+    assert "reading disk usage failed" in captured.err, (
+        "expected: 'reading disk usage failed' in captured.err"
+    )
+    assert not (target / "llvm-cov-target").exists(), (
+        "the removal itself succeeded and must not be undone"
+    )
+    assert not (target / "llvm-cov").exists(), (
+        "expected: not (target / 'llvm-cov').exists()"
+    )
+    assert "removed " not in captured.out, (
+        "the per-tree report is skipped when the step fails"
     )
 
 

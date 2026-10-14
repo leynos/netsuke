@@ -26,18 +26,16 @@ import pathlib
 import sys
 import typing as typ
 
+from ci_archive import download, extract_members, verify_sha256
 from ci_support import (
     CiScriptError,
     RunSpec,
     append_github_path,
     catalogue,
     describe_failure,
-    download,
-    extract_members,
     is_executable_file,
     prepend_path,
     run,
-    verify_sha256,
 )
 
 import cyclopts

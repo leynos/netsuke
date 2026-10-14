@@ -325,8 +325,11 @@ test-linux-package-metadata: ## Test Linux package metadata reading and validati
 
 test-ci-scripts: ## Test the CI helper scripts under scripts/ci with pytest and cmd-mox
 	@PYTHONPATH=scripts/ci:scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
-		--with pytest==9.0.2 --with cmd-mox==0.2.0 $(CI_SCRIPT_DEPS) \
+		--with pytest==9.0.2 --with cmd-mox==0.2.0 --with hypothesis==6.151.9 \
+		$(CI_SCRIPT_DEPS) \
 		python -m pytest -p cmd_mox.pytest_plugin \
+		scripts/tests/test_ci_archive.py \
+		scripts/tests/test_ci_containment.py \
 		scripts/tests/test_ci_discard_instrumented_tree.py \
 		scripts/tests/test_ci_install_actionlint.py \
 		scripts/tests/test_ci_install_kani.py \

@@ -27,18 +27,36 @@ def summary(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> pathlib.
     return summary
 
 
-def _sccache(cmd_mox: CmdMox, *, json_exit: int = 0) -> list[list[str]]:
-    """Mock ``sccache`` for the text and JSON reports, recording its calls."""
+def _sccache(
+    cmd_mox: CmdMox,
+    *,
+    text_exit: int = 0,
+    json_exit: int = 0,
+    expected_calls: int = 2,
+) -> list[list[str]]:
+    """Mock ``sccache`` for the text and JSON reports, recording its calls.
+
+    The two reports fail independently, so a test can prove that a text-report
+    failure is not masked by the JSON report that would follow it, and vice
+    versa. ``expected_calls`` is what cmd-mox verifies at teardown, so a
+    failure that stops the script early passes ``1``.
+
+    Returns
+    -------
+    list[list[str]]
+        The argument lists recorded so far, which the live mock appends to as
+        the script runs.
+    """
     calls: list[list[str]] = []
 
     def handle(invocation: Invocation) -> tuple[str, str, int]:
-        """Record the call and fail only the JSON-format report."""
+        """Record the call and fail the report the test selected."""
         calls.append(list(invocation.args))
         if "--stats-format=json" in invocation.args:
             return (JSON_STATS, "", json_exit)
-        return (TEXT_STATS, "", 0)
+        return (TEXT_STATS, "", text_exit)
 
-    cmd_mox.mock("sccache").runs(handle).times(2)
+    cmd_mox.mock("sccache").runs(handle).times(expected_calls)
     return calls
 
 
@@ -90,6 +108,75 @@ def test_a_failing_report_leaves_no_files_and_fails_the_step(
     )
     assert summary.read_text(encoding="utf-8") == "## Earlier\n", (
         "expected: summary.read_text(encoding='utf-8') == '## Earlier\n'"
+    )
+
+
+def test_a_failing_text_report_leaves_no_files_and_fails_the_step(
+    cmd_mox: CmdMox,
+    summary: pathlib.Path,
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A non-zero text report stops the step before the JSON report is asked for.
+
+    The text report is the first call and the one the summary is built from, so
+    a failure there is the case where a partial write is most tempting: the
+    JSON report would still succeed, and the summary would still have something
+    to show. Failing the JSON report instead would not cover it.
+    """
+    calls = _sccache(cmd_mox, text_exit=2, expected_calls=1)
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 1, "expected: exit_code == 1"
+    assert calls == [["--show-stats"]], (
+        "a failed text report must stop the step before the JSON report runs"
+    )
+    assert "reading statistics failed" in capsys.readouterr().err, (
+        "expected: 'reading statistics failed' in capsys.readouterr().err"
+    )
+    assert not (tmp_path / "sccache-stats.txt").exists(), (
+        "expected: not (tmp_path / 'sccache-stats.txt').exists()"
+    )
+    assert not (tmp_path / "sccache-stats.json").exists(), (
+        "expected: not (tmp_path / 'sccache-stats.json').exists()"
+    )
+    assert summary.read_text(encoding="utf-8") == "## Earlier\n", (
+        "expected: summary.read_text(encoding='utf-8') == '## Earlier\n'"
+    )
+
+
+def test_an_unwritable_summary_fails_the_step_after_the_files_are_written(
+    cmd_mox: CmdMox,
+    summary: pathlib.Path,
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An unwritable step summary is a diagnostic, not a traceback.
+
+    The summary is written last, so the two report files are already on disk
+    when this fails. That is deliberate: they are what the workflow uploads as
+    an artifact, and losing them because the summary could not be appended
+    would discard the evidence this step exists to collect. The step still
+    fails, because a lane that silently reported nothing to the summary would
+    hide a broken report for as long as it stayed broken.
+    """
+    summary.chmod(0o444)
+    _sccache(cmd_mox)
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 1, "expected: exit_code == 1"
+    err = capsys.readouterr().err
+    assert "report_sccache_stats:" in err, (
+        "expected: the failure to be reported as a diagnostic"
+    )
+    assert "Traceback" not in err, "the step must not fail with a traceback"
+    assert (tmp_path / "sccache-stats.txt").read_text(encoding="utf-8") == TEXT_STATS, (
+        "expected: the text report is kept even when the summary cannot be written"
+    )
+    assert summary.read_text(encoding="utf-8") == "## Earlier\n", (
+        "expected: the summary is unchanged"
     )
 
 

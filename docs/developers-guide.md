@@ -2945,21 +2945,30 @@ script on every compiling lane except the release smoke job, which only prints
 the JSON form.
 
 `scripts/ci/ci_support.py` holds what they share: the catalogue, a synchronous
-runner, `GITHUB_PATH` publication, and checksum-verified download and
-extraction of release archives. Downloads accept `https://` and `file://` URLs
-only, and apply the same allowlist to every request `urllib` sends, including
-redirect targets, so a release URL cannot be answered with a redirect to a
-scheme the downloader refuses; the tests serve release fixtures over `file://`
-so the real download, verification, and extraction path runs without a network.
+runner, and `GITHUB_PATH` publication. The installers' other shared concern --
+checksum-verified download and extraction of release archives -- lives in
+`scripts/ci/ci_archive.py`, which is one failure mode (a hostile or stale
+artefact) rather than a second command runner. Downloads accept `https://` and
+`file://` URLs only, and apply the same allowlist to every request `urllib`
+sends, including redirect targets, so a release URL cannot be answered with a
+redirect to a scheme the downloader refuses; the tests serve release fixtures
+over `file://` so the real download, verification, and extraction path runs
+without a network. Extraction writes each named member under its own base name
+in the destination, and refuses a member whose base name cannot name a file, so
+an archive cannot write outside the directory it is given.
 
 `make test-ci-scripts` runs their suite, the `test_ci_*.py` modules under
 `scripts/tests/`, with pytest and [cmd-mox](https://github.com/leynos/cmd-mox),
 which shims the external programs (`sudo`, `sccache`, `df`, `cargo`) so each
 script's happy path and failure modes are exercised at the process boundary.
-The target names those modules one by one rather than by glob, so the
-local-reference contract sees each as reachable. CI runs the same target before
-`make check-fmt`. The scripts pin `cyclopts` and `cuprum` in their PEP 723
-blocks at the Makefile's `CYCLOPTS_VERSION` and `CUPRUM_VERSION`, held equal by
+`scripts/tests/test_ci_containment.py` adds Hypothesis properties over the two
+helpers that name filesystem entries from outside the process -- archive
+members and subtree names -- asserting that each either refuses the name or
+stays inside the directory it was handed. The target names those modules one by
+one rather than by glob, so the local-reference contract sees each as
+reachable. CI runs the same target before `make check-fmt`. The scripts pin
+`cyclopts` and `cuprum` in their PEP 723 blocks at the Makefile's
+`CYCLOPTS_VERSION` and `CUPRUM_VERSION`, held equal by
 `scripts/tests/test_ci_scripts_metadata.py`, and `make typecheck-python` checks
 them with ty alongside the rest of the Python sources. `CUPRUM_VERSION` names a
 PyPI release rather than a `leynos/cuprum` commit: the helpers under `scripts/`
