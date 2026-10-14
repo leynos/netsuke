@@ -5,7 +5,11 @@ This ExecPlan is a living document. Keep `Constraints`,
 `Surprises & discoveries`, `Decision log`, `Outcomes & retrospective`,
 `Conformance basis`, and `Verification plan` current as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
+
+Delivered on `6-1-2-canonical-value-key-and-equality-relation` with review
+concluded; the pull request remains open pending repository-owner authorization
+to merge.
 
 ## Purpose / big picture
 
@@ -430,9 +434,10 @@ under way; the invocation naming this plan supplies execution approval.
   `markdownlint`, `spelling`, `nixie`) rather than the Rust suite.
 - [x] (2026-10-13) Implement canonical keys/equality and stable deduplication;
   discharge property, BDD, runtime-boundary, and Verus obligations.
-  **Reconciled after the hosted assessments below; the header stays
-  `IN PROGRESS` while review remains open, which is a separate matter from this
-  box and from the roadmap tick.**
+  **Reconciled after the hosted assessments below. At the time this box was
+  ticked the header stayed `IN PROGRESS` while review remained open; review has
+  since concluded, so the header now reads `COMPLETE` and this sentence records
+  the state as it stood rather than contradicting it.**
 - [x] (2026-10-13) **Both hosted assessments answered, and every valid finding
   repaired.** The completeness/correctness reply (`6155015347`) and the proof
   reply (`6155046025`) are the two assessment outcomes quoted in the Surprises
@@ -709,6 +714,26 @@ under way; the invocation naming this plan supplies execution approval.
   decides, and a disagreement refuses with the same `invalid_traversal` error
   at the same path — and the focused battery passes 40/40. **The head moved to
   a new revision purely to carry this repair.**
+- (2026-10-14) **Plan closed as `COMPLETE`; all four milestones are delivered
+  and every review is concluded.** The header had read `IN PROGRESS` since
+  `aa32c294`, before this branch's first milestone landed, and it was the
+  defect: the `Progress` checkboxes above, the `Outcomes & retrospective`
+  close-out record, the roadmap 6.1.2 box, and two approvals bound to
+  `9c82a26a` all describe delivered and review-concluded work, which is what
+  the style guide reserves `COMPLETE` for. The flip is recorded here rather
+  than performed silently, and the qualifier beneath the header carries the one
+  remaining fact — the pull request is still open, awaiting the repository
+  owner's merge authorization. The plan's own
+  `Reserve COMPLETE for a plan whose work is delivered and whose review has
+  concluded, not for work merely handed off for review`
+  rule is satisfied on both clauses: the hosted completeness and proof
+  assessments were answered, the formal review's two findings were repaired and
+  confirmed, the two Codex findings were repaired with dispositions on their
+  threads, and the CodeScene duplication the repairs introduced was repaired
+  and reproduced locally before and after. The state at close-out: 22 commits
+  and 29 files against the PR base `b14bde20`, `reviewDecision: APPROVED`,
+  `mergeStateStatus: CLEAN`, `isDraft: false`, and 22 terminal check-runs bound
+  to `9c82a26a` with zero failures.
 
 ## Surprises & discoveries
 
@@ -1994,3 +2019,19 @@ touching anything under `tests/workflow_contracts/`. That is what happened at
   Progress and Surprises sections extended, and the candidate re-gated green
   across all eight applicable targets. EP-M3 (Verus proof and oracle) and EP-M4
   (documentation delta) remain outstanding.
+
+- 2026-10-14: Plan closed as `COMPLETE`. EP-M3 (the unbounded Verus kernel plus
+  its independent quadratic oracle) and EP-M4 (the design, proof, and
+  developers'-guide documentation delta) both landed in the interim, along with
+  the roadmap 6.1.2 tick. Review concluded at `9c82a26a`: the two hosted
+  assessments were answered, the formal review's own two findings were repaired
+  and confirmed, the two `chatgpt-codex-connector` findings were repaired with
+  dispositions on their threads, and the CodeScene duplication the admission
+  repairs introduced was repaired by unifying the two collectors behind
+  `collect_stably`, with the failure and the clean verdict both reproduced
+  through the local CLI. The header, which had said `IN PROGRESS` since
+  `aa32c294`, was the stale field and now reads `COMPLETE`; the sentence
+  beneath it records that the pull request is still open pending the repository
+  owner's merge authorization. No code changed in this revision — the entry
+  records state that had already landed, so the gate evidence above is
+  unaffected.
