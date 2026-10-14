@@ -15,16 +15,24 @@ against its revision `c517f6fd`, with the thirteenth — `test-nextest` — fail
 locally on an environmental timeout of the shared compile pool. That timeout
 has now been reproduced across four runs on two *different* tests while every
 other observable stayed identical (573 sccache-unreachable lines,
-`Compile requests 0`, zero assertion failures), and the same tests pass in
-hosted CI in 26.7 s and 62.9 s against the same 300 s budget. CI has therefore
-resolved the question: the local exhaustion is host contention plus an
-unreachable cache, not a budget that was too small, and the allowance is
-deliberately left unwidened because this suite's counter-example seeds are lost
-when the runner kills a process. CI also caught a Windows-only defect in this
-branch's own test, now fixed in `1e1508ca`; the Linux gates could not have seen
-it. `EP-M3` is the next milestone and is not yet started. This revision follows
-a design review, a rebase onto `origin/main`, that Windows repair, and gate
-pass #5.
+`Compile requests 0`, zero assertion failures), and CI at **the identical
+revision** passed both victims — `cli_configuration_fixture_compiles` in 66.986
+s and the boundary test in 37.893 s, against the same 300 s budget. CI has
+therefore resolved the question by direct measurement: the local exhaustion is
+host contention plus an unreachable cache, not a budget that was too small, and
+the allowance is deliberately left unwidened because this suite's
+counter-example seeds are lost when the runner kills a process. CI also caught
+a Windows-only defect in this branch's own test, now fixed in `1e1508ca` and
+confirmed fixed by the Windows job at `c517f6fd`; the Linux gates could not
+have seen it. `EP-M3` is the next milestone and is not yet started. This
+revision follows a design review, a rebase onto `origin/main`, that Windows
+repair, and gate pass #5.
+
+One item is genuinely outstanding and is recorded as a blocker rather than a
+pass: the milestone `coderabbit review --agent` is **unobtained**. Five
+consecutive attempts across two sessions failed service-side with
+`"Failed to start review. Please try again."`, producing zero findings at any
+revision, so this branch has no current CodeRabbit assessment.
 
 ## Purpose / big picture
 
@@ -2638,6 +2646,26 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   tests were also cancelled after the timeout (`--no-fail-fast` unset), so
   their local verdicts are unknown for this revision; CI is the oracle that
   closes that gap, exactly as it did for pass #4.
+- [x] (2026-10-14T00:00:00Z) **The oracle answered at the identical revision,
+  and both victims pass there.** CI run `38507025014` (`CI`) at head
+  `c517f6fd` — the *same* revision whose local `test-nextest` timed out —
+  concluded **success**, all five jobs. Its `build-test` job (`115666757113`,
+  03:35:42 → 03:56:57; log at `/tmp/ci-build-test-c517f6fd.log`) shows
+  `cli_configuration_fixture_compiles` **PASS [66.986s]** and
+  `production_build_module_slice_has_expected_boundary` **PASS
+  [37.893s]`, against the 300 s cap one of them exhausted locally at that very revision. `Release
+  Dry
+  Run` (`38507024993`) also concluded success. So the local exhaustion is environmental by direct measurement, not by inference, and the refusal to widen the allowance is vindicated a second time. One detail cuts against complacency while supporting the disposition: `cli_configuration_fixture_compiles` is **itself `SLOW
+  [>
+  60.000s]` in CI** at 66.986 s. The test is genuinely expensive everywhere; what differs is only the headroom the host has. CI leaves it 4.5x, a contended host with an unreachable cache leaves it none — so local timeouts on this fixture should be *expected* to recur, and CI stays the standing oracle rather than a one-time tiebreak. A direct probe recorded separately confirms the mechanism: given a 1500 s allowance the same test passes in **977 s wall**, split as 4 m 28 s to compile the binary plus **709 s inside the test body**, where it spawns a child `cargo
+  check` against a `target/.tmp…/` tree that is **cold on every run** and then queues behind 20+ peer crates for the same four-slot admission pool.
+- [x] (2026-10-14T00:00:00Z) **The Windows repair is CI-verified, at
+      `c517f6fd`.**
+  Both `CI` (`38507025014`) and `Release Dry Run` (`38507024993`) concluded
+  success at that revision, including `Windows / build-test-windows` (job
+  `115666757060`), which had **failed** on the pre-fix tip `8fc7a2fa` over this
+  branch's own contract test. That is the single check no Linux gate could
+  perform, and it now covers the fix.
 - [ ] `EP-M2`: file splits, mutation-evidence contract, ordering helpers,
       `make proptest`. **Implementation complete and gate-verified as of
       `c517f6fd` (12/13 green, the thirteenth environmental); awaiting
