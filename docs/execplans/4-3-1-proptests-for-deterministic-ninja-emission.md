@@ -1959,6 +1959,46 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
 
+- [x] (2026-10-14T00:00:00Z) The third `EP-M2` gate pass (revision
+      `4250152d`, twelve targets dispatched) produced one real defect and one
+      environmental failure.
+      **Green:** `check-fmt`, `lint` (exit 0 — and, unlike pass #2, every
+      sub-leg ran: `cargo doc`, Clippy, Whitaker, `ruff`, `pylint`, the df12
+      house lints, `ambrleaks`, `interrogate` at 100.0%, `yamllint`,
+      `actionlint`), `typecheck` (304 s), `doc-coverage` (**98.87%** against
+      the 80.00% threshold), `nixie`.
+      **Real defect — `make test`.** `behavioural_nextest_targets_forward_both_worker_bounds`
+      failed: `NEXTEST_TARGETS` declared five targets but the Makefile now
+      invokes the runner from six, because `335ca971` added `make proptest`
+      without adding it to the inventory. The contract test was doing its
+      documented job — "a new recipe joins the contract or breaks the build".
+      Fixed in `73d2f814` by declaring `proptest`; the recipe already forwards
+      both worker bounds, so only the declaration was missing.
+      **Environmental — `production_build_module_slice_has_expected_boundary`
+      timed out at 300.073 s.** This is the recorded live form of the
+      load-sensitive failure, and the diagnostic is a count, not the test
+      name: the run carries **573** `the managed sccache server is unreachable`
+      lines, the same figure previously measured alongside four to nine
+      `TIMEOUT`s with **zero** source failures. The test is untouched by this
+      branch and is a named member of the serialized `nested-cargo-builds`
+      group, whose override sets no `slow-timeout`. A from-scratch nested
+      compile under an unreachable cache cannot fit 300 s; widening the
+      allowance would not have saved the attempt, so the budget question is
+      deferred rather than tuned here.
+      **Two gates never ran.** `markdownlint` inherits `spelling` as a
+      prerequisite (`Makefile:445`), so its exit 2 was the spelling defect
+      below, not a Markdown verdict of its own — markdownlint-cli2 itself has
+      still never executed on this branch. Gates 9-12
+      (`test-workflow-contracts`, `test-documentation-contracts`, `proptest`,
+      `test-coverage-artifact`) were not reached.
+- [x] (2026-10-14T00:00:00Z) `make spelling` failed on `hand-written` in the
+      Progress prose added by `4250152d`, corrected to `handwritten` in
+      `9105e03c`. The adjacent hyphenated forms `hand-off`, `hand-rolled` and
+      `hand-maintained` are all accepted by the dictionary, so only this one
+      was a violation. A tracked edit during a gate pass moved HEAD and
+      invalidated the pass in flight; the rule the run applied — re-check
+      `HEAD` after every gate and stop on a change — is the correct one and did
+      its job.
 - [x] (2026-10-14T00:00:00Z) The second `EP-M2` gate pass cleared
       `make check-fmt` (exit 0, 4s) but failed `make lint` (exit 2, 2789s):
       `clippy::shadow_unrelated` at
