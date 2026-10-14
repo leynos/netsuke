@@ -1530,9 +1530,13 @@ pinned toolchain is absent.
 
 **The mutation caller.** `.github/workflows/mutation-testing.yml` is a thin
 caller of `leynos/shared-actions/.github/workflows/mutation-cargo.yml`. It has
-one job, `mutation`, whose `with:` block currently carries `exclude-globs` and
-`extra-args: "--all-features"`. The default `setup-rust` on the shared worker
-exports `RUSTFLAGS="-D warnings"`; the caller must not fight that.
+one job, `mutation`, whose `with:` block carries `exclude-globs`,
+`extra-args: "--all-features"`, `install-mold: 'true'` and a `setup-commands`
+script; the last two are this branch's change, described under *Milestones*.
+The default `setup-rust` on the shared worker exports
+`RUSTFLAGS="-D warnings"`, and the caller must not fight that. `install-mold` is
+a string input rather than a boolean, because the shared workflow declares it
+`type: string` and a bare `true` is rejected at workflow-call time.
 
 **The shared sandbox.** `test_support/src/build_tools/sandbox/mod.rs` builds a
 temporary `PATH` and `HOME` "from nothing": `env_clear`, then only the sandbox
@@ -1546,12 +1550,16 @@ by `sandbox/pins.rs`.
 
 **The two failing tests.** `tests/makefile_test_target/rustdocflags.rs` holds
 `behavioural_doctest_passes_shell_sensitive_overrides_only_as_rustdocflags` and
-`property_doctest_preserves_rustdoc_override_values`. Both call
-`run_doctest_with_override`, which today runs `make` directly with the ambient
-environment plus `CARGO` and `RUSTDOC_ENVIRONMENT_LOG`. `CARGO` is a
-`#!/bin/sh` script that records `RUSTDOCFLAGS`, whether `RUSTDOC_FLAGS` is
-present, and `"$*"`, tab-separated, into `$RUSTDOC_ENVIRONMENT_LOG`.
-`assert_doctest_record` then asserts on those three fields.
+`property_doctest_preserves_rustdoc_override_values`. Both run the `doctest`
+target through `DoctestHarness`, which supplies the build-tools prerequisite
+from fakes instead of crossing it: the harness seeds a `Sandbox` with
+`Sandbox::write_mold` and `Sandbox::write_rustup` at the committed pins, adds a
+fake `CARGO`, and calls `Sandbox::run_make`, so the recipe reaches the fake
+Cargo however the host is provisioned. That boundary is what this branch's
+change introduced; before it, both tests ran `make` against the ambient host.
+`CARGO` is a `#!/bin/sh` script that records `RUSTDOCFLAGS`, whether
+`RUSTDOC_FLAGS` is present, and `"$*"`, tab-separated, into
+`$RUSTDOC_ENVIRONMENT_LOG`; the harness asserts on those three fields.
 
 Terms used in this plan:
 
