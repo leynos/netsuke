@@ -17,7 +17,6 @@ import os
 import pathlib
 import shutil
 import tarfile
-import typing as typ
 import urllib.parse
 import urllib.request
 
@@ -29,9 +28,6 @@ from cuprum import (
     ProjectSettings,
     sh,
 )
-
-if typ.TYPE_CHECKING:
-    import http.client
 
 PROJECT_NAME = "netsuke-ci"
 DOCUMENTATION = ("docs/developers-guide.md",)
@@ -151,49 +147,61 @@ def is_executable_file(path: pathlib.Path) -> bool:
     return path.is_file() and os.access(path, os.X_OK)
 
 
-class _SchemeCheckedRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Refuse a redirect whose target leaves ``ALLOWED_URL_SCHEMES``.
+class _SchemeCheckedRequestHandler(urllib.request.BaseHandler):
+    """Refuse to send any request whose scheme leaves ``ALLOWED_URL_SCHEMES``.
 
-    ``urllib`` opens the redirect target itself, so a check on the finished
-    response would run after the request has already gone out. CPython's own
-    guard only rejects schemes outside ``http``, ``https`` and ``ftp``, which
-    would let an ``https://`` release URL be redirected to plain ``http`` or
-    ``ftp``; this handler applies the same allowlist as the initial URL.
+    ``urllib`` follows a redirect itself, by opening the target as a fresh
+    request, so the redirect target reaches this guard by the same route as the
+    URL the caller asked for. Validating here therefore covers both, and does so
+    before anything is sent: CPython's own guard in ``http_error_302`` only
+    rejects schemes outside ``http``, ``https``, ``ftp`` and the empty string,
+    which would let an ``https://`` release URL be redirected to plain ``http``
+    or ``ftp``. It also reads either a ``Location`` or a ``URI`` header, so a
+    check that inspected only ``Location`` would be bypassable; inspecting the
+    outgoing request avoids having to know which header named the target.
+
+    ``file_request`` is what carries the ``file://`` test fixtures, so the
+    allowlist is applied to every scheme rather than only the network ones.
+
+    The schemes arrive through the constructor rather than being read from
+    ``ALLOWED_URL_SCHEMES`` directly, which keeps the guard a function of its
+    own configuration and gives the hook a genuine use of ``self``. No
+    ``@override`` marks the hook: typeshed declares ``BaseHandler`` without
+    these methods, so it would override nothing statically; each class that
+    does implement them -- ``HTTPCookieProcessor``, ``HTTPHandler`` -- declares
+    its own, which is the shape ``OpenerDirector`` discovers at run time
+    through the ``process_request`` table.
     """
 
-    @typ.override
-    # The stdlib fixes this signature, so an override cannot narrow its arity.
-    # pylint: disable-next=too-many-arguments,too-many-positional-arguments
-    def redirect_request(
-        self,
-        req: urllib.request.Request,
-        fp: typ.IO[bytes],
-        code: int,
-        msg: str,
-        headers: http.client.HTTPMessage,
-        newurl: str,
-    ) -> urllib.request.Request | None:
-        """Reject a redirect target outside the allowed schemes.
+    def __init__(self, allowed_schemes: frozenset[str]) -> None:
+        """Record the schemes this handler will let through."""
+        self._allowed_schemes = allowed_schemes
+
+    def http_request(self, request: urllib.request.Request) -> urllib.request.Request:
+        """Reject an outgoing request outside the allowed schemes.
 
         Returns
         -------
-        urllib.request.Request | None
-            Whatever ``super()`` builds for ``newurl``; ``None`` when it
-            declines to follow the redirect at all.
+        urllib.request.Request
+            ``request`` itself, which ``urllib`` then sends unchanged.
 
         Raises
         ------
         CiScriptError
-            If ``newurl`` uses a scheme the downloader does not permit.
+            If the request's scheme is not one the downloader permits.
         """
-        scheme = urllib.parse.urlsplit(newurl).scheme
-        if scheme not in ALLOWED_URL_SCHEMES:
+        scheme = urllib.parse.urlsplit(request.full_url).scheme
+        if scheme not in self._allowed_schemes:
             message = (
-                f"{req.full_url} redirected to {newurl!r}, whose scheme "
-                f"{scheme!r} is not one of {sorted(ALLOWED_URL_SCHEMES)}"
+                f"refusing to open {request.full_url!r}: scheme {scheme!r} "
+                f"is not one of {sorted(self._allowed_schemes)}"
             )
             raise CiScriptError(message)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        return request
+
+    https_request = http_request
+    ftp_request = http_request
+    file_request = http_request
 
 
 def download(url: str, destination: pathlib.Path) -> None:
@@ -220,9 +228,13 @@ def download(url: str, destination: pathlib.Path) -> None:
         )
         raise CiScriptError(message)
     try:
-        # The scheme is allowlisted just above, and every redirect target is
-        # allowlisted by the handler; `file://` serves test fixtures.
-        opener = urllib.request.build_opener(_SchemeCheckedRedirectHandler)
+        # The scheme is allowlisted just above; the handler applies the same
+        # check to every request `urllib` sends afterwards, including redirect
+        # targets, so a redirect cannot leave the allowlist. `file://` serves
+        # test fixtures.
+        opener = urllib.request.build_opener(
+            _SchemeCheckedRequestHandler(ALLOWED_URL_SCHEMES)
+        )
         with (
             opener.open(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response,
             destination.open("wb") as handle,
