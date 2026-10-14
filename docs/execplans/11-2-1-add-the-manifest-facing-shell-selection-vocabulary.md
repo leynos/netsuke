@@ -5,11 +5,14 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: BLOCKED
+Status: APPROVED
 
-The user approved this plan on 2026-10-13. Stage A's untouched-tree baseline
-failed at `make test`, so implementation is stopped until that failure is
-resolved.
+The user approved this plan on 2026-10-13 and authorized the prerequisite
+timeout repair on 2026-10-14. The fix is separated into
+[PR #913](https://github.com/leynos/netsuke/pull/913), which targets `main`.
+This PR targets that prerequisite. Feature implementation has not begun. Its
+26-file tolerance remains unchanged and applies to this PR's own diff,
+excluding the prerequisite repair.
 
 ## Purpose / big picture
 
@@ -109,8 +112,11 @@ These are hard invariants. Violating one requires escalation, not a workaround.
 
 ## Tolerances (exception triggers)
 
-Measure scope from the commit that records this plan's approval, excluding the
-ExecPlan file itself.
+Measure scope from this PR's prerequisite branch base, excluding the ExecPlan
+file itself. On 2026-10-14 the user directed the timeout repair into its own PR
+under #778; that independent prerequisite is excluded from the feature diff.
+The approval record remains `1747496f`, and the original combined candidate is
+preserved under `refs/recovery/timeout-stack-20261014/original-head`.
 
 - Scope: stop and escalate if implementation needs more than 26 changed files
   or more than 2,600 net added lines including tests, snapshots, and
@@ -203,7 +209,48 @@ ExecPlan file itself.
   `make typecheck`, `make lint`, and `make doc-coverage`; `make test` failed on
   a 300-second timeout in `cli_configuration_fixture_compiles`. See the
   `-4.out` gate logs under `/tmp` and _Outcomes & retrospective_ below.
-- [ ] EP-M0: green baseline recorded; blocked by the timed-out test.
+- [x] EP-M0: repaired pre-feature test baseline recorded on 2026-10-14;
+  the original untouched-tree failure is preserved below.
+- [x] (2026-10-14) Investigated and repaired the baseline timeout using the
+  [CLI configuration debugging plan][cli-timeout-debugging], then validated the
+  repaired test baseline before EP-M1.
+- [x] (2026-10-14) Reproduced the original child Cargo command once: it
+  succeeded after 23 minutes 37 seconds with 263 dependency build/check entries
+  and observed admission waits. The isolated-target regression was observed red
+  before switching the CLI fixture to the existing harness.
+- [x] (2026-10-14) First corrected candidate passed workflow contracts,
+      formatting,
+  typechecking, lint, and documentation coverage (98.81%). Full tests exposed a
+  second 300-second timeout in the build-module boundary fixture before the
+  repaired CLI cases ran. H3 investigated its ambient Cargo preparation; that
+  failed run did not establish a repaired baseline.
+- [x] (2026-10-14) Matching all targets and workspace features alone did not
+  clear the module-slice timeout: the next full run also observed empty Bash
+  completion content. H4 traced the remaining Cargo command-mode mismatch
+  before another gate run. No CLI fixture timing or green baseline is
+  established by either failed validation run.
+- [x] (2026-10-14) Latest full run passed both repaired CLI cases, the
+  module-slice boundary, and completion readers: 3,369 tests passed, with
+  packaging alone timing out at 300 seconds. An isolated verified packaging dry
+  run then succeeded in 507.99 seconds. Two regression guards were observed red
+  before adding a packaging-only 660-second allowance and relocating its fresh
+  build target beneath workspace `target/`. The subsequent full test gate
+  passed; feature implementation has not begun.
+- [x] (2026-10-14) Repaired candidate passed formatting, 667 workflow
+  contracts (two skipped), typechecking, lint, and documentation coverage
+  (98.81%). Full Nextest passed all 3,370 tests (five skipped) in 1,051.448
+  seconds; doctests passed 39 with six ignored. CLI cases took 15.715 and
+  17.049 seconds, the module boundary 285.271 seconds, and packaging 385.821
+  seconds. Logs use `-netsuke-11-2-1-20261014-9.out` under `/tmp`; typecheck
+  uses the unchanged-Rust gate-8 log. Markdown validation initially saw the
+  removed manifest in Git's index; staging the intended deletion resolved it.
+  Formatting, spelling, Markdown lint, and Mermaid validation then passed in the
+  `-20261014-10-doc.out` logs. Local review belongs to the repair delivery
+  ledger and PR record.
+- [x] (2026-10-14) User directed a separate prerequisite PR beneath #778.
+  The fix targets `main`, and #778 targets the fix. The 34-file combined-scope
+  proposal is withdrawn; the feature's own PR diff retains the 26-file and
+  2,600-net-line tolerances. No shell vocabulary implementation is claimed.
 - [ ] EP-M1: host family, built-in registry, and `ShellName` landed with
   tests.
 - [ ] EP-M2: `ShellSelection` codec, parity tests, properties, and behavioural
@@ -221,8 +268,17 @@ ExecPlan file itself.
   queued requests. This supports, but does not prove, shared compile contention
   as the cause. The log is
   `/tmp/test-f900fc37-c6fe-4ed1-8700-ec572d9952c3-11-2-1-add-the-manifest-facing-shell-selection-vocabulary-4.out`.
-  Impact: Stage A requires stopping after any failed baseline gate, so no
-  product implementation has started.
+  Historical impact: Stage A required stopping after the failed baseline, so
+  no product implementation has started.
+- Observation: the CLI fixture's isolated Cargo project duplicates work
+  that the existing public API harness can reuse. Evidence: the standalone
+  manifest selects `target/cli-configuration-ui`, whereas `NetsukeRlib` builds
+  the workspace library with the gate's feature selection and passes its
+  reported artefacts to the fixture compiler. Impact: investigate that
+  avoidable build before changing timeout policy. The controlled run took
+  1,418.27 seconds and resolved 42 dependency versions absent from the
+  workspace lockfile. Reusing the existing harness removes the independent
+  graph and preserves compiler admission through `RUSTC_WRAPPER`.
 - Observation: the pinned Python lint dependency initially used Lody's Git
   HTTPS helper even when `/usr/bin/git` was selected. Evidence: setting
   `GIT_EXEC_PATH=/usr/libexec/git-core` in the clean command environment made
@@ -278,6 +334,8 @@ ExecPlan file itself.
   <https://docs.rs/crate/serde-saphyr/1.2.0/source/src/de/options.rs>
 [saphyr-deserializer]:
   <https://docs.rs/crate/serde-saphyr/1.2.0/source/src/de/deserializer.rs>
+[cli-timeout-debugging]:
+  ../debugging/debugging-plan-2026-10-14-cli-configuration-timeout.md
 
 ## Decision log
 
@@ -460,18 +518,43 @@ ExecPlan file itself.
   with this plan), and the other decisions refine ADR-019 without changing it.
   Date/Author: 2026-09-24, planning agent.
 
+- Decision D11: separate the independently authorized timeout repair into
+  prerequisite PR #913, targeting `main`, with #778 targeting that
+  prerequisite. This follows the user's explicit direction on 2026-10-14. The
+  original combined candidate is preserved at `1d237e19`; only the plan and
+  design changes belong to this upper PR. Scope is measured on this PR's
+  exclusive diff, preserving the original 26-file and 2,600-net-line limits.
+  The combined 34-file ceiling proposal is withdrawn. Date/Author: 2026-10-14,
+  implementation supervisor; user-authorized stack separation.
+
 ## Outcomes & retrospective
 
-EP-M0 is blocked and implementation has not started. The final clean Git
-environment run passed `make check-fmt`, `make typecheck`, `make lint`, and
+The timeout repair clears the pre-feature test baseline and belongs to the
+separate prerequisite PR #913. Its fresh current-main validation passed 3,934
+Nextest tests (six skipped), 129 doctests (32 ignored), 1,271 workflow
+contracts (three skipped), and 27 script tests. Formatting, typechecking, lint,
+documentation coverage (98.87%), spelling, Markdown lint, and Mermaid
+validation passed. CLI cases completed in 9.849 and 5.959 seconds; the module
+boundary took 151.141 seconds and packaging took 167.123 seconds. The debugging
+plan and prerequisite PR retain the detailed evidence and review state.
+
+The earlier combined candidate passed 3,370 Nextest tests and 39 doctests;
+these are historical results, distinct from the prerequisite's fresh run. No
+shell vocabulary implementation has started, and roadmap 11.2.1 remains open.
+The combined file-count blocker is resolved by separating the two PR scopes;
+the feature's exclusive diff retains its approved limits.
+
+The original untouched-tree run is retained as historical evidence. Its clean
+Git environment run passed `make check-fmt`, `make typecheck`, `make lint`, and
 `make doc-coverage` (98.81%, 4,728/4,785). Nextest reported 3,348 tests passed,
 one timeout, and five skipped; it also warned that 15 tests were not run after
 the failure.
 `netsuke-build::command_env_ui_tests::cli_configuration_fixture_compiles` timed
 out at 300 seconds. Doctests did not run. The failure evidence is in the
 `-4.out` logs under `/tmp`, especially the test log named in _Surprises &
-discoveries_. No product source changes were made. The plan's Stage A stop rule
-prevents EP-M1 until the baseline test issue is resolved.
+discoveries_. No product source changes preceded that run. The user
+subsequently authorized repairing this prerequisite; the repaired baseline does
+not turn that original red run into a pass.
 
 On completion, record here the delivered API, the gate results, and these
 hand-offs:
@@ -922,6 +1005,12 @@ Confirm the working tree is clean and on the task branch. Run the gates once to
 record a green baseline; if any gate fails on the untouched tree, stop and
 report it, because later failures would otherwise be ambiguous.
 
+On 2026-10-14 the user authorized repairing the baseline timeout. Record that
+test-harness repair separately, run the full gates on the repaired pre-feature
+tree, and require a green result before EP-M1. The original failure and its
+diagnostic evidence remain in this plan and the debugging record; do not
+present the repaired baseline as the original untouched run.
+
 ### EP-M1: host family, built-in registry, and names
 
 File layout under `src/shell_selection/`:
@@ -1076,7 +1165,8 @@ Markdown edit, then the Markdown gates and the full gates. Commit.
 
 ## Milestones and plateaus
 
-- EP-M0, baseline. Outcome: a recorded green baseline on the unmodified tree.
+- EP-M0, baseline. Outcome: a recorded green repaired pre-feature baseline,
+  preserving the untouched-tree failure and separately authorized repair.
   Requirements: none. Acceptance: every gate log exits zero. Conformance check,
   recovery, and compatibility: not applicable. Remaining gaps: everything.
 - EP-M1, host family, built-in registry, and names. Outcome: `HostFamily`,
@@ -1396,3 +1486,10 @@ executable path belongs to 11.2.3, and the IR's `ResolvedShell` belongs to
 - 2026-10-13: recorded the final EP-M0 gate results and stopped at Stage A
   after the untouched-tree nextest timeout; status is `BLOCKED` pending its
   resolution.
+
+- 2026-10-14: repaired the baseline timeout, then followed the user's direction
+  to separate the fix into prerequisite PR #913 targeting `main` and restack
+  #778 above it. Restored `APPROVED` status for the unstarted feature plan,
+  retained the original scope limits, and withdrew the combined 34-file ceiling
+  proposal. Recorded fresh prerequisite validation separately from the original
+  red baseline and earlier combined candidate.
