@@ -1534,8 +1534,8 @@ one job, `mutation`, whose `with:` block carries `exclude-globs`,
 `extra-args: "--all-features"`, `install-mold: 'true'` and a `setup-commands`
 script; the last two are this branch's change, described under *Milestones*.
 The default `setup-rust` on the shared worker exports
-`RUSTFLAGS="-D warnings"`, and the caller must not fight that. `install-mold` is
-a string input rather than a boolean, because the shared workflow declares it
+`RUSTFLAGS="-D warnings"`, and the caller must not fight that. `install-mold`
+is a string input rather than a boolean, because the shared workflow declares it
 `type: string` and a bare `true` is rejected at workflow-call time.
 
 **The shared sandbox.** `test_support/src/build_tools/sandbox/mod.rs` builds a
