@@ -13,7 +13,7 @@ use dyndep::reject_reserved_paths;
 pub use dyndep::{GeneratedDyndep, GeneratedNinja, generate_bundle};
 pub(crate) use path_syntax::{reject_unsupported_path_characters, validated_ninja_path};
 
-use crate::ast::{Recipe, StringOrList};
+use crate::ast::{CommandIsolation, Recipe, StringOrList};
 use crate::ir::{BuildEdge, BuildGraph};
 use crate::localization::{self, keys};
 use camino::Utf8PathBuf;
@@ -29,7 +29,6 @@ mod recipe_shell;
 mod validation;
 
 pub use crate::recipe_shell::RecipeShell;
-use command_list::{ActionId, CommandListEntry, command_list_entry};
 pub use error::NinjaGenError;
 use escape::{ShellText, escape_metadata_value};
 pub use explicit_shell::generate_with_shell;
@@ -64,12 +63,15 @@ pub(crate) use display_edge::DisplayEdge;
 ///
 /// # Examples
 /// ```
-/// use netsuke::ast::Recipe;
+/// use netsuke::ast::{CommandIsolation, Recipe};
 /// use netsuke::ir::{Action, BuildEdge, BuildGraph};
 /// use camino::Utf8PathBuf;
 /// let mut graph = BuildGraph::default();
 /// graph.actions.insert("a".into(), Action {
-///     recipe: Recipe::Command { command: "true".into() },
+///     recipe: Recipe::Command {
+///         command: "true".into(),
+///         isolation: CommandIsolation::Shared,
+///     },
 ///     description: None, depfile: None, deps_format: None,
 ///     pool: None, restat: false
 /// });
@@ -95,8 +97,10 @@ pub(crate) use display_edge::DisplayEdge;
 /// programmatic action has an empty command recipe, a command-list entry starts
 /// multiple background jobs, a command-list entry uses an unsupported `exec`
 /// structure, a command-list `eval` payload cannot be analysed, a command-list
-/// entry contains a Ninja control character, a graph path uses Netsuke's
-/// reserved serial-ordering namespace, or writing to the output fails.
+/// entry contains a Ninja control character, isolated mode is attached to a
+/// non-list command, a PowerShell recipe exceeds its size limit, an isolated
+/// PowerShell entry exceeds Windows' command-line limit, a graph path uses
+/// Netsuke's reserved serial-ordering namespace, or writing to the output fails.
 pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     let mut out = String::new();
     generate_into(graph, &mut out)?;
@@ -107,12 +111,15 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 ///
 /// # Examples
 /// ```
-/// use netsuke::ast::Recipe;
+/// use netsuke::ast::{CommandIsolation, Recipe};
 /// use netsuke::ir::{Action, BuildEdge, BuildGraph};
 /// use camino::Utf8PathBuf;
 /// let mut graph = BuildGraph::default();
 /// graph.actions.insert("a".into(), Action {
-///     recipe: Recipe::Command { command: "true".into() },
+///     recipe: Recipe::Command {
+///         command: "true".into(),
+///         isolation: CommandIsolation::Shared,
+///     },
 ///     description: None, depfile: None, deps_format: None,
 ///     pool: None, restat: false
 /// });
@@ -139,8 +146,10 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 /// programmatic action has an empty command recipe, a command-list entry starts
 /// multiple background jobs, a command-list entry uses an unsupported `exec`
 /// structure, a command-list `eval` payload cannot be analysed, a command-list
-/// entry contains a Ninja control character, a graph path uses Netsuke's
-/// reserved serial-ordering namespace, or writing to the output fails.
+/// entry contains a Ninja control character, isolated mode is attached to a
+/// non-list command, a PowerShell recipe exceeds its size limit, an isolated
+/// PowerShell entry exceeds Windows' command-line limit, a graph path uses
+/// Netsuke's reserved serial-ordering namespace, or writing to the output fails.
 pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), NinjaGenError> {
     generate_into_with_shell(graph, out, RecipeShell::host_default())
 }
@@ -311,6 +320,7 @@ impl NamedAction<'_> {
         let command = match &self.action.recipe {
             Recipe::Command {
                 command: StringOrList::String(scalar_command),
+                ..
             } => {
                 if self.shell != RecipeShell::PowerShell {
                     Self::assert_shell_command(scalar_command);
@@ -319,9 +329,11 @@ impl NamedAction<'_> {
             }
             Recipe::Command {
                 command: StringOrList::List(items),
-            } => self.command_list_shell_text(items),
+                isolation,
+            } => command_list::command_list_shell_text(self.id, items, *isolation, self.shell)?,
             Recipe::Command {
                 command: StringOrList::Empty,
+                ..
             } => return Self::reject_empty_command_recipe(),
             Recipe::Script { script } => self.script_shell_text(script),
             Recipe::Rule { .. } => return Self::reject_rule_recipe(),
@@ -344,31 +356,19 @@ impl NamedAction<'_> {
         // debug parser guard.
         ShellText::new(cmd)
     }
-    /// Write list entries as isolated current-shell groups joined by `&&`.
-    fn command_list_shell_text(&self, items: &[String]) -> ShellText {
-        if let Some(script) = self.shell.command_list_script(items) {
-            return ShellText::new(script);
-        }
-        // Brace groups keep each entry a distinct shell unit, and `eval`
-        // prevents comments or trailing control operators inside an entry
-        // consuming its terminator. Braces run in the current shell (unlike
-        // `( ... )`), so working directory, environment, and variables set by
-        // one entry still carry into the next, and the `&&` chain stays
-        // fail-fast.
-        let command_line = items
-            .iter()
-            .enumerate()
-            .map(|(entry_index, item)| {
-                command_list_entry(CommandListEntry(item), ActionId(self.id), entry_index + 1)
-            })
-            .join(" && ");
-        Self::assert_shell_command(&command_line);
-        ShellText::new(command_line)
-    }
-
     /// Writes this action's Ninja rule, escaping only the shell-text boundary.
     fn write_into<W: Write>(&self, output: &mut W) -> Result<(), NinjaGenError> {
-        let command = self.shell.command_value(&self.shell_text()?)?;
+        let shell_text = self.shell_text()?;
+        let command = match (&self.action.recipe, self.shell) {
+            (
+                Recipe::Command {
+                    command: StringOrList::List(_),
+                    isolation: CommandIsolation::Isolated,
+                },
+                RecipeShell::PowerShell,
+            ) => self.shell.isolated_command_list_value(&shell_text)?,
+            _ => self.shell.command_value(&shell_text)?,
+        };
         writeln!(output, "rule {}", self.id)?;
         writeln!(output, "  command = {}", command.command())?;
         if let Some(content) = command.response_file_content() {

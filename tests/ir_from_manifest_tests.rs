@@ -69,7 +69,7 @@ fn command_list_entries_are_interpolated_in_order() -> Result<()> {
         .values()
         .next()
         .context("expected one action")?;
-    let Recipe::Command { command } = &action.recipe else {
+    let Recipe::Command { command, .. } = &action.recipe else {
         bail!("expected a command recipe, got {:?}", action.recipe);
     };
     ensure!(
@@ -177,7 +177,8 @@ fn dependency_only_entries_lower_to_deduplicated_phony_actions() -> Result<()> {
                 matches!(
                     action.recipe,
                     Recipe::Command {
-                        command: StringOrList::Empty
+                        command: StringOrList::Empty,
+                        ..
                     }
                 )
             }),
@@ -343,3 +344,6 @@ fn manifest_error_cases(
 
 #[path = "ir_from_manifest_tests/dependency_order.rs"]
 mod dependency_order;
+
+#[path = "ir_from_manifest_tests/isolation.rs"]
+mod isolation;

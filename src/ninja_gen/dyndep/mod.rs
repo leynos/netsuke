@@ -14,13 +14,16 @@
 //! rejects graphs that require a bundle.
 //!
 //! ```rust
-//! use netsuke::ast::Recipe;
+//! use netsuke::ast::{CommandIsolation, Recipe};
 //! use netsuke::ir::{BuildEdge, BuildGraph, DependencyOrder};
 //! use netsuke::ninja_gen::generate_bundle;
 //! use camino::Utf8PathBuf;
 //!
 //! let action = netsuke::ir::Action {
-//!     recipe: Recipe::Command { command: "echo done".into() },
+//!     recipe: Recipe::Command {
+//!         command: "echo done".into(),
+//!         isolation: CommandIsolation::Shared,
+//!     },
 //!     description: None,
 //!     depfile: None,
 //!     deps_format: None,

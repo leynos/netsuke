@@ -179,6 +179,8 @@ manifest.glob.unknown_pattern_error = ismeretlen mintahiba.
 manifest.glob.io_failed = A glob sikertelen ehhez: „{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = ismeretlen be- és kiviteli hiba.
 manifest.command_list_empty = A „command” mező nem lehet üres: adjon meg egy parancs-karakterláncot vagy egy nem üres listát.
+manifest.command_isolation_recipe = Az „command_isolation” mezőhöz parancslistás recept szükséges.
+manifest.command_isolation_scalar = Az „command_isolation: isolated” értékhez parancslista szükséges.
 
 # A köztes ábrázolás hibái.
 ir.rule_not_found = A(z) „{ $target }” cél által hivatkozott „{ $rule }” szabály nem található.

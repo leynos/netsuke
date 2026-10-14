@@ -21,6 +21,12 @@ pub enum NinjaGenError {
         /// One-based stable position in generated action order.
         action_index: usize,
     },
+    /// An isolated mode is attached to a scalar command or dependency marker.
+    #[error("command-list action {action_index} uses isolation without a command list")]
+    InvalidCommandIsolation {
+        /// One-based stable position in generated action order.
+        action_index: usize,
+    },
     /// A list entry starts multiple background jobs, which cannot be
     /// attributed reliably by a shared POSIX shell.
     #[error(
@@ -73,10 +79,22 @@ pub enum NinjaGenError {
         "PowerShell recipe is {actual_bytes} bytes, exceeding the {maximum_bytes}-byte encoding limit"
     )]
     PowerShellRecipeTooLarge {
-        /// UTF-8 byte length of the completed recipe before PowerShell wrapping.
+        /// UTF-8 byte length of the complete wrapped parent script.
         actual_bytes: usize,
         /// Largest completed recipe Netsuke encodes in memory.
         maximum_bytes: usize,
+    },
+    /// An isolated PowerShell entry exceeds Windows' child command-line limit.
+    #[error(
+        "PowerShell command-list entry {entry_index} needs {actual_characters} command-line characters, exceeding the {maximum_characters}-character limit"
+    )]
+    PowerShellCommandLineTooLong {
+        /// One-based position in the command list.
+        entry_index: usize,
+        /// UTF-16 code-unit length of the generated child command line.
+        actual_characters: usize,
+        /// Largest command line accepted before Windows' terminating NUL.
+        maximum_characters: usize,
     },
     /// A graph with serial dependencies cannot be represented by a single
     /// build-file string; callers must use [`crate::ninja_gen::generate_bundle`].

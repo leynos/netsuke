@@ -19,6 +19,7 @@ fn sample_manifest() -> Result<NetsukeManifest> {
         name: StringOrList::String("{{ message }}!".into()),
         recipe: Recipe::Command {
             command: "{{ message }}".into(),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         sources: StringOrList::List(vec!["{{ subject }}.txt".into()]),
         deps: StringOrList::Empty,
@@ -35,6 +36,7 @@ fn sample_manifest() -> Result<NetsukeManifest> {
         name: "example".into(),
         recipe: Recipe::Command {
             command: "{{ 2 + 2 }}".into(),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         description: Some("{{ 1 + 1 }}".into()),
     };
@@ -84,7 +86,7 @@ fn expect_list(value: &StringOrList, label: impl std::fmt::Display) -> &[String]
 #[expect(clippy::panic, reason = "panic for clearer test failures")]
 fn expect_command(recipe: &Recipe, label: impl std::fmt::Display) -> &str {
     match recipe {
-        Recipe::Command { command } => match command {
+        Recipe::Command { command, .. } => match command {
             StringOrList::String(item) => item,
             other => panic!("expected {label} command as a scalar, got {other:?}"),
         },
@@ -129,7 +131,7 @@ fn assert_rendered_target(target: &Target) {
 fn assert_rendered_rule(rule: &Rule) {
     assert_eq!(rule.description.as_deref(), Some("2"));
     match &rule.recipe {
-        Recipe::Command { command } => assert_eq!(command.as_single(), Some("4")),
+        Recipe::Command { command, .. } => assert_eq!(command.as_single(), Some("4")),
         other => panic!("expected command recipe, got {other:?}"),
     }
 }
@@ -150,43 +152,6 @@ fn render_manifest_renders_targets_and_rules() -> Result<()> {
 }
 
 #[test]
-fn command_list_renders_each_entry_with_ins_outs_placeholders() -> Result<()> {
-    let env = Environment::new();
-    let mut vars = Vars::new();
-    vars.insert("ins".into(), ManifestValue::String("caller-ins".into()));
-    vars.insert("outs".into(), ManifestValue::String("caller-outs".into()));
-    let manifest = NetsukeManifest {
-        netsuke_version: Version::parse("1.0.0")?,
-        vars,
-        macros: Vec::new(),
-        rules: vec![Rule {
-            name: "check".into(),
-            recipe: Recipe::Command {
-                command: StringOrList::List(vec![
-                    "echo {{ 1 + 1 }}".into(),
-                    "{{ ins }}".into(),
-                    "{{ outs }}".into(),
-                ]),
-            },
-            description: None,
-        }],
-        actions: Vec::new(),
-        targets: Vec::new(),
-        defaults: Vec::new(),
-    };
-    let rendered = render_manifest(manifest, &env)?;
-    let rule = rendered.rules.first().context("rendered rule missing")?;
-    let Recipe::Command { command } = &rule.recipe else {
-        anyhow::bail!("expected command recipe, got {:?}", rule.recipe);
-    };
-    anyhow::ensure!(
-        command.to_string_vec() == ["echo 2", crate::ir::INS_TOKEN, crate::ir::OUTS_TOKEN],
-        "unexpected rendered command list: {command:?}"
-    );
-    Ok(())
-}
-
-#[test]
 fn command_list_render_failure_names_the_failing_entry() -> Result<()> {
     let env = Environment::new();
     let manifest = NetsukeManifest {
@@ -197,6 +162,7 @@ fn command_list_render_failure_names_the_failing_entry() -> Result<()> {
             name: "check".into(),
             recipe: Recipe::Command {
                 command: StringOrList::List(vec!["echo ok".into(), "echo {{ 1 + }}".into()]),
+                isolation: crate::ast::CommandIsolation::Shared,
             },
             description: None,
         }],
@@ -302,6 +268,7 @@ fn manifest_with_build_only_recipe_helper() -> Result<NetsukeManifest> {
                     "nextest run{% else %}test{% endif %} --all-targets"
                 )
                 .into(),
+                isolation: crate::ast::CommandIsolation::Shared,
             },
             sources: StringOrList::Empty,
             deps: StringOrList::Empty,

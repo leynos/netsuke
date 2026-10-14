@@ -179,6 +179,8 @@ manifest.glob.unknown_pattern_error = neznámá chyba vzoru.
 manifest.glob.io_failed = Glob selhal pro „{ $pattern }“: { $detail }.
 manifest.glob.unknown_io_error = neznámá vstupně-výstupní chyba.
 manifest.command_list_empty = Pole „command“ nesmí být prázdné: zadejte řetězec s příkazem nebo neprázdný seznam.
+manifest.command_isolation_recipe = Pole „command_isolation“ vyžaduje recept se seznamem příkazů.
+manifest.command_isolation_scalar = „command_isolation: isolated“ vyžaduje seznam příkazů.
 
 # Chyby mezikódu.
 ir.rule_not_found = Pravidlo „{ $rule }“, na které odkazuje cíl „{ $target }“, nebylo nalezeno.

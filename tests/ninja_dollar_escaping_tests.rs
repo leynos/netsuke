@@ -221,6 +221,7 @@ fn backend_doubles_every_residual_shell_dollar(
         (
             Recipe::Command {
                 command: command.into(),
+                isolation: netsuke::ast::CommandIsolation::Shared,
             },
             expected.into(),
         ),
@@ -242,9 +243,9 @@ fn backend_doubles_every_residual_shell_dollar(
 
 /// Verify that Netsuke placeholders lower before residual dollars are escaped.
 #[rstest]
-#[case::scalar(Recipe::Command { command: "echo $NETSUKE_TEST_SENTINEL".into() })]
+#[case::scalar(Recipe::Command { command: "echo $NETSUKE_TEST_SENTINEL".into(), isolation: netsuke::ast::CommandIsolation::Shared })]
 #[case::command_list(Recipe::Command {
-    command: StringOrList::List(vec!["echo ${NETSUKE_TEST_SENTINEL:-fallback}".into()]),
+    command: StringOrList::List(vec!["echo ${NETSUKE_TEST_SENTINEL:-fallback}".into()]), isolation: netsuke::ast::CommandIsolation::Shared
 })]
 #[case::script(Recipe::Script { script: "echo $NETSUKE_TEST_SENTINEL".into() })]
 fn ninja_expands_only_netsuke_placeholders(#[case] recipe: Recipe) -> Result<()> {

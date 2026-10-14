@@ -70,7 +70,9 @@ fn first_target_command(world: &TestWorld, command: &str) -> Result<()> {
     let result = world.manifest.with_ref(|m| {
         let target = m.targets.first().context("missing target 1")?;
         match &target.recipe {
-            Recipe::Command { command: actual } => {
+            Recipe::Command {
+                command: actual, ..
+            } => {
                 let actual = actual.as_single().context("command is a scalar")?;
                 assert_target_command_eq(1, actual, &command)
             }
@@ -164,7 +166,9 @@ fn target_name_n(world: &TestWorld, index: usize, name: &str) -> Result<()> {
 fn target_command_n(world: &TestWorld, index: usize, command: &str) -> Result<()> {
     let command = CommandText::new(command);
     with_target(world, index, |target| match &target.recipe {
-        Recipe::Command { command: actual } => {
+        Recipe::Command {
+            command: actual, ..
+        } => {
             let actual = actual.as_single().context("command is a scalar")?;
             assert_target_command_eq(index, actual, &command)
         }

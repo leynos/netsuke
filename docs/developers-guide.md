@@ -727,6 +727,15 @@ that constructs the IR directly must reject an empty
 `StringOrList::List(Vec::new())` during Ninja generation rather than emitting
 an unusable rule.
 
+`Recipe::Command` also carries the typed `CommandIsolation` value from the
+literal `command_isolation` key. `shared` is the default and is omitted from
+serialization; `isolated` is included in action identity. Manifest rendering
+does not template the mode, and command interpolation copies it unchanged.
+Rule-backed targets inherit the rule recipe's mode because rule resolution
+clones the complete recipe. The mode is available to static readers before any
+recipe is executed; see
+[What a static reader may rely on](users-guide.md#what-a-static-reader-may-rely-on).
+
 ### Dependency-only actions and targets
 
 The manifest's internal dependency-only marker represents an action or target
@@ -762,35 +771,46 @@ The lowering stages have deliberately separate responsibilities:
   contains lowered command text and no Ninja rule variables; an inert region
   may still retain an internal Netsuke marker token.
 - `src/ninja_gen/mod.rs` delegates completed recipe text to
-  `src/ninja_gen_recipe_shell.rs`. On Unix, and for the explicit Windows Bash
+  `src/ninja_gen/recipe_shell.rs`. On Unix, and for the explicit Windows Bash
   compatibility route, a scalar remains POSIX shell text. A list puts each
   entry in a brace group and joins the groups with `&&`; `eval` receives a
   shell-quoted payload, which keeps inline comments and trailing control
-  operators inside the entry boundary. Braces preserve current-shell state and
-  the chain remains fail-fast. The existing background-job and `exec`
-  validation rules apply to this POSIX route.
+  operators inside the entry boundary. In `shared` mode the braces preserve
+  current-shell state. In `isolated` mode each existing entry wrapper is
+  enclosed in a subshell, so its working-directory and environment changes do
+  not reach later entries. Both modes retain fail-fast ordering, background job
+  waiting, and the direct/unsupported `exec` rules. The isolated failure trap
+  emits its marker only for non-zero exit status, so `exit 0` leaves no stale
+  attribution marker.
 - On Windows, `RecipeShell::PowerShell` renders scalar commands and scripts as
   encoded `powershell.exe` invocations while they fit the Windows command-line
   limit. Recipes up to 1 MiB use Ninja's per-edge `rspfile` and
-  `rspfile_content` bindings; larger recipes are rejected before Netsuke
-  allocates UTF-16LE and Base64 payloads. Ninja derives a unique `$out`-based
-  `.ps1` response-file name, creates it in the edge's working directory with an
-  ASCII PowerShell bootstrap containing the Base64 UTF-16LE payload, and
+  `rspfile_content` bindings; the size check covers the complete parent text,
+  including encoded isolated-entry payloads. Ninja derives a unique `$out`-based
+  `.ps1` response-file name, creates it in the edge's working directory with
+  an ASCII PowerShell bootstrap containing the Base64 UTF-16LE payload, and
   invokes it with `powershell.exe -File "$rspfile"`. The bootstrap removes its
   own `$PSCommandPath` in a `finally` block after the recipe succeeds or fails;
-  query-only generation emits the bindings without creating files. An ordered
-  list becomes one PowerShell script that checks `$LASTEXITCODE` immediately
-  after each generated list entry, preserving PowerShell state while stopping
-  before a later entry can overwrite a non-zero status. Multiple native
-  commands inside one entry are not individually instrumented. Terminating
-  PowerShell errors also stop the list. The POSIX command-list analyser is
-  deliberately not applied to this route. The runner resolves
-  `NETSUKE_WINDOWS_SHELL` and preflights `bash.exe` only when the optional
-  compatibility route is selected; `help targets` stays outside this execution
-  boundary.
+  query-only generation emits the bindings without creating files. Shared lists
+  become one PowerShell script that checks `$LASTEXITCODE` after each entry and
+  carries PowerShell state forward. Isolated lists encode each entry with a
+  cmdlet `ErrorAction` default of `Stop` and native stderr pass-through, then
+  launch a fresh `"$PSHOME\powershell.exe"` from the unchanged parent baseline
+  and stop when a child returns non-zero. The parent also passes through native
+  stderr so a successful child that reports diagnostics does not stop dispatch.
+  Netsuke rejects statically oversized child command lines during generation;
+  the parent also checks the expanded `$PSHOME` executable path before launch
+  and reports the entry and final length if it exceeds 32,766 characters.
+  Multiple native commands inside one entry are not individually instrumented.
+  Cmdlet errors and non-zero native exits stop isolated entries; native stderr
+  alone does not. The POSIX command-list analyser is deliberately not applied
+  to this route; PowerShell does not emit POSIX failure markers. The runner
+  resolves `NETSUKE_WINDOWS_SHELL` and preflights `bash.exe` only when the
+  optional compatibility route is selected; `help targets` stays outside this
+  execution boundary.
 - The brace-group, `eval`, background-job, and `exec` validation rules described
   above apply only to Unix and the explicit Windows Bash compatibility route.
-  PowerShell uses its per-entry `$LASTEXITCODE` and terminating-error checks
+  PowerShell uses its per-entry `$LASTEXITCODE` and cmdlet-error policy
   instead. In shell-dollar documentation, `$$` therefore means a process
   identifier only for POSIX/Bash; PowerShell's `$$` automatic variable contains
   the last token received by the session.

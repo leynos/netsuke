@@ -1,9 +1,9 @@
 //! Compile-pass fixture for the public command-list AST surface.
 
-use netsuke::ast::{Recipe, Recipe::Command, StringOrList};
+use netsuke::ast::{CommandIsolation, Recipe, Recipe::Command, StringOrList};
 
 fn command(recipe: Recipe) -> StringOrList {
-    let Recipe::Command { command } = recipe else {
+    let Recipe::Command { command, .. } = recipe else {
         unreachable!("fixture constructs only command recipes");
     };
     command
@@ -29,11 +29,13 @@ fn main() {
 
     let constructed: StringOrList = command(Command {
         command: StringOrList::from("recipe"),
+        isolation: CommandIsolation::Shared,
     });
     assert!(matches!(constructed, StringOrList::String(value) if value == "recipe"));
     assert_eq!(
         recipe_kind(Command {
             command: StringOrList::from("recipe"),
+            isolation: CommandIsolation::Shared,
         }),
         "command"
     );

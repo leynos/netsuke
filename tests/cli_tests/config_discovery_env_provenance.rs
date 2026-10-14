@@ -142,7 +142,7 @@ fn env_manifest(name: &str) -> String {
 /// Return the rendered command from the first rule when it uses a command recipe.
 fn first_rule_command(manifest: &NetsukeManifest) -> Option<&str> {
     match &manifest.rules.first()?.recipe {
-        Recipe::Command { command } => command.as_single(),
+        Recipe::Command { command, .. } => command.as_single(),
         _ => None,
     }
 }
