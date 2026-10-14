@@ -309,23 +309,24 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   compatibility route, a list is lowered to brace groups that evaluate each
   entry through a shell-quoted `eval` payload and are joined by `&&`. The
   literal `command_isolation` field selects `shared` or `isolated` and defaults
-  to `shared`; it is serialized with the command recipe, preserved during
-  rendering, rule resolution, and interpolation, and is not templated. Shared
-  groups run in the current shell, so working directory, environment, and shell
-  variables carry forward. Isolated groups run in subshells from the action
-  baseline. The `eval` boundary keeps an entry's inline comments or trailing
-  control operators from consuming the generated group terminator. Entries
-  remain ordered and fail fast. On POSIX and Bash, a successful `exit` or direct
-  `exec` ends only an isolated entry; in shared mode it ends the remaining
-  chain. A successful PowerShell `exit` ends its process, while `exec` has no
-  POSIX meaning on that route. A failed POSIX/Bash entry emits a bounded
-  action/entry marker for the runner to include in the failure diagnostic. The
-  resulting POSIX command must be parsable by
-  [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). On Windows with
-  the default PowerShell route, shared lists use one encoded script, while
-  isolated lists launch one new encoded `powershell.exe` process per entry.
-  Both modes check `$LASTEXITCODE` and stop on a non-zero status. An entry
-  remains opaque recipe text, so multiple native commands separated by
+  to `shared`. Only `isolated` is serialized; omitting `shared` preserves
+  legacy action hashes, while `isolated` contributes to action identity. The
+  mode is preserved during rendering, rule resolution, and interpolation, and
+  is not templated. Shared groups run in the current shell, so working
+  directory, environment, and shell variables carry forward. Isolated groups
+  run in subshells from the action baseline. The `eval` boundary keeps an
+  entry's inline comments or trailing control operators from consuming the
+  generated group terminator. Entries remain ordered and fail fast. On POSIX
+  and Bash, a successful `exit` or direct `exec` ends only an isolated entry;
+  in shared mode it ends the remaining chain. A successful PowerShell `exit`
+  ends its process, while `exec` has no POSIX meaning on that route. A failed
+  POSIX/Bash entry emits a bounded action/entry marker for the runner to
+  include in the failure diagnostic. The resulting POSIX command must be
+  parsable by [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). On
+  Windows with the default PowerShell route, shared lists use one encoded
+  script, while isolated lists launch one new encoded `powershell.exe` process
+  per entry. Both modes check `$LASTEXITCODE` and stop on a non-zero status. An
+  entry remains opaque recipe text, so multiple native commands separated by
   semicolons inside one entry are not checked individually. An empty command
   list is rejected during manifest deserialization. Plain command strings
   remain shell text; authors should use structured recipes or explicit quoting
@@ -953,6 +954,7 @@ pub enum CommandIsolation {
 pub enum Recipe {
     Command {
         command: StringOrList,
+        // Serialize only Isolated; omitting Shared preserves legacy hashes.
         #[serde(
             rename = "command_isolation",
             default,
