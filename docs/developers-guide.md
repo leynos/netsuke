@@ -2687,21 +2687,19 @@ only; the tests serve release fixtures over `file://` so the real download,
 verification, and extraction path runs without a network.
 
 `make test-ci-scripts` runs their suite, the `test_ci_*.py` modules under
-`scripts/tests/`, with pytest and
-[cmd-mox](https://github.com/leynos/cmd-mox), which shims the external programs
-(`sudo`, `sccache`, `df`, `cargo`) so each script's happy path and failure modes
-are exercised at the process boundary. The target names those modules one by
-one rather than by glob, so the local-reference contract sees each as
-reachable. CI runs the same
-target before `make check-fmt`. The scripts pin `cyclopts` and `cuprum` in
-their PEP 723 blocks at the Makefile's `CYCLOPTS_VERSION` and `CUPRUM_VERSION`,
-held equal by `scripts/tests/test_ci_scripts_metadata.py`, and
-`make typecheck-python` checks them with ty alongside the rest of the Python
-sources. `CUPRUM_VERSION` names a PyPI release rather than a `leynos/cuprum`
-commit: the helpers under `scripts/` share one `run_sync` signature with the
-scripts under `scripts/ci`, and `make typecheck-python` resolves a single
-cuprum for the whole tree, so a git pin would leave that one resolution unable
-to satisfy both call shapes.
+`scripts/tests/`, with pytest and [cmd-mox](https://github.com/leynos/cmd-mox),
+which shims the external programs (`sudo`, `sccache`, `df`, `cargo`) so each
+script's happy path and failure modes are exercised at the process boundary.
+The target names those modules one by one rather than by glob, so the
+local-reference contract sees each as reachable. CI runs the same target before
+`make check-fmt`. The scripts pin `cyclopts` and `cuprum` in their PEP 723
+blocks at the Makefile's `CYCLOPTS_VERSION` and `CUPRUM_VERSION`, held equal by
+`scripts/tests/test_ci_scripts_metadata.py`, and `make typecheck-python` checks
+them with ty alongside the rest of the Python sources. `CUPRUM_VERSION` names a
+PyPI release rather than a `leynos/cuprum` commit: the helpers under `scripts/`
+share one `run_sync` signature with the scripts under `scripts/ci`, and
+`make typecheck-python` resolves a single cuprum for the whole tree, so a git
+pin would leave that one resolution unable to satisfy both call shapes.
 
 ### GitHub Actions validation
 
@@ -2736,7 +2734,6 @@ and the same curated `PATH` carries `~/.cargo/bin`, `~/.local/bin`, and
 different directory, or pass `ACTIONLINT=/path/to/actionlint` to use a binary
 elsewhere; CI does exactly that with its checked-out copy, which the installer
 writes into the working directory:
-
 
 ```bash
 INPUT_ACTIONLINT_VERSION='1.7.12' \
