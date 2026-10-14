@@ -2679,6 +2679,18 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 
 ## Surprises & discoveries
 
+- (2026-10-14) **`mdtablefix --wrap` can need two passes to converge, so one
+  canonicalisation is not enough to clear `make check-fmt`.** After a hand-edit
+  to a long paragraph in this plan, piping a single canonicalisation straight
+  back into the file still failed `--check` with a `+3 -17` line delta. Running
+  mdtablefix over *its own output* changed it further; only that second output
+  was a fixed point. The wrap and join steps interact — re-flowing a line
+  alters which lines are eligible to be joined on the next run — so convergence
+  is iterative. The safe repair is to diff the first pass against a second and
+  copy back only once `diff` is empty. This is worth knowing because the
+  failure mode looks like "the gate is flaky" when the tool is in fact
+  deterministic and the repair was simply incomplete.
+
 - (2026-10-14) **A serialized test group turns a compile-cache outage into a
   timeout, and it does so at whatever test happens to be holding the slot.** The
   `nested-cargo-builds` group in `.config/nextest.toml` pins
