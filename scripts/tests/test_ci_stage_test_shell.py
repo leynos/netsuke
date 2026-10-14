@@ -238,6 +238,38 @@ def test_reports_a_package_that_leaves_no_binary_on_path(
     )
 
 
+def test_a_staged_copy_printing_only_whitespace_still_succeeds(
+    cmd_mox: CmdMox,
+    workflow_env: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A staged copy that runs but says nothing is staged, not an IndexError.
+
+    ``verify_staged`` returns the first line as a courtesy report, so output
+    that strips to nothing must yield the empty string. Indexing the stripped
+    result before splitting it would raise ``IndexError``, which the entry
+    point does not catch, and the step would fail with a traceback naming
+    neither the staged file nor the reason.
+    """
+    system_bin = workflow_env / "usr-bin"
+    # Runs successfully and exits 0, so the version probe passes.
+    write_executable(system_bin / "gawk", "printf '  \\n'")
+    monkeypatch.setenv("PATH", f"{system_bin}{os.pathsep}{os.environ['PATH']}")
+    _apt_get(cmd_mox)
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 0, "expected: exit_code == 0"
+    out = capsys.readouterr().out
+    assert "Traceback" not in out, "the step must not fail with a traceback"
+    staged = workflow_env / "runner-temp" / "netsuke-test-bin" / "awk"
+    assert staged.is_file(), "expected: staged.is_file()"
+    assert out.rstrip().endswith(f"staged {system_bin / 'gawk'} as {staged}:"), (
+        "the report must end with the empty version line"
+    )
+
+
 def test_honours_package_and_staging_name_inputs(
     cmd_mox: CmdMox,
     workflow_env: pathlib.Path,

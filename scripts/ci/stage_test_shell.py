@@ -92,12 +92,35 @@ def stage_copy(source: pathlib.Path, staging_dir: pathlib.Path) -> pathlib.Path:
 
 
 def verify_staged(staged: pathlib.Path) -> str:
-    """Run the staged ``awk --version`` and return its first output line."""
+    """Run the staged ``awk --version`` and return its first output line.
+
+    The line is reported rather than asserted on, so a binary that runs and
+    exits cleanly but prints only whitespace yields the empty string and the
+    step still succeeds. Splitting before indexing is what makes that true:
+    the stripped output becomes an empty list, and indexing it would raise
+    ``IndexError`` from a path the entry point does not catch, so a staged copy
+    that works would fail the step with a traceback naming neither the file nor
+    the reason.
+
+    Returns
+    -------
+    str
+        The first line of the staged binary's version output, or the empty
+        string when it printed nothing usable.
+
+    Raises
+    ------
+    CiScriptError
+        If the staged copy does not run. The staging step exists to prove the
+        copy runs, so a non-zero exit is the failure this function reports
+        rather than a version to compare.
+    """
     result = run(str(staged), "--version", spec=RunSpec(catalogue(str(staged))))
     if not result.ok:
         message = f"the staged awk does not run: {describe_failure(result)}"
         raise CiScriptError(message)
-    return (result.stdout or "").strip().splitlines()[0] if result.stdout else ""
+    lines = (result.stdout or "").strip().splitlines()
+    return lines[0] if lines else ""
 
 
 @app.default

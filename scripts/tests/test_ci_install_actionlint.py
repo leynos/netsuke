@@ -113,8 +113,8 @@ def test_stale_cached_binary_is_replaced_by_the_pinned_release(
     exit_code = invoke(script.app)
 
     assert exit_code == 0, "expected: exit_code == 0"
-    assert script.reported_version(install_dir / "actionlint") == VERSION, (
-        "expected: script.reported_version(install_dir / 'actionlint') == VE..."
+    assert script.probe_version(install_dir / "actionlint").version == VERSION, (
+        "expected: the replaced binary to report the pinned version"
     )
 
 
@@ -197,6 +197,130 @@ def test_missing_pins_are_reported_before_anything_runs(
     )
     assert not (tmp_path / "actionlint").exists(), (
         "expected: not (tmp_path / 'actionlint').exists()"
+    )
+
+
+def test_a_missing_install_directory_is_created_on_extraction(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``INPUT_INSTALL_DIR`` may name a directory that does not exist yet.
+
+    The workflow uses the existing working directory, so this only bites when
+    the input overrides it. Extraction writes into the destination rather than
+    creating it, so without the mkdir the cold path fails with a
+    ``FileNotFoundError`` from deep inside the archive write, naming neither
+    the input nor the directory it was told to use.
+    """
+    install_dir = tmp_path / "workspace" / "nested"
+    monkeypatch.setenv("INPUT_INSTALL_DIR", str(install_dir))
+    monkeypatch.setenv("INPUT_ACTIONLINT_VERSION", VERSION)
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    _publish_release(tmp_path, monkeypatch, {"actionlint": script_reporting(VERSION)})
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 0, "expected: exit_code == 0"
+    binary = install_dir / "actionlint"
+    assert binary.is_file(), "the binary must land in the directory that was made"
+    assert os.access(binary, os.X_OK), "expected: os.access(binary, os.X_OK)"
+    assert f"installed actionlint {VERSION}" in capsys.readouterr().out, (
+        "the install must be reported with its version"
+    )
+
+
+def test_a_cached_binary_that_cannot_report_a_version_fails_the_step(
+    install_dir: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A cached binary that runs but cannot answer is a failure, not a miss.
+
+    A reinstall would replace it and the step would pass, so a broken cache
+    would read as a healthy one and the entry would stay broken until the
+    version pin changed. The failure has to surface here, where the diagnostic
+    can name the binary and its exit status. ``INPUT_RELEASE_ROOT`` points at
+    a directory with no releases, so a step that treated this as a cache miss
+    would fail on the download instead and the assertions below would catch
+    the wrong failure.
+    """
+    write_executable(install_dir / "actionlint", "exit 7")
+    monkeypatch.setenv("INPUT_RELEASE_ROOT", file_url(tmp_path / "absent"))
+    monkeypatch.setenv("INPUT_ACTIONLINT_SHA256", "0" * 64)
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 1, "expected: exit_code == 1"
+    err = capsys.readouterr().err
+    assert "the cached actionlint cannot be used" in err, (
+        "expected: the diagnostic to name the unusable cache entry"
+    )
+    assert "exited 7" in err, "expected: the probe's exit status in the diagnostic"
+    assert "does not match its pinned SHA-256" not in err, (
+        "the step must fail at the cache probe, not at a download it should "
+        "never have attempted"
+    )
+
+
+def test_a_cached_binary_printing_nothing_fails_the_step(
+    install_dir: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A probe that exits 0 while printing nothing is still not an answer.
+
+    This is the other half of the same failure: the exit status is clean, so
+    only the empty output marks the binary as unusable. Without that check the
+    empty string would be compared against the pin, read as a version
+    mismatch, and the binary would be replaced.
+    """
+    write_executable(install_dir / "actionlint", "true")
+    monkeypatch.setenv("INPUT_RELEASE_ROOT", file_url(tmp_path / "absent"))
+    monkeypatch.setenv("INPUT_ACTIONLINT_SHA256", "0" * 64)
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 1, "expected: exit_code == 1"
+    err = capsys.readouterr().err
+    assert "the cached actionlint cannot be used" in err, (
+        "expected: the diagnostic to name the unusable cache entry"
+    )
+    assert "exited 0" in err, "expected: the probe's exit status in the diagnostic"
+
+
+def test_a_failed_checksum_leaves_no_install_directory_behind(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The install directory is made after verification, not before it.
+
+    Creating it first would leave an empty directory behind on a checksum
+    mismatch, which reads as a partially completed install to anyone looking
+    at the cache volume afterwards.
+    """
+    install_dir = tmp_path / "workspace" / "nested"
+    monkeypatch.setenv("INPUT_INSTALL_DIR", str(install_dir))
+    monkeypatch.setenv("INPUT_ACTIONLINT_VERSION", VERSION)
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    _publish_release(
+        tmp_path,
+        monkeypatch,
+        {"actionlint": script_reporting(VERSION)},
+        pin_matches=False,
+    )
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 1, "expected: exit_code == 1"
+    assert not install_dir.exists(), (
+        "a rejected archive must not leave an install directory behind"
+    )
+    assert "does not match its pinned SHA-256" in capsys.readouterr().err, (
+        "expected: the checksum failure to be reported"
     )
 
 
