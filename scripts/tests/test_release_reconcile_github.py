@@ -46,14 +46,20 @@ def test_a_missing_asset_is_planned_for_upload() -> None:
         {"netsuke.tar.gz": DIGEST_A, "netsuke.tar.gz.sha256": DIGEST_B},
         {"netsuke.tar.gz.sha256": f"{DIGEST_PREFIX}{DIGEST_B}"},
     )
-    assert plan["netsuke.tar.gz"] is AssetAction.UPLOAD
-    assert plan["netsuke.tar.gz.sha256"] is AssetAction.SKIP_VERIFIED
+    assert plan["netsuke.tar.gz"] is AssetAction.UPLOAD, (
+        "an absent archive must be planned for upload"
+    )
+    assert plan["netsuke.tar.gz.sha256"] is AssetAction.SKIP_VERIFIED, (
+        "a sidecar whose digest matches must be left alone"
+    )
 
 
 def test_a_present_asset_with_the_right_digest_is_skipped() -> None:
     """Require a verified asset to be left alone rather than re-uploaded."""
     plan = _plan({"netsuke.tar.gz": DIGEST_A}, {"netsuke.tar.gz": f"sha256:{DIGEST_A}"})
-    assert plan["netsuke.tar.gz"] is AssetAction.SKIP_VERIFIED
+    assert plan["netsuke.tar.gz"] is AssetAction.SKIP_VERIFIED, (
+        "an asset whose published digest matches must not be re-uploaded"
+    )
 
 
 def test_a_present_asset_with_the_wrong_digest_conflicts() -> None:
@@ -64,13 +70,15 @@ def test_a_present_asset_with_the_wrong_digest_conflicts() -> None:
     stop.
     """
     plan = _plan({"netsuke.tar.gz": DIGEST_A}, {"netsuke.tar.gz": f"sha256:{DIGEST_B}"})
-    assert plan["netsuke.tar.gz"] is AssetAction.CONFLICT
+    assert plan["netsuke.tar.gz"] is AssetAction.CONFLICT, (
+        "different bytes under the same name must stop the release"
+    )
     assert conflicts(
         plan_asset_actions(
             expected={"netsuke.tar.gz": DIGEST_A},
             present={"netsuke.tar.gz": f"sha256:{DIGEST_B}"},
         )
-    ) == ("netsuke.tar.gz",)
+    ) == ("netsuke.tar.gz",), "the conflicting name must be reported"
 
 
 def test_a_present_asset_with_no_reported_digest_conflicts() -> None:
@@ -80,7 +88,9 @@ def test_a_present_asset_with_no_reported_digest_conflicts() -> None:
     unverifiable asset as verified is the same failure as name-matching.
     """
     plan = _plan({"netsuke.tar.gz": DIGEST_A}, {"netsuke.tar.gz": None})
-    assert plan["netsuke.tar.gz"] is AssetAction.CONFLICT
+    assert plan["netsuke.tar.gz"] is AssetAction.CONFLICT, (
+        "an asset with no reported digest has no evidence and must conflict"
+    )
 
 
 def test_undeclared_assets_are_not_decided_here() -> None:
@@ -94,14 +104,18 @@ def test_undeclared_assets_are_not_decided_here() -> None:
         {"netsuke.tar.gz": DIGEST_A},
         {"netsuke.tar.gz": f"sha256:{DIGEST_A}", "stowaway.txt": f"sha256:{DIGEST_B}"},
     )
-    assert set(plan) == {"netsuke.tar.gz"}
+    assert set(plan) == {"netsuke.tar.gz"}, (
+        "an undeclared asset must not appear in the plan"
+    )
 
 
 def test_the_plan_is_sorted_by_asset_name() -> None:
     """Require a stable order, so two runs of the same input read identically."""
     names = ["c.tar.gz", "a.tar.gz", "b.tar.gz"]
-    plan = plan_asset_actions(expected={name: DIGEST_A for name in names}, present={})
-    assert [name for name, _ in plan] == sorted(names)
+    plan = plan_asset_actions(expected=dict.fromkeys(names, DIGEST_A), present={})
+    assert [name for name, _ in plan] == sorted(names), (
+        "the plan must be ordered by asset name"
+    )
 
 
 @pytest.mark.parametrize(
@@ -128,7 +142,9 @@ def test_normalise_digest_accepts_only_the_prefixed_form(
     The prefixed and upper-case readings must compare equal to a bare digest,
     or a correct asset is reported as a conflict.
     """
-    assert normalise_digest(reported) == expected
+    assert normalise_digest(reported) == expected, (
+        "only GitHub's prefixed digest form may normalise to a bare digest"
+    )
 
 
 def test_every_expected_asset_receives_exactly_one_action() -> None:
@@ -140,8 +156,12 @@ def test_every_expected_asset_receives_exactly_one_action() -> None:
     expected = {f"{n}.tar.gz": DIGEST_A for n in range(5)}
     present = {f"{n}.tar.gz": f"sha256:{DIGEST_A}" for n in (1, 3)}
     plan = plan_asset_actions(expected=expected, present=present)
-    assert [name for name, _ in plan] == sorted(expected)
-    assert len(plan) == len(expected)
+    assert [name for name, _ in plan] == sorted(expected), (
+        "every expected asset must have its own entry"
+    )
+    assert len(plan) == len(expected), (
+        "no expected asset may be decided twice or dropped"
+    )
 
 
 def test_an_empty_expectation_plans_nothing() -> None:
@@ -154,7 +174,9 @@ def test_an_empty_expectation_plans_nothing() -> None:
     visible to whoever next reads this function and wonders why it does not
     guard the case itself.
     """
-    assert plan_asset_actions(expected={}, present={}) == ()
+    assert not plan_asset_actions(expected={}, present={}), (
+        "an empty expectation must produce an empty plan"
+    )
 
 
 def test_conflicts_reports_every_conflicting_name() -> None:
@@ -163,4 +185,6 @@ def test_conflicts_reports_every_conflicting_name() -> None:
         expected={"a.tar.gz": DIGEST_A, "b.tar.gz": DIGEST_A, "c.tar.gz": DIGEST_A},
         present={"a.tar.gz": f"sha256:{DIGEST_B}", "b.tar.gz": f"sha256:{DIGEST_B}"},
     )
-    assert conflicts(actions) == ("a.tar.gz", "b.tar.gz")
+    assert conflicts(actions) == ("a.tar.gz", "b.tar.gz"), (
+        "every conflicting name must be reported, in plan order"
+    )

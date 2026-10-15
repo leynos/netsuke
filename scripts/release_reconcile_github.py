@@ -149,7 +149,7 @@ def plan_asset_actions(
     return tuple(actions)
 
 
-def conflicts(actions: typ.Iterable[tuple[str, AssetAction]]) -> tuple[str, ...]:
+def conflicts(actions: cabc.Iterable[tuple[str, AssetAction]]) -> tuple[str, ...]:
     """Return the names a planned action set refuses to overwrite.
 
     Parameters

@@ -15,7 +15,7 @@ Run via ``make test-release-publication``.
 """
 
 import hashlib
-import pathlib
+import typing as typ
 
 import pytest
 from release_digest import (
@@ -26,6 +26,9 @@ from release_digest import (
     parse_sidecar,
     verify_file_against_sidecar,
 )
+
+if typ.TYPE_CHECKING:
+    import pathlib
 
 #: Two distinct byte strings with distinct digests, so identity and mismatch
 #: are both reachable. The digests are computed, never written by hand.
@@ -55,7 +58,9 @@ def test_digest_of_file_matches_hashlib(tmp_path: pathlib.Path) -> None:
     """Require the file digest to be the one an independent tool computes."""
     target = tmp_path / "bytes"
     target.write_bytes(ARCHIVE_BYTES)
-    assert digest_of_file(target) == hashlib.sha256(ARCHIVE_BYTES).hexdigest()
+    assert digest_of_file(target) == hashlib.sha256(ARCHIVE_BYTES).hexdigest(), (
+        "the digest must be the one an independent tool computes"
+    )
 
 
 def test_digest_of_file_is_lowercase_hexadecimal(tmp_path: pathlib.Path) -> None:
@@ -63,8 +68,8 @@ def test_digest_of_file_is_lowercase_hexadecimal(tmp_path: pathlib.Path) -> None
     target = tmp_path / "bytes"
     target.write_bytes(ARCHIVE_BYTES)
     digest = digest_of_file(target)
-    assert digest == digest.lower()
-    assert len(digest) == 64
+    assert digest == digest.lower(), "the hexadecimal spelling must be lowercase"
+    assert len(digest) == 64, "the digest must be the full 64 characters"
 
 
 def test_verify_accepts_the_bytes_the_sidecar_describes(
@@ -72,7 +77,9 @@ def test_verify_accepts_the_bytes_the_sidecar_describes(
 ) -> None:
     """Require a correct archive to verify, returning its digest."""
     archive, digest = staged
-    assert verify_file_against_sidecar(archive) == digest
+    assert verify_file_against_sidecar(archive) == digest, (
+        "a correct archive must verify and report its recorded digest"
+    )
 
 
 def test_verify_rejects_a_single_flipped_byte(
@@ -110,8 +117,12 @@ def test_parse_reads_the_gnu_binary_marker() -> None:
     digest = hashlib.sha256(ARCHIVE_BYTES).hexdigest()
     text_digest, text_path = parse_sidecar(f"{digest}  netsuke.tar.gz\n")
     star_digest, star_path = parse_sidecar(f"{digest} *netsuke.tar.gz\n")
-    assert text_digest == star_digest == digest
-    assert text_path == star_path == "netsuke.tar.gz"
+    assert text_digest == star_digest == digest, (
+        "the marker must not be read as part of the digest"
+    )
+    assert text_path == star_path == "netsuke.tar.gz", (
+        "the marker must not be read as part of the path"
+    )
 
 
 def test_parse_discards_the_recorded_directory() -> None:
@@ -123,7 +134,9 @@ def test_parse_discards_the_recorded_directory() -> None:
     """
     digest = hashlib.sha256(ARCHIVE_BYTES).hexdigest()
     _, path = parse_sidecar(f"{digest}  artifacts/linux-x86_64/netsuke.tar.gz\n")
-    assert path == "netsuke.tar.gz"
+    assert path == "netsuke.tar.gz", (
+        "the recorded directory must not survive as part of the asset name"
+    )
 
 
 @pytest.mark.parametrize(
@@ -147,7 +160,7 @@ def test_parse_refuses_a_malformed_sidecar(text: str) -> None:
 
 
 def test_parse_refuses_the_gnu_escaped_path_form() -> None:
-    """Require GNU's escaped-path spelling to be refused deliberately.
+    r"""Require GNU's escaped-path spelling to be refused deliberately.
 
     ``sha256sum`` escapes a path containing a backslash or newline by prefixing
     the line with ``\\``. The inventory requires every asset name to be a bare
@@ -169,12 +182,16 @@ def test_parse_refuses_the_gnu_escaped_path_form() -> None:
     ],
 )
 def test_constant_time_equal_agrees_with_equality(
-    left: str, right: str, identical: bool
+    left: str, right: str, *, identical: bool
 ) -> None:
     """Require the comparison to agree with ``==`` while not short-circuiting.
 
     Constancy is not observable from the result, so the result is what is
     pinned here; the timing property is the rationale in the module.
     """
-    assert constant_time_equal(left, right) is identical
-    assert constant_time_equal(left, right) is (left == right)
+    assert constant_time_equal(left, right) is identical, (
+        "the comparison's verdict must be the declared expectation"
+    )
+    assert constant_time_equal(left, right) is (left == right), (
+        "the comparison must agree with equality"
+    )
