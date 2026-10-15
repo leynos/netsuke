@@ -1571,7 +1571,7 @@ anchors), §4.3 (options shape, `TestSurface`, overlays in the test surface,
 `macro_substitutions`, overlay name rules), §5.5 (the full refusing inventory
 and the `which`/`expanduser` deviation; the six file-reading filters are
 already recorded there), and §7 (shadowed-function capture is possible). Write
-`docs/adr-041-deny-by-default-test-mode-stdlib.md` (surface, refusal code and
+`docs/adr-055-deny-by-default-test-mode-stdlib.md` (surface, refusal code and
 typed source, `is_system` as injection) and index it in `docs/contents.md`. Add
 Addendum E to `docs/adr-018-bound-manifest-template-evaluation.md`. Add a
 "Manifest loader entry points" subsection to `docs/developers-guide.md` (new
