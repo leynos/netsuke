@@ -83,8 +83,8 @@ fn observer_line(seam: StageSeam, stages: &[ManifestLoadStage]) -> String {
     match (seam, stages) {
         (StageSeam::Absent, _) => "observer: none accepted by this entry point\n".to_owned(),
         (StageSeam::Accepted, []) => "observer: accepted, notified no stage\n".to_owned(),
-        (StageSeam::Accepted, stages) => {
-            let names = stages
+        (StageSeam::Accepted, notified) => {
+            let names = notified
                 .iter()
                 .map(|stage| format!("{stage:?}"))
                 .collect::<Vec<_>>()
