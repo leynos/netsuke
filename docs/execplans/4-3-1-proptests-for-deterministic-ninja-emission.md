@@ -281,7 +281,11 @@ or a conditional skip is needed.
 ### Terms used in this plan
 
 - **Build graph / IR** — the `BuildGraph` value above.
-- **Edge** — one `BuildEdge`, rendered as one Ninja `build` statement.
+- **Edge** — one `BuildEdge`. On the simple `generate` path it renders as one
+  Ninja `build` statement; on the bundle path a *serial* edge additionally
+  renders its staged gate and sidecar lines, so the emitted `build` count
+  exceeds the edge count. See `OBL-NOLOSS` for why that makes a count equality
+  the wrong assertion.
 - **Action** — one `Action`, rendered as one Ninja `rule` block.
 - **Dyndep staging** — when an edge has `DependencyOrder::Serial` and more than
   one implicit dependency, `generate_bundle` lowers it into Ninja `dyndep`
@@ -654,12 +658,52 @@ draft stated injectivity without it and was simply wrong.
 
 ______________________________________________________________________
 
-**OBL-NOLOSS** — *every distinct edge is emitted exactly once; no edge is
-silently dropped.*
+**OBL-NOLOSS** — *every distinct edge contributes exactly one line of its own,
+and no edge is silently dropped.*
 
-Statement: for every well-formed graph, the number of `build` statements in the
-emitted text equals the number of distinct edges in the graph, and every
-explicit output appears exactly once on the left-hand side of a `build` line.
+Statement: for every well-formed graph, every explicit output appears exactly
+once on the left-hand side of a `build` line in the emitted text, and no edge's
+outputs are absent from it.
+
+A first version of this statement said instead that "the number of `build`
+statements in the emitted text equals the number of distinct edges in the
+graph". **That count conjunct is false, and it was corrected on 2026-10-15
+before `EP-M4` implemented it.** The bundle path lowers a serial edge into
+staged dyndep gates, and `render_serial_block`
+(`src/ninja_gen/dyndep/mod.rs:247-290`) emits, for each of the edge's `N`
+implicit dependencies, both a sidecar-producing phony line and a gate line:
+
+```plaintext
+build <sidecar>: phony [<previous gate>]     # dyndep/mod.rs:269 or :272
+build <gate>: phony || <sidecar>             # dyndep/mod.rs:277
+```
+
+then once, after the loop, the real edge itself through `render_display_edge`
+(`dyndep/mod.rs:212`). A staged edge therefore contributes **`1 + 2N`** `build`
+statements, and the equality fails by `2N` on exactly the graphs `EP-M3`'s
+non-vacuity assertion guarantees are generated: `reaches_class_intersection`
+requires `dyndep_staged_edges > 0`, and that predicate is
+`dependency_order == Serial && implicit_deps.len() > 1`
+(`strategy/classification.rs:95-100`), which is byte-for-byte the same
+conjunction as `edge_requires_gates` (`src/ninja_gen/mod.rs:237`) — so the
+generator's *interesting* cases are precisely the ones the count breaks on.
+
+Why the surviving conjunct is the stronger one. It carries the whole safety
+argument — a real edge dropped between graph and text loses its output from
+every left-hand side, which is the `MUT-EDGEDROP` failure mode — and it is
+robust to the lowering precisely because `reject_reserved_paths`
+(`dyndep/mod.rs:333`) guarantees no user path occupies `.netsuke/serial` or
+`.netsuke/dyndep`, so no gate or sidecar can supply a user output's left-hand
+side. It is also still order-independent, which is what the obligation needs.
+
+A second, independent trap sits beside this one. Any `EP-M4` property that
+emits through `ninja_gen::generate` will return `Err(DyndepFilesRequired)` on
+every case the generator is built to produce, because `generate_into_with_shell`
+(`src/ninja_gen/mod.rs:161-165`) rejects a graph satisfying
+`graph_requires_dyndep`, which is `edges().any(edge_requires_gates)` — the same
+predicate again. **The oracle must use `generate_bundle(..).build_file()`**,
+which is also what production uses. Choosing `generate` would make the property
+vacuous in a way that reports as a clean `Err`, not as a failure.
 
 This replaces the first draft's `OBL-GUARD`, which asserted a *mechanism*
 ("validation runs before sorting") as a proxy for the failure that matters. The
@@ -703,8 +747,16 @@ domain must exclude empty target names so that "well-formed" keeps meaning what
   edges. Two directed non-well-formed cases: an edge with
   `explicit_outputs: []`, and two edges whose output lists are permutations of
   one another (which `from_manifest` rejects but a direct constructor permits).
-- **Oracle:** the count and set of outputs computed from the spec, independently
-  of the emitter.
+- **Oracle:** the set of outputs computed from the spec, independently of the
+  emitter, compared against the set of user paths appearing on left-hand sides
+  in the emitted text. The entry point must be
+  `generate_bundle(..).build_file()`, **not** `ninja_gen::generate`: the
+  generated domain's intersection class necessarily satisfies
+  `graph_requires_dyndep`, and the simple path rejects exactly those graphs with
+  `Err(DyndepFilesRequired)` — so `generate` would turn every interesting case
+  into a clean-looking error. Counting `build` statements as a whole is
+  deliberately *not* the assertion; see the statement above for why the count
+  exceeds the edge count on this path.
 - **Artefact:** `src/ninja_gen/determinism/no_loss.rs`.
 - **Non-vacuity:**
   - *Covers.* Per-case assertion that at least one graph in the run had a
@@ -2871,8 +2923,36 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
       `cli_configuration_fixture_compiles` timeout is an environmental
       question recorded under Surprises & discoveries, not a milestone defect.
 
-- [ ] `EP-M3` milestone CodeRabbit review: pending.
-- [ ] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
+- [x] (2026-10-15) **The `EP-M3` milestone CodeRabbit review completed,
+      after eight attempts, and returned exactly one finding.** The first
+      seven attempts failed service-side with zero findings; this one was
+      admitted and completed in 71.9 s over the three milestone commits
+      (`1ff0c1e1`, `429720b2`, `2b01a3e3`) against the milestone's real base
+      `7f3b13c3`, with `head` and `comparisonBaseCommitId` matching exactly and
+      all ten milestone paths in `reviewedFiles`. Admissibility is evidenced by
+      the usage counter moving 7/10 → 6/10, not by the tool's self-description.
+      The finding was a module-doc accuracy defect, verified and fixed (see
+      below); no rate limit was encountered.
+
+  ```plaintext
+  ~/.coderabbit/…/review.jsonl:
+    {"type":"complete","status":"review_completed","findings":1,
+     "outcome":"completed","message":"Review completed"}
+  ```
+
+- [x] (2026-10-15) **The one valid concern is resolved.** The finding read
+      "the doc says 'Five claims are checked here'. The file defines four
+      tests", with the alternative "state that the round-trip claim and the
+      divergence claim share one property". All three of its premises were
+      re-verified against the tree rather than taken on trust, and the
+      *alternative* was adopted because it is the accurate repair: the
+      count of claims was never wrong, the *implication* that claims map
+      one-to-one onto properties was. `graph.rs`'s module doc now reads "Four
+      properties are defined here, between them checking five claims" and
+      names the reason the two share a property. The plan's own file table at
+      the `EP-M3` entry already described the file as "the four properties",
+      so the plan and the doc now agree.
+
 - [ ] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [ ] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [ ] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
@@ -2936,6 +3016,61 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   the test is exceeding. Corroborated by an identical 300 s kill on worktree
   `0965d3fb`, whose tree contains no `determinism/` directory at all. The
   repair is to wait for the pool rather than to raise the bound.
+
+- (2026-10-15) **`OBL-NOLOSS`'s count conjunct was false, and the same
+  predicate also makes `ninja_gen::generate` the wrong oracle for `EP-M4`.**
+  Found by reading the emitter while `EP-M3`'s review ran, before `EP-M4`
+  began, and corrected in the obligation's own statement above. Two distinct
+  defects share one root: `edge_requires_gates` (`src/ninja_gen/mod.rs:237`) is
+  `dependency_order == Serial && implicit_deps.len() > 1`, and three separate
+  sites restate it — the classification counter
+  (`strategy/classification.rs:95-100`), `graph_requires_dyndep`
+  (`src/ninja_gen/mod.rs:232`), and the serial lowering itself.
+
+  1. A staged edge emits `1 + 2N` `build` statements, not one, so "the number
+     of `build` statements equals the number of distinct edges" fails by `2N`.
+     The plan's glossary at line 285 — "Edge — one `BuildEdge`, rendered as one
+     Ninja `build` statement" — encodes the same wrong assumption, and the
+     serial `dyndep` lowering is exactly what breaks it.
+  2. Because `generate_into_with_shell` rejects any graph where
+     `graph_requires_dyndep` holds, an `EP-M4` property emitting through
+     `generate` gets `Err(DyndepFilesRequired)` on every case worth generating
+     — the generator's intersection class *requires* `dyndep_staged_edges > 0`.
+     So `OBL-NOLOSS` and its siblings must take the bundle path,
+     `generate_bundle(..).build_file()`.
+
+  The transferable lesson is that this failed **silently in both directions**:
+  the count would have failed loudly on first run, but choosing `generate` as
+  the oracle would have looked like a clean result until someone read what the
+  errors were. A generator whose non-vacuity assertion targets class `X` cannot
+  be paired with an entry point that rejects class `X`, and that pairing is
+  decided by a predicate restated in several places rather than by one shared
+  name.
+
+- (2026-10-15) **A stored CodeRabbit checkpoint from before a rebase is
+  *residue*, and `--fresh` is what disqualifies it.** The review store held a
+  prior session for this branch (`~/.coderabbit/reviews/8ce93b54/887be735`,
+  four rounds on 2026-10-10) whose checkpoint head was `1401d0da`. That commit
+  is **not an ancestor of the current HEAD** —
+  `git merge-base --is-ancestor 1401d0da HEAD` returns non-zero — so its stored
+  findings describe a revision this branch no longer contains. `--fresh` forced
+  the review to re-derive from the diff rather than from that stale cursor, and
+  the run's own `comparisonBaseCommitId` confirms it reviewed
+  `7f3b13c3..2b01a3e3` as intended. **Rule adopted:** a CLI review on a rebased
+  branch is not admissible without `--fresh`, and the admissibility of the
+  *run* is evidenced from `reviewedFiles` and the usage counter, never from the
+  tool's own summary line.
+
+- (2026-10-15) **The review's own base question has two different answers, and
+  conflating them would misstate the comparison.** The branch's *milestone*
+  base is `7f3b13c3` (the parent of `1ff0c1e1`, and what `--base-commit` was
+  given); the *pull request* base is `origin/main`. As of this run those are
+  not the same commit: `git merge-base HEAD origin/main` is `e1df2ead`, the
+  point this branch forked, while the live `origin/main` tip has advanced to
+  `486b876c`. So "base" names three distinct commits — fork point, branch PR
+  base, and live upstream tip — and a review or a gate that names a base must
+  say which. For a milestone review the correct base is the milestone's own,
+  which is what was used.
 
 - (2026-10-14) **The 400-line file cap is a *live* gate on Rust sources, and
   `GraphSpec` alone exceeded it at 538 lines.** `AGENTS.md` states "No single
