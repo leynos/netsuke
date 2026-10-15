@@ -494,6 +494,12 @@ and YAML fixtures, and were set from the inventory in Table 1.
   lint stage unrun. Repaired in `9191699b` by extracting the two disjunctions
   into named predicates on `Capabilities`. `make test` also timed out on an
   admission-pool-bound row (see `Surprises & discoveries`).
+- [x] (2026-10-15) EP-M0 gate re-run at `ca7ed7d4`: **eight of nine gates
+  green**, including the full `lint` cascade whose Python and YAML stages the
+  earlier abort had concealed. `make test` timed out on a third distinct
+  nested-Cargo row, which — with the rows all belonging to one serialized group
+  — is the evidence that the red is queue latency rather than the candidate.
+  `doctest` is unverified, not failed. See `Artefacts and notes`.
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
@@ -586,6 +592,31 @@ and YAML fixtures, and were set from the inventory in Table 1.
   running before `doctest` means a timeout leaves the doctest suite
   *unverified*, not merely failing. Date/Author: 2026-10-15, implementation
   agent.
+
+- Observation: the strongest evidence that a wall-clock gate red belongs to the
+  host rather than the candidate is **role inversion between sibling tests**
+  (three different rows timed out across three runs), but **the weaker version
+  of that claim is the true one**, and the difference matters. All three
+  victims sit in `.config/nextest.toml`'s `nested-cargo-builds` group, which
+  spawns child Cargo builds and is serialized, so its members queue behind one
+  another: `cli_configuration_fixture_compiles` timed out twice, then
+  `production_build_module_slice_has_expected_boundary` — which had *passed* at
+  168.114 s in the Stage A baseline — timed out instead. **What the third run
+  does *not* show is that the earlier victim passed.** It does not appear in
+  the log because `test-nextest` fails fast and left 16 rows unscheduled; a
+  passing row always prints (`PASS` rows, 3926, equal the reported passed
+  count, 3926). So the correct statement is "the set of victims moved", not
+  "the two siblings swapped outcomes". Even the weaker form is
+  load-attributable — a candidate defect cannot change *which* member of a
+  serialized group reaches a fixed wall-clock bound — but it is a claim about
+  scheduling order, and it must not be inflated into a claim about the other
+  row's verdict. Impact: do not read "absent from the log" as "passed"; check
+  whether the runner failed fast first. Two further corollaries: a `TIMEOUT`
+  row is not a `FAIL` row (no assertion failed, but unscheduled rows exist),
+  and the doctest half never runs, leaving it *unverified* rather than failed.
+  Evidence: `/tmp/test-FAIL-ca7ed7d4.out`; the census read 256 compile-slot
+  waits with a queue depth of 240 ahead and 1108 sccache-unreachable notices,
+  and zero admission failures. Date/Author: 2026-10-15, implementation agent.
 
 - Observation: the technical design's line citations are stale, and the loader
   has grown since the design was written: `ManifestEnvironment`,
@@ -1239,12 +1270,26 @@ After each milestone, perform the conformance check listed and update
     `char_device`, `device`); and the ten host-dependent helpers (`which` — as
     both a filter and a function, two registrations — `command_available`,
     `now`, `realpath`, `expanduser`, `size`, `linecount`, `hash`, `digest`).
-  - **Permitted under query — 15 entries**, in registration order inside
-    `register_manifest_query` (`src/stdlib/register.rs:165`):
-    `basename`, `dirname`, `with_suffix`, `relative_to` (via
-    `path::register_query_filters` → `register_lexical_filters`), `compact`,
-    `flatten`, `group_by`, `uniq`, `shell_quote`, `shell_join`, and
-    `timedelta`.
+    Re-verified 2026-10-15 against the EP-M0 oracle,
+    `src/stdlib/register/refusal_snapshots.rs`, whose 23 rows are numbered
+    `=== 00 env … ===` through `=== 22 device … ===` and are the cheapest place
+    to re-count.
+  - **Permitted under query — 11 entries**, grouped by the registration
+    function that adds them inside `register_manifest_query`
+    (`src/stdlib/register.rs:165`). The order below is the order each function
+    registers in; the four functions themselves run in the order listed:
+    - `path::register_query_filters` → `register_lexical_filters`:
+      `basename`, `dirname`, `with_suffix`, `relative_to`.
+    - `collections::register_filters`: `uniq`, `flatten`, `compact`,
+      `group_by`.
+    - `recipe_text::register_filters`, quoting for the host-default dialect:
+      `shell_quote`, `shell_join`.
+    - `time::register_query_functions`: `timedelta`.
+    The count is the *names* the enumeration lists, re-verified against source
+    on 2026-10-15. An earlier draft said 15, which its own name list
+    contradicted; the name list was right and the number wrong. That draft also
+    said "in registration order" over an alphabetized list, which the grouping
+    above replaces with an order that is actually the source's.
   - **Trap:** `realpath` and `size` are *not* dual-surface. They appear only in
     `register_filters` (the build surface); reading them as query-permitted
     comes from letting a `grep -A30` run past the end of
@@ -1257,6 +1302,32 @@ After each milestone, perform the conformance check listed and update
 - Recovery: revert the refactor commits (one per extraction).
 - Remaining gaps: the test surface.
 - Compatibility decision: none (private code).
+- **The extraction invalidates a stated rationale, so carry a replacement.**
+  `classify_query_evaluation`'s doc comment
+  (`src/manifest/jinja_macros/mod.rs:124-126`) argues for keeping the adapter
+  *where it is*: "Keeping the adapter here confines that implementation detail
+  to the Jinja boundary; manifest expansion consumes only [`QueryEvaluation`]."
+  Moving it to `query_classification.rs` contradicts that sentence, so the
+  relocated code needs a rationale for the new home rather than a copy of the
+  old one. The parent is at **394 lines** against AGENTS.md's 400-line cap —
+  six lines of slack — so this extraction is load-bearing for C10 and the
+  parent cannot absorb the code instead. `QueryEvaluation`'s own doc block
+  moves with it and carries the same issue.
+- **Wiring the `is_manifest_query_disabled_error` re-export.** Three hops must
+  survive the move: `src/stdlib/mod.rs:33` re-exports it from `register`,
+  `register.rs:29` re-exports it from `query_helpers`, and
+  `src/manifest/jinja_macros/mod.rs:129` calls it through `crate::stdlib`. The
+  move only forces re-pointing `register.rs:29`; the other two are by-name and
+  keep working. The EP-M0 refusal rows in `register/refusal_snapshots.rs:44`
+  import `super::{is_manifest_query_disabled_error, register_manifest_query}`
+  and move to `restricted_helpers/tests.rs` in the same commit, so their
+  `super::` path changes too.
+- **`FILE_TESTS` visibility.** It is a private `const` in `register.rs` today
+  and is imported by `query_helpers.rs:16` for the stubs and consumed at
+  `register.rs` by the real registrations. The plan's decision stands: either
+  widen its visibility or subsume it in `SURFACE`, which is preferable because
+  `SURFACE` is the single list that stops a test reaching one surface and
+  staying unregistered on the other.
 
 ### EP-M2 — options entry point and thin wrappers
 
@@ -1629,6 +1700,59 @@ not predict:
 **Disposition: `lint` repair committed and its stage re-verified in isolation;
 the full gate set must be re-run at `9191699b` before the milestone is called
 green. The `make test` timeout is re-run, not repaired.**
+
+### EP-M0 gate re-run at `ca7ed7d4`
+
+The repaired head, with the plan records above included in the candidate. Same
+log template, same sequential discipline, same frozen-tree rule.
+
+| Gate                           | Result | Evidence                                                |
+| ------------------------------ | ------ | ------------------------------------------------------- |
+| `make check-fmt`               | PASS   | 3 s; 250 files formatted, 183 unchanged                 |
+| `make typecheck`               | PASS   | 169 s; 0 errors                                         |
+| `make lint`                    | PASS   | 814 s; **every stage reached** (see below)              |
+| `make doc-coverage`            | PASS   | 397 s; aggregate 4988/5045, 98.87% ≥ 80%                |
+| `make test`                    | RED    | 1723 s; one nextest timeout at 300.011 s; doctest UNRUN |
+| `make markdownlint`            | PASS   | 30 s; 0 issues in 183 files                             |
+| `make nixie`                   | PASS   | 1 s; "All diagrams validated successfully!"             |
+| `make spelling`                | PASS   | 16 s; `typos.toml` current, no rewrite                  |
+| `make test-workflow-contracts` | PASS   | 156 s; 1271 passed, 3 skipped; then 27 passed           |
+
+**The lint blind spot is closed.** All four stages were reached and passed:
+`lint-clippy` (`cargo doc`, `cargo clippy`), `lint-whitaker` for both
+`netsuke-build` and `test_support` with **zero diagnostics**, then
+`lint-workflow-scripts`, and finally `lint-python` through its full cascade —
+Ruff, Pylint 10.00/10, the df12 house lints 10.00/10, `ambrleaks` clean, and
+`interrogate` at 100%. `yamllint` and `actionlint` both ran and passed. Every
+stage that the `1d75efce` abort concealed is now exercised. The stage that ran
+1977 s under queue contention took 814 s here with the same content.
+
+**The `make test` red is load attribution, and this run supplies the proof the
+earlier ones could only argue.** The timeout has moved to a **third** victim —
+`build_module_slice_ui_tests::production_build_module_slice_has_expected_boundary`
+at `TIMEOUT [300.011s]`, having grown through `SLOW` at 60/120/180/240 s. All
+three victims across the three runs sit in the `nested-cargo-builds` group
+(`.config/nextest.toml:99-101`), which spawns child Cargo builds and is
+serialized, so its members queue behind one another; a candidate defect cannot
+change which member of that group reaches a fixed wall-clock bound.
+`command_env_ui_tests::cli_configuration_fixture_compiles` — twice the victim —
+does not appear in this run's log, but **it cannot be claimed to have passed**:
+`test-nextest` fails fast, and 16 of 3943 rows were never scheduled. Checked
+against the runner's own accounting, every passing row prints a `PASS` line
+(3926 rows for 3926 reported passes), so an absent row is an unscheduled row.
+The census agrees: 256 compile-slot waits with a queue depth reaching **240
+ahead**, 1108 sccache-unreachable notices, and zero `build-limits:` admission
+failures. The failing row is unchanged from `origin/main`.
+
+**Disposition of this run.** `doctest` remains **UNRUN** (not failed) and 16
+nextest rows were never scheduled, because `test-nextest` fails fast at
+`Makefile:230`. `make test` is to be re-run once on a quieter host, which
+executes `doctest` automatically as its second half. The timeout is not
+repaired: `.config/nextest.toml:57-70` documents this signature for this group
+and deliberately keeps the budget at five periods rather than "moving to an
+allowance the delay can still exceed". EP-M0 is green on every gate whose
+verdict the candidate can decide, with `make test`'s doctest half the one
+outstanding item.
 
 ## Interfaces and dependencies
 
