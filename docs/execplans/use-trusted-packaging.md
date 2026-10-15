@@ -1059,15 +1059,54 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   comparison simplifications the house lints required. Measured:
   `make lint-python` exits 0 through all five stages and
   `make test-release-publication` still reports 212 passed.
-- [x] (2026-10-15) Rebased onto `main` (`486b876c`), replayed as `c09e9e99`.
-  Nine commits, zero conflicts, `range-diff` empty — every commit replayed
-  byte-identically, so there is no conflict resolution to review. Performed
-  BEFORE Stage C because the `local_reference_*` family (11 modules) exists
-  only on `main` and constrains exactly the composite actions Stage C adds. Two
-  predictions confirmed: the dead `.github/actions/cross-build-macos` action
-  (deleted on `main` by PR #859 while this branch still carried it) is gone,
-  and the coverage probe's uncovered count fell from 1 to 0 (inventory 71 →
-  85). The branch still changes zero `.rs` files.
+- [x] (2026-10-15) Rebased onto `main` (`486b876c`), finishing at `c09e9e99`.
+  Nine commits, zero conflicts. Performed BEFORE Stage C because the
+  `local_reference_*` family (11 modules) exists only on `main` and constrains
+  exactly the composite actions Stage C adds. Two predictions confirmed: the
+  dead `.github/actions/cross-build-macos` action — present at the old base
+  `557966c8`, deleted by `9e1bf27e` (#798, "Remove dead release code and stop
+  tests reading GoReleaser YAML", PR #859) before the new base — is gone, and
+  the coverage probe's uncovered count fell from 1 to 0 (inventory 71 → 85).
+  The branch still changes zero `.rs` files.
+
+  The `range-diff` for this replay is **not** empty, and two later citations of
+  it were wrong. Replayed against the range that existed when the sentence was
+  first written (`557966c8..0440bfaa` versus `486b876c..c09e9e99`) all nine
+  commits read `=`, but only because that range had been **amended** that
+  afternoon; the replayed range is `486b876c..7339ed3c`, and against the
+  *pre-amend* old range (`557966c8..f537009f`, three commits) `range-diff`
+  reports `-: -------- > 4: …` through `> 11: …` — eight commits exist only on
+  the new side. That is an artefact of comparing a range that grew before the
+  replay against one that grew after it, not a replayed patch that changed, and
+  the correct comparison for "did the replay alter the patches" is the amended
+  range. Both figures a later entry and the decision log quote are now
+  corrected to the post-amend range.
+- [x] (2026-10-15) Rebased a second time, onto `fa5a4ffa`, finishing at
+  `565d5572` (the current head). Trigger: a stop-hook instruction to rebase onto
+  `origin/main` and re-run `check-fmt`, `test`, `typecheck` and `lint` before
+  a leased force push. Eleven commits, zero conflicts; every commit replayed
+  byte-identically (`range-diff fa5a4ffa..565d5572` against
+  `486b876c..7339ed3c` is all `=`, eleven lines). Audited rather than assumed:
+  the diffstat is identical on both sides — `fa5a4ffa..565d5572` and
+  `486b876c..7339ed3c` each report
+  `18 files changed, 5679 insertions(+), 1 deletion(-)`, and
+  `17 files / 3996 insertions(+) / 1 deletion(-)` excluding this plan, so the
+  delta was **base movement, not patch movement**; `git diff --check` is clean;
+  and `git diff 7339ed3c 565d5572` is 38 inherited files, 6071 insertions, 44
+  deletions, every one of them upstream work this branch never touched — with a
+  single, benign exception, the `Makefile`, which both sides edit and which a
+  raw path-intersection test flags for that reason alone. The two edits do not
+  overlap: upstream moved `PROVER_TOOLS_SOURCE` from
+  `rust-prover-tools@b07ef696` to `@2ba17da6` at the pin line, while this
+  branch adds its `test-release-publication` recipe elsewhere in the file, so
+  both survive at the new base. Recovery refs
+  `recovery/trusted-packaging/OLD_HEAD-7339ed3c` and
+  `recovery/trusted-packaging/TARGET-fa5a4ffa` are held. The branch is 0 behind
+  and 11 ahead of `origin/main`, which still carries `local_reference_*` (11
+  modules) so the ordering constraint above still holds. **Not yet done at this
+  head: the four re-run gates and the force push** — the pre-rebase batch
+  belonged to `7339ed3c`, and a rebased head is a new candidate whose gate
+  evidence is not inherited.
 - [x] (2026-10-15) Corrected five false premises in this plan after checking
   each against source rather than against a contract's shape. Retracted: the
   claim that new `release.yml` jobs need two-place runner registration (the
@@ -1084,10 +1123,16 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `hand-written` as a misspelling of `handwritten`), and the third —
   `markdownlint` MD040 on three unlabelled fences — was **masked**: it never
   ran, because `markdownlint` depends on `spelling` and the prerequisite
-  aborted the target. Corrected the stale `+5495` figure the reflow exposed,
-  and restructured that passage to lead with the figure **excluding** this
-  plan, which is the one the tolerance turns on and the only one stable under
-  revision of the file that carries it.
+  aborted the target. Re-measured the tolerance figures rather than trusting
+  the first reading: the all-paths value had been carried forward as `5495`
+  from an earlier head and is `5679` at this one, and the passage now leads
+  with the figure **excluding** this plan, which is the one the tolerance turns
+  on and the only one that does not move when the plan is revised to record it.
+  No formatter caught this one: `check-fmt` passed at `7339ed3c` both before
+  and after the figure was corrected, because a stale figure is a documentation
+  defect and not a gate input whatsoever. It was found by a provenance check on
+  the SHA the figure cited. Whether `check-fmt` still passes is now a question
+  for the re-run owed at `565d5572`.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 
@@ -1596,17 +1641,36 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `Tolerances` section allows up to 30 changed files and 1 500 net changed
   lines. The figure that decides this is the work **excluding this plan**,
   since the plan is itself a changed path and its size churns with every
-  revision to it. Measured against the rebased candidate
-  (`git diff --shortstat 486b876c..e2b9794b`):
+  revision to it. Measured against the current candidate
+  (`git diff --shortstat fa5a4ffa..565d5572`):
 
   ```plaintext
   excluding this plan:  17 files changed, 3996 insertions(+), 1 deletion(-)
-  all paths:            18 files changed, 5651 insertions(+), 1 deletion(-)
+  all paths:            18 files changed, 5679 insertions(+), 1 deletion(-)
   ```
 
   The file count is inside tolerance (17 ≤ 30) but the line count is not: 3 995
-  net excluding the plan, 2.7× the 1 500 budget. Stage C is still to come and
-  adds five composite actions, new `release.yml` jobs, the LEM-5 suite, a
+  net excluding the plan, 2.7× the 1 500 budget. The **excluding** figure is
+  the one quoted because it is the only one that does not move when this plan
+  is revised to record it. Holding the base fixed at `486b876c` and varying
+  only the head across this branch's own successive revisions, the two figures
+  behave differently:
+
+  ```plaintext
+                excluding this plan            all paths
+  c09e9e99      3996 insertions(+)             5495 insertions(+)
+  e2b9794b      3996 insertions(+)             5651 insertions(+)
+  7339ed3c      3996 insertions(+)             5679 insertions(+)
+  ```
+
+  The excluding figure is **constant** at `3996 insertions(+)` across all three
+  — it does not depend on the plan's length at all. The all-paths figure drifts
+  `5495 → 5651 → 5679` over the same head range, entirely from growth in the
+  file that reports it. (Quoted against the current base `fa5a4ffa` the
+  excluding figure is still `3996 insertions(+)`, so the constancy is not an
+  artefact of the old base.) A breach measured with the number that moves when
+  you record it is not a measurement. Stage C is still to come and adds five
+  composite actions, new `release.yml` jobs, the LEM-5 suite, a
   composite-action guard and a mutation harness — all growth, with no
   offsetting deletions. The breach is structural, not incidental: the required
   six-section design (candidate binding, package verification, short-lived
