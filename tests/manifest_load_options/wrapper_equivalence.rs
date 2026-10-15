@@ -59,11 +59,12 @@ use netsuke::stdlib::NetworkPolicy;
 
 use super::fixtures::{
     Capabilities, Case, StagedFixture, cases, environment, exhausted_budget, fixed_clock_config,
-    one_var_reader, path_entry_point, process_environment, report, settings,
+    injected_environment, injected_environment_and_clock, one_var_reader, path_entry_point,
+    path_entry_point_with_environment, process_environment, report, settings,
 };
 
 /// Return the fixtures a loader with `capabilities` may load.
-fn applicable(capabilities: &Capabilities) -> Vec<Case> {
+fn applicable(capabilities: Capabilities) -> Vec<Case> {
     cases()
         .iter()
         .copied()
@@ -87,7 +88,7 @@ fn applicable(capabilities: &Capabilities) -> Vec<Case> {
 /// Returns an error when the capability table admits no fixture — the row would
 /// snapshot an empty document and characterize nothing — or when a fixture
 /// cannot be staged or read.
-fn document<F>(capabilities: &Capabilities, mut load: F) -> Result<String>
+fn document<F>(capabilities: Capabilities, mut load: F) -> Result<String>
 where
     F: FnMut(&Case, &Utf8Path, &mut Vec<ManifestLoadStage>) -> Result<NetsukeManifest>,
 {
@@ -99,8 +100,8 @@ where
     let mut stages = Vec::new();
     let mut blocks = Vec::with_capacity(applicable.len());
     for case in applicable {
-        let staged = StagedFixture::new(&case)?;
-        let outcome = load(&case, staged.manifest_path(), &mut stages);
+        let fixture = StagedFixture::new(&case)?;
+        let outcome = load(&case, fixture.manifest_path(), &mut stages);
         blocks.push(report(&[(case.label.to_owned(), outcome)]));
     }
     Ok(blocks.join("\n\n"))
@@ -116,7 +117,7 @@ where
 ///
 /// Returns an error under the same conditions as [`document`], plus when a
 /// fixture cannot be read.
-fn document_from_string<F>(capabilities: &Capabilities, mut load: F) -> Result<String>
+fn document_from_string<F>(capabilities: Capabilities, mut load: F) -> Result<String>
 where
     F: FnMut(&str) -> Result<NetsukeManifest>,
 {
@@ -144,11 +145,11 @@ fn permissive() -> EnvAccessPolicy {
 /// Assert that a path entry point consults the host clock and cannot be given
 /// another.
 ///
-/// The capability table marks every path row `injected_clock: false`, and this
-/// row is the measurement behind that claim. Without it, a later change that
-/// *did* give a path entry point a clock seam would leave the clock fixture
-/// silently excluded from seven rows, where the omission would read as a
-/// decision rather than a gap.
+/// The capability table gives every path row no clock seam, and this row is the
+/// measurement behind that claim. Without it, a later change that *did* give a
+/// path entry point a clock seam would leave the clock fixture silently
+/// excluded from seven rows, where the omission would read as a decision rather
+/// than a gap.
 ///
 /// The same manifest is loaded twice: once through a string entry that can pin
 /// the clock, once through a path entry that cannot. Equal descriptions would
@@ -163,7 +164,7 @@ fn path_entry_point_cannot_inject_a_clock() -> Result<()> {
         .find(|case| case.hazards.consults_clock)
         .ok_or_else(|| anyhow::anyhow!("the corpus no longer holds a clock-reading fixture"))?;
     anyhow::ensure!(
-        !case.is_loadable(&path_entry_point()),
+        !case.is_loadable(path_entry_point()),
         "a path entry point now admits the clock fixture; give the path rows an injected clock"
     );
 
@@ -209,18 +210,14 @@ fn describe(manifest: &NetsukeManifest) -> Result<String> {
 /// are exactly the ones no seam can change.
 #[rstest]
 fn from_str_row() -> Result<()> {
-    let document = document_from_string(&process_environment(), |text| from_str(text))?;
+    let document = document_from_string(process_environment(), from_str)?;
     settings().bind(|| insta::assert_snapshot!("from_str", document));
     Ok(())
 }
 
 #[rstest]
 fn from_str_with_env_row() -> Result<()> {
-    let capabilities = Capabilities {
-        injected_reader: true,
-        ..process_environment()
-    };
-    let document = document_from_string(&capabilities, |text| {
+    let document = document_from_string(injected_environment(), |text| {
         from_str_with_env(text, &one_var_reader())
     })?;
     settings().bind(|| insta::assert_snapshot!("from_str_with_env", document));
@@ -229,11 +226,7 @@ fn from_str_with_env_row() -> Result<()> {
 
 #[rstest]
 fn from_str_with_env_and_policy_row() -> Result<()> {
-    let capabilities = Capabilities {
-        injected_reader: true,
-        ..process_environment()
-    };
-    let document = document_from_string(&capabilities, |text| {
+    let document = document_from_string(injected_environment(), |text| {
         from_str_with_env_and_policy(text, &one_var_reader(), &permissive())
     })?;
     settings().bind(|| {
@@ -244,12 +237,7 @@ fn from_str_with_env_and_policy_row() -> Result<()> {
 
 #[rstest]
 fn from_str_with_env_and_config_row() -> Result<()> {
-    let capabilities = Capabilities {
-        injected_reader: true,
-        injected_clock: true,
-        ..process_environment()
-    };
-    let document = document_from_string(&capabilities, |text| {
+    let document = document_from_string(injected_environment_and_clock(), |text| {
         from_str_with_env_and_config(text, &one_var_reader(), fixed_clock_config()?)
     })?;
     settings().bind(|| {
@@ -266,14 +254,14 @@ fn from_str_with_env_and_config_row() -> Result<()> {
 /// point does once the defaults are supplied.
 #[rstest]
 fn from_path_row() -> Result<()> {
-    let document = document(&path_entry_point(), |_, path, _| from_path(path))?;
+    let document = document(path_entry_point(), |_, path, _| from_path(path))?;
     settings().bind(|| insta::assert_snapshot!("from_path", document));
     Ok(())
 }
 
 #[rstest]
 fn from_path_with_policy_row() -> Result<()> {
-    let document = document(&path_entry_point(), |_, path, stages| {
+    let document = document(path_entry_point(), |_, path, stages| {
         from_path_with_policy(path, policy(), Some(&mut |stage| stages.push(stage)))
     })?;
     settings().bind(|| insta::assert_snapshot!("from_path_with_policy", document));
@@ -282,7 +270,7 @@ fn from_path_with_policy_row() -> Result<()> {
 
 #[rstest]
 fn from_path_with_policy_and_limits_row() -> Result<()> {
-    let document = document(&path_entry_point(), |_, path, stages| {
+    let document = document(path_entry_point(), |_, path, stages| {
         from_path_with_policy_and_limits(
             path,
             policy(),
@@ -298,11 +286,7 @@ fn from_path_with_policy_and_limits_row() -> Result<()> {
 
 #[rstest]
 fn from_path_with_policy_and_env_row() -> Result<()> {
-    let capabilities = Capabilities {
-        injected_reader: true,
-        ..path_entry_point()
-    };
-    let document = document(&capabilities, |_, path, stages| {
+    let document = document(path_entry_point_with_environment(), |_, path, stages| {
         from_path_with_policy_and_env(
             path,
             policy(),
@@ -318,11 +302,7 @@ fn from_path_with_policy_and_env_row() -> Result<()> {
 
 #[rstest]
 fn from_path_with_policy_and_env_and_limits_row() -> Result<()> {
-    let capabilities = Capabilities {
-        injected_reader: true,
-        ..path_entry_point()
-    };
-    let document = document(&capabilities, |_, path, stages| {
+    let document = document(path_entry_point_with_environment(), |_, path, stages| {
         from_path_with_policy_and_env_and_limits(
             path,
             policy(),
@@ -339,11 +319,7 @@ fn from_path_with_policy_and_env_and_limits_row() -> Result<()> {
 
 #[rstest]
 fn from_path_with_policy_and_environment_row() -> Result<()> {
-    let capabilities = Capabilities {
-        injected_reader: true,
-        ..path_entry_point()
-    };
-    let document = document(&capabilities, |_, path, stages| {
+    let document = document(path_entry_point_with_environment(), |_, path, stages| {
         from_path_with_policy_and_environment(
             path,
             policy(),
@@ -367,11 +343,7 @@ fn from_path_with_policy_and_environment_row() -> Result<()> {
 /// successful load.
 #[rstest]
 fn from_path_with_policy_and_environment_and_limits_row() -> Result<()> {
-    let capabilities = Capabilities {
-        injected_reader: true,
-        ..path_entry_point()
-    };
-    let document = document(&capabilities, |_, path, stages| {
+    let document = document(path_entry_point_with_environment(), |_, path, stages| {
         from_path_with_policy_and_environment_and_limits(
             path,
             policy(),
