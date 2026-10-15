@@ -7,6 +7,7 @@
 //! points discoverable: `StdlibConfig`, `NetworkConfig`, `register`,
 //! `register_with_config`, and `value_from_bytes`.
 
+mod canonical_value;
 mod collections;
 mod command;
 mod config;
@@ -18,6 +19,9 @@ mod register;
 mod time;
 mod which;
 
+pub use canonical_value::{
+    CanonicalKey, CanonicalValueError, canonical_eq, canonical_key, stable_deduplicate,
+};
 pub use config::{
     DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES, DEFAULT_COMMAND_TEMP_DIR,
     DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES, DEFAULT_WHICH_CACHE_CAPACITY,

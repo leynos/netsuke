@@ -855,7 +855,7 @@ ordinary additions or need individual design passes. See RFC 0006 §§6 and 14.1
     deferred or rejected candidate is covered by neither. A capability may be
     named by more than one roadmap task, as `product` already is by 6.4.2 and
     6.4.5, so only the RFC count is exactly one.
-- [ ] 6.1.2. Implement the canonical value key and equality relation.
+- [x] 6.1.2. Implement the canonical value key and equality relation.
   - See RFC 0006 §6.7.
   - Derive the key with the existing `serde_json_canonicalizer` dependency and
     reject value kinds that have no canonical form.

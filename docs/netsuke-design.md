@@ -1989,6 +1989,10 @@ Implementation notes for collection filters:
 - `uniq` stores values in an `IndexSet` so duplicates are removed with `O(n)`
   complexity while preserving the original order according to MiniJinja's
   equality semantics.
+- `uniq` is unchanged by the canonical value work: it still stores values in an
+  `IndexSet` and still compares them through MiniJinja's own equality. The
+  canonical key and equality relation below is a separate foundation that
+  standard-library helpers may adopt, and no existing filter was migrated to it.
 - `flatten` recurses through nested sequences and iterables; scalars raise an
   `InvalidOperation` error to avoid silently iterating over strings or other
   unintended inputs.
@@ -2177,6 +2181,52 @@ cannot silently wrap. The resulting object exposes `.iso8601`, `.seconds`, and
 {{ "src/app.c" | basename | with_suffix(".o") }}
 {{ fetch('https://example.com/data.csv', cache=True) | head(5) }}
 ```
+
+#### Canonical value key and equality relation
+
+Comparing template values is otherwise entangled with MiniJinja's internal
+equality, which is not a stable, serializable contract: two values that agree
+semantically can differ in a host object's iteration order, and a helper that
+wanted deterministic output had no shared rule to appeal to.
+
+Netsuke derives a **canonical key** for a value by serializing it under RFC
+8785 (JSON Canonicalization Scheme, JCS) through the repository's existing
+canonicalizer. Two values are **equal** exactly when their canonical keys are
+byte-identical, and deduplication retains the first representative of each key
+in input order.
+
+The public surface is five names, re-exported from `src/stdlib` as Rust library
+items rather than template names:
+
+| Name                  | Role                                                           |
+| --------------------- | -------------------------------------------------------------- |
+| `CanonicalKey`        | The canonical byte string, as a newtype                        |
+| `CanonicalValueError` | Typed refusal for values outside the supported domain          |
+| `canonical_key`       | Derive the key for a value, or refuse                          |
+| `canonical_eq`        | Compare two values by canonical key, or refuse                 |
+| `stable_deduplicate`  | Retain first representatives by key, in first-appearance order |
+
+Three properties of this contract matter to readers of the design, because each
+is a deliberate limit rather than an oversight:
+
+- **Equality inherits JCS number semantics, not source-integer identity.**
+  Numbers outside the range JCS represents exactly can share a key: `2^53 + 1`
+  and `2^53` serialize alike, as do negative and positive zero. No
+  arbitrary-precision integer-injectivity claim is made, and the module
+  documents the boundary rather than papering over it.
+- **Map key order is normalized, sequence order is not.** Keying a map sorts its
+  property names, so `{"a":1,"b":2}` and `{"b":2,"a":1}` share a key and the
+  second is a duplicate. Keying a sequence preserves element order, so `[1,2]`
+  and `[2,1]` are distinct values.
+- **The caller supplies a precondition.** Keying relies on the host object being
+  finite, stable, and acyclic. A host object that mutates between traversal
+  steps, or that contains a cycle, is outside the contract; the adapter does
+  not defend against it. This is an explicit precondition on the caller, not a
+  runtime check.
+
+Nothing in this subsection registers a template helper. The existing `uniq` and
+`unique` behaviour is unchanged and no manifest-visible behaviour changes at
+this stage; later helpers decide their own bounds, diagnostics, and integration.
 
 ## Section 5: The Bridge to Ninja: Intermediate Representation and Code Generation
 

@@ -7,13 +7,16 @@
 //! as parameters, eliminating the need for thread-local storage.
 
 use camino::Utf8PathBuf;
+use minijinja::value::Value;
 use netsuke::cli::Cli;
 use netsuke::localization::LocalizerGuard;
 use netsuke::manifest::EnvAccessPolicy;
 use netsuke::output_mode::OutputMode;
 use netsuke::output_prefs::OutputPrefs;
 use netsuke::runner::CommandEnv;
-use netsuke::stdlib::{ClockProvider, NetworkPolicy, StdlibState as NetsukeStdlibState};
+use netsuke::stdlib::{
+    CanonicalKey, ClockProvider, NetworkPolicy, StdlibState as NetsukeStdlibState,
+};
 use rstest::fixture;
 use rstest_bdd::Slot;
 use std::cell::RefCell;
@@ -106,6 +109,28 @@ pub struct TestWorld {
     pub stdlib_command_stream_max_bytes: Slot<u64>,
     /// Text payload injected into stdlib templates for streaming scenarios.
     pub stdlib_text: Slot<String>,
+
+    // Canonical value state (Clone)
+    /// First of two string-keyed maps with the same members in another order.
+    pub canonical_map_a: Slot<Value>,
+    /// Second of two string-keyed maps with the same members in another order.
+    pub canonical_map_b: Slot<Value>,
+    /// Whether the two maps above enumerate their members in different orders.
+    pub canonical_host_orders_differ: Slot<bool>,
+    /// Canonical key derived for [`Self::canonical_map_a`].
+    pub canonical_key_a: Slot<CanonicalKey>,
+    /// Canonical key derived for [`Self::canonical_map_b`].
+    pub canonical_key_b: Slot<CanonicalKey>,
+    /// Materialized sequence with values repeated across canonical classes.
+    pub canonical_sequence: Slot<Vec<Value>>,
+    /// Positions in [`Self::canonical_sequence`] that deduplication retained.
+    pub canonical_retained_indices: Slot<Vec<usize>>,
+    /// Rendered text of the retained values, in the order they were retained.
+    pub canonical_retained_order: Slot<Vec<String>>,
+    /// The value outside the canonical-JSON domain under test.
+    pub canonical_offending: Slot<Value>,
+    /// Rendered kind named by the refusal of [`Self::canonical_offending`].
+    pub canonical_refusal_kind: Slot<String>,
 
     // Localization state (non-Clone)
     /// Lock guarding process-wide localizer mutations during scenarios.
