@@ -500,6 +500,16 @@ and YAML fixtures, and were set from the inventory in Table 1.
   nested-Cargo row, which — with the rows all belonging to one serialized group
   — is the evidence that the red is queue latency rather than the candidate.
   `doctest` is unverified, not failed. See `Artefacts and notes`.
+- [x] (2026-10-15) Documentation-delta gate re-run at `f1b4b03d`, the head that
+  carries the EP-M0 records and the corrections above: **all five gates green**
+  (`check-fmt` 2 s, `markdownlint` 29 s, `spelling` 10 s, `nixie` 4 s,
+  `test-workflow-contracts` 134 s). `make spelling` did not rewrite
+  `typos.toml`. The previous batch's greens do not transfer to a changed head,
+  which is why this was re-run rather than assumed.
+- [x] (2026-10-15) EP-M1 read-only recon completed while the candidate was
+  frozen: the correction to the layout rationale (below), the Kani scope
+  entries, the placement rule, and the forced-edit inventory. EP-M1 itself
+  remains unstarted.
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
@@ -618,6 +628,28 @@ and YAML fixtures, and were set from the inventory in Table 1.
   waits with a queue depth of 240 ahead and 1108 sccache-unreachable notices,
   and zero admission failures. Date/Author: 2026-10-15, implementation agent.
 
+- Observation: **a plan can cite the wrong mechanism and still reach the right
+  decision**, which is the harder version of a stale citation to catch because
+  nothing downstream contradicts it. EP-M1's plan asserted that the flat
+  `restricted_helpers.rs` form "fails `prefixed_files_beside_directory()`" and
+  that this forced the directory form. Running both functions of
+  `tests/workflow_contracts/rust_module_layout_test.py` against synthetic trees
+  shows it does not: `prefixed_files_beside_directory` globs
+  `f"{directory.name}_*.rs"`, so it catches an underscore-prefixed *sibling*
+  (`restricted_helpers_tests.rs`) and never a bare `restricted_helpers.rs`
+  beside `restricted_helpers/`. A flat file plus a `#[path]`-declared child
+  passes both functions — as the live `register.rs` + `register/` pair does
+  today. What actually forbids the flat form is prose:
+  `docs/repository-layout.md:409-419`. Impact: cite the rule rather than the
+  function, and when a plan names a specific contract function, run that
+  function — it is a twenty-line pure-Python port with no dependencies, and
+  `pytest` is unavailable outside the uv environment, so importing the module
+  directly is not an option. Evidence: a verbatim port of both functions run
+  against three synthetic trees (directory-module, flat-plus-`#[path]`-child,
+  flat-plus-sibling) and validated against the live tree, where both checks
+  report zero violations — matching the contract's own green run. Reproduce the
+  port from `rust_module_layout_test.py:23-84`; it needs only `pathlib`,
+  `itertools`, and `collections`. Date/Author: 2026-10-15, implementation agent.
 - Observation: the technical design's line citations are stale, and the loader
   has grown since the design was written: `ManifestEnvironment`,
   `ManifestBudgetLimits`, the manifest root, a private `ManifestParse` bundle,
@@ -1257,9 +1289,21 @@ After each milestone, perform the conformance check listed and update
   `src/manifest/jinja_macros/query_classification.rs`. The query-refusal rows
   move unchanged to `src/stdlib/restricted_helpers/tests.rs`. Behaviour is
   byte-identical. The directory form, not the flat `restricted_helpers.rs` the
-  earlier draft named, is required by the layout contract: a flat file plus a
-  sibling `restricted_helpers/tests.rs` fails
-  `prefixed_files_beside_directory()`.
+  earlier draft named, is required — but by the **layout rule**, not by the
+  contract function the earlier draft cited.
+  `docs/repository-layout.md:409-419` states that a shared name prefix
+  represents a module hierarchy, that its children go under a directory module
+  using `mod.rs`, and that `#[path]` is kept "only when a specific requirement
+  still needs it". An earlier draft attributed the prohibition to
+  `prefixed_files_beside_directory()`, which was false: that function's glob is
+  `f"{directory.name}_*.rs"` and so catches only an underscore-prefixed
+  *sibling* (`restricted_helpers_tests.rs`), never a bare
+  `restricted_helpers.rs` beside `restricted_helpers/`. Running both contract
+  functions against synthetic trees confirms the flat-plus-`#[path]` shape
+  passes them (the live `register.rs` + `register/` pair is the same shape and
+  passes today); `sibling_prefix_groups` is the function that would reject a
+  true sibling, and even it accepts a `#[path]` child. The directory form is
+  still the right choice; cite the rule, not the function.
 - Requirements: RM-c (mechanism made reusable); C10 headroom.
 - `SURFACE` content, enumerated read-only at `71f26e1f` so the move can be
   checked against it:
@@ -1328,6 +1372,29 @@ After each milestone, perform the conformance check listed and update
   widen its visibility or subsume it in `SURFACE`, which is preferable because
   `SURFACE` is the single list that stops a test reaching one surface and
   staying unregistered on the other.
+- **Kani scope must move in the same commit.** `tools/kani/proof-scope.toml`
+  lists `src/stdlib/register/query_helpers.rs` at **:162** and
+  `src/stdlib/register.rs` at `:161`. The scope is a derived closure of the
+  `#[kani::proof]` harnesses and
+  `tests/workflow_contracts/kani_proof_scope_test.py` rejects both a missing
+  file and an entry covering nothing a harness reaches, so the moved file's
+  entry must be re-derived — run `make test-kani-scope-wrapper`, which prints
+  the files to add or remove, rather than editing the list by guesswork.
+  Read-only recon taken 2026-10-15 while a gate batch held the candidate
+  frozen; no `restricted_helpers` symbol existed in the tree at that point, so
+  EP-M1 is genuinely unstarted.
+- **Placement of the new module**, from `docs/repository-layout.md:409-439`: use
+  `mod.rs` for the directory module and plain `mod child;` for children
+  (dropping the parent prefix from filenames), and put a module's tests under
+  its owner's `tests/` directory — the live precedents are
+  `src/stdlib/which/telemetry/tests/mod.rs` and
+  `src/observability/recorder/tests/`. So `restricted_helpers/tests.rs` should
+  be declared from `restricted_helpers/tests/mod.rs` rather than reached as a
+  bare sibling file, unless a recorded reason keeps it flat. A justified
+  `#[path]` additionally needs a comment stating the reason and an entry in the
+  support-module ownership inventory; note that today's
+  `register/query_helpers.rs` has **no** inventory entry, which is a
+  pre-existing gap rather than one this milestone must close.
 
 ### EP-M2 — options entry point and thin wrappers
 
