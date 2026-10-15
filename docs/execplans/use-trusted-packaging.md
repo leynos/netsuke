@@ -904,15 +904,26 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   contract suite after both the Makefile and `ci.yml` changed.
 - [x] (2026-10-12) LEM-1 landed as `scripts/release_candidate.py` and
   `scripts/release_semver.py`, with `scripts/tests/test_release_candidate.py`
-  and `scripts/tests/test_release_semver.py` (96 tests, 7 doctests). Both
-  modules are stdlib-only and under the 400-line cap (394 and 139). Three
-  seeded mutations are each caught by multiple rows, and the identity record's
-  both directions — accept a well-formed version, refuse a near-match — are
-  witnessed. Two findings were recorded while doing it: the first version of
-  the leading-zero rule was stated too broadly and refused a version Cargo
-  accepts (see `Surprises & discoveries`), and the `ambrleaks` stage of
-  `make lint-python` reports findings for an explicitly named `.py` file while
-  passing over the same file reached through a directory walk.
+  and `scripts/tests/test_release_semver.py` (96 tests, 7 doctests when they
+  were later wired to run — see the correction below). Both modules are
+  stdlib-only and under the 400-line cap (394 and 139). Three seeded mutations
+  are each caught by multiple rows, and the identity record's both directions —
+  accept a well-formed version, refuse a near-match — are witnessed. Two
+  findings were recorded while doing it: the first version of the leading-zero
+  rule was stated too broadly and refused a version Cargo accepts (see
+  `Surprises & discoveries`), and the `ambrleaks` stage of `make lint-python`
+  reports findings for an explicitly named `.py` file while passing over the
+  same file reached through a directory walk.
+- [x] (2026-10-15) Corrected an inherited overstatement and repaired its cause.
+  The "7 doctests" above were counted from the source files, not from a run:
+  nothing collected them, because the recipe carried no `--doctest-modules` and
+  named no source module. The recipe now does both, the wiring is pinned by
+  `SOURCE_MODULES` and a new parametrized contract test, and the repair was
+  proved live by mutation rather than by asserting the flag's presence.
+  Measured effect on the target: **118 → 126 passed**, the difference being
+  exactly the eight source-module doctests (4 in `release_candidate.py`, 1 in
+  `release_inventory.py`, 3 in `release_semver.py`). `release_inventory.py`
+  sits at exactly 400 lines after this, the inclusive cap boundary.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 
@@ -1176,6 +1187,33 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   reaching the root does not make them uploadable. Three suites pin the hoist,
   the staging config, and the binstall metadata; none of them observes the
   published asset list, which is where the loss happens.
+
+- Observation: the docstring examples this plan counts as LEM-1 and LEM-2
+  evidence were **inert** when they were first written. The seven in
+  `release_candidate.py` and `release_semver.py` existed, read correctly, and
+  passed whenever they were run by hand — but no target collected them, so the
+  "7 doctests" reported above was a measurement of nothing. Evidence: the
+  `test-release-publication` recipe named only the three test modules and
+  carried no `--doctest-modules`, so pytest collected test functions alone.
+  Impact: this is Cuprum #499's orphaned-suite hazard one layer down. A suite
+  nothing runs is the failure the wiring contract exists to catch; a *doctest*
+  nothing runs is the same failure inside a file that is already wired, and it
+  is harder to see because the module is present in the recipe and green in
+  every gate. The repair is the recipe's source-module arguments plus
+  `--doctest-modules`, pinned by `SOURCE_MODULES` in
+  `tests/workflow_contracts/release_publication_test.py`, and proved live by
+  mutation: deleting the flag turns 2 of the contract tests red rather than
+  silently reducing the doctest count to zero. The same mutation exposed a
+  second, narrower gap — `release_inventory.py` carried no example at all, so
+  naming it on the command line would have been vacuous; `validate_inventory`
+  now has one, which is why that module grew from 397 to 400 lines. A third
+  finding, deliberately **out of scope** for this branch: 15 further inert
+  doctests pre-exist on `main` in `validate_coverage_artifact.py` (6),
+  `kani_proof_scope.py` (4), `cargo_package_metadata.py` (2), and
+  `verify_python_baseline.py` (3). They are recorded here so they are not lost,
+  but this deliverable owns only its own new modules, and repairing modules it
+  did not touch would enlarge the diff past its scope. Date/Author: 2026-10-15,
+  implementation agent.
 
 ## Decision log
 

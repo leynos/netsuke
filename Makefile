@@ -303,13 +303,22 @@ test-linux-package-metadata: ## Test Linux package metadata reading and validati
 # The release-candidate and inventory modules are pure: they read strings,
 # paths, and directory listings, and make no network request, so their suites
 # run beside the other script tests rather than in a job of their own.
+#
+# The source modules are named here as well as their suites, and the run
+# carries --doctest-modules, so the examples in their docstrings execute.
+# Without the flag pytest collects test functions only and those examples are
+# prose nothing runs: deleting it breaks no import and changes no test, which
+# is how they would silently stop running. `test-workflow-contracts` pairs test
+# modules with doctested sources the same way.
 test-release-publication: ## Test release-candidate identity and staged inventory exactness
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with pytest==9.0.2 --with hypothesis==6.151.9 python -m pytest \
 		scripts/tests/test_release_candidate.py \
 		scripts/tests/test_release_inventory.py \
-		scripts/tests/test_release_semver.py -c /dev/null --rootdir=. \
-		-p no:cacheprovider
+		scripts/tests/test_release_semver.py \
+		scripts/release_candidate.py scripts/release_inventory.py \
+		scripts/release_semver.py -c /dev/null --rootdir=. \
+		-p no:cacheprovider --doctest-modules
 
 # Split rather than a single `target/%/$(APP)` pattern: the two profiles no
 # longer share a command line. The debug build takes the standard; the release
