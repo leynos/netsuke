@@ -101,7 +101,7 @@ Hodges-Lehmann median pairwise candidate-minus-control shift with an exact 95%
 permutation-inversion interval under exchangeability for controlled, comparable
 samples. Compute IQR with `statistics.quantiles(method="inclusive")`. Do not
 make causal interval claims across source changes or report small-sample p95.
-Five observations in each arm is a collection floor, not proof. The minimum
+Five observations in each arm are a collection floor, not proof. The minimum
 useful improvement is the larger of 60 seconds and the control cohort IQR.
 
 Invert exact rank-sum permutation tests over additive location shifts, using
