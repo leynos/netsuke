@@ -365,8 +365,14 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_release_candidate.py \
 		scripts/tests/test_release_inventory.py \
 		scripts/tests/test_release_semver.py \
+		scripts/tests/test_release_digest.py \
+		scripts/tests/test_verify_crates_io_bytes.py \
+		scripts/tests/test_release_reconcile_crates.py \
+		scripts/tests/test_release_reconcile_github.py \
 		scripts/release_candidate.py scripts/release_inventory.py \
-		scripts/release_semver.py -c /dev/null --rootdir=. \
+		scripts/release_semver.py scripts/release_digest.py \
+		scripts/verify_crates_io_bytes.py scripts/release_reconcile_crates.py \
+		scripts/release_reconcile_github.py -c /dev/null --rootdir=. \
 		-p no:cacheprovider --doctest-modules
 
 # Split rather than a single `target/%/$(APP)` pattern: the two profiles no

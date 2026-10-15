@@ -46,6 +46,10 @@ SECTION_MODULES = (
     "scripts/tests/test_release_candidate.py",
     "scripts/tests/test_release_inventory.py",
     "scripts/tests/test_release_semver.py",
+    "scripts/tests/test_release_digest.py",
+    "scripts/tests/test_verify_crates_io_bytes.py",
+    "scripts/tests/test_release_reconcile_crates.py",
+    "scripts/tests/test_release_reconcile_github.py",
 )
 
 #: The modules under test, named on the command line so `--doctest-modules`
@@ -57,6 +61,10 @@ SOURCE_MODULES = (
     "scripts/release_candidate.py",
     "scripts/release_inventory.py",
     "scripts/release_semver.py",
+    "scripts/release_digest.py",
+    "scripts/verify_crates_io_bytes.py",
+    "scripts/release_reconcile_crates.py",
+    "scripts/release_reconcile_github.py",
 )
 
 #: Fragments any sibling script-test target carries. The three that matter
