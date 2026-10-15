@@ -500,16 +500,35 @@ and YAML fixtures, and were set from the inventory in Table 1.
   nested-Cargo row, which — with the rows all belonging to one serialized group
   — is the evidence that the red is queue latency rather than the candidate.
   `doctest` is unverified, not failed. See `Artefacts and notes`.
-- [x] (2026-10-15) Documentation-delta gate re-run at `f1b4b03d`, the head that
-  carries the EP-M0 records and the corrections above: **all five gates green**
-  (`check-fmt` 2 s, `markdownlint` 29 s, `spelling` 10 s, `nixie` 4 s,
-  `test-workflow-contracts` 134 s). `make spelling` did not rewrite
-  `typos.toml`. The previous batch's greens do not transfer to a changed head,
-  which is why this was re-run rather than assumed.
+- [x] (2026-10-15) Documentation-delta gate re-run at `f1b4b03d` and again at
+  `87ff771f`, the head that carries the EP-M0 records and the corrections
+  above: **all five gates green** (`check-fmt` 2 s, `markdownlint` 29 s,
+  `spelling` 10 s, `nixie` 4 s, `test-workflow-contracts` 126-134 s).
+  `make spelling` did not rewrite `typos.toml`. The previous batch's greens do
+  not transfer to a changed head, which is why this was re-run rather than
+  assumed. At `87ff771f` the logs are
+  `/tmp/{check-fmt,markdownlint,spelling,nixie,test-workflow-contracts}-87ff771f.out`;
+  at `f1b4b03d` the same names carry that revision's suffix. **These five do
+  not cover the plan's Rust-read contracts** — see the gate-set correction
+  below.
 - [x] (2026-10-15) EP-M1 read-only recon completed while the candidate was
   frozen: the correction to the layout rationale (below), the Kani scope
   entries, the placement rule, and the forced-edit inventory. EP-M1 itself
   remains unstarted.
+- [ ] **Gate-set correction pending for plan edits.** Running the cheaper
+  documentation gates is **not sufficient** for a diff that touches this plan.
+  `tests/execplan_status_contract_tests.rs` reads every `docs/execplans/*.md`
+  at test time and asserts that the header carries exactly one line-initial
+  `Status:` field whose value is in the closed set
+  `DRAFT | APPROVED | IN PROGRESS | BLOCKED | COMPLETE` (and that
+  `docs/documentation-style-guide.md` documents the same set);
+  `tests/kani_scope_wrapper_e2e_tests.rs` also reads this file. No Markdown
+  gate sees any of that — form, not a Rust contract — so `make test` belongs in
+  the plan-touching set. The current header satisfies both rules (one bare
+  `IN PROGRESS` above the first section; the mid-document `Status: BLOCKED` at
+  line 374 is mid-sentence and outside the scanned header region, so it is
+  correctly ignored rather than a second field). `make test` is still deferred
+  by host load, so this is recorded as pending, not passed.
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
