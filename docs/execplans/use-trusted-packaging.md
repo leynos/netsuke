@@ -291,17 +291,22 @@ Stop and escalate when any of these is breached.
 
 - Risk: a re-run of a tagged workflow double-uploads an asset or attempts to
   re-publish an existing version. Severity: high Likelihood: high Mitigation:
-  `concurrency` with `cancel-in-progress: false` for the tag event,
-  reconciliation that inspects remote state before acting, and a digest
-  comparison before any skip.
+  `concurrency` pinned to `cancel-in-progress: false`, reconciliation that
+  inspects remote state before acting, and a digest comparison before any skip.
+  A tag re-run therefore QUEUES behind the in-flight release rather than
+  cancelling it, which is also the safer semantics for a publication. It
+  cannot be made event-dependent: `tests/workflow_contracts/pr_concurrency_test.py`
+  pins `RELEASE_CONCURRENCY` by exact equality (`:275-278`) and separately
+  rejects any `cancel-in-progress` that `is not False` for a workflow with no
+  `pull_request` trigger (`:261-269`).
 
 - Risk: expanding `make github-actions-lint` to cover composite actions
   breaks the existing contract test that pins its recipe, or breaks the `lint`
-  target for an unrelated reason. Severity: medium Likelihood: medium
-  Mitigation: keep yamllint's existing invocation and actionlint's position
-  unchanged; add composite-action validation as a separate, additional recipe
-  line, and update `tests/workflow_contracts/github_actions_validation_test.py`
-  in the same change-set.
+  target for an unrelated reason. Severity: medium Likelihood: **certain** —
+  this is not a risk but a measured constraint. Mitigation: give
+  composite-action validation its OWN Makefile target and wire it into `lint`
+  alongside `github-actions-lint`. See `Surprises & discoveries`; appending a
+  recipe line to `github-actions-lint` is impossible.
 
 - Risk: a new composite action under `.github/actions/` silently violates the
   repository-wide source-build or cache policy, because three existing suites
@@ -318,12 +323,22 @@ Stop and escalate when any of these is breached.
   inline.
 
 - Risk: a contract test that enumerates release jobs or runner assignments
-  fails after a job is added. Severity: low Likelihood: medium Mitigation: the
-  two suites that do enumerate (`runner_placement_test.py` through
-  `DIRECT_RUNNER_SOURCES` and `REQUIRED_RUNNER_ASSIGNMENTS`) were read before
-  planning. Any added job must be registered in
-  `runner_placement_invariants.py` and given a `timeout-minutes`; nothing else
-  enumerates the job set.
+  fails after a job is added. Severity: **none** — RETRACTED, this was my
+  inference from the contract's shape and it is false. Mitigation: none is
+  needed. `DIRECT_RUNNER_SOURCES` is a hand-written tuple of **specific** jobs,
+  and `_checked_in_runner_assignments` gathers only those plus matrix-derived
+  and reusable-workflow entries; a job absent from both tables is never
+  collected, so the exact-equality assertion in
+  `has_required_runner_assignments` is satisfied while omitting it entirely.
+  The repository's own precedent settles it: `publish-release`, added by
+  PR #834, appears in neither table and the gate is green
+  (`grep -c 'publish-release'` returns 0 in both files).
+  The ONE real registration step is per-job `permissions:` —
+  `tests/workflow_contracts/release_publish_path_permissions_test.py:13-24`
+  loops over **every** job asserting `"permissions" in job`, and separately
+  requires workflow-level `permissions == {}`. `timeout-minutes` is NOT
+  required: that suite is parameterized over named Ubicloud jobs, none in
+  `release.yml`.
 
 - Risk: the binstall archives the hoist stages are never actually uploaded, so
   the documented `cargo binstall netsuke-build` fetches nothing. Severity: high
@@ -559,6 +574,22 @@ Each gains a `scripts/tests/test_<module>.py`. The contract tests gain:
 Each new job's name matches the composite action it calls, so a reader moving
 between `release.yml` and `.github/actions/` does not have to translate.
 
+**The new actions pass values by environment, never by `${{ }}` in a `run`
+block.** `tests/workflow_contracts/release_run_interpolation_test.py` forbids
+`${{` inside any `run` in `release.yml` or `package.yml` — but its
+`_step_contexts` skips every job carrying `uses`, so moving a step body into a
+composite action **removes that shell from the contract's reach entirely**. The
+existing five actions already carry 84 such sites between them
+(`windows-gate-cache` 26, `windows-msi-upgrade-validation` 18, `linux-gate-cache`
+17, `cross-build-macos` 16 at the time of measurement, `kani-cache` 7), so a
+blanket extension of the rule to all composite actions would red immediately.
+
+The resolution is to scope the rule **by path** to the release-path actions
+this work adds, not by an allowlist of known-violating files. An allowlist is
+the weakening the mission forbids; scoping by path states the real invariant —
+that the actions this design introduces pass values through the environment —
+and the required deliberate negative mutation discharges its non-vacuity.
+
 `.github/workflows/release.yml` gains, after the existing `metadata`, `build-*`,
 `windows-native-recipe-smoke`, and `release-admission-canaries` jobs:
 
@@ -605,22 +636,34 @@ running the draft-creation steps; `release` holds `contents: read` and runs the
 dry-run rehearsal. `publish-release`'s `needs` grows `package-crate`, so the
 draft is not created before a package exists. Stage C as first drafted
 attributed the write permission to `release`; that predates PR #834, which
-split rehearsal from publication. The workflow's
-`concurrency.cancel-in-progress` becomes a function of the event: `true` for
-`workflow_call`, and `false` for a tag push, so a queued re-run of a tag
-reconciles rather than interrupting an upload.
+split rehearsal from publication.
 
-Adding jobs 1–5 to `release.yml` would exceed 400 lines, so each new job's body
-is a single `uses: ./.github/actions/...` step.
+`concurrency.cancel-in-progress` stays **`false`** and is **not** made a
+function of the event. `pr_concurrency_test.py:275-278` pins
+`RELEASE_CONCURRENCY` by exact equality, and `:261-269` independently rejects
+any `cancel-in-progress` that `is not False` for a workflow with no
+`pull_request` trigger. A tag re-run therefore QUEUES behind the in-flight
+release rather than cancelling it, which is the safer semantics for a
+publication anyway: cancelling mid-upload is the failure mode this whole
+design exists to prevent.
+
+Each new job's body is a single `uses: ./.github/actions/...` step. The
+justification for extracting them is that the composite-action convention is
+the repository's own documented practice (`docs/developers-guide.md:1361-1362`
+records it for the cache steps), **not** that a contract enforces a 400-line
+cap on workflow YAML — no such contract exists. `release.yml` is 685 lines on
+`main` and is not failing anything.
 
 ### Stage D — wiring and documentation
 
 - `Makefile`: a `test-release-publication` target running the new
   `scripts/tests` modules with pinned `pytest` and `hypothesis`, and a
   `test-release-negative-mutation` target.
-- `Makefile`: `github-actions-lint` additionally runs yamllint with the same
-  policy over `.github/actions/*/action.yml`, and a new `bash -n`-based syntax
-  check over each composite action's `run` blocks.
+- `Makefile`: a **new, separate** target validates `.github/actions/*/action.yml`
+  — yamllint with the same policy, plus a `bash -n`-based syntax check over each
+  composite action's `run` blocks — and is wired into `lint` alongside
+  `github-actions-lint`. It cannot be appended to `github-actions-lint` itself;
+  see `Surprises & discoveries` for the positional pin that forbids it.
 - `.github/workflows/ci.yml`: run the new targets in `build-test`.
 - `docs/developers-guide.md`: the release runbook — job graph, package and
   asset identity contract, provenance verification, re-run procedure, and
@@ -658,8 +701,11 @@ is a single `uses: ./.github/actions/...` step.
 
 **EP-M3 — the GitHub-side publication sequence.**
 
-- Outcome: `release.yml` carries the full sequence, every body extracted to
-  a composite action, the file still under 400 lines.
+- Outcome: `release.yml` carries the full sequence, every new job body
+  extracted to a composite action so the job graph stays readable at a glance.
+  (Not "under 400 lines": no contract caps workflow YAML, and `release.yml` is
+  already 685 lines on `main`. The extraction follows the repository's
+  documented composite-action convention, `docs/developers-guide.md:1361-1362`.)
 - Requirements: INV-1, LEM-5, LEM-6 discharged.
 - Acceptance evidence: `make test-workflow-contracts` passes, including the
   new permission and mode-matrix tests.
@@ -706,8 +752,8 @@ is a single `uses: ./.github/actions/...` step.
   runs; composite actions are linted; no new test is orphaned.
 - Requirements: Cuprum #487 and #499 closed locally.
 - Acceptance evidence: `make test-release-negative-mutation` fails with the
-  injected mutation and passes without it; `make github-actions-lint` covers
-  `.github/actions`.
+  injected mutation and passes without it; the new composite-action target
+  covers `.github/actions` and `make lint` runs it.
 - Conformance check: the full gate set passes sequentially.
 - Recovery: revert.
 - Remaining gaps: none known.
@@ -770,8 +816,11 @@ A reviewer accepts this change when all of the following hold.
    injected and zero when it is not; the control run is part of the same
    command, so neither half can pass alone.
 4. `make github-actions-lint` lints `.github/workflows` with yamllint and
-   actionlint, and `.github/actions/*/action.yml` with yamllint and the
-   shell-syntax check.
+   actionlint, **unchanged in shape**; the new composite-action target lints
+   `.github/actions/*/action.yml` with yamllint and the shell-syntax check,
+   and `make lint` runs both. These are two targets, not one: the existing
+   recipe's first and last lines are pinned verbatim by
+   `github_actions_validation_test.py:218-227`.
 5. `wc -l .github/workflows/release.yml` reports a value at or below 400.
    **Unsatisfiable as written.** The file is 685 lines on `main` before this
    change, and no repository contract enforces a 400-line cap on workflow YAML:
@@ -1008,6 +1057,26 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   comparison simplifications the house lints required. Measured:
   `make lint-python` exits 0 through all five stages and
   `make test-release-publication` still reports 212 passed.
+- [x] (2026-10-15) Rebased onto `main` (`486b876c`), replayed as `c09e9e99`.
+  Nine commits, zero conflicts, `range-diff` empty — every commit replayed
+  byte-identically, so there is no conflict resolution to review. Performed
+  BEFORE Stage C because the `local_reference_*` family (11 modules) exists
+  only on `main` and constrains exactly the composite actions Stage C adds.
+  Two predictions confirmed: the dead `.github/actions/cross-build-macos`
+  action (deleted on `main` by PR #859 while this branch still carried it)
+  is gone, and the coverage probe's uncovered count fell from 1 to 0
+  (inventory 71 → 85). The branch still changes zero `.rs` files.
+- [x] (2026-10-15) Corrected five false premises in this plan after checking
+  each against source rather than against a contract's shape. Retracted: the
+  claim that new `release.yml` jobs need two-place runner registration (the
+  gatherer never collects an unregistered job, so it is invisible, not
+  failing — `publish-release` on `main` proves it); the event-dependent
+  `cancel-in-progress` design (pinned by exact equality); and the
+  `github-actions-lint` extension (recipe positionally pinned). Corrected: the
+  composite-action rationale is the repository's documented convention, not a
+  400-line cap that no contract enforces. Recorded the scope-tolerance breach
+  (3 995 net lines excluding this plan against a 1 500 budget) as a deviation
+  in prose.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 
@@ -1172,26 +1241,39 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   be indistinguishable from contention here, so the diff-scope argument — not
   the timeout message — is what establishes the red as environmental.
 
-- Observation: **every** new job added to `release.yml` reds
-  `make test-workflow-contracts` until it is registered in two places.
-  `runner_placement_invariants.has_required_runner_assignments` compares the
-  gathered assignment map to `REQUIRED_RUNNER_ASSIGNMENTS` for *exact equality*
-  — not a subset — and `runner_placement_test.DIRECT_RUNNER_SOURCES` is the
-  tuple that gathers them. A job absent from both fails the equality; a job
-  present in `runner_placement_invariants.py` but not in
-  `DIRECT_RUNNER_SOURCES` is never gathered and so can never appear, which
-  fails the same assertion from the other side. Separately,
-  `runner_shape_test.test_every_ubicloud_job_declares_a_timeout` requires a
-  positive integer `timeout-minutes` on each Ubicloud job, and
-  `test_rule_labels` derives the actionlint self-hosted registry from what the
-  workflows actually select. Evidence: read from
-  `tests/workflow_contracts/runner_placement_invariants.py:203`,
-  `runner_placement_test.py:28-52` and `runner_placement_test.py:225-252`.
-  Impact: Stage C must land its `release.yml` jobs and both registration
-  updates in one commit, or the workflow-contract gate is red in between. The
-  plan's `Risks` entry anticipated this shape but named only
-  `runner_placement_invariants.py`; `DIRECT_RUNNER_SOURCES` is the second half
-  and is the one that fails silently if forgotten.
+- Observation: **RETRACTED — new `release.yml` jobs need NO runner
+  registration.** An earlier revision of this entry asserted that every added
+  job must be registered in two places or the gate reds. That was an inference
+  from a contract's *shape*, and reading the object the contract actually
+  constrains falsifies it. `has_required_runner_assignments` does compare for
+  exact equality, but the gatherer `_checked_in_runner_assignments` collects
+  only the **eleven** `DIRECT_RUNNER_SOURCES` entries plus matrix-derived and
+  reusable-workflow entries. A job named in neither table is never collected,
+  so it can never appear in the gathered map — and the equality is still
+  satisfied, because it is only ever compared against what was gathered. An
+  unregistered job is INVISIBLE to this contract, not failing it.
+  The repository's own precedent settles the question rather than leaving it to
+  argument: `publish-release`, added by PR #834 and live on `main`, appears in
+  neither table, and `make test-workflow-contracts` is green.
+
+  ```
+  grep -c 'publish-release' tests/workflow_contracts/runner_placement_invariants.py
+    -> 0
+  grep -c 'publish-release' tests/workflow_contracts/runner_placement_test.py
+    -> 0
+  ```
+
+  No suite enumerates the `release.yml` job set:
+  `grep -rn 'required_actions\|JOB_NAMES\|expected_jobs\|job_names'
+  tests/workflow_contracts/*.py` returns no matches. The plan's `Risks` entry
+  has been corrected to match.
+
+  What **does** apply to a new job is per-job `permissions:` —
+  `release_publish_path_permissions_test.py:13-24` loops over every job
+  asserting `"permissions" in job` and separately requires the workflow-level
+  `permissions` to be `{}`. That is the one real registration step Stage C owes.
+  `timeout-minutes` is not required of these jobs: the timeout suite is
+  parameterized over named Ubicloud jobs, none of them in `release.yml`.
 
 - Observation:
   `github_actions_validation_test.test_makefile_runs_both_github_actions_linters`
@@ -1210,6 +1292,50 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `github_actions_validation_test.py` updated in the same change-set to
   describe the new shape. This is a real constraint discovered now rather than
   at the first red gate.
+
+- Observation: Stage C must be authored **after** the rebase onto `main`, and
+  the rebase is now done. The `local_reference_*` family — eleven contract
+  modules — exists only on `main`, and it constrains exactly the artefact
+  Stage C adds (every local composite action must be referenced from a
+  workflow, Makefile, or test source, or carry a reasoned exemption).
+  Authoring the actions before the rebase would have meant writing against a
+  contract that was not present and then being judged by it afterwards.
+  Evidence: before the rebase the probe below reported one uncovered item,
+  `.github/actions/cross-build-macos`, a dead action that `main` had already
+  deleted in PR #859 while this branch still carried it; after the rebase the
+  count is zero.
+
+  ```
+  before rebase:  inventory size 71,  uncovered total 1
+                  ['.github/actions/cross-build-macos']
+  after  rebase:  inventory size 85,  uncovered total 0
+                  all 7 new release scripts inventoried=True covered=True
+                  control (a script that cannot exist): False
+  ```
+
+  Impact for Stage C, measured from `local_reference_coverage_test.py`:
+  `EXEMPTIONS` is **empty on main**, so the contract is satisfied entirely by
+  real references and an exemption is the wrong tool —
+  `test_exemptions_are_not_stale` deletes one the moment the item gains a real
+  reference. Coverage resolves **indirectly**: `covered_items` makes a covered
+  action's own manifest a source, so the intended chain is
+  `release.yml` → `uses: ./.github/actions/<name>` → that action's `action.yml`
+  naming `scripts/<script>.py`. Each new action must therefore be referenced
+  from `release.yml`, and any script it invokes must be named in its own
+  manifest. `test_expected_indirect_repository_items_are_covered` pins a known
+  set of indirectly-covered items, so the mechanism is load-bearing rather
+  than incidental.
+
+- Observation: test collection differs by directory, and the difference decides
+  where a new guard may live. `make test-workflow-contracts` passes
+  `tests/workflow_contracts` as a **directory**, so a new contract module there
+  is auto-collected with no registration — which is why the LEM-5 suite belongs
+  there. The same recipe names `scripts/tests/test_*.py` as a
+  **hand-enumerated list**, so a new module under `scripts/tests/` must be
+  named in a recipe or `release_publication_test.py`'s orphan check reds.
+  Evidence: `Makefile:247-262`. Impact: if the composite-action guard is
+  written as a `scripts/tests/` module it must be registered; the LEM-5 suite
+  and the mutation module need not be.
 
 - Observation: the existing publish-path contract suite is a **scenario
   evaluator**, not a name-matching assertion set.
@@ -1354,9 +1480,14 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 
 - Decision: extract every new step body into a composite action rather than
   growing `release.yml` inline. Rationale: the repository's own convention,
-  stated in `docs/developers-guide.md`, and the only way to keep the file under
-  400 lines while making the sequence explicit. Date/Author: 2026-09-27,
-  planning agent.
+  stated in `docs/developers-guide.md:1361-1362` for the lane cache steps, and
+  the only way to keep the job graph readable while making the sequence
+  explicit. **Not** a 400-line cap: no contract enforces one on workflow YAML,
+  and `release.yml` is 685 lines on `main`. A local `action.yml` resolves from
+  the checked-out commit, so it carries no pin — `action_references.py:66-69`
+  in fact refuses a `./`-prefixed action for exactly that reason, meaning
+  `uses: ./.github/actions/<name>` needs no SHA. Date/Author: 2026-09-27,
+  planning agent; rationale corrected 2026-10-15.
 
 - Decision: do not adopt Cuprum's filename-first identity rule.
   Rationale: crates.io keys the trusted-publisher registration on the Cargo
@@ -1433,6 +1564,31 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   — it is recorded here and reported rather than escalated as `BLOCKED`, per
   the skill's instruction to record a proposed deviation from approved scope.
   Date/Author: 2026-10-12, implementation agent.
+
+- Decision: record the **scope tolerance breach** as an escalated deviation in
+  prose, rather than silently rewriting approved scope to fit. Rationale: the
+  `Tolerances` section allows up to 30 changed files and 1 500 net changed
+  lines. Measured against the rebased candidate
+  (`git diff --shortstat 486b876c..c09e9e99`):
+
+  ```
+  all paths:            18 files changed, 5495 insertions(+), 1 deletion(-)
+  excluding this plan:  17 files changed, 3996 insertions(+), 1 deletion(-)
+  ```
+
+  The file count is inside tolerance (18 ≤ 30) but the line count is not:
+  3 995 net excluding the plan, 2.7× the 1 500 budget. Stage C is still to
+  come and adds five composite actions, new `release.yml` jobs, the LEM-5
+  suite, a composite-action guard and a mutation harness — all growth, with no
+  offsetting deletions. The breach is structural, not incidental: the required
+  six-section design (candidate binding, package verification, short-lived
+  auth, recoverable sequence, immutable-state reconciliation, genuine dry
+  runs) cannot be delivered as pure Python modules plus contract suites inside
+  1 500 lines. Raising the tolerance would be redefining the measurement to
+  fit the result, which is why this is recorded as a breach and reported to the
+  user. The `AskUserQuestion` seam has failed before (PR #860: six of six
+  attempts aborted), so this is escalated in prose rather than through that
+  mechanism. Date/Author: 2026-10-15, implementation agent.
 
 - Decision: state the version grammar against the reference implementation
   rather than against the informal SemVer description, and keep byte equality
