@@ -1730,8 +1730,8 @@ without an allowlist blocks only its listed names. A blocklist entry always
 overrides an allowlist entry. Every entry is one exact variable name; this
 policy has no glob or pattern matching. `env_allow_var` entries from project
 occurrences selected through `.netsuke.toml` and its `extends` chain are
-removed before policy composition. This prevents a checkout-controlled
-ancestor from widening the operator allowlist or activating default-deny.
+removed before policy composition. This prevents a checkout-controlled ancestor
+from widening the operator allowlist or activating default-deny.
 `env_block_var` entries remain cumulative because they only restrict access.
 Operator chains and unrelated explicit configuration chains retain their
 grants; a file reached from both project and operator roots keeps its separate

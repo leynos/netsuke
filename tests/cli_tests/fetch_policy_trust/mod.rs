@@ -124,16 +124,16 @@ fn url(value: &str) -> Result<Url> {
 }
 
 /// Evaluate a URL and return the policy rejection it produces.
-fn rejection(cli: &Cli, value: &str) -> Result<NetworkPolicyViolation> {
+fn rejection(cli: &Cli, url: &Url) -> Result<NetworkPolicyViolation> {
     cli.network_policy()?
-        .evaluate(&url(value)?)
+        .evaluate(url)
         .err()
-        .with_context(|| format!("URL should be rejected by the policy: {value}"))
+        .with_context(|| format!("URL should be rejected by the policy: {url}"))
 }
 
 /// Assert that a URL is rejected because its host was not allowlisted.
-fn assert_host_not_allowlisted(cli: &Cli, value: &str) -> Result<()> {
-    let error = rejection(cli, value)?;
+fn assert_host_not_allowlisted(cli: &Cli, url: &Url) -> Result<()> {
+    let error = rejection(cli, url)?;
     ensure!(
         matches!(error, NetworkPolicyViolation::HostNotAllowlisted { .. }),
         "expected host allowlist violation, got {error:?}"
@@ -142,8 +142,8 @@ fn assert_host_not_allowlisted(cli: &Cli, value: &str) -> Result<()> {
 }
 
 /// Assert that a URL is rejected because its scheme was not allowlisted.
-fn assert_scheme_not_allowed(cli: &Cli, value: &str) -> Result<()> {
-    let error = rejection(cli, value)?;
+fn assert_scheme_not_allowed(cli: &Cli, url: &Url) -> Result<()> {
+    let error = rejection(cli, url)?;
     ensure!(
         matches!(error, NetworkPolicyViolation::SchemeNotAllowed { .. }),
         "expected scheme violation, got {error:?}"
@@ -152,8 +152,8 @@ fn assert_scheme_not_allowed(cli: &Cli, value: &str) -> Result<()> {
 }
 
 /// Assert that a URL is rejected because a block rule takes priority.
-fn assert_host_blocked(cli: &Cli, value: &str) -> Result<()> {
-    let error = rejection(cli, value)?;
+fn assert_host_blocked(cli: &Cli, url: &Url) -> Result<()> {
+    let error = rejection(cli, url)?;
     ensure!(
         matches!(error, NetworkPolicyViolation::HostBlocked { .. }),
         "expected host block violation, got {error:?}"

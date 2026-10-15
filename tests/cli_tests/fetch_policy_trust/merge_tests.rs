@@ -21,7 +21,7 @@ fn defaults_keep_project_fetch_grants_outside_operator_policy() -> Result<()> {
         !merged.fetch_default_deny,
         "a project false request should not alter the default operator policy"
     );
-    assert_scheme_not_allowed(&merged, "http://169.254.169.254")
+    assert_scheme_not_allowed(&merged, &url("http://169.254.169.254")?)
 }
 
 #[rstest]
@@ -32,7 +32,7 @@ fn project_can_tighten_default_deny_without_operator_policy() -> Result<()> {
         merged.fetch_default_deny,
         "a project true request should tighten the default operator policy"
     );
-    assert_host_not_allowlisted(&merged, "https://downloads.example.org")
+    assert_host_not_allowlisted(&merged, &url("https://downloads.example.org")?)
 }
 
 #[rstest]
@@ -62,8 +62,8 @@ fetch_allow_host = ["downloads.example.org"]
             .is_ok(),
         "user allowlist entry should remain effective"
     );
-    assert_host_not_allowlisted(&merged, "https://169.254.169.254")?;
-    assert_scheme_not_allowed(&merged, "http://downloads.example.org")
+    assert_host_not_allowlisted(&merged, &url("https://169.254.169.254")?)?;
+    assert_scheme_not_allowed(&merged, &url("http://downloads.example.org")?)
 }
 
 #[rstest]
@@ -109,11 +109,11 @@ fetch_block_host = ["blocked.example.org"]
             "trusted allowlist entry should be effective: {allowed}"
         );
     }
-    assert_host_not_allowlisted(&merged, "https://169.254.169.254")?;
-    assert_scheme_not_allowed(&merged, "http://cli.example.org")?;
-    assert_host_blocked(&merged, "https://blocked.example.org")?;
-    assert_host_blocked(&merged, "https://environment-blocked.example.org")?;
-    assert_host_blocked(&merged, "https://cli-blocked.example.org")
+    assert_host_not_allowlisted(&merged, &url("https://169.254.169.254")?)?;
+    assert_scheme_not_allowed(&merged, &url("http://cli.example.org")?)?;
+    assert_host_blocked(&merged, &url("https://blocked.example.org")?)?;
+    assert_host_blocked(&merged, &url("https://environment-blocked.example.org")?)?;
+    assert_host_blocked(&merged, &url("https://cli-blocked.example.org")?)
 }
 
 #[rstest]
@@ -136,8 +136,8 @@ fetch_block_host = ["downloads.example.org"]
         ],
     )?;
 
-    assert_host_blocked(&merged, "https://downloads.example.org")?;
-    assert_host_not_allowlisted(&merged, "https://169.254.169.254")
+    assert_host_blocked(&merged, &url("https://downloads.example.org")?)?;
+    assert_host_not_allowlisted(&merged, &url("https://169.254.169.254")?)
 }
 
 #[rstest]
@@ -242,5 +242,5 @@ fn project_cannot_self_authorize_fetch_policy_widening() -> Result<()> {
         !merged.trust_project_fetch_policy,
         "project opt-in request must be removed before generic merging"
     );
-    assert_scheme_not_allowed(&merged, "http://169.254.169.254")
+    assert_scheme_not_allowed(&merged, &url("http://169.254.169.254")?)
 }

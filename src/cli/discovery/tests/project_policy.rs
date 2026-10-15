@@ -180,7 +180,10 @@ fn project_chain_requests_append_grants_and_use_the_last_present_default() -> an
             .into_iter()
             .enumerate()
             .map(|(index, value)| {
-                MergeLayer::file(Cow::Owned(value), Some(format!("layer-{index}.toml").into()))
+                MergeLayer::file(
+                    Cow::Owned(value),
+                    Some(format!("layer-{index}.toml").into()),
+                )
             })
             .collect(),
         2,
@@ -193,16 +196,19 @@ fn project_chain_requests_append_grants_and_use_the_last_present_default() -> an
             .context("project chain should produce a request")?,
     )?;
     let mut layers = resolved.layers.into_iter();
-    let base = layers.next().context("base layer should remain")?.into_value();
-    let middle = layers
+    let base_layer = layers
+        .next()
+        .context("base layer should remain")?
+        .into_value();
+    let middle_layer = layers
         .next()
         .context("middle layer should remain")?
         .into_value();
-    let primary = layers
+    let primary_layer = layers
         .next()
         .context("primary layer should remain")?
         .into_value();
-    check_quarantined_fields(&base, &middle, &primary)?;
+    check_quarantined_fields(&base_layer, &middle_layer, &primary_layer)?;
     ensure!(
         resolved.errors.is_empty(),
         "valid requests should not add errors"

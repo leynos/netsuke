@@ -21,8 +21,8 @@ fn inherited_project_grants_cannot_widen_user_policy() -> Result<()> {
         &["netsuke"],
     )?;
 
-    assert_scheme_not_allowed(&merged, "http://169.254.169.254")?;
-    assert_host_not_allowlisted(&merged, "https://169.254.169.254")
+    assert_scheme_not_allowed(&merged, &url("http://169.254.169.254")?)?;
+    assert_host_not_allowlisted(&merged, &url("https://169.254.169.254")?)
 }
 
 #[rstest]
@@ -39,7 +39,7 @@ fn inherited_project_default_deny_cannot_weaken_user_policy() -> Result<()> {
     )?;
 
     ensure!(merged.fetch_default_deny, "inherited false must be ignored");
-    assert_host_not_allowlisted(&merged, "https://otherwise-unlisted.example")
+    assert_host_not_allowlisted(&merged, &url("https://otherwise-unlisted.example")?)
 }
 
 #[rstest]
@@ -64,10 +64,10 @@ fn inherited_trust_cannot_authorize_primary_or_inherited_grants() -> Result<()> 
         !merged.trust_project_fetch_policy,
         "inherited trust request must not become operator policy"
     );
-    assert_scheme_not_allowed(&merged, "http://primary.example")?;
-    assert_host_not_allowlisted(&merged, "https://primary.example")?;
-    assert_scheme_not_allowed(&merged, "http://inherited.example")?;
-    assert_host_not_allowlisted(&merged, "https://inherited.example")
+    assert_scheme_not_allowed(&merged, &url("http://primary.example")?)?;
+    assert_host_not_allowlisted(&merged, &url("https://primary.example")?)?;
+    assert_scheme_not_allowed(&merged, &url("http://inherited.example")?)?;
+    assert_host_not_allowlisted(&merged, &url("https://inherited.example")?)
 }
 
 #[rstest]
@@ -99,7 +99,7 @@ fn inherited_project_blocks_remain_cumulative_and_authoritative() -> Result<()> 
         "https://inherited-blocked.example",
         "https://primary-blocked.example",
     ] {
-        assert_host_blocked(&merged, blocked)?;
+        assert_host_blocked(&merged, &url(blocked)?)?;
     }
     Ok(())
 }
@@ -142,14 +142,18 @@ fn trusted_user_policy_accepts_the_project_chain_in_dependency_order() -> Result
         &["netsuke"],
     )?;
 
+    ensure_trusted_project_chain_policy(&merged)
+}
+
+/// Check that trusted grants retain dependency-first ordering and authority.
+fn ensure_trusted_project_chain_policy(merged: &netsuke::cli::Cli) -> Result<()> {
     ensure!(
         !merged.fetch_default_deny,
         "the last present project value from the middle layer must apply"
     );
     ensure!(
         merged.fetch_allow_scheme == ["http", "ftp", "https", "http"].map(String::from),
-        "accepted schemes must retain operator then dependency-first order: {:?}",
-        merged.fetch_allow_scheme
+        "the user grant must precede dependency-first project grants"
     );
     let expected_hosts = [
         "operator.example",
@@ -162,7 +166,7 @@ fn trusted_user_policy_accepts_the_project_chain_in_dependency_order() -> Result
     .collect::<std::result::Result<Vec<_>, _>>()?;
     ensure!(
         merged.fetch_allow_host == expected_hosts,
-        "accepted hosts must retain operator then dependency-first order"
+        "host grants must follow user, dependency, then primary order"
     );
     for value in [
         "http://operator.example",
@@ -238,7 +242,7 @@ fn shared_file_keeps_operator_authority_only_for_its_operator_occurrence() -> Re
         &[],
         &["netsuke"],
     )?;
-    assert_host_not_allowlisted(&project_only_occurrence, "http://shared.example")
+    assert_host_not_allowlisted(&project_only_occurrence, &url("http://shared.example")?)
 }
 
 #[rstest]
@@ -266,8 +270,8 @@ fn three_level_project_chain_grants_remain_quarantined() -> Result<()> {
     )?;
 
     for host in ["base.example", "middle.example", "primary.example"] {
-        assert_scheme_not_allowed(&merged, &format!("http://{host}"))?;
-        assert_host_not_allowlisted(&merged, &format!("https://{host}"))?;
+        assert_scheme_not_allowed(&merged, &url(&format!("http://{host}"))?)?;
+        assert_host_not_allowlisted(&merged, &url(&format!("https://{host}"))?)?;
     }
     ensure!(
         merged.fetch_default_deny,

@@ -1480,11 +1480,11 @@ Windows lanes pass `use-sccache: false` and keep the local arm
 `sccache_contract_test.py` describes. `SCCACHE_CACHE_SIZE` is 4 GB there rather
 than the usual 2 GB, because one store holds two build shapes.
 
-Both instrumented lanes set `RUN_RUST_CARGO_WAIT_TIMEOUT` to `1800`. The shared
+Both instrumented lanes set `RUN_RUST_CARGO_WAIT_TIMEOUT` to `1980`. The shared
 coverage action wraps `cargo llvm-cov nextest` in a watchdog which defaulted to
 600 seconds when this was written, a budget sized against a lane that restored a
 `target` archive and so never paid for a cold compile. That default is now
-1,800 seconds, the same figure these lanes set, which makes writing it down
+1,980 seconds, the same figure these lanes set, which makes writing it down
 more important rather than less: an accidental deletion would change nothing
 observable until the run it killed. Nothing here archives a build tree, so a
 cold sccache store leaves the whole instrumented build to do inside that
@@ -1492,8 +1492,8 @@ budget. The first trunk run after the Ubicloud migration failed exactly there:
 all 2,790 tests passed, taking about 512 seconds at 19.42% sccache hits, and
 the watchdog killed cargo 88 seconds later during report generation.
 
-The value is roughly three times the observed cold cost and still far inside
-each job's `timeout-minutes`, which is 90 on both instrumented lanes, so a
+The value is roughly four times the observed cold cost and still far inside
+each job's `timeout-minutes`, which is 100 on both instrumented lanes, so a
 genuine hang is caught long before the runner is abandoned. Keep the two lanes
 equal: `build-test` runs the same action on pull requests and meets the same
 wall whenever its store is cold, which is the case a green trunk run hides.
@@ -4462,14 +4462,14 @@ is the host's to decide. Two CI runs passed at 257.7 s and 261.5 s; a third
 failed at 300.008 s on a head whose only difference was eight lines of
 Markdown. A 38 s margin is not a budget but the difference between two runners,
 and the failure then names nextest's cap rather than the patch that was slow.
-The widened allowance is bounded from above by the whole-run budget, though not
-tightly: what the ordering requires is `global-timeout` strictly above the
-largest per-test allowance, and at 60 s periods 780 s admits up to twelve of
-them, 720 s. The 600 s is therefore a chosen allowance with 180 s of margin
-above it rather than the ceiling itself. Raising it to 780 s is what the
-ordering forbids: the test's allowance would then equal the whole-run budget it
-must stay below, and the run would end before the test could use it. So 720 s
-is the last value the ordering admits, and 780 s is where the two tiers meet.
+The widened allowance is bounded from above by the whole-run budget: the
+ordering requires `global-timeout` strictly above the largest per-test
+allowance. The mutation gate keeps its 600 s allowance, while the split-build
+and production-module checks get 720 s; the packaging smoke test now gets 900
+s, leaving 60 s below the 960 s whole-run budget. At 60 s periods, 960 s would
+permit at most fifteen periods (900 s) while remaining strictly below the
+whole-run budget. An allowance of 960 s would equal that budget, and the run
+could end before the test used its allowance.
 
 That widening was inert when it first landed, which is why the override is
 worth reading as a worked example of the trap above. Its filter named the bare
@@ -4704,12 +4704,19 @@ governs the non-doctest pass only, and deliberately stays small:
 - **A conservative slow timeout** (warn after 60s, terminate after five
   warning periods) so a hung test surfaces without failing the legitimately
   slow documentation end-to-end suites, which shell out to real Ninja.
-- **A targeted cold-package allowance.**
+- **Targeted cold-build allowances.**
   `packaged_manifest_retains_build_script_sources` runs
   `cargo publish --dry-run` into a fresh target directory. Its measured runtime
-  approaches the default 300s cap before shared-cache and compiler-queue
-  delays, so this test alone receives ten warning periods (600s). This does not
-  add retries or widen the allowance for unrelated tests.
+  reached the targeted 600s cap during a cold build under shared compiler
+  admission, so it now receives fifteen warning periods (900s). The isolated
+  `split_build_fixture_compiles_through_the_direct_rustc_harness` test receives
+  twelve warning periods (720s) after reaching its 300s cap while compiler
+  admission was saturated.
+  `production_build_module_slice_has_expected_boundary` also runs a nested
+  `cargo build --lib` before its direct-rustc checks; it reached the default
+  300s cap in a full gate with compiler admission saturated, so it gets the
+  same targeted 720s allowance. These targeted allowances remain below the 960s
+  CI whole-run cap; none adds retries or widens timeouts for unrelated tests.
 - **One serialized child-Cargo group.** Tests that spawn their own Cargo build
   join `nested-cargo-builds`, whose `max-threads = 1` stops four Nextest
   workers from each starting a four-job build on four vCPUs. Membership is
@@ -9335,43 +9342,45 @@ fed back upstream.
 
 All four tiers are set here.
 
-| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                                        |
-| ------------------------ | ---------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s (60 s x 5); 600 s (60 s x 10) for the mutation compile gate and the cold package publish check |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 780 s (13 m) in CI; unset locally                                                                    |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,800 s (30 m), armed twice per coverage step                                                        |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 90 m                                                                                                 |
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                                             |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation; 720 s split-build and production-module checks; 900 s packaging smoke test |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally                                                                         |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step                                                             |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                                                                                     |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
 the shared action runs `cargo llvm-cov nextest` and then an uninstrumented
 `cargo test --doc`, each arming the watchdog separately. Issue 715 moved two of
 the four: `global-timeout` fell so the watchdog still covers the sum it starts,
-and the ceiling rose to 90 m to contain both windows. The per-test allowance
-and the watchdog's 1,800 s keep the values they already had.*
+and the ceiling rose to 100 m to contain both windows. The per-test allowance
+and the watchdog's 1,980 s are the current values.*
 
 ### The per-test budget is a product, not a period
 
 `terminate-after` counts warning periods, so the budget a test actually gets is
 `period` multiplied by it. Every period here is 60 s, so reading the period
-alone would report a 60 s allowance where the real figure is 600 s. Any
+alone would report a 60 s allowance where the real maximum is 900 s. Any
 comparison against the tiers above rests on that reading, and the contract
 asserts it explicitly rather than leaving it implied.
 
-There are two such figures and the larger one governs. `[profile.default]`'s own
+There are four such figures and the largest governs. `[profile.default]`'s own
 `slow-timeout` gives five periods — 300 s — to every test no override matches,
-which is almost all of them. Two overrides widen it to ten periods, 600 s: the
-mutation compile gate, which compiles all 18 patched trees through the Kani
-frontend into a target directory no cache restores, and
-`packaged_manifest_retains_build_script_sources`, whose
-`cargo publish --dry-run` verification build lands in a nested target directory
-whatever `CARGO_TARGET_DIR` it is given and so inherits nothing from `target/`.
-A whole-run budget has to sit above the largest allowance in the file, so 600 s
-is the figure the ordering below is written against, not the 300 s most tests
-get.
+which is almost all of them. The mutation compile gate gets ten periods, 600 s;
+it compiles all 18 patched trees through the Kani frontend into a target
+directory no cache restores.
+`production_build_module_slice_has_expected_boundary` gets twelve periods, 720
+s. `split_build_fixture_compiles_through_the_direct_rustc_harness` also gets
+twelve periods, 720 s. The packaging smoke test gets fifteen periods, 900 s. Its
+`cargo publish --dry-run` build and the split-build fixture's dependency build
+use fresh nested target directories, so neither inherits completed artefacts
+from `target/`. A whole-run budget has to sit above the largest allowance in
+the file, so 900 s is the figure the ordering below is written against, not the
+300 s most tests get.
 
-The second of those is scoped to one test deliberately, and the distinction is
-about what a budget can buy rather than about how slow the two look. Their
+The package allowance is scoped to one test deliberately, and the distinction
+is about what a budget can buy rather than about how slow the two look. Its
 sibling `cli_configuration_fixture_compiles` spawns a nested Cargo build too
 and shares the same `test-group`, but its child `cargo check` runs in the same
 four-slot compiler-admission pool as every other build on the host, so its wall
@@ -9382,10 +9391,12 @@ the contention that produces it. What makes covering it unreliable is the
 spread: the same test has finished in 171.4 s on a quiet run, been terminated
 at the 300 s cap on a contended one with the sccache server unreachable and
 every slot held by peer worktrees, and measured 709.2 s inside the test body on
-a cold per-run tree. The ordering caps an allowance at 720 s, which is roughly
-11 s above that measured cost, so widening would buy a margin too thin to rely
-on. Sharing a serialization group is a statement about resource contention, not
-about budget; the two were briefly treated as one case and are not one.
+a cold per-run tree. The previous 780 s whole-run budget capped any allowance
+at 720 s, roughly 11 s above that measured cost. The candidate's 960 s run
+budget would permit up to 900 s, but widening this fixture would cover the wait
+without removing the contention that produces it. Sharing a serialization group
+is a statement about resource contention, not about budget; the two were
+briefly treated as one case and are not one.
 
 Those overrides are the targeted, written-rationale case
 `.config/nextest.toml`'s own policy asks for, and the mutation gate is worth
@@ -9399,18 +9410,20 @@ directory whatever `CARGO_TARGET_DIR` it is given, and it has passed at 145 s
 and timed out at 300.047 s on this host on one head whose only change between
 the two runs was a word in a plan, with load average the rest of the
 difference. Against the 300 s allowance it measured 259.5 s in the gate run
-that passed, 40 s of margin. The widened allowance is a chosen figure inside
-the ordering rather than at its edge: what
-`global-timeout > largest per-test allowance` permits at 60 s periods is up to
-720 s under the 780 s budget, so the 600 s leaves 180 s of margin and the two
-tiers still bound each other. Each override binds only because its filter
-carries the test's module path; for a period one did not, and the two passing
-runs above were read as evidence the widened allowance was in force when both
-sit inside the 300 s default anyway. See "nextest configuration" for the rule.
+that passed, 40 s of margin. Separate full-suite runs passed at 208.921 s and
+reached the 300.017 s cap during concurrent Cargo work, confirming that its
+timing varies with host load. The latest cold-target run reached 600 s while
+compiler admission was saturated. The candidate gives this test fifteen warning
+periods, 900 s, which remains strictly below the 960 s whole-run budget. The
+split-build and production-module checks retain their twelve-period, 720 s
+allowances. Each override binds only because its filter carries the test's
+module path; for a period one did not, and the earlier passing runs were read
+as evidence the widened allowance was in force when both sit inside the 300 s
+default anyway. See "nextest configuration" for the rule.
 
-### The whole-run budget, and how 13 minutes was arrived at
+### The whole-run budget, and how 16 minutes was arrived at
 
-`[profile.ci]` sets `global-timeout = "13m"`. Until it was set the watchdog was
+`[profile.ci]` sets `global-timeout = "16m"`. Until it was set the watchdog was
 doing tier two's job as well as its own, because a run whose tests each stay
 inside their allowance can still exceed the watchdog between them, and the
 failure then names `cargo` rather than the run.
@@ -9480,24 +9493,24 @@ profile data and writing `lcov.info`. The next-longest report phases measured
 The trunk lane's longest build and longest test run fall on different runs; its
 longest test run is 320 s on run 34240220630.*
 
-Thirteen minutes clears the longest test run in the sample by 328 s. It also
-has to sit between its neighbours, and does:
+Sixteen minutes clears the longest test run in the sample by 508 s. It also has
+to sit between its neighbours, and does:
 
 ```text
 global-timeout > largest per-test allowance
-780 s          > 600 s
+960 s          > 900 s
 
 watchdog      >= global-timeout + termination + cold build + report
-1,800 s       >= 780 s + 70 s + 600 s + 300 s = 1,750 s
+1,980 s       >= 960 s + 70 s + 600 s + 300 s = 1,930 s
 ```
 
-The termination allowance is the largest `grace-period` the configuration sets,
-or nextest's 10 s default where it sets none, as here, plus a 60 s safety
-margin. The cold-build allowance is 600 s against a 242 s worst measured build,
-because every run in the sample had a warm compiler cache and so none of them
-measured the case the allowance is for. The report allowance is 300 s against
-the 274 s worst measured phase, for the same reason: the sample's runs measured
-a warm profile merge and the allowance is for the case none of them reached.
+The watchdog leaves 50 s above those four terms. The termination allowance is
+the largest `grace-period` the configuration sets, or nextest's 10 s default
+where it sets none, as here, plus a 60 s safety margin. The cold-build
+allowance is 600 s against a 242 s worst measured build, because every run in
+the sample had a warm compiler cache. The report allowance is 300 s against the
+274 s worst measured phase, for the same reason: neither sample measures a cold
+build or report.
 
 The report phase is a separate term from the termination margin, and neither
 subsumes the other. The termination margin covers what nextest does after a
@@ -9505,13 +9518,14 @@ subsumes the other. The termination margin covers what nextest does after a
 The report allowance covers a different program's work after a *normal* finish.
 A run can do one, the other, or both.
 
-Thirteen minutes is the largest whole number of minutes the watchdog can carry.
-The non-budget terms sum to 970 s, so the largest coverable budget is 830 s; 14
-m needs 1,810 s and 15 m needs 1,870 s, both above the watchdog. The estate's
-fifteen-minute margin carried above the worst measured run, rather than made
-the budget itself, gives 1,352 s, which needs a watchdog above 1,800 s and then
-a ceiling above 90 minutes; the gain would be a longer wait for a legible
-failure, so the tighter budget is kept.
+Sixteen minutes is the largest whole number of minutes the watchdog can carry.
+The non-budget terms sum to 970 s, so the largest coverable budget is 1,010 s;
+17 m needs 1,990 s and exceeds the watchdog. The estate's fifteen-minute margin
+carried above the worst measured run, rather than made the budget itself, gives
+1,352 s and needs a watchdog of at least 2,322 s. Two such windows, plus the
+900 s of outside work and a 900 s ceiling margin, would require 6,444 s (107.4
+minutes). The gain would be a longer wait for a legible failure, so the tighter
+budget is kept.
 
 Its purpose is that failure's legibility rather than the saving: a run that
 overruns now ends with nextest naming the run, inside a watchdog that still has
@@ -9566,23 +9580,23 @@ The widest gap is 648 s, so the contract allows 15 minutes, 252 s above it.
 Adding a 15-minute margin above the sum it contains gives the requirement:
 
 ```text
-ceiling >= 2 x 1,800 s + 900 s + 900 s
-        = 5,400 s (90 minutes)
+ceiling >= 2 x 1,980 s + 900 s + 900 s
+        = 5,760 s (96 minutes)
 ```
 
 The first term is counted twice because both lanes pass the action's `doctests`
 input, so an uninstrumented `cargo test --doc` follows the instrumented run
 inside the same step and each invocation arms the watchdog separately; the log
-prints `cargo watchdog budget: 1800.0s` once per window, twice over on every
+prints `cargo watchdog budget: 1980.0s` once per window, twice over on every
 run measured. The second term is the 900 s of measured work outside those
 windows and the third is the estate's fifteen-minute margin carried above the
 sum rather than made part of it.
 
-Both jobs therefore set `timeout-minutes: 90`. The 60 minutes they used to set
-fell 1,800 s short of the two-window requirement -- exactly one watchdog
-window's worth -- so the ceiling would have cancelled those jobs at the moment
-the second window's watchdog would have reported its overrun. That is the shape
-of [`wildside` #486](https://github.com/leynos/wildside/issues/486), where a
+Both jobs therefore set `timeout-minutes: 100`, four minutes above the
+96-minute requirement. A 60-minute ceiling would fall 2,160 s short of that
+requirement, cancelling the jobs before the second window's watchdog could
+report its overrun. That is the shape of
+[`wildside` #486](https://github.com/leynos/wildside/issues/486), where a
 ceiling equal to the watchdog it contained cancelled the job at the moment the
 watchdog would have reported it: the report is the only thing that makes an
 overrun actionable, and a cancellation discards it. The doctest pass measured
@@ -9918,16 +9932,16 @@ window, and the ceiling belongs to the job, so the job's lanes are summed
 before the comparison: judging each separately against the same ceiling asks
 only that it clear the largest budget, which is the requirement a job arming
 one window happens to satisfy and a job arming two does not. Both jobs here arm
-two, and each ninety-minute ceiling sits exactly at the two-window requirement,
-so summing and taking the largest both pass on this tree and it cannot tell the
-two readings apart; the sum is asserted against controlled lanes instead.
+two, and each 100-minute ceiling exceeds the two-window requirement, so summing
+and taking the largest both pass on this tree and it cannot tell the two
+readings apart; the sum is asserted against controlled lanes instead.
 
 The requirement also carries fifteen minutes above that sum rather than merely
 reaching it, because a ceiling equal to the sum it contains cancels the job at
 the moment the watchdog would have reported the overrun, and the report is the
-only thing that makes an overrun actionable. Both ceilings have moved to ninety
-minutes under that reading: the sixty they used to set fell one whole watchdog
-window short of the two-window requirement.
+only thing that makes an overrun actionable. Both ceilings are 100 minutes,
+four minutes above the 96-minute requirement; the previous 60-minute ceiling
+would have been 2,160 s short.
 
 The ceiling counts windows, not steps, so a step passing `doctests: 'true'`
 contributes two budgets to the sum. `_watchdog_windows` reads that input from
@@ -9937,7 +9951,7 @@ window the action always runs. It counts the one spelling this repository
 writes, `'true'`, which the input pin in `test_execution_coverage_test` holds
 both coverage producers to; `coverage_lane_multi_step_test.py` drives the
 declined spellings and the two-window arithmetic end to end, and asserts the
-required ceiling is 5,400 s for such a step.
+required ceiling is 5,760 s for such a step.
 
 The termination allowance between the whole-run budget and the watchdog is two
 terms, not one: the largest `grace-period` the configuration sets, or nextest's
@@ -9979,7 +9993,7 @@ accepting an override or a bare duration.
 
 `tests/workflow_contracts/whole_run_value_test.py` pins the budget's value as
 well as its place in the order. The ordering holds for everything between the
-600 s largest per-test allowance and the 830 s the watchdog can cover, so the
+900 s largest per-test allowance and the 1,010 s the watchdog can cover, so the
 budget could drift to a value nobody chose with every comparison still passing,
 and the sample above would then describe a figure the file no longer sets.
 
