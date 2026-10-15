@@ -533,9 +533,17 @@ Each gains a `scripts/tests/test_<module>.py`. The contract tests gain:
 - `tests/workflow_contracts/release_publication_test.py` (INV-1, LEM-6).
 - `tests/workflow_contracts/release_publication_mutations.py` (input
   mutations, no tests of its own).
-- `tests/workflow_contracts/release_permissions_test.py` (LEM-5).
+- `tests/workflow_contracts/release_permissions_test.py` (LEM-5). It must land
+  in the same commit as the `publish-crates-io` job: two of its tests assert
+  that a job *does* carry `id-token: write` and `environment: crates-io`, so
+  committing it first leaves `make test-workflow-contracts` red. The other four
+  assert the separation itself and pass vacuously until the job exists, which
+  is why the existence checks are not optional.
 - `tests/workflow_contracts/composite_action_contract_test.py` (new).
-- `tests/workflow_contracts/release_modules_wired_test.py` (Cuprum #499).
+- `tests/workflow_contracts/release_modules_wired_test.py` (Cuprum #499) is
+  **superseded**: `release_publication_test.py`, landed at `ef02f499`, already
+  performs the Makefile and continuous-integration wiring checks plus the
+  orphan check this suite was planned to add.
 
 ### Stage C — implementation
 
@@ -546,7 +554,10 @@ Each gains a `scripts/tests/test_<module>.py`. The contract tests gain:
 - `publish-crates-io/` — probe, decide, upload, verify registry bytes.
 - `verify-release-inventory/` — compare the whole release against the
   identity record.
-- `github-release-finalize/` — reconcile the draft, then un-draft.
+- `finalize-github-release/` — reconcile the draft, then un-draft.
+
+Each new job's name matches the composite action it calls, so a reader moving
+between `release.yml` and `.github/actions/` does not have to translate.
 
 `.github/workflows/release.yml` gains, after the existing `metadata`, `build-*`,
 `windows-native-recipe-smoke`, and `release-admission-canaries` jobs:
@@ -566,11 +577,20 @@ Each gains a `scripts/tests/test_<module>.py`. The contract tests gain:
    permissions: {contents: read, id-token: write}
    ```
 
-3. `verify-release-inventory` — `needs: [publish-crates-io, release]`;
-   `contents: read`.
-4. `publish-github-release` — `needs: [verify-release-inventory]`;
-   `contents: write`, no `id-token`.
-5. `consumer-smoke` — `needs: [publish-github-release]`; verifies the
+3. `verify-release-inventory` —
+   `needs: [metadata, publish-crates-io, publish-release]`; `contents: read`;
+   `if: … should_publish == 'true'`. The mode gate is stated directly rather
+   than inherited. `release` and `publish-release` are mutually exclusive —
+   `release` requires `dry_run == 'true'`, `publish-release` requires
+   `should_publish == 'true'` — and GitHub skips any job that needs a skipped
+   job. Depending on `release` here would make this job unreachable in both
+   lanes: on a tag push `release` is skipped, and on a pull-request dry run
+   `publish-crates-io` is skipped.
+4. `finalize-github-release` — `needs: [verify-release-inventory]`;
+   `contents: write`, no `id-token`. Named `finalize-` rather than
+   `publish-github-` to keep it distinct from the existing `publish-release`,
+   which it follows rather than replaces.
+5. `consumer-smoke` — `needs: [finalize-github-release]`; verifies the
    published bytes without compiling anything (see `Surprises & discoveries`:
    `cargo install` is forbidden in CI by policy). It fetches
    `https://static.crates.io/crates/netsuke-build/netsuke-build-<version>.crate`,
@@ -580,9 +600,12 @@ Each gains a `scripts/tests/test_<module>.py`. The contract tests gain:
    That exercises the real public-consumer download path — the one
    `cargo-binstall` takes for a user — and executes the shipped bytes.
 
-The existing `release` job keeps its name, its `contents: write`, and its
-draft-creation and asset-upload steps; its `needs` grows `package-crate`, so
-the draft is not created before a package exists. The workflow's
+`publish-release` — not `release` — is the job holding `contents: write` and
+running the draft-creation steps; `release` holds `contents: read` and runs the
+dry-run rehearsal. `publish-release`'s `needs` grows `package-crate`, so the
+draft is not created before a package exists. Stage C as first drafted
+attributed the write permission to `release`; that predates PR #834, which
+split rehearsal from publication. The workflow's
 `concurrency.cancel-in-progress` becomes a function of the event: `true` for
 `workflow_call`, and `false` for a tag push, so a queued re-run of a tag
 reconciles rather than interrupting an upload.
@@ -924,6 +947,37 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   exactly the eight source-module doctests (4 in `release_candidate.py`, 1 in
   `release_inventory.py`, 3 in `release_semver.py`). `release_inventory.py`
   sits at exactly 400 lines after this, the inclusive cap boundary.
+- [x] (2026-10-15) Ran the full nine-gate batch against `ef02f499` and read
+  every log to a terminal verdict: **eight green, one environmental timeout,
+  and no branch failure**. `check-fmt`, `lint`, `typecheck`, `doc-coverage`,
+  `markdownlint` (with the spelling gate it inherits), `nixie`,
+  `test-workflow-contracts` (27 passed) and `test-release-publication` (126
+  passed) all pass. `make test` fails only on
+  `netsuke-build::command_env_ui_tests cli_configuration_fixture_compiles`, a
+  `TIMEOUT [300.020s]` with **no `FAIL` line anywhere in the log**: 3903 of
+  3904 run tests reported `passed`, 6 skipped, and the doctest pass reports
+  `ok … 0 failed`. The timeout is contention, not the branch — the diagnostic
+  is a count, `grep -c "sccache server is unreachable"` = **573** against a
+  healthy 1, identical on two independent runs of this commit, and this is the
+  measurement the existing tolerance names. The tolerance is therefore used as
+  written and **not** widened. doc-comment coverage closed at **98.87%**
+  (4972/5029) against the 80% threshold.
+- [x] (2026-10-15) Proved the `--doctest-modules` repair by observed mutation
+  rather than by the earlier derivation. With the line
+  `-p no:cacheprovider --doctest-modules` reduced to `-p no:cacheprovider` **in
+  that recipe alone**, `test-workflow-contracts` reports `1 failed, 11 passed`;
+  restored, it reports `12 passed`. The failing case is
+  `test_the_target_recipe_pins_its_interpreter_and_modules`. The earlier entry
+  above was written from source counting and is superseded by this observation;
+  the tree was confirmed clean on both sides of the mutation.
+- [x] (2026-10-15) Observed the LEM-5 suite red for the *right* reason before
+  removing it. Run against the current `release.yml` it reports
+  `2 failed, 6 passed`: the failures are the two assertions that require
+  `publish-crates-io` — a job that **does not exist yet**, because it is Stage
+  C work. Red for absence of the object under test is the intended Red stage,
+  not a defect. The suite is drafted and held outside the tree until Stage C
+  can land it in the same commit as the job it constrains, so the orphan guard
+  is never asked to tolerate an unwired module.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 
@@ -1189,31 +1243,40 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   published asset list, which is where the loss happens.
 
 - Observation: the docstring examples this plan counts as LEM-1 and LEM-2
-  evidence were **inert** when they were first written. The seven in
-  `release_candidate.py` and `release_semver.py` existed, read correctly, and
-  passed whenever they were run by hand — but no target collected them, so the
-  "7 doctests" reported above was a measurement of nothing. Evidence: the
-  `test-release-publication` recipe named only the three test modules and
-  carried no `--doctest-modules`, so pytest collected test functions alone.
-  Impact: this is Cuprum #499's orphaned-suite hazard one layer down. A suite
-  nothing runs is the failure the wiring contract exists to catch; a *doctest*
-  nothing runs is the same failure inside a file that is already wired, and it
-  is harder to see because the module is present in the recipe and green in
-  every gate. The repair is the recipe's source-module arguments plus
-  `--doctest-modules`, pinned by `SOURCE_MODULES` in
-  `tests/workflow_contracts/release_publication_test.py`, and proved live by
-  mutation: deleting the flag turns 2 of the contract tests red rather than
-  silently reducing the doctest count to zero. The same mutation exposed a
-  second, narrower gap — `release_inventory.py` carried no example at all, so
-  naming it on the command line would have been vacuous; `validate_inventory`
-  now has one, which is why that module grew from 397 to 400 lines. A third
-  finding, deliberately **out of scope** for this branch: 15 further inert
-  doctests pre-exist on `main` in `validate_coverage_artifact.py` (6),
-  `kani_proof_scope.py` (4), `cargo_package_metadata.py` (2), and
-  `verify_python_baseline.py` (3). They are recorded here so they are not lost,
-  but this deliverable owns only its own new modules, and repairing modules it
-  did not touch would enlarge the diff past its scope. Date/Author: 2026-10-15,
-  implementation agent.
+  evidence were **inert** when they were first written. The seven collected
+  doctest **items** in `release_candidate.py` and `release_semver.py` (four and
+  three) existed, read correctly, and passed whenever they were run by hand —
+  but no target collected them, so the "7 doctests" reported above was a
+  measurement of nothing. Evidence: the `test-release-publication` recipe named
+  only the three test modules and carried no `--doctest-modules`, so pytest
+  collected test functions alone. Impact: this is Cuprum #499's orphaned-suite
+  hazard one layer down. A suite nothing runs is the failure the wiring
+  contract exists to catch; a *doctest* nothing runs is the same failure inside
+  a file that is already wired, and it is harder to see because the module is
+  present in the recipe and green in every gate. The repair is the recipe's
+  source-module arguments plus `--doctest-modules`, pinned by `SOURCE_MODULES`
+  in `tests/workflow_contracts/release_publication_test.py`, and proved live by
+  mutation: deleting the flag turns **one** contract test red —
+  `test_the_target_recipe_pins_its_interpreter_and_modules`, on its single
+  `REQUIRED_RECIPE_FRAGMENTS` assertion. Observed, not derived: with the line
+  `-p no:cacheprovider --doctest-modules` reduced to `-p no:cacheprovider` in
+  that recipe alone, the module reports `1 failed, 11 passed`; restored,
+  `12 passed`. The other candidates do not move — the source-module check reads
+  the *source* text for `>>>`, which deleting a recipe fragment does not
+  change, and the module-existence check reads the test-module directory. The
+  same mutation exposed a second, narrower gap — `release_inventory.py` carried
+  no example at all, so naming it on the command line would have been vacuous;
+  `validate_inventory` now has one, which is why that module grew from 397 to
+  400 lines. A third finding, deliberately **out of scope** for this branch:
+  fifteen further inert doctest **lines** pre-exist on `main` in
+  `validate_coverage_artifact.py` (6 lines, 4 items), `kani_proof_scope.py` (4
+  lines, 2 items), `cargo_package_metadata.py` (2 lines, 2 items), and
+  `.github/scripts/verify_python_baseline.py` (3 lines, 2 items). The counts are
+  `>>>` lines, not collected items; the two units differ and this bullet
+  states which is which on both figures. They are recorded here so they are not
+  lost, but this deliverable owns only its own new modules, and repairing
+  modules it did not touch would enlarge the diff past its scope. Date/Author:
+  2026-10-15, implementation agent.
 
 ## Decision log
 
@@ -1319,6 +1382,32 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `0.1.0-beta4+meta` against the tag `v0.1.0-beta4`, because semantic-version
   ordering ignores build metadata. Evidence for both directions is recorded in
   `Surprises & discoveries`. Date/Author: 2026-10-12, implementation agent.
+
+- Decision: name the four remaining jobs `package-crate`, `publish-crates-io`,
+  `verify-release-inventory` and `finalize-github-release`, avoiding the four
+  names PR #780 already claims. Rationale: the plan forbids reusing
+  `release-candidate`, `downstream-canaries`, `downstream-canaries-windows` and
+  the workflow input `candidate-ref`, because #780 owns that vocabulary and a
+  second workflow reusing it would make the two suites ambiguous about which
+  file they constrain. Every new job name also matches the composite action it
+  calls, and the fifth action was renamed from `github-release-finalize/` to
+  `finalize-github-release/` so that parity holds in both directions rather
+  than only one. Date/Author: 2026-10-15, implementation agent.
+
+- Decision: land `release_permissions_test.py` in the **same commit** as the
+  `publish-crates-io` job, and do not write `release_modules_wired_test.py` at
+  all. Rationale: the first would otherwise fail the orphan guard the plan
+  requires, and the second is superseded by `release_publication_test.py`,
+  which already pins the module inventory. This reverses an earlier reading of
+  mine that the LEM-5 suite was redundant with
+  `release_publish_path_permissions_test.py`: that suite asserts what each
+  *named* job holds, while LEM-5 asserts that **no** job can hold both
+  authorities, that the token scope and the protected environment appear
+  together in exactly one place, that the check is non-vacuous, and that a
+  synthetic offending job is reported. All four were absent. The lesson, which
+  generalizes past this plan: "an existing file covers this" is a claim about
+  the *property*, not about the filename. Date/Author: 2026-10-15,
+  implementation agent.
 
 ## Outcomes & retrospective
 
