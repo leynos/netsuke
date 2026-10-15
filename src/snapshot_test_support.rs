@@ -72,7 +72,10 @@ pub(crate) fn stable_snapshot_settings(subdir: &str) -> Settings {
 /// whichever machine recorded it.
 fn add_temp_dir_filter(settings: &mut Settings) {
     let prefix = regex::escape(&std::env::temp_dir().display().to_string());
-    settings.add_filter(&format!(r#"{prefix}/[^\s"']*"#), "[TMP]");
+    // Match either separator. `temp_dir()` renders backslashes on Windows, so a
+    // literal `/` here would leave every Windows path unnormalized and the
+    // checked-in snapshots would carry a run-specific workspace name.
+    settings.add_filter(&format!(r#"{prefix}[\\/][^\s"']*"#), "[TMP]");
 }
 
 /// Add a redaction filter for the Netsuke generator version.
