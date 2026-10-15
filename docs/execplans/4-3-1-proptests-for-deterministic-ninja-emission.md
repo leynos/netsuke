@@ -2822,7 +2822,37 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   additionally passes `--no-tests fail`, so an empty selection is a hard
   failure rather than a silent pass.
 
-- [ ] `EP-M3` milestone gates and CodeRabbit review: pending.
+- [x] (2026-10-15) **The first `EP-M3` gate run was red on two deterministic
+      gates, and both repairs are now green.** `make check-fmt` reported 8
+      `cargo fmt` diffs across the four new files; `make lint` aborted at
+      `lint-clippy` with three `-D warnings` errors, all in the new tree:
+  `excessive-nesting` at `strategy/graph/mod.rs:195` (the `map_err` closure sat
+  at nesting depth 5 inside `for` + `if let`), and `shadow_reuse` for `left` and
+  `right` at `classification.rs:165` (closure parameters shadowing the
+  enclosing `edge_lists_differ`'s own parameters of those names).
+
+  The nesting repair extracts the closure to a free function `insert_pool_edge`
+  in the same module, dropping the depth to 3. That extraction **introduced a
+  type error the stop hook caught**: `insert_edge` returns
+  `Result<EdgeId, IrGenError>`, not `Result<(), _>`, and the inline `?` had
+  been discarding the identifier implicitly, so a helper declaring
+  `Result<(), _>` did not compile. The resolution keeps the proven
+  `map_err(..)?` form and adds an explicit `Ok(())`, documenting that the arena
+  owns the inserted edge so its identifier is unneeded. A first attempt using
+  `.map(|_edge_id| ())` was rejected by inspection before running:
+  `clippy::result_map_unit_fn` denies that shape.
+
+  Both repairs are validated, though narrowly: focused
+  `cargo clippy -p netsuke-build --lib --tests --all-features -- -D warnings`
+  exits 0 with no diagnostics, and
+  `cargo nextest run --lib --all-features -E 'test(/determinism/)'` is 4/4 PASS
+  in 0.168 s. The full-gate confirmation is still outstanding.
+
+- [ ] `EP-M3` milestone gates and CodeRabbit review: pending. The two
+      deterministic gate failures above are repaired and narrowly validated;
+      a full re-run of `check-fmt` and `lint` is required, and `make test`'s
+      `cli_configuration_fixture_compiles` timeout is an environmental
+      question recorded under Surprises & discoveries.
 - [ ] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [ ] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [ ] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
@@ -2830,6 +2860,38 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 - [ ] `EP-M8`: `OBL-NINJA`, documentation, evidence sweep, roadmap.
 
 ## Surprises & discoveries
+
+- (2026-10-15) **A red `lint-clippy` silently removes all evidence for the
+  three lint targets after it.** `make lint` is declared
+  `lint: lint-clippy lint-whitaker lint-python github-actions-lint`, and a
+  failure in the first prerequisite aborts the whole target. So the previous
+  `EP-M3` gate run left `lint-whitaker`, `lint-python` and
+  `github-actions-lint` with **no evidence at any revision**, not merely a
+  stale one. This was confirmed from the log rather than inferred: the only
+  occurrence of the string `whitaker` in `/tmp/lint-…-4-3-1-…out` is
+  `[build-limits] whitaker_boundary_contract: …`, which is a *crate being
+  compiled*, not the Dylint suite executing. The consequence matters here
+  because `module_max_lines` — the Whitaker rule that forced the `graph.rs`
+  split recorded below — has therefore **never actually run against this
+  tree**. Its correctness is still an assumption, and the `graph/mod.rs` line
+  count was re-measured at 364 (of 400) to keep that assumption unstrained. Any
+  future claim that "the 400-line cap is satisfied" must cite the
+  `lint-whitaker` execution, not the file measurement alone.
+
+- (2026-10-15) **The `make test` timeout is compile-queue latency, not the
+  test's own cost.** `cli_configuration_fixture_compiles`
+  (`tests/command_env_ui_tests.rs:70`) is a member of the `nested-cargo-builds`
+  test group, which serializes tests that **spawn a child Cargo build**; its
+  allowance comes from
+  `slow-timeout = { period = "60s", terminate-after = 5 }`, i.e. 300 s. The
+  child Cargo inherits the shared build-limits pool, and `build-limits-status`
+  taken during this work showed `capacity 4, held 4, … healthy` with roughly
+  thirty requests waiting on unrelated crates from another agent's `ddlint`
+  build. A 300 s cap on a test whose real work is a compile, queued behind
+  thirty competitors, is a capacity observation about the *host*, not a budget
+  the test is exceeding. Corroborated by an identical 300 s kill on worktree
+  `0965d3fb`, whose tree contains no `determinism/` directory at all. The
+  repair is to wait for the pool rather than to raise the bound.
 
 - (2026-10-14) **The 400-line file cap is a *live* gate on Rust sources, and
   `GraphSpec` alone exceeded it at 538 lines.** `AGENTS.md` states "No single

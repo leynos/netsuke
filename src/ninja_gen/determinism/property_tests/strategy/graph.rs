@@ -15,10 +15,10 @@
 //! `Debug` plus the direct bound on the rendered length asserted below.
 
 use crate::ninja_gen::determinism::strategy::classification::edge_lists_differ;
-use crate::ninja_gen::determinism::strategy::{ALWAYS_RESTAT_ALL, Classification};
 use crate::ninja_gen::determinism::strategy::graph::{
     MAX_ACTIONS, MAX_EDGES, MAX_OUTPUTS, MIN_ACTIONS, MIN_EDGES, arb_graph_spec,
 };
+use crate::ninja_gen::determinism::strategy::{ALWAYS_RESTAT_ALL, Classification};
 use proptest::prelude::*;
 use proptest::test_runner::TestRunner;
 use std::cell::Cell;
@@ -158,9 +158,7 @@ impl Reach {
             edges: self.edges.max(classes.edges),
             multi_output_edges: self.multi_output_edges.max(classes.multi_output_edges),
             phony_edges: self.phony_edges.max(classes.phony_edges),
-            dyndep_staged_edges: self
-                .dyndep_staged_edges
-                .max(classes.dyndep_staged_edges),
+            dyndep_staged_edges: self.dyndep_staged_edges.max(classes.dyndep_staged_edges),
             default_targets: self.default_targets.max(classes.default_targets),
             intersection_cases: self.intersection_cases
                 + usize::from(classes.reaches_class_intersection()),
