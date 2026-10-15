@@ -43,7 +43,7 @@ use netsuke::stdlib::{StdlibConfig, fixed_clock};
 pub const FIXED_INSTANT: OffsetDateTime = datetime!(2026-06-08 12:00:00 UTC);
 
 /// Return the characterization corpus.
-pub fn cases() -> &'static [Case] {
+pub const fn cases() -> &'static [Case] {
     &[
         Case {
             label: "pure",
@@ -149,17 +149,17 @@ impl Case {
     ///
     /// Each rule pairs something the fixture needs with something the loader
     /// offers, and they are stated once here rather than restated by every row.
-    pub const fn is_loadable(self, capabilities: &Capabilities) -> bool {
+    pub const fn is_loadable(self, capabilities: Capabilities) -> bool {
         if !capabilities.from_workspace && self.requires_workspace() {
             return false;
         }
         if self.hazards.reads_environment
-            && !(capabilities.injected_reader || capabilities.refusing_helpers)
+            && !(capabilities.seams.environment || capabilities.refusing_helpers)
         {
             return false;
         }
         if self.hazards.consults_clock
-            && !(capabilities.injected_clock || capabilities.refusing_helpers)
+            && !(capabilities.seams.clock || capabilities.refusing_helpers)
         {
             return false;
         }
@@ -194,17 +194,32 @@ impl Hazards {
 }
 
 /// What a loader is able to offer the corpus.
+///
+/// The two injected seams are held as one field rather than two sibling
+/// Booleans because they answer one question — which boundaries does the caller
+/// supply? — and because grouping them keeps the struct within Clippy's
+/// four-Boolean ceiling without bending the rules that read it. They are not
+/// forced to agree: [`injected_environment`] supplies a reader without a
+/// clock, which is exactly the distinction that keeps clock-reading fixtures
+/// out of the rows that pass no [`StdlibConfig`].
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Capabilities {
-    /// The loader accepts an injected environment reader.
-    pub injected_reader: bool,
-    /// The loader accepts a [`StdlibConfig`], and so a fixed clock.
-    pub injected_clock: bool,
+    /// The seams the loader accepts from its caller.
+    pub seams: Seams,
     /// The loader loads from a workspace path rather than from a string.
     pub from_workspace: bool,
     /// The loader registers a refusing stub in place of every helper that
     /// inspects or acts on the host.
     pub refusing_helpers: bool,
+}
+
+/// The injected boundaries a loader accepts from its caller.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Seams {
+    /// The loader accepts an injected environment reader.
+    pub environment: bool,
+    /// The loader accepts a [`StdlibConfig`], and so a fixed clock.
+    pub clock: bool,
 }
 
 /// Return a loader that reads the process environment and the host clock.
@@ -213,8 +228,10 @@ pub struct Capabilities {
 /// their own configuration from the workspace they open, all behave this way.
 pub const fn process_environment() -> Capabilities {
     Capabilities {
-        injected_reader: false,
-        injected_clock: false,
+        seams: Seams {
+            environment: false,
+            clock: false,
+        },
         from_workspace: false,
         refusing_helpers: false,
     }
@@ -225,6 +242,46 @@ pub const fn path_entry_point() -> Capabilities {
     Capabilities {
         from_workspace: true,
         ..process_environment()
+    }
+}
+
+/// Return a loader that takes an injected environment reader only.
+///
+/// Rows that pass a reader but no [`StdlibConfig`] — including the policy-taking
+/// and budget-taking string adapters — all have these capabilities.
+pub const fn injected_environment() -> Capabilities {
+    Capabilities {
+        seams: Seams {
+            environment: true,
+            clock: false,
+        },
+        ..process_environment()
+    }
+}
+
+/// Return a loader that takes both injected seams.
+///
+/// Only the rows that pass a [`StdlibConfig`] qualify, which is what makes this
+/// distinct from [`injected_environment`]: a clock-carrying fixture is loadable
+/// here and not there.
+pub const fn injected_environment_and_clock() -> Capabilities {
+    Capabilities {
+        seams: Seams {
+            environment: true,
+            clock: true,
+        },
+        ..process_environment()
+    }
+}
+
+/// Return a workspace-opening loader that also takes an injected reader.
+pub const fn path_entry_point_with_environment() -> Capabilities {
+    Capabilities {
+        seams: Seams {
+            environment: true,
+            clock: false,
+        },
+        ..path_entry_point()
     }
 }
 

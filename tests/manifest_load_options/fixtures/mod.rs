@@ -25,7 +25,8 @@ pub use self::{
     corpus::StagedFixture,
     fixture::{
         Capabilities, Case, cases, environment, exhausted_budget, fixed_clock_config,
-        one_var_reader, path_entry_point, process_environment,
+        injected_environment, injected_environment_and_clock, one_var_reader, path_entry_point,
+        path_entry_point_with_environment, process_environment,
     },
     settings::settings,
 };
