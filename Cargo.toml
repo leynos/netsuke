@@ -99,7 +99,7 @@ default = []
 legacy-digests = ["sha1", "md5"]
 # `netsuke check`, the manifest linter. Off by default so release binaries,
 # which build the default feature set, ship without it until v0.2.0; see
-# ADR-042. CI lints and tests both with and without it.
+# ADR-056. CI lints and tests both with and without it.
 lint = ["dep:granit-parser"]
 
 [dependencies]

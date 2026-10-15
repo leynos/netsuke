@@ -940,7 +940,7 @@ rather than reusing command escaping.
 
 `netsuke check` is driven by a static registry in `src/lint/registry/mod.rs`.
 The [manifest linter design](netsuke-linter-design.md) specifies the model and
-[ADR-042](adr-042-manifest-linting-under-netsuke-check.md) records the
+[ADR-056](adr-056-manifest-linting-under-netsuke-check.md) records the
 decisions behind it; this section is the mechanics.
 
 A new rule touches four implementation places, the rule reference, and the
@@ -1035,7 +1035,7 @@ the lint domain remains free of metrics and tracing concerns.
 `netsuke check` and the whole `crate::lint` module compile only under the
 `lint` Cargo feature (`lint = ["dep:granit-parser"]`), which is off by default.
 The "Release gating" section of
-[ADR-042](adr-042-manifest-linting-under-netsuke-check.md) records why: release
+[ADR-056](adr-056-manifest-linting-under-netsuke-check.md) records why: release
 binaries build the default feature set, so v0.1.0 ships without the linter, and
 removing the gate is planned for v0.2.0. Treat it as temporary scaffolding, not
 a permanent configuration knob.

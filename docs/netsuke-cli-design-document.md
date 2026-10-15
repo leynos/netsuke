@@ -84,7 +84,7 @@ consumer parses one representation.
 
 The [manifest linter design](netsuke-linter-design.md) specifies the rule model
 and the output schemas, and
-[ADR-042](adr-042-manifest-linting-under-netsuke-check.md) records why linting
+[ADR-056](adr-056-manifest-linting-under-netsuke-check.md) records why linting
 lives under `check` rather than under a new noun. The subcommand exists only in
 builds with the `lint` Cargo feature enabled until v0.2.0.
 
