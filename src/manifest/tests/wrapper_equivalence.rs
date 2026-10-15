@@ -109,10 +109,11 @@ fn cases() -> [(&'static str, &'static str); 3] {
 /// The `error` variant is rendered with `{:#}` so the snapshot records the
 /// whole `anyhow` chain rather than only its outermost context. A refactor that
 /// starts wrapping or dropping a context changes that text, which is exactly
-/// what the baseline exists to catch.
-fn outcome(label: &str, path: &std::path::Path, limits: ManifestBudgetLimits) -> (String, String) {
+/// what the baseline exists to catch. The row's label is not threaded through
+/// here: it names the row, not the load, so the caller joins it to the text.
+fn outcome(path: &std::path::Path, limits: ManifestBudgetLimits) -> String {
     let result = manifest::query::from_path_for_manifest_query_with_limits(path, limits, None);
-    let rendered = match &result {
+    match &result {
         Ok(manifest) => match serde_json_canonicalizer::to_string(manifest) {
             Ok(canonical) => match serde_json::from_str::<serde_json::Value>(&canonical) {
                 Ok(value) => serde_json::to_string_pretty(&value)
@@ -122,8 +123,7 @@ fn outcome(label: &str, path: &std::path::Path, limits: ManifestBudgetLimits) ->
             Err(error) => format!("<manifest not serializable: {error}>"),
         },
         Err(error) => format!("{error:#}"),
-    };
-    (label.to_owned(), rendered)
+    }
 }
 
 /// Snapshot what the crate-internal query entry point produces.
@@ -137,7 +137,7 @@ fn from_path_with_limits_row() -> Result<()> {
     let mut blocks = Vec::new();
     for (label, text) in cases() {
         let (_dir, path) = staged(text)?;
-        let (label, rendered) = outcome(label, &path, ManifestBudgetLimits::default());
+        let rendered = outcome(&path, ManifestBudgetLimits::default());
         blocks.push(format!("=== {label} ===\n{rendered}"));
     }
     let document = blocks.join("\n\n");
@@ -164,8 +164,9 @@ fn budget_exhaustion_row() -> Result<()> {
         source_bytes: 8,
         ..ManifestBudgetLimits::default()
     };
-    let (_dir, path) = staged(cases()[0].1)?;
-    let (label, rendered) = outcome("pure", &path, limits);
+    let (label, text) = cases()[0];
+    let (_dir, path) = staged(text)?;
+    let rendered = outcome(&path, limits);
     let document = format!("=== {label} ===\n{rendered}");
     stable_snapshot_settings("manifest_load_options").bind(|| {
         insta::assert_snapshot!("from_path_with_limits_exhausted_budget", document);
