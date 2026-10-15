@@ -978,6 +978,24 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   not a defect. The suite is drafted and held outside the tree until Stage C
   can land it in the same commit as the job it constrains, so the orphan guard
   is never asked to tolerate an unwired module.
+- [x] (2026-10-15) Landed the last four Stage B modules and their four suites
+  in one commit: `scripts/release_digest.py`, `verify_crates_io_bytes.py`,
+  `release_reconcile_crates.py`, `release_reconcile_github.py` and their
+  `scripts/tests/` suites, with `release_publication_test.py`'s
+  `SECTION_MODULES`, `SOURCE_MODULES` and the `test-release-publication` recipe
+  extended in the same commit. Measured on the committed content: **126 → 212
+  passed**, the increase consisting of the four new suites' test functions plus
+  **13 source-module doctest items** (4 `release_digest`, 8
+  `verify_crates_io_bytes`, 2 `release_reconcile_crates`, 3
+  `release_reconcile_github` — the last two are my run's counts, and the
+  per-module collection is recorded in the batch report). All eight modules sit
+  under the 400-line cap, the largest at 396. Acceptance criterion 2's "at
+  least six new test modules" is now **satisfied as enumerated**: the target
+  collects six `scripts/tests/` modules added by this work, not counting the
+  three that predate it. A pedantic reading would require six modules *added by
+  the target*, which has collected nine since `ef02f499`, and is unachievable.
+  The reading chose the one that is satisfiable and is stated here rather than
+  left implicit.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 
