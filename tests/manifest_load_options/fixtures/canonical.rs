@@ -21,8 +21,28 @@
 //! from the outermost context to the root cause. That is the part worth
 //! pinning: a refactor that starts wrapping or dropping a context changes the
 //! text, and that is exactly the kind of change the baseline exists to catch.
+//!
+//! Each block also leads with the stages the entry point's observer was
+//! notified with. A seam a caller can pass is a seam a caller can observe, so
+//! the notified sequence is part of what a row freezes.
 
 use netsuke::ast::NetsukeManifest;
+use netsuke::manifest::ManifestLoadStage;
+
+/// Record which stage-observer seam one row's entry point offers.
+///
+/// The distinction is carried in the type rather than inferred from an empty
+/// observation, because those two states mean different things: an entry point
+/// that takes no observer cannot notify a stage however it is refactored, while
+/// one that takes an observer and notifies nothing has lost behaviour it used
+/// to have.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StageSeam {
+    /// The entry point takes no observer parameter.
+    Absent,
+    /// The entry point takes an observer, which the row supplies.
+    Accepted,
+}
 
 /// Render a load outcome as the text a snapshot records.
 pub fn canonical(result: &anyhow::Result<NetsukeManifest>) -> String {
@@ -39,12 +59,39 @@ pub fn canonical(result: &anyhow::Result<NetsukeManifest>) -> String {
 /// characterization in one place, so a reviewer reads one file to see whether a
 /// refactor changed *anything* about that entry, and the snapshot directory
 /// stays small enough to hold in view.
-pub fn report(entries: &[(String, anyhow::Result<NetsukeManifest>)]) -> String {
+///
+/// `stages` is what the row's observer was notified with, and is empty for a
+/// row whose entry point has no observer to notify.
+pub fn report(
+    entries: &[(String, anyhow::Result<NetsukeManifest>)],
+    seam: StageSeam,
+    stages: &[ManifestLoadStage],
+) -> String {
+    let observed = observer_line(seam, stages);
     entries
         .iter()
-        .map(|(label, result)| format!("=== {label} ===\n{}", canonical(result)))
+        .map(|(label, result)| format!("=== {label} ===\n{observed}{}", canonical(result)))
         .collect::<Vec<_>>()
         .join("\n\n")
+}
+
+/// Render the stage-observer line that opens a fixture's block.
+///
+/// The three states are spelled out rather than collapsed into one, because a
+/// missing observer and a silent one would otherwise read the same in a diff.
+fn observer_line(seam: StageSeam, stages: &[ManifestLoadStage]) -> String {
+    match (seam, stages) {
+        (StageSeam::Absent, _) => "observer: none accepted by this entry point\n".to_owned(),
+        (StageSeam::Accepted, []) => "observer: accepted, notified no stage\n".to_owned(),
+        (StageSeam::Accepted, stages) => {
+            let names = stages
+                .iter()
+                .map(|stage| format!("{stage:?}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("observer: {names}\n")
+        }
+    }
 }
 
 /// Render a manifest as indented canonical JSON.

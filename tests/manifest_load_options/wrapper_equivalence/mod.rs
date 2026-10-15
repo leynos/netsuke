@@ -39,8 +39,17 @@
 //! `clock_now` is loaded only there. That is a property of the public surface
 //! rather than a choice: a path entry point builds its own configuration from
 //! the workspace it opens and has no seam for a caller's clock, so
-//! [`path_entry_point_cannot_inject_a_clock`] measures that rather than leaving
-//! it as an assumption the capability table happens to encode.
+//! [`path_rows::path_entry_point_cannot_inject_a_clock`] measures that rather
+//! than leaving it as an assumption the capability table happens to encode.
+//!
+//! # Splitting the rows
+//!
+//! [`path_rows`] holds every row whose entry point opens a workspace, and this
+//! module holds the string rows plus the shared harness. The split is the
+//! string-versus-path seam, not a line count: a path row stages a fixture
+//! before it can load anything, and a string row never does.
+
+mod path_rows;
 
 use anyhow::Result;
 use camino::Utf8Path;
@@ -48,23 +57,18 @@ use rstest::rstest;
 
 use netsuke::ast::NetsukeManifest;
 use netsuke::manifest::{
-    EnvAccessPolicy, ManifestLoadStage, from_path, from_path_with_policy,
-    from_path_with_policy_and_env, from_path_with_policy_and_env_and_limits,
-    from_path_with_policy_and_environment, from_path_with_policy_and_environment_and_limits,
-    from_path_with_policy_and_limits, from_str, from_str_with_env, from_str_with_env_and_config,
+    EnvAccessPolicy, ManifestLoadStage, from_str, from_str_with_env, from_str_with_env_and_config,
     from_str_with_env_and_policy,
 };
-use netsuke::recipe_shell::RecipeShell;
 use netsuke::stdlib::NetworkPolicy;
 
 use super::fixtures::{
-    Capabilities, Case, StagedFixture, cases, environment, exhausted_budget, fixed_clock_config,
-    injected_environment, injected_environment_and_clock, one_var_reader, path_entry_point,
-    path_entry_point_with_environment, process_environment, report, settings,
+    Capabilities, Case, StageSeam, StagedFixture, cases, fixed_clock_config, injected_environment,
+    injected_environment_and_clock, one_var_reader, process_environment, report, settings,
 };
 
 /// Return the fixtures a loader with `capabilities` may load.
-fn applicable(capabilities: Capabilities) -> Vec<Case> {
+pub(super) fn applicable(capabilities: Capabilities) -> Vec<Case> {
     cases()
         .iter()
         .copied()
@@ -74,21 +78,31 @@ fn applicable(capabilities: Capabilities) -> Vec<Case> {
 
 /// Render the document a row snapshots, staging each fixture in turn.
 ///
-/// `load` receives the fixture and the path a path entry point should read: the
-/// staged copy, which lives in a fresh temporary workspace.
+/// `load` receives the fixture, the path a path entry point should read, and
+/// the buffer an observer should append to: the staged copy lives in a fresh
+/// temporary workspace.
 ///
-/// The observer records every stage the entry point notifies, which is part of
-/// what these rows characterize — an entry point that accepts a stage observer
-/// is called with one, so a refactor that stops notifying changes what a real
-/// caller sees. The stages themselves are not snapshotted: they are identical
-/// for every fixture and would only pad the document.
+/// The observer's stages are recorded per fixture, in the block that fixture
+/// produced. A shared buffer would misreport every block but the first, because
+/// a load that fails early notifies fewer stages than one that succeeds, and
+/// the entry point's own line already records where it stopped.
+///
+/// `seam` states whether the entry point offers an observer at all. It is the
+/// caller's claim rather than something this function can infer, so a row that
+/// passes `Accepted` while its entry point takes no observer fails to compile,
+/// and one that passes `Absent` for an observer-taking entry point would leave
+/// its closures unused.
 ///
 /// # Errors
 ///
 /// Returns an error when the capability table admits no fixture — the row would
 /// snapshot an empty document and characterize nothing — or when a fixture
 /// cannot be staged or read.
-fn document<F>(capabilities: Capabilities, mut load: F) -> Result<String>
+pub(super) fn document<F>(
+    capabilities: Capabilities,
+    seam: StageSeam,
+    mut load: F,
+) -> Result<String>
 where
     F: FnMut(&Case, &Utf8Path, &mut Vec<ManifestLoadStage>) -> Result<NetsukeManifest>,
 {
@@ -97,12 +111,12 @@ where
         !applicable.is_empty(),
         "no fixture is applicable to this entry point; the capability table is wrong"
     );
-    let mut stages = Vec::new();
     let mut blocks = Vec::with_capacity(applicable.len());
     for case in applicable {
         let fixture = StagedFixture::new(&case)?;
+        let mut stages = Vec::new();
         let outcome = load(&case, fixture.manifest_path(), &mut stages);
-        blocks.push(report(&[(case.label.to_owned(), outcome)]));
+        blocks.push(report(&[(case.label.to_owned(), outcome)], seam, &stages));
     }
     Ok(blocks.join("\n\n"))
 }
@@ -113,6 +127,9 @@ where
 /// repository-relative path serves as that name. Naming it anything else would
 /// suggest the loader had been handed a workspace it does not have.
 ///
+/// No string entry point takes a stage observer, so the rows built on this
+/// helper are all [`StageSeam::Absent`].
+///
 /// # Errors
 ///
 /// Returns an error under the same conditions as [`document`], plus when a
@@ -121,7 +138,7 @@ fn document_from_string<F>(capabilities: Capabilities, mut load: F) -> Result<St
 where
     F: FnMut(&str) -> Result<NetsukeManifest>,
 {
-    document(capabilities, |case, _path, _stages| {
+    document(capabilities, StageSeam::Absent, |case, _path, _stages| {
         load(&case.manifest_text()?)
     })
 }
@@ -133,74 +150,13 @@ where
 /// refuses at the scheme check before a socket is opened, and only a
 /// refusing-surface row loads it. The policy is therefore not what any row
 /// characterizes; it is the value an ordinary caller supplies.
-fn policy() -> NetworkPolicy {
+pub(super) fn policy() -> NetworkPolicy {
     NetworkPolicy::default()
 }
 
 /// Return the permissive access policy the adapters default to.
 fn permissive() -> EnvAccessPolicy {
     EnvAccessPolicy::default()
-}
-
-/// Assert that a path entry point consults the host clock and cannot be given
-/// another.
-///
-/// The capability table gives every path row no clock seam, and this row is the
-/// measurement behind that claim. Without it, a later change that *did* give a
-/// path entry point a clock seam would leave the clock fixture silently
-/// excluded from seven rows, where the omission would read as a decision rather
-/// than a gap.
-///
-/// The same manifest is loaded twice: once through a string entry that can pin
-/// the clock, once through a path entry that cannot. Equal descriptions would
-/// mean the path entry had somehow obtained the pinned instant, so it must
-/// differ — and it differs by rendering the host's, which the fixed instant is
-/// a decade away from.
-#[rstest]
-fn path_entry_point_cannot_inject_a_clock() -> Result<()> {
-    let case = cases()
-        .iter()
-        .copied()
-        .find(|case| case.hazards.consults_clock)
-        .ok_or_else(|| anyhow::anyhow!("the corpus no longer holds a clock-reading fixture"))?;
-    anyhow::ensure!(
-        !case.is_loadable(path_entry_point()),
-        "a path entry point now admits the clock fixture; give the path rows an injected clock"
-    );
-
-    let text = case.manifest_text()?;
-    let pinned = from_str_with_env_and_config(&text, &one_var_reader(), fixed_clock_config()?)?;
-    let staged = StagedFixture::new(&case)?;
-    let mut stages = Vec::new();
-    let host = from_path_with_policy(
-        staged.manifest_path(),
-        policy(),
-        Some(&mut |stage| stages.push(stage)),
-    )?;
-
-    anyhow::ensure!(
-        describe(&pinned)? != describe(&host)?,
-        "a path entry point rendered the pinned clock; it has gained a clock seam \
-         and the path rows must start using it"
-    );
-    Ok(())
-}
-
-/// Return the first target's rendered description.
-///
-/// # Errors
-///
-/// Returns an error when the manifest has no target, or when the fixture's
-/// description does not survive as a string.
-fn describe(manifest: &NetsukeManifest) -> Result<String> {
-    let target = manifest
-        .targets
-        .first()
-        .ok_or_else(|| anyhow::anyhow!("the clock fixture has no target"))?;
-    target
-        .description
-        .clone()
-        .ok_or_else(|| anyhow::anyhow!("the clock fixture's target has no description"))
 }
 
 /// Snapshot what `from_str` produces.
@@ -242,119 +198,6 @@ fn from_str_with_env_and_config_row() -> Result<()> {
     })?;
     settings().bind(|| {
         insta::assert_snapshot!("from_str_with_env_and_config", document);
-    });
-    Ok(())
-}
-
-/// Snapshot what `from_path` produces.
-///
-/// `from_path` is the path entry point with no seam: no policy, no budget, no
-/// observer. It exists so a caller that wants none of them does not have to
-/// name them, and the row records that it behaves as the policy-taking entry
-/// point does once the defaults are supplied.
-#[rstest]
-fn from_path_row() -> Result<()> {
-    let document = document(path_entry_point(), |_, path, _| from_path(path))?;
-    settings().bind(|| insta::assert_snapshot!("from_path", document));
-    Ok(())
-}
-
-#[rstest]
-fn from_path_with_policy_row() -> Result<()> {
-    let document = document(path_entry_point(), |_, path, stages| {
-        from_path_with_policy(path, policy(), Some(&mut |stage| stages.push(stage)))
-    })?;
-    settings().bind(|| insta::assert_snapshot!("from_path_with_policy", document));
-    Ok(())
-}
-
-#[rstest]
-fn from_path_with_policy_and_limits_row() -> Result<()> {
-    let document = document(path_entry_point(), |_, path, stages| {
-        from_path_with_policy_and_limits(
-            path,
-            policy(),
-            exhausted_budget(),
-            Some(&mut |stage| stages.push(stage)),
-        )
-    })?;
-    settings().bind(|| {
-        insta::assert_snapshot!("from_path_with_policy_and_limits", document);
-    });
-    Ok(())
-}
-
-#[rstest]
-fn from_path_with_policy_and_env_row() -> Result<()> {
-    let document = document(path_entry_point_with_environment(), |_, path, stages| {
-        from_path_with_policy_and_env(
-            path,
-            policy(),
-            &one_var_reader(),
-            Some(&mut |stage| stages.push(stage)),
-        )
-    })?;
-    settings().bind(|| {
-        insta::assert_snapshot!("from_path_with_policy_and_env", document);
-    });
-    Ok(())
-}
-
-#[rstest]
-fn from_path_with_policy_and_env_and_limits_row() -> Result<()> {
-    let document = document(path_entry_point_with_environment(), |_, path, stages| {
-        from_path_with_policy_and_env_and_limits(
-            path,
-            policy(),
-            &one_var_reader(),
-            exhausted_budget(),
-            Some(&mut |stage| stages.push(stage)),
-        )
-    })?;
-    settings().bind(|| {
-        insta::assert_snapshot!("from_path_with_policy_and_env_and_limits", document);
-    });
-    Ok(())
-}
-
-#[rstest]
-fn from_path_with_policy_and_environment_row() -> Result<()> {
-    let document = document(path_entry_point_with_environment(), |_, path, stages| {
-        from_path_with_policy_and_environment(
-            path,
-            policy(),
-            &environment(&one_var_reader()),
-            Some(&mut |stage| stages.push(stage)),
-        )
-    })?;
-    settings().bind(|| {
-        insta::assert_snapshot!("from_path_with_policy_and_environment", document);
-    });
-    Ok(())
-}
-
-/// Snapshot the fully parameterized entry point with every ceiling at its
-/// default.
-///
-/// The `_and_limits` name describes the seam, not the value: a caller that
-/// wants the ceilings the constants define passes them explicitly rather than
-/// omitting them. The exhausted budget is exercised by
-/// [`from_path_with_policy_and_limits_row`] instead, so this row still shows a
-/// successful load.
-#[rstest]
-fn from_path_with_policy_and_environment_and_limits_row() -> Result<()> {
-    let document = document(path_entry_point_with_environment(), |_, path, stages| {
-        from_path_with_policy_and_environment_and_limits(
-            path,
-            policy(),
-            &environment(&one_var_reader()),
-            exhausted_budget(),
-            RecipeShell::host_default(),
-            Some(&mut |stage| stages.push(stage)),
-        )
-    })?;
-    settings().bind(|| {
-        insta::assert_snapshot!("from_path_with_policy_and_environment_and_limits", document);
     });
     Ok(())
 }
