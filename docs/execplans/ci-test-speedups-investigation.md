@@ -96,7 +96,7 @@ fingerprints must cover both. The installed suite revision and upstream
 installer resolution remain unverified; source pins alone do not establish that
 every installation input is immutable.
 
-The offline evidence set now contains 81 job records from 21 distinct
+The original offline evidence set contains 81 job records from 21 distinct
 run-attempt pairs: six trunk coverage jobs, six trunk cache-writer jobs, nine
 same-repository PR Linux gate jobs and 60 jobs from other cohorts. Source
 revisions vary; paired trunk workflows share a SHA but remain distinct cohorts.
@@ -104,6 +104,13 @@ All records are observational, not controlled baseline/candidate comparisons.
 The attempt summaries and eligible PR job times are in
 `docs/ci-performance/README.md`. Deduplicate by `(run_id, run_attempt)` before
 summing attempt-level runner-second totals, which repeat on each job record.
+
+A dated supplement retains five jobs from ordinary attempt `38750711833`,
+completed on 15 October: 86 records across 22 attempts in total. Its Linux job
+ran 3,933 tests, with different application tests and additional CI stages.
+Keep it separate from the original descriptive groups; it is not a fifth
+matched control. The README's supplement records provenance, identity-set
+differences, native phases, resources and all five jobs' cost proxies.
 
 The pinned coverage path runs the instrumented command
 `cargo llvm-cov nextest --manifest-path Cargo.toml --workspace --all-targets
@@ -356,9 +363,10 @@ fidelity comparisons block adoption.
 - [x] Revalidate current runner, cache, Nextest and API-harness state against
   the reference SHA and record the differences above.
 - [x] Implement the offline collector and retain 21 attempts / 81 job records
-  in `docs/ci-performance/observations.jsonl`.
+  in `docs/ci-performance/observations.jsonl`, plus the dated five-job
+  supplement.
 - [ ] Establish a comparable controlled baseline and fill phase/inventory gaps.
-- [x] Validate the collector in the complete workflow-contract suite: 1,303
+- [x] Validate the collector in the complete workflow-contract suite: 1,311
   passed, three skipped, with 27 follow-on script tests passing. Dispatch no CI
   for this evidence milestone.
 - [ ] Complete full local Rust validation and code review before committing the
@@ -373,6 +381,20 @@ The candidates remain deferred; no candidate has been scientifically rejected
 or adopted. Update progress and decisions as evidence lands.
 
 ## Surprises & discoveries
+
+- 2026-10-15: An additional ordinary CI log exposed the next crate's doctest
+  marker arriving before the previous crate's compile-fail batch finished. Two
+  regressions reproduced a 90-pass/26-ignored undercount instead of the native
+  129 passes and 32 ignored tests. Preserve active and pending targets through
+  their respective summaries. Both regressions pass; reprocessing the original
+  81 records changes none of them. The log adapter's private scope predicate
+  belongs only to this native-doctest parser.
+
+- 2026-10-15: Six focused regressions exposed boolean and floating-point job
+  provenance and page counts comparing equal to integers. Reject those
+  malformed fields before comparing identities or accepting a complete page.
+  The focused cases and all Python gates pass after correction. Regenerating
+  the 81 saved observations produces a byte-for-byte identical dataset.
 
 - 2026-10-15: A missing cache-size line could inherit the preceding restored
   archive's bytes. The regression reproduced that attribution error; consume
@@ -438,13 +460,14 @@ or adopted. Update progress and decisions as evidence lands.
 
 ## Outcomes & retrospective
 
-The offline collector and retained observation set are recorded. A controlled
-baseline, distinct coverage merge/export timings, bounded CI telemetry,
-candidate evaluations and adoption follow-through remain outstanding.
+The offline collector, original observation set and dated supplement are
+recorded. A controlled baseline, distinct coverage merge/export timings,
+bounded CI telemetry, candidate evaluations and adoption follow-through remain
+outstanding.
 
 Local lint, formatting, Markdown/spelling, diagram validation and Python
 typechecking passed. Documentation coverage is 98.87%. Workflow contracts
-passed 1,303 cases with three skips, followed by 27 passing script tests. The
+passed 1,311 cases with three skips, followed by 27 passing script tests. The
 separate doctest pass succeeded: its three native summaries report 129 passes,
 32 ignored cases and no failures. Collector regressions preserve merged and
 compile-fail result batches and keep absent archive sizes unknown.
@@ -459,18 +482,21 @@ attempt or collector code review has begun. The collector and tests remain
 staged pending the required gate result. Candidate adoption still requires
 controlled CI evidence beyond this offline milestone.
 
-The documentation checkpoint is committed as `b5e64888`, with a punctuation
-correction in `f3a5e8a5`. Applicable formatting, Markdown, spelling and Mermaid
-checks passed before those documentation-only commits. Two documentation-only
-CodeRabbit reviews each found a minor grammar issue, addressed separately from
-the staged code. Both reviews reported one unreviewed file without naming it;
-complete review coverage remains unverified. No push, draft PR, issue comment
-or CI dispatch has occurred.
+The documentation checkpoint is committed as `b5e64888`, with review
+corrections in `f3a5e8a5` and `159d91a6`. Applicable formatting, Markdown,
+spelling and Mermaid checks passed before those documentation-only commits.
+Three documentation-only CodeRabbit reviews found two minor grammar issues,
+both corrected. The latest review, at `159d91a6`, reported zero findings. All
+three reported one unreviewed file without naming it; complete review coverage
+remains unverified. The collector and its contracts have not received
+CodeRabbit code review. No push, draft PR, issue comment or CI dispatch has
+occurred.
 
 ## Revision note
 
 Revised 2026-10-15 to include the cache-writer cohort, separate runner shapes,
-and record the interrupted local lint gate. The controlled baseline, bounded
-telemetry and candidate decisions remain outstanding.
+the dated ordinary-run supplement and parser regressions, and record local
+validation. The controlled baseline, bounded telemetry and candidate decisions
+remain outstanding.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
