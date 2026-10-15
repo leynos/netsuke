@@ -39,20 +39,32 @@ if typ.TYPE_CHECKING:
 TARGET = "test-release-publication"
 CI_STEP_NAME = "Release publication tests"
 
-#: The modules this target owns. Named individually rather than by a glob, so
-#: a module silently dropped from the recipe is a failure here and not a
-#: smaller test run that still reports success.
+#: The test modules this target owns. Named individually rather than by a
+#: glob, so a module silently dropped from the recipe is a failure here and
+#: not a smaller test run that still reports success.
 SECTION_MODULES = (
     "scripts/tests/test_release_candidate.py",
     "scripts/tests/test_release_inventory.py",
     "scripts/tests/test_release_semver.py",
 )
 
+#: The modules under test, named on the command line so `--doctest-modules`
+#: has something to collect. `pytest` with the flag but no module argument
+#: collects examples only in what it already walks, so dropping these leaves
+#: the flag present and every example unrun — a state that looks identical to
+#: success from the outside.
+SOURCE_MODULES = (
+    "scripts/release_candidate.py",
+    "scripts/release_inventory.py",
+    "scripts/release_semver.py",
+)
+
 #: Fragments any sibling script-test target carries. The three that matter
 #: are the baseline interpreter, the pinned pytest, and the isolated
 #: configuration: without `-c /dev/null` a root `pyproject.toml` silently
 #: supplies plugins and ini options, and the command stops describing what it
-#: runs.
+#: runs. `--doctest-modules` is here because the source modules' examples are
+#: evidence the plan claims; without the flag they are prose nothing executes.
 REQUIRED_RECIPE_FRAGMENTS = (
     "PYTHONPATH=scripts",
     "--python $(PYTHON_BASELINE)",
@@ -62,6 +74,7 @@ REQUIRED_RECIPE_FRAGMENTS = (
     "-c /dev/null",
     "--rootdir=.",
     "-p no:cacheprovider",
+    "--doctest-modules",
 )
 
 #: Matches a test module path in a recipe. Deliberately anchored to the
@@ -114,6 +127,30 @@ def test_the_target_recipe_pins_its_interpreter_and_modules() -> None:
     assert [f"scripts/tests/{name}" for name in collected] == list(SECTION_MODULES), (
         f"{TARGET} must execute exactly the release-publication modules, "
         f"got {collected!r}"
+    )
+    for module in SOURCE_MODULES:
+        assert module in recipe, (
+            f"{TARGET} must name {module} on its command line, or "
+            f"--doctest-modules has no source to collect and the examples in "
+            f"that module are prose nothing executes"
+        )
+
+
+@pytest.mark.parametrize("module", SOURCE_MODULES)
+def test_each_source_module_carries_docstring_examples(module: str) -> None:
+    """Require the named sources to hold examples, so the flag is not vacuous.
+
+    ``--doctest-modules`` over a module with no ``>>>`` line collects nothing
+    and reports success either way, so the flag's presence alone does not show
+    the examples ran. This asserts there is something for it to find, which
+    makes the target's doctest count a fixed number rather than a value that
+    can quietly fall to zero.
+    """
+    source = (REPO_ROOT / module).read_text(encoding="utf-8")
+    assert ">>>" in source, (
+        f"{module} carries no docstring example, so naming it on the "
+        f"{TARGET} command line adds no coverage; either restore an example "
+        f"or drop the module from SOURCE_MODULES"
     )
 
 

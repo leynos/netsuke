@@ -68,18 +68,16 @@ class MalformedAssetNameError(InventoryError):
 class PublishedAsset:
     """One file a release presents for publication.
 
+    Construction validates nothing: a name is judged by
+    :func:`validate_inventory` against the declared set, so every rejection
+    carries its context rather than arriving here.
+
     Parameters
     ----------
     name
         Bare file name as the uploader would publish it.
     size
         Size in bytes, as reported by the directory listing.
-
-    Notes
-    -----
-    The dataclass validates nothing. A name is judged by
-    :func:`validate_inventory` against the declared set, so every rejection is
-    reported with its context rather than at construction.
     """
 
     name: str
@@ -163,8 +161,8 @@ def _is_bare_file_name(name: str) -> bool:
     -----
     Both flavours must agree, for the reason given in
     :func:`_escapes_its_directory`: a name nested under Windows separators
-    alone is still not the flat name the uploader publishes, even though a
-    POSIX parser treats the backslashes as ordinary characters.
+    alone is not the flat name the uploader publishes, though a POSIX parser
+    treats the backslashes as ordinary characters.
     """
     return all(
         len(flavour(name).parts) == 1 and flavour(name).parts[0] not in {"", ".", ".."}
@@ -189,8 +187,7 @@ def _rejected_names(names: cabc.Iterable[str]) -> tuple[list[str], list[str]]:
     -----
     The two are different diagnoses: ``../netsuke`` means the release tried to
     publish outside its staging directory, ``sub/netsuke`` that a nested path
-    reached the listing. Reporting both as "bad name" would hide the first,
-    which is the one with security consequences.
+    reached the listing. Calling both "bad name" would hide the security one.
     """
     escaping: list[str] = []
     malformed: list[str] = []
@@ -208,8 +205,7 @@ def _require_usable_entries(assets: list[PublishedAsset]) -> dict[str, int]:
     Returns
     -------
     dict[str, int]
-        How many entries claim each staged name, which is what the caller
-        compares against the declaration.
+        How many entries claim each staged name.
 
     Raises
     ------
@@ -306,12 +302,21 @@ def validate_inventory(
     offending name rather than the first, so one run describes the whole
     shortfall.
 
-    The remaining four refusing classes are raised by the stage helpers this
-    delegates to, each of which documents them: `_require_usable_entries`
-    raises `EmptyAssetError` and `DuplicateAssetError`,
-    `_require_declared_agreement` raises `MissingAssetError` and
-    `UnexpectedAssetError`. They remain the caller's to handle, since nothing
-    here catches them.
+    The four remaining refusing classes come from the stage helpers this
+    delegates to, which document each: `_require_usable_entries` raises
+    `EmptyAssetError` and `DuplicateAssetError`; `_require_declared_agreement`
+    raises `MissingAssetError` and `UnexpectedAssetError`. Nothing here catches
+    them, so all four remain the caller's to handle.
+
+    Examples
+    --------
+    >>> staged = [PublishedAsset(name="netsuke.tar.gz", size=11)]
+    >>> validate_inventory(staged, expected=["netsuke.tar.gz"])
+    >>> validate_inventory(staged, expected=["netsuke.tar.gz", "netsuke.tar.gz.sha256"])
+    Traceback (most recent call last):
+        ...
+    release_inventory.MissingAssetError: declared assets were not staged: \
+'netsuke.tar.gz.sha256'
     """
     assets = list(present)
     escaping, malformed = _rejected_names(asset.name for asset in assets)
@@ -355,9 +360,8 @@ def binstall_asset_names(
     -----
     The archive names are not derived here. They come from
     :func:`hoist_binstall_discovery.expected_archive_names`, so the inventory
-    and the hoist cannot drift apart about what an archive is called; this
-    function adds only the sidecar suffix that the hoist's own staging step
-    emits beside each archive.
+    and the hoist cannot drift apart about what an archive is called. This
+    function adds only the sidecar suffix the hoist stages beside each archive.
     """
     archives = hoist_binstall_discovery.expected_archive_names(
         staging_config, manifest, version
@@ -384,9 +388,8 @@ def read_inventory(directory: Path) -> list[PublishedAsset]:
     -----
     Only regular files are reported, and symlinks are not followed, so a link
     is never mistaken for the asset it points at: the release must publish the
-    archive itself, not a reference to a file left elsewhere. Sorted output
-    keeps the result stable, so a caller comparing two listings compares
-    content and not directory order.
+    archive itself, not a reference left elsewhere. Sorted output keeps the
+    result stable, so a caller comparing two listings compares content.
     """
     with os.scandir(directory) as entries:
         assets = [
