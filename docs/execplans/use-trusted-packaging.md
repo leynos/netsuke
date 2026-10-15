@@ -5,11 +5,12 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
-The plan is a draft for review. No implementation has begun, and no release,
-tag, registry publication, GitHub Release, credential, or account setting is
-changed by this document.
+The plan is approved and implementation has begun: EP-M1 (the plan) and EP-M2
+(Stage B) are complete, with Stages C and D open. No release, tag, registry
+publication, GitHub Release, credential, or account setting has been changed by
+this work.
 
 ## Purpose / big picture
 
@@ -578,18 +579,29 @@ between `release.yml` and `.github/actions/` does not have to translate.
 block.** `tests/workflow_contracts/release_run_interpolation_test.py` forbids
 `${{` inside any `run` in `release.yml` or `package.yml` — but its
 `_step_contexts` skips every job carrying `uses`, so moving a step body into a
-composite action **removes that shell from the contract's reach entirely**. The
-existing five actions already carry 84 such sites between them
-(`windows-gate-cache` 26, `windows-msi-upgrade-validation` 18,
-`linux-gate-cache` 17, `cross-build-macos` 16 at the time of measurement,
-`kani-cache` 7), so a blanket extension of the rule to all composite actions
-would red immediately.
+composite action **removes that shell from the contract's reach entirely**.
 
-The resolution is to scope the rule **by path** to the release-path actions
-this work adds, not by an allowlist of known-violating files. An allowlist is
-the weakening the mission forbids; scoping by path states the real invariant —
-that the actions this design introduces pass values through the environment —
-and the required deliberate negative mutation discharges its non-vacuity.
+Re-measured at `c1f3f2ed`, the five existing actions carry **68** expression
+sites between them (`windows-gate-cache` 26, `windows-msi-upgrade-validation`
+18, `linux-gate-cache` 17, `kani-cache` 7, `memory-sampler` 0), and **none of
+the 68 sits inside a `run` block**. Partitioned by the key that owns each site:
+32 under `env:`, 28 under `with:`, and 8 in a manifest's declared `outputs:` —
+every one a place where an expression is a substituted value rather than
+executable source. The rule therefore extends to **every** manifest under
+`.github/actions`, not by path to the five this work adds and not by an
+allowlist of known-violating files. An allowlist is the weakening the mission
+forbids; a path-scoped rule would have to be extended by hand each time an
+action is added, and would leave the next action uncovered until someone
+remembered.
+
+Earlier revisions of this plan justified a path-scoped rule by asserting a
+blanket extension "would red immediately". That assertion is falsified: it
+rested on a stale figure of 84, which counted a `cross-build-macos` action
+since deleted (`9e1bf27e`, #798). A blanket sweep is green today, and stays
+green because it constrains an invariant the tree already satisfies. The
+deliberate negative mutation in
+`tests/workflow_contracts/composite_action_contract_test.py` discharges its
+non-vacuity, so the stricter rule cannot pass by having nothing to check.
 
 `.github/workflows/release.yml` gains, after the existing `metadata`, `build-*`,
 `windows-native-recipe-smoke`, and `release-admission-canaries` jobs:
@@ -943,9 +955,13 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   2026-10-11 decision to host the crates.io exchange inside `publish-release`
   contradicts LEM-5. Both are recorded in `Decision log`; neither blocks Stage
   B, which touches no workflow file.
-- [ ] Stage B: pure modules and their failing suites (EP-M2). LEM-1 and LEM-2
-  are complete and wired; LEM-3 and LEM-4 and the remaining Stage B contract
-  suites remain.
+- [x] Stage B: pure modules and their failing suites (EP-M2). LEM-1 through
+  LEM-4 are complete and wired: `release_candidate.py`, `release_inventory.py`,
+  `release_semver.py`, `release_digest.py`, `verify_crates_io_bytes.py`,
+  `release_reconcile_crates.py` and `release_reconcile_github.py` each have
+  their suite, and `release_publication_test.py` pins every module and suite
+  name in the `test-release-publication` recipe so a new module cannot land
+  unwired.
 - [x] (2026-10-12) LEM-2 landed as `scripts/release_inventory.py` (397 lines,
   stdlib-only) with `scripts/tests/test_release_inventory.py`, 22 tests. The
   rule is exact set equality against the declared set, not a per-file
@@ -1133,7 +1149,29 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   defect and not a gate input whatsoever. It was found by a provenance check on
   the SHA the figure cited. Whether `check-fmt` still passes is now a question
   for the re-run owed at `565d5572`.
+- [x] (2026-10-15) Ran the full commit-gate batch at `c1f3f2ed`, the first
+  batch against the rebased head: nine of ten targets exit zero (`check-fmt`,
+  `spelling`, `markdownlint`, `nixie`, `lint` 59 m, `typecheck` 8 m,
+  `doc-coverage` 98.89% against an 80% threshold, `test-workflow-contracts`
+  1291 + 27 passed, `test-release-publication` 212 passed). `make test` exits 2
+  on one nested-Cargo trybuild test terminated at its 300 s cap with **no
+  `FAIL` line anywhere in the log**, its two siblings having passed at 272.487
+  s and 240.973 s against the same cap. The branch changes no Rust, so no
+  mechanism exists by which it slows a `netsuke-build` compile;
+  `build-limits-status` reported capacity 4 with all 4 held and peer waiters
+  queued 83.8 s, and the gate's own log carries 573
+  `sccache server is unreachable` lines, so every compile ran uncached. The red
+  is recorded as **environmental, not a branch defect** — and as attempt one of
+  the `Tolerances` limit of three. The `cargo test --doc` half of `make test`
+  never ran, because the nextest abort pre-empted it; doctests at this revision
+  are **unobserved evidence**, not a pass.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
+  Scope correction from recon at `c1f3f2ed`: this is not an extraction of
+  existing bodies. `release.yml` has no `package-crate`, `publish-crates-io`,
+  `verify-release-inventory` or `consumer-smoke` job, and no crates.io step of
+  any kind; only `release` and `publish-release` carry the upload sequence that
+  the new jobs decompose. Stage C therefore writes five new composite actions
+  plus the job graph, and is the largest stage in this plan.
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 
 ## Surprises & discoveries
@@ -1723,6 +1761,34 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   generalizes past this plan: "an existing file covers this" is a claim about
   the *property*, not about the filename. Date/Author: 2026-10-15,
   implementation agent.
+
+- Decision: extend the `${{`-in-`run` prohibition to **every** composite action
+  rather than scoping it by path to the five release-path actions, reversing
+  the scoping stated in Stage C of earlier revisions. Rationale: the scoping
+  rested on a measurement that does not hold. The five existing actions carry
+  68 expression sites, not the 84 the plan recorded (`cross-build-macos` was
+  deleted by `9e1bf27e`, #798), and **none** of the 68 is inside a `run` block,
+  so a blanket extension is green today rather than red. With the premise gone,
+  path-scoping buys nothing and costs a manual extension each time an action is
+  added. It is also strictly stricter with no allowlist, which is what the
+  mission requires. The deliberate mutation that restores an expression to a
+  named step and requires that step alone to fail discharges non-vacuity, so
+  the sweep cannot pass by having nothing to sweep. Date/Author: 2026-10-15,
+  implementation agent.
+
+- Decision: hold `contents: write` on **two** jobs, `publish-release` and
+  `finalize-github-release`, and assert that exact set rather than a subset.
+  Rationale: `publish-release` creates the draft release and uploads the assets
+  to it, while `finalize-github-release` un-drafts it only once the whole
+  release has been verified against the identity record. Un-drafting is itself
+  a write, and jobs do not share a token, so a single-holder design would have
+  to delete the finalizer's write scope — which is exactly the separation
+  between "upload" and "make public" that makes the ordering meaningful. An
+  implementation draft of mine asserted the single-holder form and would have
+  forced that deletion; recorded because the failure is instructive. "An
+  assertion that sounds stricter" is not evidence that it is correct, and a
+  stricter-sounding claim needs the same check against the design as a weaker
+  one. Date/Author: 2026-10-15, implementation agent.
 
 ## Outcomes & retrospective
 
