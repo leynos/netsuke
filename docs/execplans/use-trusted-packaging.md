@@ -996,11 +996,60 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   the target*, which has collected nine since `ef02f499`, and is unachievable.
   The reading chose the one that is satisfiable and is stated here rather than
   left implicit.
+- [x] (2026-10-15) Cleared the Stage B Python diagnostics (`51ab8275`). The
+  Stage B commit was gated on `make test-release-publication` alone, so it
+  passed 212 tests while `make lint` failed on 13 Ruff diagnostics in the
+  modules it added. Repairing those exposed 2 Pylint and 53 df12 house-lint
+  findings that Ruff had been masking: `make lint` stops at its first failing
+  stage, so a single run's problem count is a **lower bound**, never a total.
+  68 diagnostics in files that had never been linted at the 3.14 baseline. All
+  repairs are behavioural no-ops; an AST comparison of assertion expressions
+  against `118b8c9c` shows identical expressions everywhere except the two
+  comparison simplifications the house lints required. Measured:
+  `make lint-python` exits 0 through all five stages and
+  `make test-release-publication` still reports 212 passed.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 
 ## Surprises & discoveries
 
+- Observation: **DOC502 follows the public function's own body only**, so a
+  `Raises` section naming an exception raised solely by a private helper is
+  itself a lint error. `classify_registry_state` documented
+  `RegistryResponseError` while only `_version_records` and `_checksums` raised
+  it, which was correct to a human reader and wrong to the linter. Evidence:
+  two probes. A synthetic module at `/tmp/doc502probe/probe.py` reproduced the
+  finding, and the real tree reports `docstring-extraneous-exception` at
+  `release_reconcile_crates.py:161`. The `release_inventory.py` precedent
+  settles the convention: `Raises` names what the function's own body raises —
+  `validate_inventory` lists only `EscapingAssetNameError` and
+  `MalformedAssetNameError` for that reason — and helper-raised exceptions are
+  named in `Notes`. Impact: the four exceptions `validate_inventory` inherits
+  from `_require_usable_entries` and `_require_declared_agreement` are
+  documented in its `Notes` prose, not in its `Raises` section.
+- Observation: **the backslash line-continuation form in a doctest does not
+  work in a raw docstring**, so it is unavailable wherever the docstring
+  discusses backslashes. `release_inventory.py:319` and
+  `verify_crates_io_bytes.py:279` use `\` at column 0 to fit a long expected
+  exception line under Ruff's 88-column limit, which `make lint` enforces and
+  `ruff format` does not. Python splices the physical lines into one logical
+  line before `doctest` sees them, so the continuation must sit at **column
+  0**: indent it and its leading spaces are spliced into the expected message.
+  `parse_sidecar`'s docstring is raw — it explains the GNU escaped-path form —
+  so its backslash stayed literal and `doctest` rejected the example with
+  "inconsistent leading whitespace". Evidence:
+  `ValueError: line 55 of the docstring for
+  release_digest.parse_sidecar has inconsistent leading whitespace`
+  from `make test-release-publication`, resolved by `# doctest: +ELLIPSIS`
+  with the message truncated to `...`, which has a repository precedent at
+  `tests/workflow_contracts/nextest_durations.py:243`. Impact: a raw docstring
+  needs ELLIPSIS, a non-raw one may use the continuation.
+- Observation: **the df12 house lints require a failure message on every
+  `assert`** (C9102, an enable-only rule). Evidence: the four Stage B suites
+  carried 53 bare asserts and reported 53 findings, while the three sibling
+  suites that predate this work pass because every assert already carries one.
+  Impact: new `scripts/tests` modules must write a message per assert from the
+  outset; the requirement was invisible to Ruff and to Pylint's default set.
 - Observation: the shared `upload-release-assets` action rejects `.tar.gz`
   outright, because `Path("x.tar.gz").suffix` is `.gz`. Evidence: read from its
   `scripts/upload_release_assets.py` at pin
