@@ -153,14 +153,10 @@ impl Case {
         if !capabilities.from_workspace && self.requires_workspace() {
             return false;
         }
-        if self.hazards.reads_environment
-            && !(capabilities.seams.environment || capabilities.refusing_helpers)
-        {
+        if self.hazards.reads_environment && !capabilities.resolves_environment_hazard() {
             return false;
         }
-        if self.hazards.consults_clock
-            && !(capabilities.seams.clock || capabilities.refusing_helpers)
-        {
+        if self.hazards.consults_clock && !capabilities.resolves_clock_hazard() {
             return false;
         }
         if self.hazards.acts_on_host && !capabilities.refusing_helpers {
@@ -220,6 +216,29 @@ pub struct Seams {
     pub environment: bool,
     /// The loader accepts a [`StdlibConfig`], and so a fixed clock.
     pub clock: bool,
+}
+
+impl Capabilities {
+    /// Report whether the loader can answer a manifest that reads the
+    /// environment.
+    ///
+    /// It answers one either way: by supplying a reader, or by registering a
+    /// refusing stub in place of the helper that would have consulted the
+    /// process environment. Refusal counts because it is still a repeatable
+    /// outcome — the corpus holds the refusal rows precisely to pin the
+    /// diagnostic a caller sees when the boundary is withheld.
+    pub const fn resolves_environment_hazard(self) -> bool {
+        self.seams.environment || self.refusing_helpers
+    }
+
+    /// Report whether the loader can answer a manifest that consults the clock.
+    ///
+    /// The reasoning mirrors [`resolves_environment_hazard`](Self::resolves_environment_hazard):
+    /// a supplied clock and a refusing stub both replace a host read with a
+    /// fixed outcome.
+    pub const fn resolves_clock_hazard(self) -> bool {
+        self.seams.clock || self.refusing_helpers
+    }
 }
 
 /// Return a loader that reads the process environment and the host clock.
