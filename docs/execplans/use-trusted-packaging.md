@@ -294,8 +294,8 @@ Stop and escalate when any of these is breached.
   `concurrency` pinned to `cancel-in-progress: false`, reconciliation that
   inspects remote state before acting, and a digest comparison before any skip.
   A tag re-run therefore QUEUES behind the in-flight release rather than
-  cancelling it, which is also the safer semantics for a publication. It
-  cannot be made event-dependent: `tests/workflow_contracts/pr_concurrency_test.py`
+  cancelling it, which is also the safer semantics for a publication. It cannot
+  be made event-dependent: `tests/workflow_contracts/pr_concurrency_test.py`
   pins `RELEASE_CONCURRENCY` by exact equality (`:275-278`) and separately
   rejects any `cancel-in-progress` that `is not False` for a workflow with no
   `pull_request` trigger (`:261-269`).
@@ -325,15 +325,15 @@ Stop and escalate when any of these is breached.
 - Risk: a contract test that enumerates release jobs or runner assignments
   fails after a job is added. Severity: **none** — RETRACTED, this was my
   inference from the contract's shape and it is false. Mitigation: none is
-  needed. `DIRECT_RUNNER_SOURCES` is a hand-written tuple of **specific** jobs,
+  needed. `DIRECT_RUNNER_SOURCES` is a handwritten tuple of **specific** jobs,
   and `_checked_in_runner_assignments` gathers only those plus matrix-derived
   and reusable-workflow entries; a job absent from both tables is never
   collected, so the exact-equality assertion in
   `has_required_runner_assignments` is satisfied while omitting it entirely.
-  The repository's own precedent settles it: `publish-release`, added by
-  PR #834, appears in neither table and the gate is green
-  (`grep -c 'publish-release'` returns 0 in both files).
-  The ONE real registration step is per-job `permissions:` —
+  The repository's own precedent settles it: `publish-release`, added by PR
+  #834, appears in neither table and the gate is green
+  (`grep -c 'publish-release'` returns 0 in both files). The ONE real
+  registration step is per-job `permissions:` —
   `tests/workflow_contracts/release_publish_path_permissions_test.py:13-24`
   loops over **every** job asserting `"permissions" in job`, and separately
   requires workflow-level `permissions == {}`. `timeout-minutes` is NOT
@@ -580,9 +580,10 @@ block.** `tests/workflow_contracts/release_run_interpolation_test.py` forbids
 `_step_contexts` skips every job carrying `uses`, so moving a step body into a
 composite action **removes that shell from the contract's reach entirely**. The
 existing five actions already carry 84 such sites between them
-(`windows-gate-cache` 26, `windows-msi-upgrade-validation` 18, `linux-gate-cache`
-17, `cross-build-macos` 16 at the time of measurement, `kani-cache` 7), so a
-blanket extension of the rule to all composite actions would red immediately.
+(`windows-gate-cache` 26, `windows-msi-upgrade-validation` 18,
+`linux-gate-cache` 17, `cross-build-macos` 16 at the time of measurement,
+`kani-cache` 7), so a blanket extension of the rule to all composite actions
+would red immediately.
 
 The resolution is to scope the rule **by path** to the release-path actions
 this work adds, not by an allowlist of known-violating files. An allowlist is
@@ -644,8 +645,8 @@ function of the event. `pr_concurrency_test.py:275-278` pins
 any `cancel-in-progress` that `is not False` for a workflow with no
 `pull_request` trigger. A tag re-run therefore QUEUES behind the in-flight
 release rather than cancelling it, which is the safer semantics for a
-publication anyway: cancelling mid-upload is the failure mode this whole
-design exists to prevent.
+publication anyway: cancelling mid-upload is the failure mode this whole design
+exists to prevent.
 
 Each new job's body is a single `uses: ./.github/actions/...` step. The
 justification for extracting them is that the composite-action convention is
@@ -659,11 +660,12 @@ cap on workflow YAML — no such contract exists. `release.yml` is 685 lines on
 - `Makefile`: a `test-release-publication` target running the new
   `scripts/tests` modules with pinned `pytest` and `hypothesis`, and a
   `test-release-negative-mutation` target.
-- `Makefile`: a **new, separate** target validates `.github/actions/*/action.yml`
-  — yamllint with the same policy, plus a `bash -n`-based syntax check over each
-  composite action's `run` blocks — and is wired into `lint` alongside
-  `github-actions-lint`. It cannot be appended to `github-actions-lint` itself;
-  see `Surprises & discoveries` for the positional pin that forbids it.
+- `Makefile`: a **new, separate** target validates
+  `.github/actions/*/action.yml` — yamllint with the same policy, plus a
+  `bash -n`-based syntax check over each composite action's `run` blocks — and
+  is wired into `lint` alongside `github-actions-lint`. It cannot be appended to
+  `github-actions-lint` itself; see `Surprises & discoveries` for the
+  positional pin that forbids it.
 - `.github/workflows/ci.yml`: run the new targets in `build-test`.
 - `docs/developers-guide.md`: the release runbook — job graph, package and
   asset identity contract, provenance verification, re-run procedure, and
@@ -817,9 +819,9 @@ A reviewer accepts this change when all of the following hold.
    command, so neither half can pass alone.
 4. `make github-actions-lint` lints `.github/workflows` with yamllint and
    actionlint, **unchanged in shape**; the new composite-action target lints
-   `.github/actions/*/action.yml` with yamllint and the shell-syntax check,
-   and `make lint` runs both. These are two targets, not one: the existing
-   recipe's first and last lines are pinned verbatim by
+   `.github/actions/*/action.yml` with yamllint and the shell-syntax check, and
+   `make lint` runs both. These are two targets, not one: the existing recipe's
+   first and last lines are pinned verbatim by
    `github_actions_validation_test.py:218-227`.
 5. `wc -l .github/workflows/release.yml` reports a value at or below 400.
    **Unsatisfiable as written.** The file is 685 lines on `main` before this
@@ -1061,26 +1063,50 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   Nine commits, zero conflicts, `range-diff` empty — every commit replayed
   byte-identically, so there is no conflict resolution to review. Performed
   BEFORE Stage C because the `local_reference_*` family (11 modules) exists
-  only on `main` and constrains exactly the composite actions Stage C adds.
-  Two predictions confirmed: the dead `.github/actions/cross-build-macos`
-  action (deleted on `main` by PR #859 while this branch still carried it)
-  is gone, and the coverage probe's uncovered count fell from 1 to 0
-  (inventory 71 → 85). The branch still changes zero `.rs` files.
+  only on `main` and constrains exactly the composite actions Stage C adds. Two
+  predictions confirmed: the dead `.github/actions/cross-build-macos` action
+  (deleted on `main` by PR #859 while this branch still carried it) is gone,
+  and the coverage probe's uncovered count fell from 1 to 0 (inventory 71 →
+  85). The branch still changes zero `.rs` files.
 - [x] (2026-10-15) Corrected five false premises in this plan after checking
   each against source rather than against a contract's shape. Retracted: the
   claim that new `release.yml` jobs need two-place runner registration (the
-  gatherer never collects an unregistered job, so it is invisible, not
-  failing — `publish-release` on `main` proves it); the event-dependent
+  gatherer never collects an unregistered job, so it is invisible, not failing —
+  `publish-release` on `main` proves it); the event-dependent
   `cancel-in-progress` design (pinned by exact equality); and the
   `github-actions-lint` extension (recipe positionally pinned). Corrected: the
   composite-action rationale is the repository's documented convention, not a
   400-line cap that no contract enforces. Recorded the scope-tolerance breach
   (3 995 net lines excluding this plan against a 1 500 budget) as a deviation
   in prose.
+- [x] (2026-10-15) Cleared three self-inflicted Markdown-gate failures in this
+  plan. Two were mine and visible (`mdtablefix` wanted a reflow; `typos` read
+  `hand-written` as a misspelling of `handwritten`), and the third —
+  `markdownlint` MD040 on three unlabelled fences — was **masked**: it never
+  ran, because `markdownlint` depends on `spelling` and the prerequisite
+  aborted the target. Corrected the stale `+5495` figure the reflow exposed,
+  and restructured that passage to lead with the figure **excluding** this
+  plan, which is the one the tolerance turns on and the only one stable under
+  revision of the file that carries it.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 
 ## Surprises & discoveries
+
+- Observation: **a failing Make prerequisite can hide a downstream gate
+  entirely, so a gate's silence is not a gate's pass.** `make markdownlint`
+  depends on `spelling` (`Makefile:448`), and when `spelling` exited 2 the
+  recipe never ran: the log read `make: *** [Makefile:452: spelling] Error 2`
+  and stopped. The batch's report therefore listed three failures where the
+  third had produced *no verdict at all* — and the real MD040 errors beneath it
+  stayed invisible until `spelling` was fixed and the target re-run on its own.
+  Evidence: `docs/execplans/use-trusted-packaging.md` carried three bare fences
+  (`1261`, `1310`, `1578` at that revision), all introduced by my own
+  `e2b9794b` — the pre-edit `0440bfaa` had none — and `markdownlint` reported
+  `0 issues in 0 files` once it finally ran. Impact: **re-run a
+  prerequisite-aborted target after fixing its prerequisite; do not record the
+  abort as that target's result.** A gate that never executed is missing
+  evidence, not a pass and not even a known failure.
 
 - Observation: **DOC502 follows the public function's own body only**, so a
   `Raises` section naming an exception raised solely by a private helper is
@@ -1251,12 +1277,12 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   reusable-workflow entries. A job named in neither table is never collected,
   so it can never appear in the gathered map — and the equality is still
   satisfied, because it is only ever compared against what was gathered. An
-  unregistered job is INVISIBLE to this contract, not failing it.
-  The repository's own precedent settles the question rather than leaving it to
+  unregistered job is INVISIBLE to this contract, not failing it. The
+  repository's own precedent settles the question rather than leaving it to
   argument: `publish-release`, added by PR #834 and live on `main`, appears in
   neither table, and `make test-workflow-contracts` is green.
 
-  ```
+  ```plaintext
   grep -c 'publish-release' tests/workflow_contracts/runner_placement_invariants.py
     -> 0
   grep -c 'publish-release' tests/workflow_contracts/runner_placement_test.py
@@ -1265,8 +1291,8 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 
   No suite enumerates the `release.yml` job set:
   `grep -rn 'required_actions\|JOB_NAMES\|expected_jobs\|job_names'
-  tests/workflow_contracts/*.py` returns no matches. The plan's `Risks` entry
-  has been corrected to match.
+  tests/workflow_contracts/*.py`
+  returns no matches. The plan's `Risks` entry has been corrected to match.
 
   What **does** apply to a new job is per-job `permissions:` —
   `release_publish_path_permissions_test.py:13-24` loops over every job
@@ -1295,17 +1321,17 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 
 - Observation: Stage C must be authored **after** the rebase onto `main`, and
   the rebase is now done. The `local_reference_*` family — eleven contract
-  modules — exists only on `main`, and it constrains exactly the artefact
-  Stage C adds (every local composite action must be referenced from a
-  workflow, Makefile, or test source, or carry a reasoned exemption).
-  Authoring the actions before the rebase would have meant writing against a
-  contract that was not present and then being judged by it afterwards.
-  Evidence: before the rebase the probe below reported one uncovered item,
+  modules — exists only on `main`, and it constrains exactly the artefact Stage
+  C adds (every local composite action must be referenced from a workflow,
+  Makefile, or test source, or carry a reasoned exemption). Authoring the
+  actions before the rebase would have meant writing against a contract that
+  was not present and then being judged by it afterwards. Evidence: before the
+  rebase the probe below reported one uncovered item,
   `.github/actions/cross-build-macos`, a dead action that `main` had already
   deleted in PR #859 while this branch still carried it; after the rebase the
   count is zero.
 
-  ```
+  ```plaintext
   before rebase:  inventory size 71,  uncovered total 1
                   ['.github/actions/cross-build-macos']
   after  rebase:  inventory size 85,  uncovered total 0
@@ -1318,24 +1344,24 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   real references and an exemption is the wrong tool —
   `test_exemptions_are_not_stale` deletes one the moment the item gains a real
   reference. Coverage resolves **indirectly**: `covered_items` makes a covered
-  action's own manifest a source, so the intended chain is
-  `release.yml` → `uses: ./.github/actions/<name>` → that action's `action.yml`
-  naming `scripts/<script>.py`. Each new action must therefore be referenced
-  from `release.yml`, and any script it invokes must be named in its own
-  manifest. `test_expected_indirect_repository_items_are_covered` pins a known
-  set of indirectly-covered items, so the mechanism is load-bearing rather
-  than incidental.
+  action's own manifest a source, so the intended chain is `release.yml` →
+  `uses: ./.github/actions/<name>` → that action's `action.yml` naming
+  `scripts/<script>.py`. Each new action must therefore be referenced from
+  `release.yml`, and any script it invokes must be named in its own manifest.
+  `test_expected_indirect_repository_items_are_covered` pins a known set of
+  indirectly-covered items, so the mechanism is load-bearing rather than
+  incidental.
 
 - Observation: test collection differs by directory, and the difference decides
   where a new guard may live. `make test-workflow-contracts` passes
   `tests/workflow_contracts` as a **directory**, so a new contract module there
   is auto-collected with no registration — which is why the LEM-5 suite belongs
-  there. The same recipe names `scripts/tests/test_*.py` as a
-  **hand-enumerated list**, so a new module under `scripts/tests/` must be
-  named in a recipe or `release_publication_test.py`'s orphan check reds.
-  Evidence: `Makefile:247-262`. Impact: if the composite-action guard is
-  written as a `scripts/tests/` module it must be registered; the LEM-5 suite
-  and the mutation module need not be.
+  there. The same recipe names `scripts/tests/test_*.py` as a **hand-enumerated
+  list**, so a new module under `scripts/tests/` must be named in a recipe or
+  `release_publication_test.py`'s orphan check reds. Evidence:
+  `Makefile:247-262`. Impact: if the composite-action guard is written as a
+  `scripts/tests/` module it must be registered; the LEM-5 suite and the
+  mutation module need not be.
 
 - Observation: the existing publish-path contract suite is a **scenario
   evaluator**, not a name-matching assertion set.
@@ -1568,27 +1594,29 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 - Decision: record the **scope tolerance breach** as an escalated deviation in
   prose, rather than silently rewriting approved scope to fit. Rationale: the
   `Tolerances` section allows up to 30 changed files and 1 500 net changed
-  lines. Measured against the rebased candidate
-  (`git diff --shortstat 486b876c..c09e9e99`):
+  lines. The figure that decides this is the work **excluding this plan**,
+  since the plan is itself a changed path and its size churns with every
+  revision to it. Measured against the rebased candidate
+  (`git diff --shortstat 486b876c..e2b9794b`):
 
-  ```
-  all paths:            18 files changed, 5495 insertions(+), 1 deletion(-)
+  ```plaintext
   excluding this plan:  17 files changed, 3996 insertions(+), 1 deletion(-)
+  all paths:            18 files changed, 5651 insertions(+), 1 deletion(-)
   ```
 
-  The file count is inside tolerance (18 ≤ 30) but the line count is not:
-  3 995 net excluding the plan, 2.7× the 1 500 budget. Stage C is still to
-  come and adds five composite actions, new `release.yml` jobs, the LEM-5
-  suite, a composite-action guard and a mutation harness — all growth, with no
+  The file count is inside tolerance (17 ≤ 30) but the line count is not: 3 995
+  net excluding the plan, 2.7× the 1 500 budget. Stage C is still to come and
+  adds five composite actions, new `release.yml` jobs, the LEM-5 suite, a
+  composite-action guard and a mutation harness — all growth, with no
   offsetting deletions. The breach is structural, not incidental: the required
   six-section design (candidate binding, package verification, short-lived
-  auth, recoverable sequence, immutable-state reconciliation, genuine dry
-  runs) cannot be delivered as pure Python modules plus contract suites inside
-  1 500 lines. Raising the tolerance would be redefining the measurement to
-  fit the result, which is why this is recorded as a breach and reported to the
-  user. The `AskUserQuestion` seam has failed before (PR #860: six of six
-  attempts aborted), so this is escalated in prose rather than through that
-  mechanism. Date/Author: 2026-10-15, implementation agent.
+  auth, recoverable sequence, immutable-state reconciliation, genuine dry runs)
+  cannot be delivered as pure Python modules plus contract suites inside 1 500
+  lines. Raising the tolerance would be redefining the measurement to fit the
+  result, which is why this is recorded as a breach and reported to the user.
+  The `AskUserQuestion` seam has failed before (PR #860: six of six attempts
+  aborted), so this is escalated in prose rather than through that mechanism.
+  Date/Author: 2026-10-15, implementation agent.
 
 - Decision: state the version grammar against the reference implementation
   rather than against the informal SemVer description, and keep byte equality
