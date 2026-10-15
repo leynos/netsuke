@@ -295,7 +295,7 @@ Record the actual profile pattern, raw-profile and object inventory, and
 merge/export times first. If the tail is below the predeclared threshold,
 publish a deferred decision and stop this milestone.
 
-Otherwise test a small, predeclared sequential set of bounded `%Nm` pools with
+Otherwise, test a small, predeclared sequential set of bounded `%Nm` pools with
 the pinned LLVM. Inspect the complete pattern because `%p` can defeat
 cross-process pooling. Before CI, compare exact counters from concurrent
 repeated processes in a deterministic instrumented program using
