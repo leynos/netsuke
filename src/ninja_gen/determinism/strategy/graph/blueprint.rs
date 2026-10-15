@@ -7,9 +7,7 @@
 //! boundary in the reasoning; the well-formedness argument lives here because
 //! path allocation is what carries it.
 
-use super::{
-    EXTERNAL_PREFIX, EdgePlan, GraphSpec, MAX_OUTPUTS, OUTPUT_PREFIX, rotate,
-};
+use super::{EXTERNAL_PREFIX, EdgePlan, GraphSpec, MAX_OUTPUTS, OUTPUT_PREFIX, rotate};
 use crate::ast::{Recipe, StringOrList};
 use crate::ir::{Action, BuildEdge, DependencyOrder};
 use camino::Utf8PathBuf;
@@ -203,8 +201,9 @@ fn resolve(pool: &[Utf8PathBuf], available: usize, positions: &[usize]) -> Vec<U
 
 /// Append generated external dependencies, which no edge in the pool produces.
 fn with_externals(mut paths: Vec<Utf8PathBuf>, index: usize, count: usize) -> Vec<Utf8PathBuf> {
-    paths.extend((0..count).map(|offset| {
-        Utf8PathBuf::from(format!("{EXTERNAL_PREFIX}/{index:04}-{offset}"))
-    }));
+    paths.extend(
+        (0..count)
+            .map(|offset| Utf8PathBuf::from(format!("{EXTERNAL_PREFIX}/{index:04}-{offset}"))),
+    );
     paths
 }

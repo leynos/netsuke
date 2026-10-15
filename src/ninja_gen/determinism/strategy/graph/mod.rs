@@ -179,12 +179,8 @@ impl GraphSpec {
     /// # Errors
     ///
     /// Returns an error if an edge's outputs collide with one already
-    /// inserted. The pool's disjoint slices make that unreachable in practice;
-    /// it is reported rather than asserted or ignored so that a defect in the
-    /// generator surfaces as a shrinkable test failure carrying the offending
-    /// specification's shape, instead of as a panic that shrinking cannot
-    /// reduce, or as a silently thinner graph that would let a property pass
-    /// for the wrong reason.
+    /// inserted; see [`insert_pool_edge`] for why that is reported rather than
+    /// asserted. The pool's disjoint slices make it unreachable in practice.
     pub(crate) fn materialize(&self, order: &[usize]) -> Result<BuildGraph, TestCaseError> {
         let mut graph = BuildGraph::default();
         for (id, action) in &self.actions {
@@ -192,9 +188,7 @@ impl GraphSpec {
         }
         for index in order {
             if let Some(edge) = self.edges.get(*index) {
-                graph.insert_edge(edge.clone()).map_err(|error| {
-                    TestCaseError::fail(format!("pool slices must not collide: {error}"))
-                })?;
+                insert_pool_edge(&mut graph, edge)?;
             }
         }
         graph.default_targets.clone_from(&self.default_targets);
@@ -251,6 +245,25 @@ impl GraphSpec {
     }
 }
 
+/// Insert one pool edge, reporting a collision as a shrinkable test failure.
+///
+/// Reported rather than asserted or ignored so that a defect in the generator
+/// surfaces as a failure carrying the specification's shape, instead of as a
+/// panic shrinking cannot reduce, or as a silently thinner graph that would let
+/// a property pass for the wrong reason.
+///
+/// # Errors
+///
+/// Returns an error if the edge's outputs collide with one already inserted.
+/// The pool's disjoint slices make that unreachable in practice.
+fn insert_pool_edge(graph: &mut BuildGraph, edge: &BuildEdge) -> Result<(), TestCaseError> {
+    // The arena owns the inserted edge, so its identifier is not needed here.
+    graph
+        .insert_edge(edge.clone())
+        .map_err(|error| TestCaseError::fail(format!("pool slices must not collide: {error}")))?;
+    Ok(())
+}
+
 /// Hash a path list, its length included so that `[]` and `[""]` differ.
 fn hash_paths<H: Hasher>(hasher: &mut H, paths: &[Utf8PathBuf]) {
     paths.len().hash(hasher);
@@ -289,8 +302,8 @@ impl fmt::Debug for GraphSpec {
 /// name are reachable but not guaranteed on any one case. Properties record the
 /// classes they observed rather than assuming them.
 pub(crate) fn arb_graph_spec() -> impl Strategy<Value = GraphSpec> {
-    (MIN_ACTIONS..=MAX_ACTIONS, MIN_EDGES..=MAX_EDGES).prop_flat_map(
-        |(action_count, edge_count)| {
+    (MIN_ACTIONS..=MAX_ACTIONS, MIN_EDGES..=MAX_EDGES)
+        .prop_flat_map(|(action_count, edge_count)| {
             let positions: Vec<usize> = (0..edge_count).collect();
             (
                 Just(action_count),
@@ -305,20 +318,9 @@ pub(crate) fn arb_graph_spec() -> impl Strategy<Value = GraphSpec> {
                 Just(positions).prop_shuffle(),
                 1usize..edge_count,
             )
-        },
-    )
-    .prop_map(
-        |(
-            action_count,
-            edge_count,
-            plans,
-            restat_flags,
-            default_picks,
-            phony_count,
-            shuffled,
-            rotation,
-        )| {
-            Blueprint {
+        })
+        .prop_map(
+            |(
                 action_count,
                 edge_count,
                 plans,
@@ -327,10 +329,20 @@ pub(crate) fn arb_graph_spec() -> impl Strategy<Value = GraphSpec> {
                 phony_count,
                 shuffled,
                 rotation,
-            }
-            .build()
-        },
-    )
+            )| {
+                Blueprint {
+                    action_count,
+                    edge_count,
+                    plans,
+                    restat_flags,
+                    default_picks,
+                    phony_count,
+                    shuffled,
+                    rotation,
+                }
+                .build()
+            },
+        )
 }
 
 /// Rotate a permutation by `offset`, wrapping, and never returning it unchanged.

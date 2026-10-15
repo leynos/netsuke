@@ -162,7 +162,7 @@ pub(crate) fn edge_lists_differ(left: &[BuildEdge], right: &[BuildEdge]) -> bool
         || left
             .iter()
             .zip(right)
-            .any(|(left, right)| !same_content(left, right))
+            .any(|(left_edge, right_edge)| !same_content(left_edge, right_edge))
 }
 
 /// The mask bit for one `always`/`restat` combination.
