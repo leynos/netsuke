@@ -232,9 +232,11 @@ For screen readers: The following flowchart follows one manifest load through
 `from_str_with_options`, branching at the `StdlibRegistration` mode. The
 `AmbientFull` and `Full` modes register the whole stdlib; `ManifestQuery`
 registers the query helpers and their refusals, which are then classified;
-`Test` registers the pure helpers and typed refusals, and additionally takes
-the injected environment reader and clock and applies the overlays. Every
-branch converges on foreach/`when` expansion, then on rendering and validation.
+`Test` registers the pure helpers and typed refusals, and applies the overlays.
+Every branch converges on foreach/`when` expansion, then on rendering and
+validation. The environment reader is not part of the branch: `Full` and `Test`
+each take one from their caller's options, and `AmbientFull` and `ManifestQuery`
+read the process environment.
 
 ```mermaid
 flowchart TD
@@ -242,20 +244,22 @@ flowchart TD
     Mode -->|AmbientFull or Full| Build[Register full helpers]
     Mode -->|ManifestQuery| RestrictedQuery[Register query helpers and refusals]
     Mode -->|Test| RestrictedTest[Register pure helpers and typed refusals]
-    RestrictedTest --> Inject[Use injected env reader and clock]
+    Build --> Inject[Use the caller's env reader and clock]
+    RestrictedTest --> Inject
     RestrictedTest --> Overlay[Register overlays]
-    Build --> Expand[Expand foreach and when]
+    Inject --> Expand[Expand foreach and when]
     RestrictedQuery --> QueryClassify[Classify query refusals]
     QueryClassify --> Expand
-    Inject --> Expand
     Overlay --> Expand
     Expand --> Render[Render and validate manifest]
 ```
 
 _Figure 2: Manifest loading paths by `StdlibRegistration` mode. Only the `Test`
-mode takes the injected environment reader and clock and applies overlays; the
-expansion, rendering, and validation stages after the branch are shared by
-every mode._
+mode applies overlays; the injected environment reader and clock come from the
+caller's options in `Full` and `Test` alike, since `ManifestLoadOptions::full`
+takes a `ManifestEnvironment` and a `StdlibConfig` whose clock
+`StdlibConfig::with_clock` may have pinned. The expansion, rendering, and
+validation stages after the branch are shared by every mode._
 
 ### 4.4. Result views
 
@@ -402,13 +406,20 @@ file tests and file-reading filters resolve their paths through the same
 handle, rejecting escapes rather than falling back to ambient authority. The
 filters matter as much as the other two because filters cannot be replaced by
 doubles in the first version (UX design §8.6): without an adapter, a manifest
-that hashes or reads a file could never be tested. Until roadmap 7.4.1 lands,
-the test registration refuses all three groups (roadmap 7.1.2). These adapters
-are test-mode components, not changes to the build path's behaviour, so
-ADR-010's accepted limitation stands for builds while tests get the stronger
-guarantee they require.
+that hashes or reads a file could never be tested. These adapters are test-mode
+components, not changes to the build path's behaviour, so ADR-010's accepted
+limitation stands for builds while tests get the stronger guarantee they
+require.
 
-With those adapters in place the visibility consequence is worth stating
+The adapters land in stages, and until they do the test registration refuses
+all three groups rather than falling back to ambient authority (roadmap 7.1.2).
+Refusal is the interim behaviour, so a manifest under test that globs, tests a
+file, or reads one gets a located diagnostic naming the withheld capability —
+not a host-dependent answer. Roadmap 7.4.1 replaces the refusals with the
+sandbox-rooted adapters for all three groups. The visibility consequence below
+holds in both states, because a refusal reaches no file at all.
+
+Once those adapters are in place the visibility consequence is worth stating
 plainly: the project tree is _not_ visible to a manifest under test. A
 default-subject test sees only the files its fixtures and `given.fs` created.
 Invariant I4 (§12) is scoped accordingly, and invariant I5's
