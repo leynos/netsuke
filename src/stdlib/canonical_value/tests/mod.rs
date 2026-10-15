@@ -7,7 +7,8 @@
 //!
 //! The batteries are split by the kind of judgement each makes, not by line
 //! count. This module owns the host fixtures and the helpers every other
-//! battery builds on; `boundaries` owns the refusals; `host_traversal` owns the
+//! battery builds on; `boundaries` owns the refusals; `diagnostics` owns the
+//! snapshots that pin each refusal's rendered message; `host_traversal` owns the
 //! contract a custom object must satisfy to be read at all; `parity` owns the
 //! checks that compare emitted bytes against the canonicalizer itself;
 //! `properties` owns the cases whose inputs come from a generator and the
@@ -35,6 +36,7 @@ use minijinja::value::{Enumerator, Object, ObjectRepr, Value, ValueKind};
 use super::*;
 
 mod boundaries;
+mod diagnostics;
 mod examples;
 mod host_traversal;
 mod oracle;

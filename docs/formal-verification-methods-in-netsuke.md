@@ -75,8 +75,11 @@ The first Kani harnesses should cover these properties:
 
 `src/ir/cycle/mod.rs` is the strongest narrow proof candidate in the current
 repository. `canonicalize_cycle` has a crisp normalization contract that is
-small enough for Kani immediately and remains a plausible later Verus kernel if
-stronger proof obligations become worthwhile.[^7]
+small enough for Kani immediately and remains a plausible Verus kernel if
+stronger proof obligations become worthwhile.[^7] It is not yet one: the two
+kernels the "Optional Verus proof kernel" section below accepts are the
+canonical value key and equality relation, which is committed, and this cycle
+model, which is not.
 
 ### Kani for command interpolation
 
@@ -140,22 +143,39 @@ targets, Verus Continuous Integration (CI), or Verus files under ordinary Cargo
 as part of the phase-1 boundary.
 
 Verus is not the correct first tool for the manifest or command-interpolation
-layers. The only current entry point worth preserving for later evaluation is a
-cycle canonicalization model related to `src/ir/cycle/mod.rs`. That model is
-appropriate because `canonicalize_cycle` exposes a clear mathematical contract:
+layers. Two kernels are accepted, and both are narrow normalization or
+algorithm models rather than production subsystems.
+
+The first is a cycle canonicalization model related to `src/ir/cycle/mod.rs`.
+That model is appropriate because `canonicalize_cycle` exposes a clear
+mathematical contract:
 
 - output length is preserved,
 - the cycle remains closed,
 - the interior node multiset is preserved, and
 - the chosen start node is stable under the repository's ordering rule.[^7]
 
-If Verus is introduced by a later approved roadmap item, it should prove only
-that narrow normalization model at first. Production `HashMap` structures,
-MiniJinja values, filesystem helpers, and subprocess orchestration should
-remain outside the first proof boundary. Until the proof kernel is stable and
-reviewed, Verus should remain outside pull-request gates, `make test`,
-`make lint`, `make check-fmt`, `make all`, `make kani-check`, `make kani-full`,
-and `make formal-pr`.
+The second is the algorithm behind the canonical value key and equality
+relation, proved in `verus/canonical_value/main.rs`. It establishes that
+first-index deduplication retains exactly the least occurrences of each key,
+against an independent quadratic specification stated over the input rather
+than derived from any membership structure. The relation's own reflexivity,
+symmetry, and transitivity are *not* among its results: they are properties of
+byte-identity over a canonical form, and they are checked by the property
+battery in `src/stdlib/canonical_value/tests/properties.rs`, not proved here.
+
+Production `HashMap` structures, MiniJinja values, filesystem helpers, and
+subprocess orchestration remain outside both proof boundaries. The second
+kernel's keys are an abstract sort standing in for the runtime's byte strings,
+so the template-to-key conversion, the runtime's own membership structure, and
+the production adapter are each outside what it proves, and the kernel carries
+no `assume`, `admit`, external body, or axiom beyond `vstd`'s own. The runtime
+correspondence is carried by the independent quadratic oracle in
+`src/stdlib/canonical_value/tests/oracle.rs`, not by Verus.
+
+Verus remains outside pull-request gates, `make test`, `make lint`,
+`make check-fmt`, `make all`, `make kani-check`, `make kani-full`, and
+`make formal-pr`.
 
 ### Stateright remains deferred
 

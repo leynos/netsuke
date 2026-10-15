@@ -25,7 +25,8 @@ tested Rust contract for later helpers.
 
 This plan covers roadmap item 6.1.2 only. It targets a release after v0.1.0
 final and does not widen the issue #594 hardening release. Implementation is
-under way; the invocation naming this plan supplies execution approval.
+complete; the invocation naming this plan supplied execution approval, and
+everything below is the record of what that approval was spent on.
 
 ## Constraints
 
@@ -734,6 +735,72 @@ under way; the invocation naming this plan supplies execution approval.
   and 29 files against the PR base `b14bde20`, `reviewDecision: APPROVED`,
   `mergeStateStatus: CLEAN`, `isDraft: false`, and 22 terminal check-runs bound
   to `9c82a26a` with zero failures.
+- (2026-10-15) **The pre-merge warning walkthrough was dispositioned row by
+  row, and two of its three rows were repaired rather than answered.** The
+  walkthrough is bound to `8ff58e80…`, which the branch has since superseded,
+  so each row was checked against the current tree rather than taken at its
+  word. One row was stale, one was partly stale, and one had no coverage behind
+  it anywhere in the repository:
+  - **User-facing documentation — rebutted.** The row asked for an
+    API-consumer section in `docs/users-guide.md` or the standard-library
+    guide. The repository's own policy is the opposite:
+    `docs/developers-guide.md` keeps a section titled "Unstable Rust API for
+    embedders" that opens "The [users' guide] documents Netsuke's user
+    interface … Rust code examples and the Rust API surfaces below belong
+    here instead", and `CHANGELOG.md` records that PR #804 *moved* those
+    examples out of the users' guide. Complying would restore what that change
+    deliberately removed. This step registers no template function or filter,
+    so no manifest-visible behaviour changed either. The rebuttal rests on a
+    settled repository decision, not on the change being small.
+    The row's second half — a next-release migration-guide note — has its own
+    worked precedent, which was checked rather than assumed. PR #804 *deleted*
+    the clock-provider section and its table row from
+    `docs/v0-1-0-migration-guide.md`, with the stated reason that it "belongs
+    to the forthcoming testing framework and is not yet a user-facing feature",
+    even though that same commit relocated the section's Rust example into the
+    developers' guide and kept it pinned there as `devguide-clock-snippet`.
+    That is the exact shape of this change — a stdlib Rust API addition with no
+    manifest-visible surface — and the same commit that established "Rust API
+    material lives in the developers' guide" also decided that such an addition
+    does not earn a migration row. Note the precedent cuts against the naive
+    reading of the `#696` commit, which *did* add both a users'-guide section
+    and a migration row: that was one release earlier, before #804 reversed the
+    placement. `#696` is therefore not the governing example, and citing it
+    would have argued the wrong way.
+  - **Developer documentation — repaired, and it was not merely a reviewer
+    opinion.** The row asked for both Verus kernels to be described. Commit
+    `8be39b08` states as its conformance basis that "the formal-verification
+    **and** developers' guide documents [must] admit a second narrow Verus
+    kernel"; it amended the developers' guide ("Two are accepted") but left
+    `docs/formal-verification-methods-in-netsuke.md` saying the cycle model is
+    "the only current entry point" and that Verus is "**If** … introduced by
+    a later approved roadmap item" — wording that the same document
+    contradicts twenty lines later by recording the committed kernel. That is
+    a literal, un-discharged obligation of this plan's own Stage D, so it is a
+    conformance gap and not a preference. Repaired by describing both kernels
+    and dropping the future-introduction wording. The repair also corrected an
+    overclaim in its own first draft: the kernel proves the deduplication
+    *algorithm* against an independent quadratic specification, and does **not**
+    prove the relation's reflexivity, symmetry, or transitivity — those are
+    properties of byte-identity over a canonical form, checked by the property
+    battery. The first draft asserted otherwise and was measured false against
+    the kernel's twelve `proof fn`s before landing.
+  - **Testing / snapshot coverage — repaired, and the gap was larger than the
+    row said.** `SnapshotPath::render_abbreviated` has three branches, and
+    **no test anywhere in the repository reached the elided one**: no other
+    battery builds a path longer than one edge, the generator's depth is 3, and
+    the elision fires only past 8. The row asked for "representative variants
+    and the long-path elision case"; the elision case is not representative
+    garnish but the only unexercised branch of a documented renderer. The
+    plan's own gate at "EP-V2" reserved this decision — "No snapshot file is
+    warranted *unless* genuinely multivariant diagnostic rendering is added" —
+    and that condition is now met, so the reservation is discharged rather than
+    overridden. A `diagnostics` battery pins all five rendered messages and the
+    elision boundary from both sides (8 edges un-elided, 9 elided, 12 reporting
+    a non-minimal omission count), with the typed and semantic assertions kept
+    alongside as the row required.
+  The two repairs are documentation and test-only. No production behaviour
+  changed, so no acceptance criterion moves.
 
 ## Surprises & discoveries
 
