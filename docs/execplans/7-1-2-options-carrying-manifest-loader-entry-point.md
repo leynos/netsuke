@@ -488,6 +488,12 @@ and YAML fixtures, and were set from the inventory in Table 1.
 - [x] (2026-10-15) Diagrammed the four `StdlibRegistration` modes in technical
   design §4.3 (`04aa8366`), with the screen-reader description and caption the
   style guide requires.
+- [x] (2026-10-15) EP-M0 second gate repair. `make lint` was **red** at
+  `1d75efce` on two Whitaker `conditional_max_n_branches` findings that Clippy
+  cannot reach, and the abort left `yamllint`, `actionlint`, and every Python
+  lint stage unrun. Repaired in `9191699b` by extracting the two disjunctions
+  into named predicates on `Capabilities`. `make test` also timed out on an
+  admission-pool-bound row (see `Surprises & discoveries`).
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
@@ -542,9 +548,44 @@ and YAML fixtures, and were set from the inventory in Table 1.
   integration targets behind it were never linted at all — not clean,
   unvisited. Impact: do not treat a green `make lint` *stage* as coverage of
   every target unless the whole gate is green, and expect repeat lint cycles
-  after any change that adds a test target. Evidence: `/tmp/lint-*.out` at
-  `71f26e1f` versus `/tmp/clippy-focused-*.out`; repaired in `fbf221f0`.
-  Date/Author: 2026-10-15, implementation agent.
+  after any change that adds a test target. Evidence:
+  `/tmp/clippy-focused-<branch>.out` (the eight findings, exit 2) versus
+  `/tmp/clippy-focused2-<branch>.out` (clean afterwards, exit 0); repaired in
+  `fbf221f0`. The pre-fix `make lint` log is **not** available as evidence: the
+  next gate run reused the same `tee` filename and overwrote it. A log named
+  only by gate and branch is a reused label, not a permanent record — copy a
+  log worth citing to a name that carries its revision. Date/Author:
+  2026-10-15, implementation agent.
+
+- Observation: Whitaker's `conditional_max_n_branches` counts **leaf Boolean
+  operands**, not `&&`/`||` operators, and Clippy has no equivalent rule, so
+  `clippy` stays green on a construct only `lint-whitaker` rejects. The form
+  `hazards.reads_environment && !(seams.environment || refusing_helpers)` is
+  three leaves against a ceiling of two, even though it reads as a single
+  conjunction. Impact: a Clippy-clean target is not a Whitaker-clean target,
+  and the 1977-second `lint-whitaker` stage is the only place this surfaces —
+  after the whole Clippy stage has run. Its remedy is stated at
+  `docs/whitaker-users-guide.md:407`: extract the sub-predicate. Doing so is
+  also a readability win here, since it names *why* a refusing stub answers a
+  hazard. Evidence: `/tmp/lint-whitaker-failure-1d75efce.out` (two errors at
+  `fixture.rs:156` and `:161`) versus `/tmp/whitaker-focused-<branch>.out`
+  (clean, exit 0); repaired in `9191699b`. Date/Author: 2026-10-15,
+  implementation agent.
+
+- Observation: `make test` at `1d75efce` failed on nextest's own 300-second cap,
+  not on an assertion:
+  `command_env_ui_tests::cli_configuration_fixture_compiles` ran
+  `TERMINATING [>300.000s]` / `TIMEOUT [300.008s]`, leaving 15 tests unrun and
+  `doctest` **never executed**. The same log holds 107
+  `waiting for a compile slot` lines, and `.config/nextest.toml:57-70`
+  documents this exact row as bound to the compiler-admission pool. The red is
+  therefore evidence about host load, not about this candidate — and this is
+  the third distinct identity to trip the cap across EP-M0's runs. Impact: the
+  timeout is not actionable in the candidate; re-run on a quieter host for the
+  doctest evidence rather than raising the limit. Note also that `test-nextest`
+  running before `doctest` means a timeout leaves the doctest suite
+  *unverified*, not merely failing. Date/Author: 2026-10-15, implementation
+  agent.
 
 - Observation: the technical design's line citations are stale, and the loader
   has grown since the design was written: `ManifestEnvironment`,
@@ -1532,6 +1573,62 @@ rather than arguing it from history.
 past; this one is re-run once, at a later milestone, when the host is quieter.
 If it then passes, this record stands as the explanation of the first red. The
 doctest half of `make test` is unverified by this baseline, not failed.
+
+### EP-M0 gate runs
+
+Candidate at `1d75efce`, `git status --short` empty before the first gate and
+after every gate. Same log template and same sequential discipline as the Stage
+A baseline.
+
+| Gate                           | Result | Evidence                                              |
+| ------------------------------ | ------ | ----------------------------------------------------- |
+| `make check-fmt`               | PASS   | no reformat required                                  |
+| `make doc-coverage`            | PASS   | aggregate 4988/5045, 98.87% ≥ 80% (880 s)             |
+| `make test-workflow-contracts` | PASS   | 1271 passed, 3 skipped, then 27 passed (131 s)        |
+| `make nixie`                   | PASS   | "All diagrams validated successfully", Figure 2 incl. |
+| `make markdownlint`            | PASS   | 0 issues in 183 files; spelling clean (22 s, 10 s)    |
+| `make lint`                    | RED    | two `conditional_max_n_branches` at `lint-whitaker`   |
+| `make test`                    | RED    | one nextest timeout at 300.008 s; doctest never ran   |
+
+Two reds, two different causes, and neither is a defect the earlier records did
+not predict:
+
+- **`make lint`.** Whitaker rejected the two multi-branch conditions in
+  `tests/manifest_load_options/fixtures/fixture.rs` at `:156` and `:161`. Both
+  were introduced by `fbf221f0`, which is also the commit whose clippy repair
+  produced the surrounding structs; the checks that would have caught it before
+  it was committed do not exist, because Clippy has no analogue of this rule.
+  Repaired in `9191699b`, then the `lint-whitaker` stage was re-run **in
+  isolation** against the repaired tree and exited 0 with zero diagnostics,
+  having compiled the previously failing `manifest_load_options_tests` target
+  through the dylint driver. Because `make lint` aborts at its first failing
+  stage, `yamllint`, `actionlint`, and every Python lint stage are **UNRUN** for
+  `1d75efce` and must be re-run against the repaired head. The eight clippy
+  findings that `fbf221f0` repaired and the two Whitaker findings here are the
+  same failure mode twice in one milestone: a stage that aborts conceals every
+  check behind it.
+
+- **`make test`.** `command_env_ui_tests::cli_configuration_fixture_compiles`
+  timed out at the repo's own 300-second cap:
+
+  ```plaintext
+  TIMEOUT [ 300.008s] (3928/3943) netsuke-build::command_env_ui_tests cli_configuration_fixture_compiles
+  Summary [ 613.491s] 3928/3943 tests run: 3927 passed (1 slow), 1 timed out, 6 skipped
+  ```
+
+  This is the same row, the same signature, and the same load attribution as
+  the Stage A baseline, and every `src/` file this branch edits is test-only:
+  `src/stdlib/register.rs` gains a `#[cfg(test)]` child declaration,
+  `src/manifest/tests/mod.rs` gains a `mod` line inside a tests module, and
+  `src/snapshot_test_support.rs` is gated behind `#[cfg(test)]` at
+  `src/lib.rs:30`. No production item changed. The log again holds 107
+  compile-slot waits and 574 sccache-unreachable notices and zero admission
+  failures. The SLOW row differs from the baseline's, which is what one expects
+  from queue order and not from a candidate.
+
+**Disposition: `lint` repair committed and its stage re-verified in isolation;
+the full gate set must be re-run at `9191699b` before the milestone is called
+green. The `make test` timeout is re-run, not repaired.**
 
 ## Interfaces and dependencies
 
