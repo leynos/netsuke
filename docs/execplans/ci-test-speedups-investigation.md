@@ -361,8 +361,8 @@ fidelity comparisons block adoption.
 - [x] Validate the collector in the complete workflow-contract suite: 1,303
   passed, three skipped, with 27 follow-on script tests passing. Dispatch no CI
   for this evidence milestone.
-- [ ] Complete full local Rust validation and CodeRabbit review before commit
-  and publication; retain all failed local attempts and diagnostic overhead.
+- [ ] Complete full local Rust validation and code review before committing the
+  collector and publishing; retain failed attempts and diagnostic overhead.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
       rejected/deferred.
@@ -455,9 +455,17 @@ and split-layout checks passed at 198.270 and 255.989 seconds. The faithful
 consumer diagnostic took 691.538 seconds; it is local preparation, not CI
 evidence or a passing gate. A single packaging diagnostic awaits the
 predeclared quieter-queue condition in the debugging plan. No fourth full
-attempt or CodeRabbit review has begun. Commit and publication remain pending
-the required gate result; candidate adoption still requires controlled CI
-evidence beyond this offline milestone.
+attempt or collector code review has begun. The collector and tests remain
+staged pending the required gate result. Candidate adoption still requires
+controlled CI evidence beyond this offline milestone.
+
+The documentation checkpoint is committed as `b5e64888`, with a punctuation
+correction in `f3a5e8a5`. Applicable formatting, Markdown, spelling and Mermaid
+checks passed before those documentation-only commits. Two documentation-only
+CodeRabbit reviews each found a minor grammar issue, addressed separately from
+the staged code. Both reviews reported one unreviewed file without naming it;
+complete review coverage remains unverified. No push, draft PR, issue comment
+or CI dispatch has occurred.
 
 ## Revision note
 
