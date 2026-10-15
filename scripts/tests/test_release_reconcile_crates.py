@@ -48,8 +48,10 @@ def test_absent_version_is_absent() -> None:
     state = classify_registry_state(
         None, intended_sha256=INTENDED, http_status=NOT_FOUND
     )
-    assert state is RegistryState.ABSENT
-    assert plan_crates_action(state) == "publish"
+    assert state is RegistryState.ABSENT, "a 404 must classify as absent"
+    assert plan_crates_action(state) == "publish", (
+        "an absent version must be planned for publication"
+    )
 
 
 def test_identical_version_is_identical() -> None:
@@ -59,8 +61,12 @@ def test_identical_version_is_identical() -> None:
         intended_sha256=INTENDED,
         http_status=OK,
     )
-    assert state is RegistryState.IDENTICAL
-    assert plan_crates_action(state) == "skip"
+    assert state is RegistryState.IDENTICAL, (
+        "a published version with the intended digest must classify as identical"
+    )
+    assert plan_crates_action(state) == "skip", (
+        "an identical version must be planned as a skip"
+    )
 
 
 def test_crate_endpoint_shape_is_also_understood() -> None:
@@ -74,7 +80,9 @@ def test_crate_endpoint_shape_is_also_understood() -> None:
         intended_sha256=INTENDED,
         http_status=OK,
     )
-    assert state is RegistryState.IDENTICAL
+    assert state is RegistryState.IDENTICAL, (
+        "the plural versions shape must classify the same way as the singular"
+    )
 
 
 def test_published_version_with_a_different_digest_conflicts() -> None:
@@ -88,8 +96,12 @@ def test_published_version_with_a_different_digest_conflicts() -> None:
         intended_sha256=INTENDED,
         http_status=OK,
     )
-    assert state is RegistryState.CONFLICT
-    assert plan_crates_action(state) == "fail"
+    assert state is RegistryState.CONFLICT, (
+        "a published version carrying other bytes must conflict"
+    )
+    assert plan_crates_action(state) == "fail", (
+        "a conflict must stop the release rather than publish or skip"
+    )
 
 
 def test_yanked_version_is_yanked_not_identical() -> None:
@@ -104,8 +116,12 @@ def test_yanked_version_is_yanked_not_identical() -> None:
         intended_sha256=INTENDED,
         http_status=OK,
     )
-    assert state is RegistryState.YANKED
-    assert plan_crates_action(state) == "fail"
+    assert state is RegistryState.YANKED, (
+        "a yank must be judged before the digest and reported as a yank"
+    )
+    assert plan_crates_action(state) == "fail", (
+        "a withdrawn version must stop the release even when the bytes match"
+    )
 
 
 def test_a_later_version_record_does_not_mask_the_intended_one() -> None:
@@ -120,7 +136,9 @@ def test_a_later_version_record_does_not_mask_the_intended_one() -> None:
         intended_sha256=INTENDED,
         http_status=OK,
     )
-    assert state is RegistryState.IDENTICAL
+    assert state is RegistryState.IDENTICAL, (
+        "a matching record must be found wherever it sits in the list"
+    )
 
 
 def test_an_unrecognised_body_is_indeterminate() -> None:
@@ -133,8 +151,12 @@ def test_an_unrecognised_body_is_indeterminate() -> None:
     state = classify_registry_state(
         "not json at all", intended_sha256=INTENDED, http_status=OK
     )
-    assert state is RegistryState.INDETERMINATE
-    assert plan_crates_action(state) != "publish"
+    assert state is RegistryState.INDETERMINATE, (
+        "an unreadable answer must be indeterminate, not absent"
+    )
+    assert plan_crates_action(state) != "publish", (
+        "an indeterminate state must not plan a publication"
+    )
 
 
 def test_a_version_with_no_checksum_is_refused() -> None:
@@ -161,8 +183,12 @@ def test_a_version_with_no_checksum_is_refused() -> None:
 def test_a_server_error_is_indeterminate(status: int) -> None:
     """Require a retryable server status not to be read as absence."""
     state = classify_registry_state(None, intended_sha256=INTENDED, http_status=status)
-    assert state is RegistryState.INDETERMINATE
-    assert plan_crates_action(state) == "fail"
+    assert state is RegistryState.INDETERMINATE, (
+        "a retryable server status must not be read as absence"
+    )
+    assert plan_crates_action(state) == "fail", (
+        "a server error must stop the release rather than publish over it"
+    )
 
 
 def test_only_identical_skips() -> None:
@@ -172,11 +198,15 @@ def test_only_identical_skips() -> None:
     a state added later cannot quietly acquire a skipping plan.
     """
     skipping = {state for state in RegistryState if plan_crates_action(state) == "skip"}
-    assert skipping == {RegistryState.IDENTICAL}
+    assert skipping == {RegistryState.IDENTICAL}, (
+        "only the identical state may plan a skip"
+    )
     publishing = {
         state for state in RegistryState if plan_crates_action(state) == "publish"
     }
-    assert publishing == {RegistryState.ABSENT}
+    assert publishing == {RegistryState.ABSENT}, (
+        "only the absent state may plan a publication"
+    )
 
 
 @pytest.mark.parametrize(
@@ -207,4 +237,4 @@ def test_a_digest_the_registry_does_not_report_conflicts(
             http_status=OK,
         )
         is state
-    )
+    ), "any intended digest the registry does not report must conflict"

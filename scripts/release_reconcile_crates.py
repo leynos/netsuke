@@ -137,6 +137,11 @@ def _version_records(parsed: object) -> list[object]:
 def _checksums(versions: list[object]) -> list[tuple[str, bool]]:
     """Return every version's ``(checksum, is_yanked)`` pair.
 
+    Returns
+    -------
+    list[tuple[str, bool]]
+        One pair per record, in the order the registry listed them.
+
     Raises
     ------
     RegistryResponseError
@@ -153,6 +158,40 @@ def _checksums(versions: list[object]) -> list[tuple[str, bool]]:
             raise RegistryResponseError(msg)
         records.append((checksum, bool(version.get(YANKED_KEY, False))))
     return records
+
+
+def _readable_records(body: str | None) -> list[tuple[str, bool]] | None:
+    """Return the checksum records a readable response body carries.
+
+    Parameters
+    ----------
+    body
+        Response body as recorded, or ``None`` when the response had none.
+
+    Returns
+    -------
+    list[tuple[str, bool]] | None
+        Every version's ``(checksum, is_yanked)`` pair, or ``None`` when the
+        body is not a readable answer at all.
+
+    Notes
+    -----
+    ``None`` and "no records" are deliberately different answers, so the
+    return is optional rather than an empty list. An absent or unparseable
+    body is a transient or proxied reply the caller may retry, while a body
+    that parses and does not fit is a schema surprise: ``_version_records``
+    and ``_checksums`` raise ``RegistryResponseError`` for that, and this
+    does not catch it, so it reaches the caller rather than being folded into
+    an ``INDETERMINATE`` state.
+    """
+    if body is None:
+        # A 200 with no body is not a readable answer, whatever it claims.
+        return None
+    try:
+        parsed = json.loads(body)
+    except json.JSONDecodeError:
+        return None
+    return _checksums(_version_records(parsed))
 
 
 def classify_registry_state(
@@ -174,11 +213,6 @@ def classify_registry_state(
     RegistryState
         The state, from :class:`RegistryState`.
 
-    Raises
-    ------
-    RegistryResponseError
-        If a 200 response body is not the shape crates.io sends.
-
     Notes
     -----
     Absence is read from ``404`` alone. A crate never published and a version
@@ -192,6 +226,13 @@ def classify_registry_state(
     match is still withdrawn, and reporting ``IDENTICAL`` would let a release
     skip publication while pointing consumers at a version they cannot
     resolve.
+
+    A body that parses as JSON and is not a shape crates.io sends is not a
+    state at all, and ``_readable_records`` raises ``RegistryResponseError``
+    for it. That is deliberate rather than an ``INDETERMINATE``: an
+    unparseable body is a transient answer to retry, while a well-formed one
+    carrying an unfamiliar shape means this code's assumption about the
+    registry schema is wrong, and a state would swallow that.
 
     Examples
     --------
@@ -212,14 +253,9 @@ def classify_registry_state(
         return RegistryState.ABSENT
     if http_status != OK:
         return RegistryState.INDETERMINATE
-    if body is None:
-        # A 200 with no body is not a readable answer, whatever it claims.
+    records = _readable_records(body)
+    if records is None:
         return RegistryState.INDETERMINATE
-    try:
-        parsed = json.loads(body)
-    except json.JSONDecodeError:
-        return RegistryState.INDETERMINATE
-    records = _checksums(_version_records(parsed))
     if any(is_yanked for _, is_yanked in records):
         return RegistryState.YANKED
     if intended_sha256 in {checksum for checksum, _ in records}:

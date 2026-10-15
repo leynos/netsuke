@@ -38,7 +38,8 @@ DIGEST_HEX_LENGTH = 64
 #: accepted. The digest is matched case-insensitively and lowercased on the
 #: way out, because producers differ on case while consumers compare hex.
 _CHECKSUM_LINE = re.compile(
-    r"\A(?P<digest>[0-9a-fA-F]{%d}) (?P<marker>[ *])(?P<path>.+)\Z" % DIGEST_HEX_LENGTH
+    rf"\A(?P<digest>[0-9a-fA-F]{{{DIGEST_HEX_LENGTH}}}) "
+    r"(?P<marker>[ *])(?P<path>.+)\Z"
 )
 
 
@@ -141,10 +142,10 @@ def parse_sidecar(text: str) -> tuple[str, str]:
     ...     digest, name = parse_sidecar(recorded)
     ...     (name, digest == digest_of_file(asset))
     ('netsuke-linux-x86_64', True)
-    >>> parse_sidecar("not a checksum")
+    >>> parse_sidecar("not a checksum")  # doctest: +ELLIPSIS
     Traceback (most recent call last):
         ...
-    release_digest.MalformedSidecarError: sidecar is not one SHA-256 checksum line: 'not a checksum'
+    release_digest.MalformedSidecarError: sidecar is not one SHA-256 checksum line: ...
     """
     line = text.strip()
     match = _CHECKSUM_LINE.match(line)

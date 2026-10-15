@@ -15,7 +15,7 @@ Run via ``make test-release-publication``.
 """
 
 import hashlib
-import pathlib
+import typing as typ
 
 import pytest
 import release_digest
@@ -31,6 +31,9 @@ from verify_crates_io_bytes import (
     verify_downloaded_archive,
     verify_status_is_readable,
 )
+
+if typ.TYPE_CHECKING:
+    import pathlib
 
 #: gzip magic, as decimal integers. Spelled without escape sequences on
 #: purpose: an escape inside a non-raw docstring or literal is evaluated when
@@ -63,7 +66,7 @@ def test_download_url_names_the_crate_and_version() -> None:
     url = download_url("netsuke-build", "0.1.0-beta4")
     assert url == (
         "https://static.crates.io/crates/netsuke-build/netsuke-build-0.1.0-beta4.crate"
-    )
+    ), "the URL must name the crate and the version being downloaded"
 
 
 @pytest.mark.parametrize(
@@ -84,13 +87,17 @@ def test_classify_download_separates_absence_from_failure(
     Both hosts answer 404 for an absent version and the CDN answers 403 for an
     absent key, so a non-200 status alone cannot mean "not published".
     """
-    assert classify_download(status) == verdict
+    assert classify_download(status) == verdict, (
+        "absence and failure must be distinct verdicts"
+    )
 
 
 def test_classify_download_agrees_with_the_absent_set() -> None:
     """Require the classification to use the declared absent statuses."""
     for status in ABSENT_STATUSES:
-        assert classify_download(status) == "absent"
+        assert classify_download(status) == "absent", (
+            "every declared absent status must classify as absent"
+        )
 
 
 def test_verify_accepts_the_intended_bytes(archive: pathlib.Path) -> None:
@@ -103,7 +110,7 @@ def test_verify_accepts_the_intended_bytes(archive: pathlib.Path) -> None:
             expected_sha256=INTENDED,
         )
         == INTENDED
-    )
+    ), "the downloaded bytes must verify to the recorded digest"
 
 
 def test_verify_rejects_bytes_that_differ(archive: pathlib.Path) -> None:
@@ -122,9 +129,15 @@ def test_verify_rejects_bytes_that_differ(archive: pathlib.Path) -> None:
             version="0.1.0-beta4",
             expected_sha256="0" * 64,
         )
-    assert "netsuke-build" in str(excinfo.value)
-    assert isinstance(excinfo.value, release_digest.DigestMismatchError)
-    assert isinstance(excinfo.value, release_digest.DigestError)
+    assert "netsuke-build" in str(excinfo.value), (
+        "the diagnostic must name the crate whose bytes differ"
+    )
+    assert isinstance(excinfo.value, release_digest.DigestMismatchError), (
+        "a mismatch must be catchable as a digest mismatch"
+    )
+    assert isinstance(excinfo.value, release_digest.DigestError), (
+        "a mismatch must be catchable as a digest error"
+    )
 
 
 def test_every_failure_is_catchable_as_verification_error(
@@ -186,8 +199,12 @@ def test_a_real_archive_is_not_mistaken_for_a_refusal(archive: pathlib.Path) -> 
     ``0x1f 0x8b``, so the two cannot collide — asserted here so a later
     widening of the prefix test cannot quietly start rejecting real archives.
     """
-    assert archive.read_bytes()[:2] == GZIP_MAGIC[:2]
-    assert not archive.read_bytes()[:1].startswith(b"<")
+    assert archive.read_bytes()[:2] == GZIP_MAGIC[:2], (
+        "the genuine archive must still carry the gzip magic"
+    )
+    assert not archive.read_bytes()[:1].startswith(b"<"), (
+        "the genuine archive must not carry the refusal document's XML prefix"
+    )
     assert (
         verify_downloaded_archive(
             archive,
@@ -196,7 +213,7 @@ def test_a_real_archive_is_not_mistaken_for_a_refusal(archive: pathlib.Path) -> 
             expected_sha256=INTENDED,
         )
         == INTENDED
-    )
+    ), "a real archive must pass the absence test and verify"
 
 
 def test_status_readability_refuses_an_error_status() -> None:
@@ -215,8 +232,8 @@ def test_required_headers_names_a_user_agent() -> None:
     """
     headers = required_headers()
     lowered = {key.lower(): value for key, value in headers.items()}
-    assert "user-agent" in lowered
-    assert lowered["user-agent"].strip() != ""
+    assert "user-agent" in lowered, "the required headers must carry a User-Agent entry"
+    assert lowered["user-agent"].strip(), "the User-Agent value must not be blank"
 
 
 @pytest.mark.parametrize(
@@ -238,7 +255,7 @@ def test_plan_verification_maps_every_observable_case(
             status=status, expected_sha256=expected_sha256, actual_sha256=actual_sha256
         )
         == verdict
-    )
+    ), "the verdict must follow from the status and the two digests"
 
 
 def test_the_declared_verdicts_are_all_reachable() -> None:
@@ -253,4 +270,6 @@ def test_the_declared_verdicts_are_all_reachable() -> None:
         for s in (200, 403, 500)
         for a in (INTENDED, "0" * 64, None)
     }
-    assert set(declared_verdicts()) <= reachable
+    assert set(declared_verdicts()) <= reachable, (
+        "every declared verdict must be produced by some input"
+    )
