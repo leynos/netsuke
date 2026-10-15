@@ -242,7 +242,7 @@ doctest: check-build-tools ## Run doctests, which cargo-nextest cannot execute
 # The default-feature lane. Release binaries build the default feature set,
 # which excludes `lint` (`netsuke check`) until v0.2.0, so these targets lint
 # and test exactly that set; `lint-clippy` and `test` above cover
-# `--all-features`. See ADR-042 and "Feature-gated code" in the developers'
+# `--all-features`. See ADR-056 and "Feature-gated code" in the developers'
 # guide.
 test-default-features: check-build-tools ## Run every Rust test with only the default features, as release binaries build
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --workspace --all-targets $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)

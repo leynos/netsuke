@@ -11,14 +11,14 @@
   progresses rather than treating it as a record of what was once decided. The
   linter compiles only under the off-by-default `lint` Cargo feature until
   v0.2.0, when the gate is planned to be removed; see the "Release gating"
-  section of [ADR-042](adr-042-manifest-linting-under-netsuke-check.md).
+  section of [ADR-056](adr-056-manifest-linting-under-netsuke-check.md).
 - **Scope:** the manifest linter — its rule model, compiler-stage hooks, rule
   identifiers, suppression contract, policy configuration, and output schemas.
 - **Primary audience:** Netsuke contributors adding or changing lint rules, and
   operators wiring `netsuke check` into `make`, continuous integration (CI),
   editors, and agents.
 - **Documents that take precedence:**
-  - [ADR-042](adr-042-manifest-linting-under-netsuke-check.md) owns the command
+  - [ADR-056](adr-056-manifest-linting-under-netsuke-check.md) owns the command
     placement, the findings-as-data output contract, and the sequencing that
     keeps rule prose in the registry for the prototype period.
   - [ADR-003](adr-003-agent-consistent-human-first-cli.md) owns the command-line
@@ -111,7 +111,7 @@ These are assumed by every later section rather than re-justified.
 1. **No new top-level noun.** `check` is already in the canonical command
    vocabulary and is listed as unbuilt work in roadmap task 3.15.1. The linter
    is that command. See
-   [ADR-042](adr-042-manifest-linting-under-netsuke-check.md).
+   [ADR-056](adr-056-manifest-linting-under-netsuke-check.md).
 2. **Non-interactive and deterministic.** No prompts, no network, no clock, and
    no dependence on terminal capabilities for the analysis itself. Two runs
    over the same manifest and configuration produce byte-identical findings in
@@ -637,7 +637,7 @@ catalogues under roadmap step 31.2, keyed by the rule's stable name; rule
 identifiers never move, because they are values a user types and a machine
 matches. The command's framing text — help, summary, threshold message, and
 errors — is already localized.
-[ADR-042](adr-042-manifest-linting-under-netsuke-check.md) records why the
+[ADR-056](adr-056-manifest-linting-under-netsuke-check.md) records why the
 prose migration waits for the rule set to settle.
 
 **The rule set will grow faster than the engine.** The registry is a static
