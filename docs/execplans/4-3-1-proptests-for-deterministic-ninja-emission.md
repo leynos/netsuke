@@ -385,16 +385,16 @@ There is no Terms of Reference document in this repository. Upstream artefacts:
 Trace links:
 
 ```plaintext
-RM-4.3.1.a   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::order::ordered_edges_ignore_input_order
-RM-4.3.1.a   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::order::emission_is_insertion_order_invariant
-RM-4.3.1.b   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::defaults::default_line_is_the_ascending_sort
-RM-4.3.1.c   -> FV-DET      -> EP-M4 -> ninja_gen::determinism::path_key::path_key_is_permutation_invariant
-RM-4.3.1.c   -> FV-DET      -> EP-M4 -> ninja_gen::determinism::path_key::path_key_is_injective_on_validated_paths
-FV-DET       -> ADR-NNN     -> EP-M4 -> ninja_gen::determinism::no_loss::every_distinct_edge_is_emitted_once
+RM-4.3.1.a   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::property_tests::order::ordered_edges_ignore_input_order
+RM-4.3.1.a   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::property_tests::order::emission_is_insertion_order_invariant
+RM-4.3.1.b   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::property_tests::defaults::default_line_is_the_ascending_sort
+RM-4.3.1.c   -> FV-DET      -> EP-M4 -> ninja_gen::determinism::property_tests::path_key::path_key_is_permutation_invariant
+RM-4.3.1.c   -> FV-DET      -> EP-M4 -> ninja_gen::determinism::property_tests::path_key::path_key_is_injective_on_validated_paths
+FV-DET       -> ADR-NNN     -> EP-M4 -> ninja_gen::determinism::property_tests::no_loss::every_explicit_output_appears_exactly_once
 FV-DET       -> ADR-NNN     -> EP-M5 -> tests::ninja_gen_hashmap_boundary::no_hashmap_iteration_in_ninja_gen
 FV-DET       -> FV-DET      -> EP-M6 -> ir::action_hash_property_tests::equal_actions_hash_equally
 FV-CONTRACT  -> ADR-NNN     -> EP-M6 -> tests::ninja_determinism_process::two_runs_emit_identical_bytes
-RM-4.3.1.a   -> ADR-NNN     -> EP-M6 -> ninja_gen::determinism::declaration::declaration_order_does_not_change_emission
+RM-4.3.1.a   -> ADR-NNN     -> EP-M6 -> ninja_gen::determinism::property_tests::declaration::declaration_order_does_not_change_emission
 RM-4.2.1.dup -> ADR-004     -> EP-M7 -> ir::graph::property_tests::duplicates::duplicate_outputs_are_rejected_at_larger_n
 RM-4.2.1.cyc -> ADR-004     -> EP-M7 -> ir::graph::property_tests::cycles::cycles_are_rejected_at_larger_n
 FV-CONTRACT  -> ADR-NNN     -> EP-M1 -> docs/adr-030-ninja-emission-determinism-contract.md
@@ -634,7 +634,7 @@ draft stated injectivity without it and was simply wrong.
 - **Oracle:** the permutation arm compares `path_key` against itself on a
   shuffled input. The injectivity arm compares against sorted-multiset equality
   computed in the test — structurally different from join-with-NUL.
-- **Artefact:** `src/ninja_gen/determinism/path_key.rs`.
+- **Artefact:** `src/ninja_gen/determinism/property_tests/path_key.rs`.
 - **Non-vacuity:**
   - *Covers.* Per-case *classification* (never an assertion) of whether the
     shuffle actually reordered, recorded for length ≥ 2. Classes: empty list,
@@ -658,8 +658,8 @@ draft stated injectivity without it and was simply wrong.
 
 ______________________________________________________________________
 
-**OBL-NOLOSS** — *every distinct edge contributes exactly one line of its own,
-and no edge is silently dropped.*
+**OBL-NOLOSS** — *every explicit output is accounted for, and no edge is
+silently dropped.*
 
 Statement: for every well-formed graph, every explicit output appears exactly
 once on the left-hand side of a `build` line in the emitted text, and no edge's
@@ -757,24 +757,23 @@ domain must exclude empty target names so that "well-formed" keeps meaning what
   into a clean-looking error. Counting `build` statements as a whole is
   deliberately *not* the assertion; see the statement above for why the count
   exceeds the edge count on this path.
-- **Artefact:** `src/ninja_gen/determinism/no_loss.rs`.
+- **Artefact:** `src/ninja_gen/determinism/property_tests/no_loss.rs`.
 - **Non-vacuity:**
   - *Covers.* Per-case assertion that at least one graph in the run had a
     multi-output edge. Directed cases pin the two bypasses, but only after
     `EP-M4` has established what each actually does; until then the
     output-less case is a reachability question, not a known bypass.
-  - *Mutation.* `MUT-EDGEDROP` makes `render_edges` skip an arena entry when
-    `explicit_outputs` is empty, so an output-less edge vanishes from the text.
-    This is the mutation this obligation actually needs, and it replaces
-    `MUT-GUARD`, which could not serve. `MUT-GUARD` moved
-    `reject_unsupported_path_characters` after the sort; re-reading
-    `src/ninja_gen/path_syntax.rs:24` shows that function *returns*
-    `Result<(), NinjaGenError>` and validates without dropping or merging
-    anything, so reordering it changes *when* an error is raised, never
-    *whether* an edge is emitted. It cannot fail a no-loss property. If
-    `EP-M4` finds the output-less case unreachable through the loader, the
-    patch targets the directly-constructed graph instead, and the obligation
-    says so rather than keeping a mutation that demonstrates nothing.
+  - *Mutation.* `MUT-EDGEDROP` makes `render_edges` skip an arena entry whose
+    `explicit_outputs` is **non-empty**, so a real edge vanishes from the text
+    and its outputs disappear from every left-hand side. This is the mutation
+    this obligation actually needs, and it replaces `MUT-GUARD`, which could
+    not serve: `MUT-GUARD` moved `reject_unsupported_path_characters` after
+    the sort, and re-reading `src/ninja_gen/path_syntax.rs:24` shows that
+    function *returns* `Result<(), NinjaGenError>` and validates without
+    dropping or merging anything, so reordering it changes *when* an error is
+    raised, never *whether* an edge is emitted. The trigger must drop an edge
+    that carries outputs; the 2026-10-15 entry below records why the
+    output-less form it replaces could never fail this property.
 
 ______________________________________________________________________
 
@@ -864,7 +863,7 @@ to 5 actions and edges for that budget reason.
   this arm does not close that gap. Closing it needs an oracle that computes
   expected Ninja text independently — `OBL-NINJA`'s real-`ninja` arm is the one
   that does.
-- **Artefact:** `src/ninja_gen/determinism/order.rs`.
+- **Artefact:** `src/ninja_gen/determinism/property_tests/order.rs`.
 - **Non-vacuity:**
   - *Covers.* Per-case: the constructed reordering was distinct; and,
     separately, whether the two iteration orders differed. Recorded classes must
@@ -943,7 +942,7 @@ offset exceeds that of every `build` line.
   since it mirrors the production call; its strength comes from the
   permutation-invariance half, which compares two input permutations and cannot
   be satisfied by copied code.
-- **Artefact:** `src/ninja_gen/determinism/defaults.rs`.
+- **Artefact:** `src/ninja_gen/determinism/property_tests/defaults.rs`.
 - **Non-vacuity:**
   - *Covers.* Empty (asserting no `default` line at all), singleton,
     already-sorted, reverse-sorted, and duplicate-bearing. The duplicate class
@@ -1012,7 +1011,7 @@ within a list, not across the two.
   acyclicity holds by construction. `NetsukeManifest` does not derive `Clone`,
   so permutation rebuilds from the spec rather than cloning.
 - **Oracle:** the permuted manifest's emission — metamorphic.
-- **Artefact:** `src/ninja_gen/determinism/declaration.rs`.
+- **Artefact:** `src/ninja_gen/determinism/property_tests/declaration.rs`.
 - **Non-vacuity:**
   - *Covers.* The permutation reordered; at least two targets share an
     identical recipe so interning collapses them; declared `defaults` present;
@@ -1190,14 +1189,15 @@ permutations.
   `-t commands` and fails only under `-n`. As first drafted this obligation
   was vacuous over the sidecar bundle, the newest and most intricate part of
   the emitter. Measured cost is 1.63 ms and 1.91 ms respectively.
-- **Artefact:** `src/ninja_gen/determinism/ninja_oracle.rs`. The existing
-  `NinjaCommandOracle::ninja_commands` cannot be reused: `batch_ninja_files`
-  discards the graph and scrapes only `command =` lines. A new harness is
-  budgeted, which must create `.netsuke/dyndep/` and `.netsuke/serial/` before
-  writing sidecars, materialize or exclude out-of-namespace inputs, and use a
-  **fresh temporary directory per case** — the existing oracle reuses one
-  directory, so content-addressed sidecars from earlier cases could satisfy a
-  later case's reference and mask a missing-sidecar bug.
+- **Artefact:** `src/ninja_gen/determinism/property_tests/ninja_oracle.rs`. The
+  existing `NinjaCommandOracle::ninja_commands` cannot be reused:
+  `batch_ninja_files` discards the graph and scrapes only `command =` lines. A
+  new harness is budgeted, which must create `.netsuke/dyndep/` and
+  `.netsuke/serial/` before writing sidecars, materialize or exclude
+  out-of-namespace inputs, and use a **fresh temporary directory per case** —
+  the existing oracle reuses one directory, so content-addressed sidecars from
+  earlier cases could satisfy a later case's reference and mask a
+  missing-sidecar bug.
 - **Non-vacuity:**
   - *Covers.* Multi-output edges, phony edges, dyndep-staged edges, and a
     non-empty `default` line. Assert a non-zero case count when Ninja is
@@ -1595,8 +1595,8 @@ assertion prints a counter-example that fits on a screen.
 
 *Acceptance:* `make proptest` passes; `MUT-PATHKEY` fails
 `path_key_is_permutation_invariant`; `MUT-EDGEDROP` fails
-`every_distinct_edge_is_emitted_once`; both revert cleanly. The two directed
-witness tests are present and phrased as disjunctions.
+`every_explicit_output_appears_exactly_once`; both revert cleanly. The two
+directed witness tests are present and phrased as disjunctions.
 
 ### EP-M5 — ordering invariance and the collection boundary
 
@@ -1730,17 +1730,17 @@ new `tests/` subdirectory with a `mod.rs` needs an explicit `mod` declaration.
 Mutation patches, named after the test they falsify per the house convention,
 with `__` for the module separator:
 
-| Handle           | Falsifies                  | Mutation                                                 |
-| ---------------- | -------------------------- | -------------------------------------------------------- |
-| `MUT-PATHKEY`    | `OBL-PATHKEY`              | Delete `parts.sort_unstable()` in `path_key`.            |
-| `MUT-EDGEDROP`   | `OBL-NOLOSS`               | Skip an arena entry whose `explicit_outputs` is empty.   |
-| `MUT-EDGESORT`   | `OBL-ORDER`                | Delete `edges.sort_by_key` in both paths.                |
-| `MUT-ACTIONSORT` | `OBL-ORDER`, `OBL-PROCESS` | Delete `actions.sort_by_key`.                            |
-| `MUT-DEFSORT`    | `OBL-DEFAULT`, `OBL-E2E`   | Delete `defs.sort()`.                                    |
-| `MUT-DEFPOS`     | `OBL-DEFAULT`, `OBL-NINJA` | Emit `default` before edge rendering.                    |
-| `MUT-HASHMETA`   | `OBL-ACTION`               | Make the hasher skip `pool`.                             |
-| `MUT-DUPWITHIN`  | `OBL-DUP`                  | Disable the within-one-target half of `find_duplicates`. |
-| `MUT-CYCLEDEPTH` | `OBL-CYCLE`                | Cap cycle traversal depth at 4.                          |
+| Handle           | Falsifies                  | Mutation                                                   |
+| ---------------- | -------------------------- | ---------------------------------------------------------- |
+| `MUT-PATHKEY`    | `OBL-PATHKEY`              | Delete `parts.sort_unstable()` in `path_key`.              |
+| `MUT-EDGEDROP`   | `OBL-NOLOSS`               | Skip an arena entry whose `explicit_outputs` is non-empty. |
+| `MUT-EDGESORT`   | `OBL-ORDER`                | Delete `edges.sort_by_key` in both paths.                  |
+| `MUT-ACTIONSORT` | `OBL-ORDER`, `OBL-PROCESS` | Delete `actions.sort_by_key`.                              |
+| `MUT-DEFSORT`    | `OBL-DEFAULT`, `OBL-E2E`   | Delete `defs.sort()`.                                      |
+| `MUT-DEFPOS`     | `OBL-DEFAULT`, `OBL-NINJA` | Emit `default` before edge rendering.                      |
+| `MUT-HASHMETA`   | `OBL-ACTION`               | Make the hasher skip `pool`.                               |
+| `MUT-DUPWITHIN`  | `OBL-DUP`                  | Disable the within-one-target half of `find_duplicates`.   |
+| `MUT-CYCLEDEPTH` | `OBL-CYCLE`                | Cap cycle traversal depth at 4.                            |
 
 Nine, not the first draft's eleven. Two were cut because the existing nightly
 `cargo-mutants` job (`.github/workflows/mutation-testing.yml`, 03:05 UTC over
@@ -2065,6 +2065,33 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
 
+- [x] (2026-10-15T00:00:00Z) Corrected two plan defects before implementing
+      `EP-M4`, and ran the last `EP-M2` gate batch.
+      **Repair 1 — stale artefact paths.** Thirteen live citations gave the six
+      property homes as `src/ninja_gen/determinism/<module>.rs`, without the
+      `property_tests` segment `PROPTEST_FILTER` (`Makefile:264`) selects on.
+      A suite built at those paths would never have run. `EP-M4` would have
+      been implemented from them.
+      **Repair 2 — an unfalsifiable mutation.** `MUT-EDGEDROP` skipped a
+      dispatch edge whose `explicit_outputs` is empty. `blueprint.rs:119`
+      gives every generated edge at least one explicit output, so no
+      generated case reaches that trigger, and the one directed case that
+      does renders an empty left-hand side, leaving the output set identical
+      whether the edge is rendered or skipped. The trigger now drops an edge
+      carrying outputs. The acceptance test name was an edge-*count* claim —
+      the very assertion the 2026-10-15 statement correction removed — and is
+      renamed `every_explicit_output_appears_exactly_once`, which holds on the
+      generated domain because `allocate_pool` names globally unique slots.
+      **Gate batch** (`2b01a3e3`, six targets): `typecheck`, `lint` (all four
+      sub-targets, both Whitaker passes), `doc-coverage` (98.87% against
+      80.00%), `test-workflow-contracts` and `check-fmt` all exit 0.
+      `make test` is **environment-red**: one `TIMEOUT [300.012s]` in
+      `cli_configuration_fixture_compiles`, zero assertion failures. The
+      branch does not touch `.config/nextest.toml`, the test's 300 s allowance
+      is identical to `origin/main`'s, and the run logged 573 sccache
+      `unreachable` lines against a saturated shared compiler pool. No
+      allowance is widened. Because `test-nextest` aborts it, the `doctest`
+      pass did **not** run in that batch and is re-run below.
 - [x] (2026-10-14T00:00:00Z) The third `EP-M2` gate pass (revision
       `4250152d`, twelve targets dispatched) produced one real defect and one
       environmental failure.
@@ -2961,6 +2988,32 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 
 ## Surprises & discoveries
 
+- (2026-10-15) **The mutation `OBL-NOLOSS` was designed against could not
+  fail it, and the test its acceptance names asserted the claim the statement
+  correction had just removed.** Correcting the count conjunct above left two
+  things behind. The first was `MUT-EDGEDROP`'s trigger: it skipped an arena
+  entry whose `explicit_outputs` is *empty*, but `blueprint.rs:119` gives every
+  generated edge `explicit_count >= 1` (`share >= 1` at `:60-75`, then
+  `(1 + plan.extra_outputs).min(share)`), so the generator cannot reach that
+  trigger at all. The one directed case that does have no explicit outputs
+  renders `build : <hash>` — an empty left-hand side — so skipping it leaves
+  the emitted *set* of outputs identical and the property cannot fail. The
+  trigger now drops an edge that *carries* outputs, which is the failure mode
+  the justification paragraph had described all along. The second was the
+  accepted test name `every_distinct_edge_is_emitted_once`, an edge-*count*
+  claim — precisely the assertion the correction removed — carried in the
+  `EP-M4` acceptance line and in a trace link, so a checked box would have
+  cited a test whose name promised semantics the plan had just disproved. It is
+  renamed `every_explicit_output_appears_exactly_once`, which is literally true
+  on the generated domain: `allocate_pool` (`blueprint.rs:169-174`) names slots
+  `out/{slot:04}` and `build_edges` advances one monotone cursor, so every
+  emitted output name is globally unique. Four restatements of the old count
+  also survived the correction, two of them inconsistent with it. **The
+  transferable lesson is that a corrected statement does not correct the
+  mutation or the test name built on it.** A mutation's trigger is a claim
+  about reachability, and it needs the same against-source check as the
+  statement.
+
 - (2026-10-15) **A red `lint-clippy` silently removes all evidence for the
   three lint targets after it.** `make lint` is declared
   `lint: lint-clippy lint-whitaker lint-python github-actions-lint`, and a
@@ -3028,10 +3081,11 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   (`src/ninja_gen/mod.rs:232`), and the serial lowering itself.
 
   1. A staged edge emits `1 + 2N` `build` statements, not one, so "the number
-     of `build` statements equals the number of distinct edges" fails by `2N`.
-     The plan's glossary at line 285 — "Edge — one `BuildEdge`, rendered as one
-     Ninja `build` statement" — encodes the same wrong assumption, and the
-     serial `dyndep` lowering is exactly what breaks it.
+     of `build` statements equals the number of distinct edges" fails by `2N`,
+     and that quoted claim is itself withdrawn; the statement above records
+     why. The glossary entry at line 285 — "Edge — one `BuildEdge`, rendered as
+     one Ninja `build` statement" — has since been qualified to name the
+     staging, because the serial `dyndep` lowering is exactly what breaks it.
   2. Because `generate_into_with_shell` rejects any graph where
      `graph_requires_dyndep` holds, an `EP-M4` property emitting through
      `generate` gets `Err(DyndepFilesRequired)` on every case worth generating
@@ -3241,11 +3295,12 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   third defect, independent of the two below, and the most dangerous of the
   three because it fails *silently*. `PROPTEST_FILTER` (`Makefile:264`) selects
   a module *segment* ending in `proptests` or `property_tests`. The plan's
-  property homes are `src/ninja_gen/determinism/path_key.rs`, `no_loss.rs`,
-  `order.rs`, `defaults.rs`, `declaration.rs`, and `ninja_oracle.rs` — **not
-  one of which ends in either suffix**. Evaluated against the real filter,
+  property homes as first drafted were `src/ninja_gen/determinism/path_key.rs`,
+  `no_loss.rs`, `order.rs`, `defaults.rs`, `declaration.rs`, and
+  `ninja_oracle.rs` — **not one of which ends in either suffix**. Evaluated
+  against the real filter,
   `ninja_gen::determinism::path_key::path_key_is_permutation_invariant` and its
-  six siblings each match **nothing**:
+  six siblings each matched **nothing**:
 
   ```plaintext
   plan as written : 0 of 7 planned suites selected
