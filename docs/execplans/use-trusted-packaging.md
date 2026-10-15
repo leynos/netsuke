@@ -325,6 +325,15 @@ Stop and escalate when any of these is breached.
   `runner_placement_invariants.py` and given a `timeout-minutes`; nothing else
   enumerates the job set.
 
+- Risk: the binstall archives the hoist stages are never actually uploaded, so
+  the documented `cargo binstall netsuke-build` fetches nothing. Severity: high
+  Likelihood: high (it is not a risk — it is a live defect, found on 2026-10-12
+  and recorded under `Surprises & discoveries`). Mitigation: this plan's
+  `verify-release-inventory` job compares the whole release against the
+  identity record, which fails on the missing archives; the maintainer
+  checklist records that the defect predates this branch and that the
+  `release`/`publish-release` upload call sites are the ones to correct.
+
 ## Verification plan
 
 The change introduces one central invariant and a small family of lemmas around
@@ -741,6 +750,15 @@ A reviewer accepts this change when all of the following hold.
    actionlint, and `.github/actions/*/action.yml` with yamllint and the
    shell-syntax check.
 5. `wc -l .github/workflows/release.yml` reports a value at or below 400.
+   **Unsatisfiable as written.** The file is 685 lines on `main` before this
+   change, and no repository contract enforces a 400-line cap on workflow YAML:
+   `ci.yml` (642) and `build-and-package.yml` (441) exceed it too. The premise
+   behind this criterion — that the cap is enforced on workflow files and that
+   only the new jobs stand between the file and compliance — is false. It
+   cannot be discharged by this plan's scope, which does not restructure the
+   existing `metadata`, `build-*`, `release-admission-canaries`, `release`, or
+   `publish-release` bodies. See `Decision log`; the criterion is retained
+   unedited so the deviation stays visible rather than being redefined away.
 6. `make lint` and `make test` pass unchanged.
 7. A dry-run rehearsal on a pull request runs `package-crate` to completion
    and skips every publishing job, with no environment approval requested.
@@ -841,8 +859,60 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `make test` is red on two *different* nested-Cargo tests across two runs,
   each by the 300 s per-test allowance rather than by an assertion; both are
   proven environmental. See `Surprises & discoveries`.
-- [ ] Obtain approval (EP-M1).
-- [ ] Stage B: pure modules and their failing suites (EP-M2).
+- [x] (2026-10-12) Approval granted (EP-M1). The `sdlc-implementation` skill
+  was invoked for this plan; its own contract is that an explicit instruction
+  to proceed with the plan supplies execution approval and is not re-requested.
+- [x] (2026-10-12) Reconnaissance for Stage B and Stage C, read from the tree
+  rather than from this plan. Established the exact contract surfaces any new
+  job must satisfy (see `Surprises & discoveries`), and found that criterion 5
+  of `Validation and acceptance` is unsatisfiable as written and that the
+  2026-10-11 decision to host the crates.io exchange inside `publish-release`
+  contradicts LEM-5. Both are recorded in `Decision log`; neither blocks Stage
+  B, which touches no workflow file.
+- [ ] Stage B: pure modules and their failing suites (EP-M2). LEM-1 and LEM-2
+  are complete and wired; LEM-3 and LEM-4 and the remaining Stage B contract
+  suites remain.
+- [x] (2026-10-12) LEM-2 landed as `scripts/release_inventory.py` (397 lines,
+  stdlib-only) with `scripts/tests/test_release_inventory.py`, 22 tests. The
+  rule is exact set equality against the declared set, not a per-file
+  acceptability check: the weaker rule accepts a release that is merely
+  *missing* an asset, which is the live binstall defect recorded under
+  `Surprises & discoveries`, and the `a-binstall-archive` row is that release's
+  verdict written down as a test. Archive names are delegated to
+  `hoist_binstall_discovery.expected_archive_names` rather than restated, so
+  the inventory and the hoist cannot drift about what an archive is called. Two
+  acceptance rows and two Hypothesis witnesses make the predicate two-sided,
+  and a `FrozenInstanceError` row pins the entry as immutable.
+- [x] (2026-10-12) Closed the orphan window the plan's EP-M6 requires. The
+  LEM-1 suite had landed with no selector collecting it — `make test` runs the
+  Rust suite only — which is precisely the Cuprum #499 failure this plan exists
+  to avoid, so committing it unwired would have shipped the defect the work is
+  meant to prevent. Added the `test-release-publication` Makefile target
+  (mirroring `test-linux-package-metadata`'s pinned pytest/hypothesis and
+  isolated-configuration shape), declared it phony, and added the
+  `Release publication tests` step to `ci.yml`'s `build-test` after the
+  workflow-contract gate.
+  `tests/workflow_contracts/release_publication_test.py` (9 tests) pins all of
+  that, and its orphan check — every `scripts/tests` module must be named by
+  some recipe — was probed live: it fails naming a deliberately uncoupled
+  module and passes once it is removed. Verified before writing it that all 20
+  existing modules were already wired, so the guard is green at introduction
+  rather than failing for an unrelated reason.
+- [x] (2026-10-12) Ran the focused suites and then the full
+  `test-workflow-contracts` gate on the changed tree: 118 passed for the three
+  publication suites, and 1224 passed with 3 skipped (pre-existing) for the
+  contract suite after both the Makefile and `ci.yml` changed.
+- [x] (2026-10-12) LEM-1 landed as `scripts/release_candidate.py` and
+  `scripts/release_semver.py`, with `scripts/tests/test_release_candidate.py`
+  and `scripts/tests/test_release_semver.py` (96 tests, 7 doctests). Both
+  modules are stdlib-only and under the 400-line cap (394 and 139). Three
+  seeded mutations are each caught by multiple rows, and the identity record's
+  both directions — accept a well-formed version, refuse a near-match — are
+  witnessed. Two findings were recorded while doing it: the first version of
+  the leading-zero rule was stated too broadly and refused a version Cargo
+  accepts (see `Surprises & discoveries`), and the `ambrleaks` stage of
+  `make lint-python` reports findings for an explicitly named `.py` file while
+  passing over the same file reached through a directory walk.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 
@@ -970,6 +1040,143 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   be indistinguishable from contention here, so the diff-scope argument — not
   the timeout message — is what establishes the red as environmental.
 
+- Observation: **every** new job added to `release.yml` reds
+  `make test-workflow-contracts` until it is registered in two places.
+  `runner_placement_invariants.has_required_runner_assignments` compares the
+  gathered assignment map to `REQUIRED_RUNNER_ASSIGNMENTS` for *exact equality*
+  — not a subset — and `runner_placement_test.DIRECT_RUNNER_SOURCES` is the
+  tuple that gathers them. A job absent from both fails the equality; a job
+  present in `runner_placement_invariants.py` but not in
+  `DIRECT_RUNNER_SOURCES` is never gathered and so can never appear, which
+  fails the same assertion from the other side. Separately,
+  `runner_shape_test.test_every_ubicloud_job_declares_a_timeout` requires a
+  positive integer `timeout-minutes` on each Ubicloud job, and
+  `test_rule_labels` derives the actionlint self-hosted registry from what the
+  workflows actually select. Evidence: read from
+  `tests/workflow_contracts/runner_placement_invariants.py:203`,
+  `runner_placement_test.py:28-52` and `runner_placement_test.py:225-252`.
+  Impact: Stage C must land its `release.yml` jobs and both registration
+  updates in one commit, or the workflow-contract gate is red in between. The
+  plan's `Risks` entry anticipated this shape but named only
+  `runner_placement_invariants.py`; `DIRECT_RUNNER_SOURCES` is the second half
+  and is the one that fails silently if forgotten.
+
+- Observation:
+  `github_actions_validation_test.test_makefile_runs_both_github_actions_linters`
+  pins the `github-actions-lint` recipe's **first line** to
+  `$(YAMLLINT) --config-file .yamllint.yml .github/workflows` and its **last
+  line** to `$(ACTIONLINT)`, and models the target with strict CmdMox mocks
+  that call `--with_args(...)` exactly once per tool. Evidence: read from
+  `tests/workflow_contracts/github_actions_validation_test.py:79-90` and
+  `:230-235`. Impact: Stage D's requirement that `github-actions-lint` also lint
+  `.github/actions/*/action.yml` with yamllint **cannot** be satisfied by
+  appending a second `yamllint` line — `recipe[-1]` would become the new line
+  and the exact-args mock would see an unexpected second call. It cannot be
+  satisfied by extending the first line's path list either, because that string
+  is asserted verbatim. The composite-action lint therefore needs its own
+  Makefile target, wired into `lint` alongside `github-actions-lint`, with
+  `github_actions_validation_test.py` updated in the same change-set to
+  describe the new shape. This is a real constraint discovered now rather than
+  at the first red gate.
+
+- Observation: the existing publish-path contract suite is a **scenario
+  evaluator**, not a name-matching assertion set.
+  `release_publish_path_scenarios.py` declares eleven `Scenario` rows over the
+  mode/event/needs matrix, `release_publish_path_contract.py` renders the
+  `metadata` outputs and job guards through the repository's own expression
+  evaluator, and `release_publish_path_publication.py` asserts
+  `publish-release`'s reachability per row. Evidence: read in full. Impact: two
+  consequences for Stage B. First, the new `release_publication_test.py` must
+  *extend* this scenario table rather than duplicate it — a parallel table
+  would drift and the two would disagree about what `should_publish` means.
+  Second, adding a job that `publish-release` needs, or changing `metadata`'s
+  outputs, will change these rows' expected values and must be done
+  deliberately.
+
+- Observation: the leading-zero rule was written too broadly in the first
+  attempt, and the mistake was in the *documentation* as well as the test rows.
+  The module claimed `0.1.0-beta04` "is not a semantic version" and that this
+  was "the rule that matters". Cargo parses versions with the `semver` crate,
+  which pins `1.0.28` in this repository's `Cargo.lock`, and its identifier
+  rule refuses a leading zero only when the identifier is *entirely* numeric —
+  the `!segment_has_nondigit` guard at
+  `~/.cargo/registry/src/index.crates.io-*/semver-1.0.28/src/parse.rs:242-248`.
+  So `0.1.0-01` is invalid but `0.1.0-beta04` is valid: the padding sits inside
+  an alphanumeric identifier, which the grammar permits. Evidence: the reference
+  `semver` npm package agrees on a ten-case corpus, and it is the stricter
+  oracle for the tag-prefix and whitespace rows because it trims and accepts
+  `v0.1.0`, which this grammar refuses on purpose. Impact: the module docstring
+  and three test rows were corrected. The defensible claim is the one the plan
+  needs anyway — `0.1.0-beta04` and `0.1.0-beta4` are *different identifiers*
+  that no ordering comparison unifies (`semver.eq` is false, `compare` is -1),
+  so the tag must spell whichever the manifest declares. The byte-equality rule
+  was never wrong; one of its justifications was. The general lesson is that a
+  rule stated as "the leading-zero rule" must be stated with its exact guard,
+  because the intuitive version refuses versions the registry accepts.
+
+- Observation: `ambrleaks`, the last stage of `make lint-python`, reports
+  findings for an explicitly named `.py` path while passing over the same file
+  reached through a directory walk. Evidence: `ambrleaks scripts/` exits 0 and
+  prints nothing; `ambrleaks scripts/tests/test_release_candidate.py` exits 1
+  with four `snapshot-hex` findings against that file's 40-character commit
+  fixtures. The Makefile passes directories
+  (`PYTHON_SOURCES = .github/scripts scripts tests/workflow_contracts`), so the
+  gate sees only `.ambr` files and the findings are invisible to it. Impact:
+  this is the same explicit-path hazard as `mdtablefix`'s in the Markdown gates
+  — naming a path bypasses the tool's extension filter — and it means a
+  per-file invocation of a directory-oriented tool proves nothing about what
+  the gate will say. The four findings are in test fixtures whose values are
+  public commit hashes, not secrets; the gate is nonetheless silent about them,
+  and this is recorded rather than papered over.
+
+- Observation: the 400-line cap and `too-many-locals` pull against each other
+  when a function is decomposed by extraction, and satisfying one naively
+  breaks the other. Evidence: `scripts/release_inventory.py` carried 11 locals
+  in `validate_inventory` against the configured limit of 10. The
+  house-preferred fix is extraction rather than shaving a variable, so two
+  stage helpers were extracted — and the file went from 361 to 421 lines,
+  breaching the 400-line cap the plan's constraint 13 requires. Trimming
+  docstrings back to 397 lines then produced a *second*, previously absent
+  finding: `docstring-extraneous-exception` (DOC502) on `validate_inventory`,
+  because four of the six exception classes it had documented are now raised by
+  its helpers rather than in its own body. Impact: a decomposition fix is not
+  complete until the linter has been re-run on the decomposed shape, since
+  moving code across a function boundary changes what each docstring may
+  legitimately claim. The resolution keeps the two locally-raised classes in the
+  `Raises` block and names the remaining four in prose, with the helper that
+  raises each — which is what a caller needs, since none is caught here.
+
+- Observation: **the released binstall archives do not exist.** All six
+  `netsuke-build-{version}-{target}.tar.gz` archives are absent from every
+  published release, while their `.sha256` sidecars are present. Evidence, all
+  read on 2026-10-12:
+  `gh release view v0.1.0-beta4 --repo leynos/netsuke --json assets` lists 29
+  assets; six end in `.tar.gz.sha256` (119–125 bytes each) and **zero** end in
+  `.tar.gz`. `v0.1.0-beta3` and `v0.1.0-beta2` show the identical shape, and
+  `v0.1.0-beta1` has neither. The mechanism is read from the action's own
+  source at the pin `release.yml` uses: in
+  `.github/actions/upload-release-assets/scripts/upload_release_assets.py` (pin
+  `0606ca89…`), `_is_candidate` accepts a file named `{bin_name}`,
+  `{bin_name}.exe`, or `{bin_name}.1`, anything ending `.sha256`, or any path
+  whose `path.suffix` is `.deb`, `.rpm`, `.pkg`, or `.msi` — and
+  `Path("x.tar.gz").suffix` is `.gz`, so an archive is never a candidate while
+  its sidecar always is. `scripts/hoist_binstall_archives.py` therefore moves
+  the archives to the `dist/` root correctly, and the uploader then discards
+  them by extension. Impact: the user-visible consequence is confirmed by
+  request, not inferred — `curl -L` on the exact URL the
+  `[package.metadata.binstall]` template in `Cargo.toml` resolves returns
+  **404**, while the same URL with `.sha256` appended returns **200**. So
+  `cargo binstall netsuke-build`, documented in `README.md:72` and
+  `docs/users-guide.md:29`, cannot install any released version, and the
+  sidecars that do upload direct a user to bytes that are not there. This is a
+  pre-existing defect on `main`, not one this branch introduces, and it is
+  exactly what LEM-2 and the `verify-release-inventory` job exist to catch: the
+  previous plan statement that "binstall archives reach the release root only
+  through `scripts/hoist_binstall_archives.py`" was true and insufficient —
+  reaching the root does not make them uploadable. Three suites pin the hoist,
+  the staging config, and the binstall metadata; none of them observes the
+  published asset list, which is where the loss happens.
+
 ## Decision log
 
 - Decision: keep the existing `release` job's name and identity.
@@ -1017,9 +1224,63 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   pool is saturated by another repository, and the branch's whole diff is one
   Markdown file. Re-running until it happens to pass would produce a green tick
   whose value cannot be distinguished from the one already recorded, and would
-  hide the fact that this host cannot run these two tests reliably under
-  contention. The honest record is the two-run evidence above, including the
-  residual risk. Date/Author: 2026-10-11, planning agent.
+  hide that this host cannot run these two tests reliably under contention. The
+  honest record is the two-run evidence above, including the residual risk.
+  Date/Author: 2026-10-11, planning agent.
+
+- Decision: **SUPERSEDES the 2026-10-11 decision below.** Declare the crates.io
+  OIDC exchange in its own job in `release.yml`, not inside #834's existing
+  `publish-release` job. Rationale: LEM-5 requires that no job holds both a
+  registry credential path and GitHub release-write authority, and the plan's
+  own Verification plan states that the registry-exchange job "is the only one
+  carrying `id-token: write` **and** `environment: crates-io`". #834's
+  `publish-release` holds `contents: write` and runs the draft creation, the
+  asset download, the hoist, and the upload — granting it `id-token: write` as
+  well would put a publisher credential and release-write authority in one job,
+  which is exactly the split LEM-5 exists to prevent, and would contradict
+  `release_publish_path_permissions_test.py`'s stated intent that only
+  publication holds `contents: write`. The 2026-10-11 decision was made to
+  avoid a competing *publication* job and that concern still stands; the
+  resolution is that the new job is a *registry exchange and upload* job, not a
+  second GitHub-publication job. `publish-release` keeps its name, its
+  `contents: write`, and its steps unchanged. Escalated under the plan's
+  `Ambiguity` tolerance on 2026-10-12 (choice between two materially different
+  credential-separation semantics) and resolved in favour of LEM-5, which is
+  the security invariant rather than a layout preference. Date/Author:
+  2026-10-12, implementation agent.
+
+- Decision: record acceptance criterion 5 as a **deviation** rather than
+  silently redefining it or restructuring five existing job bodies to chase it.
+  Rationale: the criterion's premise is false. `release.yml` is 685 lines on
+  `main`, `ci.yml` is 642 and `build-and-package.yml` is 441, and no contract
+  test enforces a 400-line cap on workflow YAML — the 400-line rule reaches
+  Python through Pylint's `max-module-lines` (`pyproject.toml:175`) and Rust
+  through Whitaker's `module_max_lines`, and the developers' guide applies it
+  to workflows by convention only. Meeting the number would require extracting
+  `metadata`, all three `build-*` jobs, `windows-native-recipe-smoke`,
+  `release-admission-canaries`, `release` and `publish-release` into composite
+  actions, which is far outside this plan's scope and would churn six contract
+  suites for no security or correctness benefit. Because the deviation is not a
+  workaround of a constraint — it is a false premise in an acceptance criterion
+  — it is recorded here and reported rather than escalated as `BLOCKED`, per
+  the skill's instruction to record a proposed deviation from approved scope.
+  Date/Author: 2026-10-12, implementation agent.
+
+- Decision: state the version grammar against the reference implementation
+  rather than against the informal SemVer description, and keep byte equality
+  as the tag/version rule. Rationale: the informal "no leading zeros" phrasing
+  is too broad. Cargo's `semver` crate refuses a leading zero only when an
+  identifier is entirely numeric (`!segment_has_nondigit`, `parse.rs:242-248`
+  in the pinned `1.0.28`), so a grammar written from the informal rule would
+  refuse `0.1.0-beta04` — a version crates.io accepts — and turn the LEM-1
+  validator into an obstacle for a legitimate release. The rule that actually
+  protects the release is unaffected: `0.1.0-beta04` and `0.1.0-beta4` are
+  distinct identifiers that no ordering comparison equates, so a tag that
+  spells one must not be satisfied by a manifest declaring the other. Byte
+  equality is what refuses that; a parsed comparison would accept
+  `0.1.0-beta4+meta` against the tag `v0.1.0-beta4`, because semantic-version
+  ordering ignores build metadata. Evidence for both directions is recorded in
+  `Surprises & discoveries`. Date/Author: 2026-10-12, implementation agent.
 
 ## Outcomes & retrospective
 
