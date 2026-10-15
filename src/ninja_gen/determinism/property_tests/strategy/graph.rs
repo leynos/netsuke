@@ -1,12 +1,17 @@
 //! Soundness and non-vacuity properties for `GraphSpec` generation.
 //!
 //! `EP-M3` delivers infrastructure, so its acceptance is that the generator is
-//! sound and non-vacuous rather than that emission is deterministic. Five
-//! claims are checked here: the generated shape stays inside the roadmap's
-//! bounds; `materialize` round-trips the specification's own counts; the two
-//! insertion orders genuinely differ; the compact `Debug` is compact; and the
-//! generator reaches every shape class, and every class intersection, an order
-//! obligation needs.
+//! sound and non-vacuous rather than that emission is deterministic. Four
+//! properties are defined here, between them checking five claims: the
+//! generated shape stays inside the roadmap's bounds; `materialize`
+//! round-trips the specification's own counts; the two insertion orders
+//! genuinely differ; the compact `Debug` is compact; and the generator reaches
+//! every shape class, and every class intersection, an order obligation needs.
+//! The round-trip and divergence claims share one property rather than taking
+//! one each, because neither is meaningful without the other: two orders that
+//! coincide would make the round-trip comparison vacuous, and two orders that
+//! disagree about what the graph contains would make the divergence
+//! uninformative.
 //!
 //! A separate check is deliberately absent. Proptest's counter-example
 //! formatting is only exercised by a failing property, so a test asserting "a
