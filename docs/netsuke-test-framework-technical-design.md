@@ -229,6 +229,35 @@ The overlay hook is compiled unconditionally: it is an ordinary parameter, not
 a test-only `cfg`, because the test runner is a production code path of the
 shipped binary.
 
+For screen readers: The following flowchart follows one manifest load through
+`from_str_with_options`, branching at the `StdlibRegistration` mode. The
+`AmbientFull` and `Full` modes register the whole stdlib; `ManifestQuery`
+registers the query helpers and their refusals, which are then classified;
+`Test` registers the pure helpers and typed refusals, and additionally takes
+the injected environment reader and clock and applies the overlays. Every
+branch converges on foreach/`when` expansion, then on rendering and validation.
+
+```mermaid
+flowchart TD
+    Start[from_str_with_options] --> Mode{StdlibRegistration mode}
+    Mode -->|AmbientFull or Full| Build[Register full helpers]
+    Mode -->|ManifestQuery| RestrictedQuery[Register query helpers and refusals]
+    Mode -->|Test| RestrictedTest[Register pure helpers and typed refusals]
+    RestrictedTest --> Inject[Use injected env reader and clock]
+    RestrictedTest --> Overlay[Register overlays]
+    Build --> Expand[Expand foreach and when]
+    RestrictedQuery --> QueryClassify[Classify query refusals]
+    QueryClassify --> Expand
+    Inject --> Expand
+    Overlay --> Expand
+    Expand --> Render[Render and validate manifest]
+```
+
+_Figure 2: Manifest loading paths by `StdlibRegistration` mode. Only the `Test`
+mode takes the injected environment reader and clock and applies overlays; the
+expansion, rendering, and validation stages after the branch are shared by
+every mode._
+
 ### 4.4. Result views
 
 `NetsukeManifest` already derives `Serialize` (`src/ast/mod.rs:102`), and
