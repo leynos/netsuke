@@ -215,3 +215,10 @@ slot, `alchemist` may perform one minimal experiment:
 This is a local diagnostic with a reduced selection, not a passing full gate, a
 controlled CI observation or authorization to relax packaging fidelity. The
 parent reviews the outcome before authorizing further validation.
+
+As of 15:10 UTC on 15 October, 299 read-only observations had not produced a
+qualifying pair. One healthy reading at 15:03:12 showed zero queued requests;
+31 seconds later the queue was 321. No diagnostic test had launched. This
+records an unavailable observation condition, not a verdict about packaging
+behaviour or the earlier timeout's cause. These local observations remain
+outside the CI baseline dataset.

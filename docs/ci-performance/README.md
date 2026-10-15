@@ -2,9 +2,10 @@
 
 This directory holds published evidence for issue
 [#894](https://github.com/leynos/netsuke/issues/894). It describes how ordinary
-CI observations are collected and compared. The dataset is append-only JSON
-Lines at `observations.jsonl`; each record represents one job attempt. Keep raw
-CI logs outside the repository, such as under `/tmp`.
+CI observations are collected and compared. Each JSON Lines record represents
+one job attempt. The original harvest is `observations.jsonl`; dated
+supplements remain separate. Keep raw CI logs outside the repository, such as
+under `/tmp`.
 
 The retained observation set is published in `observations.jsonl`: 81 job
 records across 21 distinct run attempts. It contains six trunk coverage jobs,
@@ -12,7 +13,8 @@ six trunk cache-writer jobs, nine same-repository PR Linux gate jobs and 60
 jobs from other cohorts. These are observational records across different
 source commits, not a controlled baseline or candidate comparison. Do not fill
 missing fields from historical September timings or infer them from aggregate
-durations.
+durations. The [15 October supplement](#15-october-supplement) adds one
+ordinary attempt and five job records with different source and test conditions.
 
 ## Collection
 
@@ -239,9 +241,10 @@ fingerprints. No cache was purged or populated for the investigation.
 
 ## Phase attribution and gaps
 
-The latest retained [PR Linux job][latest-pr-job] supplies this example of
-native attribution. It is one observational job, not a controlled baseline.
-Step timestamps have whole-second precision; do not sum these rows as savings.
+The latest [PR Linux job][latest-pr-job] in the original 21-attempt set
+supplies this example of native attribution. It is observational, not a
+controlled baseline. Step timestamps have whole-second precision; do not sum
+these rows as savings.
 
 | Component                            | Observed seconds | Boundary                                             |
 | ------------------------------------ | ---------------: | ---------------------------------------------------- |
@@ -303,10 +306,45 @@ Candidates A, B and C remain deferred pending a controlled baseline and the
 missing attribution evidence. Keep their decisions and supporting observation
 links in the living ExecPlan and issue. No default optimization is enabled.
 
+## 15 October supplement
+
+`2026-10-15-observations.jsonl` retains five jobs from ordinary
+[attempt 38750711833, 1][current-attempt]. Its source SHA is
+`2b01a3e3fd51e02d16bb5485ddb3b2f6dd3b7a31`; the Linux job tested merge SHA
+`820bfdaa957bc75f28ea72159cf301b29ec6ccc7`. Only the Linux job log was
+downloaded; missing logs for the other four jobs remain explicit.
+
+The [Linux job][current-job] took 1,369 seconds, including 495 seconds for the
+combined coverage step and 344.029 seconds of native Nextest execution. It
+reported 3,933 passes, six skips and native doctest batches totalling 129
+passes and 32 ignored tests. Cargo can announce the next doctest target before
+the active batch ends. The log adapter preserves that active batch and pending
+target separately, retaining all three batches without counting later unrelated
+harnesses.
+
+Cargo downloads, tools and Whitaker all had exact archive hits; sccache
+reported 2,934 hits and 559 misses. Peak system-used memory was 2,591 MiB;
+process RSS remains missing. The attempt consumed 4,230 runner-seconds as a
+proxy: 1,369 on the four-vCPU Ubicloud shape, 787 on the two-vCPU shape and
+2,074 on GitHub-hosted jobs. These are not invoice measurements.
+
+Keep this supplement separate from the earlier descriptive summaries. Its
+[source diff][current-diff] changes application tests and CI stages. Compared
+with job `114902625996`, the executed identity sets contain 25 additions and
+four removals; skipped identities are still missing. Additional native stages
+include release-admission runtime checks and Linux package metadata checks. It
+is not a fifth matched control or evidence of a performance regression.
+Merge/export timings and raw-profile inventory remain missing.
+
+[current-attempt]: https://github.com/leynos/netsuke/actions/runs/38750711833/attempts/1
+[current-job]: https://github.com/leynos/netsuke/actions/runs/38750711833/job/116476064720
+[current-diff]: https://github.com/leynos/netsuke/compare/c65ad9709d1d7cc46c094d88b2eecd1deea8f4c8...2b01a3e3fd51e02d16bb5485ddb3b2f6dd3b7a31
+
 ## Dataset footprint
 
 The JSONL contains full per-test identities and native outcomes. Its Git blob
-is approximately 10.3 MiB before compression; raw logs are not committed. No
-telemetry artefact upload or new cache archive is introduced here. Provider
-storage and transfer billing for repository checkout is unavailable, so this
-milestone makes no claim that the additional data has zero transfer cost.
+is approximately 10.3 MiB before compression; the supplement adds approximately
+0.75 MiB. Raw logs are not committed. No telemetry artefact upload or new cache
+archive is introduced here. Provider storage and transfer billing for
+repository checkout is unavailable, so this milestone makes no claim that the
+additional data has zero transfer cost.

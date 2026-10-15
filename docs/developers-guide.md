@@ -18,6 +18,10 @@ workflow execution must not import them. No equivalent collector exists in the
 release-operation observability helper, which instead measures its own release
 phases from an injected environment.
 
+The collector's serialization module owns positive-integer API identity
+validation. Only the offline collector may call that check; application
+identity policies remain in their own domain modules.
+
 Keep parsing independent of filesystem delivery and retain unknown evidence as
 `null`. Validate optional inventory artefacts against the run, attempt and job
 identity before use. Deduplicate attempt totals before summing cost, and retain
