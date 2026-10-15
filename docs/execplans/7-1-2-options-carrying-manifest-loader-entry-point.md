@@ -477,8 +477,17 @@ and YAML fixtures, and were set from the inventory in Table 1.
   outside tests is `stable_snapshot_settings` in
   `src/snapshot_test_support.rs`, which `src/lib.rs:30` gates behind
   `#[cfg(test)]`, and `src/stdlib/register.rs` gains only a `#[cfg(test)]`
-  child declaration. Gate evidence pending the `scrutineer` run for this
-  milestone's commit.
+  child declaration.
+- [x] (2026-10-15) EP-M0 gate repair. `make check-fmt` and
+  `make doc-coverage` pass at `71f26e1f`; `make lint` was **red** on a
+  `clippy::shadow_reuse` in `src/manifest/tests/wrapper_equivalence.rs`, and
+  the abort left every integration-test target behind it unlinted. Linting them
+  revealed eight findings in the EP-M0 suites, all repaired in `fbf221f0`; the
+  characterization snapshots are unchanged, which is the evidence the repair is
+  a refactor and not a behaviour change. See `Surprises & discoveries`.
+- [x] (2026-10-15) Diagrammed the four `StdlibRegistration` modes in technical
+  design §4.3 (`04aa8366`), with the screen-reader description and caption the
+  style guide requires.
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
@@ -521,6 +530,20 @@ and YAML fixtures, and were set from the inventory in Table 1.
   visibility change or subsumption by the new `SURFACE` inventory — which is
   the point of `SURFACE`: one list, so a test added to one surface cannot stay
   silently unregistered on the other. Evidence: `wyvern` recon at `c4ca78b8`.
+  Date/Author: 2026-10-15, implementation agent.
+
+- Observation: `make lint`'s reported error count is a **lower bound**, and the
+  EP-M0 gate run proved it again in a new way. `make lint` at `71f26e1f`
+  aborted on one `clippy::shadow_reuse` in
+  `src/manifest/tests/wrapper_equivalence.rs`. A focused
+  `cargo clippy -p netsuke-build --lib --tests` then found **eight** findings,
+  seven of them in the `tests/` integration crate. `cargo clippy` was walking
+  targets in order and stopped at the failing lib-test target, so the
+  integration targets behind it were never linted at all — not clean,
+  unvisited. Impact: do not treat a green `make lint` *stage* as coverage of
+  every target unless the whole gate is green, and expect repeat lint cycles
+  after any change that adds a test target. Evidence: `/tmp/lint-*.out` at
+  `71f26e1f` versus `/tmp/clippy-focused-*.out`; repaired in `fbf221f0`.
   Date/Author: 2026-10-15, implementation agent.
 
 - Observation: the technical design's line citations are stale, and the loader
@@ -1166,6 +1189,27 @@ After each milestone, perform the conformance check listed and update
   sibling `restricted_helpers/tests.rs` fails
   `prefixed_files_beside_directory()`.
 - Requirements: RM-c (mechanism made reusable); C10 headroom.
+- `SURFACE` content, enumerated read-only at `71f26e1f` so the move can be
+  checked against it:
+  - **Refused under query — 23 entries.** From
+    `src/stdlib/register/query_helpers.rs`: the six always-disabled helpers
+    (`env`, `glob`, `fetch`, `shell`, `grep`, `contents`); the seven
+    `FILE_TESTS` members (`dir`, `file`, `symlink`, `pipe`, `block_device`,
+    `char_device`, `device`); and the ten host-dependent helpers (`which` — as
+    both a filter and a function, two registrations — `command_available`,
+    `now`, `realpath`, `expanduser`, `size`, `linecount`, `hash`, `digest`).
+  - **Permitted under query — 15 entries**, in registration order inside
+    `register_manifest_query` (`src/stdlib/register.rs:165`):
+    `basename`, `dirname`, `with_suffix`, `relative_to` (via
+    `path::register_query_filters` → `register_lexical_filters`), `compact`,
+    `flatten`, `group_by`, `uniq`, `shell_quote`, `shell_join`, and
+    `timedelta`.
+  - **Trap:** `realpath` and `size` are *not* dual-surface. They appear only in
+    `register_filters` (the build surface); reading them as query-permitted
+    comes from letting a `grep -A30` run past the end of
+    `register_query_filters` into `register_filters`. The query side is
+    lexical-only by construction, because `register_query_filters` calls
+    `register_lexical_filters` alone.
 - Acceptance evidence: gates green; C12 diff clean; both source files well
   under 400 lines.
 - Conformance check: refactor only; no public change.
