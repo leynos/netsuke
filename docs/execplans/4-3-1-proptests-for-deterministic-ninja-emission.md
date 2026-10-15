@@ -2842,17 +2842,37 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   `.map(|_edge_id| ())` was rejected by inspection before running:
   `clippy::result_map_unit_fn` denies that shape.
 
-  Both repairs are validated, though narrowly: focused
+  Both repairs are validated, first narrowly and then at full-gate scope.
+  Focused
   `cargo clippy -p netsuke-build --lib --tests --all-features -- -D warnings`
   exits 0 with no diagnostics, and
   `cargo nextest run --lib --all-features -E 'test(/determinism/)'` is 4/4 PASS
-  in 0.168 s. The full-gate confirmation is still outstanding.
+  in 0.168 s.
 
-- [ ] `EP-M3` milestone gates and CodeRabbit review: pending. The two
-      deterministic gate failures above are repaired and narrowly validated;
-      a full re-run of `check-fmt` and `lint` is required, and `make test`'s
+  The full re-run is green at `429720b2`, reading the gate logs directly:
+
+  ```plaintext
+  === gate-end check-fmt rc=0 at 2026-10-15T02:05:01+02:00 ===
+  === gate-end lint rc=0 at 2026-10-15T02:54:27+02:00 ===
+  ```
+
+  All four `lint` sub-targets actually executed this time, which is the point
+  of interest given the finding below: `cargo doc` and `cargo clippy` (lines
+  3/478), both Whitaker invocations — `--package netsuke-build` (line 1645) and
+  the crate-scoped `--package test_support` pass run from `test_support/` (line
+  2914) — the Python cascade (lines 3628-3640), and `yamllint`/`actionlint`
+  (lines 3643-3644). The `lint` run took 49m 8s, essentially all of it queued
+  on the shared compile pool.
+
+- [x] (2026-10-15) **The repaired tree is green on both deterministic gates.**
+      See the entry above for the evidence and revision. The remaining
+      `EP-M3` item is the milestone CodeRabbit review, which is unblocked: no
+      valid deterministic concern remains unresolved. `make test`'s
       `cli_configuration_fixture_compiles` timeout is an environmental
-      question recorded under Surprises & discoveries.
+      question recorded under Surprises & discoveries, not a milestone defect.
+
+- [ ] `EP-M3` milestone CodeRabbit review: pending.
+- [ ] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [ ] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [ ] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [ ] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
@@ -2872,11 +2892,35 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   `[build-limits] whitaker_boundary_contract: …`, which is a *crate being
   compiled*, not the Dylint suite executing. The consequence matters here
   because `module_max_lines` — the Whitaker rule that forced the `graph.rs`
-  split recorded below — has therefore **never actually run against this
-  tree**. Its correctness is still an assumption, and the `graph/mod.rs` line
-  count was re-measured at 364 (of 400) to keep that assumption unstrained. Any
-  future claim that "the 400-line cap is satisfied" must cite the
-  `lint-whitaker` execution, not the file measurement alone.
+  split recorded below — had therefore **never actually run against this tree**
+  at the time of that finding; the `graph/mod.rs` line count was re-measured at
+  364 (of 400) to keep the assumption unstrained. The `429720b2` re-run closed
+  this: `lint` is rc=0 and both Whitaker passes executed, so the cap is now a
+  measured pass rather than an assumption. The general lesson stands, though —
+  a claim that "the 400-line cap is satisfied" must cite a `lint-whitaker`
+  execution, never the file measurement alone.
+
+  The `429720b2` run also settled the obvious follow-up question, because
+  "reported nothing" is only a pass if the rule was *loaded*. Positively
+  confirmed by listing the suite's lints rather than by inferring from silence:
+
+  ```plaintext
+  $ whitaker list --lib whitaker_suite
+  whitaker_suite
+      module_max_lines  warn  modules should stay within the configured maximum line count
+  ```
+
+  `module_max_lines` is present at `warn` severity, and the gate denies
+  warnings, so a violation would have failed the run. The cap is verified.
+
+- (2026-10-15) **Never dispatch a gate run against a tree that has not
+  compiled.** A `make lint` was launched against a working tree carrying the
+  `E0308` described above — before the stop hook reported it — so that run was
+  doomed from its first non-formatting step. It cost a full queue wait on a
+  contended pool and returned nothing. A focused compile of the changed crate
+  before requesting a full gate is cheap and would have caught it. Worse, the
+  doomed run overlapped the stop hook's own gate batch, compounding the
+  pressure on the shared pool; the round was discarded and had to be repeated.
 
 - (2026-10-15) **The `make test` timeout is compile-queue latency, not the
   test's own cost.** `cli_configuration_fixture_compiles`
