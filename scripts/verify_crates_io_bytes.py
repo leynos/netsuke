@@ -21,13 +21,13 @@ Used by the release workflow's post-publication verification step; behavioural
 coverage lives in ``scripts/tests/test_verify_crates_io_bytes.py``.
 """
 
-import pathlib
 import typing as typ
 
 import release_digest
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
+    import pathlib
 
 #: Public host serving published crate archives without a token.
 DOWNLOAD_HOST = "https://static.crates.io"
@@ -140,7 +140,7 @@ def classify_download(status: int) -> str:
 
 
 def _is_absence_body(archive: pathlib.Path) -> bool:
-    """Report whether a downloaded file is an absence response, not an archive.
+    r"""Report whether a downloaded file is an absence response, not an archive.
 
     Parameters
     ----------
