@@ -521,14 +521,88 @@ and YAML fixtures, and were set from the inventory in Table 1.
   at test time and asserts that the header carries exactly one line-initial
   `Status:` field whose value is in the closed set
   `DRAFT | APPROVED | IN PROGRESS | BLOCKED | COMPLETE` (and that
-  `docs/documentation-style-guide.md` documents the same set);
-  `tests/kani_scope_wrapper_e2e_tests.rs` also reads this file. No Markdown
-  gate sees any of that — form, not a Rust contract — so `make test` belongs in
-  the plan-touching set. The current header satisfies both rules (one bare
-  `IN PROGRESS` above the first section; the mid-document `Status: BLOCKED` at
-  line 374 is mid-sentence and outside the scanned header region, so it is
-  correctly ignored rather than a second field). `make test` is still deferred
-  by host load, so this is recorded as pending, not passed.
+  `docs/documentation-style-guide.md` documents the same set). It is the sole
+  Rust test that reads `docs/execplans/` from disk:
+  `tests/kani_scope_wrapper_e2e_tests.rs` names this plan only in its `//!`
+  header — its `open_ambient_dir` calls are `/tmp` and `/sys/fs/cgroup`. No
+  Markdown gate sees any of that — form, not a Rust contract — so `make test`
+  belongs in the plan-touching set. The current header satisfies both rules:
+  `grep -n '^Status:'` over the whole file returns exactly one hit, the header
+  field whose value is `IN PROGRESS`. The mid-document `Status: BLOCKED` inside
+  the `Design: stop and set …` bullet under
+  `## Tolerances (exception triggers)` is removed by two independent mechanisms
+  — `header_lines()` stops at the first `##` heading, and the filter is
+  `line.starts_with("Status:")`, which that bullet fails anyway because it
+  opens with a list marker and the word `Design`, not with `Status:`.
+  `make test` is still deferred by host load, so this is recorded as pending,
+  not passed.
+- [x] (2026-10-15) The four queued EP-M1 plan corrections applied. The
+  placement bullet now prefers `restricted_helpers/tests.rs` and rests on the
+  destination the moved file already names (`refusal_snapshots.rs:25-26`), the
+  18 `mod.rs`+`tests.rs`-only directories, and the retirement of the `#[path]`
+  at `register.rs:39` — **not** on file count, because an earlier draft's
+  premise that no `tests/mod.rs` holds one child is false: 8 of the 17 do. Two
+  further false claims were found and removed while applying them: that
+  `src/manifest/tests/` holds no `mod.rs` (it does, declared by a plain
+  `mod tests;` at `src/manifest/mod.rs:249`), and the escaped-backtick code
+  span whose quoting made mdtablefix emit a 94-column line it then accepted as
+  its own fixed point. Also recorded: EP-M0's split of
+  `tests/manifest_load_options/wrapper_equivalence.rs` into
+  `wrapper_equivalence/mod.rs` plus `wrapper_equivalence/path_rows.rs`, which
+  the plan did not carry. The two artefact paths that named the pre-split file
+  — in the OBL-1 statement and in `Stage B` — were corrected in the same edit,
+  so no citation in this plan now points at a line number a later reflow can
+  invalidate.
+- [x] (2026-10-15) Plan-touching gate batch run against the frozen pair: **red,
+  3 of 7**. Green: `check-fmt` (ruff 250 files; mdtablefix
+  `183 files left unchanged`, independently confirming the reflow repair),
+  `typecheck`, `doc-coverage` (65 validator tests; 98.87% against the 80% bar).
+  Three independent causes, none of them the plan text itself. (1)
+  `markdownlint` MD038, introduced by the plan edit — a code span written
+  `` `## ` `` whose trailing space markdownlint rejects; fixed to `` `##` ``.
+  (2) `lint` aborted at `lint-clippy` on `clippy::shadow_reuse` in
+  `tests/manifest_load_options/fixtures/canonical.rs:86`, where the
+  `StageSeam::Accepted` arm rebound `stages` over the parameter of the same
+  name; renamed to `notified`, so `lint-whitaker`, `lint-python`, and
+  `github-actions-lint` never ran and remain unverified. That file was last
+  touched by `847c19cc` and the shadow is present verbatim in it, so the red
+  **predated this candidate** and was never caused by the plan edits. (3)
+  `nixie` diagram 2, the `Figure 2` flowchart `04aa8366` added, whose
+  `Inject[Use the caller's env reader and clock]` label carries an apostrophe
+  that mermaid's lexer reads as a string delimiter — the bare label is
+  unterminated from that point. Quoted to `Inject["…"]`, matching the shape
+  already used at `netsuke-test-framework-technical-design.md:86`. All three
+  repaired; `make nixie`, `make markdownlint`, and a targeted
+  `cargo clippy --test manifest_load_options_tests` now exit 0 (the last after
+  8m20s of compile-slot waiting), and repo-wide mdtablefix still reports 183
+  unchanged. `make test` was red on
+  `build_module_slice_ui_tests::production_build_module_slice_has_expected_boundary`
+  timing out at 300 s under a saturated host, with 16 rows never run and the
+  doctest pass never reached — a skipped pass is not a pass, so both remain
+  pending rather than passed.
+- [x] (2026-10-16) Repairs confirmed at full scope: **six of seven gates
+  green**. `check-fmt`, `typecheck`, `lint`, and `doc-coverage` exited 0, and
+  `markdownlint` and `nixie` cleared the two Markdown defects. The `lint` gate
+  is the one worth recording, because it went **past** `lint-clippy` for the
+  first time on this branch: all four stages ran — clippy, `lint-whitaker` over
+  both `netsuke-build` and `test_support`, `lint-python` (ruff, pylint at
+  10.00/10, the df12 house lints, `ambrleaks`, and `interrogate` at 100%), and
+  `github-actions-lint` (yamllint plus actionlint). The `shadow_reuse` string
+  appears zero times in that log. Provenance held: all three frozen hashes were
+  identical at the start and the end of the batch, and `git status --porcelain`
+  was byte-identical at both ends. Repaired in `12e8d47c`.
+- [x] (2026-10-16) The one red is the plan's own Risk `:433` case, now measured
+  rather than predicted: `make test` aborted on
+  `build_module_slice_ui_tests::production_build_module_slice_has_expected_boundary`
+  terminating at 300.009 s, with 3927 of 3928 run passing, 6 skipped, and 16
+  never run. The queue census is 227 compile-slot waits, a peak of 341 ahead,
+  574 sccache-unreachable notices, and **zero** `build-limits:` admission
+  failures — so admission never refused and this is queue latency. The changed
+  surface touches the failing test's package but not its test file or its
+  nextest policy, and the `manifest_load_options_tests` target passed 13 rows
+  against 0 failures. Disposition unchanged from `:1839-1842`: **re-run, do not
+  repair**, and do not widen the budget. The doctest pass is still unrun — a
+  fourth abort short-circuited it — so it remains unknown, not passed.
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
@@ -536,6 +610,24 @@ and YAML fixtures, and were set from the inventory in Table 1.
 - [ ] EP-M5 — documentation, ADR, and roadmap closure.
 
 ## Surprises & discoveries
+
+- Observation: a gate report's "pre-existing base-red" verdict is only as good
+  as the revision it compared against, and this batch's `nixie` verdict named
+  the wrong one. The scrutineer called diagram 2 "byte-identical to base
+  `c16a2ab1`" and advised "leave the `nixie` diagram-2 failure out of that fix,
+  as it is pre-existing base-red and needs its own decision". `c16a2ab1` is the
+  **tip of this branch**, not the rebase base, so "identical to base" was
+  measured against a revision that already contained the defect. Against the
+  real base (`486b876c`) the design doc holds exactly one mermaid fence
+  (`:83`); diagram 2 is absent, and `git log -S` attributes it to `04aa8366`
+  "Diagram the loader's registration modes" — an EP-M0 commit on this branch.
+  Impact: had the advice been followed, a green `nixie` would have been
+  reported while `ci.yml:261` runs `make nixie`, leaving the branch unmergeable
+  on a defect the plan had by then recorded as not its own. The repair is one
+  pair of quotes, proven by minimal experiment: `A[it's fine]` fails while
+  `A["… it's fine"]` parses. Evidence: `git show 486b876c:<doc>` fence count,
+  `git log --reverse -S 'Register query helpers and refusals'`, `merman-cli` on
+  handwritten probes. Date/Author: 2026-10-16, implementation agent.
 
 - Observation: the EP-M1 moves touch `tools/kani/proof-scope.toml`, a file the
   plan never mentions. Its `sources` list names
@@ -1100,9 +1192,11 @@ through pipeline actions.
   `path_override`; no Full-mode row loads a fixture calling `fetch`, `shell`, or
   `which`. A malformed-YAML fixture and a budget-exhausting fixture cover
   error text. Artefact: public entries in
-  `tests/manifest_load_options/wrapper_equivalence.rs`; the crate-internal
-  query entry in `src/manifest/tests/wrapper_equivalence.rs`. Both use
-  `insta::Settings` with `set_snapshot_path` to fixed directories
+  `tests/manifest_load_options/wrapper_equivalence/` (since EP-M0 split into
+  `mod.rs` for the string rows and `path_rows.rs` for the workspace-opening
+  ones); the crate-internal query entry in
+  `src/manifest/tests/wrapper_equivalence.rs`. Both use `insta::Settings` with
+  `set_snapshot_path` to fixed directories
   (`tests/snapshots/manifest_load_options/`,
   `src/snapshots/manifest_load_options/`),
   `set_prepend_module_to_snapshot (false)`, and filters replacing
@@ -1402,18 +1496,50 @@ After each milestone, perform the conformance check listed and update
   Read-only recon taken 2026-10-15 while a gate batch held the candidate
   frozen; no `restricted_helpers` symbol existed in the tree at that point, so
   EP-M1 is genuinely unstarted.
-- **Placement of the new module**, from `docs/repository-layout.md:409-439`: use
-  `mod.rs` for the directory module and plain `mod child;` for children
-  (dropping the parent prefix from filenames), and put a module's tests under
-  its owner's `tests/` directory — the live precedents are
-  `src/stdlib/which/telemetry/tests/mod.rs` and
-  `src/observability/recorder/tests/`. So `restricted_helpers/tests.rs` should
-  be declared from `restricted_helpers/tests/mod.rs` rather than reached as a
-  bare sibling file, unless a recorded reason keeps it flat. A justified
-  `#[path]` additionally needs a comment stating the reason and an entry in the
-  support-module ownership inventory; note that today's
+- **Placement of the new module**, from `docs/repository-layout.md:409-439`: a
+  shared name prefix means a directory module with `mod.rs` and plain
+  `mod child;` declarations (dropping the parent prefix from filenames).
+  `restricted_helpers/` therefore needs a `mod.rs`, and `config/` is the
+  canonical shape to copy: `mod.rs` plus `tests.rs` plus plain children, no
+  `#[path]`.
+
+  The test file is `restricted_helpers/tests.rs`, **not**
+  `restricted_helpers/tests/mod.rs`. Both shapes are live and neither is
+  contract-enforced, so the choice needs a reason. Measured across `src/`: 38
+  files are named `tests.rs`, 18 directories are named `tests/` of which 17
+  hold a `mod.rs`, and 8 of those 17 hold a single child. File count therefore
+  does not decide it — a one-child `tests/mod.rs` is common. Three things do
+  decide it. First, the moved file already names its destination:
+  `refusal_snapshots.rs:25-26` records that "EP-M1 can move this file into
+  `src/stdlib/restricted_helpers/tests.rs`". Second, `tests.rs` is the majority
+  shape, and 18 directories under `src/` consist of nothing but `mod.rs` and
+  `tests.rs` — so the shape has ample precedent, `src/stdlib/config/` among it.
+  Third, `refusal_snapshots.rs` is reached by `#[path]` today
+  (`register.rs:39`), so a plain `mod tests;` retires that declaration, the
+  direction `docs/repository-layout.md:418-420` asks for. The snapshot is
+  indifferent either way: `stable_snapshot_settings("manifest_load_options")`
+  pins `src/snapshots/manifest_load_options/` and
+  `set_prepend_module_to_snapshot(false)` drops the module path from the name,
+  so `refusals.snap` keeps its directory and its name under any placement. A
+  second test file under the module is the change that would earn a
+  `tests/mod.rs`.
+
+  A justified `#[path]` additionally needs a comment stating the reason and an
+  entry in the support-module ownership inventory; note that today's
   `register/query_helpers.rs` has **no** inventory entry, which is a
   pre-existing gap rather than one this milestone must close.
+
+- **Fate of `src/stdlib/register/`**, which the placement bullet above settles:
+  the directory holds exactly two files, `query_helpers.rs` and
+  `refusal_snapshots.rs`, and both move under EP-M1. The `#[path]` declarations
+  at `register.rs:27` and `:39` are therefore deleted, the emptied directory is
+  removed, and `register.rs` stays a flat file with no children — **no `mod.rs`
+  conversion is forced on it**. Two items move with the code:
+  `MANIFEST_QUERY_DISABLED_HELPER_MARKER` (`register.rs:52`) belongs to the
+  query-disabled vocabulary and follows it into `restricted_helpers/mod.rs`, and
+  `FILE_TESTS` (`register.rs:228`/`:240`) must stay reachable by both the real
+  registrations (`register.rs:253`) and the moved stubs, which is the plan's
+  stated case for subsuming it in `SURFACE` rather than widening its visibility.
 
 ### EP-M2 — options entry point and thin wrappers
 
@@ -1494,18 +1620,25 @@ and `tests/manifest_load_options/mod.rs` declaring `wrapper_equivalence` (later
 also `fidelity_property` and `corpus_fidelity`), each file under 400 lines. In
 `wrapper_equivalence.rs`, write one `rstest` per public entry point over its
 applicable fixtures, snapshotting canonical JSON or the error chain with the
-insta settings from OBL-1. Path entries copy fixtures into a `tempfile`
-directory. Add the crate-internal query rows in
-`src/manifest/tests/wrapper_equivalence.rs` and the query-refusal rows in
-`src/stdlib/register/refusal_snapshots.rs`. Review every new snapshot by
+insta settings from OBL-1. (That file outgrew the 400-line cap once the rows
+became observable, so it was split during EP-M0 into
+`wrapper_equivalence/mod.rs` plus `wrapper_equivalence/path_rows.rs`.) Path
+entries copy fixtures into a `tempfile` directory. Add the crate-internal query
+rows in `src/manifest/tests/wrapper_equivalence.rs` and the query-refusal rows
+in `src/stdlib/register/refusal_snapshots.rs`. Review every new snapshot by
 reading it, then accept it; this is the only acceptance the characterization
 snapshots ever receive. The refusal rows record one document rather than one
 snapshot per helper, so a reviewer reading for "does every row name the helper
 it should?" can read them comparatively — twenty-two files differing only in
-their leading word would hide the one thing worth seeing. Both internal modules
-are `#[path]` children rather than directory modules: their parents sit at or
-near the 400-line cap, and neither `register/` nor `manifest/tests/` holds a
-`mod.rs`, so the layout contract does not treat either as a module of its own.
+their leading word would hide the one thing worth seeing. The two internal
+modules reached by `#[path]` are `register/query_helpers.rs` and
+`register/refusal_snapshots.rs`; the reason is that their parent sits at the
+400-line cap and they are split out to hold it. An earlier draft added that
+neither `register/` nor `manifest/tests/` holds a `mod.rs`, which is false for
+the second: `src/manifest/tests/mod.rs` exists and `src/manifest/mod.rs:249`
+declares it with a plain `mod tests;`. Only `register/` is a `#[path]` case;
+the fact that matters for EP-M1 is that `register/` stops being one, because
+both its files leave and `register.rs` reverts to a flat file with no children.
 
 ### Stage C — implementation (EP-M1 to EP-M4)
 
