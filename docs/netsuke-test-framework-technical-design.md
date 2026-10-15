@@ -235,8 +235,8 @@ registers the query helpers and their refusals, which are then classified;
 `Test` registers the pure helpers and typed refusals, and applies the overlays.
 Every branch converges on foreach/`when` expansion, then on rendering and
 validation. The environment reader is not part of the branch: `Full` and `Test`
-each take one from their caller's options, and `AmbientFull` and `ManifestQuery`
-read the process environment.
+each take one from their caller's options, and `AmbientFull` and
+`ManifestQuery` read the process environment.
 
 ```mermaid
 flowchart TD
@@ -244,7 +244,7 @@ flowchart TD
     Mode -->|AmbientFull or Full| Build[Register full helpers]
     Mode -->|ManifestQuery| RestrictedQuery[Register query helpers and refusals]
     Mode -->|Test| RestrictedTest[Register pure helpers and typed refusals]
-    Build --> Inject[Use the caller's env reader and clock]
+    Build --> Inject["Use the caller's env reader and clock"]
     RestrictedTest --> Inject
     RestrictedTest --> Overlay[Register overlays]
     Inject --> Expand[Expand foreach and when]
