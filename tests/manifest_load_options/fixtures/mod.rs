@@ -9,8 +9,9 @@
 //!   siblings that fixture declared.
 //! - [`settings`] builds the insta settings every row binds, pinned to one
 //!   snapshot directory and to a temporary-path filter.
-//! - [`canonical`] reduces a load outcome to the text a snapshot records, so a
-//!   successful load and a failed one are snapshotted the same way.
+//! - [`canonical`] reduces a load outcome to the text a snapshot records — the
+//!   observed load stages, then the outcome itself — so a successful load and a
+//!   failed one are snapshotted the same way.
 //!
 //! Every fixture is a file, which is what lets a path row pin the error text
 //! that names it and gives the temporary-path filter something to replace.
@@ -21,7 +22,7 @@ mod fixture;
 mod settings;
 
 pub use self::{
-    canonical::report,
+    canonical::{StageSeam, report},
     corpus::StagedFixture,
     fixture::{
         Capabilities, Case, cases, environment, exhausted_budget, fixed_clock_config,
