@@ -258,5 +258,5 @@ locales or Cargo-included documentation/assets. Its full diff still differs in
 CI/Kani tooling and `tests/workflow_ci.rs`; the native record reports packaging
 at 169.864 seconds. This narrows package-input differences in that comparison,
 but does not establish matching compiler, cache or runner conditions or explain
-the local timeout. The native journal window from 11–13 October contains no
+the local timeout. The native journal window from 11 to 13 October contains no
 cache-service entries, so the service stop reason remains unknown.
