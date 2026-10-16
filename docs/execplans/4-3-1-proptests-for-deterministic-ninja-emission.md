@@ -2260,6 +2260,73 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       (`src/ninja_gen/dyndep/mod.rs:155`) to skip entries with a non-empty
       `explicit_outputs`. Both pass `git apply --check` and are registered in
       `SUPPLEMENTAL_PROPERTY_PATCHES`.
+- [ ] (2026-10-16T00:00:00Z) `EP-M4`'s four files statically verified reference
+      by
+      reference, while the compiler remains unavailable.
+      This is a **substitute for the compiler, not the compiler**. It cannot
+      discharge `EP-M4`'s acceptance, which is defined by `make proptest`
+      passing and two mutations failing; it closes the class of defects that a
+      reader can settle by following names, and leaves type inference, trait
+      resolution, and borrow checking entirely unverified — precisely where a
+      first compile is most likely to object.
+      **Every import resolves.** `crate::ninja_gen::path_key`
+      (`src/ninja_gen/mod.rs:226`, `pub(crate)` — reachable, since
+      `property_tests` is a descendant of that module);
+      `crate::ninja_gen::generate_bundle` (re-exported at
+      `src/ninja_gen/mod.rs:13` from `dyndep::generate_bundle`,
+      `src/ninja_gen/dyndep/mod.rs:87`, returning `Result<GeneratedNinja,
+      NinjaGenError>`, whose `build_file()` is `&str` at
+      `dyndep/bundle.rs:54`); `crate::ir::{Action, BuildEdge, BuildGraph,
+      DependencyOrder, IrGenError}` (one `pub use` at `src/ir/mod.rs:33`);
+      `crate::ast::{Recipe, StringOrList}`; and
+      `crate::ninja_gen::determinism::strategy::graph::GraphSpec` — the path
+      `graph/mod.rs:157` declares `pub(crate) struct GraphSpec` and
+      `strategy/mod.rs:15-16` re-exports `classification` and `graph` as
+      `pub(crate)`, with `determinism/mod.rs:21` declaring `strategy`
+      `pub(crate)`.
+      **Every called signature matches.** `GraphSpec::orders(&self) ->
+      (&[usize], &[usize])` (`graph/mod.rs:203`) — the `let (first, _) = …`
+      destructuring is right; `materialize(&self, order: &[usize]) ->
+      Result<BuildGraph, TestCaseError>` (`:184`) — its error type is exactly
+      what `support.rs`'s `map_err` consumes; `classification(&self) ->
+      Classification` (`:213`) with `pub(crate)` fields read at
+      `classification.rs:37,45`; `arb_graph_spec() -> impl
+      Strategy<Value = GraphSpec>` (`:304`).
+      **Every struct literal is field-exact.** `BuildEdge` has exactly nine
+      public fields (`src/ir/graph/mod.rs:275-293`: `action_id`, `inputs`,
+      `implicit_deps`, `dependency_order`, `explicit_outputs`,
+      `implicit_outputs`, `order_only_deps`, `phony`, `always`) and
+      `no_output_edge` sets nine, with `no_output_edge`/`permuted_edge`
+      supplying all of them so the `..no_output_edge()` update form in the
+      directed case is complete. `Action` has exactly six
+      (`:254-268`: `recipe`, `description`, `depfile`, `deps_format`, `pool`,
+      `restat`) and `graph_of_one_edge` sets six. `GraphSpec` is not named in
+      the files at all — it only appears in a `use` — so its private fields
+      cannot be a construction error there. `StringOrList::String(String)` and
+      `::Empty` exist (`src/ast/string_or_list.rs:24,26`), as does
+      `Recipe::Command { command }` (`src/ast/mod.rs:158`), and
+      `DependencyOrder::Parallel` (`src/ir/graph/mod.rs:244`).
+      **`BuildGraph::actions` is genuinely public** (`src/ir/graph/mod.rs:41`),
+      so `graph.actions.insert(...)` is admissible from a descendant module;
+      `edges()` is `pub fn edges(&self) (impl Iterator<Item = &BuildEdge>)`
+      (`:204`), matching the `graph.edges()` call in `declared_outputs`.
+      **The Proptest surface is real in 1.11.0.** `prop::collection::vec` is
+      reachable because the prelude re-exports the whole crate as a `prop`
+      submodule that includes `pub use crate::collection`
+      (`src/prelude.rs:35-44`), so `prop::collection::vec` needs no extra
+      import. `prop_shuffle` is a `Strategy` trait method
+      (`src/strategy/traits.rs:500`), and `Shuffleable` is implemented for
+      `Vec<T>` (`src/strategy/shuffle.rs:39,52`), so
+      `Just(paths).prop_shuffle()` type-checks. `TestRunner` is **not** in the
+      prelude, and both suites import it explicitly from
+      `proptest::test_runner` (`path_key.rs:23`, `no_loss.rs:36`) — correct,
+      and the kind of thing that fails loudly rather than silently.
+      **One residual risk the reading cannot close:** `proptest!` bodies desugar
+      to closures whose free variables must be `Send`/`Sync` where the runner
+      requires it, and `path_key.rs` reads `tallies.get()` inside such a body.
+      The `!Send` warning that Proptest emits for a non-`Sync` feature is a
+      *warning*, not an error, so it is not a gate failure — but it is a real
+      inference question and is left for the compiler rather than guessed at.
 - [ ] (2026-10-16T00:00:00Z) `EP-M4` compiler-free gates green on the candidate;
       the compiling gates are **blocked by a machine-wide admission outage**,
       not by this change.
