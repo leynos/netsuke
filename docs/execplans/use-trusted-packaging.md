@@ -1251,14 +1251,27 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 - [x] (2026-10-16) Ran four gates at `7d3f18c2`, the commit that repaired the
   second spelling defect. `check-fmt` exits 0 in 2 s and `spelling` exits 0 in
   12 s, so **the repair is confirmed by the gate itself** and not only by the
-  ad-hoc check that preceded the commit. **`markdownlint` then ran for the
-  first time in this plan's history and reded on a real defect of this branch's
-  own prose** — which means the two earlier masked runs had been hiding a live
-  failure, not merely an unknown. Its verdict changed from *no verdict* to *one
-  genuine MD013 violation* precisely because fixing the `spelling` prerequisite
-  let the dependent target execute at all. That is the second time in this plan
-  that repairing one gate exposed another, and it confirms the hazard recorded
-  in Surprises: a red prerequisite is a mask, and a mask is not a pass.
+  ad-hoc check that preceded the commit.
+
+  **`markdownlint` then executed and reded on a real defect of this branch's
+  own prose.** This entry originally claimed that execution was the first in
+  the plan's history, and that the two preceding reds had been masking a live
+  failure. **Both claims were false, and the correction matters.** Re-checking
+  every revision's log shows the true sequence: at `c1f3f2ed` the target ran
+  and **passed** — 184 files, `0 issues in 0 files` — and the same is visible
+  in that revision's own log; at `ce5ff20f` and at `048b49f8` it was masked by
+  a red `spelling` prerequisite and never ran. So only `048b49f8` masked a
+  *defect*, and it did so because that single commit introduced both failures
+  at once — the spelling error that aborted the prerequisite, and the MD013
+  violation the prerequisite was hiding. `ce5ff20f` masked nothing, because at
+  that revision the defect did not yet exist.
+
+  The general lesson is the opposite of the one first written here, and is the
+  reason the error is left recorded rather than quietly overwritten: a masked
+  gate is an unknown at the time it is masked, and retroactively equating one
+  mask with a hidden failure is itself an unsupported claim. The mask can only
+  be adjudicated by re-running the gate at that revision, which is what
+  established this sequence.
 
   The violation was at `docs/execplans/use-trusted-packaging.md:1185`, an
   89-column line whose over-long content was a long Rust test path. The cause
