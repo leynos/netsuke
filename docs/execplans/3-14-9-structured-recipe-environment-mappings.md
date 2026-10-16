@@ -729,7 +729,7 @@ The chain from specification to observed behaviour is:
    functions clause by clause, imports nothing from `ir::env`, and carries a
    cross-reference comment on each function naming its Verus counterpart (and
    vice versa). Its correspondence to the Verus text is established by review;
-   hand-written literal expectations in `rstest` tables check the mirror
+   handwritten literal expectations in `rstest` tables check the mirror
    independently.
 3. The production merge and validator are checked against the mirror by the
    bounded-exhaustive test and by V-ADMIT.
