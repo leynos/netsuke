@@ -3429,6 +3429,41 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
       **This is a tracking fix, not a compilation result.** The four files
       still have never been compiled for a target that sets `cfg(test)`.
 
+- [x] (2026-10-16) **`MUT-EDGEDROP`'s reachability settled statically: the
+      mutation kills every edge, so it is certain to break its named
+      property.** The trace runs `emit` → `generate_bundle`
+      (`src/ninja_gen/mod.rs`) → `generate_bundle_inner` (`dyndep/mod.rs:117`)
+      → `render_edges` (`:136`). The patch inserts
+      `if !edge.explicit_outputs.is_empty() { continue; }` at the head of the
+      loop body, which is reachable whenever the graph has an edge — and
+      `arb_graph_spec` draws `MIN_EDGES = 5` (`strategy/graph/mod.rs:51`) as a
+      floor, so every generated graph has at least five. Nothing constrains a
+      graph's edges to carry empty `explicit_outputs`: the property's own
+      `declared_outputs` (`no_loss.rs:204`) flat-maps
+      `edge.explicit_outputs.iter().chain(&edge.implicit_outputs)`, expecting
+      those slices populated. So the mutation emits no `build` line at all,
+      `lhs_counts` returns an empty map, `emitted.get(output).copied().unwrap_or(0)`
+      reads `0`, and `prop_assert_eq!(0, 1)` fails on every output of every
+      case. A mutation that kills every input is not a mutation to an
+      unreachable path — the concern that would make it dead evidence, which
+      is the real risk for a seeded fault, does not apply here. This is
+      distinct from the compile defect repaired in `5e973841`: that made the
+      patch unbuildable, this settles that the (now buildable) patch is also
+      effective. **What it still is not:** a run. Whether
+      `make proptest` fails for this reason is unobserved, and no static
+      argument substitutes for observing the named property fail.
+
+- [x] (2026-10-16) **`path_key` confirmed live in production, which
+      `MUT-PATHKEY`
+      depends on.** `src/ninja_gen/order.rs:23` sorts edges by
+      `path_key(&edge.explicit_outputs)` and imports it at `:9`, and
+      `path_key` is `pub(crate) fn` at `src/ninja_gen/mod.rs:226`. So the
+      function under mutation is on the emission path rather than dead code
+      behind a test-only facade, and the reachability that `MUT-PATHKEY` needs
+      is established independently of the property's own call. Recorded
+      because a mutation to a function whose only caller is a test measures the
+      test rather than the code.
+
 - [ ] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [ ] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [ ] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
