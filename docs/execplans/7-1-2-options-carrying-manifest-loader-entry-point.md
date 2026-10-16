@@ -603,6 +603,79 @@ and YAML fixtures, and were set from the inventory in Table 1.
   against 0 failures. Disposition unchanged from `:1839-1842`: **re-run, do not
   repair**, and do not widen the budget. The doctest pass is still unrun — a
   fourth abort short-circuited it — so it remains unknown, not passed.
+- [x] (2026-10-16) Milestone CLI review (`coderabbit review --agent` through
+  `scrutineer`) returned **three findings over 39 reviewed files**, of which
+  **two are unique** — the two minor findings are one defect worded twice on
+  the same lines. Both unique findings were verified against source before
+  repair, and both are repaired in `8cf507c2`.
+  - **major, the temporary-path filter in both of its copies**
+    (`src/snapshot_test_support.rs` and
+    `tests/manifest_load_options/fixtures/settings.rs`): the pattern required
+    **exactly one** separator between prefix components. A successful manifest
+    snapshot holds a Windows path **twice** — a diagnostic quotes it with the
+    single backslashes `temp_dir()` renders, while the canonical renderer
+    serializes the same path through `serde_json`, which **doubles** every
+    backslash. `temp_dir().display()` returns the raw (single) form, so a
+    pattern built from it could never match the serialized form, and it is the
+    serialized form that carries the run-specific workspace name. The filter now
+    emits a separator class matching **one or more** of either separator, and
+    trims a trailing separator first so two adjacent classes do not demand two
+    separators where the text has one. This is the **second** round on this
+    filter: `51fb1b49` widened a literal `/` to the class `[\\/]`, which is
+    "either separator" but still exactly one character — the round-one repair
+    was incomplete, and its own commit message recorded a green that was not
+    evidence.
+  - **minor, `docs/netsuke-test-framework-technical-design.md` (duplicate):**
+    the paragraph claimed `ManifestQuery` reads the process environment. It
+    cannot. `register_env_function` runs before the mode match
+    (`src/manifest/mod.rs:135`) and installs the real `env`;
+    `register_manifest_query` then registers `env` as a **refusal** over it, and
+    MiniJinja's `add_function` reaches `Arc::make_mut(..).insert(..)` — an
+    overwrite — so the refusal wins. `AmbientFull` is the only mode that reads
+    the process environment. That variant is planned for EP-M2 and is absent
+    from `src/`, so the correction phrases it as the design's future mode rather
+    than inventing implementation.
+- [x] (2026-10-16) The filter repair is guarded by an oracle that can see the
+  defect. `temp_dir_filter_pattern` is now a pure function of its **argument**,
+  because the defect is invisible on Linux: a test that called `temp_dir()`
+  could only ever guard the platform that recorded the snapshot. That
+  extraction is what lets the Windows spelling be asserted on any host. The
+  `rstest` carries five cases — a diagnostic Windows path with single
+  backslashes, a serialized Windows path with doubled ones, a Unix path, a
+  trailing separator, and a sibling directory that merely shares the prefix
+  (`/tmpfoo/ws`, which must be left alone). Non-vacuity was proved by reverting
+  the pattern and confirming that **exactly** the JSON-escaped row and the
+  trailing-separator row fail; round one had no such check, which is why it
+  recorded a green while the defect was live. The rows use `ensure!` and return
+  `anyhow::Result` rather than asserting, because `clippy::panic_in_result_fn`
+  is denied workspace-wide (`Cargo.toml:223`) and an assertion inside a
+  `Result`-returning test trips it.
+- [x] (2026-10-16) A **third** false claim sat next to the code under repair, in
+  the integration fixture's module header: it explained the filter by saying
+  the loader "puts that workspace's root into the manifest it returns".
+  `NetsukeManifest` has no root or path field — it carries `netsuke_version`,
+  `vars`, `macros`, `rules`, `actions`, `targets`, and `defaults` — and
+  `glob()` returns **relative** template paths. The filter's live justification
+  is error text: a path entry point is handed an absolute path and quotes it
+  back in an error. Corrected in the same commit, since it sat adjacent to the
+  changed lines.
+- [x] (2026-10-16) Repair batch at `8cf507c2`: **all seven gates green**, and
+  the doctest pass **ran for the first time on this branch**. `check-fmt` (183
+  files left unchanged), `typecheck` (`ty` clean), `lint` (all five stages
+  complete, `panic_in_result_fn` appearing zero times, so the abort that opened
+  this sequence is confirmed fixed), `doc-coverage` (98.87%, aggregate
+  4988/5045, against the 80% bar), `markdownlint` (0 issues), and `nixie` (all
+  diagrams validated). `make test` aborted on its first attempt at a single 300
+  s per-test timeout — `cli_configuration_fixture_compiles`, the same
+  nested-compile class as Risk `:433` — with 15 rows never run and the doctest
+  pass short-circuited, and **passed on the mandated re-run**: 3954 of 3954,
+  plus a doctest pass at 0 failures. That pass is 129 passed and 32 ignored
+  across the two targets: `netsuke` contributed 88 passed and 26 ignored, then
+  2 compile-fail rows, then `test_support` contributed 39 passed and 6 ignored.
+  The announced `running 114` and `running 45` counts include the ignored rows,
+  so neither is a pass count. Provenance held: HEAD `8cf507c2` and all three
+  blob hashes identical at both ends of the batch, and `git status --porcelain`
+  empty at both.
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
@@ -906,6 +979,64 @@ and YAML fixtures, and were set from the inventory in Table 1.
   number. The rebase preserved both intents — roadmap 7.4.1 keeps this plan's
   file-reading-filter extension *and* `main`'s new 7.6 items; technical design
   §5.5 keeps the file-reading-filter paragraph.
+
+- Observation: a filter that rewrites a path inside snapshot text must be
+  written against the **serialized** text, not against the path as the
+  operating system spells it, and "match either separator" is not the same
+  property as "match the escaped form". Evidence: reverting `separator` to
+  `[\\/]` fails exactly the JSON-escaped row while every plain row still
+  passes, so the two properties are independently observable rather than one
+  standing in for the other. Impact: the same trap applies to any future filter
+  that redacts a path reaching a snapshot through `serde_json` — the doubled
+  form, not the raw form, is what decides whether a run-specific name survives
+  into a checked-in file. The two copies are separate functions rather than a
+  shared helper, so they must be corrected together:
+  `src/snapshot_test_support.rs` serves `src/snapshots/` and
+  `tests/manifest_load_options/fixtures/settings.rs` serves `tests/snapshots/`.
+  A sweep for the class confirms these are the only two path-rewriting snapshot
+  filters in the tree; every other `add_filter` call is a MiniJinja template
+  filter, a different API on a different object. Likewise the `ManifestQuery`
+  claim was swept: it is named in 10 places across five documents outside this
+  plan — `developers-guide.md`, `roadmap.md`, ADR-018, RFC 0007, and the
+  technical design — and the corrected paragraph was the only site asserting
+  the process environment.
+
+- Observation: the review's two minor findings were one defect reported twice,
+  and a raw finding count therefore overstated the work by a third. Evidence:
+  both cite the same file, the same line range, and the same remedy, differing
+  only in wording and in the suggested diff. Impact: a finding count must be
+  de-duplicated by (file, lines, defect) before it is quoted as a measure of
+  how much was wrong, or the record implies work that no one did.
+
+- Observation: the scrutineer's closing recommendation — add a `slow-timeout`
+  override for `cli_configuration_fixture_compiles` — is one the repository has
+  already considered and refused, in the very file it would be written in.
+  `.config/nextest.toml:51-70` grants that test a group slot and then argues
+  that its budget stays at the profile's five periods because the child build
+  is awaited inside the test body, so the queue wait counts against the
+  allowance: a wider budget "would cover the delay, and would not remove the
+  contention that causes it". The same comment records the measured spread
+  (171.4 s quiet, 709.2 s on a cold tree, terminated at the cap on a contended
+  one) and the ordering that caps any per-test allowance at 720 s. Impact: the
+  recommendation is declined on the file's own evidence, and the standing
+  disposition stays **re-run, do not repair**. This is worth recording because
+  the suggestion will recur every time this test times out, and re-deriving the
+  refusal each time is wasted work.
+
+- Observation: the canonical gate-log path names the **branch**, not the run, so
+  a later local gate run silently destroys the earlier batch's evidence at the
+  same path. Evidence: after the seven-gate batch at `8cf507c2`, repairing two
+  Markdown defects and re-running `check-fmt`, `markdownlint`, `typecheck`,
+  `lint`, and `nixie` with the prescribed `tee` template overwrote all five
+  logs in place; the per-gate durations the batch had reported then had no
+  surviving log to cite. The fresh runs prove the exit codes and the counts
+  quoted above, but they do not prove the durations, so the durations were
+  removed rather than quoted from a narrative alone. Impact: a batch's numeric
+  detail is only durable if its logs are copied aside before any re-run, since
+  the template in `AGENTS.md` deliberately isolates work per branch rather than
+  per revision. Two defences, either sufficient: copy the batch's `.out` and
+  `.exit` files to a revision-suffixed name immediately on receipt, or quote in
+  the plan only figures the surviving logs still show.
 
 ## Decision log
 
