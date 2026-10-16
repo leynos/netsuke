@@ -1163,8 +1163,54 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `sccache server is unreachable` lines, so every compile ran uncached. The red
   is recorded as **environmental, not a branch defect** — and as attempt one of
   the `Tolerances` limit of three. The `cargo test --doc` half of `make test`
-  never ran, because the nextest abort pre-empted it; doctests at this revision
-  are **unobserved evidence**, not a pass.
+  never ran, because the nextest abort stopped the target before reaching it;
+  doctests at this revision are **unobserved evidence**, not a pass.
+- [x] (2026-10-16) Ran the full batch again at `ce5ff20f`. **One real defect,
+  and it was mine:** `spelling` exits 2 on a hyphenated word at line 1166 whose
+  trailing element the shared dictionary reads as a misspelling of "emptied".
+  The word entered in this candidate's own Progress entry and is absent at
+  `c1f3f2ed`. Repaired by rewording to "stopped the target before reaching it"
+  rather than by adding a `typos.local.toml` exception, since the exception
+  would be a standing tolerance for a phrase nobody needs. This entry therefore
+  describes the defect without reproducing either spelling, so that the record
+  of the repair cannot itself re-trigger the gate it repairs. `markdownlint`
+  exits 2 on the same run with a **byte-identical log** — it never ran, because
+  it depends on `spelling` and the prerequisite aborted it, so its red is
+  masked, not independent; the same masking is already recorded in Surprises.
+  `make test` exits 2 again: **0 `FAIL` lines**, 3969 passed, 1 timed out, at
+  the same slot (3970/3976) as the previous run.
+
+  That second timeout is stronger evidence than the first, and it changes the
+  disposition. The timed-out test is
+  `locale_stub_ui_tests::split_build_fixture_compiles_through_the_direct_rustc_harness` —
+  in `.config/nextest.toml` it sits in the **same
+  `[[profile.default.overrides]]` block** (`:98-100`) as
+  `production_build_module_slice_has_expected_boundary`, which
+  `docs/developers-guide.md` documents as a known host-contention timeout whose
+  wall clock "is the queue's to decide rather than the test's". Both runs hit
+  the cap at 300.007 s and 300.010 s, 0.003 s apart, because
+  `period = "60s", terminate-after = 5` is arithmetic and not a measurement.
+  `make test` is therefore adjudicated **environmental for the second time and
+  at the same site**, reproducing across two revisions eleven hours apart, and
+  is **not** evidence against this branch. The doctest half again did not run —
+  for the same reason, and it remains **unobserved evidence**, not a pass. That
+  is attempt two of the `Tolerances` limit of three for the `test` target
+  specifically; the `spelling` red is a different target, and it is repaired
+  rather than tolerated.
+- [x] (2026-10-16) Plan maintenance before the re-gate, in two parts. First,
+  the Progress entry above that recorded the `spelling` defect **reproduced the
+  offending token** while describing it, so the record of the repair would have
+  re-triggered the gate it repairs; it now describes the defect without either
+  spelling. Second, the 2026-10-12 OIDC-separation decision cited the older
+  permissions test as stating that only publication holds `contents: write`,
+  which reads as a violated constraint now that a second writer is decided
+  (`finalize-github-release`); it is qualified to say that the intent governs
+  the GitHub publication path, that the test asserts per-job scopes and never
+  set-equality over holders, and that Stage C must extend or rename it so its
+  name does not outlive its truth. Both edits are whitespace-canonicalised:
+  `mdtablefix --check` reports 184 files unchanged, the token stream is
+  identical to the pre-format copy, and the line-initial ordered-list marker
+  census is 44 before and after.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
   Scope correction from recon at `c1f3f2ed`: this is not an extraction of
   existing bodies. `release.yml` has no `package-crate`, `publish-crates-io`,
@@ -1647,7 +1693,16 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   well would put a publisher credential and release-write authority in one job,
   which is exactly the split LEM-5 exists to prevent, and would contradict
   `release_publish_path_permissions_test.py`'s stated intent that only
-  publication holds `contents: write`. The 2026-10-11 decision was made to
+  publication holds `contents: write`. **Qualified 2026-10-16:** that intent
+  governs which job may hold `contents: write` *for the GitHub release
+  publication path*, and it is what forbids the registry-exchange job from
+  acquiring it; it is not a claim that no other job may ever hold it. The test
+  itself asserts per-job scopes and does not perform set-equality over the
+  holders, so the later decision to grant a second, post-publication writer
+  (`finalize-github-release`) does not conflict with it — but the test's name
+  and docstring would outlive their truth once that job lands, so Stage C
+  extends or renames it and the two-writer set is asserted by
+  `release_credentials_separation_test.py`. The 2026-10-11 decision was made to
   avoid a competing *publication* job and that concern still stands; the
   resolution is that the new job is a *registry exchange and upload* job, not a
   second GitHub-publication job. `publish-release` keeps its name, its
