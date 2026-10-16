@@ -1278,13 +1278,17 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 
   `make test` was refused a second time by the same admission failure, so it
   again carries no verdict and the doctest half is again unobserved. The
-  supervisor has since become **unqueryable** — `build-limits-status` now exits
-  1 with `cannot query the supervisor ... timed out` rather than reporting
-  `UNHEALTHY` — so the Rust gates cannot be attempted at all until admission is
-  restored. Two genuine `test` timeouts (at `c1f3f2ed` and `ce5ff20f`) remain
-  the only real failures recorded against that target; the two later refusals
-  are admission unavailability and are not counted as failed attempts against
-  the `Tolerances` limit of three.
+  supervisor then became **unqueryable** for a period — `build-limits-status`
+  exiting 1 with `cannot query the supervisor ... timed out` rather than
+  reporting `UNHEALTHY` — and has since recovered to
+  `healthy, caching through sccache`, currently
+  `capacity 4, held 2, compiling directly`, with peer builds from other
+  worktrees waiting in the same pool. A re-run is therefore the disposition for
+  every Rust gate, and admission refusal is reported rather than worked around.
+  Two genuine `test` timeouts (at `c1f3f2ed` and `ce5ff20f`) remain the only
+  real failures recorded against that target; the later refusals are admission
+  unavailability and are not counted as failed attempts against the
+  `Tolerances` limit of three.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
   Scope correction from recon at `c1f3f2ed`: this is not an extraction of
   existing bodies. `release.yml` has no `package-crate`, `publish-crates-io`,
