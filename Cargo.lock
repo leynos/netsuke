@@ -2975,6 +2975,7 @@ dependencies = [
  "mockable",
  "netsuke-build",
  "proptest",
+ "regex",
  "rstest",
  "sha2",
  "tempfile",
