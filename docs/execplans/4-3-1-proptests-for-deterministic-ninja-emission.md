@@ -389,7 +389,7 @@ RM-4.3.1.a   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::property_tests::
 RM-4.3.1.a   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::property_tests::order::emission_is_insertion_order_invariant
 RM-4.3.1.b   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::property_tests::defaults::default_line_is_the_ascending_sort
 RM-4.3.1.c   -> FV-DET      -> EP-M4 -> ninja_gen::determinism::property_tests::path_key::path_key_is_permutation_invariant
-RM-4.3.1.c   -> FV-DET      -> EP-M4 -> ninja_gen::determinism::property_tests::path_key::path_key_is_injective_on_validated_paths
+RM-4.3.1.c   -> FV-DET      -> EP-M4 -> ninja_gen::determinism::property_tests::path_key::path_key_is_injective_on_keyable_paths
 FV-DET       -> ADR-NNN     -> EP-M4 -> ninja_gen::determinism::property_tests::no_loss::every_explicit_output_appears_exactly_once
 FV-DET       -> ADR-NNN     -> EP-M5 -> tests::ninja_gen_hashmap_boundary::no_hashmap_iteration_in_ninja_gen
 FV-DET       -> FV-DET      -> EP-M6 -> ir::action_hash_property_tests::equal_actions_hash_equally
@@ -527,6 +527,40 @@ question.
 
 ## Risks
 
+- **The compile-admission pool can be unavailable for minutes at a time,
+  blocking every gate that compiles.** *Severity: moderate (revised down from
+  high). Likelihood: observed three times on this plan.* The pool has been
+  unwedged by contention, by the supervisor reconciling a live sccache service
+  against its drain check, and — at 20:28 today — by a self-completed
+  stop/start that needed no operator. *Impact:* `typecheck`, `lint`, `test`,
+  `doc-coverage`, `proptest`, and both mutation falsifications all queue behind
+  it, so `EP-M4`'s acceptance, which is defined in terms of `make proptest` and
+  the two patch runs, cannot be discharged while it is down. *Mitigation:*
+  wait, and verify liveness rather than reading state words — compare the
+  supervisor's PID and `ActiveEnterTimestamp` across probes instead of trusting
+  `UNHEALTHY`, which reads identically while a drain is in progress and after
+  one has failed. Do **not** escalate an operator action from
+  `build-limits-status` output alone; today's near-miss would have had an
+  operator stop a shared sccache during other agents' builds, for a fault that
+  had already cleared. `RUSTC_WRAPPER`/`RUSTDOC` may not be unset and `rustc`
+  may not be invoked directly, so there is no route around the pool and none
+  should be sought. Keep the compiler-free gates (`check-fmt`, `markdownlint`,
+  `nixie`) green so that when admission returns, only compiling gates remain;
+  and record which files have never been compiled, so a later reader does not
+  mistake "no gate failed on this file" for "this file is sound".
+- **A file that no gate has ever compiled carries defects that no gate has
+  seen, and the debt compounds while admission is down.** *Severity: high.
+  Likelihood: certain for any file written during an outage.* Four files are in
+  this state — `path_key.rs`, `no_loss.rs`, `support.rs`, and the `mod.rs` that
+  declares them — and one of them (`path_key.rs`) is *known* to contain a
+  compile error that was found by reading, not by a compiler. The error class
+  it belonged to is invisible to every gate except a compile, and invisible to
+  inspection at the speed a reviewer normally reads. *Mitigation:* treat the
+  first compile as a gate in its own right, not a formality; do not record any
+  claim about such a file, including "it parses", until `rustc` has seen it,
+  and say plainly in the Progress entry that the run establishes nothing about
+  the file. See `Surprises & discoveries` for the class of defect and why
+  reading dependency source is what caught it.
 - **A property fails against current production code.** *Severity: high.
   Likelihood: moderate.* Most likely on `OBL-E2E`, which depends on the
   lowering never smuggling declaration order into an edge. *Mitigation:*
@@ -743,10 +777,20 @@ domain must exclude empty target names so that "well-formed" keeps meaning what
 - **Rationale:** this is the real content of `RM-4.3.1.c`'s safety argument, and
   the only obligation covering the `path_key`-collision failure mode as an
   observable.
-- **Domain:** well-formed graphs of 1 to 30 edges, including multi-output
-  edges. Two directed non-well-formed cases: an edge with
-  `explicit_outputs: []`, and two edges whose output lists are permutations of
-  one another (which `from_manifest` rejects but a direct constructor permits).
+- **Domain:** well-formed graphs of 5 to 100 edges and 5 to 50 actions — the
+  bounds `MIN_EDGES`, `MAX_EDGES`, `MIN_ACTIONS`, and `MAX_ACTIONS` declare in
+  `strategy/graph/mod.rs` — including multi-output edges. Two directed
+  non-well-formed cases, which are the two the *code* distinguishes rather than
+  the two the earlier wording guessed at. First, an edge with
+  `explicit_outputs: []`: reachable through the loader (an empty or value-absent
+  `name:` lowers to `StringOrList::Empty`, `to_paths` maps it to `[]`, and a
+  duplicate scan over an empty slice rejects nothing) and accepted by
+  `insert_edge`, so the emitter renders it. Second, two edges whose output
+  lists are permutations of one another: the earlier wording said "which
+  `from_manifest` rejects but a direct constructor permits", and that is
+  **wrong** — two edges with permuted output lists have the same output *set*,
+  so `insert_edge` refuses the second exactly as the loader does, and no direct
+  constructor reaches the emitter with one.
 - **Oracle:** the set of outputs computed from the spec, independently of the
   emitter, compared against the set of user paths appearing on left-hand sides
   in the emitted text. The entry point must be
@@ -760,9 +804,11 @@ domain must exclude empty target names so that "well-formed" keeps meaning what
 - **Artefact:** `src/ninja_gen/determinism/property_tests/no_loss.rs`.
 - **Non-vacuity:**
   - *Covers.* Per-case assertion that at least one graph in the run had a
-    multi-output edge. Directed cases pin the two bypasses, but only after
-    `EP-M4` has established what each actually does; until then the
-    output-less case is a reachability question, not a known bypass.
+    multi-output edge. `EP-M4` has now established what each directed case
+    actually does: the output-less edge is **accepted** and emitted with an
+    empty left-hand side, and the permuted repeat is **rejected** at insertion.
+    So one of the two is a reachable bypass and the other is a boundary that
+    holds, and the suite asserts each answer rather than assuming either.
   - *Mutation.* `MUT-EDGEDROP` makes `render_edges` skip an arena entry whose
     `explicit_outputs` is **non-empty**, so a real edge vanishes from the text
     and its outputs disappear from every left-hand side. This is the mutation
@@ -845,7 +891,7 @@ to 5 actions and edges for that budget reason.
 
 - **Method:** Proptest, metamorphic.
 - **Rationale:** `RM-4.3.1.a`.
-- **Domain:** `GraphSpec` values with 1 to 50 actions, 1 to 100 edges, and at
+- **Domain:** `GraphSpec` values with 5 to 50 actions, 5 to 100 edges, and at
   most 200 explicit outputs in total. Both `DependencyOrder` variants; serial
   edges get 0 to 4 implicit dependencies so dyndep staging is genuinely
   exercised. The end-to-end arm requires at least `ORDER_MIN_DIVERGENCE` (5)
@@ -2065,6 +2111,225 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
 
+- [ ] (2026-10-16T00:00:00Z) `make typecheck` re-run on the recovered pool, and
+      **failed a second time for a different environmental reason**, having
+      again never reached our crate. Recorded because the two failures have
+      distinct causes and only one of them is the outage already described, and
+      because a reader who sees "typecheck failed twice" will otherwise assume
+      the same cause twice.
+      **This time the refusal is `launch-failed`, not `unhealthy`.** The log
+      carries exactly one `build-limits: the supervisor refused: launch-failed`
+      and kills exactly one crate, `termtree`. The pool was **healthy** for the
+      whole run — `capacity 4, held 3, healthy` before, during, and after — and
+      the supervisor never restarted (its PID stayed 1878261, and the journal
+      records one `supervisor_started` for the day, the 20:28 recovery).
+      **The diagnosis is cgroup pids exhaustion at spawn.** The evidence is
+      the shape the memory `build-limits-launch-failed-spawn-exhaustion`
+      records: **zero rustc diagnostics anywhere in the log** —
+      `error[E…]` 0, `cannot find` 0, `failed to compile` 0 — while the
+      supervisor reports `events: max 18516` against `pids.max: 16384` on the
+      user slice (that ceiling has since been raised to 338286, so this
+      refusal mode is currently unreachable). The supervisor could not
+      *spawn* the child, so the child
+      exited 1 having diagnosed nothing, and cargo's summary line
+      (`could not compile termtree`) reads like a source defect. It is not. The
+      compile queue backs this up: 125 requests waiting at the point of death,
+      with load average 33.70 (15 min) on six cores, and another agent's
+      `cargo-mutants` run inside Podman.
+      **Our crate was never reached, again.** No `--crate-name netsuke`
+      anywhere in 733 lines. Two full gate runs have now compiled ~90 minutes
+      of dependencies between them without once reaching `src/`. The four new
+      files still have never been seen by a compiler, so the `path_key.rs`
+      error found by reading remains unconfirmed in both directions — the
+      compiler has neither confirmed nor refuted anything about it.
+      **A third, unrelated anomaly worth recording.** `target/debug` contains
+      `build/` (336 entries, all stamped 19:55) and `incremental/`, but **no
+      `deps/` and no `.fingerprint/`**. `rust-cleanup.service` swept at
+      20:26:42 and deleted exactly 1 of 45 target directories
+      (`eligible=1 deleted=1`, in `normal` mode at 78.44% usage, so the 2-hour
+      idle rule and not disk pressure). Whether that deletion was this
+      worktree's `target/` is not established — the log does not name the
+      path, and `target/CACHEDIR.TAG` survives — but the missing `deps/` and
+      `.fingerprint/` alongside 336 surviving `build/` entries is the
+      signature of a partial removal rather than a clean one, and it would
+      explain why both runs recompiled dependencies the previous run had
+      already finished. Recorded as an observation with its evidence and its
+      uncertainty, not as a conclusion.
+      **What is and is not established.** Neither run says anything about the
+      correctness of this change. What they do establish is that this machine
+      cannot currently complete a cold Rust build of this workspace: two
+      attempts, two kills, zero lines of our source compiled. The next attempt
+      should wait for the queue to drain rather than adding a third build to a
+      pool already 125 deep, which is what the `launch-failed` memory warns
+      against explicitly: *"Do not 'help' by building."*
+- [ ] (2026-10-16T00:00:00Z) `make typecheck` ran on the candidate and **failed
+      for an infrastructure reason, not for this change**. Recorded because the
+      first run of the gate that touches the four new files is evidence
+      whatever its verdict, and because the tempting reading of its output is
+      the wrong one.
+      **The failure is not ours.** Every one of the 18 `error: could not
+      compile` lines names a *third-party* crate — `dirs-sys`, `unic-langid`
+      (twice), `pear`, `self_cell`, `gherkin`'s build script, `anstyle-parse`,
+      `fluent-syntax`, `tempfile`, `rustls-pki-types`, `time-core`,
+      `icu_locale_core`, `cap-primitives`, `walkdir`, `object`, `parking_lot`,
+      `icu_segmenter`, and `toml` — 17 distinct crates, each with the
+      `Caused by: process didn't exit successfully: …/build-limits-rustc
+      …rustc … -D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold` that pins the
+      cause to the wrapper. The wrapper's own message appears 18 times:
+      `build-limits: the supervisor refused: unhealthy`.
+      **Our crate was never reached.** No line carries `--crate-name netsuke`,
+      and every occurrence of the string `netsuke` in the log is inside this
+      worktree's path. 161 crates compiled or checked before the kill. So this
+      run establishes *nothing* about the four new files — it does not even
+      show they parse, and the `path_key.rs` compile error found by reading
+      (see `Surprises & discoveries`) is still unconfirmed by any compiler.
+      **The supervisor was caught mid-recovery, and the first reading of it
+      was wrong.** Probes at 20:26, 20:27, and 20:28 showed a
+      `deactivating`/`stop-sigterm` state, `build-limits-status` reading
+      `capacity 4, held 3, UNHEALTHY`, and status text naming operator action:
+      *"stop sccache and leave it stopped until admission confirms the empty
+      drain"*. That was read as a permanent wedge, on the strength of the unit
+      setting `Restart=always` *and* `RestartPreventExitStatus=2`, which makes
+      exit status 2 suppress the restart. **All three probes were taken after
+      the recovery had already started and before it had finished.** The
+      supervisor's journal records the completion at 20:28:14 —
+      `sccache service verified stopped and empty; drain tokens may return` —
+      followed by a clean `Stopped`/`Starting`/`Started` cycle and a **new
+      PID** (1878261, replacing 1127739). By 20:31 the pool read `capacity 4,
+      held 2, healthy` with a real build waiting on a token, and my own
+      restart of `make typecheck` compiled without a single refusal.
+      **The trap is that a transient state and a terminal state are
+      indistinguishable from `build-limits-status` alone, and the status text
+      does not say which it is.** The disambiguating evidence is in the journal
+      (the `drain check failed` line is printed while the drain is still
+      running, not only after it gives up) and in the PID changing. Two things
+      would have been enough: waiting for at least one full probe cycle before
+      concluding, and checking whether `NRestarts=0` alongside a *changing* PID
+      means "restarted internally" rather than "refused to restart". The
+      earlier reading also leaned on `RestartPreventExitStatus=2` from the
+      *previous* outage's exit-status-2 state — a detail that does not carry
+      over to a `stop-sigterm` deactivation, and I applied it anyway.
+      **`sccache unreachable, compiling directly` is confirmed benign.** The
+      status line moved to it across those same three probes, and it persisted
+      into the healthy state. It is the degraded mode this plan has seen
+      before, and it costs cache hits, not correctness. It is *not* evidence of
+      the wedge: the same clause appears on both sides of the recovery.
+      **What this means for the milestone.** Nothing is blocked any longer.
+      `make check-fmt` was re-run green after the plan edits, and `make
+      typecheck` was relaunched against the recovered pool. The four new files
+      now reach a compiler for the first time. The `EP-M4` acceptance line is
+      still open, because the run has not finished and `make proptest` and the
+      two mutation falsifications have not been attempted.
+      **The escalation written here previously is withdrawn.** It was addressed
+      to a condition that had already resolved itself, and acting on it — an
+      operator stopping sccache — would have been an unnecessary intervention
+      on a shared service during other agents' active builds.
+- [ ] (2026-10-16T00:00:00Z) `EP-M4` source landed: `path_key.rs`, `no_loss.rs`,
+      and `support.rs` written, `mod.rs` declaring all four children, and both
+      mutation patches authored and registered.
+      **Domain repairs.** Two `Domain:` blocks quoted bounds the generator
+      does not use: `OBL-NOLOSS` said "1 to 30 edges" — a number from the first
+      draft's sketch, contradicted by `MIN_EDGES`/`MAX_EDGES` and by the class
+      intersection `EP-M3` guarantees — and both blocks said "1 to 50 actions"
+      where the floor is `MIN_ACTIONS = 5`. Both now quote the constants. The
+      `MIN_*` floors are *sampling* thresholds, not correctness bounds: an
+      order-set with fewer than five keys has at most one alternative order, so
+      a perturbation property stated over it would be vacuous. Recorded in the
+      domain text rather than left to be rediscovered.
+      **A third Domain defect, in the directed cases.** The plan named "two
+      edges whose output lists are permutations of one another (which
+      `from_manifest` rejects but a direct constructor permits)" as the second
+      non-well-formed case. Re-read against `BuildGraph::insert_edge`
+      (`src/ir/graph/mod.rs:63`), the parenthetical is **false**: two edges with
+      permuted output lists have the same output *set*, `duplicate_output`
+      scans the indexed aliases, and the second insertion is refused for
+      exactly the loader's reason. So that case is a boundary that holds at
+      every construction path, and the suite asserts *that* rather than a
+      collision that cannot occur. The reachable bypass is the output-less
+      edge, which is also loader-reachable (empty `name:` → `StringOrList::Empty`
+      → `to_paths` → `[]` → an empty-slice duplicate scan rejects nothing), and
+      the suite asserts the emitter renders it rather than dropping it.
+      **A stale trace link.** `RM-4.3.1.c`'s second link named
+      `path_key_is_injective_on_validated_paths`; the tree names it
+      `..._on_keyable_paths`, and the difference is load-bearing — "validated"
+      is the weaker condition an empty path satisfies, so the old name
+      advertised a guarantee the suite does not hold. Link corrected and the
+      naming decision logged.
+      **Mutation patches.** `MUT-PATHKEY` deletes `parts.sort_unstable()`
+      (`src/ninja_gen/mod.rs:228`); `MUT-EDGEDROP` filters `render_edges`
+      (`src/ninja_gen/dyndep/mod.rs:155`) to skip entries with a non-empty
+      `explicit_outputs`. Both pass `git apply --check` and are registered in
+      `SUPPLEMENTAL_PROPERTY_PATCHES`.
+- [ ] (2026-10-16T00:00:00Z) `EP-M4` compiler-free gates green on the candidate;
+      the compiling gates are **blocked by a machine-wide admission outage**,
+      not by this change.
+      **Green, sequentially, on the candidate.** `make check-fmt` (exit 0)
+      caught two real `rustfmt` diffs in the new sources — the `tallies.set(…)`
+      call in `no_loss.rs` and the `map_err` chain in `support.rs` — which were
+      applied and re-verified; it also caught a `mdtablefix` diff in this plan,
+      applied with a path-scoped `--in-place` run (a bare `mdtablefix FILE`
+      prints and writes nothing, and `--git` cannot be combined with a path).
+      `make markdownlint` (exit 0) and `make nixie` (exit 0) also pass.
+      **Blocked — since resolved; the observation above is preserved as
+      historical, but its current-state claims are superseded.** At the time of
+      writing, `build-limits-status` reported the supervisor unreachable and
+      `buildlimits-supervisor.service` was `failed` with exit status 2, its
+      journal carrying: *"start-up requires operator action: startup cannot
+      account for managed cache work: live sccache service may retain detached
+      requests; visible compiler roots=0; operator accounting required"*. The
+      inference drawn from `RestartPreventExitStatus=2` — that the unit would
+      **not** self-recover — **was wrong**, in the way recorded in `Risks`:
+      the setting governs a specific exit path and does not constrain a
+      `stop-sigterm` deactivation, which is what actually occurred.
+      **Resolved without operator action at 21:42:31.** The supervisor
+      restarted itself: `MainPID` moved 1878261 → 2867217,
+      `ActiveEnterTimestamp=21:42:31 CEST`, `SubState=running`, and
+      `buildlimits-sccache.service` came up under it (`MainPID=2868075`).
+      `build-limits-status` then read `capacity 4, held 4, healthy, caching
+      through sccache` — the managed cache is back, not merely the admission
+      pool. No operator action was taken or needed; the prescribed quiet
+      sccache stop would have been an unnecessary intervention on a shared
+      service during other agents' builds.
+      **Unrun, therefore unverified.** The four source files have never been
+      compiled. The first compile attempt was killed by the outage at the
+      `--print=sysroot` probe, so it establishes nothing about the code — not
+      even that it parses.
+      **A vacuity trap in the `--lib` probe, established after the fact.** The
+      narrowed `cargo check --lib --all-features` probe that was adopted as the
+      cheap way to judge these four files **cannot judge them at all**. The
+      modules are gated by `#[cfg(test)]` (`src/ninja_gen/determinism/mod.rs:17`
+      and `:20`), and `cargo check --lib` does not set `cfg(test)`: the flag
+      means "check this package's library" in its normal, non-test build.
+      `--all-targets` is what reaches them, because it includes the targets for
+      which `test = true` holds — `cargo check --help` states `--tests` as
+      "Check all targets that have `test = true` set", and `make typecheck`
+      (`Makefile:423`) passes `--all-targets` and `--all-features`.
+      **The evidence is intrinsic, not circumstantial.** Two `netsuke` library
+      rmetas were built and completed by these probes
+      (`target/debug/incremental/netsuke-0m5t1t8w250tg/…/metadata.rmeta` and
+      `…/netsuke-3e9x4qeorcsj4/…/metadata.rmeta`). Searching each for symbols
+      gives `BuildGraph` — a non-test item expected in the normal library — **13
+      occurrences**, and `arb_graph_spec`, which lives under the same
+      `#[cfg(test)] mod` that the four files do, **0 occurrences**. The paired
+      control rules out the alternative explanation that `strings` simply
+      cannot recover this rmeta's symbol table: it recovers 13 other symbols
+      from the same file. A probe that leaves a cfg(test)-only symbol at zero
+      has not compiled cfg(test) code.
+      **Consequence.** This is the sixth run to fail to reach the code, and the
+      third distinct reason. The two `--lib` probes that were believed to have
+      "reached 75 crates with zero diagnostics" reached 75 crates of the
+      *non-test* library and were silent about every `EP-M4` line by
+      construction. No `--lib` probe result may be cited for or against
+      `EP-M4`, and this must not be recorded as a code failure — there were
+      still zero rustc diagnostics. The judgement has to come from a target
+      that sets `test = true`: `make typecheck` (`--all-targets`), `make
+      proptest`, or `make test`.
+      **Checked and cleared: no orphaned compiler.** The probe agent was
+      stopped, and the one `cargo check --lib` chain that survived it (pid
+      558023, a `--unit-graph` render adopted from a shell whose parent had
+      died) exited on its own with `rc=0` and a **0-byte** `/tmp/ug-checklib.json`.
+      Its rmeta shows the same `arb_graph_spec = 0`, so it too was a non-test
+      render. Nothing of mine was left holding a token or a scope.
 - [x] (2026-10-15T00:00:00Z) Corrected two plan defects before implementing
       `EP-M4`, and ran the last `EP-M2` gate batch.
       **Repair 1 — stale artefact paths.** Thirteen live citations gave the six
@@ -2980,6 +3245,41 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
       the `EP-M3` entry already described the file as "the four properties",
       so the plan and the doc now agree.
 
+- [ ] (2026-10-16) **`make typecheck` on the `EP-M4` source: red, and the
+      refusal count is exactly the integration-test set.** The run compiled
+      the library (`Compiling netsuke-build …` present) and then died with
+      `EXIT=2`, `make: *** [Makefile:423: typecheck] Error 101`. Every one of
+      the 18 errors is the same cascade shape — `could not compile
+      'netsuke-build' (test "…")` / `Caused by: process didn't exit
+      successfully: '…/build-limits-rustc …'` — and **each traces to
+      `build-limits: the supervisor refused: unhealthy`**, 18 refusals for 18
+      dead targets. There are **zero** rustc diagnostics in the log:
+      `error[E…]` 0, `cannot find` 0. This is a refusal, not a defect in the
+      code, and the first refusal lands at 21:41 — minutes before the
+      supervisor's 21:42:31 restart, so the build was cut down by the tail of
+      the outage rather than by anything in the tree.
+      **The 18 refused targets are all `tests/*.rs` integration tests**
+      (`bdd_tests`, `ninja_gen_unit_tests`, `runner_tests`, …). The library's
+      **own** unit-test harness — `--crate-name netsuke`, the name from
+      `[lib] name = "netsuke"`, which is where the four `#[cfg(test)]` files
+      actually compile — is **not among them**, and `netsuke_build` appears
+      nowhere in the log. So a refusal-only failure of `typecheck` cannot be
+      read as evidence for or against the `EP-M4` source: the gate never got
+      as far as judging it. This is the fifth consecutive run to die before
+      reaching the code, and the reason the ceiling is now being lowered — a
+      `--lib` probe judges the same four files without dragging 105
+      integration targets behind it.
+      **A second, separate anomaly: `target/debug/deps/` and `.fingerprint/`
+      are still absent**, at zero entries, immediately after a 241-crate
+      compile that produced `incremental/` entries stamped 21:41. `target/debug/`'s
+      own mtime is frozen at 19:55, which is inconsistent with a child
+      directory having been added or removed after that time. Investigated and
+      **deliberately left with cause unestablished**: `rust-cleanup` is
+      excluded by construction — it deletes whole target directories and has
+      no selective-deletion code — so the previously recorded attribution to
+      it is withdrawn in `Surprises & discoveries`. Recorded rather than
+      explained, because a wrong mechanism is worse than none.
+
 - [ ] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [ ] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [ ] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
@@ -2988,6 +3288,138 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 
 ## Surprises & discoveries
 
+- (2026-10-16) **A narrowed probe can be silent about the exact code it was
+  built to judge, while producing output that reads like a pass.** Five compile
+  attempts on `EP-M4` were made with `cargo check --lib --all-features`, on the
+  reasoning that a shorter dependency list reaches these four files sooner than
+  the 105-target `make typecheck`. It reaches them **not at all**.
+  `property_tests` and `strategy` are declared `#[cfg(test)]`
+  (`src/ninja_gen/determinism/mod.rs:17`, `:20`), and `cargo check --lib` does
+  not set `cfg(test)`. The flag most naturally read as "check this package's
+  library, which is where my code lives" excludes every line of it. The check
+  that settles it is intrinsic, not circumstantial: both completed probe builds
+  left a library rmeta, and each contains `BuildGraph` — a non-test item — **13
+  times** and `arb_graph_spec`, a `cfg(test)`-only item in the same module tree
+  as the four files, **0 times**
+  (`target/debug/incremental/netsuke-0m5t1t8w250tg/…/metadata.rmeta`,
+  `…/netsuke-3e9x4qeorcsj4/…/metadata.rmeta`). The paired control rules out
+  "the symbol table is simply unreadable": 13 other symbols come back from the
+  same file. A probe that leaves a `cfg(test)`-only symbol at zero has not
+  compiled `cfg(test)` code, whatever else it reports. This is the trap worth
+  carrying forward. The probes were honest — they really did compile 75 crates
+  with no refusal and no diagnostic — and that is exactly what made them
+  convincing. **A probe whose scope misses the target reports the same success
+  as one that covers it**, so the scope has to be evidenced from the artefact
+  rather than assumed from the flag. Here that evidence was one `strings` call
+  away the whole time, and the probe agent asked the right question before
+  being stopped: it refused to accept its own exit 0 until it could name what
+  was in the unit.
+- (2026-10-16) **`build-limits-status` timing out is specific to the query,
+  not to the socket.** The same command timed out repeatedly while
+  `/run/user/1000/buildlimits/supervisor.sock` accepted other clients on the
+  same path within seconds. Reading "timed out" as "the pool is down" would
+  have written off a machine on which requests were still being admitted. The
+  user manager's bus was also caught mid-recovery: at 22:56 `systemctl --user`
+  and `busctl --user list` both failed with
+  `Transport endpoint is not connected`, and by 23:03 `busctl --user list`
+  answered normally. Both readings are true of different moments, and neither
+  is a property of the supervisor.
+- (2026-10-16) **An attribution of the missing-`deps/` anomaly to
+  `rust-cleanup` was recorded earlier in this session and is now withdrawn.**
+  The earlier reading was that `rust-cleanup.service` deletes
+  `target/debug/deps` and `target/debug/.fingerprint` while leaving `build/` in
+  place. Read against the installed package
+  (`/home/leynos/.local/share/uv/tools/rust-cleanup/lib/python3.14/site-packages/rust_cleanup/`),
+  that is impossible: `reclamation.py:128` `_delete_candidate` calls
+  `self.delete_directory(candidate.path)`, and `filesystem.py:217`
+  `delete_directory` is documented as "Delete a **directory tree**" — it is
+  all-or-nothing on the candidate. `grep -rnE 'deps|fingerprint|incremental'`
+  over the package returns **nothing**, so no selective-deletion logic exists
+  to produce a half-cleaned target. The journal reports the unit explicitly as
+  a directory count: `scanned=46 protected=30 … eligible=1 deleted=1`, then
+  `Deleted 1 of 46 target directories`. **The observation stands; the mechanism
+  does not.** The anomaly is left recorded with its cause unestablished rather
+  than reassigned to a fresh guess — the withdrawal is the finding. Recorded
+  here because a wrong mechanism is worse than none: it would send the next
+  reader to reconfigure or escalate against host infrastructure protecting a
+  shared 1.8T volume across ~46 worktrees, for a fault it demonstrably did not
+  cause. A second, independent reason the sweep is a poor suspect:
+  `has_recent_files` (`discovery.py:268`) protects any target whose newest
+  non-marker file is newer than the cutoff, and treats an *uncertain*
+  inspection as recent — so a target being actively written by a live build is
+  normally protected.
+- (2026-10-16) **A gate that fails for infrastructure reasons still produces
+  output shaped exactly like an output that failed for code reasons, and the
+  difference is only visible if you read the `Caused by:` lines.**
+  `make typecheck` exited 101 and printed 18 `error: could not compile` lines.
+  Read at the level a busy human reads them, that is "18 broken crates". Read
+  one level down, every one is a third-party crate whose compiler process was
+  killed, and the killer names itself:
+  `build-limits: the supervisor refused: unhealthy`, 18 times, extracted from
+  the `Caused by: process didn't exit successfully: …/build-limits-rustc …`
+  line. The wrapper's refusal is the error; the crate names are casualties.
+  **The transferable lesson is to classify a gate failure by the failure's
+  *cause line* before acting on it, and specifically to check whether the
+  failing crate is one you own.** Had this been read as "18 crates are broken",
+  the next hour would have gone into investigating `toml` and `tempfile`. A
+  second trap sits on top of the first: the background-task notification for
+  this run reported `completed (exit code 0)`. That status is the wrapper's, not
+  `make`'s. The log's own last line —
+  `make: *** [Makefile:423: typecheck] Error 101` — is the gate's verdict, and
+  it is the one to trust. **A notification's exit status and the gate's exit
+  status are different quantities whenever a pipe, `tee`, or shell wrapper sits
+  between them.** Both of these are cheap to check and expensive not to.
+- (2026-10-16) **I read a supervisor recovering from a transient fault as a
+  supervisor that would never recover, and wrote that conclusion into this
+  plan, a Risk entry, and an escalation before checking it.** Three probes over
+  three minutes showed `capacity 4, held 3, UNHEALTHY`, `deactivating` /
+  `stop-sigterm`, and status text that named operator action — *"stop sccache
+  and leave it stopped until admission confirms the empty drain"*. The reading
+  was that the pool was wedged and needed a human. **The pool recovered by
+  itself at 20:28:14, during the probe window, while the probes were still
+  reporting the pre-recovery state.** The journal has the completion the status
+  command never showed:
+  `sccache service verified stopped and empty; drain tokens may return`, then a
+  clean stop/start and a new PID. Six minutes later the same command read
+  `healthy` with a build queued behind a token. **The status text was not
+  lying; it was describing work in progress in the grammar of work that had
+  failed.** `drain check failed` reads as a terminal verdict and is actually
+  the name of a check that is still running. The disambiguating evidence was
+  one command away and I did not run it: the supervisor's PID. `NRestarts=0`
+  plus a *changed* PID means the service restarted through a path systemd's
+  counter does not record; `NRestarts=0` plus an *unchanged* PID is the
+  terminal case. **The compounding error was carrying a detail forward from the
+  previous outage.** The earlier wedge ended in `ExecMainStatus=2`, and I
+  reasoned from `RestartPreventExitStatus=2` that this one would not restart
+  either. But this outage never reached exit status 2 — it was a `stop-sigterm`
+  deactivation, a different mechanism that the setting does not govern. **A
+  diagnostic detail that explained one occurrence of a recurring fault is not
+  automatically evidence about the next one, and reusing it without re-checking
+  made a transient condition look permanent.** **The transferable lesson is to
+  establish that a fault is *terminal* before escalating it, and to prefer a
+  liveness signal (has the PID changed, has the start timestamp moved) over
+  state words that read the same in both cases.** Three probes sampled one
+  moment three times; they were not three independent observations, they were
+  one observation with a delay. Had the escalation been acted on, an operator
+  would have stopped sccache — a shared service — during other agents' active
+  builds, to fix a fault that was already fixing itself. A related detail worth
+  keeping: `buildlimits-token-watchdog.service` is `active` and only ever logs
+  `probe_failed` and `no_stall`. It reports the condition; it does not repair
+  it. So its being green is not evidence that anything will self-heal — but
+  neither is its logging `probe_failed` evidence that nothing will.
+- (2026-10-16) **A user-space `ENOSPC` appeared during this window and is
+  inotify watch exhaustion, not disk.** Lody logged
+  `root watch failed code=ENOSPC` and systemd logged
+  `Failed to add control inotify watch descriptor … No space left on device` for
+  `rust-cleanup.service`. The filesystem is fine: `/` has 288 GB available at
+  83% used, well clear of the stop-work threshold. The exhausted resource is
+  `fs.inotify.max_user_instances` (currently 512, with 153 instances in use).
+  Recorded because `ENOSPC` reads as "the disk is full" and this plan's
+  standing instruction is to stop and report if that happens; it has not
+  happened, and the message is a different resource with the same errno.
+  `rust-cleanup.service` is also running on a repeating schedule against lody
+  worktrees — it reported `deleted=0, eligible=0` on its 20:31 pass, so it is
+  not currently deleting anything of mine.
 - (2026-10-15) **The mutation `OBL-NOLOSS` was designed against could not
   fail it, and the test its acceptance names asserted the claim the statement
   correction had just removed.** Correcting the count conjunct above left two
@@ -3013,6 +3445,28 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   mutation or the test name built on it.** A mutation's trigger is a claim
   about reachability, and it needs the same against-source check as the
   statement.
+- (2026-10-16) **A file that has never been compiled carries defects no
+  gate has seen, and the admission outage turned that into a concrete compile
+  error.** The admission blocker above meant `path_key.rs` had never reached
+  `rustc`. Reading it against the vendored `camino` source found
+  `.map(Utf8PathBuf::as_str)`: `as_str` is inherent on `Utf8Path`
+  (`camino-1.2.6/src/lib.rs:796`, inside `impl Utf8Path` at `:660`) and
+  `Utf8PathBuf` reaches it only through `Deref` (`:591-597`). Method-call
+  syntax auto-derefs, but a *function path* does not, and no trait supplies
+  `as_str`, so the expression names an associated function that does not exist.
+  It is now a closure over the deref, matching the form this repository already
+  compiles at `src/ninja_gen/property_tests/mod.rs:213`, applied to the same
+  receiver type. **The transferable lesson is that when an outage blocks the
+  compiler, reading production and dependency source is not a substitute for it
+  but is not idle either: it can still falsify an API assumption, and the ones
+  worth checking first are the calls whose receiver does not obviously own the
+  method.** Everything else the four files depend on was verified the same way
+  and held: `proptest` 1.11.0's prelude re-exports, `TestRunner::new`/`run`
+  signatures, `From<String> for Reason` (so `TestCaseError::fail(format!(…))`
+  resolves), `prop_assert_eq!`'s trailing-comma arm, `RangeInclusive<usize>` to
+  `SizeRange`, `Vec<T>: Shuffleable`, and the `proptest!` body's
+  `let (): () = $body;` binding that admits `?` early-returns. The same sweep
+  cleared every other type-qualified call in the new files.
 
 - (2026-10-15) **A red `lint-clippy` silently removes all evidence for the
   three lint targets after it.** `make lint` is declared
@@ -4207,6 +4661,36 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   rework later. Measured, not inferred: the upstream contract was executed
   against the live tree over four candidate layouts, which is also how the
   clean shape was identified. Date/Author: 2026-10-10 / implementation agent.
+
+- Decision: name the injectivity property
+  `path_key_is_injective_on_keyable_paths`, not the
+  `path_key_is_injective_on_validated_paths` the trace link at line 392
+  carried, and correct the link to match. The two words are not synonyms here
+  and the difference is the obligation's whole point: "validated" would mean
+  the property holds for everything `reject_unsupported_path_characters`
+  admits, and it does not — an empty path passes that validator and still
+  collides with an absent one. "Keyable" names the actual precondition, which
+  is stronger than validation: non-empty *and* NUL-free. Naming the property
+  after the weaker condition would have advertised a guarantee the suite does
+  not hold, since the property's own strategy builds only keyable paths.
+  Date/Author: 2026-10-16 / implementation agent.
+
+- Decision: accept the plan's "two directed non-well-formed cases" as two
+  *questions* and let `EP-M4` answer them, rather than treating the
+  parenthetical as settled fact. It was wrong: the plan said two edges whose
+  output lists are permutations of one another are "rejected by `from_manifest`
+  but permitted by a direct constructor", and `BuildGraph::insert_edge` refuses
+  the second one for exactly the loader's reason — the output *set* is already
+  indexed, and a permutation has the same set. So the second case is a boundary
+  that holds at every construction path, not a bypass, and the suite asserts
+  *that* instead of asserting a collision that cannot occur. The genuinely
+  reachable non-well-formed shape is the output-less edge, which is reachable
+  through the loader too (empty `name:` → `StringOrList::Empty` → `to_paths` →
+  `[]` → a duplicate scan over an empty slice finds nothing), and the suite
+  asserts the emitter renders it rather than dropping it. This is the only one
+  of the two the plan's own `OBL-NOLOSS` statement actually needs, because a
+  dropped output-less edge would be invisible to the output-count assertion.
+  Date/Author: 2026-10-16 / implementation agent.
 
 ## Design review findings
 
