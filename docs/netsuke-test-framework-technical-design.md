@@ -404,7 +404,7 @@ pretend otherwise. Three groups of filesystem helpers bypass it today:
 Left unaddressed, a fixture-built project would be globbed from the runner's
 working directory instead of its own sandbox, which is both host-dependent and
 the exact non-determinism this framework exists to remove. The test
-registration therefore supplies sandbox-rooted adapters for all three groups:
+registration will therefore supply sandbox-rooted adapters for all three groups:
 `glob()` resolves relative patterns against the case sandbox `Dir`, and the
 file tests and file-reading filters resolve their paths through the same
 handle, rejecting escapes rather than falling back to ambient authority. The
