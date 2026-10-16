@@ -7064,11 +7064,17 @@ unrelated configuration unchanged.
 
 After the generic merge produces `CliConfig`, reconciliation runs before
 `apply_config` copies values onto `Cli`. Without the operator opt-in, project
-grants are discarded, any project `fetch_default_deny = true` tightens the
-result, and `false` never weakens an operator or project restriction. With the
-opt-in from a trusted system, user, environment, or CLI layer, project grants
-append to operator grants; a present project default-deny value applies
-directly. The merge composition boundary then emits exactly one
+requests are first folded in dependency-first order: scheme and host grants are
+concatenated, and the last present project `fetch_default_deny` value is
+retained. Without the opt-in, project grants are discarded and the effective
+default-deny value is
+`operator_default_deny || (combined_project_default_deny == Some(true))`. An
+earlier project `true` therefore does not survive a later present project
+`false`, while the project request cannot weaken an operator restriction. With
+the opt-in from a trusted system, user, environment, or CLI layer, the combined
+project grants append to operator grants and the last present project
+default-deny value applies directly; if no project value is present, the
+operator value remains. The merge composition boundary then emits exactly one
 `FetchPolicyReconciled` observer event for a successful reconciliation. Its
 fields are limited to the trust state, request presence, a fixed default-deny
 decision, and requested, accepted, and ignored scheme and host grant counts. It

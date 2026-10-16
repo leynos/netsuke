@@ -418,10 +418,12 @@ System and user configuration, `NETSUKE_` environment variables, and explicit
 CLI options are operator-controlled. Every occurrence in the project
 `.netsuke.toml` `extends` chain is untrusted by default. Its
 `fetch_allow_scheme` and `fetch_allow_host` entries do not widen the operator's
-allowlists unless the operator explicitly trusts project policy. Project
-`fetch_default_deny` values are considered in dependency-first order, with the
-last present value taking effect; without operator trust, `true` can tighten
-the policy and `false` cannot weaken an operator restriction.
+allowlists unless the operator explicitly trusts project policy. Discovery
+folds grants from every project-chain occurrence in dependency-first order and
+retains the last present `fetch_default_deny` value. Without operator trust,
+the grants are ignored and the folded value tightens the operator policy only
+when it is `true`. An earlier project `true` does not survive a later present
+`false`, and the project value cannot weaken an operator restriction.
 
 Only system or user configuration, `NETSUKE_TRUST_PROJECT_FETCH_POLICY`, or
 `--trust-project-fetch-policy` can enable project grants. Trust settings in the
@@ -433,10 +435,11 @@ own root.
 To trust a checkout deliberately, set `trust_project_fetch_policy = true` in
 system or user configuration, set `NETSUKE_TRUST_PROJECT_FETCH_POLICY=true`, or
 pass `--trust-project-fetch-policy`. With that operator opt-in, project scheme
-and host grants from the primary project file append to the operator values. A
-present project `fetch_default_deny` value applies directly. A project cannot
-grant itself this opt-in because its `trust_project_fetch_policy` field is
-ignored in the primary project file.
+and host grants from every project-chain occurrence append to the operator
+values in dependency-first order. The last present project `fetch_default_deny`
+value applies directly; when none is present, the operator value remains in
+effect. A project cannot grant itself this opt-in because its
+`trust_project_fetch_policy` field is ignored in every project-chain occurrence.
 
 ### Revalidate every redirected fetch
 
