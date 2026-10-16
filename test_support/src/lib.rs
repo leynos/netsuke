@@ -8,6 +8,7 @@
 //! - computing SHA-256 hashes for cache keys (hash module)
 //! - spawning lightweight HTTP servers for network tests (http module)
 //! - sandboxing PATH and HOME for the build-tools target tests (`build_tools` module)
+//! - building the shared temporary-path snapshot filter (`temp_path_filter` module)
 //!
 //! All items are intended for use in tests within this workspace; avoid using
 //! them in production code.
@@ -34,6 +35,7 @@ pub mod ninja;
 pub mod ninja_gen;
 pub mod ninja_semantics;
 pub mod stdlib_assert;
+pub mod temp_path_filter;
 /// Re-export the SHA-256 helper for concise call sites.
 pub use hash::sha256_hex;
 
