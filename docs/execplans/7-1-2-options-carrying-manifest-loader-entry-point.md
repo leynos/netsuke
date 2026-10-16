@@ -787,6 +787,94 @@ and YAML fixtures, and were set from the inventory in Table 1.
     unchanged. **The repair voids the `925f803e` review**, so the milestone
     review must be re-run against the new head; this entry records the finding
     as repaired, not as closed.
+- [x] (2026-10-16) Gate batch and milestone review at `52992f4c`, the
+  review-repair head: **nine of nine gates green**, then the re-run milestone
+  review, which returned **one `minor` finding** on
+  `docs/netsuke-test-framework-technical-design.md:406` — valid, and repaired
+  in the next commit.
+  - The nine gates ran sequentially under the exclusive gate-runner against the
+    frozen revision, with the tree verified clean before and after: `check-fmt`
+    2 s, `typecheck` 884 s, `lint` 2679 s (`RESULT: PASSED (minimum: 100.0%,
+    actual: 100.0%)`), `doc-coverage` 771 s (98.87% against the 80% bar),
+    `test` 445 s, `markdownlint` 29 s, `nixie` 1 s, `spelling` 9 s,
+    `test-workflow-contracts` 144 s. Evidence: `/tmp/pr807-batchD-52992f4c/`.
+  - `make test` reached green on its **third** invocation, and the first two are
+    instrumentation, not candidate, failures — the runner's own chunks were
+    bounded and it killed in-flight tests. Attempt 1 (`…/attempt-2/test.out`) is
+    a genuine `TIMEOUT [300.015s]` on
+    `production_build_module_slice_has_expected_boundary` with 18 `SIGTERM`
+    rows from the chunk bound; attempt 2 is a `SIGTERM [111.879s]` on
+    `packaged_manifest_retains_build_script_sources` while it was inside its own
+    600 s budget, so that attempt was neither a nextest timeout nor a failure of
+    the test. The brief's "re-run exactly once if it times out" did not fit this
+    host: the passing run needed to be uninterrupted. **Neither red attempt is
+    evidence about the candidate.**
+  - **Timeout census, corrected by counting rather than recollection.** Across
+    the full-suite `make test` invocations preserved for this branch, split on
+    the runner's `test invocation` separators and deduplicated by content
+    SHA-256: **16 distinct invocations, 8 of which ended in a nextest timeout,
+    5 green, and 3 killed by the runner's own chunk bound** (instrumentation,
+    not evidence about the candidate). The three timed-out tests are
+    `production_build_module_slice_has_expected_boundary` (5 times, at 300 s),
+    `cli_configuration_fixture_compiles` (2 times, at 300 s), and
+    `packaged_manifest_retains_build_script_sources` (once, at 600 s) — all in
+    the `nested-cargo-builds` group (`max-threads = 1`), so every one is a
+    nested-Cargo test whose wall clock is decided by the shared compile pool.
+    The earlier figure carried in the PR body draft and the ledger — "five of
+    six runs, four test names" — was written from recollection and is wrong on
+    both numbers. The count needs ANSI escapes stripped and an anchor on
+    `TIMEOUT [` rather than the bare word, because a bare grep also matches test
+    *names* containing "timeout", and `SLOW [>Ns]` lines are heartbeats that a
+    **passing** run emits.
+  - The passing run's `Summary` is `3949 tests run: 3949 passed (1 slow), 6
+    skipped`, and **both halves of `make test` genuinely ran** — `Doc-tests
+    netsuke` (114 announced, 88 passed, 26 ignored, plus 2 compile-fail rows)
+    then `Doc-tests test_support` (46 announced, 40 passed, 6 ignored). The
+    announced counts include the ignored rows, so neither is a pass count. This
+    discharges the "doctest unverified" caveat the earlier batches carried.
+  - `markdownlint` reports `Linting: 183 files` and then `Summary: 0 issues in
+    0 files`. The second line is the tool's own summary format against those 183
+    files, not a zero-file run — read the two lines together, because the
+    summary alone looks like a vacuous pass.
+  - The ExecPlan contract is confirmed *inside* the gate rather than assumed:
+    `netsuke-build::execplan_status_contract_tests` ran with 10 PASS rows
+    including `every_execplan_header_status_is_within_the_closed_set`. No test
+    output names this plan, so "the contract passed" is the strongest available
+    evidence that it read this file; the contract enumerates
+    `docs/execplans/*.md` from disk.
+  - **The provenance brief I dispatched was wrong about the diff surface, and
+    the runner caught it.** I described the candidate as "docs-only — exactly
+    two files"; that describes `HEAD~1..HEAD`. Against the stated base
+    `6a6fed3a`, `git merge-base` is `486b876c` — the branch is *not* based on
+    `origin/main` — and the surface is **44 paths, 40 of them non-Markdown**
+    (`src/manifest/tests/*`, `src/stdlib/register.rs`, `test_support/*`,
+    `tests/manifest_load_options/*`, 13 insta snapshots). The nine-gate set was
+    therefore right on scope grounds alone, independent of the ExecPlan
+    argument. A base-versus-branch-tip confusion produced a false description of
+    the change surface, exactly as it did for the `nixie` verdict above.
+  - The re-run review covered the **whole 44-path surface**: the tool's own
+    `reviewedFiles` list is set-identical to
+    `git diff --name-only 6a6fed3a...52992f4c`, so nothing was skipped, and it
+    warned about no sampling or truncation. Evidence:
+    `/tmp/pr807-review-52992f4c/coderabbit.out` (sha256 `fa06c749…`), exit 0.
+  - The finding, verified against source rather than accepted on the reviewer's
+    word: `:406` read "The test registration therefore supplies sandbox-rooted
+    adapters for all three groups", in the present tense, while `:417-422`
+    (added by this branch) says the adapters "land in stages", that the test
+    registration "refuses all three groups" until they do, and that roadmap
+    7.4.1 "replaces the refusals with the sandbox-rooted adapters". The adapters
+    genuinely do not exist: `StdlibRegistration` (`src/manifest/mod.rs:96`)
+    declares only `Full` and `ManifestQuery`, and no sandbox-rooted adapter
+    appears in `src/stdlib/`. The sentence is base text (`:367` in `6a6fed3a`,
+    then "for both helpers"), but this branch edited that same line to "all
+    three groups" while adding the staging paragraph, so the contradiction is
+    now ours to fix. **It was also the section's only present-tense claim that
+    the adapters exist** — every other adapter statement is staged (`:417`,
+    `:421`, `:425`), while `:378` describes command helpers that *do* exist
+    today. Repaired by "supplies" → "will therefore supply", one word.
+  - Repair scope note: the finding needed no re-derivation of the design's
+    substance, so no Decision-log entry is owed; the staged framing this branch
+    added is unchanged and now reads consistently at both ends.
 - [x] (2026-10-16) Repair batch at `301f2456` ("Share the temporary-path
   snapshot filter"): **all nine gates green**, including the two the previous
   batch could not reach. `make test` was red on **attempt 1** at the same
