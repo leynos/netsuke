@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted.
+Accepted. The 2026-10-16 addendum below supersedes the primary-only project
+boundary for current implementations; the decision and consequences below
+record the original boundary.
 
 ## Date
 
@@ -27,6 +29,9 @@ filesystem capabilities in
 value determines the authority it may exercise.
 
 ## Decision
+
+The following decision and consequences record the original primary-only
+boundary. The 2026-10-16 addendum below defines the current project-chain rule.
 
 Treat only the primary project `.netsuke.toml` as a project policy request
 before generic configuration merging. Discovery preserves primary-file
@@ -69,8 +74,9 @@ monotonic: a lower-trust project can add a restriction but cannot remove one.
 Keeping grants out of the generic primary-project layer prevents accidental
 authority transfer, while the explicit opt-in provides a clear choice for
 operators who trust a checkout. Returning bounded outcome data lets the merge
-observer explain the decision without exposing configuration content. Files
-loaded through `extends` remain ordinary file layers by design.
+observer explain the decision without exposing configuration content. The
+original decision treated files loaded through `extends` as ordinary file
+layers; the addendum below supersedes that rule for project-chain occurrences.
 
 ## Consequences
 
@@ -82,8 +88,9 @@ loaded through `extends` remain ordinary file layers by design.
   by default.
 - Operators who enable the opt-in accept project grants being appended and a
   project default-deny value being applied directly.
-- Files loaded through `extends` retain ordinary file-layer semantics; only the
-  exact primary project path is quarantined.
+- The original decision quarantined only the exact primary project path; the
+  2026-10-16 addendum below supersedes that boundary for the selected project
+  chain.
 
 ## Alternatives considered
 
@@ -123,3 +130,25 @@ loaded through `extends` remain ordinary file layers by design.
 [adr-004]: adr-004-explicit-config-selection-outside-orthoconfig.md
 [adr-010]: adr-010-scope-glob-capability-to-literal-prefix.md
 [reconciliation-module]: ../src/stdlib/network/policy/reconciliation/mod.rs
+
+## Addendum (2026-10-16): Quarantine the project chain
+
+Issue #845 extends the project request boundary from the primary project file
+in the accepted decision above to every occurrence in its selected `extends`
+chain. This addendum supersedes the primary-only boundary for current
+implementations while preserving the original decision and its rationale as
+history.
+
+Discovery captures `fetch_default_deny`, `fetch_allow_scheme`, and
+`fetch_allow_host` from each project-chain occurrence before generic merging.
+It removes those fields and `trust_project_fetch_policy` from each project
+occurrence, while retaining `fetch_block_host` so blocks remain cumulative. A
+file reached through both an operator root and the project root retains two
+occurrences with their respective authority.
+
+Project requests are combined dependency-first: scheme and host grants append
+in that order, and the last present `fetch_default_deny` value wins, with the
+primary file last. Only operator-controlled configuration can enable project
+grants; no project-chain occurrence can self-authorize. Without operator trust,
+project grants are ignored, `true` can tighten default-deny, and `false` cannot
+weaken an existing restriction.

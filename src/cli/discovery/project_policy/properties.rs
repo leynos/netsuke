@@ -4,10 +4,95 @@
 //! the same physical path, proving authority follows its discovery provenance.
 
 use super::*;
+use crate::host_pattern::HostPattern;
 use proptest::prelude::*;
 use serde_json::{Map, Value, json};
 
 proptest! {
+    /// Fold project fetch grants in dependency order and quarantine every layer.
+    #[test]
+    fn project_fetch_requests_follow_dependency_first_fold(
+        requests in prop::collection::vec(
+            (
+                prop::option::of(any::<bool>()),
+                prop::option::of(prop::collection::vec(
+                    prop_oneof![
+                        Just("http".to_owned()),
+                        Just("https".to_owned()),
+                        Just("ftp".to_owned()),
+                    ],
+                    0..4,
+                )),
+                prop::option::of(prop::collection::vec(0u16..1000, 0..4)),
+            ),
+            1..9,
+        ),
+    ) {
+        let expected_default_deny = requests
+            .iter()
+            .filter_map(|(default_deny, _, _)| *default_deny)
+            .next_back();
+        let expected_schemes = requests
+            .iter()
+            .flat_map(|(_, schemes, _)| schemes.iter().flatten().cloned())
+            .collect::<Vec<_>>();
+        let expected_hosts = requests
+            .iter()
+            .flat_map(|(_, _, hosts)| hosts.iter().flatten())
+            .map(|host| {
+                HostPattern::parse(&format!("host-{host}.example"))
+                    .expect("generated host is valid")
+            })
+            .collect::<Vec<_>>();
+        let layers = requests
+            .iter()
+            .map(|(default_deny, requested_schemes, requested_hosts)| {
+                let mut fields = Map::from_iter([
+                    ("fetch_block_host".to_owned(), json!(["blocked.example"])),
+                    ("trust_project_fetch_policy".to_owned(), json!(true)),
+                ]);
+                if let Some(value) = default_deny {
+                    fields.insert("fetch_default_deny".to_owned(), json!(value));
+                }
+                if let Some(scheme_grants) = requested_schemes {
+                    fields.insert("fetch_allow_scheme".to_owned(), json!(scheme_grants));
+                }
+                if let Some(host_grants) = requested_hosts {
+                    let names = host_grants
+                        .iter()
+                        .map(|host| format!("host-{host}.example"))
+                        .collect::<Vec<_>>();
+                    fields.insert("fetch_allow_host".to_owned(), json!(names));
+                }
+                MergeLayer::file(Cow::Owned(Value::Object(fields)), None)
+            })
+            .collect::<Vec<_>>();
+
+        let resolved = retain_layers_and_resolve_json(scope_project_chain(
+            layers,
+            requests.len() - 1,
+        ));
+        prop_assert!(resolved.errors.is_empty(), "generated policy fields are valid");
+        let request = resolved
+            .project_request
+            .expect("a project occurrence yields a policy request");
+        prop_assert_eq!(request.default_deny, expected_default_deny);
+        prop_assert_eq!(request.allow_scheme, expected_schemes);
+        prop_assert_eq!(request.allow_host, expected_hosts);
+
+        for layer in resolved.layers {
+            let value = layer.into_value();
+            prop_assert!(value.get("fetch_default_deny").is_none());
+            prop_assert!(value.get("fetch_allow_scheme").is_none());
+            prop_assert!(value.get("fetch_allow_host").is_none());
+            prop_assert!(value.get("trust_project_fetch_policy").is_none());
+            prop_assert_eq!(
+                value.get("fetch_block_host"),
+                Some(&json!(["blocked.example"]))
+            );
+        }
+    }
+
     /// Quarantine grants per occurrence across mixed roots and arbitrary order.
     #[test]
     fn environment_grants_follow_occurrence_provenance(

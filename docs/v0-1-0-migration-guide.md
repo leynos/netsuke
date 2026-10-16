@@ -413,24 +413,33 @@ and [interpret failures](users-guide.md#interpret-failures) sections.
 
 ## Review the project fetch-policy boundary
 
-The v0.1.0 fetch-policy merge distinguishes operator policy from a project's
-request. System and user configuration, `NETSUKE_` environment variables, and
-explicit CLI options are operator-controlled. The primary project
-`.netsuke.toml` is untrusted by default, so its `fetch_allow_scheme` and
-`fetch_allow_host` entries do not widen the operator's allowlists. The primary
-project file may still tighten the policy by setting
-`fetch_default_deny = true`; a `false` request cannot undo an operator
-restriction. Inherited fetch-policy fields retain ordinary file-layer merge
-semantics. Project `fetch_block_host` entries remain cumulative, and a block
-wins over an allow.
+The fetch-policy merge distinguishes operator policy from project requests.
+System and user configuration, `NETSUKE_` environment variables, and explicit
+CLI options are operator-controlled. Every occurrence in the project
+`.netsuke.toml` `extends` chain is untrusted by default. Its
+`fetch_allow_scheme` and `fetch_allow_host` entries do not widen the operator's
+allowlists unless the operator explicitly trusts project policy. Discovery
+folds grants from every project-chain occurrence in dependency-first order and
+retains the last present `fetch_default_deny` value. Without operator trust,
+the grants are ignored and the folded value tightens the operator policy only
+when it is `true`. An earlier project `true` does not survive a later present
+`false`, and the project value cannot weaken an operator restriction.
+
+Only system or user configuration, `NETSUKE_TRUST_PROJECT_FETCH_POLICY`, or
+`--trust-project-fetch-policy` can enable project grants. Trust settings in the
+project chain cannot authorize themselves. Project `fetch_block_host` entries
+remain cumulative, and a block wins over an allow. If one file is reached from
+both project and operator roots, each occurrence retains the authority of its
+own root.
 
 To trust a checkout deliberately, set `trust_project_fetch_policy = true` in
 system or user configuration, set `NETSUKE_TRUST_PROJECT_FETCH_POLICY=true`, or
 pass `--trust-project-fetch-policy`. With that operator opt-in, project scheme
-and host grants from the primary project file append to the operator values. A
-present project `fetch_default_deny` value applies directly. A project cannot
-grant itself this opt-in because its `trust_project_fetch_policy` field is
-ignored in the primary project file.
+and host grants from every project-chain occurrence append to the operator
+values in dependency-first order. The last present project `fetch_default_deny`
+value applies directly; when none is present, the operator value remains in
+effect. A project cannot grant itself this opt-in because its
+`trust_project_fetch_policy` field is ignored in every project-chain occurrence.
 
 ### Revalidate every redirected fetch
 

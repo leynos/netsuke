@@ -29,6 +29,7 @@ from nextest_durations import (
     UnboundedTestError,
 )
 from timeout_budgets import (
+    NEXTEST_CONFIG,
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
     TERMINATION_SAFETY_MARGIN_SECONDS,
 )
@@ -80,18 +81,15 @@ def document(*tables: str, profile: str = "default") -> str:
 
 
 def test_the_repository_s_own_per_test_budgets_are_the_documented_ones() -> None:
-    """300 s ordinarily, 600 s for the two Windows tests.
+    """300 s ordinarily, up to 900 s for the targeted package build.
 
-    Pinned rather than derived, because the developers' guide states
-    these two figures and nothing else would notice them drifting.
+    Read the checked-in nextest configuration so drift from the documented
+    budget is visible; the synthetic profile also keeps the default figure
+    covered independently.
     """
-    config = (
-        '[profile.default]\nslow-timeout = { period = "60s", terminate-after = 5 }\n'
-        "\n[[profile.default.overrides]]\n"
-        'slow-timeout = { period = "60s", terminate-after = 10 }\n'
-    )
-    assert largest_test_allowance(config) == pytest.approx(600.0), (
-        "ten warning periods of sixty seconds is a 600s budget"
+    configured = NEXTEST_CONFIG.read_text(encoding="utf-8")
+    assert largest_test_allowance(configured) == pytest.approx(900.0), (
+        "fifteen warning periods of sixty seconds is a 900s budget"
     )
     base_only = (
         '[profile.default]\nslow-timeout = { period = "60s", terminate-after = 5 }\n'

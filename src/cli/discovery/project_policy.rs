@@ -3,7 +3,8 @@
 //! Validates policy requests before generic merging while preserving
 //! configuration errors rather than treating malformed values as absent.
 //! Environment grants and budget restrictions follow an automatically
-//! discovered project chain; fetch grants remain primary-scoped.
+//! discovered project chain; fetch requests retain each project occurrence's
+//! provenance.
 
 use ortho_config::{MergeLayer, OrthoError, OrthoResult};
 use serde::de::DeserializeOwned;
@@ -17,12 +18,12 @@ use super::paths::{PathNormalizer, comparison_key, project_scope_file};
 use super::trace::EnvGrantQuarantineTrace;
 use super::{ProjectFetchPolicyRequest, ProjectManifestBudgetRequest};
 
-/// Identify whether this occurrence is the primary project configuration.
+/// Identify whether this occurrence belongs to a selected project chain.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum FileScope {
     /// A layer governed by ordinary configuration precedence.
     Operator,
-    /// The primary project configuration file.
+    /// An occurrence selected through the project configuration file.
     Project,
 }
 
@@ -47,8 +48,8 @@ impl ScopedFileLayer {
     }
 }
 
-/// Mark only the selected primary configuration layer as project-scoped.
-pub(super) fn scope_primary_project_layer(
+/// Mark inherited parents through the selected project layer as project-scoped.
+pub(super) fn scope_project_fetch_layers(
     layers: Vec<MergeLayer<'static>>,
     project_index: usize,
 ) -> Vec<ScopedFileLayer> {
@@ -57,7 +58,7 @@ pub(super) fn scope_primary_project_layer(
         .enumerate()
         .map(|(index, layer)| ScopedFileLayer {
             layer,
-            scope: if index == project_index {
+            scope: if index <= project_index {
                 FileScope::Project
             } else {
                 FileScope::Operator
@@ -69,14 +70,14 @@ pub(super) fn scope_primary_project_layer(
 
 /// Preserve chain provenance for every occurrence from project discovery.
 ///
-/// Every file reached from the automatically discovered project root receives
-/// this provenance, including ancestors. Fetch-policy quarantine remains
-/// primary-only.
+/// Environment grants and manifest budgets follow the complete automatically
+/// discovered chain. Fetch requests use each occurrence's project or operator
+/// scope, so layers after the selected project file retain operator authority.
 pub(super) fn scope_project_chain(
     layers: Vec<MergeLayer<'static>>,
     project_index: usize,
 ) -> Vec<ScopedFileLayer> {
-    scope_primary_project_layer(layers, project_index)
+    scope_project_fetch_layers(layers, project_index)
         .into_iter()
         .map(|mut layer| {
             layer.project_chain = true;
@@ -85,7 +86,7 @@ pub(super) fn scope_project_chain(
         .collect()
 }
 
-/// Identify the primary project file before discarding chain boundaries.
+/// Identify the project file before discarding explicit-chain boundaries.
 pub(super) fn scope_selected_primary_layer(
     layers: Vec<MergeLayer<'static>>,
     directory: Option<&Path>,
@@ -100,7 +101,7 @@ pub(super) fn scope_selected_primary_layer(
             .is_some_and(|(path, expected)| path.as_str() == expected.to_string_lossy())
     });
     if let Some(index) = project_index {
-        scope_primary_project_layer(layers, index)
+        scope_project_fetch_layers(layers, index)
     } else {
         layers.into_iter().map(ScopedFileLayer::operator).collect()
     }
@@ -113,7 +114,7 @@ pub(super) struct ResolvedFileLayers {
     pub(super) layers: Vec<MergeLayer<'static>>,
     /// Last valid file preference, including layers after an invalid request.
     pub(super) json_preference: bool,
-    /// Quarantined request from the primary project layer, when present.
+    /// Combined request from project-chain occurrences, when present.
     pub(super) project_request: Option<ProjectFetchPolicyRequest>,
     /// Quarantined manifest-budget restrictions from project layers.
     pub(super) project_budget_request: ProjectManifestBudgetRequest,
@@ -191,13 +192,16 @@ fn quarantine_env_grants(
     }
 }
 
-/// Retain a primary-project fetch request or its deferred validation error.
+/// Retain project-chain fetch requests or their deferred validation errors.
 ///
-/// Keep this primary-only operation separate from whole-chain budget quarantine
-/// to preserve their different authority boundaries during discovery.
+/// Requests arrive dependency-first, so later occurrences append grants and
+/// replace default-deny only when they provide a value.
 fn quarantine_fetch_policy(value: &mut serde_json::Value, resolved: &mut ResolvedFileLayers) {
     match take_project_fetch_policy_request(value) {
-        Ok(request) => resolved.project_request = Some(request),
+        Ok(request) => match resolved.project_request.as_mut() {
+            Some(existing) => existing.append_with(request),
+            None => resolved.project_request = Some(request),
+        },
         Err(error) => resolved.errors.push(error),
     }
 }
@@ -251,7 +255,7 @@ fn take_project_manifest_budget_request(
     Ok(request)
 }
 
-/// Capture and remove primary-project fetch policy from one JSON layer.
+/// Capture and remove project-chain fetch policy from one JSON layer.
 ///
 /// The environment grant has its own chain-aware quarantine so it can follow
 /// project provenance without broadening fetch-policy authority.
@@ -301,6 +305,10 @@ where
 #[cfg(test)]
 #[path = "project_policy/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/project_policy.rs"]
+mod project_chain_tests;
 
 #[cfg(test)]
 #[path = "project_policy/properties.rs"]

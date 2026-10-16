@@ -20,10 +20,9 @@ fn utf8_path(path: &Path) -> Result<Utf8PathBuf> {
     })
 }
 
-/// Quarantine grants across an automatic project chain while retaining
-/// cumulative blocks and primary-only fetch extraction.
+/// Quarantine grants across a project chain while retaining cumulative blocks.
 #[test]
-fn project_chain_quarantines_ancestor_grants_and_keeps_fetch_fields() {
+fn project_chain_quarantines_ancestor_fetch_grants_and_keeps_blocks() {
     let scoped = scope_project_chain(
         vec![
             file_layer(
@@ -60,19 +59,14 @@ fn project_chain_quarantines_ancestor_grants_and_keeps_fetch_fields() {
         ancestor.get("env_block_var"),
         Some(&json!(["BLOCKED_TOKEN"]))
     );
-    assert_eq!(
-        ancestor.get("fetch_allow_host"),
-        Some(&json!(["ancestor.example"]))
-    );
-    assert_eq!(
-        ancestor.get("trust_project_fetch_policy"),
-        Some(&json!(true))
-    );
+    assert!(ancestor.get("fetch_allow_host").is_none());
+    assert!(ancestor.get("trust_project_fetch_policy").is_none());
     assert!(primary.get("env_allow_var").is_none());
     assert!(primary.get("fetch_allow_host").is_none());
     assert_eq!(
         resolved.project_request.map(|request| request.allow_host),
         Some(vec![
+            HostPattern::parse("ancestor.example").expect("valid host pattern"),
             HostPattern::parse("primary.example").expect("valid host pattern")
         ])
     );
@@ -93,20 +87,25 @@ fn operator_occurrence_retains_environment_grants() {
     );
 }
 
-/// Quarantine an explicitly selected project primary while leaving its
-/// explicit ancestors at operator authority.
+/// Quarantine an explicitly selected project primary and its ancestors.
 #[test]
-fn explicit_primary_is_quarantined_but_explicit_ancestor_retains_grants() -> Result<()> {
+fn explicit_project_chain_quarantines_primary_and_ancestor_grants() -> Result<()> {
     let project = tempfile::tempdir()?;
     let ancestor_path = utf8_path(&project.path().join("base.toml"))?;
     let primary_path = utf8_path(&project.path().join(".netsuke.toml"))?;
     let layers = vec![
         file_layer(
-            json!({ "env_allow_var": ["ANCESTOR_TOKEN"] }),
+            json!({
+                "env_allow_var": ["ANCESTOR_TOKEN"],
+                "fetch_allow_host": ["ancestor.example"]
+            }),
             Some(ancestor_path),
         ),
         file_layer(
-            json!({ "env_allow_var": ["PRIMARY_TOKEN"] }),
+            json!({
+                "env_allow_var": ["PRIMARY_TOKEN"],
+                "fetch_allow_host": ["primary.example"]
+            }),
             Some(primary_path),
         ),
     ];
@@ -131,13 +130,20 @@ fn explicit_primary_is_quarantined_but_explicit_ancestor_retains_grants() -> Res
         .next()
         .context("primary layer should remain available")?
         .into_value();
-    ensure!(
-        ancestor.get("env_allow_var") == Some(&json!(["ANCESTOR_TOKEN"])),
-        "an explicit ancestor keeps its environment grant"
-    );
+    ensure!(ancestor.get("env_allow_var").is_none());
+    ensure!(ancestor.get("fetch_allow_host").is_none());
     ensure!(
         primary.get("env_allow_var").is_none(),
         "the selected project primary loses its environment grant"
+    );
+    ensure!(primary.get("fetch_allow_host").is_none());
+    ensure!(
+        resolved.project_request.map(|request| request.allow_host)
+            == Some(vec![
+                HostPattern::parse("ancestor.example")?,
+                HostPattern::parse("primary.example")?
+            ]),
+        "explicit project-chain grants are retained in dependency order"
     );
     Ok(())
 }

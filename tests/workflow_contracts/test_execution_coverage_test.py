@@ -260,7 +260,7 @@ def test_one_coverage_producer_per_event(
 #: in seconds. The shared coverage action defaults to 600, which was sized
 #: against a lane that restored a `target` archive and so never paid for a cold
 #: compile.
-CARGO_WAIT_TIMEOUT = "1800"
+CARGO_WAIT_TIMEOUT = "1980"
 
 
 @pytest.mark.parametrize(
