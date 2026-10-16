@@ -28,13 +28,18 @@ const EXEMPT_HARNESSES: &[(&str, &str)] = &[];
 
 /// Property-test mutation patches that deliberately have no Kani harness.
 ///
-/// They exercise scanner and command-guard contracts that exceed the bounded
-/// Kani resource cap. Keep this list narrow: each entry must name a live
-/// Proptest property, and the patch still has to apply cleanly below.
+/// The `ir__cmd_interpolate` entries exercise scanner and command-guard
+/// contracts that exceed the bounded Kani resource cap; the
+/// `ninja_gen__determinism` entries state contract properties over whole
+/// emitted bundles, which the bounded harnesses do not model. Keep this list
+/// narrow: each entry must name a live Proptest property, and the patch still
+/// has to apply cleanly below.
 const SUPPLEMENTAL_PROPERTY_PATCHES: &[&str] = &[
     "ir__cmd_interpolate__property_tests__guard_uses_the_substituted_command",
     "ir__cmd_interpolate__property_tests__scanner_agrees_with_independent_specification",
     "ir__cmd_interpolate__property_tests__substituted_odd_backticks_are_rejected",
+    "ninja_gen__determinism__property_tests__no_loss__every_explicit_output_appears_exactly_once",
+    "ninja_gen__determinism__property_tests__path_key__path_key_is_permutation_invariant",
 ];
 
 /// Resolve the source file that declares the property named by a patch stem.
