@@ -413,16 +413,22 @@ and [interpret failures](users-guide.md#interpret-failures) sections.
 
 ## Review the project fetch-policy boundary
 
-The v0.1.0 fetch-policy merge distinguishes operator policy from a project's
-request. System and user configuration, `NETSUKE_` environment variables, and
-explicit CLI options are operator-controlled. The primary project
-`.netsuke.toml` is untrusted by default, so its `fetch_allow_scheme` and
-`fetch_allow_host` entries do not widen the operator's allowlists. The primary
-project file may still tighten the policy by setting
-`fetch_default_deny = true`; a `false` request cannot undo an operator
-restriction. Inherited fetch-policy fields retain ordinary file-layer merge
-semantics. Project `fetch_block_host` entries remain cumulative, and a block
-wins over an allow.
+The fetch-policy merge distinguishes operator policy from project requests.
+System and user configuration, `NETSUKE_` environment variables, and explicit
+CLI options are operator-controlled. Every occurrence in the project
+`.netsuke.toml` `extends` chain is untrusted by default. Its
+`fetch_allow_scheme` and `fetch_allow_host` entries do not widen the operator's
+allowlists unless the operator explicitly trusts project policy. Project
+`fetch_default_deny` values are considered in dependency-first order, with the
+last present value taking effect; without operator trust, `true` can tighten
+the policy and `false` cannot weaken an operator restriction.
+
+Only system or user configuration, `NETSUKE_TRUST_PROJECT_FETCH_POLICY`, or
+`--trust-project-fetch-policy` can enable project grants. Trust settings in the
+project chain cannot authorize themselves. Project `fetch_block_host` entries
+remain cumulative, and a block wins over an allow. If one file is reached from
+both project and operator roots, each occurrence retains the authority of its
+own root.
 
 To trust a checkout deliberately, set `trust_project_fetch_policy = true` in
 system or user configuration, set `NETSUKE_TRUST_PROJECT_FETCH_POLICY=true`, or

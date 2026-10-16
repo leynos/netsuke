@@ -7016,14 +7016,20 @@ policies.
 ### Fetch-policy trust boundary
 
 Network-policy grants do not use the ordinary file-layer precedence contract.
-Discovery preserves provenance for the exact primary project `.netsuke.toml`.
-For fetch-policy quarantine, `FileScope::Operator` marks ordinary layers,
-including files loaded through `extends`; `FileScope::Project` marks only the
-primary project file. Discovery extracts that file's `fetch_default_deny`,
-`fetch_allow_scheme`, `fetch_allow_host`, and `trust_project_fetch_policy`
-fields into a project request before the generic merge. Those fields are
-removed only from the primary file; `fetch_block_host` remains in all layers so
-blocklists continue to accumulate.
+Discovery preserves provenance for every occurrence in the selected project
+`.netsuke.toml` chain. `FileScope::Project` marks the inherited files and
+primary project file; layers from operator roots retain `FileScope::Operator`,
+even when the same physical file is reached from both roots. Discovery captures
+each project occurrence's `fetch_default_deny`, `fetch_allow_scheme`, and
+`fetch_allow_host` fields before generic merging and removes them from that
+occurrence. It discards `trust_project_fetch_policy` from project occurrences.
+`fetch_block_host` remains in every layer so blocklists continue to accumulate.
+
+Project requests are combined in dependency-first order. Scheme and host grants
+append in that order, and the last present `fetch_default_deny` value wins,
+with the primary project file last. Only an operator-controlled value from
+system or user configuration, the environment, or CLI can enable project
+grants. A project-chain occurrence cannot self-authorize.
 
 Environment grants follow a separate boundary. The `project_chain` provenance
 flag marks every occurrence reached through an automatically discovered project
@@ -7035,21 +7041,18 @@ operator occurrence retains its grants and the project occurrence loses them.
 An explicitly selected ancestor remains operator-scoped.
 
 `retain_layers_and_resolve_json` returns the retained layers, the JSON
-preference, and the optional primary project request together.
-`DiscoveredLayers` owns the request until `into_parts` transfers it with the
-layers and discovery errors. `push_discovered_file_layers` places the layers
-into `MergeComposition` and transfers the request for the same composition.
-This preserves provenance at the discovery seam without a second discovery or
-merge pass, and the primary project file cannot self-authorize the opt-in. If
-the same file is reached through operator and project roots, both occurrences
-retain their root authority: the operator occurrence remains an ordinary layer,
-while the primary project occurrence is quarantined. The `extends` chain
-remains outside the fetch-policy trust boundary, so inherited fetch fields keep
-their existing generic-merge behaviour. The internal quarantine helpers are
-discovery-only composition points: they preserve each occurrence's authority
-and accumulated validation errors while extracting primary-only fetch requests,
-chain-wide environment-grant quarantine, and chain-wide budget narrowing
-requests.
+preference, and the ordered project-chain request together. `DiscoveredLayers`
+owns the request until `into_parts` transfers it with the layers and discovery
+errors. `push_discovered_file_layers` places the layers into `MergeComposition`
+and transfers the request for the same composition. This preserves provenance
+at the discovery seam without a second discovery or merge pass, and no
+project-chain occurrence can self-authorize the opt-in. If the same file is
+reached through operator and project roots, each occurrence retains its root
+authority: the operator occurrence remains an ordinary layer, while the project
+occurrence is quarantined. The internal quarantine helpers are discovery-only
+composition points: they preserve each occurrence's authority and accumulated
+validation errors while extracting ordered project fetch requests, chain-wide
+environment-grant quarantine, and chain-wide budget narrowing requests.
 
 The network-policy domain module
 [`src/stdlib/network/policy/reconciliation/mod.rs`][reconciliation-module] owns
@@ -7084,10 +7087,10 @@ The final merge order is:
 4. **CLI flags** — values explicitly passed on the command line.
 
 This order describes ordinary configuration fields. Fetch-policy grants use the
-primary-only trust-aware reconciliation described above. Environment grants use
-occurrence provenance: every file reached through an automatically discovered
-project root is quarantined, while operator roots and explicitly selected
-ancestor occurrences retain operator authority.
+project-chain reconciliation described above. Environment grants use occurrence
+provenance: every file reached through an automatically discovered project root
+is quarantined, while operator roots and explicitly selected ancestor
+occurrences retain operator authority.
 
 ### Configuration merge helper functions
 
@@ -7141,8 +7144,8 @@ Configuration merge helpers:
   malformed request, and keeps the original invalid JSON beside the error so
   diagnostic JSON preference is preserved. It extracts and validates all
   `env_allow_var` from the primary project file and every automatically
-  discovered project-chain occurrence, plus fetch-policy fields from the
-  primary project file, before generic merging. It avoids complete layer or
+  discovered project-chain occurrence, plus fetch-policy fields from every
+  project-chain occurrence, before generic merging. It avoids complete layer or
   JSON-value copies before the full merge.
 - `cli_overrides_from_matches(matches: &ArgMatches) -> OrthoValue` extracts
   CLI-supplied fields, stripping defaults and non-CLI sources.

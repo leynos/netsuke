@@ -1,9 +1,10 @@
-//! Tests for explicit configuration-selector independence from `-C`.
+//! Test explicit-selector resolution and project-policy discovery boundaries.
 //!
-//! A relative `--config` or `NETSUKE_CONFIG` selector resolves from the
-//! process working directory even when `-C/--directory` is supplied; an
-//! absolute selector is always used unchanged. End-to-end tests place a
-//! decoy at the `-C` location to prove the selector is not rebased.
+//! These discovery tests show that relative selectors resolve from the
+//! process working directory and absolute selectors remain unchanged when
+//! `-C/--directory` is supplied. They also verify that selected project-chain
+//! policy fields are quarantined while unrelated operator configuration keeps
+//! its authority.
 use super::super::paths::{FsPathNormalizer, normalized_path_key};
 use super::super::*;
 use crate::cli::test_support::TestEnv;
