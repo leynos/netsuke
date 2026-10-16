@@ -100,6 +100,9 @@ pub(super) fn load_manifest(
 }
 
 /// Load a manifest query with explicit resource ceilings.
+// @codescene(disable:"Code Duplication") Twin of `load_manifest_with_source`:
+// same context wrapper, different return contract and feature gate, and
+// merging them needs a mode enum or generic loader (reviewed 2026-10-16).
 pub(super) fn load_manifest_with_limits(
     path: &Utf8Path,
     budget_limits: manifest::ManifestBudgetLimits,
@@ -126,6 +129,8 @@ pub(super) fn load_manifest_with_limits(
 ///
 /// Returns an error when the manifest cannot be read, parsed, or rendered, or
 /// when it exceeds `budget_limits`.
+// @codescene(disable:"Code Duplication") Twin of `load_manifest_with_limits`;
+// see the rationale there (reviewed 2026-10-16).
 #[cfg(feature = "lint")]
 pub(super) fn load_manifest_with_source(
     path: &Utf8Path,
