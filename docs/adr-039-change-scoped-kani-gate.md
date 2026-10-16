@@ -201,6 +201,18 @@ Implementation and contracts live in
 [`tests/workflow_contracts/kani_smoke_metrics_wiring_test.py`](../tests/workflow_contracts/kani_smoke_metrics_wiring_test.py),
 and [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 
+### Main-branch validation policy retained during integration
+
+The rebase also retains the main-branch timeout policy for
+`packaged_manifest_retains_build_script_sources`: a 900-second per-test
+allowance and the serialized `nested-cargo-builds` group. That test runs a
+nested Cargo build and previously reached the 300-second default while waiting
+for the shared package-cache lock. Main also raises the CI Nextest whole-run
+limit to 16 minutes and the Cargo watchdog to 1,980 seconds, keeping the test,
+whole-run and watchdog budgets ordered. These shared test policies remain in
+`.config/nextest.toml` and `.github/workflows/ci.yml`; the metrics change adds
+no duplicate timeout settings.
+
 The local-reference coverage contract added on `main` inventories scripts under
 `scripts/` and requires each one to be reachable from a workflow, Makefile
 target, or test. The Kani workflow invokes the metrics helper directly, so
