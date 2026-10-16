@@ -83,8 +83,27 @@ and removed before generic merging. The marker does not classify a physical
 file globally: if an operator root and a project root both reach the same file,
 the operator occurrence retains its grants and the project occurrence loses
 them. An explicitly selected chain keeps operator authority for its ancestors.
-This addendum changes only environment grants; fetch-policy fields remain
-subject to their existing primary-only quarantine.
+This addendum changes only environment grants. Its description of fetch-policy
+quarantine records the policy on 2026-10-11; the 2026-10-16 addendum below
+supersedes that fetch boundary without changing the environment-grant rule.
+
+### Addendum: align fetch-policy quarantine with ADR-021 (2026-10-16)
+
+Issue #845 extends fetch-policy provenance from the primary project file to
+each occurrence reached through the automatically discovered project root's
+`extends` chain. A file reached from both an operator root and the project root
+retains separate occurrences with their respective authority. An explicitly
+selected chain remains operator-scoped unless its selected primary resolves to
+the project's `.netsuke.toml`; in that case, occurrences through that file are
+project-scoped and later occurrences retain operator authority.
+
+The project-chain occurrences cannot contribute fetch grants or enable
+`trust_project_fetch_policy` through generic configuration merging. Their
+`fetch_block_host` entries remain cumulative. Only operator-controlled
+configuration can authorize project grants, as described in the current
+fetch-policy boundary in [ADR-021](adr-021-trust-aware-fetch-policy-merge.md).
+This addendum changes fetch-policy provenance only; environment allow and block
+rules continue to follow the environment-specific decision above.
 
 Enforcement belongs at the registered `env()` call boundary, not at the reader.
 The registered closure delegates to `env_var_with`, which evaluates the
