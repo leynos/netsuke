@@ -9,10 +9,12 @@ The reading that matters most is the per-test one. nextest warns once
 per ``period`` and terminates after ``terminate-after`` of them, so the
 budget is their product. Every period in this repository is 60 s, so a
 reader taking the period alone would report a 60 s allowance where the
-real maximum is 720 s: five periods by default, ten for the mutation
-compile gate, and twelve for the cold package publish, split-build, and
-production module-slice checks. The contract uses the largest value, because
-a whole-run cap has to sit above it. A
+real maximum is 900 s: five periods by default, ten for the mutation
+compile gate, twelve for the production module-slice check, and fifteen
+for the CLI configuration, stub-environment compile-fail, split-build, and
+cold package-publish checks.
+The contract uses the largest value, because a whole-run cap has to sit
+above it. A
 ``slow-timeout`` naming no ``terminate-after`` terminates nothing at
 all, so that form is refused rather than read as a single period.
 
@@ -143,8 +145,10 @@ def largest_test_allowance(config_text: str) -> fractions.Fraction:
     ``terminate-after`` of them, so the budget is their product. This
     repository sets five 60 s periods on the profile's own allowance, so it
     gives every test it matches 300 s. The mutation compile gate gets ten
-    periods and the cold package publish and split-build checks get twelve.
-    The largest allowance in the file is therefore 720 s, and it is that
+    periods; the production module-slice check gets twelve; and the CLI
+    configuration, stub-environment compile-fail, split-build, and cold
+    package-publish checks get fifteen.
+    The largest allowance in the file is therefore 900 s, and it is that
     figure, not the profile's own, that a whole-run budget has to stay
     above. Reading the period alone would understate either by its
     multiplier.

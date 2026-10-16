@@ -20,9 +20,10 @@
 # after 60s; terminate a test that has run for five warning periods (300s).
 #
 # This is the profile's own allowance, and it governs every test no override
-# matches. The mutation compile gate widens it to ten periods; the split-build
-# and production module-slice checks get twelve, and the cold package publish
-# gets fifteen. The largest allowance is 900 s.
+# matches. The mutation compile gate widens it to ten periods; the production
+# module-slice check gets twelve; and the CLI configuration, stub-environment,
+# split-build, and cold package-publish checks get fifteen. The largest
+# allowance is 900 s.
 slow-timeout = { period = "60s", terminate-after = 5 }
 
 [test-groups.nested-cargo-builds]
@@ -55,20 +56,16 @@ max-threads = 1
 filter = 'test(/^cli_configuration_fixture_compiles($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
-# This test keeps the profile's own five periods, and deliberately so. Its
-# child `cargo check` runs in the same four-slot compiler-admission pool as
-# every other build on the host, so its wall clock is the queue's to decide
-# rather than the test's. That wait falls inside the running test, because the
-# child is awaited with `.output()` in the test body, so it counts towards this
-# allowance: a wider budget would cover the delay, and would not remove the
-# contention that causes it. The spread is what makes covering it unreliable.
-# The same test has finished in 171.4 s on a quiet run, been terminated at the
-# 300 s cap on a contended one with 3,484 "sccache server is unreachable" lines
-# in that gate's log and every slot held by peer worktrees, and measured 709.2 s
-# inside the test body on a cold per-run tree. A 900 s package allowance leaves
-# about 191 s above that measurement. This sibling keeps five periods: its
-# elapsed time is still governed by the shared compiler queue, and a wider
-# timeout would cover the delay without changing the contention that causes it.
+# Its child `cargo check` runs in the same four-slot compiler-admission pool as
+# every build on the host, and the child is awaited with `.output()` inside the
+# test body. The shared package-cache and compiler queues therefore count
+# towards this test's wall clock. It completed in 171.4 s on a quiet run and
+# took 709.2 s on a cold per-run tree; this candidate also timed out at the
+# default 300 s while the child waited for Cargo's package-cache lock. Fifteen
+# periods leave about 191 s above the measured cold run and fit below the
+# 960 s CI whole-run cap. The dedicated test group still serializes child Cargo
+# jobs without widening the allowance for unrelated tests.
+slow-timeout = { period = "60s", terminate-after = 15 }
 
 [[profile.default.overrides]]
 # `cargo publish --dry-run` builds into a fresh target directory. Allow fifteen
@@ -107,12 +104,20 @@ slow-timeout = { period = "60s", terminate-after = 12 }
 
 [[profile.default.overrides]]
 # This isolated fixture builds dependencies into a fresh target before its
-# direct-rustc check. It reached the default 300 s cap under saturated compiler
-# admission, so give this one nested build twelve periods (720 s), below the
-# 960 s CI whole-run cap.
+# direct-rustc check. A full-suite retry timed out at 720 s while its nested
+# Cargo build waited for the shared package-cache lock, so give this one build
+# fifteen periods (900 s), below the 960 s CI whole-run cap.
 filter = 'test(/^split_build_fixture_compiles_through_the_direct_rustc_harness($|::)/)'
 success-output = "immediate"
-slow-timeout = { period = "60s", terminate-after = 12 }
+slow-timeout = { period = "60s", terminate-after = 15 }
+
+[[profile.default.overrides]]
+# This compile-fail fixture builds test_support and invokes rustc through the
+# direct harness. It hit the default 300 s cap during the full suite, so give
+# this one cold fixture fifteen periods (900 s), below the 960 s CI run cap.
+filter = 'test(/^stub_env_default_does_not_compile($|::)/)'
+success-output = "immediate"
+slow-timeout = { period = "60s", terminate-after = 15 }
 
 [[profile.default.overrides]]
 # Compiles one patched tree per mutation patch, so it belongs in the same
@@ -178,9 +183,9 @@ success-output = "immediate"
 # this file bounds it and its own cargo watchdog does.
 #
 # The 16-minute global timeout is above the 900s largest per-test allowance.
-# The mutation compile gate keeps its 600s budget, the split-build and
-# production module-slice checks keep 720s, and the cold package publish gets
-# 900s. Both comparisons hold:
+# The mutation compile gate keeps its 600s budget, the production module-slice
+# check keeps 720s, and the CLI configuration, stub-environment compile-fail,
+# split-build, and cold package-publish checks get 900s. Both comparisons hold:
 #
 #   global-timeout > largest per-test allowance
 #   960 s          > 900 s

@@ -73,6 +73,44 @@ def test_nested_cargo_group_serializes_build_capable_tests() -> None:
     ), "nested Cargo build diagnostics must remain immediate"
 
 
+def test_cli_configuration_fixture_has_cold_build_allowance() -> None:
+    """The isolated CLI fixture keeps the timeout measured for cold Cargo."""
+    config = nextest_config()
+    matching = [
+        override
+        for override in all_overrides(config)
+        if "cli_configuration_fixture_compiles"
+        in GROUP_FILTER.findall(str(override.get("filter", "")))
+        and "slow-timeout" in override
+    ]
+    assert len(matching) == 1, (
+        "the CLI configuration fixture must have one targeted timeout override"
+    )
+    assert matching[0].get("slow-timeout") == {
+        "period": "60s",
+        "terminate-after": 15,
+    }, "the cold nested Cargo check needs its measured 900 s allowance"
+
+
+def test_stub_env_default_compile_fail_has_cold_build_allowance() -> None:
+    """The compile-fail fixture keeps its allowance for a cold rustc build."""
+    config = nextest_config()
+    matching = [
+        override
+        for override in all_overrides(config)
+        if "stub_env_default_does_not_compile"
+        in GROUP_FILTER.findall(str(override.get("filter", "")))
+        and "slow-timeout" in override
+    ]
+    assert len(matching) == 1, (
+        "the StubEnv compile-fail fixture must have one targeted timeout override"
+    )
+    assert matching[0].get("slow-timeout") == {
+        "period": "60s",
+        "terminate-after": 15,
+    }, "the cold direct-rustc fixture needs a 900 s allowance"
+
+
 def test_nested_cargo_group_covers_discovered_build_commands() -> None:
     """Direct and helper-mediated build-capable Cargo commands remain grouped."""
     sources = rust_test_sources()

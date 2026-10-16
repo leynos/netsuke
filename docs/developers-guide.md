@@ -9342,12 +9342,12 @@ fed back upstream.
 
 All four tiers are set here.
 
-| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                                             |
-| ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation; 720 s split-build and production-module checks; 900 s packaging smoke test |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally                                                                         |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step                                                             |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                                                                                     |
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                                                           |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation; 720 s production-module check; 900 s CLI fixture, split-build, and packaging smoke tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally                                                                                       |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step                                                                           |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                                                                                                   |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
@@ -9371,32 +9371,30 @@ which is almost all of them. The mutation compile gate gets ten periods, 600 s;
 it compiles all 18 patched trees through the Kani frontend into a target
 directory no cache restores.
 `production_build_module_slice_has_expected_boundary` gets twelve periods, 720
-s. `split_build_fixture_compiles_through_the_direct_rustc_harness` also gets
-twelve periods, 720 s. The packaging smoke test gets fifteen periods, 900 s. Its
-`cargo publish --dry-run` build and the split-build fixture's dependency build
-use fresh nested target directories, so neither inherits completed artefacts
-from `target/`. A whole-run budget has to sit above the largest allowance in
-the file, so 900 s is the figure the ordering below is written against, not the
-300 s most tests get.
+s. `cli_configuration_fixture_compiles`, `stub_env_default_does_not_compile`,
+`split_build_fixture_compiles_through_the_direct_rustc_harness`, and the
+packaging smoke test each get fifteen periods, 900 s. Their nested Cargo builds
+use isolated target directories, so they do not inherit completed artefacts
+from the workspace `target/`. A whole-run budget has to sit above the largest
+allowance in the file, so 900 s is the figure the ordering below is written
+against, not the 300 s most tests get.
 
-The package allowance is scoped to one test deliberately, and the distinction
-is about what a budget can buy rather than about how slow the two look. Its
-sibling `cli_configuration_fixture_compiles` spawns a nested Cargo build too
-and shares the same `test-group`, but its child `cargo check` runs in the same
-four-slot compiler-admission pool as every other build on the host, so its wall
-clock is decided by the queue rather than by the build. The child is awaited
-with `.output()` inside the test body, so that wait counts towards the test's
-allowance and a wider budget would cover it; a wider budget would not remove
-the contention that produces it. What makes covering it unreliable is the
-spread: the same test has finished in 171.4 s on a quiet run, been terminated
-at the 300 s cap on a contended one with the sccache server unreachable and
-every slot held by peer worktrees, and measured 709.2 s inside the test body on
-a cold per-run tree. The previous 780 s whole-run budget capped any allowance
-at 720 s, roughly 11 s above that measured cost. The candidate's 960 s run
-budget would permit up to 900 s, but widening this fixture would cover the wait
-without removing the contention that produces it. Sharing a serialization group
-is a statement about resource contention, not about budget; the two were
-briefly treated as one case and are not one.
+The longer cold-build allowances are scoped to four fixtures. The CLI
+configuration fixture's nested `cargo check` spent 300 s waiting for the shared
+package-cache lock in the latest full-suite run, so Nextest terminated it at
+the profile's default cap before the build could finish. Earlier runs completed
+in 171.4 s on a quiet host and measured 709.2 s on a cold per-run tree. Fifteen
+periods give it 900 s, about 191 s above that cold measurement and below the
+960 s CI whole-run cap. The split-build fixture also timed out at 720 s while
+waiting on the shared package-cache lock; its allowance now matches the CLI
+fixture and packaging smoke test.
+
+`stub_env_default_does_not_compile` builds the `test_support` rlib with Cargo
+before invoking rustc through its direct-compile harness. The full suite
+reached the default 300 s cap on this fixture, so it now has a targeted 900 s
+allowance for a cold build. The nested-Cargo test group still serializes child
+builds, while these wider timeouts let them complete under measured cold and
+contended runs; unrelated tests retain their own allowances.
 
 Those overrides are the targeted, written-rationale case
 `.config/nextest.toml`'s own policy asks for, and the mutation gate is worth
@@ -9415,11 +9413,12 @@ reached the 300.017 s cap during concurrent Cargo work, confirming that its
 timing varies with host load. The latest cold-target run reached 600 s while
 compiler admission was saturated. The candidate gives this test fifteen warning
 periods, 900 s, which remains strictly below the 960 s whole-run budget. The
-split-build and production-module checks retain their twelve-period, 720 s
-allowances. Each override binds only because its filter carries the test's
-module path; for a period one did not, and the earlier passing runs were read
-as evidence the widened allowance was in force when both sit inside the 300 s
-default anyway. See "nextest configuration" for the rule.
+production-module check retains its twelve-period, 720 s allowance; the CLI
+configuration fixture, stub-environment compile-fail fixture, split-build
+fixture, and packaging smoke test share the 900 s tier. Each override binds
+only because its filter carries the test's module path; earlier passing runs
+did not prove the wider allowance was in force because the test completed
+inside the 300 s default. See "nextest configuration" for the rule.
 
 ### The whole-run budget, and how 16 minutes was arrived at
 
