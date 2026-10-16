@@ -50,33 +50,31 @@ fn phony_dep_of_file_target_accepts_correct_shapes(#[case] yaml: &str) {
     crate::assert_lint_silent!(yaml, "phony-dep-of-file-target");
 }
 
-#[test]
-fn phony_dep_of_file_target_is_suppressed_by_a_directive() {
-    let yaml = concat!(
-        "netsuke_version: \"1.0.0\"\n",
-        "targets:\n",
-        "  - name: schema\n",
-        "    phony: true\n",
-        "    command: \"generate-schema\"\n",
-        "  # netsuke-lint: allow phony-dep-of-file-target -- the schema really is an input\n",
-        "  - name: api.json\n",
-        "    deps: schema\n",
-        "    command: \"render > {{ outs }}\"\n",
-    );
-    crate::assert_lint_silent!(yaml, "phony-dep-of-file-target");
-}
-
-#[test]
-fn directory_dep_not_order_only_reports_a_content_dependency() {
-    let yaml = concat!(
-        "netsuke_version: \"1.0.0\"\n",
-        "targets:\n",
-        "  - name: build\n",
-        "    command: \"mkdir -p {{ outs }}\"\n",
-        "  - name: build/report.txt\n",
-        "    deps: build\n",
-        "    command: \"report > {{ outs }}\"\n",
-    );
+/// A plain edge onto a directory target is a content dependency, whether the
+/// directory's recipe is inline or comes from a shared `rule:` selector.
+#[rstest]
+#[case(concat!(
+    "netsuke_version: \"1.0.0\"\n",
+    "targets:\n",
+    "  - name: build\n",
+    "    command: \"mkdir -p {{ outs }}\"\n",
+    "  - name: build/report.txt\n",
+    "    deps: build\n",
+    "    command: \"report > {{ outs }}\"\n",
+))]
+#[case(concat!(
+    "netsuke_version: \"1.0.0\"\n",
+    "rules:\n",
+    "  - name: make_dir\n",
+    "    command: \"mkdir -p {{ outs }}\"\n",
+    "targets:\n",
+    "  - name: build\n",
+    "    rule: make_dir\n",
+    "  - name: build/report.txt\n",
+    "    deps: build\n",
+    "    command: \"report > {{ outs }}\"\n",
+))]
+fn directory_dep_not_order_only_reports_a_content_dependency(#[case] yaml: &str) {
     crate::assert_lint_fires!(yaml, "directory-dep-not-order-only", 1);
 }
 
@@ -105,28 +103,25 @@ fn directory_dep_not_order_only_accepts_correct_shapes(#[case] yaml: &str) {
     crate::assert_lint_silent!(yaml, "directory-dep-not-order-only");
 }
 
-/// The rule resolves a `rule:` selector, so a directory target that shares a
-/// reusable `mkdir` rule is still recognized.
-#[test]
-fn directory_dep_not_order_only_resolves_a_shared_rule() {
-    let yaml = concat!(
+/// A suppression directive above the dependent target silences each caching
+/// rule for that target.
+#[rstest]
+#[case(
+    concat!(
         "netsuke_version: \"1.0.0\"\n",
-        "rules:\n",
-        "  - name: make_dir\n",
-        "    command: \"mkdir -p {{ outs }}\"\n",
         "targets:\n",
-        "  - name: build\n",
-        "    rule: make_dir\n",
-        "  - name: build/report.txt\n",
-        "    deps: build\n",
-        "    command: \"report > {{ outs }}\"\n",
-    );
-    crate::assert_lint_fires!(yaml, "directory-dep-not-order-only", 1);
-}
-
-#[test]
-fn directory_dep_not_order_only_is_suppressed_by_a_directive() {
-    let yaml = concat!(
+        "  - name: schema\n",
+        "    phony: true\n",
+        "    command: \"generate-schema\"\n",
+        "  # netsuke-lint: allow phony-dep-of-file-target -- the schema really is an input\n",
+        "  - name: api.json\n",
+        "    deps: schema\n",
+        "    command: \"render > {{ outs }}\"\n",
+    ),
+    "phony-dep-of-file-target"
+)]
+#[case(
+    concat!(
         "netsuke_version: \"1.0.0\"\n",
         "targets:\n",
         "  - name: build\n",
@@ -135,6 +130,9 @@ fn directory_dep_not_order_only_is_suppressed_by_a_directive() {
         "  - name: build/report.txt\n",
         "    deps: build\n",
         "    command: \"report > {{ outs }}\"\n",
-    );
-    crate::assert_lint_silent!(yaml, "directory-dep-not-order-only");
+    ),
+    "directory-dep-not-order-only"
+)]
+fn a_directive_suppresses_each_caching_rule(#[case] yaml: &str, #[case] rule: &str) {
+    crate::assert_lint_silent!(yaml, rule);
 }
