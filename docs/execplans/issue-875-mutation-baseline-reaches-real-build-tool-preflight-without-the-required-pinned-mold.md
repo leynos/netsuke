@@ -1140,6 +1140,33 @@ Every stopping point is documented here. Timestamps are UTC.
   must never be bypassed by unsetting `RUSTC_WRAPPER`. This is reported to the
   operator instead.
 
+- [x] (2026-10-16 22:52Z) **The amended plan's own head `06124400` is green on
+  the same three workflows, so the edit that this plan describes is itself
+  covered by the suite it describes.** The three workflows bound to
+  `061244001b5a7a249a552f508b3e311e06ec362a` each concluded `completed success`
+  on attempt 1: `CI` `38962538616` (started 20:28:54Z, updated 20:50:46Z, five
+  jobs all `success`), `Netsukefile Build Test` `38962538566`, and
+  `Release Dry Run` `38962538751`. This matters beyond a repeat of the entry
+  above, because the only delta from `6558fd1f` is this document, and this
+  document is read at test time by `tests/execplan_status_contract_tests.rs`.
+  The `build-test` job log for the new head reports
+  `3990 tests run: 3990 passed (1 slow), 6 skipped` in 250.641 s and names the
+  suite nine times, every one a `PASS`, including
+  `every_execplan_header_status_is_within…` — so the amended `Status:` line,
+  the new `Progress` entry above and the new `Surprises & discoveries` bullet
+  all passed the contract that reads them. The in-line `Status:` shape was also
+  checked directly against the committed blob before pushing:
+  `git show HEAD:<plan>` is byte-identical to the working tree (so the checked
+  object is the pushed one), and the value is a bare `COMPLETE` on exactly one
+  line-initial `Status:` occurring above the first level-two heading.
+
+  **A poll reading is not a conclusion, and one transient read was
+  misleading.** A single sample showed `Release Dry Run` at `queued` *after* it
+  had been `in_progress`, which reads as a restart or a regression. Querying
+  the run directly instead of the poll's snapshot showed that it had in fact
+  concluded `success` at 20:48. The run list endpoint's `status`/`conclusion`
+  pair is the authority; a polled line is a point-in-time rendering of it.
+
 ## Surprises & discoveries
 
 Unexpected findings during implementation that were not anticipated as risks.
