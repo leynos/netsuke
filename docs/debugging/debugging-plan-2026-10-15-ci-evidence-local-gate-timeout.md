@@ -222,3 +222,41 @@ qualifying pair. One healthy reading at 15:03:12 showed zero queued requests;
 records an unavailable observation condition, not a verdict about packaging
 behaviour or the earlier timeout's cause. These local observations remain
 outside the CI baseline dataset.
+
+## H4 outcome and later environment observation
+
+The monitor collected 424 initial observations and 76 continuation
+observations, ending at 16:57:23 UTC on 15 October. No two qualifying readings
+were obtained and no diagnostic test launched. H4 is therefore inconclusive;
+the original prediction was not tested.
+
+A separate read-only status on 16 October showed a healthy four-slot admission
+pool with three slots held and sccache unreachable. The managed
+`buildlimits-sccache.service` is enabled but inactive/dead. Systemd reports it
+inactive since 12 October, with `Result=success`, `ExecMainStatus=15` and zero
+restarts. This does not establish that the service state caused the local test
+timeouts. No service, configuration or admission-limit changes have been made.
+Explicit user approval is pending before the proposed recovery command:
+`systemctl --user start buildlimits-sccache.service`. Treat these as local
+environment observations, separate from the CI baseline.
+
+On 15 October, ordinary required hosted checks passed on tested merge
+`0ced8474e03ba6ec22d45abf8d81145e90d41a35`, which included newer `main` at
+`486b876c7244c81b4fa9787a990448beebafea26`. That merge had 78 changed paths
+relative to the documentation PR head, including Rust, tests and Nextest
+configuration. Hosted Nextest reported 3,928 passes and six skips; doctests
+reported 129 passes and 32 ignored. Its packaging test passed in 161.125
+seconds with a 600-second allowance. The local full gate selected 3,912 tests
+and timed out packaging at 300.028 seconds. These runs do not have equivalent
+source, configuration, selection or timeout conditions, so hosted success does
+not waive the local gate or identify the earlier timeout's cause.
+
+A retained run provides a narrower comparison: for run `38276341866`, job
+`114902625996`, the tested merge `1d4bbde6d01713062621c7b58aa5441aaa97197e` has
+no diff from the PR head across Cargo inputs, Rust source, build scripts,
+locales or Cargo-included documentation/assets. Its full diff still differs in
+CI/Kani tooling and `tests/workflow_ci.rs`; the native record reports packaging
+at 169.864 seconds. This narrows package-input differences in that comparison,
+but does not establish matching compiler, cache or runner conditions or explain
+the local timeout. The native journal window from 11–13 October contains no
+cache-service entries, so the service stop reason remains unknown.
