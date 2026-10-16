@@ -9,8 +9,8 @@ proceeds.
 Status: COMPLETE
 
 All four milestones are closed and draft pull request #911 carries the work.
-The status describes this plan, not the issue: one of the issue's four
-acceptance criteria — that required linker selection remains intact — is unmet
+The status describes this plan, not the issue: the issue's acceptance clause
+that required linker selection remains intact — its second clause — is unmet
 under its strict reading and is **recorded as an upstream gap rather than
 resolved**, because the fix needs a `rustflags` input on the shared reusable
 workflow that no revision of it declares. See *Outcomes & retrospective*.
@@ -926,8 +926,8 @@ Every stopping point is documented here. Timestamps are UTC.
   why.** Closing Milestone 4 uncovered a contradiction rather than a cosmetic
   defect: the milestone line named "PR marked ready" as its final gate, while
   the brief asked for a *draft* pull request and this plan's own *Outcomes*
-  records the fourth acceptance criterion as unmet. Leaving that would have
-  made the plan's terminal instruction point the opposite way from its
+  records the linker-selection acceptance clause as unmet. Leaving that would
+  have made the plan's terminal instruction point the opposite way from its
   evidence. The correction landed in the commit that closes Milestone 4, and no
   later head is named here on purpose: naming one would be falsified by the
   next edit, which is the regress itself. Every head after `8c0490eb` is
@@ -954,16 +954,16 @@ Every stopping point is documented here. Timestamps are UTC.
   written once and falsified by the next push within a single turn.
 - [x] Milestone 4: ExecPlan finalized, `coderabbit review --agent` passes
   dispositioned, CI green, draft pull request open.
-  **`coderabbit review --agent` cannot be reported clean while the fourth
-  acceptance criterion is unmet:** every pass re-raises the mold-selection
-  finding as `major`, correctly, and four probes have confirmed the underlying
-  condition rather than resolved it. Milestone 4 is therefore discharged by CI
-  green plus a dispositioned review and a pull request stating the unmet
-  criterion, not by a zero-finding review — which is what the nine passes
-  delivered: six prose defects fixed, two load-bearing findings dispositioned
-  as recorded gaps. **The pull request stays a draft**, as instructed; "marked
-  ready" appeared in an earlier version of this line and was the plan
-  overreaching its brief.
+  **`coderabbit review --agent` cannot be reported clean while the
+  linker-selection acceptance clause is unmet:** every pass re-raises the
+  mold-selection finding as `major`, correctly, and four probes have confirmed
+  the underlying condition rather than resolved it. Milestone 4 is therefore
+  discharged by CI green plus a dispositioned review and a pull request stating
+  the unmet criterion, not by a zero-finding review — which is what the
+  retained passes delivered: ten non-mold defects fixed, and the mold-selection
+  finding dispositioned as a recorded gap. **The pull request stays a draft**,
+  as instructed; "marked ready" appeared in an earlier version of this line and
+  was the plan overreaching its brief.
 
   **The PR-description half is done.** PR #911's body now carries a section
   headed "One acceptance criterion is unmet, and it is recorded rather than
@@ -1011,11 +1011,13 @@ Every stopping point is documented here. Timestamps are UTC.
   corrected here rather than delivered: the request that opened this work asked
   for a draft pull request, and nothing in it asks for one marked ready.
   Clearing the flag would also contradict what this plan itself records — the
-  fourth acceptance criterion is unmet, and a ready-for-review pull request is
-  a merge signal. CodeRabbit's GitHub-side review is suppressed on a draft
-  (`success CodeRabbit Review skipped: draft pull request`), which is why the
-  review evidence on this branch comes from seven foregrounded
-  `coderabbit review --agent` passes rather than from the app's own check.
+  linker-selection acceptance clause is unmet, and a ready-for-review pull
+  request is a merge signal. CodeRabbit's GitHub-side review is suppressed on a
+  draft (`success CodeRabbit Review skipped: draft pull request`), which is why
+  the review evidence on this branch comes from foregrounded
+  `coderabbit review --agent` passes rather than from the app's own check. The
+  count is 16 invocations over 2026-10-13 05:59 .. 2026-10-14 02:43 UTC; the
+  census method and its deduplication are in *Outcomes & retrospective*.
 
 ## Surprises & discoveries
 
@@ -1033,6 +1035,20 @@ Unexpected findings during implementation that were not anticipated as risks.
   run `38280609203` and to 13 inputs at the pin / 14 at the tip. Recourse: when
   a number in prose is a measurement, re-derive it from the artefact and read
   the *names* out rather than counting lines that look like names.
+
+  A third instance of the same class surfaced later and was worse, because it
+  was not a measurement but an **ordinal with no enumeration behind it**: the
+  plan recorded the issue's acceptance position as "the fourth acceptance
+  criterion", a phrase that appears in this file exactly once and matches no
+  list it ever writes. The issue's `## Acceptance` section states **five**
+  clauses and puts linker selection **second**; this plan's own *Purpose*
+  paragraph separately lists five items and puts it **third**. Two numbering
+  schemes were being quoted interchangeably and neither was named, so the
+  ordinal survived six plan sites and the pull-request body unchallenged. A
+  count that is wrong is at least checkable against its artefact; an ordinal
+  with no enumeration is unfalsifiable, and no gate and no reviewer can catch
+  one. Recourse: name the clause by quotation, and when two enumerations are in
+  play, say which one is being counted.
 
 - **Observation:** an `RUSTFLAGS` that is *set to the empty string* is not the
   same as one that is *unset*, and treating the two alike would have recorded a
@@ -1406,11 +1422,20 @@ changes nothing unless it reproduces. The first, second, fourth and fifth are
 met. The third is met only under one of its two readings, and the split is set
 out below rather than averaged away.
 
-**Three of the issue's four acceptance criteria are met, and the fourth is
-not.** The worker provisions mold — `build-tools: mold 2.41.0` matching
-`tools/mold/VERSION`, on `PATH` via `GITHUB_PATH`, with the
-`Run setup commands` step moving from `skipped` to `success`. The baseline then
-reports `ok Unmutated baseline in 122s build + 218s test` after
+**The issue's Acceptance clause that names linker selection is unmet; the
+others are met.** The two numbering schemes in play are distinct and both are
+now stated by name. The paragraph above counts the five items of this plan's
+own *Purpose*, where linker selection is the third. The issue's `## Acceptance`
+section separately states five clauses — the named tests and baseline pass;
+linker selection remains intact; nonempty mutants execute; diagnostics are
+retained on failure; runner, cache and concurrency are unchanged — and linker
+selection is the **second** of those. An earlier revision of this plan called
+it "the fourth criterion", an ordinal matching no enumeration it ever wrote;
+that is corrected here and the clause is referred to by name below. The worker
+provisions mold — `build-tools: mold 2.41.0` matching `tools/mold/VERSION`, on
+`PATH` via `GITHUB_PATH`, with the `Run setup commands` step moving from
+`skipped` to `success`. The baseline then reports
+`ok Unmutated baseline in 122s build + 218s test` after
 `Found 636 mutants to test`, and mutants are evaluated and reported. The two
 named tests pass locally and run inside that baseline, because
 `tests/makefile_test_target.rs:347` declares `mod rustdocflags` and the
@@ -1422,9 +1447,9 @@ reproduces the original failure. Flag ownership is recorded against
 shared-actions#544 with **no local workaround**, and the ETXTBSY audit was
 read-only with no helper changed and no retry added.
 
-**The fourth criterion, and the reading it turns on.** The issue's Acceptance
-asks that "required linker selection remains intact". That phrase has two
-readings and they disagree here, so both are stated.
+**The linker-selection clause, and the reading it turns on.** The issue's
+Acceptance asks that "required linker selection remains intact". That phrase
+has two readings and they disagree here, so both are stated.
 
 Under the **strict** reading — the worker's baseline is linked as the build
 standard requires — it is **not met**, and this change does not meet it. The
@@ -1484,23 +1509,35 @@ Markdown only, their re-run is a formality, and the standing requirement is
 that CI be green on every head, including the draft pull request's final one.
 That requirement is met on `8c0490eb` and on every head after it, each of which
 is docs-only on top of the byte-identical non-Markdown tree of the green
-`52084776`. CodeRabbit has run nine passes over this branch. Six findings were
-prose or evidence defects and were fixed — first-person pronouns in this plan,
-a flag-precedence claim stated inaccurately, a reproduction recipe that could
-not work, an acceptance line demanding evidence that was never obtainable, a
-conformance check naming `.github/actions/...` where the caller pins
-`.github/workflows/mutation-cargo.yml`, and (pass 8) a *Context and
-orientation* section still describing the caller's `with:` block and the
-rustdoc tests as they stood before this branch changed them. Two were
-load-bearing and both stand as recorded gaps: the mold-selection finding,
-raised on every pass that finds anything, which is confirmed as diagnosed and
-confirmed as not actionable from a caller; and the empty-`RUSTFLAGS` reading,
-which the plan now states correctly. A zero-finding review is not reachable
-while the fourth criterion is unmet, and treating one as the exit condition
-would mean either deleting the finding or writing a workaround the issue
-forbids.
+`52084776`. **Census of the retained `coderabbit review --agent` logs:** 16
+invocations between 2026-10-13 05:59 UTC and 2026-10-14 02:43 UTC, all
+`currentBranch` = this branch and all `workingDirectory` = this worktree.
+Twelve carried findings and four returned none. The twenty-two finding records
+are ten instances of the mold-selection finding plus twelve others standing at
+ten distinct sites, two of which were raised twice. So there are **eleven
+distinct defects: ten fixed, and the mold-selection gap standing as a recorded
+upstream blocker**. The ten fixed ones, by site, are: first-person pronouns in
+this plan; a second-person pronoun with a subject-verb agreement error; a
+reproduction recipe that could not work; a mold-free conformance command that
+cannot pass and was re-raised at the same line in a later pass; an empty
+`RUSTFLAGS` treated as proof that Cargo selects mold; an acceptance line
+demanding evidence that was never obtainable; a conformance check naming
+`.github/actions/...` where the caller pins
+`.github/workflows/mutation-cargo.yml`; a *Context and orientation* section
+still describing the caller's `with:` block and the rustdoc tests as they stood
+before this branch changed them; a flag-precedence comment in the contract test
+stated inaccurately; and, in that same test, an empty `case … : pass` arm
+replaced by a typed narrowing helper. The mold-selection finding is one defect
+raised ten times, not ten defects. The "nine passes" figure this paragraph
+previously carried, and the "seven foregrounded passes" in *Progress*, were
+both impressions rather than counts, and the "six prose defects" they carried
+understated the fixed work by four. Re-derive a count like this from the
+retained logs, keyed on `(fileName, startLine)`, rather than from recollection.
+A zero-finding review is not reachable while the linker-selection clause is
+unmet, and treating one as the exit condition would mean either deleting the
+finding or writing a workaround the issue forbids.
 
-Two of those nine passes were run back to back over the identical frozen
+Two of those sixteen passes were run back to back over the identical frozen
 revision `52084776`, and they returned **0 and 2** findings. That is the
 sampling behaviour stated as a measurement rather than a caveat: a "clean
 review" is a property of one sample, so the exit condition this plan uses is a
@@ -2017,12 +2054,13 @@ existing shared-workflow pin: the pinned revision already declares both
 `install-mold` and `setup-commands`, so the issue's conditional pin bump was
 not required.
 
-Revisions, 2026-10-14. Recorded the seven-pass CodeRabbit tally and the 0-and-2
-sampling measurement over the frozen revision `52084776`; fixed the M2
-conformance check to name the caller's real `uses:` target; and extended the
-CI-green record to `009cbf02`, whose only delta from the fully-gated `52084776`
-is this document and which is therefore gated by the three Markdown-sensitive
-gates plus `test-workflow-contracts`.
+Revisions, 2026-10-14. Recorded the CodeRabbit tally — later re-derived to the
+16-invocation census in *Outcomes & retrospective* — and the 0-and-2 sampling
+measurement over the frozen revision `52084776`; fixed the M2 conformance check
+to name the caller's real `uses:` target; and extended the CI-green record to
+`009cbf02`, whose only delta from the fully-gated `52084776` is this document
+and which is therefore gated by the three Markdown-sensitive gates plus
+`test-workflow-contracts`.
 
 Revisions, 2026-10-14 (final). Consolidated the plan onto its instructed end
 state. Milestone 4 is closed: the draft pull request #911 is the deliverable,
