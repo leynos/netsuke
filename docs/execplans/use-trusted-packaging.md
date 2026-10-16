@@ -1207,10 +1207,47 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   (`finalize-github-release`); it is qualified to say that the intent governs
   the GitHub publication path, that the test asserts per-job scopes and never
   set-equality over holders, and that Stage C must extend or rename it so its
-  name does not outlive its truth. Both edits are whitespace-canonicalised:
-  `mdtablefix --check` reports 184 files unchanged, the token stream is
-  identical to the pre-format copy, and the line-initial ordered-list marker
-  census is 44 before and after.
+  name does not outlive its truth. Both edits changed whitespace only, as
+  re-formatted by `mdtablefix`: `--check` reports 184 files unchanged, the
+  token stream is identical to the pre-format copy, and the line-initial
+  ordered-list marker census is 44 before and after.
+- [x] (2026-10-16) Ran the full ten-gate batch at `048b49f8`. **The spelling
+  gate reded a second time, and again the defect was this branch's own prose
+  about its own repair.** The previous entry, which documents a spelling
+  failure and the rewording that fixed it, added a fresh `-ise` form while
+  describing the re-formatting, and the en-GB-oxendict dictionary requires the
+  `-ize` spelling of it. So the same gate failed twice in consecutive
+  candidates by two mechanisms: first the entry quoted the offending token,
+  then it introduced a new one. This is the *same defect class* recorded in
+  `docs/execplans/6-1-1-split-rfc-0006-set-into-focused-child-rfcs-and-task.md`
+  at its own third instance, and that plan's answer applies unchanged: a
+  repo-wide `-ise` sweep is **not** a safe repair, because a backticked
+  quotation of another revision's gate output must keep its original spelling
+  or it becomes a falsified record. This plan holds no such quotation —
+  checked, and none exists — so the single plain-prose occurrence is the whole
+  repair, and it now reads "changed whitespace only, as re-formatted by
+  `mdtablefix`". `markdownlint` again exits 2 with a **byte-identical log**, so
+  `markdownlint-cli2` never ran and has **no verdict**; that is an unknown, not
+  a pass. `typos.toml` was not modified this run (tree clean afterwards).
+
+  **The four Rust gates did not fail; they were refused.** `typecheck`, `lint`,
+  `doc-coverage`, and `test` each aborted on
+  `build-limits: the supervisor refused: unhealthy` — the shared
+  compiler-admission supervisor went unhealthy mid-batch, so `cargo` could not
+  even run `rustc - --print` to learn target information. `lint` cites 17
+  refusals and `typecheck` 15; every compile failure is a third-party crate
+  compiled under `--cap-lints allow` (13 distinct in `typecheck`), and none is
+  netsuke code. `test` reports `Error 102` from `test-nextest` having never
+  started, so the doctest half again did not run. None of these four is
+  evidence about this candidate: admission itself was unavailable. The
+  supervisor recovered shortly afterwards (`healthy, caching through sccache`),
+  so a re-run is the disposition rather than a workaround, and `build-limits:`
+  refusal is reported rather than bypassed.
+
+  Net verdict for `048b49f8`: six gates reported (five green — `check-fmt`,
+  `nixie`, `test-workflow-contracts`, `test-release-publication` — and one real
+  red, `spelling`), `markdownlint` masked with no verdict, and four Rust gates
+  void by infrastructure refusal.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
   Scope correction from recon at `c1f3f2ed`: this is not an extraction of
   existing bodies. `release.yml` has no `package-crate`, `publish-crates-io`,
