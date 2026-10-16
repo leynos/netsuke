@@ -1182,8 +1182,8 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 
   That second timeout is stronger evidence than the first, and it changes the
   disposition. The timed-out test is
-  `locale_stub_ui_tests::split_build_fixture_compiles_through_the_direct_rustc_harness` —
-  in `.config/nextest.toml` it sits in the **same
+  `locale_stub_ui_tests::split_build_fixture_compiles_through_the_direct_rustc_harness`.
+  In `.config/nextest.toml` it sits in the **same
   `[[profile.default.overrides]]` block** (`:98-100`) as
   `production_build_module_slice_has_expected_boundary`, which
   `docs/developers-guide.md` documents as a known host-contention timeout whose
@@ -1248,6 +1248,43 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `nixie`, `test-workflow-contracts`, `test-release-publication` — and one real
   red, `spelling`), `markdownlint` masked with no verdict, and four Rust gates
   void by infrastructure refusal.
+- [x] (2026-10-16) Ran four gates at `7d3f18c2`, the commit that repaired the
+  second spelling defect. `check-fmt` exits 0 in 2 s and `spelling` exits 0 in
+  12 s, so **the repair is confirmed by the gate itself** and not only by the
+  ad-hoc check that preceded the commit. **`markdownlint` then ran for the
+  first time in this plan's history and reded on a real defect of this branch's
+  own prose** — which means the two earlier masked runs had been hiding a live
+  failure, not merely an unknown. Its verdict changed from *no verdict* to *one
+  genuine MD013 violation* precisely because fixing the `spelling` prerequisite
+  let the dependent target execute at all. That is the second time in this plan
+  that repairing one gate exposed another, and it confirms the hazard recorded
+  in Surprises: a red prerequisite is a mask, and a mask is not a pass.
+
+  The violation was at `docs/execplans/use-trusted-packaging.md:1185`, an
+  89-column line whose over-long content was a long Rust test path. The cause
+  is specific and worth recording, because the same file already carries lines
+  of 125 and 81 columns that pass. MD013's only live exemption here is the
+  **final** whitespace-free run of the line: the rule rewrites
+  `line.replace(/\S*$/u, "#")` before measuring, so a line whose *last* token
+  is one unbreakable span is exempt no matter how long that span is. On line
+  1185 that last token was a one-character em-dash, so the 85-column code span
+  before it was counted and the dash itself was the exempt run. Repaired by
+  ending the sentence at the code span and starting the em-dash clause as a new
+  sentence, which makes the span line-final and matches the two lines that
+  already pass. Targeted probes after the edit: `markdownlint-cli2` reports **0
+  issues** on the plan, and `mdtablefix --check` reports it unchanged. The
+  verdict was obtained by running the tool, never by predicting it from the
+  rule source.
+
+  `make test` was refused a second time by the same admission failure, so it
+  again carries no verdict and the doctest half is again unobserved. The
+  supervisor has since become **unqueryable** — `build-limits-status` now exits
+  1 with `cannot query the supervisor ... timed out` rather than reporting
+  `UNHEALTHY` — so the Rust gates cannot be attempted at all until admission is
+  restored. Two genuine `test` timeouts (at `c1f3f2ed` and `ce5ff20f`) remain
+  the only real failures recorded against that target; the two later refusals
+  are admission unavailability and are not counted as failed attempts against
+  the `Tolerances` limit of three.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
   Scope correction from recon at `c1f3f2ed`: this is not an extraction of
   existing bodies. `release.yml` has no `package-crate`, `publish-crates-io`,
