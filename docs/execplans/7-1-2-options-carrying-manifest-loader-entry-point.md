@@ -644,9 +644,13 @@ and YAML fixtures, and were set from the inventory in Table 1.
   backslashes, a serialized Windows path with doubled ones, a Unix path, a
   trailing separator, and a sibling directory that merely shares the prefix
   (`/tmpfoo/ws`, which must be left alone). Non-vacuity was proved by reverting
-  the pattern and confirming that **exactly** the JSON-escaped row and the
-  trailing-separator row fail; round one had no such check, which is why it
-  recorded a green while the defect was live. The rows use `ensure!` and return
+  the pattern **one clause at a time** and confirming that each revert fails
+  **exactly one** row and leaves the other four passing: dropping the
+  one-or-more quantifier fails only the JSON-escaped row, and removing the
+  trailing-separator trim fails only the trailing-separator row. Two clauses,
+  two disjoint failures — so no row is carrying the other's assertion and none
+  is tautological. Round one had no such check, which is why it recorded a
+  green while the defect was live. The rows use `ensure!` and return
   `anyhow::Result` rather than asserting, because `clippy::panic_in_result_fn`
   is denied workspace-wide (`Cargo.toml:223`) and an assertion inside a
   `Result`-returning test trips it.
@@ -676,6 +680,49 @@ and YAML fixtures, and were set from the inventory in Table 1.
   so neither is a pass count. Provenance held: HEAD `8cf507c2` and all three
   blob hashes identical at both ends of the batch, and `git status --porcelain`
   empty at both.
+- [x] (2026-10-16) Second milestone CLI review (`coderabbit review --agent`
+  through `scrutineer`) ran against the frozen clean tree at `cc7f0084` and
+  returned **one `trivial` finding over 39 reviewed files**, with
+  `outcome: completed` and no rate-limit text. The log is 3 JSONL lines — one
+  `review_context`, one `finding`, one `complete`, and **zero heartbeats** — at
+  `/tmp/coderabbit-7-1-2-options-carrying-manifest-loader-entry-point-cc7f0084.out`
+  (sha256 `c1a18871…`, 4276 bytes). Unlike the first review, its
+  `review_context` carries **no `baseCommit` field at all**, only
+  `baseBranch: "main"`; the review binds through the worktree path and the
+  branch, which is the reason a content edit voids it and the CLI must be
+  re-run rather than the log re-read.
+  - **trivial, `tests/manifest_load_options/fixtures/settings.rs:67-89`
+    (`[type:docstyle]`), "Remove the duplicated temporary-path filter."** —
+    asks that the pure `temp_dir_filter_pattern` be moved to a home both
+    snapshot crates can reach, for example `test_support`, with each crate
+    keeping its own `Settings` wiring. **Repaired**, on the remedy's own merits.
+    The finding's stated reason is false and is recorded as such: it claims "the
+    first repair round already missed one copy's defect", but `51fb1b49`
+    changed both files and left both holding the same incomplete pattern, so
+    nothing was missed. The duplication was nonetheless real and independently
+    triggers the `AGENTS.md` refactoring heuristic.
+  - **Why the remedy was accepted despite the false premise.** Two copies, each
+    guarded only by its own copy of the same five `rstest` cases, can drift
+    apart while both suites stay green — the guard travels with the copy, so
+    neither copy's tests can see the other. Consolidating removes the class of
+    defect instead of adding a check for it. Both copies' cases now run once,
+    against one builder, in the crate both snapshot trees already depend on.
+  - **Two entries in the plan's own `Constraints` were checked before the
+    move.** C7 ("no new crate dependency") is not violated: `regex` is already
+    in `Cargo.lock` at 1.13.1 as a dev-dependency of the root crate, so this
+    adds a second **consumer** of an already-resolved crate, not a new crate.
+    C10 (400-line cap) is satisfied: the new module is 128 lines, and both
+    edited files **shrank** — `src/snapshot_test_support.rs` 263 to 198,
+    `tests/manifest_load_options/fixtures/settings.rs` 144 to 55.
+  - **Non-vacuity was established by mutation, not by inspection.** Reverting
+    the shared builder's separator from the one-or-more class `[\\/]+` to the
+    single-character class `[\\/]` — that is, re-introducing the round-one
+    mistake exactly — fails **case 2 alone**, the JSON-escaped Windows row, with
+    `expected "{\"path\": \"[TMP]\"}"`, `got "{\"path\": \"C:\\\\Users\\\\…\"}"`;
+    the other four rows still pass. That signature is the same one the plan
+    already records for the original defect, which is the evidence that the
+    extracted oracle guards the real property rather than tautologically
+    agreeing with whatever the builder emits.
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
@@ -989,17 +1036,17 @@ and YAML fixtures, and were set from the inventory in Table 1.
   standing in for the other. Impact: the same trap applies to any future filter
   that redacts a path reaching a snapshot through `serde_json` — the doubled
   form, not the raw form, is what decides whether a run-specific name survives
-  into a checked-in file. The two copies are separate functions rather than a
-  shared helper, so they must be corrected together:
-  `src/snapshot_test_support.rs` serves `src/snapshots/` and
-  `tests/manifest_load_options/fixtures/settings.rs` serves `tests/snapshots/`.
-  A sweep for the class confirms these are the only two path-rewriting snapshot
-  filters in the tree; every other `add_filter` call is a MiniJinja template
-  filter, a different API on a different object. Likewise the `ManifestQuery`
-  claim was swept: it is named in 10 places across five documents outside this
-  plan — `developers-guide.md`, `roadmap.md`, ADR-018, RFC 0007, and the
-  technical design — and the corrected paragraph was the only site asserting
-  the process environment.
+  into a checked-in file. A sweep for the class confirms these were the only
+  two path-rewriting snapshot filters in the tree; every other `add_filter`
+  call is a MiniJinja template filter, a different API on a different object.
+  Those two copies were separate functions — `src/snapshot_test_support.rs`
+  serves `src/snapshots/` and
+  `tests/manifest_load_options/fixtures/settings.rs` serves
+  `tests/snapshots/` — and they are now one shared builder, per the decision
+  recorded below. Likewise the `ManifestQuery` claim was swept: it is named in
+  10 places across five documents outside this plan — `developers-guide.md`,
+  `roadmap.md`, ADR-018, RFC 0007, and the technical design — and the corrected
+  paragraph was the only site asserting the process environment.
 
 - Observation: the review's two minor findings were one defect reported twice,
   and a raw finding count therefore overstated the work by a third. Evidence:
@@ -1007,6 +1054,24 @@ and YAML fixtures, and were set from the inventory in Table 1.
   only in wording and in the suggested diff. Impact: a finding count must be
   de-duplicated by (file, lines, defect) before it is quoted as a measure of
   how much was wrong, or the record implies work that no one did.
+
+- Observation: a review finding can name a real defect while stating a false
+  reason for it, and the reason is checkable on its own. Evidence: the second
+  milestone's review filed one `trivial` finding asking that the duplicated
+  temporary-path filter be consolidated into `test_support`, justified by "the
+  first repair round already missed one copy's defect". That premise is false:
+  `git show --stat 51fb1b49` records **both** files changed by that commit, and
+  both blobs at that revision carry the identical
+  `settings.add_filter(&format!(r#"{prefix}[\\/][^\s"']*"#), "[TMP]");`. Round
+  one did not miss a copy; it applied the same incomplete pattern to both,
+  which is exactly why "either separator" failed identically on each. Impact:
+  the premise and the remedy are separate verdicts. Here the remedy was
+  independently sound — `AGENTS.md` lists duplicated code as a refactoring
+  trigger, and two copies each guarded only by their own copy of the same cases
+  can drift apart while both stay green — so the finding was repaired on its
+  own merits with the false premise recorded rather than inherited. A
+  reviewer's stated *reason* being wrong is not by itself a reason to reject
+  the *request*; see [[netsuke-coderabbit-wrong-premise]].
 
 - Observation: the scrutineer's closing recommendation — add a `slow-timeout`
   override for `cli_configuration_fixture_compiles` — is one the repository has
@@ -1241,6 +1306,33 @@ and YAML fixtures, and were set from the inventory in Table 1.
   runs `FILE_TESTS` against the real filesystem, and the query stubs for `hash`,
   `digest`, and `contents` reject keyword arguments before refusing.
   Date/Author: 2026-09-27, decided by the user; recorded by the planning agent.
+
+- Decision: the temporary-path snapshot pattern moves to
+  `test_support::temp_path_filter` and both snapshot trees bind it, rather than
+  each keeping a private copy. Rationale: the two copies sat in crates that
+  cannot reach each other — one is `#[cfg(test)]` code inside the library, the
+  other is a separate integration crate — so an edit to either copy could not
+  be seen by the other copy's tests, and both suites would stay green while the
+  patterns diverged. Siting the pattern in `test_support` also lets the
+  extracted rows run once, in a crate both trees already depend on, instead of
+  the same five cases existing twice. **Scope and re-use policy:** the shared
+  unit owns the *pattern* only; each crate keeps its own `insta::Settings` and
+  its own `add_temp_dir_filter`, because snapshot directory and module-prefix
+  handling legitimately differ between the trees. Any future snapshot filter
+  that rewrites a path builds its pattern here and does not restate it. The
+  policy is recorded in `docs/developers-guide.md` under *The temporary-path
+  snapshot filter*. Rationale against the alternatives: a drift-detecting
+  contract test would have to read both copies as text and compare them, which
+  adds a check to preserve a duplication rather than removing it, and a sweep
+  confirmed these were the only two path-rewriting snapshot filters in the tree
+  (every other `add_filter` is a MiniJinja template filter, a different API on
+  a different object). Constraint check: C7 (no new crate dependency) holds —
+  `regex` was already resolved in `Cargo.lock` as a dev-dependency of the root
+  crate, so the change adds a second consumer, not a crate. This followed a
+  review finding whose stated reason was false (see `Surprises & discoveries`);
+  the decision stands on the duplication, not on that reason. Date/Author:
+  2026-10-16, decided by the implementation agent as the disposition of a
+  review finding; recorded here for the approver.
 
 ## Outcomes & retrospective
 
