@@ -236,8 +236,8 @@ registers the query helpers and their refusals, which are then classified;
 `Test` registers the pure helpers and typed refusals, and applies the overlays.
 Every branch converges on foreach/`when` expansion, then on rendering and
 validation. The environment reader is not part of the branch: `Full` and `Test`
-each take one from their caller's options, and `AmbientFull` and
-`ManifestQuery` read the process environment.
+each take one from their caller's options, `AmbientFull` reads the process
+environment, and `ManifestQuery` refuses `env()` outright.
 
 ```mermaid
 flowchart TD
