@@ -3399,6 +3399,36 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
       it is withdrawn in `Surprises & discoveries`. Recorded rather than
       explained, because a wrong mechanism is worse than none.
 
+- [x] (2026-10-16) **`EP-M4`'s four files and both mutation patches are now
+      tracked, after an untracked-file defect that would have turned the
+      compile gate red for a reason unrelated to any patch.** The three new
+      modules (`no_loss.rs`, `path_key.rs`, `support.rs`) and the
+      `MUT-EDGEDROP` patch were untracked; the plan had recorded them as
+      written but not that Git did not hold them. The compile guard compiles a
+      **sandbox**, not the checkout it runs in: `every_patched_tree_compiles_under_denied_warnings`
+      (`compile_guard.rs:334`) builds it through `export_revision` (`:161`)
+      from `capture_revision` (`:185`), which runs `git stash create` — a
+      snapshot of tracked content only. This was a guaranteed red gate, not a
+      hypothetical: captured revision `a6e93539` held exactly three files under
+      `src/ninja_gen/determinism/property_tests/` (`mod.rs`,
+      `strategy/graph.rs`, `strategy/mod.rs`) while its own captured `mod.rs`
+      declared `mod no_loss;`, `mod path_key;`, and `mod support;` at lines 16,
+      18, and 22. Three declared modules with no source file means the sandbox
+      cannot build — and because the guard defers to rustc, that surfaces as
+      every patch failing to compile, misattributing the fault to all fourteen
+      patches instead of to the three missing files. The `MUT-EDGEDROP` patch
+      was caught more directly by `ensure_no_untracked_patches` (`:291`),
+      which lists `git ls-files --others --exclude-standard` under the
+      mutations directory and fails on a non-empty result. Both states are
+      cleared and the fix verified by **re-capturing the revision** rather
+      than assuming: `9b7f0ba3` lists all six `property_tests` files, and the
+      untracked list over the mutations directory prints nothing. Landed as
+      `ff39e05f` (files and patch) and `f9f3c910` (module declarations and the
+      patch registry), split so neither commit tracks a patch whose target is
+      absent nor a module whose patch is untracked.
+      **This is a tracking fix, not a compilation result.** The four files
+      still have never been compiled for a target that sets `cfg(test)`.
+
 - [ ] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [ ] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [ ] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
@@ -3407,6 +3437,30 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 
 ## Surprises & discoveries
 
+- (2026-10-16) **A gate that compiles an isolated copy of the tree cannot see
+  work that Git does not hold, and says so in the wrong voice.** `EP-M4`'s
+  three new modules and the `MUT-EDGEDROP` patch sat untracked while the plan
+  recorded them as written, which is true of the files on disk and false of
+  anything the compile gate compiles. The guard's sandbox is built from
+  `capture_revision` (`sandbox.rs:185`), a `git stash create` snapshot of
+  tracked content only, so an untracked file is not merely uncommitted — it is
+  absent from the universe the gate examines. The failure mode is the
+  interesting part: a sandbox missing three of its declared modules cannot
+  build at all, and the guard reports a build failure as **every** patch
+  failing to compile, pointing at all fourteen patches instead of at the three
+  files that are not there. The repository anticipates the narrower case and
+  not this one: `ensure_no_untracked_patches` (`compile_guard.rs:291`) refuses
+  an untracked **patch** with a message that names the mechanism exactly — the
+  sandbox "is exported from the tracked revision and cannot carry an untracked
+  file" — but nothing checks the **sources** the patches target. That asymmetry
+  is worth remembering: the guard was written by someone who had reasoned
+  carefully about the patch list and had not asked the same question of the
+  module tree. `git status` shows an untracked file; it does not show that a
+  gate's input set excludes it. The check that settles it is to ask the gate's
+  own capture what it holds — `git stash create`, then
+  `git ls-tree -r --name-only <rev> <path>` — which is one command and read the
+  captured tree directly rather than reasoning about what `git stash create`
+  ought to include.
 - (2026-10-16) **A narrowed probe can be silent about the exact code it was
   built to judge, while producing output that reads like a pass.** Five compile
   attempts on `EP-M4` were made with `cargo check --lib --all-features`, on the
