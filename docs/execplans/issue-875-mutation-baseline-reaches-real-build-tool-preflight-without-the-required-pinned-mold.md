@@ -959,9 +959,12 @@ Every stopping point is documented here. Timestamps are UTC.
   evidence. The correction landed in the commit that closes Milestone 4, and no
   later head is named here on purpose: naming one would be falsified by the
   next edit, which is the regress itself. Every head after `8c0490eb` is
-  docs-only on top of the green `52084776` and is gated accordingly, which is
-  the stable way to state it and the reason the PR description cites the
-  invariant rather than a SHA.
+  docs-only on top of `52084776` and is gated accordingly, which is the stable
+  way to state it and the reason the PR description cites the invariant rather
+  than a SHA. The carry-over covers the Markdown-sensitive targets plus
+  `test-workflow-contracts`, and of the Rust-bearing gates it covers `lint`,
+  `typecheck` and `doc-coverage` — not `test`, whose local run did not complete
+  and whose oracle is CI.
 
   **Two citation errors were made in the `009cbf02` version of the entry above
   and fixed in the `df475f2e` commit.** That version cited "the delta rule in
@@ -976,8 +979,9 @@ Every stopping point is documented here. Timestamps are UTC.
   rather than read from the artefact — and neither changes a verdict.
 
   **The PR body is written to survive the head advancing.** It states the
-  invariant (the non-Markdown tree is byte-identical to the green `52084776`,
-  so the Rust-bearing gates' green result carries) and names the last
+  invariant (the non-Markdown tree is byte-identical to `52084776`, so the
+  gates green there carry — three of the four Rust-bearing ones; see the
+  correction in the `2026-10-14 04:20Z` entry above) and names the last
   *concluded* run set rather than saying "the current head" — a phrase that was
   written once and falsified by the next push within a single turn.
 - [x] Milestone 4: ExecPlan finalized, `coderabbit review --agent` passes
@@ -1018,22 +1022,39 @@ Every stopping point is documented here. Timestamps are UTC.
   **And green on `52084776`**, the head as of 2026-10-14 03:10Z: `CI`
   `38489674825`, `Netsukefile Build Test` `38489674558`, `Release Dry Run`
   `38489674799`, each `completed success`, with `CI`'s five jobs each
-  `completed success`. This is the revision the eight-gate run and both
-  CodeRabbit passes were bound to, so CI and the local evidence describe the
-  same bytes.
+  `completed success`. Both CodeRabbit passes were bound to this revision, and
+  the full gate set was re-run against it. The all-green eight-gate run is a
+  different revision — see the correction below.
 
   **And green on `009cbf02`**: `CI` `38492475380`, `Netsukefile Build Test`
   `38492475298`, `Release Dry Run` `38492475387`, each `completed success`.
-  `009cbf02` differs from the eight-gate revision `52084776` by exactly one
-  file, the ExecPlan this document is, and its non-Markdown tree is
-  byte-identical to it, so the Rust-bearing gates were not re-run against it
-  while the Markdown-sensitive gates and `test-workflow-contracts` were.
-  `make check-fmt`, `make markdownlint` (which runs `spelling` as its
-  prerequisite), `make nixie` and `make test-workflow-contracts` each exit 0,
-  with the revision hash read immediately before the first gate and immediately
-  after the last and identical both times. The four Rust-bearing gates (`test`,
-  `lint`, `typecheck`, `doc-coverage`) are covered by their green result on
-  `52084776`, whose non-Markdown tree is byte-identical.
+  `009cbf02` differs from `52084776` by exactly one file, the ExecPlan this
+  document is, and its non-Markdown tree is byte-identical to it, so the
+  Rust-bearing gates were not re-run against it while the Markdown-sensitive
+  gates and `test-workflow-contracts` were. `make check-fmt`,
+  `make markdownlint` (which runs `spelling` as its prerequisite), `make nixie`
+  and `make test-workflow-contracts` each exit 0, with the revision hash read
+  immediately before the first gate and immediately after the last and
+  identical both times. Of the four Rust-bearing gates, `lint`, `typecheck` and
+  `doc-coverage` are covered by their green result on `52084776`, whose
+  non-Markdown tree is byte-identical, and `test` is covered by CI's
+  `build-test` on `009cbf02` and every head after it — not by the local run,
+  which did not complete.
+
+  **Correction (2026-10-16).** This entry previously said all four Rust-bearing
+  gates were covered by their green result on `52084776`. Three were.
+  `make test` on that revision terminated at `TIMEOUT [300.008s]` on
+  `command_env_ui_tests::cli_configuration_fixture_compiles` and exited
+  `Error 100`; the timeout is recorded and diagnosed in the `2026-10-14 03:10Z`
+  entry above, which attributes it to admission-queue latency on the fixture's
+  cold per-run child tree and clears it with a 1500 s probe. The gate label was
+  wrong even though the verdict it supported was not, because that test's
+  oracle is CI, which is green on every head. Reading the retained logs is what
+  settles it: `gate-{lint,typecheck,doc-coverage}-issue875-final.out` each end
+  clean and `gate-test-issue875-final.out` ends
+  `make: *** [Makefile:229: test-nextest] Error 100`. The `-final` suffix is
+  not a revision marker — it is reused across batches, so a log's binding comes
+  from its timestamps against the commit times, not from its name.
 
   **There is no remaining gate: a draft pull request is the instructed end
   state, not a step on the way to a ready one.** This entry previously said the
@@ -1079,6 +1100,23 @@ Unexpected findings during implementation that were not anticipated as risks.
   with no enumeration is unfalsifiable, and no gate and no reviewer can catch
   one. Recourse: name the clause by quotation, and when two enumerations are in
   play, say which one is being counted.
+
+- **Observation:** a descriptive log **filename** is not provenance, and one
+  was read as though it were. The plan used one name for two different
+  revisions: `52084776` was called "the eight-gate revision", but the all-green
+  eight-gate run is bound to `3d761c8d`, and the batch that ran against
+  `52084776` is green on three of the four Rust-bearing gates with `make test`
+  ending `Error 100`. Impact: four passages carried the wrong label, and each
+  was self-consistent enough that re-reading the plan confirmed rather than
+  challenged it — the error propagated by being *restated*, not by being
+  re-derived. The verdicts were unaffected, which is why no gate, no reviewer
+  and no CI run could see it. Recourse: bind a gate run to its revision from an
+  embedded `HEAD` marker or from its timestamps against the commit times, and
+  treat a name like `-final` as what it is — a review round, not a revision.
+  Two batches both used `gate-*-issue875-final.out` on different dates, so the
+  suffix discriminates nothing. This is the third instance in this plan of the
+  root cause recorded in the first bullet above, and the sharpest: an artefact
+  existed, was cited, and was not opened.
 
 - **Observation:** an `RUSTFLAGS` that is *set to the empty string* is not the
   same as one that is *unset*, and treating the two alike would have recorded a
@@ -1558,19 +1596,19 @@ confirmed repaired at `d8e03753`; because every commit after that one touches
 Markdown only, their re-run is a formality, and the standing requirement is
 that CI be green on every head, including the draft pull request's final one.
 That requirement is met on `8c0490eb` and on every head after it, each of which
-is docs-only on top of the byte-identical non-Markdown tree of the green
-`52084776`. **Census of the retained `coderabbit review --agent` logs:** 17
-invocations between 2026-10-13 05:59 UTC and 2026-10-16 16:57 UTC, all
-`currentBranch` = this branch and all `workingDirectory` = this worktree.
-Thirteen carried findings and four returned none. The twenty-three finding
-records are eleven instances of the mold-selection finding plus twelve others
-standing at ten distinct sites, two of which were raised twice. So there are
-**eleven distinct defects: ten fixed, and the mold-selection gap standing as a
-recorded upstream blocker**. The ten fixed ones, by site, are: first-person
-pronouns in this plan; a second-person pronoun with a subject-verb agreement
-error; a reproduction recipe that could not work; a mold-free conformance
-command that cannot pass and was re-raised at the same line in a later pass; an
-empty `RUSTFLAGS` treated as proof that Cargo selects mold; an acceptance line
+is docs-only over the byte-identical non-Markdown tree of `52084776`. **Census
+of the retained `coderabbit review --agent` logs:** 17 invocations between
+2026-10-13 05:59 UTC and 2026-10-16 16:57 UTC, all `currentBranch` = this
+branch and all `workingDirectory` = this worktree. Thirteen carried findings
+and four returned none. The twenty-three finding records are eleven instances
+of the mold-selection finding plus twelve others standing at ten distinct
+sites, two of which were raised twice. So there are **eleven distinct defects:
+ten fixed, and the mold-selection gap standing as a recorded upstream
+blocker**. The ten fixed ones, by site, are: first-person pronouns in this
+plan; a second-person pronoun with a subject-verb agreement error; a
+reproduction recipe that could not work; a mold-free conformance command that
+cannot pass and was re-raised at the same line in a later pass; an empty
+`RUSTFLAGS` treated as proof that Cargo selects mold; an acceptance line
 demanding evidence that was never obtainable; a conformance check naming
 `.github/actions/...` where the caller pins
 `.github/workflows/mutation-cargo.yml`; a *Context and orientation* section
@@ -2128,10 +2166,10 @@ that sentence is falsified by whatever commit carries it. The operative
 statement is narrower and stays true: every head after `8c0490eb` *up to and
 including `b9724625`* changes this document and nothing else, so each is gated
 by the three Markdown-sensitive targets plus `test-workflow-contracts`, with
-the Rust-bearing gates carried by the byte-identical non-Markdown tree of the
-green `52084776`. A reader who needs the gate evidence for a specific head
-should read it from the pull request description, which states that invariant
-rather than a SHA.
+`lint`, `typecheck` and `doc-coverage` carried by the byte-identical
+non-Markdown tree of `52084776`, and `test` resting on CI. A reader who needs
+the gate evidence for a specific head should read it from the pull request
+description, which states that invariant rather than a SHA.
 
 Revisions, 2026-10-16. Two changes, both prompted by the eleventh CodeRabbit
 pass rather than by a gate. First, the eleven-times-raised mold finding is now
@@ -2147,3 +2185,29 @@ and tells the next reader to re-check it. Behaviour is unchanged: the edit is
 confined to YAML comments, and the `uses:` pin, the `with:` block and
 `setup-commands` bytes are identical. Because this head is not docs-only, the
 full gate set is required rather than the four-target subset.
+
+Revisions, 2026-10-16 (correction). A provenance audit against the retained
+gate logs falsified a label this plan had been using, and it is corrected above
+rather than left standing. The plan called `52084776` "the eight-gate
+revision". It was not: the all-green eight-gate run is bound to `3d761c8d`, by
+the `HEAD_AFTER` field its `rc` artefacts carry, and `3d761c8d → 52084776` is
+not Markdown-only — it changes
+`tests/workflow_contracts/mutation_testing_test.py`. The second full batch, run
+10-14 01:35–02:18 after `52084776` landed at 01:28, is the `-final` log set,
+and it is green on three of the four Rust-bearing gates: `lint`, `typecheck` and
+`doc-coverage` each end clean. `make test` in that batch does not — it ends
+`make: *** [Makefile:229: test-nextest] Error 100` on the same
+`TIMEOUT [300.008s]` the `2026-10-14 03:10Z` entry diagnoses. So four passages
+that said the Rust-bearing gates were "covered by their green result on
+`52084776`" now say three are, with `test` resting on CI, which is what the
+plan's own timeout entry already implied. The verdicts are unchanged; the label
+under them was wrong.
+
+The methodological finding is worth more than the correction: **the `-final`
+suffix names a review round, not a revision.** Two different batches both used
+it, `gate-check-fmt-issue875-final.out` from 10-14 04:04 and
+`gate-lint-issue875-final.out` from 10-14 01:35, so a log's binding has to be
+derived from its timestamps against the commit times — or from an embedded
+`HEAD` marker — rather than read off its name. Checking a claim against the
+artefact it cites is what caught this; the claim had been re-asserted across
+several entries on the strength of having been written down.
