@@ -1,0 +1,14 @@
+diff --git a/src/ninja_gen/dyndep/mod.rs b/src/ninja_gen/dyndep/mod.rs
+--- a/src/ninja_gen/dyndep/mod.rs
++++ b/src/ninja_gen/dyndep/mod.rs
+@@ -152,7 +152,10 @@ fn render_edges(
+     out: &mut String,
+     stages: &mut SerialStages,
+ ) -> Result<(), NinjaGenError> {
+     for edge in ordered_edges(graph) {
++        if !edge.explicit_outputs.is_empty() {
++            continue;
++        }
+         render_edge(graph, edge, out, stages)?;
+     }
+     Ok(())
