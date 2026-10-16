@@ -13,7 +13,9 @@ The status describes this plan, not the issue: the issue's acceptance clause
 that required linker selection remains intact — its second clause — is unmet
 under its strict reading and is **recorded as an upstream gap rather than
 resolved**, because the fix needs a `rustflags` input on the shared reusable
-workflow that no revision of it declares. See *Outcomes & retrospective*.
+workflow that no *merged* revision of it declares. A fix is proposed —
+shared-actions#628 adds the input — but it is unmerged as of 2026-10-16, and a
+caller can only pin a revision that exists. See *Outcomes & retrospective*.
 
 ## Purpose / big picture
 
@@ -912,9 +914,26 @@ Every stopping point is documented here. Timestamps are UTC.
   later head is docs-only on top of the green `52084776`, rather than saying
   "the current head" — a phrase written once and falsified by the next push
   within a single turn.
-- [x] (2026-10-14 05:20Z) **`df475f2e` is gated, and the plan stops editing
-  itself here.** `df475f2e` records the `009cbf02` entry above and passes the
-  same byte-identity test: `git diff --name-only 52084776 df475f2e` names this
+- [x] (2026-10-16 17:40Z) **The upstream-state claims were refreshed, and the
+  review census re-derived after the eleventh pass.** The eleventh
+  `coderabbit review --agent` pass raised the mold-selection finding for the
+  eleventh time, at `mutation-testing.yml:78`. Checking it rather than
+  re-asserting the recorded gap found that the record had *decayed*: the
+  workflow comment named `aea9c14c24b7` as the upstream tip (now `e693d81d`, 17
+  inputs) and said #544 "has no fixing commit" (shared-actions#628 now proposes
+  exactly the missing input, `BLOCKED`). The verdict is unchanged — no merged
+  revision declares `rustflags` — but the cited reasons had rotted. Every copy
+  now names only stable anchors and states the claim as "no merged revision",
+  cites #628 with its state, and carries a re-check instruction. The census
+  re-derived to 17 invocations, 23 finding records, 11 mold instances, still
+  eleven distinct defects. **This head is the first since `52084776` that is
+  not docs-only**, so it takes the full gate set rather than the four-target
+  subset.
+- [x] (2026-10-14 05:20Z) **`df475f2e` is gated, and the plan stopped editing
+  itself there.** Superseded as a stopping point by every later commit,
+  including this document's own revision notes; retained as the record of that
+  head. `df475f2e` records the `009cbf02` entry above and passes the same
+  byte-identity test: `git diff --name-only 52084776 df475f2e` names this
   document alone and the same diff excluding `*.md` is empty. The four non-Rust
   gates were re-run against it and all exit 0 — `check-fmt` 2 s, `markdownlint`
   30 s (with `spelling` inside it), `nixie` 2 s and `test-workflow-contracts`
@@ -970,9 +989,11 @@ Every stopping point is documented here. Timestamps are UTC.
   discharged by CI green plus a dispositioned review and a pull request stating
   the unmet criterion, not by a zero-finding review — which is what the
   retained passes delivered: ten non-mold defects fixed, and the mold-selection
-  finding dispositioned as a recorded gap. **The pull request stays a draft**,
-  as instructed; "marked ready" appeared in an earlier version of this line and
-  was the plan overreaching its brief.
+  finding dispositioned as a recorded gap (the census is re-derived in
+  *Outcomes & retrospective*; it stands at eleven mold instances across
+  seventeen passes, unsuperseded as of 2026-10-16). **The pull request stays a
+  draft**, as instructed; "marked ready" appeared in an earlier version of this
+  line and was the plan overreaching its brief.
 
   **The PR-description half is done.** PR #911's body now carries a section
   headed "One acceptance criterion is unmet, and it is recorded rather than
