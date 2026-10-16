@@ -464,13 +464,13 @@ cli.subcommand.check.flag.fail_on.help = 발견 항목이 명령을 실패시키
 cli.subcommand.check.flag.limit.help = 보고할 최대 발견 항목 수. 0은 전부 보고합니다.
 cli.subcommand.check.flag.explain.help = 매니페스트를 검사하는 대신 규칙 참조를 출력합니다.
 check.threshold_exceeded = 발견 항목이 { $severity } 임계값에 도달했습니다: 보고된 { $reported }건 중 { $failing }건.
-check.threshold_exceeded.help = 보고된 항목을 수정하거나 --rule 을 조정하거나 --fail-on 을 완화하세요.
+check.threshold_exceeded.help = 보고된 항목을 수정하거나 --rule 옵션을 조정하거나 --fail-on 옵션을 완화하세요.
 check.summary.counts = 검사 결과 — 오류: { $errors }, 경고: { $warnings }, 권고: { $advice }, 억제됨: { $suppressed }.
 check.summary.clean = 발견 항목이 없습니다.
-check.summary.truncated = { $shown }건을 표시합니다. --limit 로 { $omitted }건을 생략했습니다.
-check.rule.malformed = 선택자 { $selector } 가 NAME=SEVERITY 형식이 아닙니다.
-check.rule.unknown = 선택자가 지정한 { $name } 은 규칙도 범주도 아닙니다.
-check.rule.severity = 선택자 { $name } 이 심각도 { $severity } 를 지정했습니다. 다음 중 하나여야 합니다: { $values }.
+check.summary.truncated = { $shown }건을 표시합니다. --limit 옵션으로 { $omitted }건을 생략했습니다.
+check.rule.malformed = 선택자 { $selector }이(가) NAME=SEVERITY 형식이 아닙니다.
+check.rule.unknown = 선택자가 지정한 { $name }은(는) 규칙도 범주도 아닙니다.
+check.rule.severity = 선택자 { $name }이(가) 심각도 { $severity }을(를) 지정했습니다. 다음 중 하나여야 합니다: { $values }.
 check.fail_on.invalid = 알 수 없는 실패 임계값 { $value }. 다음 중 하나여야 합니다: { $values }.
-check.source_index = 진단을 위해 { $path } 의 { $line } 행을 색인할 수 없습니다: { $reason }.
+check.source_index = 진단을 위해 { $path }의 { $line } 행을 색인할 수 없습니다: { $reason }.
 status.tool.check = 검사

@@ -472,7 +472,7 @@ check.summary.clean = Inga fynd.
 check.summary.truncated = Visar { $shown } fynd; --limit utelämnade ytterligare { $omitted }.
 check.rule.malformed = Väljaren { $selector } är inte skriven som NAME=SEVERITY.
 check.rule.unknown = Väljaren anger { $name }, som varken är en regel eller en kategori.
-check.rule.severity = Väljaren { $name } anger allvarsgraden { $severity }; förväntade en av { $values }.
-check.fail_on.invalid = Okänd feltröskel { $value }; förväntade en av { $values }.
+check.rule.severity = Väljaren { $name } anger allvarsgraden { $severity }; en av { $values } förväntades.
+check.fail_on.invalid = Okänd feltröskel { $value }; en av { $values } förväntades.
 check.source_index = Kunde inte indexera { $path } för diagnostik på rad { $line }: { $reason }.
 status.tool.check = Kontroll

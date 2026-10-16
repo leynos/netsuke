@@ -460,7 +460,7 @@ cli.flag.env_block_var.help = ตัวแปรสภาพแวดล้อ�
 cli.subcommand.check.about = ตรวจสอบไฟล์รายการโดยไม่สร้างหรือรันการบิลด์
 cli.subcommand.check.long_about = ตรวจไฟล์รายการที่เลือกเพื่อหาโครงสร้างที่แม้จะแจงได้ แต่มีแนวโน้มผิดพลาด ไม่ปลอดภัย ไม่พอร์ตได้ หรือเป็นผลเสียต่อแคช
 cli.subcommand.check.flag.rule.help = กำหนดระดับความรุนแรงของกฎหรือหมวดหมู่ เขียนเป็น NAME=SEVERITY
-cli.subcommand.check.flag.fail_on.help = ระดับความรุนแรงที่ทำให้ข้อค้นพบทำให้คำสั่งล้มเหลว
+cli.subcommand.check.flag.fail_on.help = ระดับความรุนแรงของข้อค้นพบที่จะทำให้คำสั่งล้มเหลว
 cli.subcommand.check.flag.limit.help = จำนวนข้อค้นพบสูงสุดที่รายงาน; 0 หมายถึงรายงานทั้งหมด
 cli.subcommand.check.flag.explain.help = พิมพ์เอกสารอ้างอิงกฎแทนการตรวจสอบไฟล์รายการ
 check.threshold_exceeded = ข้อค้นพบถึงเกณฑ์ { $severity } แล้ว: { $failing } จาก { $reported } ที่รายงาน
