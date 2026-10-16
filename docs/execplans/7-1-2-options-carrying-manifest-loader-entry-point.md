@@ -354,7 +354,11 @@ These are hard invariants. Violating one requires escalation, not a workaround.
 - C11. Respect `POLONIUS(...)` and `POLONIUS-REFUSED(...)` tags; do not add
   defensive clones without first compiling the borrowing form.
 - C12. After EP-M0, characterization snapshots are never re-accepted. From
-  EP-M1 onwards `git diff --exit-code` over their directories must pass.
+  EP-M1 onwards `git diff --exit-code` over their directories must pass. The
+  baseline such a diff is taken against is `847c19cc`, not EP-M0's acceptance
+  commit: that later commit repaired three vacuous rows and recorded the
+  exhaustion path separately, and the snapshots have been stable since it. See
+  the Progress entry for `847c19cc`.
 
 ## Tolerances (exception triggers)
 
@@ -517,6 +521,10 @@ and YAML fixtures, and were set from the inventory in Table 1.
   remains unstarted.
 - [ ] **Gate-set correction pending for plan edits.** Running the cheaper
   documentation gates is **not sufficient** for a diff that touches this plan.
+  *(2026-10-16 update: the batch at `301f2456` did run `make test` against this
+  plan and was green, so the deferral below is discharged for that revision —
+  but the F-1 edit to this plan re-opens the obligation, and the item stays
+  unchecked until the batch covering the edit is green.)*
   `tests/execplan_status_contract_tests.rs` reads every `docs/execplans/*.md`
   at test time and asserts that the header carries exactly one line-initial
   `Status:` field whose value is in the closed set
@@ -723,6 +731,54 @@ and YAML fixtures, and were set from the inventory in Table 1.
     already records for the original defect, which is the evidence that the
     extracted oracle guards the real property rather than tautologically
     agreeing with whatever the builder emits.
+- [x] (2026-10-15) `847c19cc` ("Make the characterization rows record what they
+  claim") **changed 11 characterization snapshots** and added
+  `budget_exhaustion.snap` — all of `tests/snapshots/manifest_load_options/`.
+  This is the one commit after EP-M0's acceptance that re-accepted snapshot
+  text, and it is **not a C12 breach**: C12's operative clause is "From EP-M1
+  onwards", and EP-M1 is unstarted; the commit touched **zero `src/` files**
+  (`git show --name-only` lists only `tests/`), so C1 is untouched and no
+  production behaviour is implicated; and the rows it fixed could not have been
+  meaningfully re-accepted, because three `_and_limits` rows passed
+  `exhausted_budget()`, so every fixture failed before parsing and all rendered
+  the identical "budget exhausted at Source (limit 8)" text — one row's own doc
+  comment claimed it "still shows a successful load" while its body passed the
+  exhausted budget. A row that cannot move when ordinary loading changes is not
+  a baseline, and repairing it necessarily changes its output.
+  - **`847c19cc` — not EP-M0's acceptance commit `c4ca78b8` — is the C12
+    baseline.** C12's text now says so. The distinction is load-bearing for a
+    future EP-M1 worker: diffing against `c4ca78b8` shows 13 files changed and
+    445 insertions against 35 deletions, which would force a choice between
+    wrongly escalating a stop condition and wrongly concluding C12 is already
+    broken. Diffing against `847c19cc` is clean, and has been across the 11
+    subsequent commits up to and including this one.
+- [x] (2026-10-16) Repair batch at `301f2456` ("Share the temporary-path
+  snapshot filter"): **all nine gates green**, including the two the previous
+  batch could not reach. `make test` was red on **attempt 1** at the same
+  host-contention class as Risk `:433` —
+  `production_build_module_slice_has_expected_boundary` terminating at 300.007
+  s, 3933/3949 run, 16 rows never run, doctest pass short-circuited — and
+  **passed on the mandated re-run**: 3949 of 3949, 6 skipped. The doctest pass
+  ran on the re-run and on neither attempt of any earlier batch:
+  `Doc-tests netsuke` 88 passed and 26 ignored, plus 2 compile-fail rows, then
+  `Doc-tests test_support` 40 passed and 6 ignored. The announced `running 114`
+  and `running 46` include the ignored rows, so neither is a pass count.
+  - `make test-workflow-contracts` was added to the dispatch **mid-batch** after
+    the first assignment omitted it. The omission's reasoning — "the diff
+    changes no file under `tests/workflow_contracts/`" — is invalid for this
+    candidate: the diff adds a `#[cfg(test)] #[path = ...] mod` child to
+    `src/stdlib/register.rs`, which `tools/kani/proof-scope.toml:161` names,
+    and `kani_proof_scope_test.py` re-derives that scope from the module
+    closure on every run. The gate ran last and was green (1271 passed, 3
+    skipped; then 27 passed). **A gate whose subject is a derived whole-crate
+    property cannot be scoped by asking which files were edited** — the same
+    lesson the EP-M1 Kani note already carries.
+  - The red attempt was preserved byte-for-byte under `.attempt1` before the
+    re-run overwrote the canonical path, and the census confirms the class: 52
+    compile-slot waits, peak 98 ahead, 574 sccache-unreachable notices, and
+    **0** `build-limits:` admission failures. The zero is what makes this queue
+    latency rather than an admission refusal. All five cases of the shared
+    filter passed in both attempts.
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
