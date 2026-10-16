@@ -1025,10 +1025,13 @@ metrics use only the bounded `outcome` label, and the corresponding
 `runner.check` span records the same value.
 
 The outcome vocabulary is fixed: `success`, `threshold_failure`,
-`policy_failure`, `analysis_failure`, and `output_failure`. Do not add rule
-names, manifest paths, finding text, or other caller-controlled values to
-metric labels or span fields. The telemetry adapter owns this instrumentation;
-the lint domain remains free of metrics and tracing concerns.
+`policy_failure`, `analysis_failure`, and `output_failure`. A selector the
+command cannot resolve is a `policy_failure`, including an unknown `--explain`
+rule; `output_failure` is reserved for a document that could not be serialized
+or written. Do not add rule names, manifest paths, finding text, or other
+caller-controlled values to metric labels or span fields. The telemetry adapter
+owns this instrumentation; the lint domain remains free of metrics and tracing
+concerns.
 
 ### Feature-gated code
 

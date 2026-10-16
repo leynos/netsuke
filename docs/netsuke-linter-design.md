@@ -539,8 +539,10 @@ invariant. The document holds one top-level diagnostic — the threshold summary
 ```
 
 A consumer reads `result.findings` when present and `diagnostics[0].related`
-otherwise. Both arrays are bounded by `--limit`, and `result.truncated` or the
-threshold message states when truncation occurred.
+otherwise. Both arrays are bounded by `--limit`. A passing document states
+truncation in `result.truncated`; a failing one states it through the threshold
+message, whose two counts both span the whole run, so a `related` array shorter
+than the reported count is a truncated one.
 
 `netsuke --json check --explain` emits a result document whose `result.command`
 is `check-explain` and whose `result.rules` array carries the registry: name,
