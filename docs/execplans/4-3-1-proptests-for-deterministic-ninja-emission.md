@@ -3464,6 +3464,36 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
       because a mutation to a function whose only caller is a test measures the
       test rather than the code.
 
+- [x] (2026-10-16) **`MUT-PATHKEY`'s detection narrowed: the run that catches it
+      is `the_constructed_permutation_is_genuinely_perturbed`, not the sampled
+      property — which matters because the acceptance criterion names the
+      sampled property.** The plant eliminates the sort, so
+      `path_key(["out/a","out/b"])` becomes
+      `"out/a\0out/b"` where the unmutated `"out/a\0out/b"` is also what the
+      sorted form yields — the mutation is invisible unless a case's two lists
+      *differ in order* yet are permutations. `prop_shuffle` may return the
+      input order, and `ListShapes.reordered` (`path_key.rs:173`) records
+      whether a case was genuinely perturbed as a **classification**, never an
+      assertion; the plan already says so at the `OBL-PATHKEY` entry
+      (*Note on `prop_shuffle`*), and `covered!` asserts five fields while
+      `reordered` and `unchanged` stay unasserted by design. So the sampled
+      `path_key_is_permutation_invariant` catches the plant only if some case
+      reorders — unobserved, and not guaranteed. The directed test does catch
+      it with certainty: its witness is the repeated-path pair
+      `["out/a","out/a","out/b"]` versus `["out/b","out/a","out/a"]`
+      (`:255-261`), which sorts to one key but, with the sort deleted, joins in
+      two different orders to two different keys, failing the
+      `assert_eq!` at `:271` whether or not any sampled case reordered.
+      The acceptance criterion nonetheless asks that
+      `path_key_is_permutation_invariant` fail, and a run where no case
+      reorders would fail it only through `prop_shuffle`'s luck. This is worth
+      knowing before the run rather than after: if the property passes under
+      the plant while the directed test fails, the honest reading is that the
+      *suite* detected the fault and that the sampled property's detection is
+      probabilistic — not that `MUT-PATHKEY` is unsound. Raising `cases` would
+      not fix it, since the issue is the per-case reorder classification
+      rather than the sample size.
+
 - [ ] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [ ] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [ ] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
