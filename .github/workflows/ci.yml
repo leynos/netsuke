@@ -605,21 +605,26 @@ jobs:
         env:
           INPUT_STATE_DIRECTORY: ${{ runner.temp }}/kani-smoke-metrics
         run: >-
-          uv run --script scripts/kani_smoke_metrics.py mark-start ||
+          uv run --script scripts/kani_smoke_metrics.py mark-start 2>/dev/null ||
           printf '%s\n' '::warning::Kani proof timing mark could not be recorded.'
       - name: Run Kani harnesses
         id: proofs
         if: steps.scope.outputs.run-proofs == 'true'
         run: make kani-ir
       - name: Mark proof end
+        id: proof_end
         # Preserve the proof duration after a failed harness while leaving
         # cancellation free to terminate the job without starting more work.
         if: ${{ !cancelled() && steps.scope.outputs.run-proofs == 'true' }}
         env:
           INPUT_STATE_DIRECTORY: ${{ runner.temp }}/kani-smoke-metrics
-        run: >-
-          uv run --script scripts/kani_smoke_metrics.py mark-end ||
-          printf '%s\n' '::warning::Kani proof timing mark could not be recorded.'
+        run: |
+          if uv run --script scripts/kani_smoke_metrics.py mark-end 2>/dev/null; then
+            printf '%s\n' 'recorded=true' >> "$GITHUB_OUTPUT"
+          else
+            printf '%s\n' 'recorded=false' >> "$GITHUB_OUTPUT"
+            printf '%s\n' '::warning::Kani proof timing mark could not be recorded.'
+          fi
       - name: Mutation patch compile gate
         id: mutations
         if: steps.scope.outputs.run-proofs == 'true'
@@ -670,6 +675,8 @@ jobs:
           INPUT_CACHE_HIT: ${{ steps.kani_cache.outputs.cache-hit }}
           INPUT_PROOFS_OUTCOME: ${{ steps.proofs.outcome }}
           INPUT_MUTATIONS_OUTCOME: ${{ steps.mutations.outcome }}
+          INPUT_END_MARK_RECORDED: ${{ steps.proof_end.outputs.recorded }}
+          INPUT_END_MARK_OUTCOME: ${{ steps.proof_end.outcome }}
           INPUT_STATE_DIRECTORY: ${{ runner.temp }}/kani-smoke-metrics
           INPUT_DECISION_FILE: ${{ runner.temp }}/kani-smoke-metrics/decision.json
           INPUT_METRICS_FILE: ${{ runner.temp }}/kani-smoke-metrics/metrics.jsonl

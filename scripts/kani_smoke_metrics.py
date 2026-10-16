@@ -54,9 +54,7 @@ MARK_END_FILE = "proof-end-ns"
 METRICS_FILE = "metrics.jsonl"
 WARNING_MARK_WRITE = "::warning::Kani proof timing mark could not be recorded."
 WARNING_DURATION = "::warning::Kani proof duration could not be measured."
-WARNING_END_FALLBACK = (
-    "::warning::Kani proof end mark is missing; finalizer time was used."
-)
+WARNING_END_FALLBACK = "::warning::Kani end mark missing; finalizer time used."
 ERROR_METRICS_WRITE = "::error::Kani smoke metrics could not be written."
 
 
@@ -73,6 +71,12 @@ class WorkflowInputs:
     cache_hit: typ.Annotated[str, Parameter(env_var="INPUT_CACHE_HIT")]
     proofs_outcome: typ.Annotated[str, Parameter(env_var="INPUT_PROOFS_OUTCOME")]
     mutations_outcome: typ.Annotated[str, Parameter(env_var="INPUT_MUTATIONS_OUTCOME")]
+    end_mark_recorded: typ.Annotated[
+        str, Parameter(env_var="INPUT_END_MARK_RECORDED")
+    ] = ""
+    end_mark_outcome: typ.Annotated[
+        str, Parameter(env_var="INPUT_END_MARK_OUTCOME")
+    ] = ""
 
 
 @Parameter(name="*")
@@ -243,23 +247,25 @@ def metrics_records(
 
 def mark_start(
     state_directory: Path, clock: MonotonicClock = time.monotonic_ns
-) -> None:
+) -> bool:
     """Record the monotonic start of the guarded Kani proof command."""
-    _write_mark(state_directory / MARK_START_FILE, clock)
+    return _write_mark(state_directory / MARK_START_FILE, clock)
 
 
-def mark_end(state_directory: Path, clock: MonotonicClock = time.monotonic_ns) -> None:
+def mark_end(state_directory: Path, clock: MonotonicClock = time.monotonic_ns) -> bool:
     """Record the monotonic end of the guarded Kani proof command."""
-    _write_mark(state_directory / MARK_END_FILE, clock)
+    return _write_mark(state_directory / MARK_END_FILE, clock)
 
 
-def _write_mark(mark_file: Path, clock: MonotonicClock) -> None:
-    """Write one timestamp while keeping mark failures non-fatal to Kani."""
+def _write_mark(mark_file: Path, clock: MonotonicClock) -> bool:
+    """Write one timestamp and report whether the mark was retained."""
     try:
         mark_file.parent.mkdir(parents=True, exist_ok=True)
         mark_file.write_text(f"{clock()}\n", encoding="ascii")
     except OSError:
         print(WARNING_MARK_WRITE, file=sys.stderr)
+        return False
+    return True
 
 
 def _read_mark(mark_file: Path) -> int | None:
@@ -283,9 +289,12 @@ def _read_decision(decision_file: Path) -> str:
 
 
 def _duration_marks(
-    state_directory: Path, clock: MonotonicClock
+    state_directory: Path,
+    clock: MonotonicClock,
+    end_mark_recorded: str,
+    end_mark_outcome: str,
 ) -> tuple[int | None, int | None]:
-    """Read proof timing marks, using finalizer time only for a missing end."""
+    """Read proof marks, falling back only when the end step was skipped."""
     start = _read_mark(state_directory / MARK_START_FILE)
     end_file = state_directory / MARK_END_FILE
     if start is None:
@@ -294,8 +303,11 @@ def _duration_marks(
     try:
         end_file.stat()
     except FileNotFoundError:
-        print(WARNING_END_FALLBACK, file=sys.stderr)
-        return start, clock()
+        if end_mark_outcome == "skipped" and not end_mark_recorded:
+            print(WARNING_END_FALLBACK, file=sys.stderr)
+            return start, clock()
+        print(WARNING_DURATION, file=sys.stderr)
+        return None, None
     except OSError:
         print(WARNING_DURATION, file=sys.stderr)
         return None, None
@@ -336,7 +348,12 @@ def finalize(
     """Write bounded run metrics from workflow inputs and retained marks."""
     state_directory = Path(files.state_directory)
     if inputs.run_proofs == "true":
-        start_ns, end_ns = _duration_marks(state_directory, dependencies.clock)
+        start_ns, end_ns = _duration_marks(
+            state_directory,
+            dependencies.clock,
+            inputs.end_mark_recorded,
+            inputs.end_mark_outcome,
+        )
     else:
         start_ns, end_ns = None, None
     records = metrics_records(
@@ -353,7 +370,8 @@ def mark_start_command(
     state_directory: typ.Annotated[str, Parameter(env_var="INPUT_STATE_DIRECTORY")],
 ) -> None:
     """Write the proof start mark without interfering with the proof step."""
-    mark_start(Path(state_directory))
+    if not mark_start(Path(state_directory)):
+        raise SystemExit(1)
 
 
 @app.command(name="mark-end")
@@ -361,7 +379,8 @@ def mark_end_command(
     state_directory: typ.Annotated[str, Parameter(env_var="INPUT_STATE_DIRECTORY")],
 ) -> None:
     """Write the proof end mark without interfering with later job steps."""
-    mark_end(Path(state_directory))
+    if not mark_end(Path(state_directory)):
+        raise SystemExit(1)
 
 
 @app.command(name="finalize")

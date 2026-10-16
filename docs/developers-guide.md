@@ -4646,14 +4646,17 @@ that the service was healthy. See the pinned
 The proof timer starts immediately before `make kani-ir` and normally ends
 immediately after it, including when the proof command fails. When `run-proofs`
 is not exactly `true`, the guard prevents proof execution, so the finalizer
-omits duration without warning. If a proof was selected but its end mark is
-absent while the start mark is valid, the finalizer uses its own monotonic time
-and emits a fixed warning. A missing or malformed start, or a malformed end,
-omits duration with a fixed warning. Reversed marks clamp to zero. The duration
-therefore measures only `make kani-ir` when both marks are present. If
-cancellation prevents the end mark, the fallback can include the short tail
-before the finalizer. A timing helper launch or write failure produces a fixed
-warning and does not skip the proof or mutation gate.
+omits duration without warning. If cancellation skips the end-mark step and no
+mark attempt was recorded while the start mark is valid, the finalizer uses its
+own monotonic time and emits a fixed warning; this fallback can include the
+short cancellation tail before the finalizer. If the end-mark step ran but
+could not retain its mark, the workflow records that failure for the finalizer,
+which omits duration with a fixed warning rather than including the later
+mutation compile or cache-save work. A missing or malformed start, or a
+malformed end, also omits duration with a fixed warning. Reversed marks clamp
+to zero. With both marks present, duration covers only `make kani-ir`. A timing
+helper launch or write failure produces a fixed warning and does not skip the
+proof or mutation gate.
 
 GitHub retains one artefact per run attempt, named
 `kani-smoke-metrics-${{ github.run_attempt }}`, for 30 days. Download an

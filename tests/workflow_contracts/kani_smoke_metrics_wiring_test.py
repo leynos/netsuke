@@ -1,6 +1,7 @@
 """Hold Kani metrics marks, finalization and artifact delivery to contract."""
 
 import json
+import textwrap
 
 from action_references import require_external_action_sha
 from kani_smoke_scope_wiring_test import PROOF_CONDITION, PROOF_END_CONDITION
@@ -25,6 +26,8 @@ FINALIZER_ENV = {
     "INPUT_CACHE_HIT": "${{ steps.kani_cache.outputs.cache-hit }}",
     "INPUT_PROOFS_OUTCOME": "${{ steps.proofs.outcome }}",
     "INPUT_MUTATIONS_OUTCOME": "${{ steps.mutations.outcome }}",
+    "INPUT_END_MARK_RECORDED": "${{ steps.proof_end.outputs.recorded }}",
+    "INPUT_END_MARK_OUTCOME": "${{ steps.proof_end.outcome }}",
     "INPUT_STATE_DIRECTORY": STATE_DIRECTORY,
     "INPUT_DECISION_FILE": DECISION_FILE,
     "INPUT_METRICS_FILE": METRICS_FILE,
@@ -59,14 +62,27 @@ def test_proof_marks_bracket_the_exact_guarded_make_target() -> None:
     assert end.get("if") == "${{ " + PROOF_END_CONDITION + " }}", (
         "the end mark must retain its guard after a proof failure"
     )
-    for step, command in ((start, "mark-start"), (end, "mark-end")):
-        expected_run = (
-            f"uv run --script scripts/kani_smoke_metrics.py {command} || "
-            f"printf '%s\\n' '{TIMING_FAILURE_WARNING}'"
-        )
-        assert step.get("run") == expected_run, (
-            f"{command} failures must warn while allowing proof work to continue"
-        )
+    assert start.get("run") == (
+        "uv run --script scripts/kani_smoke_metrics.py mark-start 2>/dev/null || "
+        f"printf '%s\\n' '{TIMING_FAILURE_WARNING}'"
+    ), "start-mark failures must warn while allowing proof work to continue"
+    assert end.get("id") == "proof_end", (
+        "the finalizer must distinguish a failed mark from a skipped step"
+    )
+    expected_end_run = textwrap.dedent(
+        """\
+        if uv run --script scripts/kani_smoke_metrics.py mark-end 2>/dev/null; then
+          printf '%s\\n' 'recorded=true' >> "$GITHUB_OUTPUT"
+        else
+          printf '%s\\n' 'recorded=false' >> "$GITHUB_OUTPUT"
+          printf '%s\\n' '::warning::Kani proof timing mark could not be recorded.'
+        fi
+        """
+    )
+    assert end.get("run") == expected_end_run, (
+        "end-mark failure must be recorded without stopping later proof gates"
+    )
+    for step in (start, end):
         assert "continue-on-error" not in step, (
             "timing failures must be non-fatal through the fixed warning command"
         )

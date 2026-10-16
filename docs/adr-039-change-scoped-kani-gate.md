@@ -183,8 +183,11 @@ artefact is retained for 30 days. The decision file is deliberately separate
 from GitHub step outputs: telemetry failure must not change the decision or the
 exact `run-proofs` contract. Timing mark failures produce a fixed warning and
 do not prevent the Kani harness or mutation gate from running. When the scope
-guard does not select proofs, the finalizer omits duration without warning;
-missing or malformed marks during a selected proof produce a fixed warning.
+guard does not select proofs, the finalizer omits duration without warning. A
+failed end-mark attempt also omits duration so the later mutation compile and
+cache-save work cannot be counted as proof time; only a skipped end-mark step
+with no recorded mark attempt, such as cancellation, uses finalizer time as its
+fallback. Missing or malformed marks produce a fixed warning.
 
 Metric labels contain only the workflow event, fixed decision and outcome
 categories, or the cache result. Paths, commit IDs, run IDs, URLs and free-form

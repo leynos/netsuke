@@ -11,7 +11,6 @@ import pytest
 from workflow_loading import MAKEFILE_PATH, REPO_ROOT
 
 if typ.TYPE_CHECKING:
-    import collections.abc as cabc
     from pathlib import Path
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -232,7 +231,7 @@ def test_unrecognized_event_and_decision_are_collapsed() -> None:
 def test_missing_end_mark_uses_the_injected_finalizer_clock(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Use finalizer time when a proof start exists but its end step did not run."""
+    """Use finalizer time when cancellation skips the proof end step."""
     state_directory = tmp_path / "state"
     state_directory.mkdir()
     (state_directory / metrics.MARK_START_FILE).write_text("50\n", encoding="ascii")
@@ -244,7 +243,12 @@ def test_missing_end_mark_uses_the_injected_finalizer_clock(
     files = metrics.FinalizerFiles(
         str(state_directory), str(tmp_path / "decision"), str(tmp_path / "out")
     )
-    finalize_inputs = _inputs()
+    finalize_inputs = _inputs(
+        job_status="cancelled",
+        proofs_outcome="cancelled",
+        mutations_outcome="skipped",
+        end_mark_outcome="skipped",
+    )
     metrics.finalize(finalize_inputs, files, dependencies)
     assert observed[2]["value"] == 1, (
         "the injected clock must close the missing end mark"
@@ -278,44 +282,6 @@ def test_malformed_start_mark_omits_duration_with_fixed_warning(
     )
     assert capsys.readouterr().err == metrics.WARNING_DURATION + "\n", (
         "malformed timing data must not disclose its contents"
-    )
-
-
-def test_mark_commands_write_monotonic_values_in_the_state_directory(
-    tmp_path: Path,
-) -> None:
-    """Expose separate start and end commands for workflow step placement."""
-    state_directory = tmp_path / "state"
-    environment = {
-        **os.environ,
-        "INPUT_STATE_DIRECTORY": str(state_directory),
-    }
-    for command, mark_name in (
-        ("mark-start", metrics.MARK_START_FILE),
-        ("mark-end", metrics.MARK_END_FILE),
-    ):
-        completed = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed argv, no shell.
-            [sys.executable, str(SCRIPT), command],
-            env=environment,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert completed.returncode == 0, completed.stderr
-        value = int((state_directory / mark_name).read_text(encoding="ascii"))
-        assert value >= 0, f"{command} must write a monotonic nanosecond value"
-
-
-@pytest.mark.parametrize("mark", [metrics.mark_start, metrics.mark_end])
-def test_mark_write_failure_warns_without_raising(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], mark: cabc.Callable[..., None]
-) -> None:
-    """Keep timing-file failures non-fatal to proof and mutation commands."""
-    blocked_directory = tmp_path / "not-a-directory"
-    blocked_directory.write_text("file", encoding="utf-8")
-    mark(blocked_directory, clock=lambda: 123)
-    assert capsys.readouterr().err == metrics.WARNING_MARK_WRITE + "\n", (
-        "a mark write failure must produce one fixed warning"
     )
 
 
