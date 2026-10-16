@@ -523,11 +523,11 @@ and YAML fixtures, and were set from the inventory in Table 1.
   documentation gates is **not sufficient** for a diff that touches this plan.
   *(2026-10-16 update: the batch at `301f2456` did run `make test` against this
   plan and was green, so the deferral below is discharged for that revision —
-  but the F-1 edit to this plan re-opens the obligation, and the item stays
-  unchecked until the batch covering the edit is green.)*
-  `tests/execplan_status_contract_tests.rs` reads every `docs/execplans/*.md`
-  at test time and asserts that the header carries exactly one line-initial
-  `Status:` field whose value is in the closed set
+  but the F-1 edit re-opened the obligation, and the review-repair edit above
+  re-opens it again, so the item stays unchecked until the batch covering the
+  latest edit is green.)* `tests/execplan_status_contract_tests.rs` reads every
+  `docs/execplans/*.md` at test time and asserts that the header carries
+  exactly one line-initial `Status:` field whose value is in the closed set
   `DRAFT | APPROVED | IN PROGRESS | BLOCKED | COMPLETE` (and that
   `docs/documentation-style-guide.md` documents the same set). It is the sole
   Rust test that reads `docs/execplans/` from disk:
@@ -752,6 +752,41 @@ and YAML fixtures, and were set from the inventory in Table 1.
     wrongly escalating a stop condition and wrongly concluding C12 is already
     broken. Diffing against `847c19cc` is clean, and has been across the 11
     subsequent commits up to and including this one.
+- [x] (2026-10-16) The milestone CodeRabbit review at `925f803e` returned one
+  `minor` finding on `docs/netsuke-test-framework-technical-design.md:247`, and
+  it is **valid on both of its claims** — verified against the document's own
+  prose rather than accepted on the reviewer's word, then repaired.
+  - First claim: `Mode -->|AmbientFull or Full| Build`, with
+    `Build --> Inject["Use the caller's env reader and clock"]`, sent
+    `AmbientFull` through caller injection. The screen-reader paragraph three
+    lines above the fence says the opposite — "`AmbientFull` reads the process
+    environment" at `:237-239` — and the Decision log at `:642` states
+    "`AmbientFull` is the only mode that reads the process environment", so the
+    diagram contradicted its own surrounding text.
+  - Second claim: `RestrictedTest` fanned out to `Inject` **and** `Overlay` as
+    two parallel edges both reaching `Expand`, which reads as either step being
+    sufficient. The registration list at `:214-225` orders them — overlays are
+    step 5 and expansion is step 6 — so the `Test` path is now drawn as
+    `RestrictedTest → TestEnv → Overlay → Expand`.
+  - Repair: the mode branch now has four arms, `AmbientFull` and `Full` are
+    separate nodes, `AmbientFull` reads the process environment, and `Full` and
+    `Test` each take the caller's reader and clock (still two nodes, because
+    `Test` alone continues to overlay registration). The prose and the Figure 2
+    caption were already correct and are unchanged; only the figure was wrong.
+  - **The quoted-label trap applies to any edit here.** Two labels carry an
+    apostrophe, so they are quoted — the unquoted form is what `04aa8366`
+    shipped and `make nixie` caught (see the Progress entry for that commit).
+    New edges were also checked for undefined and orphan nodes, and the diagram
+    was parsed directly with `merman-cli` before the gate ran.
+  - The edit keeps the file's own 80-column tightness: the first draft reached
+    98 columns in the fence, which MD013 permits (`code_block_line_length` is
+    120) but which no line in this document had used at either the base or the
+    pre-edit revision. Splitting the branch arms removed the need.
+  - `make nixie` passed on the repaired revision ("All diagrams validated
+    successfully!") and the read-only mdtablefix probe reports the file
+    unchanged. **The repair voids the `925f803e` review**, so the milestone
+    review must be re-run against the new head; this entry records the finding
+    as repaired, not as closed.
 - [x] (2026-10-16) Repair batch at `301f2456` ("Share the temporary-path
   snapshot filter"): **all nine gates green**, including the two the previous
   batch could not reach. `make test` was red on **attempt 1** at the same

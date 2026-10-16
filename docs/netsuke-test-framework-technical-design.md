@@ -242,16 +242,19 @@ environment, and `ManifestQuery` refuses `env()` outright.
 ```mermaid
 flowchart TD
     Start[from_str_with_options] --> Mode{StdlibRegistration mode}
-    Mode -->|AmbientFull or Full| Build[Register full helpers]
+    Mode -->|AmbientFull| AmbientFull[Register full helpers]
+    Mode -->|Full| FullMode[Register full helpers]
     Mode -->|ManifestQuery| RestrictedQuery[Register query helpers and refusals]
     Mode -->|Test| RestrictedTest[Register pure helpers and typed refusals]
-    Build --> Inject["Use the caller's env reader and clock"]
-    RestrictedTest --> Inject
-    RestrictedTest --> Overlay[Register overlays]
-    Inject --> Expand[Expand foreach and when]
+    AmbientFull --> AmbientEnv["Read env from the process environment"]
+    FullMode --> FullEnv["Use the caller's env reader and clock"]
+    RestrictedTest --> TestEnv["Use the caller's env reader and clock"]
+    TestEnv --> Overlay[Register overlays]
     RestrictedQuery --> QueryClassify[Classify query refusals]
-    QueryClassify --> Expand
+    AmbientEnv --> Expand[Expand foreach and when]
+    FullEnv --> Expand
     Overlay --> Expand
+    QueryClassify --> Expand
     Expand --> Render[Render and validate manifest]
 ```
 
