@@ -2327,6 +2327,58 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       The `!Send` warning that Proptest emits for a non-`Sync` feature is a
       *warning*, not an error, so it is not a gate failure — but it is a real
       inference question and is left for the compiler rather than guessed at.
+- [ ] (2026-10-16T00:00:00Z) `MUT-PATHKEY` repaired: it was a mutation that
+      **could not compile**, so it was dead evidence rather than a
+      falsification.
+      The patch deleted `parts.sort_unstable()` and left the binding declared
+      `let mut parts`. With the sort gone, nothing mutates `parts`, and
+      `unused_mut` is a warn-by-default rustc lint. The gate policy is
+      `-D warnings` — `GATE_RUSTFLAGS` (`Makefile:78`) composes it, and
+      `make proptest` (`:267`) applies it — so the patched crate would have
+      **failed to build**, and
+      `path_key_is_permutation_invariant` would never have run. That is
+      vacuous: a build failure for an unrelated reason is not a property
+      detecting the seeded fault.
+      **The repository already states this standard, and the patch failed it.**
+      `every_patched_tree_compiles_under_denied_warnings`
+      (`tests/kani_mutation_evidence_tests/compile_guard.rs:334`) exists to
+      catch exactly this, with `DENY_WARNINGS = "-D warnings"` (`:66`) applied
+      to every patched tree (`:199`). Its doc comment names the consequence:
+      *"A patch that applies but does not compile is dead evidence: `cargo
+      kani` never reaches its harness."* The other three supplemental patches
+      were checked against the same criterion and are clean — one swaps an
+      argument, one changes `placeholder` to `_placeholder` and narrows a call,
+      one flips an equality — none leaves an unused binding.
+      **Reachability note.** That guard compiles with `--lib`, which does not
+      set `cfg(test)` (see the vacuity finding above). That is enough here, and
+      only because `path_key` is **production** code: the mutation lands on a
+      non-test item, so a `--lib` compile does reach it. A mutation to a
+      `#[cfg(test)]`-only item would slip past this guard entirely, since a
+      test-only binding could never be unused *outside* a test build. Worth
+      knowing before trusting a green `make test-kani-mutations` for a patch
+      that touches test-only code.
+      **The repair, demonstrated rather than asserted.** Breaking the line
+      *and* dropping the `mut` is also the more faithful mutation: "someone
+      forgot to sort" removes the sort statement, and rustc then reports the
+      now-pointless `mut`. The failure mode was reproduced in isolation
+      (`error: variable does not need to be mutable`, `= note: -D unused-mut
+      implied by -D warnings`, `error: aborting due to 1 previous error`),
+      confirming it is an abort and not a warning.
+      The repaired patch drops `mut` as well:
+      `-    let mut parts: Vec<String> = …` joined by
+      `-    parts.sort_unstable();`, replaced with
+      `+    let parts: Vec<String> = …`. Post-apply the tree has zero
+      occurrences of both `let mut parts` and `parts.sort_unstable()`, and
+      `git apply -R` restores both to one each with a clean `git status`.
+      `MUT-EDGEDROP` was checked for the same defect and is sound: its inserted
+      `continue` leaves `graph`, `out`, and `stages` all still used, so no
+      parameter becomes dead.
+      **What remains unverified here.** That each patch, once it compiles,
+      actually *fails the named property* — the real falsification — still
+      requires `make proptest` on a working pool. Only applicability, clean
+      reversal, and the absence of the specific denied-warning defect above are
+      established, and that last one is established by reading rather than by
+      running rustc.
 - [ ] (2026-10-16T00:00:00Z) `EP-M4` compiler-free gates green on the candidate;
       the compiling gates are **blocked by a machine-wide admission outage**,
       not by this change.
