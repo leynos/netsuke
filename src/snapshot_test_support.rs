@@ -59,23 +59,48 @@ pub(crate) fn stable_snapshot_settings(subdir: &str) -> Settings {
     settings
 }
 
-/// Replace the temporary-directory prefix of any absolute path with a
-/// placeholder.
+/// Build the pattern that replaces a temporary directory with `[TMP]`.
 ///
-/// The prefix is escaped before it becomes a pattern, and the pattern then
-/// requires a separator, so a directory that merely starts with the same
-/// characters is left alone. An unescaped, unanchored pattern would rewrite an
-/// unrelated component that happened to share the prefix.
+/// Each separator becomes a class matching one or more of either separator, and
+/// every other character is escaped. The class is what lets one pattern cover
+/// both spellings a snapshot can hold: a diagnostic quotes a Windows path with
+/// the single backslashes `temp_dir()` renders, while the serialized half of the
+/// same snapshot doubles them, so a pattern requiring exactly one separator
+/// would leave the serialized copy unnormalized — and it is the serialized copy
+/// that carries the run-specific workspace name. A trailing separator is
+/// dropped first, because leaving it in would make two adjacent classes demand
+/// two separators where the text has one.
+///
+/// Requiring a whole component at each step, rather than matching the directory
+/// name as a bare substring, is what leaves a directory that merely starts with
+/// the same characters alone: `/tmp` would otherwise rewrite an unrelated
+/// `/tmpfoo/` component in a path or in a diagnostic.
 ///
 /// The placeholder is the same on every platform, which matters because the
 /// snapshots are checked in: a row that records only `[TMP]` reads the same
 /// whichever machine recorded it.
+fn temp_dir_filter_pattern(temp_dir: &str) -> String {
+    let separator = r"[\\/]+";
+    let prefix = temp_dir
+        .trim_end_matches(['/', '\\'])
+        .chars()
+        .map(|ch| match ch {
+            '/' | '\\' => separator.to_owned(),
+            other => regex::escape(&other.to_string()),
+        })
+        .collect::<String>();
+    format!("{prefix}{separator}[^\\s\"']*")
+}
+
+/// Replace the temporary-directory prefix of any absolute path with a
+/// placeholder.
+///
+/// Resolving the directory here rather than in [`temp_dir_filter_pattern`] keeps
+/// the pattern a pure function of its input, so a test can assert the Windows
+/// spelling on any host.
 fn add_temp_dir_filter(settings: &mut Settings) {
-    let prefix = regex::escape(&std::env::temp_dir().display().to_string());
-    // Match either separator. `temp_dir()` renders backslashes on Windows, so a
-    // literal `/` here would leave every Windows path unnormalized and the
-    // checked-in snapshots would carry a run-specific workspace name.
-    settings.add_filter(&format!(r#"{prefix}[\\/][^\s"']*"#), "[TMP]");
+    let temp_dir = std::env::temp_dir().display().to_string();
+    settings.add_filter(&temp_dir_filter_pattern(&temp_dir), "[TMP]");
 }
 
 /// Add a redaction filter for the Netsuke generator version.
@@ -143,12 +168,56 @@ pub(crate) fn theme_prefs(theme: ThemePreference) -> OutputPrefs {
 
 #[cfg(test)]
 mod tests {
-    //! Verify that generator-version redaction remains scoped across `SemVer` values.
+    //! Verify the two snapshot filters redact exactly what they claim.
+    //!
+    //! Both filters are the reason a checked-in snapshot repeats on a machine
+    //! that did not record it: one hides the generator version across `SemVer`
+    //! values, the other hides the temporary directory a staged workspace lives
+    //! in.
 
     use super::*;
+    use anyhow::{Result, ensure};
     use proptest::prelude::*;
     use regex::Regex;
+    use rstest::rstest;
     use serde_json::Value;
+
+    /// Replace every match of the temporary-path filter with `[TMP]`.
+    fn normalized(temp_dir: &str, text: &str) -> Result<String> {
+        let pattern = temp_dir_filter_pattern(temp_dir);
+        let filter = Regex::new(&pattern)?;
+        Ok(filter.replace_all(text, "[TMP]").into_owned())
+    }
+
+    #[rstest]
+    #[case(
+        r"C:\Users\runner\AppData\Local\Temp",
+        r"cannot read C:\Users\runner\AppData\Local\Temp\ws\Netsukefile",
+        "cannot read [TMP]",
+        "a diagnostic quotes a Windows path with single backslashes"
+    )]
+    #[case(
+        r"C:\Users\runner\AppData\Local\Temp",
+        r#"{"path": "C:\\Users\\runner\\AppData\\Local\\Temp\\ws"}"#,
+        r#"{"path": "[TMP]"}"#,
+        "serializing a Windows path doubles every backslash"
+    )]
+    #[case("/tmp", "/tmp/ws/Netsukefile", "[TMP]", "a Unix path")]
+    #[case("/tmp/", "/tmp/ws", "[TMP]", "a trailing separator changes nothing")]
+    #[case("/tmp", "/tmpfoo/ws", "/tmpfoo/ws", "a sibling sharing the prefix")]
+    fn temp_dir_filter_replaces_exactly_the_temporary_prefix(
+        #[case] temp_dir: &str,
+        #[case] text: &str,
+        #[case] expected: &str,
+        #[case] because: &str,
+    ) -> Result<()> {
+        let actual = normalized(temp_dir, text)?;
+        ensure!(
+            actual == expected,
+            "{because}: expected {expected:?}, got {actual:?}"
+        );
+        Ok(())
+    }
 
     proptest! {
         #[test]
