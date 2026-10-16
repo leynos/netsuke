@@ -38,9 +38,13 @@ fn push_line(rendered: &mut String, line: &str) {
 }
 
 /// Build the localized summary line for a report.
+///
+/// The clean message is reserved for a run with nothing to say: a run whose
+/// every finding was suppressed still states its suppressed count, as the
+/// JSON summary does.
 #[must_use]
 pub(super) fn summary_line(report: &Report) -> String {
-    if report.findings().is_empty() {
+    if report.findings().is_empty() && report.suppressed() == 0 {
         return localization::message(keys::CHECK_SUMMARY_CLEAN).to_string();
     }
     localization::message(keys::CHECK_SUMMARY_COUNTS)

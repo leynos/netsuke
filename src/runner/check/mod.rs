@@ -56,7 +56,8 @@ fn handle_check_inner(
     reporter: &dyn StatusReporter,
 ) -> Result<(), CheckFailure> {
     if let Some(rule) = args.explain.as_deref() {
-        return explain::render(cli, rule).map_err(CheckFailure::Output);
+        let rules = explain::select(rule).map_err(CheckFailure::Policy)?;
+        return explain::render(cli, &rules).map_err(CheckFailure::Output);
     }
     let policy = resolve_policy(&args.rule).map_err(CheckFailure::Policy)?;
     let threshold = parse_threshold(&args.fail_on).map_err(CheckFailure::Policy)?;
@@ -131,9 +132,12 @@ fn finish(report: &CheckReport) -> Result<()> {
     if !domain_report.is_failure() {
         return Ok(());
     }
+    // `failing_count` spans the whole run, so `reported` must too: counting
+    // only the findings left after `--limit` could read "3 of 1 reported".
+    let reported = domain_report.findings().len() + domain_report.truncated();
     let message = localization::message(keys::CHECK_THRESHOLD_EXCEEDED)
         .with_arg("severity", domain_report.threshold().as_str())
-        .with_arg("reported", domain_report.findings().len().to_string())
+        .with_arg("reported", reported.to_string())
         .with_arg("failing", domain_report.failing_count().to_string());
     Err(RunnerError::LintThresholdExceeded {
         message,

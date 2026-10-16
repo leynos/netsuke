@@ -15,24 +15,31 @@ use super::super::process;
 use super::documentation::rule_documentation_url;
 use super::json;
 
-/// Print the reference for one rule, or for every rule when `name` is empty.
+/// Print the reference for the selected rules.
+///
+/// Selection happens first, in [`select`], so an unknown rule name is a
+/// policy failure rather than an output failure.
 ///
 /// # Errors
 ///
-/// Returns an error when `name` does not identify a registered rule, or when
-/// the catalogue cannot be written.
-pub(super) fn render(cli: &Cli, name: &str) -> Result<()> {
-    let rules = select(name)?;
+/// Returns an error when the catalogue cannot be serialized or written.
+pub(super) fn render(cli: &Cli, rules: &[&'static RuleMeta]) -> Result<()> {
     let rendered = if cli.json {
-        json::render_catalogue(&rules)?
+        json::render_catalogue(rules)?
     } else {
-        render_text(&rules)
+        render_text(rules)
     };
     process::write_text_stdout(&rendered)
 }
 
-/// Select the rules `name` asks for.
-fn select(name: &str) -> Result<Vec<&'static RuleMeta>> {
+/// Select the rules `name` asks for: one rule, or every rule when `name` is
+/// empty.
+///
+/// # Errors
+///
+/// Returns [`RunnerError::CheckPolicy`] when `name` does not identify a
+/// registered rule.
+pub(super) fn select(name: &str) -> Result<Vec<&'static RuleMeta>> {
     if name.is_empty() {
         return Ok(catalogue());
     }
