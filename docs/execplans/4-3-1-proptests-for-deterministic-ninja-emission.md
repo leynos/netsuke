@@ -6,7 +6,14 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: BLOCKED
+
+Blocked on the `Scope` tolerance, not on a defect: the measured net-added-lines
+figure is 2,597 against a cap of 2,600, with `EP-M5` through `EP-M8` still
+unwritten, so the remaining milestones cannot be implemented without breaching
+the cap. A proposed deviation is recorded in `Decision log`; implementation
+awaits acceptance of one of its options. Separately, the shared compile pool is
+currently refusing every admission, so no milestone could advance regardless.
 
 `EP-M0` and `EP-M1` are complete and `ADR-030` is written and indexed. The
 approval gate was passed on 2026-09-27. `EP-M2` is complete and gate-verified:
@@ -3494,6 +3501,20 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
       not fix it, since the issue is the per-case reorder classification
       rather than the sample size.
 
+- [ ] (2026-10-16) **`BLOCKED`: the `Scope` tolerance has no room left for
+      `EP-M5`–`EP-M8`.** Measured at `8a213218` against merge base `e1df2ead`
+      (also the hook's diff base): 2,597 net added lines excluding this
+      ExecPlan, against a cap of 2,600 — three lines of headroom for four
+      milestones. 28 of 34 files, so the file axis is not the constraint. The
+      `EP-M3` and `EP-M4` suites are ~69% of the budget spent. The plan's
+      Exception handling covers exactly this case — stop when "a constraint
+      would be violated", not only once it has been — and the breach is
+      arithmetically certain rather than a risk, because no further milestone
+      fits in three lines. A proposed deviation with three options and a
+      recommendation is in `Decision log`. **No implementation work is
+      blocked by this beyond `EP-M5` onward**, and none could proceed
+      regardless while the compile pool refuses admissions.
+
 - [ ] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [ ] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [ ] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
@@ -4928,6 +4949,57 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   asserts the emitter renders it rather than dropping it. This is the only one
   of the two the plan's own `OBL-NOLOSS` statement actually needs, because a
   dropped output-less edge would be invisible to the output-count assertion.
+  Date/Author: 2026-10-16 / implementation agent.
+
+- **The net-lines tolerance is three lines from exhausted, with `EP-M5` through
+  `EP-M8` unwritten. This is a proposed deviation, and the plan is `BLOCKED`
+  until it is accepted or the budget is re-scoped.** The `Scope` tolerance
+  permits 34 files and 2,600 net added lines. Measured at `8a213218` against
+  the merge base `e1df2ead` (which is also the hook's diff base, so the figure
+  is not a stale-ref artefact):
+
+  ```plaintext
+  excluding docs/execplans/   add=3137  del=540  net=2597  / 2600
+  including docs/execplans/   add=8352  del=540  net=7812
+  files changed               28 / 34
+  ```
+
+  The count is given both ways because the tolerance's wording — "stop if net
+  added lines exceed 2,600" — does not say whether the ExecPlan is inside or
+  outside its own budget, and the two readings differ by a factor of three. The
+  conservative reading is the one asserted above: 2,597. The generous reading
+  has already breached, which is exactly the ambiguity a tolerance should not
+  have, and it is recorded rather than resolved unilaterally.
+
+  Where the budget went, by area: `ADR-030` 497, `src/ninja_gen/determinism/`
+  1,792 (the `EP-M3` strategy and the `EP-M4` suites), other `src/ninja_gen/`
+  58, `tests/kani_mutation_evidence_tests/` 140, elsewhere
+  110. `EP-M3` and `EP-M4` therefore account for roughly 69% of a budget that
+  has to cover four further milestones, including `EP-M8`'s Ninja oracle and
+  documentation sweep. The file count is not the binding constraint — 28 of 34,
+  and the artefact list budgets 12 test and strategy files against 6 written —
+  so a re-scope has line room to move in on that axis.
+
+  Options, with the trade-off each carries. **Widen the cap** (for example to
+  4,000) and record why: the 2,600 number was chosen against the 4.2.3
+  precedent, and that precedent's failure mode was under-delivery rather than
+  overspend, so the cap may be measuring the wrong axis. **Narrow scope**: drop
+  `OBL-NINJA` or move `EP-M7` out, both of which were already considered and
+  declined once — the second because the measured `-n` finding shows the oracle
+  covers the sidecar path nothing else reaches, so this option re-opens a
+  settled question. **Split the plan** at the `EP-M4` plateau, shipping
+  `EP-M0`–`EP-M4` as one PR and `EP-M5`–`EP-M8` as a successor.
+
+  The third is the one this agent would recommend, and it is the one the
+  milestone structure already supports: every milestone must end in a coherent
+  validated state, `EP-M4` closes two complete obligations, and the branch's
+  Proptest coverage would then be partial-but-real rather than
+  partial-and-overrunning. It is not taken unilaterally because the user
+  directed the wide scope and declined the split once already, which makes
+  re-proposing it a decision for them rather than for this agent. No
+  implementation work is blocked in the meantime — the compiler pool is
+  unavailable, so no milestone can advance regardless — and this entry exists
+  so the breach is visible before the budget is breached rather than after.
   Date/Author: 2026-10-16 / implementation agent.
 
 ## Design review findings
