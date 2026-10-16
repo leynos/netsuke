@@ -356,8 +356,9 @@ Every stopping point is documented here. Timestamps are UTC.
   is exactly <https://github.com/leynos/shared-actions/issues/544> ("Installed
   mold does not imply Cargo actually selects it if `RUSTFLAGS` has replaced
   project flags"). Per the plan's constraint, **no local workaround was added**
-  and no pin bump is made, because #544 has no fixing revision. Milestone 3's
-  observation obligation is now discharged with a literal transcript.
+  and no pin bump is made, because no merged revision carries a fixing input.
+  Milestone 3's observation obligation is now discharged with a literal
+  transcript.
 
   The `setup-commands` print alone would not have settled it, because it shows
   what the *environment* holds, not what the *compiler* received. The
@@ -658,16 +659,23 @@ Every stopping point is documented here. Timestamps are UTC.
   revision that preserves the project linker flags". That is a different claim
   from "mold is installed but unused", and it is testable. Three probes:
 
-  1. `shared-actions#544` is still `OPEN` with `closedAt: null`, **zero**
-     comments, and `updatedAt` of 2026-10-07 — three days before the pinned
-     revision was cut, so there is no fixing commit to pin.
-  2. `mutation-cargo.yml` at the pin declares 13 `workflow_call` inputs and
-     **none** of them is `rustflags`; the same file at shared-actions `HEAD`
-     (`aea9c14c24b7`, 2026-10-12) declares 14 — the tip adds
-     `install-clang-lld` — and still none is `rustflags`. The only setup-rust
+  1. `shared-actions#544` is `OPEN` with `closedAt: null`, **zero** comments,
+     and `updatedAt` of 2026-10-07 — three days before the pinned revision was
+     cut. Re-checked 2026-10-16: still open, still zero comments, so no
+     *merged* revision fixes it. What has changed is that a fix now exists
+     unmerged — shared-actions#628, "Add optional mutation Rustflags override
+     (#544)", open, `mergeStateStatus` `BLOCKED` — so there is a fixing commit
+     to pin *later*, at merge, and none to pin now.
+  2. `mutation-cargo.yml` at the pin (`0606ca89`) declares 13 `workflow_call`
+     inputs and **none** of them is `rustflags`; re-checked at the upstream tip
+     `e693d81d` (2026-10-14) it declares 17, the additions being
+     `install-clang-lld`, `install-mdtablefix`, `mdtablefix-sha256` and
+     `mdtablefix-version` — and still none is `rustflags`. The only setup-rust
      call there is `with: install-mold: ${{ inputs.install-mold }}`. So no
-     revision of this reusable workflow, at the pin or at its tip, exposes a
-     flag-ownership surface a caller could pin to.
+     merged revision of this reusable workflow exposes a flag-ownership surface
+     a caller could pin to. #628's head (`73e09854`) does declare an 18th
+     input, `rustflags`, defaulting to `""` — which is the input this caller
+     needs, available the moment that pull request merges.
   3. `setup-rust`'s `rustflags` input still defaults to `'-D warnings'` at
      shared-actions `HEAD` (`action.yml:85`), so the default that displaces
      `.cargo/config.toml` is unchanged upstream.
@@ -758,9 +766,10 @@ Every stopping point is documented here. Timestamps are UTC.
      propagated to the workflow comment, this plan, and the PR description.**
      Measured properly — read the key names out of the `workflow_call.inputs`
      block at each revision and compare the sets — `mutation-cargo.yml`
-     declares **13** inputs at the pin `0606ca89` and **14** at the tip
-     `aea9c14c24b7`, the tip's addition being `install-clang-lld`. Neither
-     declares `rustflags`, which is the load-bearing claim and is unaffected.
+     declares **13** inputs at the pin `0606ca89` and the tip has since grown
+     (17 at `e693d81d`, adding `install-clang-lld`, `install-mdtablefix`,
+     `mdtablefix-sha256` and `mdtablefix-version`). The tip does not declare
+     `rustflags`, which is the load-bearing claim and is unaffected.
      The over-count is exactly two, which is the signature of a loose
      `grep -c "^      [a-z-]*:$"` inside an `on:`..`jobs:` span matching the
      `workflow_call:` and `inputs:` lines as well as the input names. The
@@ -1016,7 +1025,7 @@ Every stopping point is documented here. Timestamps are UTC.
   draft (`success CodeRabbit Review skipped: draft pull request`), which is why
   the review evidence on this branch comes from foregrounded
   `coderabbit review --agent` passes rather than from the app's own check. The
-  count is 16 invocations over 2026-10-13 05:59 .. 2026-10-14 02:43 UTC; the
+  count is 17 invocations over 2026-10-13 05:59 .. 2026-10-16 16:57 UTC; the
   census method and its deduplication are in *Outcomes & retrospective*.
 
 ## Surprises & discoveries
@@ -1304,6 +1313,26 @@ Unexpected findings during implementation that were not anticipated as risks.
   is not evidence. Enumerate `steps[].conclusion` and read the log around the
   first non-`success` step.
 
+- **A claim about upstream state decays, and this plan made three of them.**
+  The mold-selection evidence is partly a statement about a *moving*
+  repository, and it was written once and then quoted. By 2026-10-16 all three
+  copies had gone stale in the same direction: the upstream tip had moved from
+  `aea9c14c24b7` (14 `workflow_call` inputs) to `e693d81d` (17), so every
+  sentence naming the tip as "its tip (`aea9c14c24b7`)" was simply false; and
+  "#544 is open with no fixing commit" had become a claim about the absence of
+  something that now exists — shared-actions#628, `BLOCKED`, whose head adds
+  the very `rustflags` input this branch needs. None of this changes the
+  verdict — no *merged* revision declares the input, so the acceptance clause
+  is still unmet and no pin bump is possible — but the *reasons* had rotted,
+  and a reviewer checking the cited SHAs would have found the citations wrong.
+  The lesson is that an external-state claim needs either a date and a re-check
+  instruction or an anchor that cannot move, and ideally both. What changed
+  here: the workflow comment now names only the pinned revision (stable) and
+  says "no merged revision" rather than naming a tip, cites #628 by number with
+  its state, and carries "re-check #628 before assuming it still stands"; the
+  same treatment is applied at every other copy. A pinned SHA is checkable
+  forever; "the current tip" is checkable for about a day.
+
 ## Decision log
 
 Record every significant decision made while working on the plan.
@@ -1469,16 +1498,16 @@ the improvement the issue asked for but not the whole of it.
 The strict reading is the one to carry forward, because the no-regression
 reading is satisfied by doing nothing. The rectification is out of reach from
 this repository either way: it needs a `rustflags` input on
-`mutation-cargo.yml`, which neither the pinned revision nor its tip declares,
-or a fix upstream of #544, which has none. **A worker-scoped `RUSTFLAGS`
-override is the one remedy explicitly forbidden** — by the issue's own wording,
-by *Constraints*, and by CodeRabbit's finding — and it would displace the
-`.cargo/config.toml` state the build standard is defined by. So the strict
-criterion is left unmet and recorded rather than silently satisfied, and the
-mutation worker's results must be read with that caveat until an upstream input
-exists. This is the second finding on the branch that a green gate cannot
-settle; the first was that installing a linker on another job does not
-provision this one.
+`mutation-cargo.yml`, which no merged revision declares, or a fix upstream of
+shared-actions#544, which is now proposed as shared-actions#628 but is unmerged
+and `BLOCKED`. **A worker-scoped `RUSTFLAGS` override is the one remedy
+explicitly forbidden** — by the issue's own wording, by *Constraints*, and by
+CodeRabbit's finding — and it would displace the `.cargo/config.toml` state the
+build standard is defined by. So the strict criterion is left unmet and
+recorded rather than silently satisfied, and the mutation worker's results must
+be read with that caveat until an upstream input exists. This is the second
+finding on the branch that a green gate cannot settle; the first was that
+installing a linker on another job does not provision this one.
 
 **Three lessons worth carrying forward.** First, the issue's premise needed
 re-cutting: the reported symptom was accurate, but "the baseline reaches the
@@ -1509,18 +1538,18 @@ Markdown only, their re-run is a formality, and the standing requirement is
 that CI be green on every head, including the draft pull request's final one.
 That requirement is met on `8c0490eb` and on every head after it, each of which
 is docs-only on top of the byte-identical non-Markdown tree of the green
-`52084776`. **Census of the retained `coderabbit review --agent` logs:** 16
-invocations between 2026-10-13 05:59 UTC and 2026-10-14 02:43 UTC, all
+`52084776`. **Census of the retained `coderabbit review --agent` logs:** 17
+invocations between 2026-10-13 05:59 UTC and 2026-10-16 16:57 UTC, all
 `currentBranch` = this branch and all `workingDirectory` = this worktree.
-Twelve carried findings and four returned none. The twenty-two finding records
-are ten instances of the mold-selection finding plus twelve others standing at
-ten distinct sites, two of which were raised twice. So there are **eleven
-distinct defects: ten fixed, and the mold-selection gap standing as a recorded
-upstream blocker**. The ten fixed ones, by site, are: first-person pronouns in
-this plan; a second-person pronoun with a subject-verb agreement error; a
-reproduction recipe that could not work; a mold-free conformance command that
-cannot pass and was re-raised at the same line in a later pass; an empty
-`RUSTFLAGS` treated as proof that Cargo selects mold; an acceptance line
+Thirteen carried findings and four returned none. The twenty-three finding
+records are eleven instances of the mold-selection finding plus twelve others
+standing at ten distinct sites, two of which were raised twice. So there are
+**eleven distinct defects: ten fixed, and the mold-selection gap standing as a
+recorded upstream blocker**. The ten fixed ones, by site, are: first-person
+pronouns in this plan; a second-person pronoun with a subject-verb agreement
+error; a reproduction recipe that could not work; a mold-free conformance
+command that cannot pass and was re-raised at the same line in a later pass; an
+empty `RUSTFLAGS` treated as proof that Cargo selects mold; an acceptance line
 demanding evidence that was never obtainable; a conformance check naming
 `.github/actions/...` where the caller pins
 `.github/workflows/mutation-cargo.yml`; a *Context and orientation* section
@@ -1528,27 +1557,30 @@ still describing the caller's `with:` block and the rustdoc tests as they stood
 before this branch changed them; a flag-precedence comment in the contract test
 stated inaccurately; and, in that same test, an empty `case … : pass` arm
 replaced by a typed narrowing helper. The mold-selection finding is one defect
-raised ten times, not ten defects. The "nine passes" figure this paragraph
-previously carried, and the "seven foregrounded passes" in *Progress*, were
-both impressions rather than counts, and the "six prose defects" they carried
-understated the fixed work by four. Re-derive a count like this from the
-retained logs, keyed on `(fileName, startLine)`, rather than from recollection.
-A zero-finding review is not reachable while the linker-selection clause is
-unmet, and treating one as the exit condition would mean either deleting the
-finding or writing a workaround the issue forbids.
+raised eleven times, not eleven defects. The "nine passes" figure this
+paragraph previously carried, and the "seven foregrounded passes" in
+*Progress*, were both impressions rather than counts, and the "six prose
+defects" they carried understated the fixed work by four. Re-derive a count
+like this from the retained logs, keyed on `(fileName, startLine)`, rather than
+from recollection. A zero-finding review is not reachable while the
+linker-selection clause is unmet, and treating one as the exit condition would
+mean either deleting the finding or writing a workaround the issue forbids.
 
-Two of those sixteen passes were run back to back over the identical frozen
+Two of those seventeen passes were run back to back over the identical frozen
 revision `52084776`, and they returned **0 and 2** findings. That is the
 sampling behaviour stated as a measurement rather than a caveat: a "clean
 review" is a property of one sample, so the exit condition this plan uses is a
 stated disposition per finding, not a finding count.
 
-**Upstream, unresolved by design.** shared-actions#544 remains open with no
-fixing revision, so a caller still cannot both request mold and keep the
-project's linker flag. shared-actions#590 covers the shard evidence, and
-shared-actions#591 the preflight consolidation. None of the three is
-reconcilable within this repository, and `Conformance basis` records them as
-external dependencies rather than gaps in this change.
+**Upstream, unresolved by design.** shared-actions#544 remains open. It now has
+a proposed fix rather than none: shared-actions#628 would add the missing
+`rustflags` input to `mutation-cargo.yml`, but it is `BLOCKED` and unmerged, so
+a caller still cannot both request mold and keep the project's linker flag.
+shared-actions#590 covers the shard evidence, and shared-actions#591 the
+preflight consolidation. None of the four is reconcilable within this
+repository, and `Conformance basis` records them as external dependencies
+rather than gaps in this change. Because #628 is a claim about upstream state
+that upstream moves, re-check it before treating this paragraph as current.
 
 ## Context and orientation
 
@@ -2055,7 +2087,7 @@ existing shared-workflow pin: the pinned revision already declares both
 not required.
 
 Revisions, 2026-10-14. Recorded the CodeRabbit tally — later re-derived to the
-16-invocation census in *Outcomes & retrospective* — and the 0-and-2 sampling
+17-invocation census in *Outcomes & retrospective* — and the 0-and-2 sampling
 measurement over the frozen revision `52084776`; fixed the M2 conformance check
 to name the caller's real `uses:` target; and extended the CI-green record to
 `009cbf02`, whose only delta from the fully-gated `52084776` is this document
@@ -2072,9 +2104,25 @@ gap — and the three sentences elsewhere that had inherited the same assumption
 
 This section deliberately does not say the plan stops editing here, because
 that sentence is falsified by whatever commit carries it. The operative
-statement is narrower and stays true: every head after `8c0490eb` changes this
-document and nothing else, so each is gated by the three Markdown-sensitive
-targets plus `test-workflow-contracts`, with the Rust-bearing gates carried by
-the byte-identical non-Markdown tree of the green `52084776`. A reader who
-needs the gate evidence for a specific head should read it from the pull
-request description, which states that invariant rather than a SHA.
+statement is narrower and stays true: every head after `8c0490eb` *up to and
+including `b9724625`* changes this document and nothing else, so each is gated
+by the three Markdown-sensitive targets plus `test-workflow-contracts`, with
+the Rust-bearing gates carried by the byte-identical non-Markdown tree of the
+green `52084776`. A reader who needs the gate evidence for a specific head
+should read it from the pull request description, which states that invariant
+rather than a SHA.
+
+Revisions, 2026-10-16. Two changes, both prompted by the eleventh CodeRabbit
+pass rather than by a gate. First, the eleven-times-raised mold finding is now
+joined by a re-derivation of the review census after that pass (17 invocations,
+23 finding records, still eleven distinct defects). Second — and this is the
+first non-Markdown delta since `52084776` — the upstream-state claims in
+`.github/workflows/mutation-testing.yml` were corrected. They had gone stale:
+the comment named `aea9c14c24b7` as the upstream tip, which is no longer true,
+and asserted that #544 "has no fixing revision", which shared-actions#628 now
+falsifies. The replacement names only the pinned revision, states the claim as
+"no merged revision declares `rustflags`", cites #628 with its `BLOCKED` state,
+and tells the next reader to re-check it. Behaviour is unchanged: the edit is
+confined to YAML comments, and the `uses:` pin, the `with:` block and
+`setup-commands` bytes are identical. Because this head is not docs-only, the
+full gate set is required rather than the four-target subset.
