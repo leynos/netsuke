@@ -1070,6 +1070,76 @@ Every stopping point is documented here. Timestamps are UTC.
   count is 17 invocations over 2026-10-13 05:59 .. 2026-10-16 16:57 UTC; the
   census method and its deduplication are in *Outcomes & retrospective*.
 
+- [x] (2026-10-16 22:05Z) **`6558fd1f` is green in CI on every workflow, and the
+  ExecPlan contract suite is observed passing there — which retires the one
+  local gate this branch could not close.** The three workflows bound to
+  `6558fd1fd1231a9701686734335c85b293890e30` each concluded `completed success`
+  on attempt 1: `CI` `38947760136`, `Netsukefile Build Test` `38947760053` and
+  `Release Dry Run` `38947760127` (plus `dependabot-automerge`, `skipped` by
+  design). Reading each run's own job list rather than a summary: `CI`'s five
+  jobs are all `success` (`kani-smoke`, `build-test`,
+  `Windows / windows-msi-upgrade`, `Windows / build-test-windows`,
+  `Windows / lint-windows`); `Netsukefile Build Test`'s one job is `success`;
+  and `Release Dry Run`'s eleven jobs are nine `success` with
+  `release / windows-native-recipe-smoke` and `release / publish-release`
+  `skipped` by design. That is 16 jobs, 14 success, 2 skipped, 0 failed and 0
+  cancelled, with nothing pending.
+
+  **The `build-test` job log settles the question this plan has carried since
+  the freeze: whether `tests/execplan_status_contract_tests.rs` runs.** It
+  does. The job's nextest pass reports
+  `3990 tests run: 3990 passed (1 slow), 6 skipped` in 253.798 s, and the log
+  names the suite nine times, every one a `PASS` — including
+  `netsuke-build::execplan_status_contract_tests every_execplan_header_status_is_within…`,
+  the closed-set check that reads every `docs/execplans/*.md` at test time and
+  is the specific reason a docs-only change still required `make test`.
+  Grepping those nine lines for `fail`, `panic` or `error` returns nothing. The
+  same job then runs the doctests successfully.
+
+  **This is the right oracle, and the reason is provenance rather than
+  convenience.** The local `make test` has now failed to reach a verdict three
+  times on this branch, each time for infrastructure reasons rather than code:
+  at `52084776` on a 300 s nextest timeout, and twice tonight on admission
+  refusals. CI's `build-test` is a different machine with its own runner and no
+  shared token pool, it is bound to this exact SHA, and it completed. So the
+  `test` row of the eight-gate set is discharged by CI on `6558fd1f` — not by a
+  local run — and this entry says so rather than implying a local green.
+
+  **The local set, on this head, is not complete and the outstanding row is
+  infrastructure.** `make check-fmt` passed (`RC=0`, 4 s, `cargo fmt` + ruff
+  0.16.4 + mdtablefix all clean) and `make lint` exited `RC=2` having never
+  linted a single netsuke item: `cargo doc --workspace --no-deps` completed
+  cleanly first (13 m 09 s, `Generated … target/doc/netsuke/index.html`), then
+  `cargo clippy` was refused at the admission layer. `grep -c 'error\['` over
+  that log is `0`, all 18 `could not compile` lines name third-party registry
+  crates only (`serde`, `thiserror`, `pear_codegen`, `rand`, `multiversion`,
+  `zerofrom-derive`, `yoke-derive`, `miette-derive`, `tracing`, `futures-util`,
+  `mockall`, `zerotrie`, `clap`), and `grep -cE 'Compiling netsuke v'` is `0` —
+  so this is INDETERMINATE and establishes no defect in `6558fd1f`. Gates 3–8
+  were deliberately not run after it: a later green gate on a tree whose
+  earlier gate never executed proves nothing.
+
+  **The cause is a machine-level fault in the admission path, and it is
+  recorded here rather than worked around.** Three symptoms, read from the
+  supervisor's own journal and socket state: the systemd user manager became
+  unresponsive to D-Bus (`systemctl --user is-system-running` and a raw
+  `dbus-send … org.freedesktop.DBus.Peer.Ping` both time out at 20 s); the
+  supervisor then logged repeated
+  `group gNNNN: cannot create buildlimits-2867217-gNNNN.scope: Call failed:
+  Connection timed out`,
+  that is, it could not make the transient scope that bounds each compiler
+  group; and with 256 `build-limits-rustc` wrappers queued its socket accept
+  queue saturated (`u_str LISTEN 129` against backlog `128`), which is why
+  `build-limits-status` reports `cannot query the supervisor …: timed out` while
+  `ss` shows the socket still listening. The supervisor also restarted twice
+  tonight (20:28:13 and ~21:42), and `sccache` was absent for part of the
+  window, which is the `sccache unreachable, compiling directly` clause — an
+  uncached build, not a failure. **No recovery action was taken:** restarting
+  `systemd --user` would terminate every other agent's processes on this
+  machine, which is out of scope for this branch, and build-limits admission
+  must never be bypassed by unsetting `RUSTC_WRAPPER`. This is reported to the
+  operator instead.
+
 ## Surprises & discoveries
 
 Unexpected findings during implementation that were not anticipated as risks.
@@ -1391,6 +1461,29 @@ Unexpected findings during implementation that were not anticipated as risks.
   its state, and carries "re-check #628 before assuming it still stands"; the
   same treatment is applied at every other copy. A pinned SHA is checkable
   forever; "the current tip" is checkable for about a day.
+
+- **Observation:** a build queue can fail by *saturation* rather than by
+  refusal, and the two look nothing alike from the caller's side. Impact: the
+  admission path on this machine degraded in a way this plan had no prior for.
+  The forms previously recorded here are a queued build printing
+  `[build-limits] CRATE: waiting for a compile slot` (wait, do not kill) and a
+  refusal printing `build-limits: the supervisor refused: unhealthy` (a fast,
+  loud failure). Tonight produced a third: the supervisor stayed **alive and
+  healthy** while becoming unable to do its job, because the systemd user
+  manager it calls to create a per-group scope stopped answering D-Bus. So
+  `build-limits-status` reports `cannot query the supervisor …: timed out`
+  *while `ss` shows the socket still listening with 129 queued against a
+  backlog of 128* — the diagnosis is in the accept-queue depth, not in the
+  process table. The supervisor's journal is what names the real cause:
+  `cannot create buildlimits-2867217-gNNNN.scope: Call failed:
+  Connection timed out`.
+  Recourse: when a status probe times out, check the listener's queue depth
+  and read `journalctl --user -u buildlimits-supervisor.service` before
+  concluding the supervisor is down — and note that a *restarted* supervisor
+  whose socket is recreated (`mtime` on `supervisor.sock`) means the queue was
+  reset, so `held` counts taken before and after a restart are not comparable.
+  The distinction matters because the responses differ: a refusal is a reason
+  to re-dispatch, saturation is a reason to stop adding work to the machine.
 
 ## Decision log
 
