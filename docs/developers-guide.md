@@ -4637,11 +4637,11 @@ The cache `result` is `hit`, `miss`, `not_attempted` or `unknown`. A successful
 restore with `cache-hit=true` is a hit; a successful restore without that exact
 value is a miss; a skipped restore is `not_attempted`; every other restore
 outcome is `unknown`. A miss means that no exact payload was restored. The
-`actions/cache` action reports service errors as warnings and can complete the
-step successfully, so this label does not claim that the cache service was
-healthy. The cache action's
-[read-only behaviour](https://github.com/actions/cache#read-only-access)
-documents this warning behaviour.
+pinned action catches restore service errors and can complete the step
+successfully: most failures produce warning annotations, while HTTP 5xx
+responses produce error annotations. The cache result therefore does not claim
+that the service was healthy. See the pinned
+[`@actions/cache` 6.1.0 restore implementation](https://unpkg.com/@actions/cache@6.1.0/lib/cache.js).
 
 The proof timer starts immediately before `make kani-ir` and normally ends
 immediately after it, including when the proof command fails. When `run-proofs`

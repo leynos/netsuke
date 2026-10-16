@@ -190,9 +190,10 @@ Metric labels contain only the workflow event, fixed decision and outcome
 categories, or the cache result. Paths, commit IDs, run IDs, URLs and free-form
 errors are excluded from every label. The cache `miss` category means that no
 exact payload was restored; it does not claim that the cache service was
-healthy, because `actions/cache` can report service errors as warnings. The
-duration marks bracket `make kani-ir`; cancellation may prevent the end mark,
-and job timeout or runner loss can prevent finalization or upload.
+healthy. The pinned action catches restore service errors: most produce warning
+annotations, while HTTP 5xx responses produce error annotations. The duration
+marks bracket `make kani-ir`; cancellation may prevent the end mark, and job
+timeout or runner loss can prevent finalization or upload.
 
 Implementation and contracts live in
 [`scripts/kani_proof_scope.py`](../scripts/kani_proof_scope.py),
