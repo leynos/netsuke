@@ -911,9 +911,9 @@ Every stopping point is documented here. Timestamps are UTC.
   as a claim about one head: `009cbf02`'s run set was still `in_progress` when
   the section was last edited, and a conclusion is not carried across a push.
   The body therefore names the last *concluded* run set and states that every
-  later head is docs-only on top of the green `52084776`, rather than saying
-  "the current head" — a phrase written once and falsified by the next push
-  within a single turn.
+  later head is docs-only on top of `52084776`, rather than saying "the current
+  head" — a phrase written once and falsified by the next push within a single
+  turn.
 - [x] (2026-10-16 17:40Z) **The upstream-state claims were refreshed, and the
   review census re-derived after the eleventh pass.** The eleventh
   `coderabbit review --agent` pass raised the mold-selection finding for the
@@ -2149,8 +2149,8 @@ Revisions, 2026-10-14. Recorded the CodeRabbit tally — later re-derived to the
 17-invocation census in *Outcomes & retrospective* — and the 0-and-2 sampling
 measurement over the frozen revision `52084776`; fixed the M2 conformance check
 to name the caller's real `uses:` target; and extended the CI-green record to
-`009cbf02`, whose only delta from the fully-gated `52084776` is this document
-and which is therefore gated by the three Markdown-sensitive gates plus
+`009cbf02`, whose only delta from `52084776` is this document and which is
+therefore gated by the three Markdown-sensitive gates plus
 `test-workflow-contracts`.
 
 Revisions, 2026-10-14 (final). Consolidated the plan onto its instructed end
