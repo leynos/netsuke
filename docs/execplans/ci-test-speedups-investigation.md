@@ -234,9 +234,20 @@ reporting; and fixed-format per-Cargo elapsed/freshness/lock-wait lines in the
 API harness. Call inventory with `always()` after coverage and before cleanup
 in PR and main coverage lanes. Preserve timeouts, groups, selection, coverage
 inputs, RUSTFLAGS, watchdog and job ceiling. Do not split phases by rerunning
-tests or changing cleanup, objects or failure behaviour. Check cargo-llvm-cov
-0.9.0 for an environment-based verbose switch; absent one, time merge and
-export together.
+tests or changing cleanup, objects or failure behaviour. Source inspection of
+cargo-llvm-cov 0.9.0 shows that it loads Cargo configuration and uses the
+`CARGO_TERM_VERBOSE` setting for report merge/export `Running` lines; it does
+not expose a dedicated `CARGO_LLVM_COV_VERBOSE` switch.[^llvm-cov-verbose] The
+v0.9.0 manifest requires `cargo-config2` `^0.1.41`, but the tag has no
+committed lockfile, so the binary's resolved transitive version is unverified.
+This is static source evidence, not confirmation of the CI binary's runtime
+behaviour or its effective environment. Before relying on the indirect switch,
+check locally whether its environment propagation affects child Cargo and fits
+the telemetry budget. Until the native boundaries are validated, record merge
+and export together. The source's default merge command is
+`llvm-profdata merge -sparse -f <list> -o <profdata>`; externally supplied
+`LLVM_PROFDATA_FLAGS` may alter it, and the actual CI invocation has not been
+verified from source alone.
 
 Account for telemetry's broad cache-key rotation and warm-up; do not purge
 caches or deliberately cold-start production. Measure execution, upload bytes
@@ -370,7 +381,8 @@ fidelity comparisons block adoption.
   passed, three skipped, with 27 follow-on script tests passing. Dispatch no CI
   for this evidence milestone.
 - [ ] Complete full local Rust validation and code review before committing the
-  collector and publishing; retain failed attempts and diagnostic overhead.
+  collector; keep the already-published documentation checkpoint distinct from
+  the still-unpublished code and retain failed attempts and diagnostic overhead.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
       rejected/deferred.
@@ -437,6 +449,32 @@ or adopted. Update progress and decisions as evidence lands.
   the OS could not launch the compiler wrapper (error 11, process resource
   exhaustion). No commit or CodeRabbit review was made with that failed gate.
   Preserve runner shapes separately in cost accounting before resuming gates.
+- 2026-10-16: The documentation-only checkpoint at
+  `55a66ca91d1989a6caa5fc8fe9a0e5e5cff8e130` was pushed in [draft PR #918].
+  Evidence checkpoints were published in [the issue][issue-checkpoint-one] and
+  [its follow-up][issue-checkpoint-two]. All ordinary required hosted checks
+  passed on 15 October on tested merge
+  `0ced8474e03ba6ec22d45abf8d81145e90d41a35`, which includes newer `main` at
+  `486b876c7244c81b4fa9787a990448beebafea26` and has 78 paths changed relative
+  to this PR head, including Rust, tests and Nextest configuration. That run
+  reports 3,928 Nextest passes, six skips, 129 doctest passes and 32 ignored
+  doctests. It is hosted validation of that tested merge, not source/config-
+  equivalent proof for the local commit gate: local selection has 3,912 tests
+  and the unchanged full local gate still timed out the packaging test at
+  300.028 seconds, while the hosted package allowance is 600 seconds and that
+  test passed in 161.125 seconds. Do not treat hosted success as waiving the
+  local gate or as causal timing evidence.
+- 2026-10-16: The H4 quiet-queue monitor ended without a qualifying pair: 424
+  initial observations plus 76 continuation observations, ending at 16:57:23
+  UTC on 15 October. It launched no diagnostic. A separate 16 October read-only
+  snapshot showed a healthy four-slot pool with three slots held and sccache
+  unreachable. `buildlimits-sccache.service` is enabled but inactive/dead;
+  systemd reports it inactive since 12 October, `Result=success`,
+  `ExecMainStatus=15` and zero restarts. These observations do not establish a
+  cause for the local timeout. No service, configuration or limit change has
+  been made; explicit user approval is pending before the proposed
+  `systemctl --user start buildlimits-sccache.service` recovery command. Keep
+  this local environment evidence out of the CI baseline dataset.
 
 - 2026-10-12: The retained set has 15 attempts and 51 job records. Its source
   SHAs differ, so it supports provenance and descriptive summaries but not a
@@ -461,9 +499,11 @@ or adopted. Update progress and decisions as evidence lands.
 ## Outcomes & retrospective
 
 The offline collector, original observation set and dated supplement are
-recorded. A controlled baseline, distinct coverage merge/export timings,
-bounded CI telemetry, candidate evaluations and adoption follow-through remain
-outstanding.
+recorded. The documentation checkpoint and evidence summaries are published
+through draft PR #918 and issue #894. The collector code remains staged and
+unpublished pending its local Rust gate and code review. A controlled baseline,
+distinct coverage merge/export timings, bounded CI telemetry, candidate
+evaluations and adoption follow-through remain outstanding.
 
 Local lint, formatting, Markdown/spelling, diagram validation and Python
 typechecking passed. Documentation coverage is 98.87%. Workflow contracts
@@ -472,31 +512,47 @@ separate doctest pass succeeded: its three native summaries report 129 passes,
 32 ignored cases and no failures. Collector regressions preserve merged and
 compile-fail result batches and keep absent archive sizes unknown.
 
-Full Rust validation remains blocked: the third attempt passed 3,911 tests but
-timed out the isolated packaging verification at 300.028 seconds. The consumer
-and split-layout checks passed at 198.270 and 255.989 seconds. The faithful
-consumer diagnostic took 691.538 seconds; it is local preparation, not CI
-evidence or a passing gate. A single packaging diagnostic awaits the
-predeclared quieter-queue condition in the debugging plan. No fourth full
-attempt or collector code review has begun. The collector and tests remain
-staged pending the required gate result. Candidate adoption still requires
-controlled CI evidence beyond this offline milestone.
+Full local Rust validation remains blocked: the third attempt passed 3,911
+tests but timed out the isolated packaging verification at 300.028 seconds. The
+consumer and split-layout checks passed at 198.270 and 255.989 seconds. The
+faithful consumer diagnostic took 691.538 seconds; it is local preparation, not
+CI evidence or a passing gate. The H4 monitor observed 500 statuses without the
+predeclared quiet-queue pair and launched no packaging diagnostic. The separate
+16 October supervisor snapshot and inactive sccache service are recorded as
+local environment evidence; no cause is established and a proposed service
+start awaits explicit user approval. No fourth full attempt or collector code
+review has begun. The collector and tests remain staged pending the required
+gate result. Candidate adoption still requires controlled CI evidence beyond
+this offline milestone.
 
-The documentation checkpoint is committed as `b5e64888`, with review
-corrections in `f3a5e8a5` and `159d91a6`. Applicable formatting, Markdown,
-spelling and Mermaid checks passed before those documentation-only commits.
-Three documentation-only CodeRabbit reviews found two minor grammar issues,
-both corrected. The latest review, at `159d91a6`, reported zero findings. All
-three reported one unreviewed file without naming it; complete review coverage
-remains unverified. The collector and its contracts have not received
-CodeRabbit code review. No push, draft PR, issue comment or CI dispatch has
-occurred.
+The documentation checkpoint is pushed in draft PR #918. Applicable formatting,
+Markdown, spelling and Mermaid checks passed before the documentation-only
+commits. Four scoped documentation reviews found two minor grammar issues, both
+corrected. The latest review at `55a66ca9` reported zero findings and listed
+all five files in its incremental review. Each of the first three reviews
+reported one unnamed unreviewed file, so the latest result does not establish
+full coverage of the original documentation diff. The collector and its
+contracts have not received CodeRabbit code review. The six collector files
+remain staged and unpublished; no CI dispatch occurred.
 
 ## Revision note
 
-Revised 2026-10-15 to include the cache-writer cohort, separate runner shapes,
-the dated ordinary-run supplement and parser regressions, and record local
-validation. The controlled baseline, bounded telemetry and candidate decisions
-remain outstanding.
+Revised 2026-10-16 to record hosted validation, the H4 monitoring outcome,
+local supervisor evidence and cargo-llvm-cov source findings. The controlled
+baseline, bounded telemetry and candidate decisions remain outstanding.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
+[draft PR #918]: https://github.com/leynos/netsuke/pull/918
+[issue-checkpoint-one]: https://github.com/leynos/netsuke/issues/894#issuecomment-6196022869
+[issue-checkpoint-two]: https://github.com/leynos/netsuke/issues/894#issuecomment-6196835735
+
+[^llvm-cov-verbose]: Static source references: [cargo-llvm-cov 0.9.0 CLI]
+  [llvm-cov-cli], [context][llvm-cov-context], [report][llvm-cov-report],
+  [manifest][llvm-cov-manifest] and [cargo-config2 environment mapping]
+  [cargo-config-env].
+
+[llvm-cov-cli]: https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.0/src/cli.rs
+[llvm-cov-context]: https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.0/src/context.rs
+[llvm-cov-report]: https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.0/src/report.rs
+[llvm-cov-manifest]: https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.0/Cargo.toml
+[cargo-config-env]: https://github.com/taiki-e/cargo-config2/blob/v0.1.41/src/env.rs
