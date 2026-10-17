@@ -1417,6 +1417,37 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   the new jobs decompose. Stage C therefore writes five new composite actions
   plus the job graph, and is the largest stage in this plan.
 - [ ] Stage D: gates, guards, documentation (EP-M6).
+- [x] (2026-10-17) Ran the full eleven-target batch over the review-closure
+  change and committed it as `d604b0cd`. Nine targets pass outright:
+  `check-fmt` (265 files formatted, 184 Markdown unchanged), `spelling`,
+  `markdownlint`, `nixie`, `lint` (second run), `typecheck`, `doc-coverage`
+  (98.89% against the 80.00% threshold), `test-workflow-contracts` (1299 plus
+  27 passed) and `test-release-publication` (212 passed). The first `lint`
+  attempt failed at `Makefile:343` on
+  `R9101: Type dispatch on 'node' would be clearer as a match statement` in the
+  new `_imported_modules`; Ruff at the pinned 0.16.4 and Pylint at 10.00/10 had
+  both passed it, because the df12 house lints are a separate stage that a plain
+  `ruff check` never runs. The dispatch is now a `match` over `ast.Import()`
+  and `ast.ImportFrom(module=str() as module)`, and the single permitted re-run
+  is green.
+- [x] (2026-10-17) `make test` has **no passing verdict**, and the failure is
+  environmental rather than a defect in this branch. `test-nextest` reached
+  3959 passed, 6 skipped and one `TIMEOUT [300.009s]` in
+  `netsuke-build::build_module_slice_ui_tests::production_build_module_slice_has_expected_boundary`;
+  because `make test` is `test: test-nextest doctest`, that failure meant the
+  doctest half never ran. The 300 s is the product `period = "60s"` ×
+  `terminate-after = 5`, and the test awaits a nested `cargo build` inside its
+  own body, so compile-slot waits are charged to it; the pool was
+  `capacity 4, held 4` with the deepest queue at 51 and 18 slot-wait messages,
+  and the test's own file is absent from the branch diff. Do **not** widen the
+  budget: `.config/nextest.toml` deliberately leaves that override at the
+  profile default, and `docs/developers-guide.md` §"The per-test budget is a
+  product, not a period" records that a wider budget "would cover the delay,
+  and would not remove the contention that causes it". The doctest half was
+  then run on its own with `make doctest` and passed — 95 passed/26 ignored, 2
+  passed and 39 passed/6 ignored, zero failures — so that half is now green and
+  only the nextest half lacks a clean run. A re-run was dispatched at the same
+  head and had not reached the tests when this entry was written.
 
 ## Surprises & discoveries
 
