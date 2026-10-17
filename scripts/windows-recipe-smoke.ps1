@@ -219,6 +219,74 @@ function Test-AutomaticPathQuoting {
         -Expected 'automatic-path-quoting' -Message 'The discovered target did not build'
 }
 
+function Test-PathPlaceholderScripts {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Netsuke
+    )
+
+    Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'path-copy.txt')
+    if (-not (Test-Path -LiteralPath 'path-copy.txt')) {
+        throw 'The semicolon-bearing source path did not produce its output file.'
+    }
+    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'path-copy.txt') `
+        -Expected 'path-derived-content' -Message 'A semicolon-bearing source path was not copied literally'
+
+    Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'literal-in-script-variable.txt')
+    if (-not (Test-Path -LiteralPath 'literal-in-script-variable.txt')) {
+        throw 'The PowerShell script variable target did not produce its output file.'
+    }
+    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'literal-in-script-variable.txt') `
+        -Expected '$in' -Message 'A PowerShell variable inside a script string was not preserved'
+
+    if (Test-Path -LiteralPath 'pwned') {
+        throw 'A path-derived PowerShell command created the pwned sentinel.'
+    }
+}
+
+function Test-QuotedScriptPlaceholderRejection {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Netsuke,
+
+        [Parameter(Mandatory)]
+        [string]$Manifest
+    )
+
+    $quotedManifest = Join-Path (Split-Path -Parent $Manifest) `
+        'windows-recipe-smoke-quoted-script.yml'
+    $workspace = Join-Path $env:RUNNER_TEMP "netsuke-windows-quoted-script-smoke-$PID"
+
+    try {
+        New-Item -ItemType Directory -Path $workspace | Out-Null
+        Copy-Item -LiteralPath $quotedManifest -Destination (Join-Path $workspace 'Netsukefile')
+        Push-Location $workspace
+        try {
+            $payloadSource = Join-Path $workspace '; New-Item pwned; Write-Output x'
+            New-Item -ItemType File -LiteralPath $payloadSource | Out-Null
+            $failure = & $Netsuke build 'quoted-script-single.txt' 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                throw 'A quoted PowerShell script marker unexpectedly built successfully.'
+            }
+            if (-not ($failure -match 'Invalid command interpolation')) {
+                throw "The quoted script failure omitted its interpolation diagnostic: $failure"
+            }
+            if (-not ($failure -match 'Write-Output' -and $failure -match '__NETSUKE_INS_PLACEHOLDER__')) {
+                throw "The quoted script failure omitted its source template: $failure"
+            }
+            if (Test-Path -LiteralPath 'pwned') {
+                throw 'The rejected quoted script executed its path-derived payload.'
+            }
+        }
+        finally {
+            Pop-Location
+        }
+    }
+    finally {
+        Remove-Item -Recurse -Force -LiteralPath $workspace -ErrorAction SilentlyContinue
+    }
+}
+
 function Test-MissingBashRuntimeDiagnostic {
     param(
         [Parameter(Mandatory)]
@@ -275,6 +343,10 @@ function Invoke-WindowsRecipeSmoke {
             Remove-Item Env:NETSUKE_SMOKE_OPTION -ErrorAction SilentlyContinue
             $env:NETSUKE_SMOKE_VALUE = 'value with spaces'
 
+            $payloadSource = Join-Path $workspace '; New-Item pwned; Write-Output x'
+            New-Item -ItemType File -LiteralPath $payloadSource | Out-Null
+            Set-Content -NoNewline -LiteralPath $payloadSource -Value 'path-derived-content'
+
             Test-TargetDiscovery -Netsuke $Netsuke
             Test-InterpreterSelection -Netsuke $Netsuke
             Test-DollarSyntax -Netsuke $Netsuke
@@ -282,6 +354,8 @@ function Invoke-WindowsRecipeSmoke {
             Test-DependencyOrdering -Netsuke $Netsuke
             Test-LargeRecipeTransport -Netsuke $Netsuke
             Test-AutomaticPathQuoting -Netsuke $Netsuke
+            Test-PathPlaceholderScripts -Netsuke $Netsuke
+            Test-QuotedScriptPlaceholderRejection -Netsuke $Netsuke -Manifest $Manifest
             Test-MissingBashRuntimeDiagnostic -Netsuke $Netsuke -Workspace $workspace
         }
         finally {

@@ -212,10 +212,12 @@ se reescribe en el texto activo de la receta; consulta la nota siguiente).
 [^inert]: En las rutas POSIX y Bash, Netsuke copia los marcadores de los
     comentarios y del cuerpo de los heredoc como tokens internos, sin expandirlos;
     los marcadores de los delimitadores de heredoc sí se expanden. Las recetas
-    `script:` usan el mismo analizador POSIX, también en PowerShell, mientras que
-    las recetas `command:` de PowerShell siguen reglas de interpolación distintas.
-    No pongas marcadores en comentarios ni en cuerpos de heredoc: los tokens
-    internos pueden permanecer en la receta generada.
+    `command:` y `script:` de PowerShell rechazan marcadores entre comillas
+    simples o dobles, en here-strings, en `$()` y justo después de una tilde
+    grave. Los scripts de PowerShell no tratan los comentarios como regiones
+    inertes; un apóstrofo en un comentario puede hacer que se rechace un marcador
+    posterior. No pongas marcadores en comentarios ni cuerpos de heredoc POSIX o
+    Bash: los tokens internos pueden permanecer en la receta generada.
 
 Si existe `input.txt`, este manifiesto POSIX copia su contenido a `output.txt`
 y comprueba que el `PATH` del shell no esté vacío:
@@ -231,8 +233,9 @@ defaults: [output.txt]
 
 **Qué entrecomilla Netsuke.** Solo las sustituciones de rutas propias de
 Netsuke reciben entrecomillado automático de shell. POSIX y Bash usan
-`shell-quote` y codificación según el contexto; PowerShell usa su propia
-codificación literal y rechaza marcadores en regiones entrecomilladas. Si existe
+`shell-quote` y codificación según el contexto; PowerShell codifica las rutas
+como literales entre comillas simples solo en posiciones sin comillas. Esa
+codificación no es segura dentro de una cadena PowerShell ya abierta. Si existe
 `input file.txt`, este ejemplo POSIX pasa la ruta como un solo argumento y
 produce `output.txt`:
 
@@ -248,9 +251,9 @@ defaults: [output.txt]
 **Acentos graves y sustitución de comandos.** Netsuke rechaza marcadores dentro
 de sustituciones con acentos graves en POSIX y Bash, y dentro de `$( … )` en
 todas las rutas de shell, en ambos tipos de receta. PowerShell usa acentos
-graves como caracteres de escape, así que queda fuera de la restricción de
-acentos graves, pero sigue rechazando marcadores en `$( … )`. Este límite de
-los marcadores es un invariante garantizado.
+graves como caracteres de escape; por eso rechaza marcadores justo después de
+uno y dentro de `$( … )` en ambos tipos de receta. Este límite de los
+marcadores es un invariante garantizado.
 
 Por separado, las recetas `command:` de POSIX y Bash rechazan actualmente un
 número total impar de acentos graves tras la sustitución. Este recuento

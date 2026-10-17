@@ -252,3 +252,34 @@ fn power_shell_scripts_do_not_use_the_posix_script_wrapper() -> Result<()> {
     );
     Ok(())
 }
+
+/// Verify a semicolon-bearing source path stays one literal in an encoded script.
+#[test]
+fn power_shell_encoded_script_keeps_path_syntax_inside_one_literal() -> Result<()> {
+    let manifest = crate::manifest::render_manifest(
+        crate::manifest::from_str(concat!(
+            "netsuke_version: '1.0.0'\n",
+            "targets:\n",
+            "  - name: output\n",
+            "    sources: \"; New-Item pwned; Write-Output x\"\n",
+            "    script: \"Copy-Item {{ ins }} {{ outs }}\"\n",
+        ))?,
+        &minijinja::Environment::new(),
+    )?;
+    let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)?;
+    let mut rendered = String::new();
+    generate_into_with_shell(&graph, &mut rendered, RecipeShell::PowerShell)?;
+    let generated = GeneratedNinja::new(&rendered);
+
+    ensure!(
+        generated.recipe_contains(RecipeNeedle::new(
+            "Copy-Item '; New-Item pwned; Write-Output x' 'output'"
+        ))?,
+        "the decoded EncodedCommand should keep the semicolon path in one quoted literal"
+    );
+    ensure!(
+        !rendered.contains("New-Item pwned"),
+        "Ninja must carry the script only in the encoded PowerShell payload"
+    );
+    Ok(())
+}

@@ -3,6 +3,7 @@
 use super::*;
 use crate::ir::cmd_interpolate::{binding_preparations, reset_binding_preparations};
 use crate::ir::{INS_TOKEN, OUTS_TOKEN};
+use crate::manifest;
 use crate::recipe_shell::RecipeShell;
 use proptest::prelude::*;
 
@@ -31,6 +32,44 @@ fn large_command_list_prepares_path_bindings_once() {
         1,
         "all entries in one recipe must reuse one prepared input/output binding set"
     );
+}
+
+#[test]
+fn power_shell_script_manifest_rejects_quoted_input_marker() {
+    let source = concat!(
+        "netsuke_version: '1.0.0'\n",
+        "targets:\n",
+        "  - name: output\n",
+        "    sources: \"; New-Item pwned; Write-Output x\"\n",
+        "    script: \"Write-Output '{{ ins }}' > {{ outs }}\"\n",
+    );
+    let manifest = manifest::from_str(source).expect("the script manifest should parse");
+    let error = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)
+        .expect_err("quoted PowerShell script markers must fail during IR lowering");
+
+    assert!(matches!(
+        error,
+        crate::ir::IrGenError::InvalidCommand { .. }
+    ));
+}
+
+#[test]
+fn power_shell_command_manifest_rejects_quoted_input_marker() {
+    let source = concat!(
+        "netsuke_version: '1.0.0'\n",
+        "targets:\n",
+        "  - name: output\n",
+        "    sources: \"; New-Item pwned; Write-Output x\"\n",
+        "    command: \"Write-Output '{{ ins }}' > {{ outs }}\"\n",
+    );
+    let manifest = manifest::from_str(source).expect("the command manifest should parse");
+    let error = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)
+        .expect_err("quoted PowerShell command markers must fail during IR lowering");
+
+    assert!(matches!(
+        error,
+        crate::ir::IrGenError::InvalidCommand { .. }
+    ));
 }
 
 proptest! {

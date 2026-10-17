@@ -5496,9 +5496,12 @@ uses backticks as escapes and does not enter that protected region. POSIX and
 Bash scanning also preserves comments and heredoc bodies verbatim; keep markers
 out of those regions, where their internal tokens can remain in generated
 recipe text. Heredoc delimiters are scanned for markers and expand normally.
-`script:` recipes share the POSIX-aware scanner on all shell routes, while
-PowerShell `command:` recipes use separate interpolation rules. For POSIX and
-Bash `command:` recipes, the scanner then validates the substituted text: odd
+POSIX and Bash `script:` recipes use the POSIX-aware scanner; PowerShell
+`command:` and `script:` recipes share the PowerShell-aware scanner and reject
+markers in quoted strings, here-strings, `$()`, or immediately after a
+backtick. PowerShell scripts have no inert comment regions, so an apostrophe in
+a comment can make a later marker fail closed. For POSIX and Bash `command:`
+recipes, the scanner then validates the substituted text: odd
 backticks reject the command, and the `shlex` guard also evaluates that
 substituted text. `script:` recipes skip both checks, because a script may
 legitimately contain heredocs and other syntax `shlex` cannot model. The

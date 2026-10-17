@@ -41,12 +41,22 @@ fn script_bindings() -> CommandBindings {
 
 /// Reject every PowerShell script marker in contexts that need shell parsing.
 #[rstest]
-#[case::single_quoted(format!("Write-Output '{INS_TOKEN}' > {OUTS_TOKEN}"))]
-#[case::double_quoted(format!("Write-Output \"{INS_TOKEN}\" > {OUTS_TOKEN}"))]
-#[case::command_substitution(format!("Write-Output $(Write-Output {INS_TOKEN}) > {OUTS_TOKEN}"))]
-#[case::escaped(format!("Write-Output `{INS_TOKEN} > {OUTS_TOKEN}"))]
-#[case::single_quoted_here_string(format!("@'\n{INS_TOKEN}\n'@ > {OUTS_TOKEN}"))]
-#[case::double_quoted_here_string(format!("@\"\n{INS_TOKEN}\n\"@ > {OUTS_TOKEN}"))]
+#[case::single_quoted_input(format!("Write-Output '{INS_TOKEN}' > {OUTS_TOKEN}"))]
+#[case::single_quoted_output(format!("Write-Output {INS_TOKEN} > '{OUTS_TOKEN}'"))]
+#[case::double_quoted_input(format!("Write-Output \"{INS_TOKEN}\" > {OUTS_TOKEN}"))]
+#[case::double_quoted_output(format!("Write-Output {INS_TOKEN} > \"{OUTS_TOKEN}\""))]
+#[case::command_substitution_input(format!("Write-Output $(Write-Output {INS_TOKEN}) > {OUTS_TOKEN}"))]
+#[case::command_substitution_output(format!("Write-Output {INS_TOKEN} > $(Write-Output {OUTS_TOKEN})"))]
+#[case::escaped_input(format!("Write-Output `{INS_TOKEN} > {OUTS_TOKEN}"))]
+#[case::escaped_output(format!("Write-Output {INS_TOKEN} > `{OUTS_TOKEN}"))]
+#[case::single_quoted_here_string_input(format!("@'\n{INS_TOKEN}\n'@ > {OUTS_TOKEN}"))]
+#[case::single_quoted_here_string_output(format!("@'\n{OUTS_TOKEN}\n'@ > {INS_TOKEN}"))]
+#[case::single_quoted_here_string_crlf(format!("@'\r\nbody ' quote {INS_TOKEN}\r\n'@"))]
+#[case::double_quoted_here_string_input(format!("@\"\n{INS_TOKEN}\n\"@ > {OUTS_TOKEN}"))]
+#[case::double_quoted_here_string_output(format!("@\"\n{OUTS_TOKEN}\n\"@ > {INS_TOKEN}"))]
+#[case::double_quoted_here_string_crlf(format!("@\"\r\nbody \" quote {OUTS_TOKEN}\r\n\"@"))]
+#[case::single_quoted_here_string_after_literal_quote(format!("@'\nbody ' quote {INS_TOKEN}\n'@"))]
+#[case::double_quoted_here_string_after_literal_quote(format!("@\"\nbody \" quote {OUTS_TOKEN}\n\"@"))]
 fn power_shell_scripts_reject_protected_markers(#[case] template: String) {
     let result = interpolate_script_with_bindings(&template, &script_bindings());
     let error = result.expect_err("PowerShell scripts must reject protected markers");
@@ -58,6 +68,104 @@ fn power_shell_scripts_reject_protected_markers(#[case] template: String) {
         command, template,
         "the diagnostic should retain the template"
     );
+}
+
+/// Preserve PowerShell variables instead of treating their names as markers.
+#[test]
+fn power_shell_scripts_preserve_shell_variables_without_path_data() {
+    let template =
+        "Write-Output '$in' > $out\nWrite-Output '$out' '$ins' '$outs' $in $out $ins $outs";
+    let actual = interpolate_script_with_bindings(template, &script_bindings())
+        .expect("PowerShell variables are ordinary script text");
+
+    assert_eq!(actual, template);
+    assert!(!actual.contains("pwned"));
+    assert!(!actual.contains("output file.txt"));
+}
+
+/// Encode apostrophes in paths as PowerShell single-quoted literal escapes.
+#[test]
+fn power_shell_scripts_double_apostrophes_in_unquoted_paths() {
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("source's file")],
+        &[Utf8PathBuf::from("output's file")],
+        RecipeShell::PowerShell,
+    );
+    let actual =
+        interpolate_script_with_bindings(&format!("Copy-Item {INS_TOKEN} {OUTS_TOKEN}"), &bindings)
+            .expect("PowerShell apostrophes should be doubled inside literal paths");
+
+    assert_eq!(actual, "Copy-Item 'source''s file' 'output''s file'");
+}
+
+/// Keep the right single quotation mark as path data in an unquoted site.
+#[test]
+fn power_shell_scripts_quote_unicode_apostrophes_as_path_data() {
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("source’s file")],
+        &[],
+        RecipeShell::PowerShell,
+    );
+    let actual = interpolate_script_with_bindings(&format!("Copy-Item {INS_TOKEN}"), &bindings)
+        .expect("a Unicode right single quotation mark is ordinary path data");
+
+    assert_eq!(actual, "Copy-Item 'source’s file'");
+}
+
+/// Keep quoted PowerShell marker rejection distinct from POSIX quoting support.
+#[rstest]
+#[case::single_quoted_input(
+    format!("Write-Output '{INS_TOKEN}' > {OUTS_TOKEN}"),
+    "Write-Output '; New-Item pwned; Write-Output x' > output' file.txt'",
+)]
+#[case::single_quoted_output(
+    format!("Write-Output {INS_TOKEN} > '{OUTS_TOKEN}'"),
+    "Write-Output '; New-Item pwned; Write-Output x' > 'output file.txt'",
+)]
+#[case::double_quoted_input(
+    format!("Write-Output \"{INS_TOKEN}\" > {OUTS_TOKEN}"),
+    "Write-Output \"; New-Item pwned; Write-Output x\" > output' file.txt'",
+)]
+#[case::double_quoted_output(
+    format!("Write-Output {INS_TOKEN} > \"{OUTS_TOKEN}\""),
+    "Write-Output '; New-Item pwned; Write-Output x' > \"output file.txt\"",
+)]
+fn posix_scripts_still_interpolate_quoted_markers(
+    #[case] template: String,
+    #[case] expected: &str,
+) {
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("; New-Item pwned; Write-Output x")],
+        &[Utf8PathBuf::from("output file.txt")],
+        RecipeShell::Posix,
+    );
+    let actual = interpolate_script_with_bindings(&template, &bindings)
+        .expect("POSIX script quoting keeps the marker inside one literal");
+
+    assert_eq!(actual, expected);
+}
+
+/// Resume unquoted interpolation after a here-string containing literal quotes.
+#[test]
+fn power_shell_scripts_track_here_string_terminators() {
+    let template = format!("@'\nbody ' quote\n'@\nWrite-Output {OUTS_TOKEN}");
+    let actual = interpolate_script_with_bindings(&template, &script_bindings())
+        .expect("a closed here-string must not alter later marker context");
+
+    assert_eq!(
+        actual,
+        "@'\nbody ' quote\n'@\nWrite-Output 'output file.txt'"
+    );
+}
+
+/// Fail closed when a comment quote changes the shared PowerShell quote state.
+#[test]
+fn power_shell_script_comment_quotes_can_reject_later_markers() {
+    let template = format!("# don't parse this comment\nWrite-Output {OUTS_TOKEN}");
+    let error = interpolate_script_with_bindings(&template, &script_bindings())
+        .expect_err("PowerShell script comments are not an inert scanner region");
+
+    assert!(matches!(error, IrGenError::InvalidCommand { command, .. } if command == template));
 }
 
 /// Accept unquoted markers and encode the semicolon path as one PowerShell word.
