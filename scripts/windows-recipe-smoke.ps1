@@ -310,17 +310,25 @@ function Test-QuotedScriptPlaceholderRejection {
         Copy-Item -LiteralPath $quotedManifest -Destination (Join-Path $workspace 'Netsukefile')
         Push-Location $workspace
         try {
-            $payloadSource = Join-Path $workspace '; New-Item pwned; Write-Output x'
-            New-Item -ItemType File -LiteralPath $payloadSource | Out-Null
-            $failure = & $Netsuke build 'quoted-script-single.txt' 2>&1
+            New-Item -ItemType File -Path $workspace -Name '; New-Item pwned; Write-Output x' | Out-Null
+            $failure = & $Netsuke --json build 'quoted-script-single.txt' 2>&1
             if ($LASTEXITCODE -eq 0) {
                 throw 'A quoted PowerShell script marker unexpectedly built successfully.'
             }
-            if (-not ($failure -match 'Invalid command interpolation')) {
-                throw "The quoted script failure omitted its interpolation diagnostic: $failure"
+            $failureText = [string]::Join([Environment]::NewLine, [string[]]@($failure))
+            try {
+                $diagnostics = $failureText | ConvertFrom-Json -ErrorAction Stop
             }
-            if (-not ($failure -match 'Write-Output' -and $failure -match '__NETSUKE_INS_PLACEHOLDER__')) {
-                throw "The quoted script failure omitted its source template: $failure"
+            catch {
+                throw "The quoted script failure did not emit JSON diagnostics: $failureText"
+            }
+            $causes = @($diagnostics.diagnostics[0].causes | ForEach-Object { [string]$_ })
+            $causesText = [string]::Join([Environment]::NewLine, [string[]]$causes)
+            if (-not ($causesText -match 'Invalid command interpolation')) {
+                throw "The quoted script failure omitted its interpolation diagnostic: $causesText"
+            }
+            if (-not ($causesText -match 'Write-Output' -and $causesText -match '__NETSUKE_INS_PLACEHOLDER__')) {
+                throw "The quoted script failure omitted its original template: $causesText"
             }
             if (Test-Path -LiteralPath 'pwned') {
                 throw 'The rejected quoted script executed its path-derived payload.'
@@ -401,8 +409,9 @@ function Invoke-WindowsRecipeSmoke {
             $env:NETSUKE_SMOKE_VALUE = 'value with spaces'
             $env:NETSUKE_ISOLATION_ROOT = $workspace
 
-            $payloadSource = Join-Path $workspace '; New-Item pwned; Write-Output x'
-            New-Item -ItemType File -LiteralPath $payloadSource | Out-Null
+            $payloadName = '; New-Item pwned; Write-Output x'
+            New-Item -ItemType File -Path $workspace -Name $payloadName | Out-Null
+            $payloadSource = Join-Path $workspace $payloadName
             Set-Content -NoNewline -LiteralPath $payloadSource -Value 'path-derived-content'
 
             Test-TargetDiscovery -Netsuke $Netsuke

@@ -216,9 +216,15 @@ se reescribe en el texto activo de la receta; consulta la nota siguiente).
     `command:` y `script:` de PowerShell rechazan marcadores entre comillas
     simples o dobles, en here-strings, en `$()` y justo después de una tilde
     grave. Los scripts de PowerShell no tratan los comentarios como regiones
-    inertes; un apóstrofo en un comentario puede hacer que se rechace un marcador
-    posterior. No pongas marcadores en comentarios ni cuerpos de heredoc POSIX o
-    Bash: los tokens internos pueden permanecer en la receta generada.
+    inertes: el texto normal de un comentario permite interpolar marcadores sin
+    comillas posteriores, pero el inicio de un comentario en bloque, las
+    comillas, las comillas invertidas o la sintaxis de sustitución en un
+    comentario de una línea pueden hacer que se rechacen marcadores posteriores.
+    Un apóstrofo en un comentario también puede rechazarlos.
+    Las comillas tipográficas de PowerShell también hacen que los marcadores
+    posteriores se rechacen de forma conservadora. No pongas marcadores en
+    comentarios ni cuerpos de heredoc POSIX o Bash: los tokens internos pueden
+    permanecer en la receta generada.
 
 Si existe `input.txt`, este manifiesto POSIX copia su contenido a `output.txt`
 y comprueba que el `PATH` del shell no esté vacío:

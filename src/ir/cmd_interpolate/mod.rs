@@ -75,8 +75,8 @@ impl CommandBindings {
         };
         match context {
             QuoteContext::Unquoted => &paths.unquoted,
-            QuoteContext::Single => &paths.single_quoted,
-            QuoteContext::Double => &paths.double_quoted,
+            QuoteContext::Single(_) => &paths.single_quoted,
+            QuoteContext::Double(_) => &paths.double_quoted,
         }
     }
 }
@@ -241,9 +241,9 @@ pub(super) enum QuoteContext {
     /// The marker is outside shell quotes.
     Unquoted,
     /// The marker is inside single quotes.
-    Single,
+    Single(char),
     /// The marker is inside double quotes.
-    Double,
+    Double(char),
 }
 
 /// Find an internal recipe token at `pos`.

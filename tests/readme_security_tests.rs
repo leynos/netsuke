@@ -209,6 +209,15 @@ fn readme_documents_power_shell_script_marker_restrictions() {
         contains_substring("PowerShell scripts have no inert")
     );
     assert_that!(readme, contains_substring("immediately after a backtick"));
+    assert_that!(
+        readme,
+        contains_substring("PowerShell quote characters also make later markers fail closed")
+    );
+    assert_that!(
+        readme,
+        contains_substring("plain line-comment text leaves later unquoted markers")
+    );
+    assert_that!(readme, contains_substring("a block-comment opener"));
 }
 
 #[rstest]

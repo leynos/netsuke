@@ -234,8 +234,8 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         }
         let context = match self.active_quote_context() {
             ShellQuoteContext::Unquoted => QuoteContext::Unquoted,
-            ShellQuoteContext::SingleQuoted => QuoteContext::Single,
-            ShellQuoteContext::DoubleQuoted => QuoteContext::Double,
+            ShellQuoteContext::SingleQuoted => QuoteContext::Single('\''),
+            ShellQuoteContext::DoubleQuoted => QuoteContext::Double('"'),
         };
         self.output
             .push_str(self.bindings.substitution(placeholder, context));

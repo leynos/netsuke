@@ -5763,15 +5763,19 @@ recipe text. Heredoc delimiters are scanned for markers and expand normally.
 POSIX and Bash `script:` recipes use the POSIX-aware scanner; PowerShell
 `command:` and `script:` recipes share the PowerShell-aware scanner and reject
 markers in quoted strings, here-strings, `$()`, or immediately after a
-backtick. PowerShell scripts have no inert comment regions, so an apostrophe in
-a comment can make a later marker fail closed. For POSIX and Bash `command:`
-recipes, the scanner then validates the substituted text: odd
-backticks reject the command, and the `shlex` guard also evaluates that
-substituted text. `script:` recipes skip both checks, because a script may
-legitimately contain heredocs and other syntax `shlex` cannot model. The
-odd-backtick and guard properties are complementary: one proves rejection of
-odd substituted backtick counts, while the other proves that the guard's
-success or failure and returned command agree with the substituted command.
+backtick. Typographic PowerShell quote characters also make later markers fail
+closed. PowerShell scripts have no inert comment regions: plain line-comment
+text leaves later markers eligible for interpolation, while a block-comment
+opener or quotes, backticks, or substitution syntax in a line comment make
+later markers fail closed. In particular, an apostrophe in a comment can make a
+later marker fail closed. For POSIX and Bash `command:` recipes, the scanner
+then validates the substituted text: odd backticks reject the command, and the
+`shlex` guard also evaluates that substituted text. `script:` recipes skip both
+checks, because a script may legitimately contain heredocs and other syntax
+`shlex` cannot model. The odd-backtick and guard properties are complementary:
+one proves rejection of odd substituted backtick counts, while the other proves
+that the guard's success or failure and returned command agree with the
+substituted command.
 
 Generated strategies that are reusable across crate boundaries belong in
 `test_support`. Because `test_support` is compiled as a library, dependencies
