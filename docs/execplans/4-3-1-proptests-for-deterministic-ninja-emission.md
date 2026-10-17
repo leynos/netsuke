@@ -2156,6 +2156,26 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
 
+- [x] (2026-10-17) **All eight gates passed against freeze `cf263af7`, and the
+      milestone was committed as `9e426d12` at that exact content.** This is
+      the run the previous entry said was still owed: `markdownlint` had been
+      unverified because its `spelling` prerequisite had short-circuited it.
+      Run sequentially in one batch: `check-fmt` (2 s), `lint` (463 s, through
+      Clippy, Whitaker, Ruff, Pylint, the df12 lints, `ambrleaks`, `yamllint`
+      and `actionlint`), `doc-coverage` (59 s, 98.89%, 5,079 of 5,136),
+      `test` (189 s, nextest 4,108 of 4,108 passed with 6 skipped, doctests 39
+      passed and 6 ignored), `markdownlint` (17 s, 186 files, 0 issues,
+      `typos.toml` unchanged), `nixie` (4 s, 187 diagrams),
+      `test-workflow-contracts` (98 s, 1,317 passed and 3 skipped, plus 27
+      script doctests) and `test-documentation-contracts` (4 s). Every
+      per-gate exit-status file holds `0`. The candidate was stable at both
+      ends — freeze `cf263af7…`, HEAD `98dd3a35`, 23 entries — and that same
+      freeze was recomputed before staging, so the committed content is the
+      gated content rather than a later edit of it. Logs are
+      `/tmp/<gate>-netsuke-4-3-1-epm5-final8-<gate>.out`, one pair per gate.
+      The `EP-M5` milestone's deterministic gate phase is therefore complete;
+      what remains for it is the CodeRabbit CLI review.
+
 - [x] (2026-10-17) **Three of the `EP-M5` trace links named tests that do not
       exist, and were corrected to the tests that do.** `emission_is_insertion_order_invariant`,
       `default_line_is_the_ascending_sort` and `no_hashmap_iteration_in_ninja_gen`
