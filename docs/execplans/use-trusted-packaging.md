@@ -1446,8 +1446,23 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   and would not remove the contention that causes it". The doctest half was
   then run on its own with `make doctest` and passed — 95 passed/26 ignored, 2
   passed and 39 passed/6 ignored, zero failures — so that half is now green and
-  only the nextest half lacks a clean run. A re-run was dispatched at the same
-  head and had not reached the tests when this entry was written.
+  only the nextest half lacks a clean run.
+- [x] (2026-10-17) Re-ran `make test-nextest` at the same head and **it
+  reproduced**: the same test timed out again at `300.011s`, with 3959 passed
+  and 6 skipped, from position 3960 of 3976. This is the more informative of
+  the two runs rather than a repeat of the first, because the pool was *worse*:
+  449 slot-wait messages with a deepest queue of 238, against 18 and 51. A
+  status check taken immediately afterwards showed
+  `capacity 4, held 4, healthy, sccache unreachable` with 252 processes queued
+  from other agents' worktrees. Contention rising between two runs of an
+  unchanged tree, on a test whose file is absent from the branch diff, is the
+  diagnostic that separates a host-capacity timeout from a defect. The verdict
+  recorded here is therefore **timeout, environmental and reproduced**, not
+  pass: this half of `make test` has no green run, and none should be claimed.
+  Two remedies exist and neither belongs in this change — wait for a quiet
+  host, or accept that a nested `cargo build` under a shared four-slot pool
+  cannot be gated in the same interval it is measured in. Widening the budget
+  stays excluded for the reason given above.
 
 ## Surprises & discoveries
 
