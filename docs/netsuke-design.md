@@ -295,8 +295,11 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   with space-separated paths quoted for the selected recipe shell before
   hashing the action. POSIX and explicit Bash routes use the
   [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/) crate (Sh
-  mode); the default Windows PowerShell route uses single-quoted literals and
-  doubles embedded apostrophes. Delayed `{{ ins }}` and `{{ outs }}` markers
+  mode); the default Windows PowerShell route uses single-quoted literals,
+  doubles embedded apostrophes, and accepts markers only at unquoted sites.
+  PowerShell commands and scripts reject markers in quoted strings,
+  here-strings, `$()`, or immediately after a backtick; scripts do not treat
+  comments as inert regions. Delayed `{{ ins }}` and `{{ outs }}` markers
   resolve at this boundary for every recipe. `$in`, `$out`, `$ins`, and `$outs`
   remain literal shell variables in every recipe. Script markers are encoded
   for their unquoted, single-quoted, or double-quoted POSIX or Bash context.
@@ -2907,8 +2910,8 @@ single-quoted literals and doubles embedded apostrophes. This automatic quoting
 applies only to Netsuke-owned `{{ ins }}` and `{{ outs }}` substitutions;
 arbitrary Jinja values and handwritten shell fragments remain the manifest
 author's responsibility. Unmatched-backtick checks and `shlex` command
-validation apply only to POSIX and Bash routes. PowerShell treats backticks as
-native escape syntax rather than interpolation-protection delimiters.
+validation apply only to POSIX and Bash routes. PowerShell backticks are escape
+characters, so a marker immediately after one is rejected.
 
 ### 6.3 Implementation Strategy
 
@@ -2920,19 +2923,26 @@ later interpolation stage lowers those internal tokens everywhere. `$in`,
 `$out`, `$ins`, and `$outs` are shell variables in every recipe and remain
 unchanged until Ninja escaping. Command lowering encodes POSIX path text for
 its active quote context and rejects markers in backticks or command
-substitutions. Script lowering retains comments and multiline shell syntax, and
-uses the same contextual path encodings while rejecting backtick-protected
-markers. The private `script_substitution` module owns the script-only lexical
-traversal needed to locate internal tokens without treating shell variables as
-markers; command recipes continue to use `substitution`, and both consume the
-shared bindings without composing their traversal states. Longer identifiers
-such as `$input` and `$output`, and non-placeholder text inside backticks,
-remain unchanged. In `command:` recipes on the POSIX and Bash routes,
-unbalanced backticks or command text that `shlex` cannot parse produce an IR
-error before an action is hashed; `script:` recipes and the PowerShell route
-are outside that check. Ninja generation then receives fully expanded command
-text and is responsible only for preserving the scalar form or constructing the
-list-entry shell boundaries.
+substitutions. PowerShell command and script lowering share the
+`SubstitutionTraversal`, which permits markers only at unquoted sites and
+rejects markers in quoted strings, here-strings, `$()`, or immediately after a
+backtick. PowerShell scripts do not treat comments as inert regions: plain
+line-comment text leaves later markers eligible for interpolation, while a
+block-comment opener or quotes, backticks, or substitution syntax in a line
+comment make later markers fail closed. In particular, an apostrophe in a
+comment may make a later marker fail closed. POSIX and Bash script lowering
+retains comments and multiline shell syntax and uses the script-only
+`ScriptSubstitutionTraversal`; it encodes markers for unquoted, single-quoted,
+and double-quoted sites while rejecting protected command substitutions. The
+private `PowerShellLexicalState` in `powershell_lexical.rs` tracks here-string
+bodies and typographic-quote fail-closed state; it is not a general PowerShell
+parser or a shared shell API. Longer identifiers such as `$input` and
+non-placeholder text inside backticks remain unchanged. In `command:` recipes
+on the POSIX and Bash routes, unbalanced backticks or command text that `shlex`
+cannot parse produce an IR error before an action is hashed; `script:` recipes
+and the PowerShell route are outside that check. Ninja generation then receives
+fully expanded command text and is responsible only for preserving the scalar
+form or constructing the list-entry shell boundaries.
 
 [ADR-027](adr-027-command-placeholder-contract.md) settles which parts of this
 behaviour are promises: the marker invariant is contractual, the odd-backtick
@@ -2952,14 +2962,14 @@ error-prone task that requires specialized knowledge.
 
 Netsuke's design makes identified path substitution safe by default. Netsuke
 applies shell-specific quoting to Netsuke-owned `{{ ins }}` and `{{ outs }}`
-marker substitutions before action hashing and Ninja synthesis; arbitrary Jinja
-values and handwritten shell fragments remain the manifest author's
-responsibility. POSIX and explicit Bash routes use `shell-quote` during IR
-command lowering, while the default Windows PowerShell route uses single-quoted
-path literals with doubled apostrophes. This protects users from a common and
-dangerous class of errors by default. The approach embodies a deeper form of
-user-friendliness: one that anticipates and mitigates risks on the user's
-behalf.
+marker substitutions before action hashing and Ninja synthesis; PowerShell
+markers are accepted only at unquoted sites. Arbitrary Jinja values and
+handwritten shell fragments remain the manifest author's responsibility. POSIX
+and explicit Bash routes use `shell-quote` during IR command lowering, while
+the default Windows PowerShell route uses single-quoted path literals with
+doubled apostrophes. This protects users from a common and dangerous class of
+errors by default. The approach embodies a deeper form of user-friendliness:
+one that anticipates and mitigates risks on the user's behalf.
 
 ## Section 7: A Framework for Friendly and Actionable Error Reporting
 

@@ -2,21 +2,12 @@
 
 ## Status
 
-Accepted. The command placeholder set, the backtick handling boundary, and the
-scope of the `shlex` guard are fixed as stated below. Roadmap item 4.4.1
-carries them to users in the
-[README section](../README.md#security-and-command-interpolation) *Security and
-command interpolation* and in every translated README. This record explains the
-decisions behind that user-facing contract.
+Accepted.
 
-Revised on 2026-09-23. The first draft of this record described the placeholder
-set as differing by recipe kind, because `script:` recipes then lowered bare
-`$in` and `$out` to paths.
-[ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md) subsequently
-removed that lowering, so the set is now uniform. ADR-034 owns that decision;
-this record states the resulting contract and is revised to agree with it. The
-backtick and `shlex` decisions below are unaffected and were re-verified
-against the implementation on the revision date.
+- Amended 2026-10-12 for issue #846.
+- Amended 2026-10-17 after review of the #846 fix.
+- Amended 2026-10-17 to bound PowerShell `--%` marker rejection to its raw
+  native-command region.
 
 ## Date
 
@@ -68,30 +59,47 @@ behaviour are promises. This record settles both.
 `{{ ins }}` and `{{ outs }}` are the only Netsuke markers, and both recipe
 kinds recognize that same set in active recipe text. On POSIX and Bash routes,
 markers in comments and heredoc bodies are copied as internal tokens instead of
-being expanded; markers in heredoc delimiters are expanded. `script:` recipes
-use the same POSIX-aware scanner, including PowerShell scripts, while PowerShell
-`command:` recipes use separate interpolation rules. Keep markers out of
-comments and heredoc bodies because their internal tokens can remain in the
-generated recipe. Every dollar-prefixed form — `$in`, `$out`, `$ins`, `$outs`,
-`$input`, `$output`, `$PATH` — is a shell variable that Netsuke leaves for the
-selected shell to interpret, in both recipe kinds. The Ninja backend doubles
-the dollar so the shell receives the text unchanged.
+being expanded; markers in heredoc delimiters are expanded. PowerShell
+`command:` and `script:` recipes use the same PowerShell-aware traversal and
+reject markers in single-quoted strings, double-quoted strings, here-strings,
+`$( … )`, immediately after a backtick, and within the raw native-command
+region after an unquoted `--%` token. PowerShell passes the rest of that line
+after `--%` to a native command as literal text, so Netsuke's standalone quoted
+path encoding is not protective there. The scanner rejects markers in that
+region and resumes after its newline or pipeline terminator; a semicolon does
+not end it. See Microsoft's documentation of the
+[stop-parsing token](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_parsing?view=powershell-7.6#the-stop-parsing-token).
+Keep markers out of POSIX and Bash comments and heredoc bodies because their
+internal tokens can remain in the generated recipe. PowerShell scripts have no
+inert comment regions: markers in plain line-comment text remain eligible for
+interpolation, while a block-comment opener or scanner-sensitive quote,
+backtick, or substitution syntax in a line-comment makes later markers fail
+closed. In particular, an apostrophe in a comment can make a later marker fail
+closed. Every dollar-prefixed form — `$in`, `$out`, `$ins`, `$outs`, `$input`,
+`$output`, `$PATH` — is a shell variable that Netsuke leaves for the selected
+shell to interpret, in both recipe kinds. The Ninja backend doubles the dollar
+so the shell receives the text unchanged.
+
+The traversal also fails closed for later markers after encountering a
+typographic PowerShell quote delimiter because it does not model delimiter
+pairing.
 
 Three terms are kept distinct throughout, following
 [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md):
 
 - a **marker** is the Netsuke-owned `{{ ins }}` or `{{ outs }}` placeholder;
 - an **internal token** is the `INS_TOKEN` or `OUTS_TOKEN` sentinel created by
-  manifest rendering and normally consumed during interpolation; inert comments
-  and heredoc bodies can carry it into the generated recipe;
+  manifest rendering and normally consumed during interpolation; POSIX and Bash
+  comments and heredoc bodies can carry it into the generated recipe;
 - a **shell variable** is handwritten text such as `$PATH` or `$in` that
   Netsuke does not rewrite.
 
 The recognizer is `find_substitution`, which matches the two internal tokens
 and nothing else. `find_script_substitution` delegates to it, so both recipe
-kinds recognize the same set. POSIX-aware scanning leaves tokens in comments
-and heredoc bodies unchanged, while heredoc delimiters remain eligible for
-substitution.
+kinds recognize the same set. POSIX-aware scanning leaves tokens in POSIX and
+Bash comments and heredoc bodies unchanged, while heredoc delimiters remain
+eligible for substitution. PowerShell scripts use `SubstitutionTraversal`, like
+PowerShell commands, so the PowerShell quote and escape rules apply to both.
 
 Netsuke does not expose Ninja's own `$in` and `$out` rule variables. Resolved
 paths are baked into each content-hashed rule, so Ninja never substitutes a
@@ -102,50 +110,49 @@ path into a recipe.
 The mechanisms are not the same kind of thing and are not promised equally.
 
 **An invariant, promised.** A Netsuke placeholder is never substituted inside a
-backtick region or a `$( … )` command substitution; such a recipe is rejected.
-Substituting into a region the shell will re-evaluate cannot be made safe, so
-the rejection is policy. It is implemented in the command traversal
-(`SubstitutionTraversal::append_protected_character`,
-`src/ir/cmd_interpolate/substitution.rs:364-375`) and in the script traversal
-(`append_substitution_or_character`,
-`src/ir/cmd_interpolate/script_substitution.rs:222-243`).
+POSIX or Bash backtick region or any shell's `$( … )` command substitution;
+such a recipe is rejected. PowerShell also rejects a marker immediately after a
+backtick because it escapes the following character. Substituting into a region
+the shell will re-evaluate cannot be made safe, so the rejection is policy. It
+is implemented by `SubstitutionTraversal::append_protected_character`
+(`src/ir/cmd_interpolate/substitution/mod.rs`) and the POSIX/Bash script
+traversal (`append_substitution_or_character` in
+`src/ir/cmd_interpolate/script_substitution.rs`).
 
 **A conservative check, not promised.** A `command:` recipe whose substituted
 text contains an odd total number of backtick characters is *currently* rejected
-(`has_unmatched_backticks`, `src/ir/cmd_interpolate/mod.rs:172-174`, reached
-from `is_valid_command_for_shell` at `:226-231`). The check is a whole-string
-parity count, not a quoting-aware model: a backtick inside single quotes counts
-toward the total, and two balanced but unrelated backticks do not. It may
-therefore reject valid shell text. A future release may accept more, and such
-widening is **not** treated as a breaking change.
+(`has_unmatched_backticks` in `src/ir/cmd_interpolate/mod.rs`, reached from
+`is_valid_command_for_shell`). The check is a whole-string parity count, not a
+quoting-aware model: a backtick inside single quotes counts toward the total,
+and two balanced but unrelated backticks do not. It may therefore reject valid
+shell text. A future release may accept more, and such widening is **not**
+treated as a breaking change.
 
 **Not a guarantee at all.** Netsuke leaves author-written backticks untouched.
 On POSIX routes, active backticks can trigger command substitution; backticks
 inside single quotes remain literal. Path substitution separately protects
 Netsuke-owned values: `quote_double_quoted_path`
-(`src/ir/cmd_interpolate/mod.rs:154-163`) backslash-escapes a backtick that
-falls inside a *Netsuke-substituted path* landing in a double-quoted context.
+(`src/ir/cmd_interpolate/mod.rs`) backslash-escapes a backtick that falls
+inside a *Netsuke-substituted path* landing in a double-quoted context.
 
-**Route and recipe-kind scope.** PowerShell sits outside the backtick half of
-the invariant, because a backtick is its escape character rather than a
-command-substitution delimiter, and outside the parity check entirely:
-`is_valid_command_for_shell` returns `true` unconditionally for
-`RecipeShell::PowerShell` (`src/ir/cmd_interpolate/mod.rs:227-228`). It is
-**inside** the `$( … )` half. The PowerShell traversal treats a marker inside a
-command substitution, or inside any quoted region, as protected and rejects it
-(`power_shell_marker_protection`,
-`src/ir/cmd_interpolate/substitution.rs:174-179`) — the same outcome as POSIX,
-by a different rule, pinned by
-`power_shell_rejects_markers_without_a_context_safe_encoder`
-(`src/ir/cmd_interpolate/power_shell_tests.rs:9-22`). The parity check is also
-`command:`-only: a `script:` recipe gets the marker invariant but no parity
-check, because scripts may legitimately contain heredocs and other text that
-`shlex` cannot model.
+**Route and recipe-kind scope.** PowerShell sits outside the POSIX backtick
+command-substitution and parity checks because a PowerShell backtick escapes
+the following character. A marker immediately following a backtick is still
+rejected, as are markers in single-quoted or double-quoted strings,
+here-strings, and `$( … )`. The PowerShell-aware traversal applies these rules
+to both `command:` and `script:` recipes; the standalone path literal is not a
+context-safe encoder inside an existing PowerShell string. PowerShell scripts
+do not have inert comment regions in this scanner: plain line-comment text
+leaves later markers eligible for interpolation, while a block-comment opener
+or scanner-sensitive syntax such as an apostrophe can make later markers fail
+closed. The `shlex` guard remains `command:`-only: a `script:` recipe bypasses
+it because scripts may contain heredocs and other text that `shlex` cannot
+model.
 
 ### The `shlex` guard is part of the acceptance contract, not a stability commitment
 
 `is_valid_command_for_shell` calls `shlex::split(command).is_some()` on the
-fully substituted text (`src/ir/cmd_interpolate/mod.rs:230`). Failure produces
+fully substituted text (`src/ir/cmd_interpolate/mod.rs`). Failure produces
 `IrGenError::InvalidCommand`, surfaced through the Fluent message
 `ir.invalid_command` (`locales/en-GB/messages.ftl:188`), rendered as
 `Invalid command interpolation: { $snippet }.`.
@@ -170,8 +177,8 @@ The two drift directions are named separately because they are not symmetric:
 The guard does not apply to `script:` recipes, and Netsuke never executes the
 token vector `shlex::split` returns; it only asks whether a split was possible.
 A second, `debug_assert!`-only use exists in `assert_shell_command`
-(`src/ninja_gen/mod.rs:283-290`), reached only for `Recipe::Command` because
-`script_shell_text` (`src/ninja_gen/mod.rs:343-356`) is explicitly exempt.
+(`src/ninja_gen/mod.rs`), reached only for `Recipe::Command` because
+`script_shell_text` is explicitly exempt.
 
 ## Options considered
 
@@ -295,7 +302,7 @@ published interface.
   by Proptest properties, not by proof, and are described here as
   property-tested rather than proved.
 - **The domain boundary in this module is not clean.**
-  `invalid_command_error` (`src/ir/cmd_interpolate/mod.rs:215-222`) calls the
+  `invalid_command_error` (`src/ir/cmd_interpolate/mod.rs`) calls the
   localization layer and stores a pre-rendered, locale-resolved human string
   inside the domain error. That is presentation resolved within domain policy
   against ambient state. It does not affect the contract above, but this module

@@ -27,6 +27,20 @@ pub(super) fn adversarial_template_strategy() -> impl Strategy<Value = String> {
         .prop_map(|chars| chars.into_iter().collect())
 }
 
+/// Generate one-line PowerShell templates with markers and lexical delimiters.
+pub(super) fn power_shell_template_strategy() -> impl Strategy<Value = String> {
+    prop::collection::vec(power_shell_fragment_strategy(), 0..=24)
+        .prop_map(|fragments| fragments.join(""))
+}
+
+/// Generate a Windows-valid path containing a semicolon, spaces, and apostrophes.
+pub(super) fn power_shell_path_strategy() -> impl Strategy<Value = camino::Utf8PathBuf> {
+    prop::collection::vec(prop::sample::select(vec!['a', 'b', 'c', ' ']), 0..=8).prop_map(|chars| {
+        let suffix = chars.into_iter().collect::<String>().trim().to_owned();
+        camino::Utf8PathBuf::from(format!("; path '{suffix}'"))
+    })
+}
+
 /// Generate templates with sparse literal regions up to the documented bound.
 pub(super) fn interpolation_template_strategy() -> impl Strategy<Value = String> {
     prop_oneof![
@@ -162,6 +176,19 @@ pub(super) fn is_valid_posix_command(command: &str) -> bool {
 /// Generate one character that can interact with interpolation syntax.
 fn template_character_strategy() -> impl Strategy<Value = char> {
     prop::sample::select(vec!['$', '`', 'i', 'n', 'o', 'u', 't', '_', 'a', ' '])
+}
+
+/// Select PowerShell syntax fragments or either complete Netsuke marker.
+fn power_shell_fragment_strategy() -> impl Strategy<Value = String> {
+    prop_oneof![
+        Just(INS_TOKEN.to_owned()),
+        Just(OUTS_TOKEN.to_owned()),
+        prop::sample::select(vec![
+            "'", "\"", "`", "$(", ")", " ", ";", "plain", "@'\n", "\n'@", "@\"\n", "\n", "#", "<#",
+            "${", "}", "’",
+        ])
+        .prop_map(str::to_owned),
+    ]
 }
 
 /// Generate a short fragment for dense eight-placeholder templates.

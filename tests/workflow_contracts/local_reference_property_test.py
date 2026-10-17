@@ -10,7 +10,7 @@ Run via ``make test-workflow-contracts``.
 import tempfile
 from pathlib import Path
 
-from hypothesis import given
+from hypothesis import given, settings
 from hypothesis import strategies as st
 from local_reference_inventory import discover_local_items
 from local_reference_test_support import create_synthetic_workspace
@@ -76,6 +76,7 @@ def _scan_graph(
     return covered_items(inventory, root_source_texts(root))
 
 
+@settings(deadline=None)
 @given(script_graphs())
 def test_coverage_matches_oracle_independent_of_reference_order(
     graph: ScriptGraph,

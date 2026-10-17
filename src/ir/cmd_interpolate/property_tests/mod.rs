@@ -8,17 +8,73 @@ use proptest::prelude::*;
 use test_support::ninja_gen::paths_strategy;
 
 use super::{
-    INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell, interpolate_command_with_bindings,
-    interpolate_command_with_shell, interpolate_script_with_bindings,
+    CommandBindings, INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell,
+    interpolate_command_with_bindings, interpolate_command_with_shell,
+    interpolate_script_with_bindings,
 };
 
 use support::{
     adversarial_template_strategy, assert_matches_specification,
     eight_placeholder_template_strategy, has_odd_backticks, interpolation_template_strategy,
-    is_valid_posix_command, posix_bindings, raw_binding_strategy, safe_text_strategy,
+    is_valid_posix_command, posix_bindings, power_shell_path_strategy,
+    power_shell_template_strategy, raw_binding_strategy, safe_text_strategy,
 };
 
 proptest! {
+    /// Keep PowerShell script and command substitution acceptance identical.
+    #[test]
+    fn power_shell_script_and_command_substitution_agree(
+        template in power_shell_template_strategy(),
+        input in power_shell_path_strategy(),
+        output in power_shell_path_strategy(),
+    ) {
+        let bindings = CommandBindings::new(
+            std::slice::from_ref(&input),
+            std::slice::from_ref(&output),
+            RecipeShell::PowerShell,
+        );
+        let command_result = interpolate_command_with_bindings(&template, &bindings);
+        let script_result = interpolate_script_with_bindings(&template, &bindings);
+
+        match (command_result, script_result) {
+            (Ok(command_output), Ok(script_output)) => {
+                prop_assert_eq!(script_output, command_output);
+            }
+            (
+                Err(IrGenError::InvalidCommand {
+                    command: command_template,
+                    ..
+                }),
+                Err(IrGenError::InvalidCommand {
+                    command: script_template,
+                    ..
+                }),
+            ) => prop_assert_eq!(script_template, command_template),
+            (command_outcome, script_outcome) => prop_assert!(
+                false,
+                "PowerShell command and script results disagree: {command_outcome:?} vs {script_outcome:?}"
+            ),
+        }
+    }
+
+    /// Reject markers after an unclosed single or double PowerShell quote.
+    #[test]
+    fn power_shell_scripts_reject_markers_after_unclosed_quotes(
+        quote in prop::sample::select(vec!["'", "\""]),
+        token in prop::sample::select(vec![INS_TOKEN, OUTS_TOKEN]),
+    ) {
+        let template = format!("Write-Output {quote}unclosed {token}");
+        let inputs = [camino::Utf8PathBuf::from("; source 'file'")];
+        let outputs = [camino::Utf8PathBuf::from("; output 'file'")];
+        let bindings = CommandBindings::new(&inputs, &outputs, RecipeShell::PowerShell);
+        let error = interpolate_script_with_bindings(&template, &bindings)
+            .expect_err("a marker after an unclosed quote must be rejected");
+
+        let rejected_original_template =
+            matches!(error, IrGenError::InvalidCommand { command, .. } if command == template);
+        prop_assert!(rejected_original_template);
+    }
+
     /// Reject manifest markers in backticks for every generated path binding.
     #[test]
     fn manifest_tokens_inside_backticks_are_rejected(prefix in safe_text_strategy(), suffix in safe_text_strategy(), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
