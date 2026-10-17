@@ -38,7 +38,11 @@ const SUPPLEMENTAL_PROPERTY_PATCHES: &[&str] = &[
     "ir__cmd_interpolate__property_tests__guard_uses_the_substituted_command",
     "ir__cmd_interpolate__property_tests__scanner_agrees_with_independent_specification",
     "ir__cmd_interpolate__property_tests__substituted_odd_backticks_are_rejected",
+    "ninja_gen__determinism__property_tests__defaults__the_default_line_follows_every_build_line",
+    "ninja_gen__determinism__property_tests__defaults__the_default_line_sorts_its_operands",
     "ninja_gen__determinism__property_tests__no_loss__every_explicit_output_appears_exactly_once",
+    "ninja_gen__determinism__property_tests__order__ordered_actions_ignore_input_order",
+    "ninja_gen__determinism__property_tests__order__ordered_edges_ignore_input_order",
     "ninja_gen__determinism__property_tests__path_key__path_key_is_permutation_invariant",
 ];
 

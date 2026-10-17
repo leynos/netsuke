@@ -53,6 +53,7 @@
 //! ```
 
 mod bundle;
+
 mod render;
 pub use bundle::{GeneratedDyndep, GeneratedNinja};
 use render::render_edges;
@@ -70,6 +71,7 @@ use std::fmt::Write as _;
 
 /// Reserved state namespace for serial gate paths.
 const SERIAL_NAMESPACE: &str = ".netsuke/serial";
+
 /// Reserved state namespace for dyndep sidecar files.
 const DYNDEP_NAMESPACE: &str = ".netsuke/dyndep";
 
@@ -162,6 +164,8 @@ fn generate_bundle_inner(
     })
 }
 
+ (S+F, confidence: low)
+
 /// Reject user outputs or dependencies that collide with the reserved
 /// serial-ordering state namespace.
 pub(crate) fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenError> {
@@ -197,3 +201,4 @@ pub(crate) fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenEr
 
 #[cfg(test)]
 mod tests;
+// weave: run 'weave explain src/ninja_gen/dyndep/mod.rs' for per-hunk detail, 'weave check' to verify your resolution

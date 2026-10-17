@@ -1,0 +1,18 @@
+diff --git a/src/ninja_gen/order.rs b/src/ninja_gen/order.rs
+--- a/src/ninja_gen/order.rs
++++ b/src/ninja_gen/order.rs
+@@ -9,7 +9,6 @@
+ use super::path_key;
+ use crate::ir::{Action, BuildEdge, BuildGraph};
+ use camino::Utf8PathBuf;
+-use itertools::Itertools;
+ 
+ /// Order a collection of edges by their sorted explicit outputs.
+ ///
+@@ -52,5 +51,5 @@
+ /// when the graph declares none, so callers can use the result to decide whether
+ /// a `default` statement is emitted at all.
+ pub(crate) fn ordered_default_targets(graph: &BuildGraph) -> Vec<Utf8PathBuf> {
+-    graph.default_targets.iter().sorted().cloned().collect()
++    graph.default_targets.iter().cloned().collect()
+ }

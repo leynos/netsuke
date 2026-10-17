@@ -5,7 +5,7 @@ diff --git a/src/ninja_gen/dyndep/mod.rs b/src/ninja_gen/dyndep/mod.rs
      out: &mut String,
      stages: &mut SerialStages,
  ) -> Result<(), NinjaGenError> {
-     for edge in ordered_edges(graph) {
+     for edge in ordered_edges(graph.edges()) {
 +        if !edge.explicit_outputs.is_empty() {
 +            continue;
 +        }

@@ -179,9 +179,7 @@ pub(crate) fn generate_into_with_shell<W: Write>(
         });
     }
     write_action_rules(graph, out, shell, None)?;
-
-    let defaults = ordered_default_targets(graph);
-    for edge in ordered_edges(graph) {
+    for edge in ordered_edges(graph.edges()) {
         let metadata = edge_metadata::for_edge(graph, edge, localizer.as_ref())?;
         write!(
             out,
@@ -195,6 +193,8 @@ pub(crate) fn generate_into_with_shell<W: Write>(
             }
         )?;
     }
+
+    let defaults = ordered_default_targets(graph);
     if !defaults.is_empty() {
         writeln!(out, "default {}", join(&defaults))?;
     }
@@ -210,3 +210,4 @@ mod property_tests;
 mod test_support;
 #[cfg(test)]
 mod tests;
+// weave: run 'weave explain src/ninja_gen/mod.rs' for per-hunk detail, 'weave check' to verify your resolution

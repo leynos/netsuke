@@ -11,31 +11,38 @@ use crate::ir::{Action, BuildEdge, BuildGraph};
 use camino::Utf8PathBuf;
 use itertools::Itertools;
 
-/// Order the graph's edges by their sorted explicit outputs.
+/// Order a collection of edges by their sorted explicit outputs.
 ///
 /// The graph arena preserves insertion order, which follows manifest order and
 /// is therefore not a function of the graph's contents. Sorting by the explicit
 /// outputs makes the emitted edge order depend only on the graph, and
 /// [`path_key`] joins the sorted outputs so an edge carrying several of them has
 /// one stable key.
-pub(crate) fn ordered_edges(graph: &BuildGraph) -> Vec<&BuildEdge> {
-    let mut edges: Vec<&BuildEdge> = graph.edges().collect();
-    edges.sort_by_key(|edge| path_key(&edge.explicit_outputs));
-    edges
+///
+/// The input is any edge iterator rather than the graph itself, so a
+/// determinism property can hand the rule a `Vec` in a constructed order and
+/// observe that the result ignores it. Both emission paths pass
+/// `graph.edges()`.
+pub(crate) fn ordered_edges<'a>(edges: impl Iterator<Item = &'a BuildEdge>) -> Vec<&'a BuildEdge> {
+    let mut collected: Vec<&BuildEdge> = edges.collect();
+    collected.sort_by_key(|edge| path_key(&edge.explicit_outputs));
+    collected
 }
 
-/// Order the graph's actions by action ID.
+/// Order a collection of actions by action ID.
 ///
 /// The action map is hash-backed, so iteration order varies between runs and
 /// would otherwise leak into the rule order written to the Ninja file.
-pub(crate) fn ordered_actions(graph: &BuildGraph) -> Vec<(&str, &Action)> {
-    let mut actions: Vec<(&str, &Action)> = graph
-        .actions
-        .iter()
-        .map(|(id, action)| (id.as_str(), action))
-        .collect();
-    actions.sort_by_key(|(id, _)| *id);
-    actions
+///
+/// The input is any `(id, action)` iterator for the same reason as
+/// [`ordered_edges`]: the sort is the property under test, and accepting the
+/// graph would make the unsorted arrangement unexpressible.
+pub(crate) fn ordered_actions<'a>(
+    actions: impl Iterator<Item = (&'a str, &'a Action)>,
+) -> Vec<(&'a str, &'a Action)> {
+    let mut collected: Vec<(&str, &Action)> = actions.collect();
+    collected.sort_by_key(|(id, _)| *id);
+    collected
 }
 
 /// Order the graph's default targets lexicographically.

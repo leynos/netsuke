@@ -29,7 +29,15 @@ pub(crate) fn write_action_rules<W: Write>(
     shell: RecipeShell,
     bash_executable: Option<&BashExecutable>,
 ) -> Result<(), NinjaGenError> {
-    for (zero_based_action_index, (id, action)) in ordered_actions(graph).into_iter().enumerate() {
+    for (zero_based_action_index, (id, action)) in ordered_actions(
+        graph
+            .actions
+            .iter()
+            .map(|(id, action)| (id.as_str(), action)),
+    )
+    .into_iter()
+    .enumerate()
+    {
         if action.recipe.is_dependency_only() {
             continue;
         }

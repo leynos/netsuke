@@ -48,7 +48,7 @@ pub(super) fn render_edges(
         stages: SerialStages::default(),
         localizer,
     };
-    for edge in ordered_edges(graph) {
+    for edge in ordered_edges(graph.edges()) {
         renderer.render_edge(edge)?;
     }
     Ok(renderer.stages.dyndep_files)

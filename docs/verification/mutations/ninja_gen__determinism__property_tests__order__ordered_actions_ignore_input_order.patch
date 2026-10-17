@@ -1,0 +1,12 @@
+--- a/src/ninja_gen/order.rs
++++ b/src/ninja_gen/order.rs
+@@ -40,8 +40,7 @@
+ pub(crate) fn ordered_actions<'a>(
+     actions: impl Iterator<Item = (&'a str, &'a Action)>,
+ ) -> Vec<(&'a str, &'a Action)> {
+-    let mut collected: Vec<(&str, &Action)> = actions.collect();
+-    collected.sort_by_key(|(id, _)| *id);
++    let collected: Vec<(&str, &Action)> = actions.collect();
+     collected
+ }
+ 
