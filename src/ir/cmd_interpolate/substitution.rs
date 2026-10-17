@@ -241,9 +241,9 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         Self::update_quote_context_for_region(quote_context, ch);
     }
 
-    /// Report whether the traversal is currently enclosed by POSIX single quotes.
+    /// Report whether the traversal is currently enclosed by single quotes.
     fn matches_single_quote_context(&self) -> bool {
-        matches!(self.active_quote_context(), QuoteContext::Single)
+        matches!(self.active_quote_context(), QuoteContext::Single(_))
     }
 
     /// Report whether the active shell region is outside both kinds of quotes.
@@ -276,9 +276,11 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     /// Update the quote state of one shell region after copying its source character.
     const fn update_quote_context_for_region(quote_context: &mut QuoteContext, ch: char) {
         match (*quote_context, ch) {
-            (QuoteContext::Unquoted, '\'') => *quote_context = QuoteContext::Single,
-            (QuoteContext::Unquoted, '"') => *quote_context = QuoteContext::Double,
-            (QuoteContext::Single, '\'') | (QuoteContext::Double, '"') => {
+            (QuoteContext::Unquoted, '\'') => *quote_context = QuoteContext::Single('\''),
+            (QuoteContext::Unquoted, '"') => *quote_context = QuoteContext::Double('"'),
+            (QuoteContext::Single(quote) | QuoteContext::Double(quote), character)
+                if quote == character =>
+            {
                 *quote_context = QuoteContext::Unquoted;
             }
             _ => {}

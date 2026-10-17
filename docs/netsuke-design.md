@@ -2927,20 +2927,23 @@ its active quote context and rejects markers in backticks or command
 substitutions. PowerShell command and script lowering share the
 `SubstitutionTraversal`, which permits markers only at unquoted sites and
 rejects markers in quoted strings, here-strings, `$()`, or immediately after a
-backtick. PowerShell scripts do not treat comments as inert regions; an
-apostrophe in a comment may make later markers fail closed. POSIX and Bash
-script lowering retains comments and multiline shell syntax and uses the
-script-only `ScriptSubstitutionTraversal`; it encodes markers for unquoted,
-single-quoted, and double-quoted sites while rejecting protected command
-substitutions. The private `PowerShellLexicalState` in `powershell_lexical.rs`
-tracks here-string bodies only; it is not a general PowerShell parser or a
-shared shell API. Longer identifiers such as `$input` and non-placeholder text
-inside backticks, remain unchanged. In `command:` recipes on the POSIX and Bash
-routes, unbalanced backticks or command text that `shlex` cannot parse produce
-an IR error before an action is hashed; `script:` recipes and the PowerShell
-route are outside that check. Ninja generation then receives fully expanded
-command text and is responsible only for preserving the scalar form or
-constructing the list-entry shell boundaries.
+backtick. PowerShell scripts do not treat comments as inert regions: plain
+line-comment text leaves later markers eligible for interpolation, while a
+block-comment opener or quotes, backticks, or substitution syntax in a line
+comment make later markers fail closed. In particular, an apostrophe in a
+comment may make a later marker fail closed. POSIX and Bash script lowering
+retains comments and multiline shell syntax and uses the script-only
+`ScriptSubstitutionTraversal`; it encodes markers for unquoted, single-quoted,
+and double-quoted sites while rejecting protected command substitutions. The
+private `PowerShellLexicalState` in `powershell_lexical.rs` tracks here-string
+bodies and typographic-quote fail-closed state; it is not a general PowerShell
+parser or a shared shell API. Longer identifiers such as `$input` and
+non-placeholder text inside backticks, remain unchanged. In `command:` recipes
+on the POSIX and Bash routes, unbalanced backticks or command text that `shlex`
+cannot parse produce an IR error before an action is hashed; `script:` recipes
+and the PowerShell route are outside that check. Ninja generation then receives
+fully expanded command text and is responsible only for preserving the scalar
+form or constructing the list-entry shell boundaries.
 
 [ADR-027](adr-027-command-placeholder-contract.md) settles which parts of this
 behaviour are promises: the marker invariant is contractual, the odd-backtick

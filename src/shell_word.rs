@@ -89,7 +89,7 @@ pub(crate) fn is_recipe_admissible(value: &str) -> bool {
 )]
 pub(crate) fn quote_word(dialect: ShellDialect, value: &str) -> String {
     if dialect == ShellDialect::PowerShell {
-        return format!("'{}'", value.replace('\'', "''"));
+        return quote_power_shell_literal(value);
     }
     // `shell_quote` returns bytes because a `Vec<u8>` argument need not be
     // UTF-8; a `&str` always is, so this conversion cannot lose information.
@@ -101,6 +101,29 @@ pub(crate) fn quote_word(dialect: ShellDialect, value: &str) -> String {
             String::from_utf8_lossy(err.as_bytes()).into_owned()
         }
     }
+}
+
+/// Encode every PowerShell single-quote character inside a literal path.
+fn quote_power_shell_literal(value: &str) -> String {
+    let escaped = value.chars().fold(
+        String::with_capacity(value.len()),
+        |mut output, character| {
+            output.push(character);
+            if is_power_shell_single_quote(character) {
+                output.push(character);
+            }
+            output
+        },
+    );
+    format!("'{escaped}'")
+}
+
+/// Report whether `character` is one of PowerShell's single-quote delimiters.
+const fn is_power_shell_single_quote(character: char) -> bool {
+    matches!(
+        character,
+        '\'' | '\u{2018}' | '\u{2019}' | '\u{201a}' | '\u{201b}'
+    )
 }
 
 #[cfg(test)]
@@ -234,6 +257,8 @@ mod tests {
     #[case::bare("plain", "'plain'")]
     #[case::space("a b", "'a b'")]
     #[case::single_quote("it's", "'it''s'")]
+    #[case::right_smart_quote("it’s", "'it’’s'")]
+    #[case::left_smart_quote("‘quoted’", "'‘‘quoted’’'")]
     #[case::dollar("$HOME", "'$HOME'")]
     #[case::empty("", "''")]
     fn power_shell_quoting_doubles_quotes(#[case] value: &str, #[case] expected: &str) {

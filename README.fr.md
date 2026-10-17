@@ -217,9 +217,15 @@ ci-dessous).
     Les recettes PowerShell `command:` et `script:` rejettent les marqueurs entre
     guillemets simples ou doubles, dans les here-strings, dans `$()` et juste après
     une accent grave. Les scripts PowerShell ne traitent pas les commentaires
-    comme des zones inertes ; une apostrophe dans un commentaire peut faire
-    rejeter un marqueur ultérieur. Évitez les marqueurs dans les commentaires et
-    heredocs POSIX et Bash : les jetons internes peuvent rester dans la recette.
+    comme des zones inertes : le texte ordinaire d'un commentaire laisse les
+    marqueurs non cités suivants être interpolés, mais l'ouverture d'un
+    commentaire de bloc, des guillemets, des accents graves ou une syntaxe de
+    substitution dans un commentaire sur une ligne peuvent faire rejeter les
+    marqueurs suivants. Une apostrophe dans un commentaire
+    peut aussi faire rejeter un marqueur ultérieur. Les guillemets typographiques PowerShell entraînent
+    aussi le rejet prudent des marqueurs suivants. Évitez les marqueurs dans
+    les commentaires et heredocs POSIX et Bash : les jetons internes peuvent
+    rester dans la recette.
 
 Si `input.txt` existe, ce manifeste POSIX copie son contenu dans `output.txt`
 et vérifie que le `PATH` du shell n'est pas vide :

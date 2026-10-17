@@ -49,6 +49,8 @@ fn script_bindings() -> CommandBindings {
 #[case::command_substitution_output(format!("Write-Output {INS_TOKEN} > $(Write-Output {OUTS_TOKEN})"))]
 #[case::escaped_input(format!("Write-Output `{INS_TOKEN} > {OUTS_TOKEN}"))]
 #[case::escaped_output(format!("Write-Output {INS_TOKEN} > `{OUTS_TOKEN}"))]
+#[case::doubled_single_quote(format!("Write-Output 'prefix ''{INS_TOKEN}' > {OUTS_TOKEN}"))]
+#[case::doubled_double_quote(format!("Write-Output \"prefix \"\"{INS_TOKEN}\" > {OUTS_TOKEN}"))]
 #[case::single_quoted_here_string_input(format!("@'\n{INS_TOKEN}\n'@ > {OUTS_TOKEN}"))]
 #[case::single_quoted_here_string_output(format!("@'\n{OUTS_TOKEN}\n'@ > {INS_TOKEN}"))]
 #[case::single_quoted_here_string_crlf(format!("@'\r\nbody ' quote {INS_TOKEN}\r\n'@"))]
@@ -68,6 +70,33 @@ fn power_shell_scripts_reject_protected_markers(#[case] template: String) {
         command, template,
         "the diagnostic should retain the template"
     );
+}
+
+/// Reject markers after comment syntax could desynchronise the partial scanner.
+#[rstest]
+#[case::comment_quote(format!("# '\nWrite-Output '{INS_TOKEN}'"))]
+#[case::comment_closes_substitution(format!(
+    "Write-Output $(Write-Output x # )\n{OUTS_TOKEN})"
+))]
+fn power_shell_scripts_reject_markers_after_ambiguous_comment_syntax(#[case] template: String) {
+    let error = interpolate_script_with_bindings(&template, &script_bindings())
+        .expect_err("scanner-sensitive comment syntax must fail closed");
+
+    assert!(matches!(error, IrGenError::InvalidCommand { command, .. } if command == template));
+}
+
+/// Reject marker sites protected by PowerShell's typographic quote delimiters.
+#[rstest]
+#[case::left_right_single("‘", "’")]
+#[case::low_single("‚", "‚")]
+#[case::reversed_single("‛", "‛")]
+#[case::left_right_double("“", "”")]
+#[case::low_double("„", "‟")]
+fn power_shell_scripts_reject_typographic_quote_markers(#[case] open: &str, #[case] close: &str) {
+    let template = format!("Write-Output {open}{INS_TOKEN}{close} > {OUTS_TOKEN}");
+    let error = interpolate_script_with_bindings(&template, &script_bindings())
+        .expect_err("typographic PowerShell quotes must fail closed around markers");
+    assert!(matches!(error, IrGenError::InvalidCommand { command, .. } if command == template));
 }
 
 /// Preserve PowerShell variables instead of treating their names as markers.
@@ -109,7 +138,21 @@ fn power_shell_scripts_quote_unicode_apostrophes_as_path_data() {
     let actual = interpolate_script_with_bindings(&format!("Copy-Item {INS_TOKEN}"), &bindings)
         .expect("a Unicode right single quotation mark is ordinary path data");
 
-    assert_eq!(actual, "Copy-Item 'source’s file'");
+    assert_eq!(actual, "Copy-Item 'source’’s file'");
+}
+
+/// Double a typographic apostrophe in a hostile path before PowerShell parses it.
+#[test]
+fn power_shell_scripts_escape_typographic_apostrophes_in_path_data() {
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("; New-Item pwned’ ; Write-Output x")],
+        &[],
+        RecipeShell::PowerShell,
+    );
+    let actual = interpolate_script_with_bindings(&format!("Copy-Item {INS_TOKEN}"), &bindings)
+        .expect("the PowerShell literal encoder must preserve typographic apostrophes");
+
+    assert_eq!(actual, "Copy-Item '; New-Item pwned’’ ; Write-Output x'");
 }
 
 /// Keep quoted PowerShell marker rejection distinct from POSIX quoting support.
@@ -156,6 +199,13 @@ fn power_shell_scripts_track_here_string_terminators() {
         actual,
         "@'\nbody ' quote\n'@\nWrite-Output 'output file.txt'"
     );
+
+    let same_line_template = format!("@'\nbody\n'@; Write-Output {OUTS_TOKEN}");
+    let error = interpolate_script_with_bindings(&same_line_template, &script_bindings())
+        .expect_err("a here-string terminator must end its line before later markers");
+    assert!(
+        matches!(error, IrGenError::InvalidCommand { command, .. } if command == same_line_template)
+    );
 }
 
 /// Fail closed when a comment quote changes the shared PowerShell quote state.
@@ -164,6 +214,33 @@ fn power_shell_script_comment_quotes_can_reject_later_markers() {
     let template = format!("# don't parse this comment\nWrite-Output {OUTS_TOKEN}");
     let error = interpolate_script_with_bindings(&template, &script_bindings())
         .expect_err("PowerShell script comments are not an inert scanner region");
+
+    assert!(matches!(error, IrGenError::InvalidCommand { command, .. } if command == template));
+}
+
+/// Keep plain comment text from poisoning later unquoted marker sites.
+#[test]
+fn power_shell_scripts_interpolate_markers_after_plain_comments() {
+    let template = format!("# ordinary comment\nWrite-Output {OUTS_TOKEN}");
+    let actual = interpolate_script_with_bindings(&template, &script_bindings())
+        .expect("plain comments do not change PowerShell quote state");
+
+    assert_eq!(actual, "# ordinary comment\nWrite-Output 'output file.txt'");
+}
+
+/// Reject markers whose quote context can be hidden by a multiline block comment.
+#[rstest]
+#[case::windows_semicolon_path("; New-Item pwned; Write-Output x")]
+#[case::command_substitution_path("$(New-Item pwned)")]
+fn power_shell_scripts_reject_markers_after_block_comment_openers(#[case] input_path: &str) {
+    let template = format!("<#\n\"\n#>\nWrite-Output \"{INS_TOKEN}\"");
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from(input_path)],
+        &[Utf8PathBuf::from("output file.txt")],
+        RecipeShell::PowerShell,
+    );
+    let error = interpolate_script_with_bindings(&template, &bindings)
+        .expect_err("a block comment can hide the real PowerShell quote context");
 
     assert!(matches!(error, IrGenError::InvalidCommand { command, .. } if command == template));
 }

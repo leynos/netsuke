@@ -226,8 +226,12 @@ active recipe text; see the note below).
     delimiters are expanded. Both PowerShell `command:` and `script:` recipes
     reject markers in single-quoted strings, double-quoted strings, here-strings,
     `$()` and immediately after a backtick. PowerShell scripts have no inert
-    comment region; an apostrophe in a comment can make a later marker fail
-    closed. Keep markers out of POSIX and Bash comments and heredoc bodies:
+    comment region: plain line-comment text leaves later unquoted markers
+    eligible for interpolation, but a block-comment opener or quotes, backticks
+    or substitution syntax in a line comment can make later markers fail closed.
+    An apostrophe in a comment can make a later marker fail closed too. Typographic
+    PowerShell quote characters also make later markers fail closed. Keep
+    markers out of POSIX and Bash comments and heredoc bodies:
     internal tokens there can remain in the generated recipe.
 
 For example, with an existing `input.txt`, this POSIX manifest copies its

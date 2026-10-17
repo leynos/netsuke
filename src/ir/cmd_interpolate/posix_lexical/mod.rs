@@ -341,8 +341,8 @@ impl From<DelimiterQuoteContext> for QuoteContext {
     fn from(context: DelimiterQuoteContext) -> Self {
         match context {
             DelimiterQuoteContext::Unquoted => Self::Unquoted,
-            DelimiterQuoteContext::Single => Self::Single,
-            DelimiterQuoteContext::Double => Self::Double,
+            DelimiterQuoteContext::Single => Self::Single('\''),
+            DelimiterQuoteContext::Double => Self::Double('"'),
         }
     }
 }
