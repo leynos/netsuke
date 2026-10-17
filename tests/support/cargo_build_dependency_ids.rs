@@ -1,26 +1,31 @@
 //! Resolves root-package build dependency IDs from Cargo metadata.
 //!
-//! Scope: this module runs the locked, all-features metadata query and selects
-//! direct build-dependency package IDs for the production build-slice harness.
-//! It does not select compiler artefacts or assemble rustc arguments.
+//! Scope: this module configures Cargo's locked, all-features metadata query
+//! and selects direct build-dependency package IDs for the production
+//! build-slice harness. It does not execute Cargo, select compiler artefacts,
+//! or assemble rustc arguments.
 //!
 //! Reuse policy: this helper is owned by the build-module-slice UI harness;
 //! other harnesses should use a narrowly scoped resolver if they need this data.
+//! Cargo inherits caller-configured wrappers and keeps its default shared-cache
+//! and network policy; `--locked` prevents lockfile changes without forcing
+//! offline resolution.
 
-use std::{collections::HashSet, io, path::Path, process::Command};
+use std::{
+    collections::HashSet,
+    io,
+    path::Path,
+    process::{Command, Output},
+};
 
-/// Query Cargo for the exact package IDs of the requested root build dependencies.
+/// Configure an unexecuted metadata query for the build-slice harness.
 ///
-/// # Errors
-///
-/// Returns an error when Cargo metadata fails or its dependency graph is
-/// malformed, ambiguous, or missing a requested build dependency.
-pub fn build_dependency_package_ids(
-    cargo_executable: &Path,
-    manifest_path: &Path,
-    required_names: &[&'static str],
-) -> io::Result<Vec<(&'static str, String)>> {
-    let output = Command::new(cargo_executable)
+/// Cargo inherits caller-configured wrappers and keeps its default shared-cache
+/// and network behaviour. `--locked` prevents lockfile changes without forcing
+/// offline resolution.
+pub fn metadata_command(cargo_executable: &Path, manifest_path: &Path) -> Command {
+    let mut command = Command::new(cargo_executable);
+    command
         .args([
             "metadata",
             "--format-version=1",
@@ -28,8 +33,20 @@ pub fn build_dependency_package_ids(
             "--locked",
             "--manifest-path",
         ])
-        .arg(manifest_path)
-        .output()?;
+        .arg(manifest_path);
+    command
+}
+
+/// Resolve requested root build-dependency IDs from captured Cargo metadata.
+///
+/// # Errors
+///
+/// Returns an error when Cargo exited unsuccessfully or its dependency graph
+/// is malformed, ambiguous, or missing a requested build dependency.
+pub fn build_dependency_package_ids(
+    output: &Output,
+    required_names: &[&'static str],
+) -> io::Result<Vec<(&'static str, String)>> {
     if !output.status.success() {
         return Err(io::Error::other(format!(
             "cargo metadata failed ({}):\n{}",

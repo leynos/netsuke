@@ -1,7 +1,12 @@
 //! Pure regressions for selecting direct Cargo build-dependency package IDs.
 
-use super::build_dependency_ids_from_metadata;
+use super::{build_dependency_ids_from_metadata, build_dependency_package_ids, metadata_command};
 use serde_json::{Value, json};
+use std::{
+    ffi::OsString,
+    path::Path,
+    process::{ExitStatus, Output},
+};
 
 /// Build the smallest Cargo metadata document needed by the resolver.
 fn metadata(root_id: Option<&str>, nodes: Value) -> String {
@@ -39,6 +44,89 @@ fn kind(value: Value) -> Value {
         (String::from("kind"), value),
         (String::from("target"), Value::Null),
     ]))
+}
+
+#[test]
+fn metadata_command_preserves_cargo_program_and_query_flags() {
+    let cargo_executable = Path::new("missing-cargo-for-command-builder-test");
+    let manifest_path = Path::new("fixture/Cargo.toml");
+    let command = metadata_command(cargo_executable, manifest_path);
+    let arguments = command.get_args().map(OsString::from).collect::<Vec<_>>();
+
+    assert_eq!(command.get_program(), cargo_executable.as_os_str());
+    assert_eq!(
+        arguments,
+        vec![
+            OsString::from("metadata"),
+            OsString::from("--format-version=1"),
+            OsString::from("--all-features"),
+            OsString::from("--locked"),
+            OsString::from("--manifest-path"),
+            manifest_path.as_os_str().to_owned(),
+        ],
+    );
+    assert!(command.get_envs().next().is_none());
+}
+
+#[test]
+fn captured_successful_output_resolves_requested_build_dependencies() {
+    let nodes = json!([
+        node(
+            "root-id",
+            json!([edge(
+                "camino",
+                Some("camino-id"),
+                json!([kind(json!("build"))])
+            )]),
+        ),
+        node("camino-id", json!([])),
+    ]);
+    let output = Output {
+        status: exit_status(true),
+        stdout: metadata(Some("root-id"), nodes).into_bytes(),
+        stderr: Vec::new(),
+    };
+
+    assert_eq!(
+        build_dependency_package_ids(&output, &["camino"])
+            .expect("successful captured Cargo metadata should be parsed"),
+        vec![("camino", String::from("camino-id"))],
+    );
+}
+
+#[test]
+fn captured_failure_preserves_exit_status_and_stderr() {
+    let output = Output {
+        status: exit_status(false),
+        stdout: b"not parsed after a Cargo failure".to_vec(),
+        stderr: b"Cargo could not resolve the locked graph".to_vec(),
+    };
+    let status = output.status.to_string();
+    let error = build_dependency_package_ids(&output, &["camino"])
+        .expect_err("unsuccessful metadata commands must fail");
+
+    assert!(error.to_string().contains(&status));
+    assert!(
+        error
+            .to_string()
+            .contains("Cargo could not resolve the locked graph")
+    );
+}
+
+/// Construct a platform-specific exit status for captured-output tests.
+#[cfg(unix)]
+fn exit_status(success: bool) -> ExitStatus {
+    use std::os::unix::process::ExitStatusExt;
+
+    ExitStatus::from_raw(if success { 0 } else { 1 << 8 })
+}
+
+/// Construct a platform-specific exit status for captured-output tests.
+#[cfg(windows)]
+fn exit_status(success: bool) -> ExitStatus {
+    use std::os::windows::process::ExitStatusExt;
+
+    ExitStatus::from_raw(if success { 0 } else { 1 })
 }
 
 #[test]

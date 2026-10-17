@@ -139,9 +139,13 @@ impl BuildSliceDependencies {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        let package_ids = cargo_build_dependency_ids::build_dependency_package_ids(
+        let metadata_output = cargo_build_dependency_ids::metadata_command(
             &cargo(),
             &manifest_dir().join("Cargo.toml"),
+        )
+        .output()?;
+        let package_ids = cargo_build_dependency_ids::build_dependency_package_ids(
+            &metadata_output,
             REQUIRED_EXTERNS,
         )?;
         let externs = package_ids
