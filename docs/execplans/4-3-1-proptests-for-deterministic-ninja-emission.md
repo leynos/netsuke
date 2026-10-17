@@ -2234,7 +2234,56 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       to a condition that had already resolved itself, and acting on it — an
       operator stopping sccache — would have been an unnecessary intervention
       on a shared service during other agents' active builds.
-- [ ] (2026-10-16T00:00:00Z) `EP-M4` source landed: `path_key.rs`, `no_loss.rs`,
+- [x] (2026-10-17T12:59:22+02:00) **`EP-M4`'s acceptance is discharged in full,
+      by execution.** `make proptest` at `1b4b3fb1` reports 104 tests run, 104
+      passed, 3834 skipped, exit 0 (log
+      `/tmp/proptest-netsuke-4-3-1-1b4b3fb1.out`). All fourteen determinism
+      tests ran and passed, including both property tests and both directed
+      witnesses.
+      **This is the first time these four files compiled.** Until this run the
+      only evidence about them was a reference-by-reference reading, which
+      leaves type inference, trait resolution, and borrow checking unverified.
+      They now compile clean under `-D warnings` for a target that sets
+      `cfg(test)`, which is the only kind of target that can reach them.
+      **`MUT-PATHKEY` fails its named property.** Applying the patch and running
+      the `path_key` suite yields 3 passed, 3 failed, exit 100. The named
+      property fails with *"a permutation of a path list must key identically"*,
+      and the directed witness fails on exactly the predicted input —
+      `["out/a", "out/a", "out/b"]` against `["out/b", "out/a", "out/a"]`.
+      **Detection is stronger than the plan predicted, and the prediction was
+      deliberately pessimistic.** The entry recorded at `8a213218` judged the
+      sampled property probabilistic, because `prop_shuffle` may return input
+      order and `ListShapes` asserts 5 of its 7 fields. Sampling found it
+      anyway, and so did `path_key_is_injective_on_keyable_paths` — an
+      unplanned third detector, since removing the sort makes two distinct
+      lists collide. The pessimistic reading was still the right thing to
+      write: it would have been correct had only the directed test fired, and
+      recording it beforehand is what makes the stronger result attributable to
+      the run rather than to hindsight.
+      **`MUT-EDGEDROP` fails its named property.** 3 passed, 1 failed, exit 100,
+      and the failing one is `every_explicit_output_appears_exactly_once` with
+      *"the graph declares 37 outputs and the text carries 0 left-hand-side
+      entries"* — the mechanism traced statically at `e3056919`, observed. The
+      other three `no_loss` tests pass under the mutant, so the failure is
+      specific rather than a suite-wide collapse.
+      **Both revert cleanly.** `git apply -R` restores a clean tree
+      (`git status --porcelain` empty) and the determinism suite re-runs 14/14
+      green at `1b4b3fb1`.
+      **A mutation-derived regression artefact was deleted, not committed.**
+      The failing runs wrote `proptest-regressions/ninja_gen/determinism/
+      property_tests/{no_loss,path_key}.txt`. The three tracked seeds are
+      mutation-derived too and are committed by convention, but both of these
+      are redundant: each mutation is detected with certainty by means that
+      survive the revert, so replaying the seed would only re-record a
+      fabricated failure. The plan's `EP-M3` precedent deleted an artefact of
+      exactly this kind for the same reason. Recording the distinction, since
+      the repo commits the older ones: a seed earns its place when it is the
+      *only* thing that catches the defect.
+      **Roadmap `RM-4.3.1.c` is satisfied; the parent item is not.** The
+      `path_key` invariance child of roadmap `4.3.1` can be ticked. The parent
+      cannot: its other two children — insertion-order stability and `default`
+      ordering — are `EP-M5`'s, assigned `RM-4.3.1.a` and `RM-4.3.1.b`.
+- [x] (2026-10-16T00:00:00Z) `EP-M4` source landed: `path_key.rs`, `no_loss.rs`,
       and `support.rs` written, `mod.rs` declaring all four children, and both
       mutation patches authored and registered.
       **Domain repairs.** Two `Domain:` blocks quoted bounds the generator
@@ -2270,9 +2319,14 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       (`src/ninja_gen/dyndep/mod.rs:155`) to skip entries with a non-empty
       `explicit_outputs`. Both pass `git apply --check` and are registered in
       `SUPPLEMENTAL_PROPERTY_PATCHES`.
-- [ ] (2026-10-16T00:00:00Z) `EP-M4`'s four files statically verified reference
+- [x] (2026-10-16T00:00:00Z) `EP-M4`'s four files statically verified reference
       by
       reference, while the compiler remains unavailable.
+      **Overtaken by the compiler at 2026-10-17.** The files compiled, and the
+      reading was vindicated: every import, signature, and borrow resolved
+      exactly as traced below, with no inference objection. It is kept because
+      it records *why* each path was believed correct before anything could
+      check it.
       This is a **substitute for the compiler, not the compiler**. It cannot
       discharge `EP-M4`'s acceptance, which is defined by `make proptest`
       passing and two mutations failing; it closes the class of defects that a
@@ -2389,7 +2443,7 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       reversal, and the absence of the specific denied-warning defect above are
       established, and that last one is established by reading rather than by
       running rustc.
-- [ ] (2026-10-16T00:00:00Z) `EP-M4` compiler-free gates green on the candidate;
+- [x] (2026-10-16T00:00:00Z) `EP-M4` compiler-free gates green on the candidate;
       the compiling gates are **blocked by a machine-wide admission outage**,
       not by this change.
       **Green, sequentially, on the candidate.** `make check-fmt` (exit 0)
