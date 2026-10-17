@@ -21,6 +21,9 @@ use miette::Diagnostic;
 use std::path::PathBuf;
 use thiserror::Error;
 
+#[cfg(feature = "lint")]
+use super::FindingDiagnostic;
+
 /// Errors raised during command execution.
 #[derive(Debug, Error, Diagnostic)]
 pub enum RunnerError {
@@ -46,6 +49,44 @@ pub enum RunnerError {
         /// Localized hint for resolving the error.
         #[help]
         help: LocalizedMessage,
+    },
+
+    /// Lint findings reached the configured failure threshold.
+    ///
+    /// The findings travel as related diagnostics rather than as a formatted
+    /// message so that both the human renderer and the JSON serializer see the
+    /// same per-finding objects, each with its own code, severity, help text,
+    /// documentation URL, and source span.
+    #[cfg(feature = "lint")]
+    #[error("{message}")]
+    #[diagnostic(code(netsuke::lint::threshold_exceeded))]
+    LintThresholdExceeded {
+        /// Localized summary naming the threshold and the finding counts.
+        message: LocalizedMessage,
+        /// Localized hint for resolving the failure.
+        #[help]
+        help: LocalizedMessage,
+        /// Every reported finding, in output order.
+        #[related]
+        findings: Vec<FindingDiagnostic>,
+    },
+
+    /// A `netsuke check` policy selector could not be applied.
+    #[cfg(feature = "lint")]
+    #[error("{message}")]
+    #[diagnostic(code(netsuke::lint::invalid_policy))]
+    CheckPolicy {
+        /// Localized description of the rejected selector.
+        message: LocalizedMessage,
+    },
+
+    /// The manifest source could not be indexed for lint diagnostics.
+    #[cfg(feature = "lint")]
+    #[error("{message}")]
+    #[diagnostic(code(netsuke::lint::source_index_failed))]
+    CheckSourceIndex {
+        /// Localized description of where indexing stopped.
+        message: LocalizedMessage,
     },
 }
 

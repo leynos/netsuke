@@ -215,13 +215,32 @@ def test_ambient_target_harnesses_match_the_gate_feature_selection() -> None:
 
     The direct-rustc UI harnesses build `test_support` or `netsuke-build` in
     the workspace target directory. Their Cargo feature selection must match
-    `make test-nextest`; otherwise Cargo gives `netsuke-build` a distinct
-    fingerprint and recompiles its graph for each harness.
+    the lane that compiled them; otherwise Cargo gives `netsuke-build` a
+    distinct fingerprint and recompiles its graph for each harness. The
+    all-features lane (`make test-nextest`) is the one with `lint` enabled, and
+    the default-features lane (`make test-default-features`) passes nothing.
     """
     module = GATE_FEATURES_MODULE.read_text(encoding="utf-8")
-    assert (
-        'pub const GATE_FEATURE_ARGUMENTS: &[&str] = &["--all-features"];' in module
-    ), "the shared Cargo feature module must define the gate's --all-features argument"
+    for lane, definition in (
+        (
+            "all-features",
+            (
+                '#[cfg(feature = "lint")]\n'
+                'pub const GATE_FEATURE_ARGUMENTS: &[&str] = &["--all-features"];'
+            ),
+        ),
+        (
+            "default-features",
+            (
+                '#[cfg(not(feature = "lint"))]\n'
+                "pub const GATE_FEATURE_ARGUMENTS: &[&str] = &[];"
+            ),
+        ),
+    ):
+        assert definition in module, (
+            f"the shared Cargo feature module must define the {lane} lane's "
+            "feature selection"
+        )
     for source in AMBIENT_TARGET_NESTED_BUILD_SOURCES:
         text = source.read_text(encoding="utf-8")
         assert "cargo_features::GATE_FEATURE_ARGUMENTS" in text, (

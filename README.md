@@ -181,6 +181,12 @@ Netsuke v0.1.0-beta4's core build-system compiler provides:
   progress reporting, stage timings, and versioned JSON results or diagnostics;
 - bounded manifest evaluation, operator-controlled network and `env()` access
   policies, and bounded file-reading filters;
+- read-only `netsuke check` semantic analysis for likely manifest errors,
+  portability problems, and cache or determinism hazards, opt-in behind the
+  `lint` Cargo feature until v0.2.0 and absent from v0.1.0 release binaries;
+  see the
+  [users' guide](docs/users-guide.md#lint-a-manifest-with-netsuke-check) for
+  rules, policy, suppressions, and JSON output;
 - unit, behavioural, integration, property, snapshot, and initial Kani
   verification coverage.
 

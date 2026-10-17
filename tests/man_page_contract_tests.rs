@@ -138,3 +138,19 @@ fn manual_page_documents_the_help_targets_topic() -> Result<()> {
     );
     Ok(())
 }
+
+/// A manual page generated with the `lint` feature documents `check`, so it
+/// lives apart from the default page that release staging ships.
+#[test]
+fn manual_page_is_separated_by_feature_set() -> Result<()> {
+    let directory = Path::new(GENERATED_MAN_PAGE)
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str())
+        .context("the manual page should sit in a named directory")?;
+    ensure!(
+        (directory == "lint") == cfg!(feature = "lint"),
+        "the manual page for this feature set should not share {GENERATED_MAN_PAGE}"
+    );
+    Ok(())
+}

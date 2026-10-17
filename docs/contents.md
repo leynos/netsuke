@@ -27,6 +27,12 @@ operator, user, and contributor references are easier to find.
   framework.
 - [Technical design](netsuke-test-framework-technical-design.md):
   Implementation architecture for the Netsukefile testing framework.
+- [netsuke-linter-design.md](netsuke-linter-design.md): Manifest linter design,
+  covering the rule model, compiler-stage hooks, suppression grammar, policy
+  configuration, and output schemas behind `netsuke check`.
+- [netsuke-linter-rules.md](netsuke-linter-rules.md): Reference for every lint
+  rule `netsuke check` ships, with its category, default severity, rationale,
+  and remediation.
 - [roadmap.md](roadmap.md): Phased implementation plan and tracked delivery
   work.
 - [roadmap-composition.md](roadmap-composition.md): Roadmap continuation for
@@ -276,6 +282,10 @@ operator, user, and contributor references are easier to find.
   0010, RFC 0011, and ADR-019: the `cwd` stream-path base, absolute-`cwd`
   rejection, the two capture forms, the two temporary-directory spellings, and
   the reserved `1.1.0` manifest minor version.
+- [ADR-056](adr-056-manifest-linting-under-netsuke-check.md):
+  Manifest-linting decision record, placing the linter under `netsuke check`,
+  treating findings as data with a threshold-selected success or failure
+  document, and fixing the rule-identifier and rule-text ownership rules.
 
 ## Proposals
 
@@ -292,6 +302,8 @@ operator, user, and contributor references are easier to find.
 - [v0-1-1-migration-guide.md](v0-1-1-migration-guide.md): Migration notes for
   replacing no-op aggregate recipes with dependency-only actions or targets,
   plus the `cwd_mode` label added to the `which` resolver counters.
+- [v0-2-0-migration-guide.md](v0-2-0-migration-guide.md): Migration signpost
+  for the `netsuke check` linter and its rule, severity, and suppression policy.
 - [users-guide.md](users-guide.md): End-user reference for authoring and
   running Netsuke manifests, including executable discovery and
   `command_available` branch selection.

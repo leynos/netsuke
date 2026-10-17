@@ -445,8 +445,9 @@ semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}
 # Plural form examples for translators.
 # These messages demonstrate Fluent's select expression syntax using CLDR
 # plural categories. Note: These require numeric FluentValue arguments to
-# properly select variants; the netsuke localization API currently passes
-# all arguments as strings, so selection falls back to the default variant.
+# properly select variants. Code passes a count with
+# `LocalizedMessage::with_count`; an argument attached with `with_arg` is a
+# string, so selection falls back to the default variant.
 example.files_processed = { $count ->
     [one] Processed { $count } file.
    *[other] Processed { $count } files.
@@ -460,3 +461,24 @@ example.errors_found = { $count ->
 
 cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper.
 cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper.
+# Manifest linting (`netsuke check`).
+cli.subcommand.check.about = Lint the manifest without generating or running a build.
+cli.subcommand.check.long_about = Analyse the selected manifest for constructs that parse but are likely erroneous, unsafe, non-portable, or hostile to caching.
+cli.subcommand.check.flag.rule.help = Set a rule's or category's severity, written as NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Severity at which findings fail the command.
+cli.subcommand.check.flag.limit.help = Maximum findings to report; 0 reports all of them.
+cli.subcommand.check.flag.explain.help = Print the rule reference instead of analysing a manifest.
+check.threshold_exceeded = Lint findings reached the { $severity } threshold: { $failing } of { $reported } reported.
+check.threshold_exceeded.help = Fix the reported findings, adjust --rule, or relax --fail-on.
+check.summary.counts = Lint results — errors: { $errors }, warnings: { $warnings }, advice: { $advice }, suppressed: { $suppressed }.
+check.summary.clean = No lint findings.
+check.summary.truncated = { $shown ->
+    [one] Showing { $shown } finding; --limit omitted { $omitted } more.
+   *[other] Showing { $shown } findings; --limit omitted { $omitted } more.
+}
+check.rule.malformed = Lint selector { $selector } is not written as NAME=SEVERITY.
+check.rule.unknown = Lint selector names { $name }, which is neither a rule nor a category.
+check.rule.severity = Lint selector { $name } names severity { $severity }; expected one of { $values }.
+check.fail_on.invalid = Unknown failure threshold { $value }; expected one of { $values }.
+check.source_index = Could not index { $path } for lint diagnostics at line { $line }: { $reason }.
+status.tool.check = Check

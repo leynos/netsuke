@@ -68,6 +68,17 @@ fn localized_help_includes_config_flag(#[case] locale: &str, #[case] config_help
     );
 }
 
+/// Suffix naming the help snapshot for the compiled feature set.
+///
+/// `netsuke check` exists only with the `lint` feature, so the command list
+/// differs by one line. The unsuffixed snapshots are the default feature set,
+/// which is what release binaries ship.
+const HELP_SNAPSHOT_SUFFIX: &str = if cfg!(feature = "lint") {
+    "_with_lint"
+} else {
+    ""
+};
+
 /// Accept localized long-help snapshots by reading or writing snapshot files on disk.
 #[rstest]
 #[case::en_us("en-US", "help_en_us")]
@@ -76,7 +87,10 @@ fn localized_help_snapshot(#[case] locale: &str, #[case] snapshot_name: &str) {
     let rendered_help = render_localized_long_help(locale, None);
 
     snapshot_settings("cli").bind(|| {
-        assert_snapshot!(snapshot_name, rendered_help);
+        assert_snapshot!(
+            format!("{snapshot_name}{HELP_SNAPSHOT_SUFFIX}"),
+            rendered_help
+        );
     });
 }
 
