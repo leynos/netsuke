@@ -99,19 +99,32 @@ def test_cold_build_budgets_are_scoped_to_the_tests_that_pay_them() -> None:
     here and names itself.
     """
     config = nextest_config()
-    profile = config["profile"]["default"]
-    assert profile["slow-timeout"] == {"period": "60s", "terminate-after": 5}, (
-        "ordinary tests must retain their five-minute budget"
+    profiles = require_mapping(config.get("profile"), "nextest profile table")
+    default_profile = require_mapping(
+        profiles.get("default"), "nextest default profile"
     )
-    timed_overrides = [
-        override for override in profile["overrides"] if "slow-timeout" in override
-    ]
+    assert default_profile.get("slow-timeout") == {
+        "period": "60s",
+        "terminate-after": 5,
+    }, "ordinary tests must retain their five-minute budget"
+    overrides = require_list(
+        default_profile.get("overrides", []), "nextest default profile overrides"
+    )
+    # Narrow to the timed overrides first, so the map below compares only the
+    # allowances this test owns. An override without a timeout belongs to the
+    # group-serialization contract and is asserted by its own test.
+    timed_overrides = []
+    for raw_override in overrides:
+        override = require_mapping(raw_override, "nextest default override")
+        if "slow-timeout" in override:
+            timed_overrides.append(override)
     assert len(timed_overrides) == 5, (
         "preserve current-main cold-build budgets, including the ambient fixture "
         "family's shared cold check"
     )
     configured = {
-        override["filter"]: override["slow-timeout"] for override in timed_overrides
+        str(override.get("filter", "")): override["slow-timeout"]
+        for override in timed_overrides
     }
     expected = {
         "test(/^packaged_manifest_retains_build_script_sources($|::)/)": {
