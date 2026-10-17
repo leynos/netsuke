@@ -166,6 +166,64 @@ again. At adoption the closure is 44 files, listed as 18 `sources` entries:
   the contract and prints the paths to add. Moving code so that a harness no
   longer reaches a file fails it too, and prints the entry to remove.
 
+## Observability addendum
+
+The required job now records one bounded run counter and one cache counter for
+each attempt, plus a proof-duration observation when timing marks permit it.
+The scope step writes its decision category to a separate JSON record, leaving
+the public `run-proofs` output unchanged. Its vocabulary is `full_run`,
+`in_scope`, `out_of_scope`, `unreadable_diff` and `invalid_scope`; missing or
+malformed records become `unknown`. An invalid scope still fails the decision
+step and the job after recording `invalid_scope` for the finalizer.
+
+The finalizer classifies the proof and mutation outcomes using a fixed
+precedence and emits the bounded JSONL contract described in the
+[developers' guide](developers-guide.md#kani-smoke-metrics). Its per-attempt
+artefact is retained for 30 days. The decision file is deliberately separate
+from GitHub step outputs: telemetry failure must not change the decision or the
+exact `run-proofs` contract. Timing mark failures produce a fixed warning and
+do not prevent the Kani harness or mutation gate from running. When the scope
+guard does not select proofs, the finalizer omits duration without warning. A
+failed end-mark attempt also omits duration so the later mutation compile and
+cache-save work cannot be counted as proof time; only a skipped end-mark step
+with no recorded mark attempt, such as cancellation, uses finalizer time as its
+fallback. Missing or malformed marks produce a fixed warning.
+
+Metric labels contain only the workflow event, fixed decision and outcome
+categories, or the cache result. Paths, commit IDs, run IDs, URLs and free-form
+errors are excluded from every label. The cache `miss` category means that no
+exact payload was restored; it does not claim that the cache service was
+healthy. The pinned action catches restore service errors: most produce warning
+annotations, while HTTP 5xx responses produce error annotations. The duration
+marks bracket `make kani-ir`; cancellation may prevent the end mark, and job
+timeout or runner loss can prevent finalization or upload.
+
+Implementation and contracts live in
+[`scripts/kani_proof_scope.py`](../scripts/kani_proof_scope.py),
+[`scripts/kani_smoke_metrics.py`](../scripts/kani_smoke_metrics.py),
+[`tests/workflow_contracts/kani_smoke_metrics_test.py`](../tests/workflow_contracts/kani_smoke_metrics_test.py),
+[`tests/workflow_contracts/kani_smoke_metrics_wiring_test.py`](../tests/workflow_contracts/kani_smoke_metrics_wiring_test.py),
+and [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+
+### Main-branch validation policy retained during integration
+
+The rebase also retains the main-branch timeout policy for
+`packaged_manifest_retains_build_script_sources`: a 900-second per-test
+allowance and the serialized `nested-cargo-builds` group. That test runs a
+nested Cargo build and previously reached the 300-second default while waiting
+for the shared package-cache lock. Main also raises the CI Nextest whole-run
+limit to 16 minutes and the Cargo watchdog to 1,980 seconds, keeping the test,
+whole-run and watchdog budgets ordered. These shared test policies remain in
+`.config/nextest.toml` and `.github/workflows/ci.yml`; the metrics change adds
+no duplicate timeout settings.
+
+The local-reference coverage contract added on `main` inventories scripts under
+`scripts/` and requires each one to be reachable from a workflow, Makefile
+target, or test. The Kani workflow invokes the metrics helper directly, so
+`scripts/kani_smoke_metrics.py` remains covered without an exemption. Keep
+future Kani workflow helpers explicitly referenced by their owning workflow or
+contract.
+
 ## Reuse in other repositories
 
 The mechanism is repository-independent apart from the scope file. A step by

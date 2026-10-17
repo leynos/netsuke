@@ -4588,9 +4588,111 @@ decision; this section is the working reference.
   next push-to-`main` run instead. That run, and the nightly one, are the
   backstop.
 
-The decision script's `cuprum` and `cyclopts` pins are repeated in the
-`test-workflow-contracts` and `typecheck-python` recipes, and
-`kani_proof_scope_decision_test.py` holds them equal.
+### Kani smoke metrics
+
+Every `kani-smoke` attempt ends with an unconditional metrics finalizer and an
+artefact upload. The scope step writes its fixed decision to
+`${{ runner.temp }}/kani-smoke-metrics/decision.json`, separate from
+`GITHUB_OUTPUT` so the public `run-proofs` output stays unchanged. A damaged or
+unreadable scope writes `invalid_scope` before the decision step fails. The
+finalizer combines that record with workflow step outcomes and monotonic marks
+around `make kani-ir`; it writes `metrics.jsonl` atomically. Its records remain
+available after normal proof, mutation, scope or cache-save failures whenever
+the runner can execute the finalizer and upload.
+
+`kani_smoke_metrics.py` is private to this workflow. Its `mark-start`,
+`mark-end` and `finalize` commands are the workflow interface; it is not a
+general metrics library. A future workflow that needs retained metrics should
+define its own bounded schema and delivery contract. The clock and sink
+protocols are local test seams, not cross-workflow interfaces.
+
+Each JSONL line has exactly `name`, `labels` and `value`, in that order. The
+labels have fixed keys and vocabularies:
+
+| Instrument                                  | Label keys, in order           | Value                                                             |
+| ------------------------------------------- | ------------------------------ | ----------------------------------------------------------------- |
+| `netsuke_kani_smoke_run_total`              | `event`, `decision`, `outcome` | `1` per attempt                                                   |
+| `netsuke_kani_smoke_cache_total`            | `result`                       | `1` per attempt                                                   |
+| `netsuke_kani_smoke_proof_duration_seconds` | `event`, `outcome`             | finite, non-negative seconds; omitted without usable timing marks |
+
+`event` is `pull_request`, `push`, `schedule`, `workflow_dispatch` or `other`.
+`decision` is `full_run`, `in_scope`, `out_of_scope`, `unreadable_diff`,
+`invalid_scope` or `unknown`. `outcome` uses this closed vocabulary. The rows
+are evaluated from top to bottom, so the first matching row wins:
+
+| Condition                                           | Outcome            |
+| --------------------------------------------------- | ------------------ |
+| Job or relevant step was cancelled                  | `cancelled`        |
+| Scope decision step failed                          | `scope_failure`    |
+| `run-proofs` is exactly `false`                     | `skipped`          |
+| `run-proofs` is neither `true` nor `false`          | `invalid_decision` |
+| Kani harness step failed                            | `proof_failure`    |
+| Harness did not succeed and the job failed          | `proof_not_run`    |
+| Mutation compile gate failed                        | `mutation_failure` |
+| Both proof steps succeeded but the job failed later | `job_failure`      |
+| Both proof steps and the job succeeded              | `success`          |
+| No rule above applies                               | `unknown`          |
+
+The cache `result` is `hit`, `miss`, `not_attempted` or `unknown`. A successful
+restore with `cache-hit=true` is a hit; a successful restore without that exact
+value is a miss; a skipped restore is `not_attempted`; every other restore
+outcome is `unknown`. A miss means that no exact payload was restored. The
+pinned action catches restore service errors and can complete the step
+successfully: most failures produce warning annotations, while HTTP 5xx
+responses produce error annotations. The cache result therefore does not claim
+that the service was healthy. See the pinned
+[`@actions/cache` 6.1.0 restore implementation](https://unpkg.com/@actions/cache@6.1.0/lib/cache.js).
+
+The proof timer starts immediately before `make kani-ir` and normally ends
+immediately after it, including when the proof command fails. When `run-proofs`
+is not exactly `true`, the guard prevents proof execution, so the finalizer
+omits duration without warning. If cancellation skips the end-mark step and no
+mark attempt was recorded while the start mark is valid, the finalizer uses its
+own monotonic time and emits a fixed warning; this fallback can include the
+short cancellation tail before the finalizer. If the end-mark step ran but
+could not retain its mark, the workflow records that failure for the finalizer,
+which omits duration with a fixed warning rather than including the later
+mutation compile or cache-save work. A missing or malformed start, or a
+malformed end, also omits duration with a fixed warning. Reversed marks clamp
+to zero. With both marks present, duration covers only `make kani-ir`. A timing
+helper launch or write failure produces a fixed warning and does not skip the
+proof or mutation gate.
+
+GitHub retains one artefact per run attempt, named
+`kani-smoke-metrics-${{ github.run_attempt }}`, for 30 days. Download an
+attempt's records with:
+
+```sh
+gh run download 123456789 --repo leynos/netsuke \
+  --name kani-smoke-metrics-1 --dir ./kani-smoke-metrics
+```
+
+Aggregate the run counter by event, decision and outcome with `jq`:
+
+```sh
+jq -s '
+  map(select(.name == "netsuke_kani_smoke_run_total"))
+  | group_by([.labels.event, .labels.decision, .labels.outcome])
+  | map({event: .[0].labels.event,
+         decision: .[0].labels.decision,
+         outcome: .[0].labels.outcome,
+         attempts: (map(.value) | add)})
+' ./kani-smoke-metrics/metrics.jsonl
+```
+
+The finalizer and upload use `always()`, but they have runner limits. GitHub's
+[cancellation procedure](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-cancellation)
+allows at most five minutes before it forcibly terminates steps still being
+cancelled. A job timeout or runner loss can stop both steps before metrics are
+written or uploaded. Checkout failure leaves no helper script, and `setup-uv`
+failure can leave no `uv` command, so those failures also produce no metrics.
+The upload uses `if-no-files-found: error` so a missing finalizer output is
+visible as a failed delivery step rather than a successful empty artefact.
+
+The scope-decision and metrics scripts' `cuprum` and `cyclopts` pins are
+repeated in the `test-workflow-contracts` and `typecheck-python` recipes, and
+`tests/workflow_contracts/kani_smoke_metrics_test.py::test_dependency_pins_match_the_makefile`
+holds them equal.
 
 ## Test execution
 

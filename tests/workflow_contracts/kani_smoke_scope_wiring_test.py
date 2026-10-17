@@ -4,11 +4,12 @@
 merge until it reports. Skipping the job itself, with a trigger `paths`
 filter or a job-level `if:`, leaves a required check that never reports and a
 pull request that can never merge. The job therefore always runs, its first
-real step decides whether the proofs can differ from `main`'s, and every step
-after the decision is conditioned on it. These contracts pin that shape: the
-decision's position and command, the condition on every later step, the
-absence of a job condition and trigger filters, and the nightly schedule that
-runs the proofs in full.
+real step decides whether the proofs can differ from `main`'s, and every proof
+step after the decision is conditioned on it. The proof end mark adds only a
+cancellation check to retain failed-run timing, and two named trailing
+`always()` steps finalize and upload metrics. These contracts pin that shape,
+the absence of a job condition and trigger filters, and the nightly schedule
+that runs the proofs in full.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -25,9 +26,11 @@ from workflow_loading import (
 JOB = "kani-smoke"
 DECISION_STEP = "Decide Kani proof scope"
 DECISION_COMMAND = "uv run --script scripts/kani_proof_scope.py"
+TRAILING_ALWAYS_STEPS = ("Finalize Kani metrics", "Upload Kani metrics")
 #: The output the script writes; `kani_proof_scope_decision_test.py` runs the
 #: script and reads this exact key back from `GITHUB_OUTPUT`.
 PROOF_CONDITION = "steps.scope.outputs.run-proofs == 'true'"
+PROOF_END_CONDITION = f"!cancelled() && {PROOF_CONDITION}"
 #: The jobs other than `kani-smoke`, which the nightly schedule must not run.
 SCHEDULE_EXCLUDED_JOBS = ("build-test", "windows")
 NOT_ON_SCHEDULE = "github.event_name != 'schedule'"
@@ -109,9 +112,10 @@ def test_decision_step_is_unconditional_and_runs_the_script(
         f"the decision must run `{DECISION_COMMAND}` as its sole command"
     )
     env = require_mapping(decision.get("env"), "decision env")
-    assert env == {"INPUT_EVENT_NAME": "${{ github.event_name }}"}, (
-        f"the decision must read the triggering event and nothing else: {env}"
-    )
+    assert env == {
+        "INPUT_EVENT_NAME": "${{ github.event_name }}",
+        "INPUT_METRICS_FILE": "${{ runner.temp }}/kani-smoke-metrics/decision.json",
+    }, f"the decision must read only the event and separate decision-record path: {env}"
     before = [str(step.get("uses", "")).split("@", 1)[0] for step in steps[:index]]
     assert before == ["actions/checkout", "astral-sh/setup-uv"], (
         "only the checkout and uv may precede the decision, so a skipped run "
@@ -127,18 +131,33 @@ def test_every_later_step_is_conditioned_on_the_decision(
 ) -> None:
     """Require the exact decision condition on every step after it.
 
-    A later step without it runs its work on a skipped pull request; a step
-    with any other condition may skip on a push to `main`, where the proofs
-    must always run. The presence half requires the harness step itself, so
-    that deleting it cannot satisfy the condition check vacuously.
+    A later proof step without it runs its work on a skipped pull request; a
+    step with any other condition may skip on a push to `main`, where the
+    proofs must always run. Only the end mark adds `!cancelled()` so a failed
+    proof still gets a duration. The presence half requires the harness step
+    itself, so deleting it cannot satisfy the condition check vacuously.
     """
     later = steps[_decision_index(steps) + 1 :]
-    assert any(step.get("run") == "make kani-ir" for step in later), (
+    trailing_names = tuple(str(step.get("name")) for step in later[-2:])
+    assert trailing_names == TRAILING_ALWAYS_STEPS, (
+        f"only the named finalizer and upload may follow proof work: {trailing_names}"
+    )
+    guarded = later[:-2]
+    assert any(step.get("run") == "make kani-ir" for step in guarded), (
         f"`{JOB}` must run `make kani-ir` after the decision"
     )
     unconditioned = [
-        step.get("name") for step in later if step.get("if") != PROOF_CONDITION
+        step.get("name")
+        for step in guarded
+        if step.get("name") != "Mark proof end" and step.get("if") != PROOF_CONDITION
     ]
     assert not unconditioned, (
         f"these `{JOB}` steps do not carry `if: {PROOF_CONDITION}`: {unconditioned}"
+    )
+    proof_end = next(step for step in guarded if step.get("name") == "Mark proof end")
+    assert proof_end.get("if") == "${{ " + PROOF_END_CONDITION + " }}", (
+        "the proof end mark must keep its scope guard after proof failure"
+    )
+    assert [step.get("if") for step in later[-2:]] == ["always()", "always()"], (
+        "the two metrics delivery steps must run unconditionally after proof work"
     )

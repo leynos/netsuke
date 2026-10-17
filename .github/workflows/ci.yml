@@ -481,6 +481,7 @@ jobs:
         id: scope
         env:
           INPUT_EVENT_NAME: ${{ github.event_name }}
+          INPUT_METRICS_FILE: ${{ runner.temp }}/kani-smoke-metrics/decision.json
         run: uv run --script scripts/kani_proof_scope.py
       - name: Restore Kani payloads
         id: kani_cache
@@ -599,10 +600,33 @@ jobs:
         # per-user systemd manager into a failure instead of a skip -- a lane
         # that skipped every scenario would otherwise read as green.
         run: make test-kani-scope-wrapper
+      - name: Mark proof start
+        if: steps.scope.outputs.run-proofs == 'true'
+        env:
+          INPUT_STATE_DIRECTORY: ${{ runner.temp }}/kani-smoke-metrics
+        run: >-
+          uv run --script scripts/kani_smoke_metrics.py mark-start 2>/dev/null ||
+          printf '%s\n' '::warning::Kani proof timing mark could not be recorded.'
       - name: Run Kani harnesses
+        id: proofs
         if: steps.scope.outputs.run-proofs == 'true'
         run: make kani-ir
+      - name: Mark proof end
+        id: proof_end
+        # Preserve the proof duration after a failed harness while leaving
+        # cancellation free to terminate the job without starting more work.
+        if: ${{ !cancelled() && steps.scope.outputs.run-proofs == 'true' }}
+        env:
+          INPUT_STATE_DIRECTORY: ${{ runner.temp }}/kani-smoke-metrics
+        run: |
+          if uv run --script scripts/kani_smoke_metrics.py mark-end 2>/dev/null; then
+            printf '%s\n' 'recorded=true' >> "$GITHUB_OUTPUT"
+          else
+            printf '%s\n' 'recorded=false' >> "$GITHUB_OUTPUT"
+            printf '%s\n' '::warning::Kani proof timing mark could not be recorded.'
+          fi
       - name: Mutation patch compile gate
+        id: mutations
         if: steps.scope.outputs.run-proofs == 'true'
         # Applies each patch under docs/verification/mutations/ and compiles the
         # patched tree under `-D warnings`. `#[ignore]`-gated and run from its
@@ -640,3 +664,28 @@ jobs:
           mode: save
           runner-image: ${{ env.NETSUKE_RUNNER_IMAGE }}
           kani-hit: ${{ steps.kani_cache.outputs.cache-hit }}
+      - name: Finalize Kani metrics
+        if: always()
+        env:
+          INPUT_EVENT_NAME: ${{ github.event_name }}
+          INPUT_JOB_STATUS: ${{ job.status }}
+          INPUT_SCOPE_OUTCOME: ${{ steps.scope.outcome }}
+          INPUT_RUN_PROOFS: ${{ steps.scope.outputs.run-proofs }}
+          INPUT_CACHE_OUTCOME: ${{ steps.kani_cache.outcome }}
+          INPUT_CACHE_HIT: ${{ steps.kani_cache.outputs.cache-hit }}
+          INPUT_PROOFS_OUTCOME: ${{ steps.proofs.outcome }}
+          INPUT_MUTATIONS_OUTCOME: ${{ steps.mutations.outcome }}
+          INPUT_END_MARK_RECORDED: ${{ steps.proof_end.outputs.recorded }}
+          INPUT_END_MARK_OUTCOME: ${{ steps.proof_end.outcome }}
+          INPUT_STATE_DIRECTORY: ${{ runner.temp }}/kani-smoke-metrics
+          INPUT_DECISION_FILE: ${{ runner.temp }}/kani-smoke-metrics/decision.json
+          INPUT_METRICS_FILE: ${{ runner.temp }}/kani-smoke-metrics/metrics.jsonl
+        run: uv run --script scripts/kani_smoke_metrics.py finalize
+      - name: Upload Kani metrics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: kani-smoke-metrics-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/kani-smoke-metrics/metrics.jsonl
+          retention-days: 30
+          if-no-files-found: error

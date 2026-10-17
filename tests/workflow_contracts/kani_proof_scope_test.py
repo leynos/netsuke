@@ -40,6 +40,7 @@ REQUIRED_INFRASTRUCTURE = (
     "docs/verification/mutations/",  # the patches the mutation gate compiles
     "rust-toolchain.toml",  # the toolchain pin
     "scripts/kani_proof_scope.py",  # the decision itself
+    "scripts/kani_smoke_metrics.py",  # timing marks and retained metrics
     "tests/kani_mutation_evidence_tests.rs",  # the mutation compile gate
     "tests/kani_mutation_evidence_tests/",  # its modules
     "tests/kani_scope_wrapper_e2e_tests.rs",  # the scope wrapper's own suite
