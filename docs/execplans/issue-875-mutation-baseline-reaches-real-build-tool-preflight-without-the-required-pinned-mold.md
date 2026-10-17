@@ -1248,6 +1248,37 @@ the last entry of this section rather than recited here.
   guess. It precedes the file's own mtime (`17:41:10 +0200`, i.e. `15:41:10Z`)
   by ten seconds, because setting the label is itself a write.
 
+- [x] (2026-10-17 16:05Z) **`927da59e`, the head carrying the provenance
+  corrections, is green on all three workflows, so the correction is itself
+  covered by the suite that reads it.** The three workflows bound to
+  `927da59ec363086a24f051041aa841f3092020e7` each concluded `completed success`
+  on attempt 1: `CI` `39046361009` (five jobs all `success`; `build-test`
+  15:44:40Z–16:02:25Z), `Netsukefile Build Test` `39046360928`, and
+  `Release Dry Run` `39046360989` (11 jobs: 9 `success`, and `publish-release`
+  and `windows-native-recipe-smoke` `skipped` by design). The delta from
+  `6558fd1f` is this document alone (`git diff --name-only 6558fd1f 927da59e`
+  names one file), and this document is read at test time by
+  `tests/execplan_status_contract_tests.rs`, so the `build-test` pass is the
+  remote check that the amended entries did not break the header contract.
+
+  **Locally, before the push,** `make check-fmt` (exit 0,
+  `181 files left unchanged`), `make markdownlint` with its `spelling`
+  prerequisite (exit 0, `Linting: 181 files`, `0 issues in 0 files`) and the
+  contract target itself
+  (`cargo nextest run --test execplan_status_contract_tests --all-features`,
+  `9 tests run: 9 passed, 0 skipped`) all ran sequentially on this content. The
+  full eight-gate set was **not** re-run for a Markdown-only delta whose only
+  consumer is the contract target just run; that omission is stated rather than
+  glossed, and the earlier eight-gate verdicts stand for the revisions they
+  were taken on.
+
+  One operational note for anyone repeating this: the earlier attempt to patch
+  the pull request description with `gh api … -f body=@/tmp/file` wrote the
+  literal string `@/tmp/file` as the body, because the `-f` flag does not
+  perform `@` file substitution. The body was replaced correctly by passing a
+  JSON payload built in Python to `gh api --input -`, and the result read back
+  afterwards. A 26-byte body is the tell.
+
 ## Surprises & discoveries
 
 Unexpected findings during implementation that were not anticipated as risks.
