@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Às aonais cuspair, tha seo a' freagairt ri `--
 cli.help.actions_heading = Gnìomhan:
 cli.help.targets_heading = Targaidean:
 cli.help.targets.about = Dèan liosta de na targaidean agus na gnìomhan anns an fhoirm-liosta a chaidh a thaghadh.
+cli.help.targets.flag.edges.help = Cuir oirean eisimeileachd agus reasabaidhean amh ann an toradh JSON.
 cli.help.default_marker = bunaiteach
 cli.help.conditional_marker = cumhach
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Cha b' urrainnear am foirm-liosta a luchdachadh o
 runner.context.build_graph = Cha b' urrainnear graf a thogail on fhoirm-liosta.
 runner.context.generate_ninja = Cha b' urrainnear am foirm-liosta Ninja a dhèanamh.
 runner.context.render_graph = Cha b' urrainnear toradh a' ghraf a reandarachadh.
+runner.help.targets_edges_require_json = Feumaidh an roghainn --edges --json aig an ìre as àirde.
 
 runner.io.create_temp_file = Cha b' urrainnear am faidhle Ninja sealach a chruthachadh.
 runner.io.write_temp_ninja = Cha b' urrainnear sgrìobhadh don fhaidhle Ninja shealach.

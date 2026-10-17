@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Tanpa topik, ini sama dengan `--help`. Gunakan 
 cli.help.actions_heading = Tindakan:
 cli.help.targets_heading = Target:
 cli.help.targets.about = Mencetak target dan tindakan dalam berkas yang dipilih.
+cli.help.targets.flag.edges.help = Sertakan sisi dependensi dan resep mentah dalam keluaran JSON.
 cli.help.default_marker = bawaan
 cli.help.conditional_marker = bersyarat
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Manifes di { $path } tidak dapat dimuat.
 runner.context.build_graph = Graf tidak dapat dibangun dari manifes.
 runner.context.generate_ninja = Manifes Ninja tidak dapat dihasilkan.
 runner.context.render_graph = Artefak graf tidak dapat dirender.
+runner.help.targets_edges_require_json = Opsi --edges memerlukan --json pada tingkat teratas.
 
 runner.io.create_temp_file = Berkas Ninja sementara tidak dapat dibuat.
 runner.io.write_temp_ninja = Berkas Ninja sementara tidak dapat ditulis.

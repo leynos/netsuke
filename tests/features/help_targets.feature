@@ -15,3 +15,9 @@ Feature: Help targets subcommand
     Then the command should succeed
     And stdout should contain "Run tests with cargo-nextest"
     And stdout should contain "[◇ conditional]"
+
+  Scenario: Help targets can include the raw build graph
+    Given a Netsuke workspace with graph export edges
+    When the netsuke help targets graph export is run
+    Then the command should succeed
+    And the JSON help-target graph should contain raw recipes and edge kinds

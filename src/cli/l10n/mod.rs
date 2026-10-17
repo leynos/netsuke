@@ -1,7 +1,7 @@
 //! Keep Clap localization logic separate from core CLI definitions.
 
 use crate::localization::keys;
-use clap::Command;
+use clap::{Arg, Command};
 use ortho_config::{LocalizationArgs, Localizer};
 use std::ffi::OsString;
 
@@ -65,18 +65,22 @@ fn localize_arguments(
         let Some(key) = flag_help_key(arg_id, subcommand) else {
             return arg;
         };
-        if let Some(help) = arg
-            .get_help()
-            .map(|s: &clap::builder::StyledStr| s.to_string())
-        {
-            let message = localizer.message(key, None, &help);
-            return arg.help(message);
-        }
-        if let Some(message) = localizer.lookup(key, None) {
-            return arg.help(message);
-        }
-        arg
+        localize_argument(arg, localizer, key)
     })
+}
+
+/// Localize one flag using its source help as the message fallback.
+fn localize_argument(arg: Arg, localizer: &dyn Localizer, key: &'static str) -> Arg {
+    if let Some(help) = arg
+        .get_help()
+        .map(|s: &clap::builder::StyledStr| s.to_string())
+    {
+        return arg.help(localizer.message(key, None, &help));
+    }
+    match localizer.lookup(key, None) {
+        Some(message) => arg.help(message),
+        None => arg,
+    }
 }
 
 /// Localize a single help field, returning translated text when a key exists.
@@ -146,6 +150,11 @@ fn localize_help_topics(
                 .map(|s: &clap::builder::StyledStr| s.to_string()),
         ) {
             updated = updated.about(localized);
+        }
+        if matches!(known, Some(HelpTopicName::Targets)) {
+            updated = updated.mut_arg("edges", |arg| {
+                localize_argument(arg, localizer, keys::CLI_HELP_TARGETS_FLAG_EDGES_HELP)
+            });
         }
         *topic = updated;
     }

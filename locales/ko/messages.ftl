@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = 주제가 없으면 `--help`와 동일합니다
 cli.help.actions_heading = 작업:
 cli.help.targets_heading = 대상:
 cli.help.targets.about = 선택한 매니페스트의 대상 및 작업을 나열합니다.
+cli.help.targets.flag.edges.help = JSON 출력에 종속성 간선과 원본 레시피를 포함합니다.
 cli.help.default_marker = 기본값
 cli.help.conditional_marker = 조건부
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = { $path }의 매니페스트를 불러오지 못�
 runner.context.build_graph = 매니페스트로 그래프를 구성하지 못했습니다.
 runner.context.generate_ninja = Ninja 매니페스트를 생성하지 못했습니다.
 runner.context.render_graph = 그래프 산출물을 렌더링하지 못했습니다.
+runner.help.targets_edges_require_json = --edges 옵션을 사용하려면 최상위 수준에서 --json을 지정해야 합니다.
 
 runner.io.create_temp_file = 임시 Ninja 파일을 만들지 못했습니다.
 runner.io.write_temp_ninja = 임시 Ninja 파일에 쓰지 못했습니다.

@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Không có chủ đề, lệnh này tương ứ
 cli.help.actions_heading = Hành động:
 cli.help.targets_heading = Mục tiêu:
 cli.help.targets.about = Liệt kê mục tiêu và hành động trong tệp kê khai đã chọn.
+cli.help.targets.flag.edges.help = Đưa các cạnh phụ thuộc và công thức thô vào đầu ra JSON.
 cli.help.default_marker = mặc định
 cli.help.conditional_marker = có điều kiện
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Không nạp được tệp kê khai tại { $pat
 runner.context.build_graph = Không dựng được đồ thị từ tệp kê khai.
 runner.context.generate_ninja = Không tạo được tệp kê khai Ninja.
 runner.context.render_graph = Không kết xuất được sản phẩm đồ thị.
+runner.help.targets_edges_require_json = Tùy chọn --edges yêu cầu --json ở cấp cao nhất.
 
 runner.io.create_temp_file = Không tạo được tệp Ninja tạm.
 runner.io.write_temp_ninja = Không ghi được tệp Ninja tạm.

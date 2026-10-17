@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Heb bwnc, mae hyn yn cyfateb i `--help`. Defnyd
 cli.help.actions_heading = Gweithredoedd:
 cli.help.targets_heading = Targedau:
 cli.help.targets.about = Rhestru targedau a gweithredoedd yn y maniffest a ddewiswyd.
+cli.help.targets.flag.edges.help = Cynnwys ymylon dibyniaeth a ryseitiau crai yn allbwn JSON.
 cli.help.default_marker = diofyn
 cli.help.conditional_marker = amodol
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Methwyd â llwytho'r maniffest o { $path }.
 runner.context.build_graph = Methwyd â llunio graff o'r maniffest.
 runner.context.generate_ninja = Methwyd â chreu'r maniffest Ninja.
 runner.context.render_graph = Methwyd â rendro arteffact y graff.
+runner.help.targets_edges_require_json = Mae'r opsiwn --edges yn gofyn am --json ar y lefel uchaf.
 
 runner.io.create_temp_file = Methwyd â chreu'r ffeil Ninja dros dro.
 runner.io.write_temp_ninja = Methwyd ag ysgrifennu i'r ffeil Ninja dros dro.

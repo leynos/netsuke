@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = ללא נושא, זה תואם את `--help`. �
 cli.help.actions_heading = פעולות:
 cli.help.targets_heading = יעדים:
 cli.help.targets.about = הצגת רשימת היעדים והפעולות במניפסט שנבחר.
+cli.help.targets.flag.edges.help = כלילת קשתות תלות ומתכונים גולמיים בפלט JSON.
 cli.help.default_marker = ברירת מחדל
 cli.help.conditional_marker = מותנה
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = לא ניתן היה לטעון את המניפס
 runner.context.build_graph = לא ניתן היה לבנות גרף מהמניפסט.
 runner.context.generate_ninja = לא ניתן היה ליצור את מניפסט Ninja.
 runner.context.render_graph = לא ניתן היה לעבד את תוצר הגרף.
+runner.help.targets_edges_require_json = האפשרות --edges מחייבת --json ברמה העליונה.
 
 runner.io.create_temp_file = לא ניתן היה ליצור את קובץ Ninja הזמני.
 runner.io.write_temp_ninja = לא ניתן היה לכתוב לקובץ Ninja הזמני.

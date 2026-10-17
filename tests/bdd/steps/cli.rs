@@ -10,7 +10,7 @@ use crate::bdd::helpers::parse_store::store_parse_outcome;
 use crate::bdd::helpers::tokens::build_tokens;
 use crate::bdd::types::{CliArgs, ErrorFragment, JobCount, PathString, TargetName, UrlString};
 use anyhow::{Context, Result, bail};
-use netsuke::cli::{Cli, Commands, HelpTopic};
+use netsuke::cli::{Cli, Commands, HelpTargetsArgs, HelpTopic};
 use netsuke::cli_localization;
 use netsuke::locale_resolution;
 use rstest_bdd_macros::then;
@@ -201,7 +201,7 @@ fn the_command_is_help(world: &TestWorld) -> Result<()> {
 
 #[then]
 fn the_help_topic_is_targets(world: &TestWorld) -> Result<()> {
-    verify_help_topic(world, Some(&HelpTopic::Targets))
+    verify_help_topic(world, Some(&HelpTopic::Targets(HelpTargetsArgs::default())))
 }
 
 #[then]

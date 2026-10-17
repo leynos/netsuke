@@ -142,6 +142,28 @@ fn json_success_keeps_stdout_artefact_and_stderr_empty(
     Ok(())
 }
 
+/// A successful graph-bearing help query writes one JSON result and no stderr.
+#[rstest]
+fn json_success_help_targets_edges_keeps_stderr_empty(
+    temp_with_minimal_manifest: Result<TempDir>,
+) -> Result<()> {
+    let temp = temp_with_minimal_manifest?;
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .current_dir(temp.path())
+        .env("NETSUKE_NINJA", "/definitely-not-a-ninja-binary")
+        .args(["--json", "help", "targets", "--edges"])
+        .output()
+        .context("run help targets graph export with --json")?;
+    let document = parse_success_result(output, "help-targets")?;
+    ensure!(
+        document
+            .pointer("/result/graph/nodes")
+            .is_some_and(Value::is_array),
+        "help-targets success result should contain graph nodes: {document}"
+    );
+    Ok(())
+}
+
 /// A successful `--json build` emits exactly one build result document on
 /// stdout with empty stderr. A fake Ninja that exits cleanly stands in for the
 /// real build so the test stays deterministic.

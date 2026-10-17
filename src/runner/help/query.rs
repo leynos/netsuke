@@ -12,6 +12,7 @@ use crate::status::PipelineStage;
 use super::super::RunnerError;
 use super::super::generation;
 use super::super::path_helpers::{ensure_manifest_exists, resolve_manifest_path};
+use super::graph_json::GraphJson;
 use super::terminal_safe;
 
 /// One catalogue row: a single resolved target name with its metadata.
@@ -32,6 +33,8 @@ pub(super) struct HelpEntry {
 pub(super) struct HelpTargetsQuery {
     /// Catalogue rows in declaration order, actions first.
     pub(super) entries: Vec<HelpEntry>,
+    /// Optional graph projection from the same restricted manifest load.
+    pub(super) graph: Option<GraphJson>,
     /// Pipeline stages traversed while loading the manifest.
     pub(super) stages: Vec<PipelineStage>,
 }
@@ -60,11 +63,16 @@ impl StdError for HelpTargetsQueryFailure {
 /// Load, validate, and catalogue manifest discovery metadata without effects.
 pub(super) fn query_help_targets(
     cli: &Cli,
+    edges: bool,
 ) -> std::result::Result<HelpTargetsQuery, HelpTargetsQueryFailure> {
     let mut stages = Vec::new();
-    let result = query_entries(cli, &mut stages);
+    let result = query_entries(cli, edges, &mut stages);
     match result {
-        Ok(entries) => Ok(HelpTargetsQuery { entries, stages }),
+        Ok((entries, graph)) => Ok(HelpTargetsQuery {
+            entries,
+            graph,
+            stages,
+        }),
         Err(error) => Err(HelpTargetsQueryFailure { error, stages }),
     }
 }
@@ -78,7 +86,11 @@ pub(super) fn query_help_targets(
 ///
 /// Returns an error when the manifest cannot be resolved, loaded, rendered, or
 /// validated, or when a declared default names no catalogue entry.
-fn query_entries(cli: &Cli, stages: &mut Vec<PipelineStage>) -> Result<Vec<HelpEntry>> {
+fn query_entries(
+    cli: &Cli,
+    edges: bool,
+    stages: &mut Vec<PipelineStage>,
+) -> Result<(Vec<HelpEntry>, Option<GraphJson>)> {
     let manifest_path = resolve_manifest_path(cli)?;
     if let Err(error) = ensure_manifest_exists(cli, &manifest_path) {
         record_missing_manifest_stage(&error, stages);
@@ -89,6 +101,7 @@ fn query_entries(cli: &Cli, stages: &mut Vec<PipelineStage>) -> Result<Vec<HelpE
     reject_terminal_controls_in_target_names(&manifest)?;
     let entries = build_catalogue(&manifest);
     let defaults = manifest.defaults.clone();
+    let graph = edges.then(|| GraphJson::from_manifest(&manifest));
 
     // Building the IR validates every resolved entry (duplicate outputs,
     // missing rules, cycles) without generating Ninja or executing recipes.
@@ -99,7 +112,7 @@ fn query_entries(cli: &Cli, stages: &mut Vec<PipelineStage>) -> Result<Vec<HelpE
         .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
 
     validate_defaults(&defaults, &entries)?;
-    Ok(entries)
+    Ok((entries, graph))
 }
 
 /// Clone a manifest for graph validation without unresolved conditional entries.

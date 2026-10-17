@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Χωρίς θέμα, αυτό ταιριάζε�
 cli.help.actions_heading = Ενέργειες:
 cli.help.targets_heading = Στόχοι:
 cli.help.targets.about = Παράθεση στόχων και ενεργειών στο επιλεγμένο δηλωτικό.
+cli.help.targets.flag.edges.help = Συμπερίληψη ακμών εξαρτήσεων και ακατέργαστων συνταγών στην έξοδο JSON.
 cli.help.default_marker = προεπιλογή
 cli.help.conditional_marker = υπό όρους
 
@@ -101,6 +102,7 @@ runner.context.load_manifest = Δεν ήταν δυνατή η φόρτωση τ
 runner.context.build_graph = Δεν ήταν δυνατή η κατασκευή γραφήματος από το δηλωτικό.
 runner.context.generate_ninja = Δεν ήταν δυνατή η δημιουργία του δηλωτικού Ninja.
 runner.context.render_graph = Δεν ήταν δυνατή η απόδοση του τεχνουργήματος γραφήματος.
+runner.help.targets_edges_require_json = Η επιλογή --edges απαιτεί το --json στο ανώτατο επίπεδο.
 
 runner.io.create_temp_file = Δεν ήταν δυνατή η δημιουργία του προσωρινού αρχείου Ninja.
 runner.io.write_temp_ninja = Δεν ήταν δυνατή η εγγραφή του προσωρινού αρχείου Ninja.
