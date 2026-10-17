@@ -136,6 +136,35 @@ fn fell_back_from_another_language(
     locale.language.as_str() != locales::tag_language(locales::SOURCE_LOCALE)
 }
 
+/// Warn that a locale request did not parse and the source locale is used.
+fn warn_unparseable_locale_request(preferred: &str) {
+    tracing::warn!(
+        requested = preferred,
+        effective = locales::SOURCE_LOCALE,
+        reason = "unparseable",
+        "locale request did not parse; falling back to the source locale"
+    );
+}
+
+/// Warn that no catalogue exists for a parsed locale request.
+fn warn_unsupported_locale_request(preferred: &str) {
+    tracing::warn!(
+        requested = preferred,
+        effective = locales::SOURCE_LOCALE,
+        reason = "unsupported",
+        "no catalogue for the requested locale; falling back to the source locale"
+    );
+}
+
+/// Note the catalogue a resolved locale request landed on.
+fn debug_locale_catalogue_resolved(preferred: &str, effective: &str) {
+    tracing::debug!(
+        requested = preferred,
+        effective = effective,
+        "resolved locale catalogue"
+    );
+}
+
 /// Build a CLI localizer with an English fallback.
 ///
 /// `preferred_locale` is matched against the catalogue registry; unsupported or
@@ -173,12 +202,7 @@ pub fn build_localizer(preferred_locale: Option<&str>) -> Box<dyn Localizer> {
     let Some(locale) = parse_locale_identifier(preferred) else {
         // A request that cannot be honoured at all: warned, not debugged, so a
         // run that silently falls back to English says so without `--verbose`.
-        tracing::warn!(
-            requested = preferred,
-            effective = locales::SOURCE_LOCALE,
-            reason = "unparseable",
-            "locale request did not parse; falling back to the source locale"
-        );
+        warn_unparseable_locale_request(preferred);
         return fallback;
     };
 
@@ -186,21 +210,12 @@ pub fn build_localizer(preferred_locale: Option<&str>) -> Box<dyn Localizer> {
     if fell_back_from_another_language(&locale, catalogue) {
         // Asked for something specific and got English. That is the case a
         // user would report as a bug, so it has to be visible by default.
-        tracing::warn!(
-            requested = preferred,
-            effective = locales::SOURCE_LOCALE,
-            reason = "unsupported",
-            "no catalogue for the requested locale; falling back to the source locale"
-        );
+        warn_unsupported_locale_request(preferred);
         return fallback;
     }
     // A resolution that landed on a real catalogue is routine; the detail is
     // only wanted when tracing the choice.
-    tracing::debug!(
-        requested = preferred,
-        effective = catalogue.tag(),
-        "resolved locale catalogue"
-    );
+    debug_locale_catalogue_resolved(preferred, catalogue.tag());
     if catalogue.tag() == locales::SOURCE_LOCALE {
         return fallback;
     }

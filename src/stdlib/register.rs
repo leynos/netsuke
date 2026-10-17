@@ -85,6 +85,23 @@ pub fn register(env: &mut Environment<'_>) -> anyhow::Result<StdlibState> {
     )
 }
 
+/// Keep the bounded registration emitters below the module line cap.
+///
+/// The `#[path]` attribute is required rather than incidental: a plain
+/// `mod emitters;` would need `register/mod.rs`, which denies
+/// `clippy::self_named_module_files` beside this non-`mod.rs` parent, while
+/// naming the file `register_emitters.rs` beside this one forms a shared
+/// `register` prefix that the module-layout contract rejects. Pointing
+/// `#[path]` into the existing `register/` directory satisfies both, and
+/// leaves the module's path — and so every `super::` reference — unchanged.
+/// `query_helpers` above reaches the same directory the same way.
+#[path = "register/emitters.rs"]
+mod emitters;
+
+use emitters::{
+    debug_file_filters_registered_from_fields, debug_time_helpers_registered_from_fields,
+};
+
 /// Register stdlib helpers using an explicit configuration.
 ///
 /// This is intended for callers that have already derived a capability-scoped
@@ -117,18 +134,12 @@ pub fn register_with_config(
     let state = StdlibState::default();
     register_read_only_helpers(env, &config);
     let clock = config.clock().clone();
-    tracing::debug!(
-        clock_source = clock.source_label(),
-        "registered stdlib time helpers"
-    );
+    debug_time_helpers_registered_from_fields(clock.source_label());
     time::register_functions(env, clock);
     let impure = state.impure_flag();
     let (network_config, file_config, command_config) = config.into_components();
     network::register_functions(env, Arc::clone(&impure), network_config);
-    tracing::debug!(
-        file_max_read_bytes = file_config.max_read_bytes,
-        "registered stdlib file-reading filters"
-    );
+    debug_file_filters_registered_from_fields(file_config.max_read_bytes);
     command::register(env, impure, command_config);
     Ok(state)
 }

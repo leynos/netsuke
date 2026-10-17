@@ -116,6 +116,14 @@ pub(in crate::manifest) fn disabled_env_reader() -> EnvReader {
     Arc::new(|_| Err(EnvReadError::NotPresent))
 }
 
+/// Emit the bounded reason one manifest environment lookup failed.
+///
+/// The variable name is deliberately absent: it is manifest-controlled and
+/// routinely identifies a credential.
+fn debug_env_lookup_failed_from_fields(failure_kind: &'static str) {
+    tracing::debug!(failure_kind = failure_kind, "manifest env lookup failed");
+}
+
 /// Resolve `name` through `read_env`, substituting `fallback` for absence.
 ///
 /// The access policy is evaluated before the reader, so a blocked name fails
@@ -149,7 +157,7 @@ pub(in crate::manifest) fn env_var_with_default(
     read_env: impl FnOnce(&str) -> Result<String, EnvReadError>,
 ) -> Result<String, Error> {
     if policy.evaluate(name).is_err() {
-        tracing::debug!(failure_kind = "blocked", "manifest env lookup failed");
+        debug_env_lookup_failed_from_fields("blocked");
         return record_env_lookup(
             telemetry::OUTCOME_BLOCKED,
             Err(Error::new(
@@ -163,7 +171,7 @@ pub(in crate::manifest) fn env_var_with_default(
         Ok(value) => record_env_lookup(telemetry::OUTCOME_SUCCESS, Ok(value)),
         Err(EnvReadError::NotPresent) => substitute_fallback(fallback),
         Err(EnvReadError::NotUnicode) => {
-            tracing::debug!(failure_kind = "not_unicode", "manifest env lookup failed");
+            debug_env_lookup_failed_from_fields("not_unicode");
             record_env_lookup(
                 telemetry::OUTCOME_NOT_UNICODE,
                 Err(Error::new(
@@ -175,6 +183,18 @@ pub(in crate::manifest) fn env_var_with_default(
     }
 }
 
+/// Emit that a manifest environment lookup substituted the declared default.
+///
+/// Hoisted for the same reason as [`debug_env_lookup_failed_from_fields`]: the
+/// event is bounded, and keeping it out of the closure keeps the closure's
+/// cognitive complexity structural.
+fn debug_env_lookup_fallback_used() {
+    tracing::debug!(
+        fallback_used = true,
+        "manifest env lookup substituted default"
+    );
+}
+
 /// Resolve an absent variable against the supplied `fallback`.
 ///
 /// A fallback present means the lookup succeeded — the manifests asked for a
@@ -184,7 +204,7 @@ pub(in crate::manifest) fn env_var_with_default(
 fn substitute_fallback(fallback: Option<String>) -> Result<String, Error> {
     fallback.map_or_else(
         || {
-            tracing::debug!(failure_kind = "not_present", "manifest env lookup failed");
+            debug_env_lookup_failed_from_fields("not_present");
             record_env_lookup(
                 telemetry::OUTCOME_NOT_PRESENT,
                 Err(Error::new(
@@ -194,10 +214,7 @@ fn substitute_fallback(fallback: Option<String>) -> Result<String, Error> {
             )
         },
         |value| {
-            tracing::debug!(
-                fallback_used = true,
-                "manifest env lookup substituted default"
-            );
+            debug_env_lookup_fallback_used();
             record_env_lookup(telemetry::OUTCOME_SUCCESS, Ok(value))
         },
     )

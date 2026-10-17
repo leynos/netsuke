@@ -265,17 +265,22 @@ fn handle_ninja_tool(
 ///
 /// # Errors
 ///
+/// Note that a Ninja tool invocation is being prepared.
+fn info_ninja_tool_preparing_from_fields(subcommand: &str) {
+    info!(
+        target: "netsuke::subcommand",
+        subcommand,
+        "Preparing Ninja tool invocation"
+    );
+}
+
 /// Returns an error if manifest generation or Ninja execution fails.
 fn execute_ninja_tool(
     cli: &Cli,
     tool: NinjaToolSpec<'_>,
     context: &ExecutionContext<'_>,
 ) -> Result<()> {
-    info!(
-        target: "netsuke::subcommand",
-        subcommand = tool.name,
-        "Preparing Ninja tool invocation"
-    );
+    info_ninja_tool_preparing_from_fields(tool.name);
     let bundle = generate_ninja_with_shell(
         cli,
         context.reporter,

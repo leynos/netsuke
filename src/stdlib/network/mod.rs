@@ -86,6 +86,35 @@ fn fetch(
 
 /// Fetch a URL for the `fetch` template function, applying policy and optional caching.
 ///
+/// Note that the network policy allowed one fetch.
+fn debug_fetch_allowed_from_fields() {
+    tracing::debug!(
+        operation = "fetch",
+        policy_outcome = "allowed",
+        "network policy allowed fetch"
+    );
+}
+
+/// Note that the network policy rejected one fetch, with its bounded reason.
+fn debug_fetch_rejected_from_fields(policy_reason: &'static str) {
+    tracing::debug!(
+        operation = "fetch",
+        policy_outcome = "rejected",
+        policy_reason,
+        "network policy rejected fetch"
+    );
+}
+
+/// Note that one fetch was served from the cache.
+fn debug_fetch_cache_hit_from_fields(host: &str, key: &str) {
+    tracing::debug!(host, key = %key, "fetch cache hit");
+}
+
+/// Note that one fetch missed the cache and will go to the network.
+fn debug_fetch_cache_miss_from_fields(host: &str, key: &str) {
+    tracing::debug!(host, key = %key, "fetch cache miss");
+}
+
 /// # Errors
 ///
 /// Returns an error when the template arguments are invalid or unused, the URL
@@ -115,21 +144,12 @@ fn fetch_inner(
     match context.policy().evaluate(&parsed) {
         Ok(()) => {
             telemetry::record_policy_decision("allowed", "allowed");
-            tracing::debug!(
-                operation = "fetch",
-                policy_outcome = "allowed",
-                "network policy allowed fetch"
-            );
+            debug_fetch_allowed_from_fields();
         }
         Err(violation) => {
             let reason = network_policy_rejection_reason(&violation);
             telemetry::record_policy_decision("rejected", reason);
-            tracing::debug!(
-                operation = "fetch",
-                policy_outcome = "rejected",
-                policy_reason = reason,
-                "network policy rejected fetch"
-            );
+            debug_fetch_rejected_from_fields(reason);
             return Err(Error::new(
                 ErrorKind::InvalidOperation,
                 localization::message(keys::STDLIB_FETCH_DISALLOWED)
@@ -148,11 +168,11 @@ fn fetch_inner(
         // may carry userinfo, and the key already identifies the entry uniquely.
         let host = parsed.host_str().unwrap_or("");
         if let Some(cached) = read_cached(&dir, &key, limit)? {
-            tracing::debug!(host, key = %key, "fetch cache hit");
+            debug_fetch_cache_hit_from_fields(host, &key);
             impure.store(true, Ordering::Relaxed);
             cached
         } else {
-            tracing::debug!(host, key = %key, "fetch cache miss");
+            debug_fetch_cache_miss_from_fields(host, &key);
             let cache = CacheEntry::new(&dir, &key);
             fetch_remote_with_cache(&parsed, context, impure, &cache)?
         }

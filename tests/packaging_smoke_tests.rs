@@ -167,6 +167,21 @@ fn cargo_subprocess(cargo_binary: &OsStr, target_dir: &TempDir) -> Command {
     command
 }
 
+/// Note that the scripted `cargo publish --dry-run` finished.
+///
+/// The emitter exists because a `tracing` macro written inline counts against
+/// its enclosing function's cognitive complexity: the `log` feature, enabled
+/// transitively by a dev-dependency, expands every macro into extra branches.
+/// Hoisting keeps the test body structural.
+fn info_publish_dry_run_completed_from_fields(elapsed_seconds: f64) {
+    tracing::info!(elapsed_seconds, "cargo publish --dry-run completed");
+}
+
+/// Note that the scripted `cargo package --list` finished.
+fn info_package_list_completed_from_fields(elapsed_seconds: f64) {
+    tracing::info!(elapsed_seconds, "cargo package --list completed");
+}
+
 /// Verify that the published package retains required build-script sources.
 #[test]
 #[expect(
@@ -185,10 +200,7 @@ fn packaged_manifest_retains_build_script_sources() {
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .output()
             .unwrap_or_else(|error| panic!("run cargo publish --dry-run: {error}"));
-        tracing::info!(
-            elapsed_seconds = publish_started_at.elapsed().as_secs_f64(),
-            "cargo publish --dry-run completed"
-        );
+        info_publish_dry_run_completed_from_fields(publish_started_at.elapsed().as_secs_f64());
 
         assert!(
             publish_output.status.success(),
@@ -202,10 +214,7 @@ fn packaged_manifest_retains_build_script_sources() {
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .output()
             .unwrap_or_else(|error| panic!("run cargo package --list: {error}"));
-        tracing::info!(
-            elapsed_seconds = package_started_at.elapsed().as_secs_f64(),
-            "cargo package --list completed"
-        );
+        info_package_list_completed_from_fields(package_started_at.elapsed().as_secs_f64());
 
         assert!(
             list_output.status.success(),

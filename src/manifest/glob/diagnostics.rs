@@ -176,6 +176,27 @@ pub(in crate::manifest) fn expand_manifest_template_glob(
     result.map_err(GlobExpansionFailure::into_error)
 }
 
+/// Emit the bounded result of one completed template glob expansion.
+fn debug_template_expansion_completed_from_fields(base_mode: &'static str, outcome: &'static str) {
+    tracing::debug!(
+        operation = "manifest_template_glob_expansion",
+        base_mode,
+        outcome,
+        "manifest template glob expansion completed"
+    );
+}
+
+/// Emit the bounded result of one failed template glob expansion.
+fn debug_template_expansion_failed_from_fields(base_mode: &'static str, outcome: &'static str) {
+    tracing::debug!(
+        operation = "manifest_template_glob_expansion",
+        base_mode,
+        outcome,
+        error_category = "expansion_failure",
+        "manifest template glob expansion failed"
+    );
+}
+
 /// Record one completed or failed manifest-template glob expansion.
 fn record_template_expansion(
     result: &std::result::Result<GlobExpansion, GlobExpansionFailure>,
@@ -197,12 +218,7 @@ fn record_template_expansion(
                 "outcome" => outcome
             )
             .increment(1);
-            tracing::debug!(
-                operation = "manifest_template_glob_expansion",
-                base_mode,
-                outcome,
-                "manifest template glob expansion completed"
-            );
+            debug_template_expansion_completed_from_fields(base_mode, outcome);
             outcome
         }
         Err(failure) => {
@@ -213,13 +229,7 @@ fn record_template_expansion(
                 "outcome" => outcome
             )
             .increment(1);
-            tracing::debug!(
-                operation = "manifest_template_glob_expansion",
-                base_mode,
-                outcome,
-                error_category = "expansion_failure",
-                "manifest template glob expansion failed"
-            );
+            debug_template_expansion_failed_from_fields(base_mode, outcome);
             outcome
         }
     }
