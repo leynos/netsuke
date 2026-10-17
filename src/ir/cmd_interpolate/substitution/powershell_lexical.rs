@@ -2,6 +2,7 @@
 
 use super::super::{IrGenError, QuoteContext, find_substitution, invalid_command_error};
 use super::{MarkerProtection, SubstitutionTraversal};
+use crate::shell_word::{is_power_shell_double_quote, is_power_shell_single_quote};
 
 /// Group a PowerShell source offset with the character being traversed.
 ///
@@ -347,17 +348,8 @@ fn is_here_string_terminator(chars: &[char], pos: usize, quote: char) -> bool {
 
 /// Report whether `ch` is a typographic PowerShell string delimiter.
 const fn is_typographic_quote(ch: char) -> bool {
-    matches!(
-        ch,
-        '\u{2018}'
-            | '\u{2019}'
-            | '\u{201a}'
-            | '\u{201b}'
-            | '\u{201c}'
-            | '\u{201d}'
-            | '\u{201e}'
-            | '\u{201f}'
-    )
+    (is_power_shell_single_quote(ch) && ch != '\'')
+        || (is_power_shell_double_quote(ch) && ch != '"')
 }
 
 /// Report whether `pos` begins a Unix or Windows line break.

@@ -852,6 +852,11 @@ that [Recipe-text dialect telemetry](#recipe-text-dialect-telemetry) admits is
 exactly the `ShellDialect` spelling, so the surjection above is what keeps a
 build's quoting reachable from the telemetry vocabulary.
 
+PowerShell quote delimiter classification lives in `src/shell_word.rs`. The
+PowerShell interpolation scanner reuses these single- and double-quote
+predicates, so path escaping and fail-closed marker detection share one
+delimiter table.
+
 Attributed list failures emit the bounded tracing fields `command_list_action`
 (a fixed-width action fingerprint) and `command_list_entry` (the one-based
 entry index), plus the matching `command_list_failure` marker. The process
