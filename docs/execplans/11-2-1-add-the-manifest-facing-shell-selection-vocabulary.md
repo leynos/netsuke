@@ -5,14 +5,16 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: APPROVED
+Status: IN PROGRESS
 
-The user approved this plan on 2026-10-13 and authorized the prerequisite
-timeout repair on 2026-10-14. The fix is separated into
-[PR #913](https://github.com/leynos/netsuke/pull/913), which targets `main`.
-This PR targets that prerequisite. Feature implementation has not begun. Its
-26-file tolerance remains unchanged and applies to this PR's own diff,
-excluding the prerequisite repair.
+The user approved this plan on 2026-10-13 and resumed implementation on
+2026-10-17 after the rebase. Prerequisite [PR 913][timeout-pr] merged into
+`main` as `077cf366`; [PR 778][feature-pr] now targets `main`. EP-M1 is in
+progress. The 26-file tolerance applies to this feature diff and excludes the
+already merged prerequisite repair.
+
+[timeout-pr]: https://github.com/leynos/netsuke/pull/913
+[feature-pr]: https://github.com/leynos/netsuke/pull/778
 
 ## Purpose / big picture
 
@@ -85,9 +87,9 @@ These are hard invariants. Violating one requires escalation, not a workaround.
   resolution, `PATHEXT` normalization, and probing belong to 11.2.3. The only
   ambient input permitted is the compile-time target family (`cfg!(windows)`),
   read in exactly one function.
-- Keep `src/shell_selection/name.rs` free of `crate::` and `super::` imports;
-  it may import only `std`, `serde`, and `thiserror`, because 11.2.2 will need
-  to add it to the build-script slice (Decision D1).
+- Keep `src/shell_selection/name/mod.rs` free of `crate::` and `super::`
+  imports; it may import only `std`, `serde`, and `thiserror`, because 11.2.2
+  will need to add it to the build-script slice (Decision D1).
 - Preserve ADR-019 exactly: the four built-in names, their supported hosts,
   executables, resolution kinds, fixed arguments, the `true` host mapping (`sh`
   on Unix-like, `powershell` on Windows), and the `ShellName` grammar with the
@@ -112,11 +114,12 @@ These are hard invariants. Violating one requires escalation, not a workaround.
 
 ## Tolerances (exception triggers)
 
-Measure scope from this PR's prerequisite branch base, excluding the ExecPlan
-file itself. On 2026-10-14 the user directed the timeout repair into its own PR
-under #778; that independent prerequisite is excluded from the feature diff.
-The approval record remains `1747496f`, and the original combined candidate is
-preserved under `refs/recovery/timeout-stack-20261014/original-head`.
+Measure scope from frozen `077cf366`, the current remote target containing the
+prerequisite squash landing, excluding the ExecPlan file itself. On 2026-10-14
+the user directed the timeout repair into its own PR under #778; that
+independent prerequisite is excluded from the feature diff. The approval record
+remains `1747496f`, and the original combined candidate is preserved under
+`refs/recovery/timeout-stack-20261014/original-head`.
 
 - Scope: stop and escalate if implementation needs more than 26 changed files
   or more than 2,600 net added lines including tests, snapshots, and
@@ -180,10 +183,10 @@ preserved under `refs/recovery/timeout-stack-20261014/original-head`.
   the compile-time step validation that `#[scenario]` does, so a step typo
   surfaces only at run time. Severity: low. Likelihood: medium. Mitigation:
   pinned step patterns and a one-row spike first (EP-M2).
-- Risk: build-script slice. Task 11.2.2 must compile `name.rs` inside
+- Risk: build-script slice. Task 11.2.2 must compile `name/mod.rs` inside
   `build.rs`, where any unused inherent method becomes a dead-code error.
-  Severity: medium for 11.2.2. Likelihood: medium. Mitigation: `name.rs` stays
-  import-free and minimal (Decision D1), and the hand-off names the risk.
+  Severity: medium for 11.2.2. Likelihood: medium. Mitigation: `name/mod.rs`
+  stays import-free and minimal (Decision D1), and the hand-off names the risk.
 
 ## Progress
 
@@ -251,6 +254,17 @@ preserved under `refs/recovery/timeout-stack-20261014/original-head`.
   The fix targets `main`, and #778 targets the fix. The 34-file combined-scope
   proposal is withdrawn; the feature's own PR diff retains the 26-file and
   2,600-net-line tolerances. No shell vocabulary implementation is claimed.
+- [x] (2026-10-17) Rebased onto prerequisite squash landing `077cf366` and
+  published the clean pre-feature head `5b32a37f`. All baseline gates passed:
+  4,080 Nextest tests (six skipped), 136 doctests (32 ignored), typechecking,
+  lint, formatting, Markdown/spelling, Mermaid, and documentation coverage
+  98.89% (5,074/5,131). Logs: `/tmp/*-netsuke-shell-rebase-20261017.out`.
+- [ ] (2026-10-17) EP-M1 Red-Green evidence covers 91 cases, 15 doctests,
+  both sensitivity unions, and all three O7 negative controls. FULL5's code and
+  workflow gates plus FULL6's fresh Rust and documentation gates now pass on
+  byte-identical non-plan files: 4,171 Nextest passes (six skipped), 151
+  doctest passes (32 ignored), and documentation coverage 98.90%. Commit and
+  completed local review remain pending. No Red state is committed.
 - [ ] EP-M1: host family, built-in registry, and `ShellName` landed with
   tests.
 - [ ] EP-M2: `ShellSelection` codec, parity tests, properties, and behavioural
@@ -258,6 +272,22 @@ preserved under `refs/recovery/timeout-stack-20261014/original-head`.
 - [ ] EP-M3: documentation, roadmap entry marked done, plan `COMPLETE`.
 
 ## Surprises & discoveries
+
+- Observation (2026-10-17): Clippy requires `mod.rs` for the new modules with
+  child tests, beyond the workflow contract's prefix grouping. Production
+  owners therefore move to `name/mod.rs` and `built_in/mod.rs`, preserving
+  module identities, public signatures, and standalone name imports. Seven
+  additional test-style diagnostics are repaired without changing their checks.
+  Evidence: `/tmp/lint-netsuke-shell-m1-full1-20261017.out`.
+- Observation (2026-10-17): current-main timeout policy differs from the
+  historical repair measurements below: the module boundary has 720 seconds,
+  isolated compile/stub/package tests 900 seconds, and the CI whole run 960
+  seconds. The default remains 300 seconds. The fresh 4,080-test baseline
+  passed under that current policy; no historical budget is being restored.
+- Observation (2026-10-17): O4's prose miscounted the unchanged support matrix;
+  six of eight cells are true, two false. D6's old `Named("n")` example was
+  obsolete after D8 reserved `n`; `Named("null")` is the valid scalar-like
+  round-trip witness. Neither correction changes the approved contract.
 
 - Observation: the untouched-tree test baseline timed out in a nested Cargo
   fixture. Evidence: `tests/command_env_ui_tests.rs` gives
@@ -309,7 +339,8 @@ preserved under `refs/recovery/timeout-stack-20261014/original-head`.
 - Observation: `build.rs` recompiles a named slice of `src/cli/` and
   `src/host_pattern.rs`, and refuses module-wide dead-code suppression.
   Evidence: `build.rs`, lines 30 to 70. Impact: 11.2.2's `CliConfig` field will
-  pull `ShellName` into that slice, which shapes `name.rs` now (Decision D1).
+  pull `ShellName` into that slice, which shapes `name/mod.rs` now (Decision
+  D1).
 - Observation: Netsuke has no host-platform type; `cfg!(windows)` is used
   directly, and `RecipeShell::host_default` is only testable on Windows.
   Evidence: `src/recipe_shell.rs`; the injected-Boolean precedent is
@@ -339,6 +370,15 @@ preserved under `refs/recovery/timeout-stack-20261014/original-head`.
 
 ## Decision log
 
+- Implementation refinement (2026-10-17): use a `pub(super)` tuple field for
+  `ShellName` solely for the existing `From<BuiltInShell>` bridge and local
+  `parse` construction. No public unchecked constructor or spare inherent
+  method is added, and O2 exhaustively checks the finite unchecked names. This
+  completes D1/D3 without introducing a reverse dependency or future
+  build-script dead code. The initial interpretation that sibling test paths
+  needed comments alone was disproved by the executable layout contract; D12
+  records the corrective child-module layout.
+
 - Decision D1: place the vocabulary in a new feature module
   `src/shell_selection/`, exported as `pub mod shell_selection` from
   `src/lib.rs`, rather than in `src/ast/`, `src/ir/`, `src/cli/`, or a
@@ -355,18 +395,18 @@ preserved under `refs/recovery/timeout-stack-20261014/original-head`.
   vocabulary only; the 11.2.3 registry and resolver live in a sibling module
   (for example `src/shell_resolution/`) and take definitions, not `CliConfig`;
   `src/cli/` may depend on `src/shell_selection/`, never the reverse. Inside
-  the module, `built_in.rs` depends on `name.rs`, never the reverse, so
-  `From<BuiltInShell> for ShellName` lives in `built_in.rs`. `name.rs` imports
-  only `std`, `serde`, and `thiserror`, so 11.2.2 can add it to the
+  the module, `built_in/mod.rs` depends on `name/mod.rs`, never the reverse, so
+  `From<BuiltInShell> for ShellName` lives in `built_in/mod.rs`. `name/mod.rs`
+  imports only `std`, `serde`, and `thiserror`, so 11.2.2 can add it to the
   build-script slice by `#[path]` without dragging in the registry or the
   selector. Date/Author: 2026-09-24, planning agent; amended after design
   review.
 - Decision D2: model the host family as `HostFamily { UnixLike, Windows }`
   (`shell_selection::HostFamily`) and pass it into every host-dependent query.
   `HostFamily::current()` is the single `cfg!(windows)` read. `HostFamily`
-  lives in `built_in.rs`, beside its only consumer. Rationale: RFC 0011 section
-  11 requires host-independent table tests for every built-in and host rule,
-  which the `RecipeShell` pattern (`cfg!` inside `host_default`) cannot
+  lives in `built_in/mod.rs`, beside its only consumer. Rationale: RFC 0011
+  section 11 requires host-independent table tests for every built-in and host
+  rule, which the `RecipeShell` pattern (`cfg!` inside `host_default`) cannot
   provide. An enum rather than a Boolean follows AGENTS.md's newtype guidance,
   and the plan's glossary term "host family" gives the name. Non-Windows
   targets are Unix-like, matching `RecipeShell::host_default`. The target
@@ -456,7 +496,7 @@ preserved under `refs/recovery/timeout-stack-20261014/original-head`.
   is needed because `NetsukeManifest` derives it (`src/ast/mod.rs`) and because
   OrthoConfig merging in 11.2.2 goes through `serde_json::to_value`
   (`src/cli/merge/mod.rs`); `serde-saphyr`'s serializer quotes YAML 1.1 Boolean
-  spellings, so `Named("n")` round-trips. Date/Author: 2026-09-24, planning
+  spellings, so `Named("null")` round-trips. Date/Author: 2026-09-24, planning
   agent; rationale corrected after design review.
 - Decision D7: pin, but do not change, the front-end's YAML 1.1 Boolean
   coercion. Rationale: the coercion applies to every Boolean field in every
@@ -479,7 +519,7 @@ preserved under `refs/recovery/timeout-stack-20261014/original-head`.
   draft's hand-off to 11.2.2, which would have fixed only the configuration
   route and failed late. Upper-case and mixed-case spellings already fail the
   grammar, and no built-in name is reserved. The reserved list is a private
-  constant in `name.rs` that `parse` uses, so it adds no dead code to the
+  constant in `name/mod.rs` that `parse` uses, so it adds no dead code to the
   11.2.2 build-script slice; no public Boolean-spelling helper is added. `null`
   is deliberately not reserved: an unquoted `null` fails closed as an invalid
   type, so it cannot misroute. Deviation record: affects `ADR019-GRAMMAR`, O2,
@@ -527,6 +567,22 @@ preserved under `refs/recovery/timeout-stack-20261014/original-head`.
   The combined 34-file ceiling proposal is withdrawn. Date/Author: 2026-10-14,
   implementation supervisor; user-authorized stack separation.
 
+- Decision D12 (2026-10-17): place production modules in `name/mod.rs` and
+  `built_in/mod.rs`, with tests in their plain child-module directories. The
+  rebased-main workflow contract rejects repeated first prefixes even when a
+  `#[path]` rationale is documented. Add only the exact root exception
+  `{shell_selection/, shell_word.rs}` because public selection data and private
+  POSIX word tokenization are unrelated feature boundaries. Test exact-set
+  acceptance, added-member rejection, and stale missing-member rejection. The
+  parent accepted this mechanical layout refinement within the existing 26-file
+  and 2,600-net-line ceilings. No dependency, public signature, production
+  ownership, or ADR contract changes. Run workflow contracts at each applicable
+  full milestone gate. The Rust test and snapshot module identities remain
+  unchanged; only source paths and snapshot source metadata move. The first
+  full Clippy gate also requires `mod.rs` for modules with children, so the
+  production owners move into those directories. `name/mod.rs` keeps its
+  standalone imports and future build-script role; no public API changes.
+
 ## Outcomes & retrospective
 
 The timeout repair clears the pre-feature test baseline and belongs to the
@@ -539,10 +595,18 @@ boundary took 151.141 seconds and packaging took 167.123 seconds. The debugging
 plan and prerequisite PR retain the detailed evidence and review state.
 
 The earlier combined candidate passed 3,370 Nextest tests and 39 doctests;
-these are historical results, distinct from the prerequisite's fresh run. No
-shell vocabulary implementation has started, and roadmap 11.2.1 remains open.
-The combined file-count blocker is resolved by separating the two PR scopes;
-the feature's exclusive diff retains its approved limits.
+these are historical results, distinct from the prerequisite's fresh run. That
+historical candidate contained no shell vocabulary. EP-M1 now implements the
+host family, fixed built-in registry, and validated names, with two complete
+Red passes, focused Green, and three meaningful negative controls. All required
+pre-commit gates pass using FULL5 and FULL6 receipts on unchanged non-plan
+files. FULL6 passed 4,171 Nextest tests (six skipped) and 151 doctests (32
+ignored), including the unchanged fixture that timed out in FULL5. These
+results do not establish the exact historical timeout cause or imply a source
+repair. Commit and completed local assessment remain pending. Roadmap 11.2.1
+and EP-M1 acceptance remain open. The combined file-count blocker is resolved
+by separating the two PR scopes; the feature's exclusive diff retains its
+approved limits.
 
 The original untouched-tree run is retained as historical evidence. Its clean
 Git environment run passed `make check-fmt`, `make typecheck`, `make lint`, and
@@ -559,9 +623,9 @@ not turn that original red run into a pass.
 On completion, record here the delivered API, the gate results, and these
 hand-offs:
 
-- to 11.2.2: add `src/shell_selection/name.rs` to the build-script slice by
+- to 11.2.2: add `src/shell_selection/name/mod.rs` to the build-script slice by
   `#[path]`, as `host_pattern` is, and confirm no inherent method is dead
-  there; place the reserved-name check where it does not pull `built_in.rs`
+  there; place the reserved-name check where it does not pull `built_in/mod.rs`
   into the slice; localize `ShellNameError` inside `ShellName`'s `Deserialize`
   implementation, naming the configuration key and definition index. Configured
   names inherit the reserved YAML 1.1 Boolean spellings from `ShellName`
@@ -606,7 +670,7 @@ Netsukefile) into a Ninja build file. The crate is both a library
   manifest enum with a documented YAML example. It shows the AST-to-IR
   boundary: the IR owns a separate value and converts from the AST value in
   `src/ir/from_manifest.rs`.
-- `src/host_pattern.rs` holds `HostPattern`, the best precedent for a validated
+- `src/host/pattern.rs` holds `HostPattern`, the best precedent for a validated
   string newtype: `parse` with a `# Errors` section, `TryFrom<&str>`,
   `TryFrom<String>`, `FromStr`, and a `Deserialize` that reads a `String` and
   maps a parse error with `serde::de::Error::custom`.
@@ -662,7 +726,15 @@ execution, so the three-way selector is Netsuke-specific.
 
 ## Conformance basis
 
-Upstream artefacts, at the revision on `main` at commit `dcac7634`:
+The original design basis was `dcac7634`. Implementation resumes against the
+frozen remote target `077cf366` after rebase to `5b32a37f`. Current-main
+orientation changes are mechanical: `HostPattern` is in `src/host/pattern.rs`
+and re-exported as `crate::host_pattern`; the new public module precedes private
+`shell_word` in `src/lib.rs`. Owned tests now use plain child modules to
+satisfy current-main's executable layout contract; production filenames and
+Rust module identities are unchanged.
+
+Upstream artefacts, rechecked against `077cf366`:
 
 - `docs/roadmap.md` task 11.2.1 (and its successors 11.2.2, 11.2.3, 11.2.4,
   and 11.3.1 for scope boundaries).
@@ -749,7 +821,7 @@ values is exactly `{sh, bash, pwsh, powershell}`.
 
 - Method: parameterized test plus a compile-time exhaustiveness guard; the
   domain has four elements, so enumeration is exhaustive.
-- Artefact: `src/shell_selection/built_in_tests.rs`,
+- Artefact: `src/shell_selection/built_in/tests.rs`,
   `built_in_names_are_exactly_the_adr_019_set` and `all_lists_every_variant`.
   The latter compares `ALL` with the handwritten list
   `[Sh, Bash, Pwsh, PowerShell]` and calls, for each element, a test helper
@@ -766,7 +838,7 @@ For every `b` in `ALL`, `ShellName::parse(b.name())` succeeds and equals
 
 - Method: parameterized test. `From<BuiltInShell> for ShellName` constructs
   without re-validation; this lemma justifies that.
-- Artefact: `built_in_tests.rs`, `built_in_names_satisfy_the_grammar`.
+- Artefact: `built_in/tests.rs`, `built_in_names_satisfy_the_grammar`.
 - Non-vacuity: a misspelt name such as `Bash` in `name()` fails the parse.
 
 #### O3: lookup round trip and exclusivity
@@ -779,8 +851,8 @@ For every `b` in `ALL`, `ShellName::parse(b.name())` succeeds and equals
 - Domain: generated valid names from the grammar, filtered to exclude the four
   built-in names (the filter rejects about one sample in 62,000, driven by
   `sh`), plus explicit rows `dash`, `zsh`, `cmd`, `sh2`, `shh`, and `bashx`.
-- Artefact: `built_in_tests.rs` and
-  `src/shell_selection/name_property_tests.rs`,
+- Artefact: `built_in/tests.rs` and
+  `src/shell_selection/name/property_tests.rs`,
   `lookup_is_none_for_non_built_in_names`.
 - Non-vacuity: `dash` is a mandatory witness named by the roadmap. A `lookup`
   that matches on prefix fails the `sh2` and `bashx` rows.
@@ -793,12 +865,12 @@ The support matrix is exactly `sh` on Unix-like only; `bash` and `pwsh` on both;
 for both hosts.
 
 - Method: parameterized 4-by-2 truth table and an `insta` snapshot.
-- Artefact: `built_in_tests.rs`, `support_matrix`, `host_default_*`, and
+- Artefact: `built_in/tests.rs`, `support_matrix`, `host_default_*`, and
   snapshot `built_in_registry_table`, which renders every row of Table 1 (name,
   hosts, executable kind and value, fixed arguments) from code. It is stored at
   `src/snapshots/shell_selection/netsuke__shell_selection__built_in__tests__built_in_registry_table.snap`
   through `snapshot_settings("shell_selection").bind(…)`.
-- Non-vacuity: all eight cells are asserted, four true and four false.
+- Non-vacuity: all eight cells are asserted, six true and two false.
   Flipping any cell fails exactly one case.
 
 #### O5: fixed invocations
@@ -814,7 +886,7 @@ and `MAIN_SEPARATOR`, whose answers differ on Windows.
 
 - Method: parameterized test with `pretty_assertions::assert_eq` on whole
   slices.
-- Artefact: `built_in_tests.rs`, `fixed_invocations` and
+- Artefact: `built_in/tests.rs`, `fixed_invocations` and
   `invocation_shapes_are_well_formed`.
 - Non-vacuity: argument order is asserted, so swapping `--norc` and
   `--noprofile` fails.
@@ -825,7 +897,7 @@ On the compiling host, `HostFamily::current() == HostFamily::Windows` if and
 only if `RecipeShell::host_default() == RecipeShell::PowerShell`.
 
 - Method: named unit test on every CI platform.
-- Artefact: `built_in_tests.rs`,
+- Artefact: `built_in/tests.rs`,
   `current_host_agrees_with_legacy_recipe_default`.
 - Non-vacuity: both sides read `cfg!(windows)`, so this is an alignment
   tripwire against a future change to either default rather than independent
@@ -854,8 +926,8 @@ Boolean spellings, and on success `as_str() == s`.
      reserved words;
   3. printable ASCII strings of length 0 to 70; and
   4. arbitrary Unicode strings.
-- Artefact: `name_property_tests.rs`, `parse_agrees_with_regex_oracle`, and
-  boundary cases in `src/shell_selection/name_tests.rs`: empty; lengths 1, 63,
+- Artefact: `name/property_tests.rs`, `parse_agrees_with_regex_oracle`, and
+  boundary cases in `src/shell_selection/name/tests.rs`: empty; lengths 1, 63,
   and 64; each forbidden first character; `dash`, `/bin/bash`, `bash.exe`,
   `C:\Windows\System32\bash.exe`, `{{ shell }}`, `bash` with a leading space,
   and `Bash`; each of the eight reserved words (rejected); and near neighbours
@@ -892,7 +964,7 @@ serialize-then-deserialize return `n`, for every valid `n`.
 - Method: property test, plus explicit rows for `null`, `nan`, `inf`, `yess`,
   and `no-op`: valid names that sampling reaches rarely and that a YAML
   serializer might leave unquoted and a parser might then infer as another type.
-- Artefact: `name_property_tests.rs`, `name_round_trips` and
+- Artefact: `name/property_tests.rs`, `name_round_trips` and
   `scalar_like_names_round_trip`.
 - Non-vacuity: the generator is O7's valid-name strategy, whose acceptance is
   established there; the explicit rows fail if the serializer stops quoting.
@@ -909,8 +981,8 @@ numbers, arrays, objects).
 - Domain: a recursive `Value` strategy of depth at most 2 covering all six
   kinds, with strings drawn from O7's generators and numbers from `i64` and
   finite `f64` ranges (`Number::from_f64` rejects NaN and infinities).
-- Artefact: `src/shell_selection/selection_tests.rs` (`decodes_*`,
-  `rejects_*`) and `selection_property_tests.rs`,
+- Artefact: `src/shell_selection/selection/tests.rs` (`decodes_*`,
+  `rejects_*`) and `selection/property_tests.rs`,
   `decoding_is_ok_exactly_for_booleans_and_valid_names`.
 - Non-vacuity: the property compares against an oracle computed independently
   from the value's kind and the regex, and a deterministic companion (as in O7)
@@ -923,7 +995,7 @@ numbers, arrays, objects).
 `serde-saphyr`.
 
 - Method: property test plus O8's explicit scalar-like names wrapped in `Named`.
-- Artefact: `selection_property_tests.rs`, `selection_round_trips`.
+- Artefact: `selection/property_tests.rs`, `selection_round_trips`.
 - Non-vacuity: the generator produces all three variants, which the
   deterministic companion asserts.
 
@@ -942,7 +1014,7 @@ default. The test uses `serde_json::Value` directly, not
   result for each path; where the paths agree the row asserts parity, and where
   they differ the row pins both and the difference is recorded under
   `Surprises & discoveries` without any production change.
-- Artefact: `selection_tests.rs`, `front_end_parity`.
+- Artefact: `selection/tests.rs`, `front_end_parity`.
 - Rows:
 
   | Input                                                                           | Expected result                |
@@ -966,6 +1038,13 @@ default. The test uses `serde_json::Value` directly, not
   (expected to fail at stage one), and `.inf` (expected to fail at stage one).
 - Non-vacuity: every row is a witness with a concrete expected value, and both
   paths run the real crates (AXIOM-1, AXIOM-2).
+- Observable substitute (2026-10-17): a row demonstrably rejected at stage one
+  by the external YAML parser cannot reach either repository-owned visitor
+  stub. Such parser-only characterization rows may pass both Red runs; record
+  their exact stage-one failures independently instead of adding unrelated
+  assertions to manufacture sensitivity. Every repository-owned codec row still
+  requires a meaningful Red failure. This distinction applies to `!!bool true`
+  and `.inf` if confirmed against the real crate.
 
 #### O12: stable error and `expecting` text
 
@@ -974,7 +1053,7 @@ number are pinned.
 
 - Method: `insta` snapshot, because error wording is multivariant output whose
   consistency matters to later consumers (Decision D5).
-- Artefact: `selection_tests.rs`, `error_texts`, stored under
+- Artefact: `selection/tests.rs`, `error_texts`, stored under
   `src/snapshots/shell_selection/`.
 - Non-vacuity: the snapshot contains one line per variant, including
   `ReservedWord`, plus the `expected a Boolean or a shell name` text, so a
@@ -983,7 +1062,7 @@ number are pinned.
 #### O13: no execution change
 
 No file outside the permitted set in `Constraints` changes; `ShellSelection` is
-absent from `src/ir/` and `src/ninja_gen/`; `name.rs` has no `crate::` or
+absent from `src/ir/` and `src/ninja_gen/`; `name/mod.rs` has no `crate::` or
 `super::` import; and the full existing suite passes.
 
 - Method: the scope and import checks in `Concrete steps`, and `make test`.
@@ -1016,15 +1095,14 @@ present the repaired baseline as the original untouched run.
 File layout under `src/shell_selection/`:
 
 - `mod.rs`: module comment, `mod` declarations, and `pub use` lines.
-- `name.rs`: `ShellName` and `ShellNameError`; declares
-  `#[cfg(test)] #[path = "name_tests.rs"] mod tests;` and
-  `#[cfg(test)] #[path = "name_property_tests.rs"] mod property_tests;`.
-- `built_in.rs`: `HostFamily`, `BuiltInExecutable`, `BuiltInShell`, and
-  `From<BuiltInShell> for ShellName`; declares
-  `#[cfg(test)] #[path = "built_in_tests.rs"] mod tests;`.
+- `name/mod.rs`: `ShellName` and `ShellNameError`; declares plain test-gated
+  `mod tests;` and `pub(super) mod property_tests;`, with sources under `name/`.
+- `built_in/mod.rs`: `HostFamily`, `BuiltInExecutable`, `BuiltInShell`, and
+  `From<BuiltInShell> for ShellName`; declares test-gated `mod tests;`, with
+  source `built_in/tests.rs`.
 
-Add `pub mod shell_selection;` to `src/lib.rs` between `pub mod runner;` and the
-`#[cfg(test)] mod snapshot_test_support;` declaration, keeping alphabetical
+Add `pub mod shell_selection;` to `src/lib.rs` immediately after
+`pub mod runner;` and before private `mod shell_word;`, keeping alphabetical
 order.
 
 Red, first pass (reject-everything stubs): write the tests for obligations O1
@@ -1070,9 +1148,9 @@ focused tests, then the gates. Commit.
 
 ### EP-M2: selection codec and behaviour
 
-Add `src/shell_selection/selection.rs` (`ShellSelection`, its `Serialize`, and
-its visitor) with sibling `selection_tests.rs` and
-`selection_property_tests.rs`, declared by `#[path]` as in EP-M1.
+Add `src/shell_selection/selection/mod.rs` (`ShellSelection`, its `Serialize`,
+and its visitor) with child modules `selection/tests.rs` and
+`selection/property_tests.rs`, declared with plain test-gated `mod` as in EP-M1.
 
 Spike: before writing the whole feature, add only the first outline with one
 Examples row and its step module, run the behavioural command in
@@ -1174,7 +1252,7 @@ Markdown edit, then the Markdown gates and the full gates. Commit.
   with doctests, unit tests, the registry snapshot, and grammar properties.
   Requirements: `RM-11.2.1-A`, `-B`, `-C`, `-E`; `ADR019-T1`, `ADR019-GRAMMAR`.
   Acceptance: obligations O1 to O8 pass; gates green. Conformance check: Table
-  1 unchanged; no file outside the permitted set touched; `name.rs` has no
+  1 unchanged; no file outside the permitted set touched; `name/mod.rs` has no
   `crate::` or `super::` import; no dependency added; `HostFamily` scope
   recorded; trace links current. Recovery: revert the milestone commit to
   return to the baseline. Remaining gaps: the selection codec. Compatibility
@@ -1212,6 +1290,7 @@ make typecheck 2>&1 | tee "/tmp/typecheck-netsuke-${BRANCH}.out"
 make lint 2>&1 | tee "/tmp/lint-netsuke-${BRANCH}.out"
 make doc-coverage 2>&1 | tee "/tmp/doc-coverage-netsuke-${BRANCH}.out"
 make test 2>&1 | tee "/tmp/test-netsuke-${BRANCH}.out"
+make test-workflow-contracts 2>&1 | tee "/tmp/workflow-contracts-netsuke-${BRANCH}.out"
 ```
 
 Each ends with exit status zero. `make test` prints a nextest summary line of
@@ -1260,7 +1339,7 @@ Scope and boundary checks before each milestone commit:
 
 ```bash
 git --no-pager diff --no-ext-diff --stat HEAD
-rg -n 'use (crate|super)::' src/shell_selection/name.rs
+rg -n 'use (crate|super)::' src/shell_selection/name/mod.rs
 rg -n 'ShellSelection' src/ir src/ninja_gen src/ast
 ```
 
@@ -1269,8 +1348,9 @@ files under `src/snapshots/shell_selection/`, `proptest-regressions/` (only if
 a failure was found and fixed),
 `tests/features/shell_selection_vocabulary.feature`,
 `tests/bdd/steps/shell_selection.rs`, `tests/bdd/steps/mod.rs`,
-`tests/bdd/fixtures/mod.rs`, and, in EP-M3, `docs/` files. Both `rg` commands
-print nothing.
+`tests/bdd/fixtures/mod.rs`, the exact-prefix layout contract
+`tests/workflow_contracts/rust_module_layout_test.py`, and `docs/` files. Both
+`rg` commands print nothing.
 
 Markdown gates after documentation edits:
 
@@ -1342,7 +1422,163 @@ unix-like default: sh
 windows default: powershell
 ```
 
-Red-Green-Refactor transcripts will be appended here during implementation.
+### EP-M1 Red evidence (2026-10-17)
+
+The reject-all candidate compiled successfully with all targets and features.
+The corrected focused Nextest run selected all 91 new cases: 21 passed and 70
+failed on assertions (exit 100), in
+`/tmp/test-netsuke-shell-m1-red1-corrected-20261017.out`. The complete case
+receipt is `/tmp/shell-m1-red1-corrected-cases-20261017.txt`. An earlier
+invocation accidentally included positional `.` and selected zero cases; that
+command-hand-off error supplies no Red evidence.
+
+The first registry snapshot failure was a missing snapshot, not a sensitivity
+check. Its deliberately wrong output was preserved privately, and the expected
+snapshot was independently populated from ADR-019 Table 1 for the second pass.
+The current-host doctest's original membership assertion was insensitive to
+coordinated stub changes; it now checks the meaningful O6 alignment with the
+legacy default. No production body changed in that refinement. Focused Red and
+Green doctest execution is required alongside Nextest before acceptance.
+
+The first focused doctest run compiled and executed 15 examples: 13 failed at
+runtime and two passed (`BuiltInShell::is_supported_on` and `ShellNameError`).
+Both passing examples must fail the accept-all second stub. Log:
+`/tmp/doctest-netsuke-shell-m1-red1-20261017.out` (exit 101; 121 unrelated
+examples filtered). The 70-byte precedence witness was mechanically changed from
+`"aB".repeat(35)` to `"aaB".repeat(23) + "a"` before Red2 to match the
+specified upper-case character at index 2. Its expected `TooLong` and its
+first-pass failure against `Empty` are unchanged.
+
+The second Nextest pass ran all 91 cases: 34 passed and 57 failed on assertions
+(exit 100), in `/tmp/test-netsuke-shell-m1-red2-20261017.out`. The union audit
+`/tmp/netsuke-shell-m1-red-union-20261017.json` confirms identical case sets,
+91/91 failures across the two passes, and no case passing both. The registry
+snapshot now failed against the independently reviewed normative table, proving
+sensitivity to the two unsupported-host cells. The second doctest pass had ten
+passes and five runtime failures; both first-pass survivors failed, giving
+15/15 examples a meaningful Red failure. Source relocation follows those
+receipts without changing test bodies or Rust module identities.
+
+The bounded layout regression ran against the empty prefix-exception table:
+eight tests ran, four passed, and four failed as expected (the live-tree check
+and all three new exact-exception cases). There were no collection errors. Log:
+`/tmp/test-netsuke-shell-m1-layout-red-20261017.out`. The correction adds only
+the exact `{shell_selection/, shell_word.rs}` exception and its disparate
+concern rationale; the checker implementation is unchanged. The same bounded
+suite must pass before restoring the Green Rust bodies.
+
+The same bounded layout suite passed all eight cases after the exact exception
+was added, with no checker implementation change. The source relocation and
+snapshot metadata update preserve the 91 Rust case identities and the normative
+registry contents. Green production bodies are now restored; focused Nextest
+and doctests run with ordinary proptest persistence before the three explicit
+O7 sensitivity mutations and full gates. Layout Green log:
+`/tmp/test-netsuke-shell-m1-layout-green-20261017.out`.
+
+The first Green compilation rejected the speculative `const` on `into_inner`
+with E0493: dropping the `ShellName` wrapper is not permitted in that constant
+function under the pinned toolchain. No tests executed. The method returns to
+its approved ordinary `pub fn` signature; no compiler feature, toolchain, or
+ownership workaround is needed. Log:
+`/tmp/test-netsuke-shell-m1-green-20261017.out`. Focused Green is retried only
+after this source correction, with ordinary persistence.
+
+Focused Green then passed all 91 Nextest cases and all 15 doctests with
+ordinary persistence, after removing the unsupported consuming-method `const`.
+Logs: `/tmp/test-netsuke-shell-m1-green2-20261017.out` and
+`/tmp/doctest-netsuke-shell-m1-green2-20261017.out`. The three explicit O7
+controls now mutate that freshly validated source one at a time and restore the
+full original file by SHA-256 before each next candidate. The first changes only
+`MAX_LEN` from 63 to 64 and must fail `error_precedence::case_04` because 64
+ASCII letters are incorrectly accepted instead of yielding `TooLong`.
+
+The length control compiled and failed its one selected case as predicted: 64
+ASCII letters produced `Ok` instead of `TooLong { length: 64 }`. Log:
+`/tmp/test-netsuke-shell-m1-control-length-20261017.out`. The complete Green
+file was restored and verified against its saved SHA-256. The next control
+changes only the first-character check from lower-case ASCII to alphabetic
+ASCII and must fail `error_precedence::case_05` by accepting `Bash` instead of
+returning `InvalidFirstCharacter`.
+
+The upper-case control compiled and failed its one selected case as predicted:
+`Bash` produced `Ok` instead of `InvalidFirstCharacter { character: 'B' }`. Log:
+`/tmp/test-netsuke-shell-m1-control-uppercase-20261017.out`. The complete
+Green file was restored and verified again. The final control removes only
+`true` from the reserved array (adjusting its array length mechanically), and
+must fail `rejects_reserved_words::case_1` because `true` is incorrectly
+accepted instead of yielding `ReservedWord`.
+
+The reserved-word control compiled and failed its one selected case as
+predicted: `true` produced `Ok` instead of `ReservedWord { word: "true" }`. Log:
+`/tmp/test-netsuke-shell-m1-control-reserved-20261017.out`. All three O7
+controls therefore failed for their intended reasons. The complete Green
+`name.rs` was restored byte-for-byte to SHA-256
+`96b81c6b46cd288312c8de60dc62f4bbe54872432f9b209391de187070156636`. There are
+no pending `.snap.new` files and no new proptest regression seeds; no actual
+Green property bug was found. O1 to O8 have focused passing evidence, the
+91-case and 15-doctest Red unions, the reviewed registry snapshot, and the
+three O7 negative controls. EP-M1 remains open pending all required gates,
+commit, and completed local review.
+
+The full-gate repair history is retained separately from the successful
+sub-gates. FULL1 failed on two owner-file layout diagnostics and seven
+test-style findings. Moving the owners into `built_in/mod.rs` and `name/mod.rs`
+preserves module identities and production bytes; rich comparisons, direct
+string writes, checked remainders, and fallible audit errors preserve the
+checks. FULL2 then needed an explicitly typed empty slice for that comparison
+(E0282); its focused case passed after the repair. FULL3 passed all Rust lint
+phases but failed Ruff on implicit string concatenation in the layout exception
+rationale. FULL4's front-loaded Python lint caught a 90-column continuation
+after parenthesization. Splitting that literal preserved its value. Logs:
+`/tmp/lint-netsuke-shell-m1-full1-20261017.out`,
+`/tmp/lint-netsuke-shell-m1-full2-20261017.out`,
+`/tmp/lint-netsuke-shell-m1-full3-20261017.out`, and
+`/tmp/lint-python-netsuke-shell-m1-full4-20261017.out`. Historical `name.rs`
+hashes above describe the unchanged production bytes before the file move.
+
+FULL5 passed `make fmt`, `make check-fmt`, the Python lint preflight, the
+complete `make lint` target, `make typecheck`, `make doc-coverage` (98.90%,
+5,143/5,200), and `make test-workflow-contracts` (1,320 passed, three skipped,
+plus 27 script tests). Its Ninja-required `make test` run passed all 91 new
+cases, but the full Nextest result was 4,152 passed, one timeout, and six
+skipped; 18 tests were not run.
+`command_env_ui_tests::ir_gen_error_public_api_fixture_compiles` timed out at
+300.009 seconds. The module-boundary check passed in 599.561 seconds within its
+existing 720-second policy. Doctests were not reached; Markdown and Mermaid
+checks did not run. Logs use `/tmp/*-netsuke-shell-m1-full5-20261017.out`.
+These partial results do not satisfy the full Rust gate.
+
+A bounded diagnostic first selected zero tests because its name included the
+binary namespace; exit 4 is not a passing result. The corrected exact-name
+invocation selected one test and passed in 270.883 seconds with the unchanged
+300-second policy. Observations of its own child process showed `cargo check`
+waiting behind a healthy full compiler pool at 82 and 254 seconds before
+fixture compilation. This supports resource contention but does not prove the
+exact historical timeout cause. No source, timeout, or admission policy
+changed. Evidence:
+`/tmp/test-netsuke-shell-m1-timeout-diagnostic2-20261017.out` and
+`/tmp/netsuke-shell-m1-timeout-diagnostic2-processes-20261017.out`. The first
+zero-selection log is
+`/tmp/test-netsuke-shell-m1-timeout-diagnostic1-20261017.out`. The diagnostic
+did not replace full validation.
+
+FULL6 then passed the fresh Ninja-required `make test`: 4,171 Nextest tests
+passed (six skipped), and 151 doctests passed (32 ignored). The previously
+timed out fixture passed in 49.730 seconds under its unchanged 300-second
+policy; packaging passed in 861.669 seconds within its existing 900-second
+policy. Formatting, format checks, Markdown/spelling, and Mermaid validation
+also passed. FULL5's aggregate lint, typecheck, documentation coverage, and
+workflow contract receipts remain applicable: all ten non-plan candidate files
+match `/tmp/netsuke-shell-m1-post-diagnostic-frozen-hashes-20261017.json`
+byte-for-byte. FULL6 logs use `/tmp/*-netsuke-shell-m1-full6-20261017.out`. All
+required pre-commit gates now have passing evidence. The final plan-only
+evidence update still requires documentation checks; milestone commit and
+completed local assessment remain pending, so EP-M1 is not closed.
+
+Intentional Red commands set `PROPTEST_DISABLE_FAILURE_PERSISTENCE=1` only in
+the child command environment, as documented by proptest 1.11.0's `Config`
+interface. Normal Green runs retain persistence. This prevents injected wrong
+stubs from creating spurious regression seeds; real failures remain persisted.
 
 ## Interfaces and dependencies
 
@@ -1353,7 +1589,7 @@ variant, `#[must_use]` where the Green checklist requires it, and doctests on
 public items.
 
 ```rust
-// src/shell_selection/built_in.rs
+// src/shell_selection/built_in/mod.rs
 
 /// The host family that decides built-in shell support.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1396,11 +1632,11 @@ impl BuiltInShell {
 }
 // Also: impl Display for BuiltInShell; impl From<BuiltInShell> for ShellName.
 
-// src/shell_selection/name.rs (imports only std, serde, thiserror)
+// src/shell_selection/name/mod.rs (imports only std, serde, thiserror)
 
 /// A validated shell registry name matching `[a-z][a-z0-9_-]{0,62}`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ShellName(String);
+pub struct ShellName(pub(super) String); // Only parse and built-in From construct it.
 
 impl ShellName {
     pub const MAX_LEN: usize = 63;
@@ -1429,7 +1665,7 @@ pub enum ShellNameError {
     ReservedWord { word: &'static str },
 }
 
-// src/shell_selection/selection.rs
+// src/shell_selection/selection/mod.rs
 
 /// The manifest author's shell intent for one structured command block.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -1493,3 +1729,41 @@ executable path belongs to 11.2.3, and the IR's `ResolvedShell` belongs to
   retained the original scope limits, and withdrew the combined 34-file ceiling
   proposal. Recorded fresh prerequisite validation separately from the original
   red baseline and earlier combined candidate.
+
+- 2026-10-17: resumed EP-M1 after a fully green rebased baseline. Refreshed
+  current-main provenance, module paths, timeout-policy distinction, private
+  construction ownership, and two mechanical specification examples. Feature
+  implementation remains data-only; focused Red evidence is pending.
+
+- 2026-10-17: recorded first-pass Nextest and doctest sensitivity, reviewed
+  the normative registry snapshot, and prepared the second accept-all stub.
+  Clarified the external-parser-only O11 sensitivity substitute; no parser or
+  selection contract changes are authorized by that clarification.
+
+- 2026-10-17: completed both Rust Red passes and the 91-case/15-doctest
+  sensitivity unions. Adopted child test directories and a bounded, exact
+  root-prefix exception to meet the rebased-main executable layout contract.
+  Focused Python regression Red/Green precedes restoration of Green Rust.
+
+- 2026-10-17: recorded focused M1 Green and all three negative controls,
+  restored the exact validated production source, and froze the candidate for
+  full code, workflow, and Markdown gates. EP-M1 remains open pending gates,
+  commit, and local review; EP-M2 and EP-M3 have not begun.
+
+- 2026-10-17: the first full Clippy gate exposed owner-file layout and seven
+  test-style errors. Moved the new production owners into their `mod.rs` files,
+  preserving module identities and standalone name imports. Replaced test-only
+  remainder operators, temporary formatting allocations, and assertions in the
+  fallible generator audit without changing its checks. Full candidate
+  validation is retried; no milestone is closed.
+
+- 2026-10-17: consolidated the actual FULL1–4 bounded lint repairs and
+  FULL5 partial gate results. Recorded the unchanged fixture timeout and its
+  passing, observed one-case diagnostic without claiming an established
+  historical cause or a full Rust pass. EP-M1 acceptance, commit, and review
+  remain open; production and test bytes remain frozen.
+
+- 2026-10-17: recorded FULL6's complete Rust and documentation passes and
+  verified non-plan byte equivalence with the successful FULL5 gates. Retained
+  the earlier timeout as failed history; no product or timeout policy changed.
+  M1 acceptance and the roadmap remain open pending commit and local review.

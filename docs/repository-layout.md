@@ -33,6 +33,7 @@ output and some leaf files so the long-lived structure remains visible.
 │   ├── manifest/
 │   ├── ninja_gen/
 │   ├── runner/
+│   ├── shell_selection/
 │   ├── snapshots/
 │   ├── shell_word.rs
 │   └── stdlib/
@@ -400,6 +401,22 @@ when it serves more than one command-interpolation property test.
 This test-only module owns the command-interpolation cases for protected
 PowerShell contexts. Keep those cases here to hold the parent test module below
 the 400-line cap; production code must not depend on this test module.
+
+### `src/shell_selection/`
+
+This public data-only module owns structured-command shell intent, validated
+registry names, and the fixed built-in table. It is independent of the private
+POSIX word-tokenization module `src/shell_word.rs`: neither is a child of the
+other. The layout contract records only this exact pair as a disparate-prefix
+exception; adding or removing a member invalidates the exception.
+
+Production `name/mod.rs` remains standalone for the future build-script slice.
+Its unit and property tests are plain child modules under `name/`;
+`built_in/tests.rs` similarly belongs only to `built_in/mod.rs`. Owner modules
+use `mod.rs` because they have child modules, as required by Clippy. The
+property helpers are visible only inside `shell_selection` for the selector
+properties; production code must never depend on them. This preserves Rust
+module and snapshot identities without sibling `#[path]` declarations.
 
 ## Placement conventions
 
