@@ -177,7 +177,15 @@ fn packaged_manifest_retains_build_script_sources() {
     let subscriber = tracing_subscriber::fmt().with_test_writer().finish();
     tracing::subscriber::with_default(subscriber, || {
         let cargo_binary = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-        let cargo_target_dir = tempfile::tempdir()
+        let target_root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("target");
+        let crate_root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
+            .unwrap_or_else(|error| panic!("open the crate root: {error}"));
+        crate_root
+            .create_dir_all("target")
+            .unwrap_or_else(|error| panic!("create workspace target root: {error}"));
+        // Keep full build artefacts off system temporary storage while retaining
+        // a fresh target for verification of the extracted published crate.
+        let cargo_target_dir = tempfile::tempdir_in(&target_root)
             .unwrap_or_else(|error| panic!("create isolated Cargo target directory: {error}"));
         let publish_started_at = Instant::now();
         let publish_output = cargo_subprocess(&cargo_binary, &cargo_target_dir)

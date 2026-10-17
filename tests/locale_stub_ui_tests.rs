@@ -16,6 +16,8 @@
 //! `.stderr` snapshot. The `test_support` rlib is built by Cargo, and the
 //! fixtures are compiled directly with the workspace `rustc` against it.
 
+#[path = "support/cargo_metadata_reuse.rs"]
+mod cargo_metadata_reuse;
 #[path = "support/test_support_rlib.rs"]
 mod test_support_rlib;
 
@@ -138,7 +140,9 @@ struct SplitBuildArtefacts {
 /// workspace, so the fixture isolates the Cargo-to-rustc boundary from the
 /// production graph.
 fn create_split_build_workspace() -> io::Result<tempfile::TempDir> {
-    let workspace = tempfile::tempdir()?;
+    let workspace_target = test_support_rlib::manifest_dir().join("target");
+    test_fs::create_dir_all(&workspace_target)?;
+    let workspace = tempfile::tempdir_in(workspace_target)?;
     let dependency = workspace.path().join("fixture_dependency");
     let support = workspace.path().join("fixture_support");
     test_fs::create_dir_all(dependency.join("src"))?;
@@ -183,7 +187,18 @@ fn create_split_build_workspace() -> io::Result<tempfile::TempDir> {
 }
 
 /// Build the fixture under separate Cargo target and build roots.
-fn build_split_fixture(root: &Path) -> io::Result<String> {
+///
+/// Passing an environment slice keeps changes in the nested Cargo process and
+/// lets the metadata regression compare a clean baseline with selected inputs.
+/// Removing these keys before applying the slice simulates an outer Cargo
+/// process without metadata variables, without mutating the test process.
+/// For example, an empty slice builds from that baseline and a populated slice
+/// supplies only child-process variables.
+///
+/// # Errors
+///
+/// Returns an I/O error if Cargo cannot run or rejects the fixture build.
+fn build_split_fixture(root: &Path, environment: &[(&str, &str)]) -> io::Result<String> {
     let target_dir = root.join("target");
     let build_dir = root.join("build");
     let cargo = Command::new(test_support_rlib::cargo())
@@ -191,9 +206,16 @@ fn build_split_fixture(root: &Path) -> io::Result<String> {
         .arg("build")
         .arg("--manifest-path")
         .arg(root.join("fixture_support/Cargo.toml"))
-        .arg("--message-format=json")
+        .arg("--message-format=json-render-diagnostics")
+        .env_remove("CARGO_PKG_VERSION")
+        .env_remove("CARGO_PKG_DESCRIPTION")
+        .env_remove("CARGO_PKG_AUTHORS")
+        .env_remove("TARGET")
+        .env_remove("PROFILE")
+        .env_remove("SOURCE_DATE_EPOCH")
         .env("CARGO_TARGET_DIR", &target_dir)
         .env("CARGO_BUILD_BUILD_DIR", &build_dir)
+        .envs(environment.iter().copied())
         .output()?;
     if !cargo.status.success() {
         return Err(io::Error::other(format!(
@@ -283,10 +305,43 @@ fn compile_split_fixture(root: &Path, artefacts: &SplitBuildArtefacts) -> io::Re
 }
 
 #[rstest]
-fn split_build_fixture_compiles_through_the_direct_rustc_harness() -> io::Result<()> {
+#[case::valid_source(false, false)]
+#[case::compiler_diagnostic(true, false)]
+#[case::cargo_metadata(false, true)]
+fn split_build_fixture_compiles_through_the_direct_rustc_harness(
+    #[case] is_invalid_source: bool,
+    #[case] has_cargo_metadata: bool,
+) -> io::Result<()> {
     let workspace = create_split_build_workspace()?;
     let root = workspace.path();
-    let messages = build_split_fixture(root)?;
+    if has_cargo_metadata {
+        cargo_metadata_reuse::prepare(root)?;
+    }
+    if is_invalid_source {
+        test_fs::write(
+            root.join("fixture_dependency/src/lib.rs"),
+            r#"compile_error!("nested Cargo diagnostic sentinel");"#,
+        )?;
+        let Err(error) = build_split_fixture(root, &[]) else {
+            return Err(io::Error::other(
+                "Cargo must reject the deliberate compiler error",
+            ));
+        };
+        if !error
+            .to_string()
+            .contains("nested Cargo diagnostic sentinel")
+        {
+            return Err(io::Error::other(format!(
+                "the harness must retain the compiler diagnostic: {error}",
+            )));
+        }
+        return Ok(());
+    }
+    let messages = build_split_fixture(root, &[])?;
     let artefacts = collect_split_build_artefacts(&messages, &root.join("build"))?;
-    compile_split_fixture(root, &artefacts)
+    compile_split_fixture(root, &artefacts)?;
+    if has_cargo_metadata {
+        cargo_metadata_reuse::verify(root)?;
+    }
+    Ok(())
 }

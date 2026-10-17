@@ -45,7 +45,7 @@ REQUIRED_COVERAGE_INPUTS = {
     "doctests": "true",
 }
 
-#: Ambient-target UI harness builds must share the gate's feature fingerprint.
+#: Ambient-target UI checks must retain the gate's workspace/target/features.
 #: Isolated fixture and packaging builds intentionally retain shipped defaults.
 GATE_FEATURES_MODULE: Path = REPO_ROOT / "tests" / "support" / "cargo_features.rs"
 TEST_SUPPORT_MANIFEST: Path = REPO_ROOT / "test_support" / "Cargo.toml"
@@ -210,23 +210,44 @@ def test_the_local_test_target_still_runs_both_passes() -> None:
         assert "-D warnings" in recipe, f"the local {label} pass must deny warnings"
 
 
-def test_ambient_target_harnesses_match_the_gate_feature_selection() -> None:
-    """Require ambient nested Cargo builds to reuse the gate's artefacts.
+def test_ambient_target_harnesses_match_the_gate_build_selection() -> None:
+    """Require ambient Cargo checks to retain the gate's target selection.
 
-    The direct-rustc UI harnesses build `test_support` or `netsuke-build` in
-    the workspace target directory. Their Cargo feature selection must match
-    `make test-nextest`; otherwise Cargo gives `netsuke-build` a distinct
-    fingerprint and recompiles its graph for each harness.
+    The direct-rustc UI harnesses check workspace packages in the ambient
+    target directory. Workspace, target, and feature selection must match
+    `make test-nextest` because development dependencies can enable features a
+    library-only check would omit. Check mode supplies metadata without linking
+    integration executables while the suite is using them; it need not match
+    the test build mode or cache identity.
     """
     module = GATE_FEATURES_MODULE.read_text(encoding="utf-8")
-    assert (
-        'pub const GATE_FEATURE_ARGUMENTS: &[&str] = &["--all-features"];' in module
-    ), "the shared Cargo feature module must define the gate's --all-features argument"
+    declaration = re.search(
+        r"pub const GATE_BUILD_ARGUMENTS:\s*&\[&str\]\s*=\s*&\[(.*?)\];",
+        module,
+        re.DOTALL,
+    )
+    assert declaration, (
+        "the shared module must define the complete gate build selection"
+    )
+    arguments = re.findall(r'"([^"]+)"', declaration.group(1))
+    assert arguments == [
+        "--workspace",
+        "--all-targets",
+        "--all-features",
+    ], "ambient checks must retain the gate's workspace, targets, and features"
     for source in AMBIENT_TARGET_NESTED_BUILD_SOURCES:
         text = source.read_text(encoding="utf-8")
-        assert "cargo_features::GATE_FEATURE_ARGUMENTS" in text, (
-            f"{source.relative_to(REPO_ROOT)} must use the shared gate feature "
-            "selection"
+        required_composition = (
+            "cargo_features::GATE_BUILD_ARGUMENTS",
+            'manifest_dir().join("Cargo.toml")',
+            '.arg("check")',
+        )
+        missing = [
+            fragment for fragment in required_composition if fragment not in text
+        ]
+        assert not missing, (
+            f"{source.relative_to(REPO_ROOT)} must compose Cargo check preparation "
+            f"with the shared selection and root manifest; missing {missing!r}"
         )
     manifest = tomllib.loads(TEST_SUPPORT_MANIFEST.read_text(encoding="utf-8"))
     features = manifest.get("features")
@@ -235,6 +256,90 @@ def test_ambient_target_harnesses_match_the_gate_feature_selection() -> None:
     assert features.get("legacy-digests") == ["netsuke/legacy-digests"], (
         "test_support must forward legacy-digests exactly to netsuke-build"
     )
+
+
+@pytest.mark.parametrize(
+    "source",
+    AMBIENT_TARGET_NESTED_BUILD_SOURCES,
+    ids=[source.name for source in AMBIENT_TARGET_NESTED_BUILD_SOURCES],
+)
+def test_ambient_ui_harnesses_do_not_rebuild_in_isolated_targets(source: Path) -> None:
+    """Keep public API checks on the ambient target directory.
+
+    The cached CLI configuration fixture previously selected a dedicated
+    target directory and rebuilt Netsuke's dependencies, exceeding Nextest's
+    300-second budget on a shared build host.
+    """
+    text = source.read_text(encoding="utf-8")
+    assert not re.search(r'\.env\(\s*"CARGO_TARGET_DIR"', text), (
+        f"{source.relative_to(REPO_ROOT)} must reuse ambient build artefacts "
+        "rather than compile into an isolated Cargo target directory"
+    )
+
+
+def test_cold_packaging_verification_has_a_scoped_budget() -> None:
+    """Allow measured cold package compilation without relaxing ordinary tests."""
+    config = tomllib.loads(
+        (REPO_ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8")
+    )
+    profile = config["profile"]["default"]
+    assert profile["slow-timeout"] == {"period": "60s", "terminate-after": 5}, (
+        "ordinary tests must retain their five-minute budget"
+    )
+    timed_overrides = [
+        override for override in profile["overrides"] if "slow-timeout" in override
+    ]
+    assert len(timed_overrides) == 5, (
+        "preserve current-main cold-build budgets without a cached CLI override"
+    )
+    configured = {
+        override["filter"]: override["slow-timeout"] for override in timed_overrides
+    }
+    expected = {
+        "test(/^packaged_manifest_retains_build_script_sources($|::)/)": {
+            "period": "60s",
+            "terminate-after": 15,
+        },
+        (
+            "test(/^compile_guard::"
+            "every_patched_tree_compiles_under_denied_warnings($|::)/)"
+        ): {
+            "period": "60s",
+            "terminate-after": 10,
+        },
+    }
+    expected.update({
+        f"test(/^{name}($|::)/)": {"period": "60s", "terminate-after": periods}
+        for name, periods in (
+            ("production_build_module_slice_has_expected_boundary", 12),
+            ("split_build_fixture_compiles_through_the_direct_rustc_harness", 15),
+            ("stub_env_default_does_not_compile", 15),
+        )
+    })
+    assert configured == expected, (
+        "cold-build budgets must retain current-main allowances"
+    )
+
+
+def test_packaging_build_stays_out_of_system_temporary_storage() -> None:
+    """Keep the isolated full package build beneath the workspace target root."""
+    source = (REPO_ROOT / "tests" / "packaging_smoke_tests.rs").read_text(
+        encoding="utf-8"
+    )
+    smoke_test = source.split(
+        "fn packaged_manifest_retains_build_script_sources()", maxsplit=1
+    )[1].split("\n#[test]", maxsplit=1)[0]
+    assert "tempfile::tempdir()" not in smoke_test, (
+        "full package verification must stay out of system temporary storage"
+    )
+    required_placement = (
+        'Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("target")',
+        "tempfile::tempdir_in(&target_root)",
+    )
+    missing = [
+        fragment for fragment in required_placement if fragment not in smoke_test
+    ]
+    assert not missing, f"package verification must use workspace storage: {missing!r}"
 
 
 @pytest.mark.parametrize(

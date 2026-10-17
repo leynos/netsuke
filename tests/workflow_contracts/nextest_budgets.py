@@ -11,7 +11,7 @@ budget is their product. Every period in this repository is 60 s, so a
 reader taking the period alone would report a 60 s allowance where the
 real maximum is 900 s: five periods by default, ten for the mutation
 compile gate, twelve for the production module-slice check, and fifteen
-for the CLI configuration, stub-environment compile-fail, split-build, and
+for the stub-environment compile-fail, split-build, and
 cold package-publish checks.
 The contract uses the largest value, because a whole-run cap has to sit
 above it. A
@@ -145,8 +145,8 @@ def largest_test_allowance(config_text: str) -> fractions.Fraction:
     ``terminate-after`` of them, so the budget is their product. This
     repository sets five 60 s periods on the profile's own allowance, so it
     gives every test it matches 300 s. The mutation compile gate gets ten
-    periods; the production module-slice check gets twelve; and the CLI
-    configuration, stub-environment compile-fail, split-build, and cold
+    periods; the production module-slice check gets twelve; and the
+    stub-environment compile-fail, split-build, and cold
     package-publish checks get fifteen.
     The largest allowance in the file is therefore 900 s, and it is that
     figure, not the profile's own, that a whole-run budget has to stay

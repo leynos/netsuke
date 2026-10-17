@@ -13,7 +13,10 @@
 //! harnesses. Ordinary Cargo-driven tests neither parse these messages nor need
 //! Cargo's private artefact layout.
 
-use std::path::{Path, PathBuf};
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
 
 /// Return loadable artefact parent directories from one Cargo JSON message.
 ///
@@ -41,10 +44,194 @@ pub fn library_path_in_message(line: &str, target_name: &str) -> Option<PathBuf>
     let (name, paths) = compiler_artifact_paths(line)?;
     (name == target_name)
         .then_some(paths)
-        .and_then(|artifact_paths| {
-            last_with_extension(&artifact_paths, "rmeta")
-                .or_else(|| last_with_extension(&artifact_paths, "rlib"))
+        .and_then(|artifact_paths| preferred_library_path(&artifact_paths))
+}
+
+/// Describe the borrowed target and package criteria for stream selection.
+#[derive(Clone, Copy)]
+pub struct LibraryArtefactSelection<'a> {
+    /// Name of the Cargo target to select.
+    pub target_name: &'a str,
+    /// Exact package ID to select, or `None` to require one stream identity.
+    pub expected_package_id: Option<&'a str>,
+}
+
+/// Select one normal, non-test library artefact from a Cargo JSON stream.
+///
+/// Compilation units are identified by package ID, target source path, the
+/// optional manifest path, and the selected full artefact path. Repeated
+/// messages for the same unit are accepted; distinct matching units are
+/// rejected rather than allowing output order to choose a host or target
+/// artefact. A package-scoped selection ignores matching target names from
+/// other packages; an unscoped selection also checks identity across tiers.
+///
+/// # Errors
+///
+/// Returns an error for malformed Cargo JSON or identity fields, an ambiguous
+/// set of matching library units, or a stream without the requested library.
+pub fn library_path_in_messages(
+    messages: &str,
+    selection: LibraryArtefactSelection<'_>,
+) -> io::Result<PathBuf> {
+    let mut candidates = Vec::new();
+    for (line_index, text) in messages.lines().enumerate() {
+        let line = CargoJsonLine {
+            text,
+            number: line_index + 1,
+        };
+        if line.text.trim().is_empty() {
+            continue;
+        }
+        let Some(candidate) = library_unit_from_message(line, selection)? else {
+            continue;
+        };
+        if !candidates.contains(&candidate) {
+            candidates.push(candidate);
+        }
+    }
+
+    select_candidate_tier(&candidates, selection)
+}
+
+/// Keep Cargo JSON text beside the line number used in parse diagnostics.
+#[derive(Clone, Copy)]
+struct CargoJsonLine<'a> {
+    /// Raw JSON message text.
+    text: &'a str,
+    /// One-based line number in Cargo's output stream.
+    number: usize,
+}
+
+/// Identify one library compilation unit and its selected artefact tier.
+#[derive(Debug, PartialEq, Eq)]
+struct LibraryArtefactUnit {
+    /// Cargo's opaque package identifier.
+    package_id: String,
+    /// The target's root source file.
+    source_path: PathBuf,
+    /// The package manifest path when Cargo includes it in the message.
+    manifest_path: Option<PathBuf>,
+    /// The `.rmeta` path, or `.rlib` fallback, selected for this unit.
+    artefact_path: PathBuf,
+    /// Whether the message contains metadata without a codegen library file.
+    metadata_only: bool,
+}
+
+/// Resolve package identity first, then reject ambiguity in the chosen tier.
+///
+/// # Errors
+///
+/// Returns an error when unscoped candidates identify different source units,
+/// the selected tier contains distinct artefacts, or no candidates exist.
+fn select_candidate_tier(
+    candidates: &[LibraryArtefactUnit],
+    selection: LibraryArtefactSelection<'_>,
+) -> io::Result<PathBuf> {
+    let identity_conflict = candidates.first().and_then(|first| {
+        candidates
+            .iter()
+            .skip(1)
+            .find(|candidate| {
+                candidate.package_id != first.package_id
+                    || candidate.source_path != first.source_path
+                    || candidate.manifest_path != first.manifest_path
+            })
+            .map(|candidate| (first, candidate))
+    });
+    if selection.expected_package_id.is_none()
+        && let Some((first, candidate)) = identity_conflict
+    {
+        return Err(io::Error::other(format!(
+            "Cargo JSON stream has ambiguous library artefacts for target {:?}: {first:?} and {candidate:?}",
+            selection.target_name,
+        )));
+    }
+
+    let use_metadata_only = candidates.iter().any(|candidate| candidate.metadata_only);
+    let mut selected: Option<&LibraryArtefactUnit> = None;
+    for candidate in candidates
+        .iter()
+        .filter(|candidate| candidate.metadata_only == use_metadata_only)
+    {
+        if let Some(previous) = selected {
+            if previous != candidate {
+                return Err(io::Error::other(format!(
+                    "Cargo JSON stream has ambiguous library artefacts for target {:?}: {previous:?} and {candidate:?}",
+                    selection.target_name,
+                )));
+            }
+        } else {
+            selected = Some(candidate);
+        }
+    }
+
+    selected
+        .map(|candidate| candidate.artefact_path.clone())
+        .ok_or_else(|| {
+            io::Error::other(format!(
+                "Cargo JSON stream has no normal, non-test library artefact for target {:?}",
+                selection.target_name,
+            ))
         })
+}
+
+/// Return a required non-empty JSON string or describe its malformed field.
+///
+/// # Errors
+///
+/// Returns an error when the field is absent, empty, or not a string.
+fn required_string(
+    value: Option<&serde_json::Value>,
+    field: &str,
+    line: usize,
+) -> io::Result<String> {
+    value
+        .and_then(serde_json::Value::as_str)
+        .filter(|text| !text.is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| malformed_field(line, field))
+}
+
+/// Return whether a required JSON string array contains `expected`.
+///
+/// # Errors
+///
+/// Returns an error when the field is absent, is not an array, or contains a
+/// non-string value.
+fn string_array_contains(
+    value: Option<&serde_json::Value>,
+    field: &str,
+    expected: &str,
+    line: usize,
+) -> io::Result<bool> {
+    let values = value
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| malformed_field(line, field))?;
+    let mut contains_expected = false;
+    for item in values {
+        let text = item.as_str().ok_or_else(|| malformed_field(line, field))?;
+        contains_expected |= text == expected;
+    }
+    Ok(contains_expected)
+}
+
+/// Parse Cargo's optional manifest path while rejecting malformed values.
+///
+/// # Errors
+///
+/// Returns an error when the field is present but empty or not a string.
+fn optional_manifest_path(message: &serde_json::Value, line: usize) -> io::Result<Option<PathBuf>> {
+    message
+        .get("manifest_path")
+        .map(|path| required_string(Some(path), "manifest_path", line).map(PathBuf::from))
+        .transpose()
+}
+
+/// Describe a missing or incorrectly typed field in a Cargo JSON message.
+fn malformed_field(line: usize, field: &str) -> io::Error {
+    io::Error::other(format!(
+        "Cargo compiler-artifact JSON line {line} has a missing or invalid {field}",
+    ))
 }
 
 /// Return the target name and filenames in one compiler-artifact message.
@@ -73,6 +260,118 @@ fn is_dependency_artefact(path: &Path) -> bool {
     })
 }
 
+/// Parse the identity and artefact of one matching normal library unit.
+///
+/// # Errors
+///
+/// Returns an error when Cargo JSON is malformed, a matching message has
+/// invalid identity fields, or it does not report a loadable library artefact.
+fn library_unit_from_message(
+    line: CargoJsonLine<'_>,
+    selection: LibraryArtefactSelection<'_>,
+) -> io::Result<Option<LibraryArtefactUnit>> {
+    let message: serde_json::Value = serde_json::from_str(line.text).map_err(|error| {
+        io::Error::other(format!(
+            "Cargo JSON line {} could not be parsed: {error}",
+            line.number,
+        ))
+    })?;
+    let reason = required_string(message.get("reason"), "reason", line.number)?;
+    if reason != "compiler-artifact" {
+        return Ok(None);
+    }
+
+    let target = message
+        .get("target")
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| malformed_field(line.number, "target object"))?;
+    let name = required_string(target.get("name"), "target.name", line.number)?;
+    if name != selection.target_name {
+        return Ok(None);
+    }
+
+    let package_id = required_string(message.get("package_id"), "package_id", line.number)?;
+    if selection
+        .expected_package_id
+        .is_some_and(|expected| expected != package_id.as_str())
+    {
+        return Ok(None);
+    }
+    let source_path = PathBuf::from(required_string(
+        target.get("src_path"),
+        "target.src_path",
+        line.number,
+    )?);
+    let manifest_path = optional_manifest_path(&message, line.number)?;
+    if !is_normal_library_unit(&message, target, line.number)? {
+        return Ok(None);
+    }
+
+    let (artefact_path, metadata_only) = library_artefact_path(line, selection)?;
+    Ok(Some(LibraryArtefactUnit {
+        package_id,
+        source_path,
+        manifest_path,
+        artefact_path,
+        metadata_only,
+    }))
+}
+
+/// Check whether a target is a non-test Rust library compilation unit.
+///
+/// # Errors
+///
+/// Returns an error when Cargo omits or malforms the target kind, crate types,
+/// or test-profile indicator.
+fn is_normal_library_unit(
+    message: &serde_json::Value,
+    target: &serde_json::Map<String, serde_json::Value>,
+    line_number: usize,
+) -> io::Result<bool> {
+    let is_library_kind =
+        string_array_contains(target.get("kind"), "target.kind", "lib", line_number)?;
+    let is_library_crate_type = string_array_contains(
+        target.get("crate_types"),
+        "target.crate_types",
+        "lib",
+        line_number,
+    )?;
+    let is_test = message
+        .get("profile")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|profile| profile.get("test"))
+        .and_then(serde_json::Value::as_bool)
+        .ok_or_else(|| malformed_field(line_number, "profile.test boolean"))?;
+    Ok(!is_test && is_library_kind && is_library_crate_type)
+}
+
+/// Select the metadata path, or the library fallback, from one Cargo message.
+///
+/// # Errors
+///
+/// Returns an error when Cargo does not provide a loadable library path.
+fn library_artefact_path(
+    line: CargoJsonLine<'_>,
+    selection: LibraryArtefactSelection<'_>,
+) -> io::Result<(PathBuf, bool)> {
+    let (_, paths) = compiler_artifact_paths(line.text)
+        .ok_or_else(|| malformed_field(line.number, "compiler-artifact filenames array"))?;
+    let artefact_path = preferred_library_path(&paths).ok_or_else(|| {
+        io::Error::other(format!(
+            "Cargo JSON line {} has no loadable library artefact for target {:?}",
+            line.number, selection.target_name,
+        ))
+    })?;
+    let metadata_only = last_with_extension(&paths, "rmeta").is_some()
+        && last_with_extension(&paths, "rlib").is_none();
+    Ok((artefact_path, metadata_only))
+}
+
+/// Prefer the last metadata path and fall back to the last library path.
+fn preferred_library_path(paths: &[PathBuf]) -> Option<PathBuf> {
+    last_with_extension(paths, "rmeta").or_else(|| last_with_extension(paths, "rlib"))
+}
+
 /// Return the last path with `extension`, retaining Cargo's uplift ordering.
 fn last_with_extension(paths: &[PathBuf], extension: &str) -> Option<PathBuf> {
     paths
@@ -85,156 +384,9 @@ fn last_with_extension(paths: &[PathBuf], extension: &str) -> Option<PathBuf> {
 }
 
 #[cfg(test)]
-mod tests {
-    //! Property and example tests for the Cargo artefact parser.
+#[path = "cargo_artifact_parser_tests.rs"]
+mod parser_tests;
 
-    use super::{compiler_artifact_paths, dependency_dirs_in_message, library_path_in_message};
-    use proptest::prelude::*;
-    use rstest::rstest;
-    use std::path::{Path, PathBuf};
-
-    /// Generate a newline-free Cargo artefact path and whether rustc can load it.
-    fn artefact_path() -> impl Strategy<Value = (String, bool)> {
-        (
-            "[\\p{L}\\p{N} _-]{1,12}",
-            "[\\p{L}\\p{N}_-]{1,12}",
-            prop_oneof![
-                Just("rmeta"),
-                Just("rlib"),
-                Just(std::env::consts::DLL_EXTENSION),
-                Just("txt")
-            ],
-        )
-            .prop_map(|(directory, name, extension)| {
-                let path = format!("/tmp/{directory}/lib{name}.{extension}");
-                let loadable = matches!(extension, "rmeta" | "rlib")
-                    || extension.eq_ignore_ascii_case(std::env::consts::DLL_EXTENSION);
-                (path, loadable)
-            })
-    }
-
-    /// Generate an ordered path whose extension can select a library artefact.
-    fn library_artefact_path() -> impl Strategy<Value = String> {
-        (
-            "[a-z]{1,12}",
-            prop_oneof![Just("rmeta"), Just("rlib"), Just("txt"), Just("dylib")],
-        )
-            .prop_map(|(name, extension)| format!("/tmp/build/lib{name}.{extension}"))
-    }
-
-    /// Derive the metadata-first library selection from an ordered path list.
-    fn expected_library_path(paths: &[String]) -> Option<PathBuf> {
-        ["rmeta", "rlib"].into_iter().find_map(|extension| {
-            paths
-                .iter()
-                .rfind(|path| {
-                    Path::new(path)
-                        .extension()
-                        .is_some_and(|value| value == extension)
-                })
-                .map(PathBuf::from)
-        })
-    }
-
-    proptest! {
-        /// Preserve every ordered parent directory rustc needs across varied paths.
-        #[test]
-        fn parser_preserves_loadable_artefact_parent_order(
-            artefacts in proptest::collection::vec(artefact_path(), 0..16),
-        ) {
-            let filenames: Vec<&str> = artefacts.iter().map(|(path, _)| path.as_str()).collect();
-            let message = serde_json::json!({
-                "reason": "compiler-artifact",
-                "target": {"name": "fixture"},
-                "filenames": filenames,
-            });
-            let expected: Vec<PathBuf> = artefacts
-                .iter()
-                .filter(|(_, loadable)| *loadable)
-                .filter_map(|(path, _)| Path::new(path).parent().map(Path::to_path_buf))
-                .collect();
-
-            prop_assert_eq!(dependency_dirs_in_message(&message.to_string()), expected);
-        }
-
-        /// Select the last metadata artefact, or the last library artefact when needed.
-        #[test]
-        fn library_parser_prefers_last_metadata_then_library_and_rejects_mismatches(
-            artefacts in proptest::collection::vec(library_artefact_path(), 0..16),
-        ) {
-            let message = serde_json::json!({
-                "reason": "compiler-artifact",
-                "target": {"name": "fixture"},
-                "filenames": &artefacts,
-            });
-            let expected = expected_library_path(&artefacts);
-
-            prop_assert_eq!(library_path_in_message(&message.to_string(), "fixture"), expected);
-            prop_assert_eq!(library_path_in_message(&message.to_string(), "other"), None);
-        }
-    }
-
-    /// Prefer metadata and fall back to the library artefact.
-    #[rstest]
-    #[case(
-        r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":["/final/libfixture.rlib","/build/libfixture.rmeta"]}"#,
-        "/build/libfixture.rmeta",
-        "metadata"
-    )]
-    #[case(
-        r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":["/final/libfixture.rlib"]}"#,
-        "/final/libfixture.rlib",
-        "library fallback"
-    )]
-    #[case(
-        r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":["/first/libfixture.rmeta","/first/libfixture.rlib","/last/libfixture.rmeta","/last/libfixture.rlib"]}"#,
-        "/last/libfixture.rmeta",
-        "last metadata"
-    )]
-    #[case(
-        r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":["/first/libfixture.rlib","/last/libfixture.rlib"]}"#,
-        "/last/libfixture.rlib",
-        "last library fallback"
-    )]
-    fn parser_prefers_metadata_then_falls_back_to_library(
-        #[case] message: &str,
-        #[case] expected: &str,
-        #[case] selection: &str,
-    ) {
-        assert_eq!(
-            library_path_in_message(message, "fixture"),
-            Some(PathBuf::from(expected)),
-            "{selection} should be selected when Cargo reports it"
-        );
-    }
-
-    /// Reject malformed and irrelevant messages before reading artefact paths.
-    #[rstest]
-    #[case("not JSON")]
-    #[case(r#"{"reason":"build-script-executed"}"#)]
-    #[case(r#"{"reason":"compiler-artifact","filenames":[]}"#)]
-    #[case(r#"{"reason":"compiler-artifact","target":{},"filenames":[]}"#)]
-    #[case(r#"{"reason":"compiler-artifact","target":{"name":"fixture"}}"#)]
-    #[case(r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":{}}"#)]
-    fn compiler_artifact_parser_rejects_invalid_messages(#[case] message: &str) {
-        assert_eq!(compiler_artifact_paths(message), None);
-    }
-
-    /// Reject malformed, irrelevant, and mismatched messages for a named library.
-    #[rstest]
-    #[case("not JSON")]
-    #[case(r#"{"reason":"build-script-executed"}"#)]
-    #[case(r#"{"reason":"compiler-artifact","filenames":[]}"#)]
-    #[case(r#"{"reason":"compiler-artifact","target":{},"filenames":[]}"#)]
-    #[case(r#"{"reason":"compiler-artifact","target":{"name":"fixture"}}"#)]
-    #[case(r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":{}}"#)]
-    #[case(
-        r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":["/build/libfixture.a","/build/libfixture.txt"]}"#
-    )]
-    #[case(
-        r#"{"reason":"compiler-artifact","target":{"name":"other"},"filenames":["/build/libother.rmeta"]}"#
-    )]
-    fn library_path_parser_rejects_unmatched_messages(#[case] message: &str) {
-        assert_eq!(library_path_in_message(message, "fixture"), None);
-    }
-}
+#[cfg(test)]
+#[path = "cargo_artifact_selection_tests.rs"]
+mod selection_tests;

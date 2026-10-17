@@ -178,12 +178,10 @@ fn emit_rerun_directives() {
     println!("cargo:rerun-if-changed=src/cli/help.rs");
     println!("cargo:rerun-if-changed=src/cli/validation.rs");
     println!("cargo:rerun-if-changed=src/host/pattern.rs");
-    println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
-    println!("cargo:rerun-if-env-changed=CARGO_PKG_DESCRIPTION");
-    println!("cargo:rerun-if-env-changed=CARGO_PKG_AUTHORS");
+    // Cargo supplies package metadata, TARGET, and PROFILE itself. Watching
+    // their ambient values would invalidate artefacts when tests invoke Cargo
+    // with inherited metadata; Cargo.toml and Cargo's build units track them.
     println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
-    println!("cargo:rerun-if-env-changed=TARGET");
-    println!("cargo:rerun-if-env-changed=PROFILE");
     println!("cargo:rerun-if-changed=src/localization/keys.rs");
     println!("cargo:rerun-if-changed=src/locale/catalogues.rs");
     println!("cargo:rerun-if-changed=Cargo.toml");

@@ -7,6 +7,7 @@
 use netsuke::{cli, cli_localization};
 use std::{ffi::OsString, sync::Arc};
 
+/// Supply an empty injected environment for the public configuration API.
 struct FixtureEnvProvider;
 
 impl cli::ConfigEnvProvider for FixtureEnvProvider {
@@ -19,6 +20,7 @@ impl cli::ConfigEnvProvider for FixtureEnvProvider {
     }
 }
 
+/// Compose diagnostic discovery and cached-layer merging as an external caller.
 fn compose_cached_configuration_flow() {
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (parsed, matches) =
@@ -37,6 +39,7 @@ fn compose_cached_configuration_flow() {
     drop(cli::merge_with_config_and_env(&parsed, &matches, &env));
 }
 
+/// Reference the complete configuration flow in the compile-only fixture.
 fn main() {
     compose_cached_configuration_flow();
 }

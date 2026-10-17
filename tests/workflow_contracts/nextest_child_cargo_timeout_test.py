@@ -1,4 +1,8 @@
-"""Pin targeted slow-timeout policy to cold Cargo build fixtures."""
+"""Pin targeted slow-timeout policy to cold Cargo build fixtures.
+
+The CLI configuration fixture reuses the gate graph and ordinary timeout;
+``test_execution_coverage_test`` guards its exclusion from the cold-build tier.
+"""
 
 import pytest
 from nextest_child_cargo_group_invariants import (
@@ -11,11 +15,6 @@ from workflow_loading import require_list, require_mapping
 @pytest.mark.parametrize(
     ("test_name", "fixture_name"),
     [
-        pytest.param(
-            "cli_configuration_fixture_compiles",
-            "CLI configuration fixture",
-            id="cli-configuration",
-        ),
         pytest.param(
             "stub_env_default_does_not_compile",
             "StubEnv compile-fail fixture",

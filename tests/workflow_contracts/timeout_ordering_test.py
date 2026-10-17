@@ -20,8 +20,8 @@ The per-test allowance is ``period`` multiplied by ``terminate-after``,
 not ``period`` alone. Every period here is 60 seconds and every platform
 uses the same multipliers, so the profile's own five periods give 300 s,
 the mutation compile gate gets 600 s, the production module-slice check gets
-720 s, and the CLI configuration, stub-environment compile-fail, split-build,
-and cold package-publish checks get 900 s.
+720 s, and the stub-environment compile-fail, split-build, and cold
+package-publish checks get 900 s.
 The largest allowance is therefore 900 s, and it is that figure the whole-run
 budget has to clear; reading the period as the budget would understate either by its
 multiplier.
