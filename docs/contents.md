@@ -328,6 +328,12 @@ operator, user, and contributor references are easier to find.
 
 ## Testing and quality references
 
+- [ci-performance/README.md](ci-performance/README.md): Attempt-scoped CI
+  observations, missing evidence, and the cost and fidelity analysis protocol
+  for issue #894.
+- [CI speedup investigation](execplans/ci-test-speedups-investigation.md):
+  Living evidence gates and independent candidate decisions before adoption.
+
 - [behavioural-testing-in-rust-with-cucumber.md](behavioural-testing-in-rust-with-cucumber.md):
   Historical behavioural-testing background.
 - [reliable-testing-in-rust-via-dependency-injection.md](reliable-testing-in-rust-via-dependency-injection.md):

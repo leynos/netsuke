@@ -7,6 +7,30 @@ reference for bounded release-admission observability is
 [ADR-020](adr-020-release-admission-observability.md). It also records the
 release-operation observability decision.
 
+## Offline CI performance evidence
+
+The [CI performance evidence protocol](ci-performance/README.md) owns the
+attempt-scoped observations for issue #894. Its offline collector,
+`scripts/ci_test_evidence.py`, consumes saved GitHub API responses and logs; it
+does not call GitHub, dispatch CI, or change any gate. Its log, telemetry and
+serialization helpers are private to this collector. Application code and
+workflow execution must not import them. No equivalent collector exists in the
+release-operation observability helper, which instead measures its own release
+phases from an injected environment.
+
+The collector's serialization module owns positive-integer API identity
+validation. Only the offline collector may call that check; application
+identity policies remain in their own domain modules.
+
+Keep parsing independent of filesystem delivery and retain unknown evidence as
+`null`. Validate optional inventory artefacts against the run, attempt and job
+identity before use. Deduplicate attempt totals before summing cost, and retain
+failed and cancelled attempts. Runner-seconds are a cost proxy; they are not
+invoice savings. Publish evidence before enabling an optimization. The
+[investigation plan](execplans/ci-test-speedups-investigation.md) records the
+collection floor, overhead budget and adoption criteria. It does not authorize
+additional paid benchmark jobs.
+
 ## Command-line interface architecture
 
 The governing command-line interface (CLI) architecture record is ADR-003,
