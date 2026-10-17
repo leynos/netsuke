@@ -39,11 +39,12 @@ pub(crate) struct CommandBindings {
     outs: PathSubstitutions,
 }
 
-/// Retain path text for each quote context used by POSIX shell traversals.
+/// Retain path text for each shell quote context used during marker lowering.
 ///
-/// PowerShell's quoted-context fields reuse its standalone single-quoted path
-/// literal. That representation is not safe inside an existing PowerShell
-/// string, so the PowerShell traversal must reject markers at those sites.
+/// POSIX and Bash traversals use their contextual encodings. PowerShell's
+/// quoted-context fields reuse its standalone single-quoted path literal. That
+/// representation is not safe inside an existing PowerShell string, so the
+/// PowerShell traversal must reject markers at those sites.
 #[derive(Debug, Clone)]
 struct PathSubstitutions {
     /// Use when the marker is outside shell quotes.
@@ -81,7 +82,7 @@ impl CommandBindings {
 }
 
 impl PathSubstitutions {
-    /// Encode paths for each POSIX quote context used during Netsuke marker lowering.
+    /// Prepare path encodings used during Netsuke marker lowering.
     fn new(paths: &[Utf8PathBuf], shell: RecipeShell) -> Self {
         let unquoted = quote_paths(paths, shell).join(" ");
         if shell == RecipeShell::PowerShell {
@@ -196,7 +197,9 @@ pub(crate) fn interpolate_command_with_bindings(
 /// the script-specific lexical rules. PowerShell scripts use the same
 /// insertion-site rules as PowerShell commands: markers are valid only when
 /// unquoted, and are rejected in quoted, escaped, or command-substitution
-/// contexts. This function does not apply the command-shaped `shlex` guard.
+/// contexts or here-strings. PowerShell comment text isn't treated as an inert
+/// region, so quote characters in a comment can make later markers fail closed.
+/// This function does not apply the command-shaped `shlex` guard.
 pub(crate) fn interpolate_script_with_bindings(
     template: &str,
     bindings: &CommandBindings,

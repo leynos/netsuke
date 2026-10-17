@@ -101,3 +101,12 @@ targets:
   - name: discovery-must-not-execute.txt
     description: Confirm target discovery has no recipe side effects
     command: "Set-Content -NoNewline -LiteralPath {{ outs }} -Value recipe-should-not-run"
+  - name: path-copy.txt
+    description: Preserve a semicolon-bearing input path as literal data
+    sources: '; New-Item pwned; Write-Output x'
+    script: |
+      Copy-Item -LiteralPath {{ ins }} -Destination {{ outs }}
+  - name: literal-in-script-variable.txt
+    description: Preserve the PowerShell $in variable inside an existing string
+    script: |
+      Set-Content -NoNewline -LiteralPath {{ outs }} -Value '$in'

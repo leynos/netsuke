@@ -2138,10 +2138,12 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   them unchanged. `{{ ins }}` and `{{ outs }}` are the only Netsuke markers for
   input and output paths. On POSIX and Bash routes, Netsuke encodes a marker
   for its unquoted, single-quoted, or double-quoted shell context, and rejects
-  one in a command substitution or backticks. In PowerShell, use markers
-  unquoted; Netsuke rejects quoted and command-substitution marker sites rather
-  than risking a context escape. PowerShell uses backticks as its native escape
-  syntax, so they do not suppress marker interpolation.
+  one in a command substitution or backticks. In PowerShell, markers are valid
+  only at unquoted sites. Netsuke rejects markers in single-quoted strings,
+  double-quoted strings, here-strings, `$()`, and immediately after a backtick.
+  PowerShell path bindings use a single-quoted literal that is unsafe inside an
+  existing string. PowerShell scripts have no inert comment regions, so an
+  apostrophe in a comment can make a later marker fail closed.
 - Build and default-target paths escape a literal space as a `$` followed by a
   space, Ninja's own path escape. They reject `|` and control characters, which
   Ninja's path grammar cannot represent, and also reject `$` and colon, which
