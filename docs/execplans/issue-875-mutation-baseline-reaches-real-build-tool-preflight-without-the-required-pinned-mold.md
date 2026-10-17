@@ -1279,6 +1279,25 @@ the last entry of this section rather than recited here.
   JSON payload built in Python to `gh api --input -`, and the result read back
   afterwards. A 26-byte body is the tell.
 
+- [x] (2026-10-17 17:10Z) **`7d48c32c`, carrying that record, is green on all
+  three workflows, and the description is back to 772 lines.** The three
+  workflows bound to `7d48c32c0bbb6f1cc005aa7c27356a5db865d237` concluded on
+  attempt 1: `CI` `39050706857` (five jobs all `completed success`),
+  `Netsukefile Build Test` `39050706879`, and `Release Dry Run` `39050706917` (9
+  `success`, 2 `skipped` by design). The check-run census on the commit is 17
+  rows, every one `success`; the PR's `mergeStateStatus` reads `CLEAN` for the
+  first time in this session, which is a statement about the merge path and
+  about nothing else — the pull request is still a draft by design, and a draft
+  is not a merge signal.
+
+  **What `CLEAN` does and does not mean here.** It means the branch's required
+  checks pass against the base and GitHub sees no conflict. It does not mean
+  the change is ready: the one unmet acceptance criterion — mold *selection* on
+  the mutation worker, which needs an unmerged `rustflags` input upstream — is
+  unchanged by anything this head does. The description states that criterion
+  and the local `make test` discharge on `6558fd1f`, and those remain the
+  reasons the draft state is correct rather than an oversight.
+
 ## Surprises & discoveries
 
 Unexpected findings during implementation that were not anticipated as risks.
