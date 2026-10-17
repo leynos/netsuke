@@ -6563,22 +6563,48 @@ are its only permitted call sites: include it from a `tests/*.rs` UI harness
 when a fixture must compile against `test_support`; a harness for the
 production crate, or one needing no crate, must use its own narrow support code.
 
-`TestSupportRlib::build` builds `test_support` with
-`cargo test --no-run --workspace --all-targets --all-features
+`TestSupportRlib::build` prepares `test_support` metadata with
+[`cargo check`](https://doc.rust-lang.org/cargo/commands/cargo-check.html) using
+`--workspace --all-targets --all-features
 --message-format=json-render-diagnostics`
-from the workspace root manifest. The shared target and feature arguments in
+from the workspace root manifest. The target and feature arguments in
 `tests/support/cargo_features.rs` match `make test-nextest`; `test_support`
-forwards `legacy-digests` to `netsuke-build`, allowing Cargo to reuse the
-gate's matching artefacts. It parses Cargo's `compiler-artifact` messages,
-locating the uplifted metadata artefact and every dependency directory from the
-paths Cargo actually reports. This avoids assuming dependencies live beside the
-final `test_support` rlib when Cargo's `build.build-dir` setting separates
-intermediate artefacts, or when the Cargo shipped with the 1.99 nightlies gives
-each crate its own directory.
+forwards `legacy-digests` to `netsuke-build`, preserving development-dependency
+feature unification. Cargo check avoids linking the checked integration-test
+executables, but may still compile metadata, build proc macros, and run build
+scripts. The helper parses Cargo's `compiler-artifact` messages, locating
+metadata artefacts and dependency directories from the reported paths. The
+shared selector used by all three ambient consumers selects non-test library
+units by target kind and `profile.test == false`, then matches package, source,
+and artefact-path identity. It prefers metadata-only check units (an `.rmeta`
+without an `.rlib`) over code-generation units. It considers the
+code-generation fallback only after scanning the full stream, and rejects
+ambiguity within the selected class rather than relying on message order. It
+also rejects distinct matching host, target, or package candidates. It retains
+`.rmeta` preference, `.rlib` fallback, and dynamic libraries in dependency
+search paths for proc macros. The isolated split-fixture retains its
+single-message helper; no new artefact handoff protocol is introduced. This
+avoids assuming dependencies live beside the final `test_support` artefact when
+Cargo's `build.build-dir` setting separates intermediate artefacts, or when the
+Cargo shipped with the 1.99 nightlies gives each crate its own directory.
+
+`tests/support/cargo_build_dependency_ids.rs` owns a separate, narrow query: it
+runs
+[Cargo metadata](https://doc.rust-lang.org/cargo/commands/cargo-metadata.html)
+with `--format-version=1 --all-features --locked` and the workspace manifest,
+then resolves the root package's build-dependency package IDs. It reads the
+full resolved graph, not `--no-deps`. Its only permitted caller is
+`BuildSliceDependencies::build` in `tests/build_module_slice_ui_tests.rs`,
+which uses those opaque IDs for exact `compiler-artifact` message matching. Do
+not parse displayed versions or hard-code a dependency version. The helper does
+not select artefact paths, build code, or assemble `rustc` arguments. Keep it
+local to this production-module fixture; `NetsukeRlib` and `TestSupportRlib`
+have unique package/source candidates and use the shared selector directly. The
+isolated fixture also retains its existing single-message selection helper.
 
 `TestSupportRlib::compile` then invokes the workspace `rustc` directly with the
 discovered artefact as `--extern test_support=…`, every discovered
-`-L dependency=` directory, and `--emit=metadata`. Cargo still builds the rlib
+`-L dependency=` directory, and `--emit=metadata`. Cargo prepares metadata
 under the workspace toolchain; direct `rustc` is limited to the small UI
 fixtures that prove compile-time contracts without a scratch project or a
 toolchain-sensitive `.stderr` snapshot.
@@ -6592,8 +6618,9 @@ a host dynamic library rather than an rlib. A shared `deps/` directory used to
 pick them up for free, so an rlib-only filter went unnoticed; once each crate
 has its own directory, a filtered-out proc macro is simply absent from the
 search path and its dependents fail with `E0463`. The same rule and the same
-reasoning apply to `tests/command_env_ui_tests.rs`, which builds the `netsuke`
-rlib and derives its search path the same way.
+reasoning apply to `tests/command_env_ui_tests.rs`, which prepares the
+`netsuke` metadata and derives its search path the same way. Direct-`rustc`
+consumers emit metadata rather than linking test executables.
 
 JSON-producing Cargo preparations use
 `--message-format=json-render-diagnostics`. Cargo still reports artefacts on
@@ -6620,23 +6647,24 @@ rebuild.
 
 The cached CLI configuration fixture uses that same `NetsukeRlib` harness. It
 type-checks `ConfigEnvProvider`, `DiscoveredLayers`, diagnostic emission, and
-cached-layer merging as an external crate against the gate-built library. A
-companion case omits `--extern netsuke` and must fail, ensuring the positive
-check depends on the public library. These checks cover API visibility and
-composition; package verification retains the separate default-feature build
-boundary.
+cached-layer merging as an external crate against the workspace library
+metadata. A companion case omits `--extern netsuke` and must fail, ensuring the
+positive check depends on the public library. These checks cover API visibility
+and composition; package verification retains the separate default-feature
+build boundary.
 
 Public API checks must not select their own `CARGO_TARGET_DIR`. The previous
 CLI fixture created an unlocked standalone Cargo project, resolved a different
 dependency graph, and rebuilt it inside Nextest. The current harness prepares
-the workspace test graph with the workspace lockfile, gate target and feature
-selection, and ambient target directory, then reuses the gate-built library.
-Its preparation uses the same
-`cargo test --no-run --workspace --all-targets --all-features` arguments as the
-test gate. The CLI fixture remains in the serialized child-Cargo group, but
-uses the ordinary 300-second allowance; it no longer has a separate cold-graph
-timeout. The workflow contract rejects isolated target-directory overrides in
-these ambient UI harnesses.
+the workspace dependency graph with the workspace lockfile, gate target and
+feature selection, and ambient target directory, then uses the workspace
+metadata. Its preparation uses
+`cargo check --workspace --all-targets --all-features`, preserving the gate's
+target and feature selection without linking test executables. The CLI fixture
+remains in the serialized child-Cargo group because Cargo check can still run
+build scripts and update generated outputs. It uses the ordinary 300-second
+allowance; it has no separate cold-graph timeout. The workflow contract rejects
+isolated target-directory overrides in these ambient UI harnesses.
 
 Those ambient builds must also select the gate's entire workspace and all
 targets. Merely passing `--all-features` to a library-only build omits
@@ -6646,10 +6674,14 @@ fixture then recompiles dependency variants inside its timer, despite using the
 same target directory. `GATE_BUILD_ARGUMENTS` in the existing `cargo_features`
 support module owns this complete selection for the three ambient harnesses;
 their workflow contract pins the arguments, command mode, and root manifest.
-Preparation uses `cargo test --no-run`, matching Nextest's test build mode. The
-`--no-run` flag is mandatory: the child must prepare artefacts without
-launching the suite recursively. The child-command scanner recognizes this
-Cargo mode as build-capable and requires the same exclusive group policy.
+Preparation uses `cargo check`, which checks integration targets without
+linking their executables. Its `--workspace --all-targets --all-features`
+selection preserves the gate's development-dependency feature unification. It
+prepares metadata for the direct-`rustc` checks, but Cargo may still do work,
+including running build scripts; the shared target does not promise a no-op
+preparation. The child-command scanner treats this Cargo command as
+build-capable and requires the same exclusive group policy, since build scripts
+or generators can update shared outputs.
 
 Generated completion contract tests share the `nested-cargo-builds` group with
 the preparations that may regenerate their target/profile staging files.

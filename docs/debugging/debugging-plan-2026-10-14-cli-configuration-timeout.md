@@ -426,10 +426,10 @@ unchanged-Rust doc coverage uses `-2.out`.
 
 [cargo-check]: https://doc.rust-lang.org/cargo/commands/cargo-check.html
 
-## Current-main integration note (2026-10-16)
+## Current-main integration note (2026-10-16; historical candidate)
 
-The current-main integration preserves the CLI fixture's artefact-reuse repair:
-it prepares against the workspace lockfile, target, and gate-matching
+That integration preserved the CLI fixture's artefact-reuse repair: it prepares
+against the workspace lockfile, target, and gate-matching
 `cargo test --no-run --workspace --all-targets --all-features` selection, then
 checks the fixture against the gate-built library. It remains serialized with
 other child-Cargo work, but its allowance is the ordinary 300 seconds because
@@ -469,7 +469,7 @@ validation was blocked by compiler admission: the supervisor refused launches
 while requests to create compiler scopes timed out. Those results do not
 establish a source failure or a passing Rust suite.
 
-## Production-module timeout follow-up (2026-10-17)
+## Production-module timeout follow-up (2026-10-17; previous candidate)
 
 On the resumed repaired candidate, `make check-fmt`, `make lint`, and
 `make typecheck` passed. `make doc-coverage` reported 98.89% (5,074/5,131), and
@@ -516,3 +516,71 @@ inherited Cargo metadata leaves the build fresh and that changing
 regression was implemented and the canary supported the mechanism. The
 candidate still required sequential gates; the canary did not prove the exact
 first invalidation in the historical Windows run.
+
+## Windows link failure and metadata-only preparation (2026-10-17)
+
+Published head `e212ec5d` had passed its full local gates. A subsequent Windows
+job failed after 102.015 seconds in
+[CI run 39004145794](https://github.com/leynos/netsuke/actions/runs/39004145794/job/117313036522).
+The nested `cargo test --no-run` compiled `ring`, `rustls`, `ureq`, and the
+workspace integration target before `link.exe` reported LNK1104: it could not
+open `build_module_slice_ui_tests-98286508330a53df.exe`. A separate Nextest
+execution of `release_help_documentation_metadata_is_stable` reported OS error
+32, “file in use”. The log does not identify the handle owner or current
+running path, so the precise collision and its first cause remain unknown. This
+failure does not establish that build-script invalidation caused the link error.
+
+CodeRabbit's
+[investigation response](https://github.com/leynos/netsuke/pull/913#issuecomment-6229977574)
+confirms metadata-only preparation as the smallest systemic repair. It also
+identifies `ring 0.17.14`'s own Cargo environment watchers as a
+source-supported additional invalidation mechanism. The job contains no
+first-dirty trace, so this does not establish that `ring` was the first
+invalidated unit or explain the executable link failure.
+
+The source audit found that these ambient helpers need Cargo metadata and
+dependency artefact paths for their direct `rustc --emit=metadata` checks; they
+do not need Cargo to link workspace test executables. The repair changes their
+preparation to
+[`cargo check`](https://doc.rust-lang.org/cargo/commands/cargo-check.html) with
+`--workspace --all-targets --all-features` and the same target selection, while
+removing `--no-run`. Cargo check omits final code generation, but can still
+compile metadata and run build scripts, so this change does not promise that
+Cargo performs no work or eliminate the need for the nested-build group. The
+isolated split-build fixture and packaging verification remain unchanged; the
+timeout budgets and no-retry policy remain unchanged as well. At this
+pre-validation checkpoint, the repair still required its sequential gates.
+
+Focused CodeRabbit confirmation withdrew the mandatory-manifest concern absent
+a demonstrated failure
+([comment](https://github.com/leynos/netsuke/pull/913#issuecomment-6229870394)).
+The subsequent investigation request received the response linked above; its
+mechanism assessment does not resolve the first-dirty uncertainty.
+
+## Focused metadata-selector ambiguity (2026-10-17)
+
+For the first unpublished check-mode candidate, `make check-fmt` and 52
+selector tests passed. The focused production boundary test then failed after
+140.199 seconds because the artefact selector found two matching Camino 1.2.6
+metadata paths from the same package, source, and manifest identity. Read-only
+inspection found that `cfc87cce273ebe8c/out` contained both `.rmeta` and
+`.rlib` outputs for a code-generation/build-dependency unit, while
+`fdf014ee1ef30f75/out` contained only `.rmeta` for the check unit. Both used
+the same features and flags. The lockfile also has direct build dependency
+`thiserror` 1.0.69 and transitive `thiserror` 2.0.20; display versions
+therefore cannot safely select artefacts.
+
+The in-progress selector refinement prefers metadata-only check messages
+(`.rmeta` without `.rlib`) over code-generation messages, scans the full stream
+before considering the fallback, and rejects ambiguity within the selected
+class. It continues to reject mismatches in package or source identity. The
+production-module fixture also needs exact build-dependency package IDs, so its
+narrow `cargo_build_dependency_ids` helper queries the locked, all-features
+Cargo metadata graph and resolves root build dependencies by `kind = build`.
+Those opaque IDs match Cargo compiler messages exactly; the helper does not
+parse displayed versions or hard-code dependency versions. It is used only by
+`BuildSliceDependencies`; the other ambient consumers use the shared artefact
+selector directly. The isolated split fixture retains its single-message helper.
+
+At this refinement checkpoint, the candidate still required its sequential
+gates.

@@ -45,7 +45,7 @@ REQUIRED_COVERAGE_INPUTS = {
     "doctests": "true",
 }
 
-#: Ambient-target UI harness builds must share the gate's feature fingerprint.
+#: Ambient-target UI checks must retain the gate's workspace/target/features.
 #: Isolated fixture and packaging builds intentionally retain shipped defaults.
 GATE_FEATURES_MODULE: Path = REPO_ROOT / "tests" / "support" / "cargo_features.rs"
 TEST_SUPPORT_MANIFEST: Path = REPO_ROOT / "test_support" / "Cargo.toml"
@@ -211,13 +211,14 @@ def test_the_local_test_target_still_runs_both_passes() -> None:
 
 
 def test_ambient_target_harnesses_match_the_gate_build_selection() -> None:
-    """Require ambient nested Cargo builds to reuse the gate's artefacts.
+    """Require ambient Cargo checks to retain the gate's target selection.
 
-    The direct-rustc UI harnesses build `test_support` or `netsuke-build` in
-    the workspace target directory. Both target and feature selection must
-    match `make test-nextest`: development dependencies can enable additional
-    features that a library-only build would omit, giving dependencies distinct
-    fingerprints and recompiling them inside the timed fixture test.
+    The direct-rustc UI harnesses check workspace packages in the ambient
+    target directory. Workspace, target, and feature selection must match
+    `make test-nextest` because development dependencies can enable features a
+    library-only check would omit. Check mode supplies metadata without linking
+    integration executables while the suite is using them; it need not match
+    the test build mode or cache identity.
     """
     module = GATE_FEATURES_MODULE.read_text(encoding="utf-8")
     declaration = re.search(
@@ -230,23 +231,22 @@ def test_ambient_target_harnesses_match_the_gate_build_selection() -> None:
     )
     arguments = re.findall(r'"([^"]+)"', declaration.group(1))
     assert arguments == [
-        "--no-run",
         "--workspace",
         "--all-targets",
         "--all-features",
-    ], "ambient preparation must build the gate's tests without executing them"
+    ], "ambient checks must retain the gate's workspace, targets, and features"
     for source in AMBIENT_TARGET_NESTED_BUILD_SOURCES:
         text = source.read_text(encoding="utf-8")
         required_composition = (
             "cargo_features::GATE_BUILD_ARGUMENTS",
             'manifest_dir().join("Cargo.toml")',
-            '.arg("test")',
+            '.arg("check")',
         )
         missing = [
             fragment for fragment in required_composition if fragment not in text
         ]
         assert not missing, (
-            f"{source.relative_to(REPO_ROOT)} must compose Cargo test preparation "
+            f"{source.relative_to(REPO_ROOT)} must compose Cargo check preparation "
             f"with the shared selection and root manifest; missing {missing!r}"
         )
     manifest = tomllib.loads(TEST_SUPPORT_MANIFEST.read_text(encoding="utf-8"))
@@ -264,7 +264,7 @@ def test_ambient_target_harnesses_match_the_gate_build_selection() -> None:
     ids=[source.name for source in AMBIENT_TARGET_NESTED_BUILD_SOURCES],
 )
 def test_ambient_ui_harnesses_do_not_rebuild_in_isolated_targets(source: Path) -> None:
-    """Keep public API checks from rebuilding the graph inside a timed test.
+    """Keep public API checks on the ambient target directory.
 
     The cached CLI configuration fixture previously selected a dedicated
     target directory and rebuilt Netsuke's dependencies, exceeding Nextest's

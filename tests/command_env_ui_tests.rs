@@ -22,9 +22,9 @@
 //! the analysis and rejected the crate's `POLONIUS(...)` sites (see
 //! docs/polonius.md). The pinned nightly now enables Polonius by default, so
 //! that hazard is gone, but the direct-compile harness is kept: it needs no
-//! scratch project and no toolchain-sensitive `.stderr` snapshot. The `netsuke`
-//! rlib is built by Cargo, and the fixture is compiled directly with the
-//! workspace `rustc` against it.
+//! scratch project and no toolchain-sensitive `.stderr` snapshot. Cargo check
+//! supplies the `netsuke` metadata artefact, and the fixture is compiled
+//! directly with the workspace `rustc` against it.
 
 #[path = "support/cargo_artifacts.rs"]
 mod cargo_artifacts;
@@ -153,22 +153,24 @@ fn compile_public_api_fixture(source: &str, failure_message: &str) -> io::Result
     Ok(())
 }
 
-/// The `netsuke` rlib and every directory holding its dependencies.
+/// The `netsuke` metadata artefact and every directory holding its dependencies.
 struct NetsukeRlib {
     rlib: PathBuf,
     deps_dirs: Vec<PathBuf>,
 }
 
 impl NetsukeRlib {
-    /// Reuse the gate's Cargo target graph and locate the `netsuke` library.
+    /// Check the gate-selected targets and locate the `netsuke` metadata artefact.
     ///
-    /// Cargo inherits the ambient `RUSTFLAGS` and the pinned toolchain, so the
-    /// rlib is borrow-checked exactly as the rest of the suite is. The package
-    /// is named `netsuke-build`, but the lib target — and therefore the
-    /// `--extern` name — is `netsuke`.
+    /// Cargo inherits the ambient `RUSTFLAGS` and pinned toolchain. The
+    /// workspace, target, and feature selection matches the test gate, while
+    /// check mode avoids linking integration executables and does not promise
+    /// the same test build mode or cache identity. The package is named
+    /// `netsuke-build`, but the lib target — and therefore the `--extern`
+    /// name — is `netsuke`.
     fn build() -> io::Result<Self> {
         let output = Command::new(cargo())
-            .arg("test")
+            .arg("check")
             .arg("--manifest-path")
             .arg(manifest_dir().join("Cargo.toml"))
             .arg("--message-format=json-render-diagnostics")
@@ -176,17 +178,13 @@ impl NetsukeRlib {
             .output()?;
         if !output.status.success() {
             return Err(io::Error::other(format!(
-                "building the netsuke library failed:\n{}",
+                "checking the netsuke library failed:\n{}",
                 stderr(&output),
             )));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        let rlib = stdout
-            .lines()
-            .filter_map(|line| cargo_artifacts::library_path_in_message(line, "netsuke"))
-            .next_back()
-            .ok_or_else(|| io::Error::other("cargo reported no netsuke rlib artefact"))?;
+        let rlib = cargo_artifacts::library_path_in_messages(&stdout, "netsuke")?;
         // Dependencies do not sit in one predictable directory. Cargo uplifts
         // the top-level package's artefacts into the profile directory, and
         // the Cargo shipped with the 1.99 nightlies gives every crate its own
@@ -210,7 +208,7 @@ impl NetsukeRlib {
         Ok(Self { rlib, deps_dirs })
     }
 
-    /// Type-check `source` with or without the `netsuke` rlib.
+    /// Type-check `source` with or without the `netsuke` metadata artefact.
     ///
     /// `--emit=metadata` is enough to surface any visibility or signature
     /// regression while sparing the harness a full link of `netsuke`'s

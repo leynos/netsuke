@@ -7,6 +7,8 @@
 
 #[path = "support/cargo_artifacts.rs"]
 mod cargo_artifacts;
+#[path = "support/cargo_build_dependency_ids.rs"]
+mod cargo_build_dependency_ids;
 #[path = "support/cargo_features.rs"]
 mod cargo_features;
 #[path = "support/build_module_slice_runtime_only_tests.rs"]
@@ -120,10 +122,10 @@ struct BuildSliceDependencies {
 }
 
 impl BuildSliceDependencies {
-    /// Reuse the gate's target graph and collect the UI fixture dependencies.
+    /// Check the gate-selected targets and collect fixture metadata artefacts.
     fn build() -> io::Result<Self> {
         let output = Command::new(cargo())
-            .arg("test")
+            .arg("check")
             .arg("--manifest-path")
             .arg(manifest_dir().join("Cargo.toml"))
             .arg("--message-format=json-render-diagnostics")
@@ -131,24 +133,23 @@ impl BuildSliceDependencies {
             .output()?;
         if !output.status.success() {
             return Err(io::Error::other(format!(
-                "building the production module dependencies failed:\n{}",
+                "checking the production module dependencies failed:\n{}",
                 stderr(&output),
             )));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        let externs = REQUIRED_EXTERNS
+        let package_ids = cargo_build_dependency_ids::build_dependency_package_ids(
+            &cargo(),
+            &manifest_dir().join("Cargo.toml"),
+            REQUIRED_EXTERNS,
+        )?;
+        let externs = package_ids
             .iter()
-            .map(|name| {
-                let artefact = stdout
-                    .lines()
-                    .filter_map(|line| cargo_artifacts::library_path_in_message(line, name))
-                    .next_back()
-                    .ok_or_else(|| {
-                        io::Error::other(format!(
-                            "cargo reported no {name} artefact for the build-slice fixture"
-                        ))
-                    })?;
+            .map(|(name, package_id)| {
+                let artefact = cargo_artifacts::library_path_in_messages_for_package(
+                    &stdout, name, package_id,
+                )?;
                 Ok((*name, artefact))
             })
             .collect::<io::Result<Vec<_>>>()?;
