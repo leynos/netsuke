@@ -6,6 +6,8 @@ Accepted.
 
 - Amended 2026-10-12 for issue #846.
 - Amended 2026-10-17 after review of the #846 fix.
+- Amended 2026-10-17 to bound PowerShell `--%` marker rejection to its raw
+  native-command region.
 
 ## Date
 
@@ -60,17 +62,23 @@ markers in comments and heredoc bodies are copied as internal tokens instead of
 being expanded; markers in heredoc delimiters are expanded. PowerShell
 `command:` and `script:` recipes use the same PowerShell-aware traversal and
 reject markers in single-quoted strings, double-quoted strings, here-strings,
-`$( … )`, and immediately after a backtick. Keep markers out of POSIX and Bash
-comments and heredoc bodies because their internal tokens can remain in the
-generated recipe. PowerShell scripts have no inert comment regions: markers in
-plain line-comment text remain eligible for interpolation, while a
-block-comment opener or scanner-sensitive quote, backtick, or substitution
-syntax in a line-comment makes later markers fail closed. In particular, an
-apostrophe in a comment can make a later marker fail closed. Every
-dollar-prefixed form — `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output`,
-`$PATH` — is a shell variable that Netsuke leaves for the selected shell to
-interpret, in both recipe kinds. The Ninja backend doubles the dollar so the
-shell receives the text unchanged.
+`$( … )`, immediately after a backtick, and within the raw native-command
+region after an unquoted `--%` token. PowerShell passes the rest of that line
+after `--%` to a native command as literal text, so Netsuke's standalone quoted
+path encoding is not protective there. The scanner rejects markers in that
+region and resumes after its newline or pipeline terminator; a semicolon does
+not end it. See Microsoft's documentation of the
+[stop-parsing token](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_parsing?view=powershell-7.6#the-stop-parsing-token).
+Keep markers out of POSIX and Bash comments and heredoc bodies because their
+internal tokens can remain in the generated recipe. PowerShell scripts have no
+inert comment regions: markers in plain line-comment text remain eligible for
+interpolation, while a block-comment opener or scanner-sensitive quote,
+backtick, or substitution syntax in a line-comment makes later markers fail
+closed. In particular, an apostrophe in a comment can make a later marker fail
+closed. Every dollar-prefixed form — `$in`, `$out`, `$ins`, `$outs`, `$input`,
+`$output`, `$PATH` — is a shell variable that Netsuke leaves for the selected
+shell to interpret, in both recipe kinds. The Ninja backend doubles the dollar
+so the shell receives the text unchanged.
 
 The traversal also fails closed for later markers after encountering a
 typographic PowerShell quote delimiter because it does not model delimiter

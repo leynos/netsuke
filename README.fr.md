@@ -223,7 +223,10 @@ ci-dessous).
     substitution dans un commentaire sur une ligne peuvent faire rejeter les
     marqueurs suivants. Une apostrophe dans un commentaire
     peut aussi faire rejeter un marqueur ultérieur. Les guillemets typographiques PowerShell entraînent
-    aussi le rejet prudent des marqueurs suivants. Évitez les marqueurs dans
+    aussi le rejet prudent des marqueurs suivants. Dans la région brute de
+    commande native après `--%`, les marqueurs sont rejetés jusqu'au prochain
+    saut de ligne ou caractère de canalisation ; l'analyse reprend ensuite.
+    Un point-virgule ne termine pas cette région. Évitez les marqueurs dans
     les commentaires et heredocs POSIX et Bash : les jetons internes peuvent
     rester dans la recette.
 

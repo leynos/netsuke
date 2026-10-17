@@ -230,7 +230,10 @@ active recipe text; see the note below).
     eligible for interpolation, but a block-comment opener or quotes, backticks
     or substitution syntax in a line comment can make later markers fail closed.
     An apostrophe in a comment can make a later marker fail closed too. Typographic
-    PowerShell quote characters also make later markers fail closed. Keep
+    PowerShell quote characters also make later markers fail closed. An unquoted
+    `--%` stop-parsing token rejects markers in its raw native-command region
+    through the next newline or pipeline; scanning resumes after that boundary
+    (a semicolon does not end the region). Keep
     markers out of POSIX and Bash comments and heredoc bodies:
     internal tokens there can remain in the generated recipe.
 

@@ -30,6 +30,21 @@ fn power_shell_rejects_markers_after_backticks() {
     assert!(matches!(error, IrGenError::InvalidCommand { .. }));
 }
 
+/// Reject a command marker in PowerShell's raw native-command argument region.
+#[test]
+fn power_shell_commands_reject_markers_after_stop_parsing_token() {
+    let template = format!("cmd /c --% type {INS_TOKEN}");
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("; New-Item pwned; Write-Output x")],
+        &[],
+        RecipeShell::PowerShell,
+    );
+    let error = interpolate_command_with_bindings(&template, &bindings)
+        .expect_err("raw native-command arguments cannot contain path markers");
+
+    assert!(matches!(error, IrGenError::InvalidCommand { command, .. } if command == template));
+}
+
 /// Prepare bindings with a Windows-valid path that can expose source injection.
 fn script_bindings() -> CommandBindings {
     CommandBindings::new(
@@ -63,6 +78,11 @@ fn script_bindings() -> CommandBindings {
 #[case::double_quoted_here_string_crlf(format!("@\"\r\nbody \" quote {OUTS_TOKEN}\r\n\"@"))]
 #[case::single_quoted_here_string_after_literal_quote(format!("@'\nbody ' quote {INS_TOKEN}\n'@"))]
 #[case::double_quoted_here_string_after_literal_quote(format!("@\"\nbody \" quote {OUTS_TOKEN}\n\"@"))]
+#[case::stop_parsing_token(format!("cmd /c --% type {INS_TOKEN}"))]
+#[case::stop_parsing_after_hash_in_argument(format!("cmd /c echo prefix#suffix --% {INS_TOKEN}"))]
+#[case::stop_parsing_after_at_hash_in_argument(format!("cmd /c echo prefix@#suffix --% {INS_TOKEN}"))]
+#[case::stop_parsing_after_semicolon(format!("cmd /c --% literal; Write-Output {INS_TOKEN}"))]
+#[case::quoted_pipe_in_stop_parsing_region(format!("cmd /c --% echo \"prefix | {INS_TOKEN}\""))]
 fn power_shell_scripts_reject_protected_markers(#[case] template: String) {
     let result = interpolate_script_with_bindings(&template, &script_bindings());
     let error = result.expect_err("PowerShell scripts must reject protected markers");
@@ -269,6 +289,29 @@ fn power_shell_scripts_interpolate_markers_after_plain_comments() {
         .expect("plain comments do not change PowerShell quote state");
 
     assert_eq!(actual, "# ordinary comment\nWrite-Output 'output file.txt'");
+}
+
+/// Resume safe interpolation after PowerShell stop parsing ends.
+#[rstest]
+#[case::newline(format!("cmd /c --% literal\nWrite-Output {OUTS_TOKEN}"), "cmd /c --% literal\nWrite-Output 'output file.txt'")]
+#[case::pipeline(format!("cmd /c --% echo \"prefix | text\" | Write-Output {OUTS_TOKEN}"), "cmd /c --% echo \"prefix | text\" | Write-Output 'output file.txt'")]
+fn power_shell_scripts_resume_after_stop_parsing(#[case] template: String, #[case] expected: &str) {
+    let actual = interpolate_script_with_bindings(&template, &script_bindings())
+        .expect("stop parsing ends at a newline or pipeline");
+
+    assert_eq!(actual, expected);
+}
+
+/// Do not treat `--%` embedded in an ordinary bare argument as a stop token.
+#[rstest]
+#[case::embedded_middle(format!("Write-Output prefix--%suffix {OUTS_TOKEN}"))]
+#[case::embedded_start(format!("Write-Output --%suffix {OUTS_TOKEN}"))]
+#[case::after_hash_in_bare_argument(format!("Write-Output prefix#--%suffix {OUTS_TOKEN}"))]
+fn power_shell_scripts_accept_non_token_stop_parsing_text(#[case] template: String) {
+    let actual = interpolate_script_with_bindings(&template, &script_bindings())
+        .expect("only the exact standalone token starts stop parsing");
+
+    assert_eq!(actual, template.replace(OUTS_TOKEN, "'output file.txt'"));
 }
 
 /// Reject markers whose quote context can be hidden by a multiline block comment.
