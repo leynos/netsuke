@@ -232,6 +232,10 @@ likelihood, and mitigation.
 
 Every stopping point is documented here. Timestamps are UTC.
 
+Three entries dated `2026-10-16` were corrected to UTC after being written in
+local time; the defect, its proof and the limits of the audit are recorded in
+the last entry of this section rather than recited here.
+
 - [x] (2026-10-12 14:45Z) Reconnaissance: confirmed the upstream diagnostic
   reproduces locally. With `PATH` and `HOME` both free of `mold`/`rustup`,
   `make … doctest` exits 2 at
@@ -914,7 +918,7 @@ Every stopping point is documented here. Timestamps are UTC.
   later head is docs-only on top of `52084776`, rather than saying "the current
   head" — a phrase written once and falsified by the next push within a single
   turn.
-- [x] (2026-10-16 17:40Z) **The upstream-state claims were refreshed, and the
+- [x] (2026-10-16 15:40Z) **The upstream-state claims were refreshed, and the
   review census re-derived after the eleventh pass.** The eleventh
   `coderabbit review --agent` pass raised the mold-selection finding for the
   eleventh time, at `mutation-testing.yml:78`. Checking it rather than
@@ -1070,7 +1074,7 @@ Every stopping point is documented here. Timestamps are UTC.
   count is 17 invocations over 2026-10-13 05:59 .. 2026-10-16 16:57 UTC; the
   census method and its deduplication are in *Outcomes & retrospective*.
 
-- [x] (2026-10-16 22:05Z) **`6558fd1f` is green in CI on every workflow, and the
+- [x] (2026-10-16 20:05Z) **`6558fd1f` is green in CI on every workflow, and the
   ExecPlan contract suite is observed passing there — which retires the one
   local gate this branch could not close.** The three workflows bound to
   `6558fd1fd1231a9701686734335c85b293890e30` each concluded `completed success`
@@ -1125,22 +1129,22 @@ Every stopping point is documented here. Timestamps are UTC.
   unresponsive to D-Bus (`systemctl --user is-system-running` and a raw
   `dbus-send … org.freedesktop.DBus.Peer.Ping` both time out at 20 s); the
   supervisor then logged repeated
-  `group gNNNN: cannot create buildlimits-2867217-gNNNN.scope: Call failed:
-  Connection timed out`,
-  that is, it could not make the transient scope that bounds each compiler
-  group; and with 256 `build-limits-rustc` wrappers queued its socket accept
-  queue saturated (`u_str LISTEN 129` against backlog `128`), which is why
+  `group gNNNN: cannot create buildlimits-2867217-gNNNN.scope`, each ending
+  `Call failed: Connection timed out` — that is, it could not make the
+  transient scope that bounds each compiler group; and with 256
+  `build-limits-rustc` wrappers queued its socket accept queue saturated
+  (`u_str LISTEN 129` against backlog `128`), which is why
   `build-limits-status` reports `cannot query the supervisor …: timed out` while
   `ss` shows the socket still listening. The supervisor also restarted twice
-  tonight (20:28:13 and ~21:42), and `sccache` was absent for part of the
-  window, which is the `sccache unreachable, compiling directly` clause — an
-  uncached build, not a failure. **No recovery action was taken:** restarting
+  tonight (`18:28:14Z` and `19:42:16Z`), and `sccache` was absent for part of
+  the window, which is the `sccache unreachable, compiling directly` clause —
+  an uncached build, not a failure. **No recovery action was taken:** restarting
   `systemd --user` would terminate every other agent's processes on this
   machine, which is out of scope for this branch, and build-limits admission
   must never be bypassed by unsetting `RUSTC_WRAPPER`. This is reported to the
   operator instead.
 
-- [x] (2026-10-16 22:52Z) **The amended plan's own head `06124400` is green on
+- [x] (2026-10-16 20:52Z) **The amended plan's own head `06124400` is green on
   the same three workflows, so the edit that this plan describes is itself
   covered by the suite it describes.** The three workflows bound to
   `061244001b5a7a249a552f508b3e311e06ec362a` each concluded `completed success`
@@ -1166,6 +1170,83 @@ Every stopping point is documented here. Timestamps are UTC.
   the run directly instead of the poll's snapshot showed that it had in fact
   concluded `success` at 20:48. The run list endpoint's `status`/`conclusion`
   pair is the authority; a polled line is a point-in-time rendering of it.
+
+- [x] (2026-10-16 21:25Z) **Three of this section's `2026-10-16` entries carried
+  local times labelled as UTC, and they are corrected above.** The defect is
+  worth stating rather than quietly fixing, because it is a provenance error in
+  an artefact whose whole purpose is to bind claims to evidence, and it is the
+  same class of error this plan spends its length warning about: a value that
+  *looks* like a revision-bound fact while actually recording something else.
+  The host runs at UTC+02:00. Two tools conspired. `journalctl -o short-iso`
+  appends an offset, which is easy to read past and then drop; and a shell
+  command formatting its own output prints local time with **no** offset at
+  all, which is indistinguishable from UTC in the output itself.
+
+  What makes this provable rather than suspected is the *committer date* of the
+  commit that introduces an entry: an entry cannot post-date the commit
+  carrying it. All three violated that, by almost exactly the local offset.
+
+  ```plaintext
+  entry as written  introducing commit  committer date (UTC)  corrected entry
+  17:40Z            84b1e46f            17:05:35Z             15:40Z
+  22:05Z            06124400            20:28:40Z             20:05Z
+  22:52Z            b2efc6c4            20:57:48Z             20:52Z
+  ```
+
+  Each commit's own timestamp was written in the same mislabelled local frame,
+  so the column is the committer date converted to UTC; author and committer
+  agree on all three, which rules out a rebase having rewritten them. The
+  writer-to-commit lag was 1h 25m, 23m and 5m, each well inside the two-hour
+  offset, which is what makes the violation visible: an entry labelled local
+  overstates its UTC time by exactly the offset, so it lands *later* than the
+  commit that carries it. **The test has a blind spot worth naming** — had the
+  lag exceeded two hours for any entry, that entry would have read as clean
+  while carrying the same defect. The restart times quoted inside the `20:05Z`
+  entry were read from `journalctl -o short-iso` as `20:28:14+02:00` and
+  `21:42:16+02:00`, so as UTC they are `18:28:14Z` and `19:42:16Z`, and the
+  entry now says so.
+
+  This entry is itself the fourth instance, found by applying the same test to
+  it. It was first written and labelled `21:40Z`, but the file's last write
+  before the correction was `21:29:03Z` (mtime `23:29:03.948942034 +0200`), so
+  the label post-dated the bytes it describes by about eleven minutes and was
+  local time mislabelled again. Applying the offset gives `19:40Z`, which
+  invents a different error; the truth is that the notice was written in local
+  time without an offset and the honest UTC value is not recoverable from that
+  label alone. It is therefore set to `21:25Z`, **earlier** than every artefact
+  it cites: the corrected entries it fixes (`20:05Z`, `20:52Z`), the commits
+  carrying them, and the mtime above. An entry ordered before its own evidence
+  is ordinary for a retrospective; one ordered after the file that holds it is
+  the contradiction being repaired.
+
+  **The honest limit of the check.** Only the three `2026-10-16` entries were
+  audited this way. The `2026-10-14` entries (`02:05Z`, `03:10Z`, `04:20Z`,
+  `05:20Z`) were **not** re-derived from their commits, so they are not
+  certified by this correction — an entry whose clock happened to be handled
+  correctly and one whose clock was not are indistinguishable from the text
+  alone. A future reader wanting certainty should re-derive each from its
+  introducing commit's committer date, which is the only durable witness
+  available.
+
+- [x] (2026-10-17 15:41Z) **The two `mod rustdocflags` line citations were
+  quoted one line early, and are corrected.** Two places cited
+  `tests/makefile_test_target.rs:347` for `mod rustdocflags`; the attribute is
+  on 347 and the declaration is on **348**. The citation was repeated rather
+  than re-read, which is the same propagation failure this plan records in
+  *Surprises & discoveries* — a number copied from the plan's own prose instead
+  of from the source. Confirmed by `grep -n 'mod rustdocflags'`, which prints
+  `348:mod rustdocflags;`. No claim depended on the ordinal, and both sites now
+  carry 348. At the EP-M3 site the surrounding sentence also states the
+  entailment honestly: `ok Unmutated baseline` is a whole-run result, so "the
+  named tests ran" follows from the target being in scope plus cargo stopping
+  at the first failing target, not from a per-target line.
+
+  The label's provenance, given the preceding entry: it was first written as
+  `11:30Z`, a figure with no clock reading behind it. The reading taken
+  immediately afterwards was `15:41:04Z`, and the label is that reading
+  truncated to the minute — an artefact of a measurement rather than a second
+  guess. It precedes the file's own mtime (`17:41:10 +0200`, i.e. `15:41:10Z`)
+  by ten seconds, because setting the label is itself a write.
 
 ## Surprises & discoveries
 
@@ -1645,15 +1726,18 @@ provisions mold — `build-tools: mold 2.41.0` matching `tools/mold/VERSION`, on
 `skipped` to `success`. The baseline then reports
 `ok Unmutated baseline in 122s build + 218s test` after
 `Found 636 mutants to test`, and mutants are evaluated and reported. The two
-named tests pass locally and run inside that baseline, because
-`tests/makefile_test_target.rs:347` declares `mod rustdocflags` and the
-mutation run passes no `--test` filter. The rustdoc tests now inject the
-build-tools boundary through the shared sandbox, so they measure `RUSTDOCFLAGS`
-propagation instead of host capability, while `build_tools_check_tests.rs`
-keeps the real prerequisite under test — including the new `doctest` case that
-reproduces the original failure. Flag ownership is recorded against
-shared-actions#544 with **no local workaround**, and the ETXTBSY audit was
-read-only with no helper changed and no retry added.
+named tests pass locally and run inside that baseline — an inference rather
+than a per-target log line, because `ok Unmutated baseline` describes the whole
+`cargo test` run: `tests/makefile_test_target.rs:348` declares
+`mod rustdocflags` and the mutation run passes no `--test` filter, so the
+target is in scope, and cargo stopping at the first failing target means an
+`ok` run left no target failed. The rustdoc tests now inject the build-tools
+boundary through the shared sandbox, so they measure `RUSTDOCFLAGS` propagation
+instead of host capability, while `build_tools_check_tests.rs` keeps the real
+prerequisite under test — including the new `doctest` case that reproduces the
+original failure. Flag ownership is recorded against shared-actions#544 with
+**no local workaround**, and the ETXTBSY audit was read-only with no helper
+changed and no retry added.
 
 **The linker-selection clause, and the reading it turns on.** The issue's
 Acceptance asks that "required linker selection remains intact". That phrase
@@ -2041,7 +2125,7 @@ sandbox module are untouched by it except for the added case.
 **Remaining gaps:** at M2 close the worker had still not been observed.
 **Closed at EP-M3:** the baseline is green on the worker
 (`ok Unmutated baseline in 122s build + 218s test`), and
-`tests/makefile_test_target.rs:347` declares `mod rustdocflags`, so the named
+`tests/makefile_test_target.rs:348` declares `mod rustdocflags`, so the named
 tests run inside it.
 
 ### EP-M3 — Validate on the real worker, observe linker selection, audit ETXTBSY
