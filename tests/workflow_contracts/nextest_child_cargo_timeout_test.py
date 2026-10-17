@@ -14,14 +14,12 @@ may a cold-build child Cargo test take?". ``test_execution_coverage_test``
 owns the single-execution rule and reads none of it.
 """
 
-import tomllib
-
 import pytest
 from nextest_child_cargo_group_invariants import (
     GROUP_FILTER,
     nextest_config,
 )
-from workflow_loading import REPO_ROOT, require_list, require_mapping
+from workflow_loading import require_list, require_mapping
 
 
 @pytest.mark.parametrize(
@@ -100,9 +98,7 @@ def test_cold_build_budgets_are_scoped_to_the_tests_that_pay_them() -> None:
     budget that moved, widened silently, or disappeared from an override fails
     here and names itself.
     """
-    config = tomllib.loads(
-        (REPO_ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8")
-    )
+    config = nextest_config()
     profile = config["profile"]["default"]
     assert profile["slow-timeout"] == {"period": "60s", "terminate-after": 5}, (
         "ordinary tests must retain their five-minute budget"

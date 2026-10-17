@@ -464,15 +464,15 @@ reconciles to.
 ## Implementation references
 
 - IR collections and the Kani substitution:
-  [`src/ir/graph.rs`](../src/ir/graph.rs) and
-  [`src/ir/graph_kani_map.rs`](../src/ir/graph_kani_map.rs)
+  [`src/ir/graph/mod.rs`](../src/ir/graph/mod.rs) and
+  [`src/ir/graph/kani_map.rs`](../src/ir/graph/kani_map.rs)
 - Lowering, rule resolution, and default targets:
-  [`src/ir/from_manifest.rs`](../src/ir/from_manifest.rs) and
-  [`src/ir/from_manifest_support.rs`](../src/ir/from_manifest_support.rs)
+  [`src/ir/from_manifest/mod.rs`](../src/ir/from_manifest/mod.rs) and
+  [`src/ir/from_manifest/support/mod.rs`](../src/ir/from_manifest/support/mod.rs)
 - Emission entry points:
   [`src/ninja_gen/mod.rs`](../src/ninja_gen/mod.rs),
   [`src/ninja_gen/explicit_shell.rs`](../src/ninja_gen/explicit_shell.rs), and
-  [`src/ninja_gen/dyndep.rs`](../src/ninja_gen/dyndep.rs)
+  [`src/ninja_gen/dyndep/mod.rs`](../src/ninja_gen/dyndep/mod.rs)
 - Within-edge rendering, exempt from I-1:
   [`src/ninja_gen/display_edge.rs`](../src/ninja_gen/display_edge.rs)
 - Path and namespace preconditions:
@@ -480,7 +480,7 @@ reconciles to.
 - The deferred obligation this discharges:
   [ADR-004](adr-004-bound-kani-ir-harnesses-to-small-n.md)
 - Prior art for order-invariance testing:
-  [`src/graph_view/tests_property.rs`](../src/graph_view/tests_property.rs)
+  [`src/graph_view/tests/property.rs`](../src/graph_view/tests/property.rs)
 - ExecPlan:
   [4.3.1 Proptest coverage for deterministic Ninja emission](execplans/4-3-1-proptests-for-deterministic-ninja-emission.md)
 
