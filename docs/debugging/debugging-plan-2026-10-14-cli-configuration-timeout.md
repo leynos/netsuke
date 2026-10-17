@@ -442,6 +442,77 @@ whole-run cap; this integration retains those current-main values. The
 current-main timeout policy is 300 seconds ordinary, 600 seconds for mutation
 compilation, 720 seconds for the production-module check, and 900 seconds for
 the stub-environment, split-build, and packaging checks. The CI watchdog
-remains 1,980 seconds and the job limit remains 100 minutes. No fresh full gate
-has yet been completed for this integrated candidate; the historical
-measurements and validation above apply to their recorded candidates only.
+remains 1,980 seconds and the job limit remains 100 minutes. At this
+integration step, fresh full gates were pending; the historical measurements
+and validation above apply to their recorded candidates only.
+
+## Windows diagnostic follow-up (2026-10-16)
+
+The original Windows run failed nested compilation after 45.959 seconds; it was
+not a timeout. The harness discarded the compiler diagnostic because Cargo
+emitted it on JSON stdout, while the failure included only stderr.
+JSON-producing fixture commands now select `json-render-diagnostics`, retaining
+artefact JSON while sending diagnostics to stderr. A deliberate compiler-error
+case guards that boundary alongside the existing successful split-build case.
+
+The nested command selects the running integration-test target, but the log
+does not establish an executable replacement collision or the reason Cargo
+invalidated the artefact. The exact Windows cause remains unconfirmed until a
+new hosted run provides its diagnostic. Moving preparation before test
+execution is a proposed systemic follow-up, not an implemented change or a
+demonstrated explanation of that historical failure.
+
+An isolated no-dependency probe under the pinned nightly confirmed the stream
+contract: both commands failed as intended, with the sentinel on JSON stdout for
+`json` and on stderr for `json-render-diagnostics`. Subsequent full Rust
+validation was blocked by compiler admission: the supervisor refused launches
+while requests to create compiler scopes timed out. Those results do not
+establish a source failure or a passing Rust suite.
+
+## Production-module timeout follow-up (2026-10-17)
+
+On the resumed repaired candidate, `make check-fmt`, `make lint`, and
+`make typecheck` passed. `make doc-coverage` reported 98.89% (5,074/5,131), and
+its tool tests passed 65 cases. `NETSUKE_REQUIRE_NINJA=1 make test` failed when
+`production_build_module_slice_has_expected_boundary` reached its 720.034
+seconds limit: 3,971 passed, one timed out, six were skipped, and 23 did not
+run. See `/tmp/test-netsuke-913-repaired.out`, lines 4531–4545. Compiler
+admission was healthy. Its nested
+`cargo test --no-run --workspace --all-targets --all-features` used the gate's
+target and flags but still compiled many workspace binaries.
+
+Fingerprint inspection found that the outer gate's
+`target/debug/build/netsuke-build/*/fingerprint/run-build-script-build-script-build.json`
+recorded `CARGO_PKG_VERSION`, `CARGO_PKG_DESCRIPTION`, and `CARGO_PKG_AUTHORS`
+as absent, while the latest nested fingerprint `a05ef5cfbe344bd2` recorded
+their injected values. The failing candidate emitted `rerun-if-env-changed` for
+those values, `TARGET`, and `PROFILE`. Cargo documents that these directives
+compare the environment of Cargo invocations; they do not watch values Cargo
+supplies only to the build script
+([build-script reference](https://doc.rust-lang.org/cargo/reference/build-scripts.html#rerun-if-env-changed)).
+
+The four-build canary ran under the pinned nightly and every invocation exited
+successfully. With the tracked watcher, the transition from an unset
+`CARGO_PKG_VERSION` to `0.1.0` marked the build script dirty (log line 4) and
+ran it (line 6). Without the watcher, the matching-value build stayed fresh
+(line 3) and did not run the build script; its warning text was cached output
+rather than another build-script execution. The logs are
+`/tmp/netsuke-cargo-metadata-canary-tracked-unset.log`,
+`/tmp/netsuke-cargo-metadata-canary-tracked-matching.log`,
+`/tmp/netsuke-cargo-metadata-canary-control-unset.log`, and
+`/tmp/netsuke-cargo-metadata-canary-control-matching.log`. This supports the
+invalidation mechanism with high confidence. It does not identify the exact
+first invalidation in the historical Windows run; the local fingerprint is
+compatible evidence, not a trace of that first cause.
+
+The repair removes the five watchers for Cargo-owned package metadata, target,
+and profile values. It relies on Cargo's manifest and build-configuration
+tracking for those inputs, retains the explicit `SOURCE_DATE_EPOCH` watcher,
+and keeps manifest-file tracking. The new regression module,
+`tests/support/cargo_metadata_reuse.rs`, adds a parameterized `cargo_metadata`
+split-fixture case using the existing workspace build helper. It checks that
+inherited Cargo metadata leaves the build fresh and that changing
+`SOURCE_DATE_EPOCH` triggers a rebuild. At this pre-validation checkpoint, the
+regression was implemented and the canary supported the mechanism. The
+candidate still required sequential gates; the canary did not prove the exact
+first invalidation in the historical Windows run.

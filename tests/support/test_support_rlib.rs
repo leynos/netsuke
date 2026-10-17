@@ -44,7 +44,7 @@ impl TestSupportRlib {
             .arg("test")
             .arg("--manifest-path")
             .arg(manifest_dir().join("Cargo.toml"))
-            .arg("--message-format=json")
+            .arg("--message-format=json-render-diagnostics")
             .args(cargo_features::GATE_BUILD_ARGUMENTS);
         let started_at = Instant::now();
         let output = command.output()?;

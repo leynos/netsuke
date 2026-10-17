@@ -4464,9 +4464,9 @@ Markdown. A 38 s margin is not a budget but the difference between two runners,
 and the failure then names nextest's cap rather than the patch that was slow.
 The widened allowance is bounded from above by the whole-run budget: the
 ordering requires `global-timeout` strictly above the largest per-test
-allowance. The mutation gate keeps its 600 s allowance, while the split-build
-and production-module checks get 720 s; the packaging smoke test now gets 900
-s, leaving 60 s below the 960 s whole-run budget. At 60 s periods, 960 s would
+allowance. The mutation gate keeps its 600 s allowance, the production-module
+check gets 720 s, and the split-build and packaging smoke tests get 900 s,
+leaving 60 s below the 960 s whole-run budget. At 60 s periods, 960 s would
 permit at most fifteen periods (900 s) while remaining strictly below the
 whole-run budget. An allowance of 960 s would equal that budget, and the run
 could end before the test used its allowance.
@@ -4710,7 +4710,7 @@ governs the non-doctest pass only, and deliberately stays small:
   reached the targeted 600s cap during a cold build under shared compiler
   admission, so it now receives fifteen warning periods (900s). The isolated
   `split_build_fixture_compiles_through_the_direct_rustc_harness` test receives
-  twelve warning periods (720s) after reaching its 300s cap while compiler
+  fifteen warning periods (900s) after reaching its 720s cap while compiler
   admission was saturated.
   `production_build_module_slice_has_expected_boundary` also runs a nested
   `cargo build --lib` before its direct-rustc checks; it reached the default
@@ -6564,7 +6564,8 @@ when a fixture must compile against `test_support`; a harness for the
 production crate, or one needing no crate, must use its own narrow support code.
 
 `TestSupportRlib::build` builds `test_support` with
-`cargo test --no-run --workspace --all-targets --all-features --message-format=json`
+`cargo test --no-run --workspace --all-targets --all-features
+--message-format=json-render-diagnostics`
 from the workspace root manifest. The shared target and feature arguments in
 `tests/support/cargo_features.rs` match `make test-nextest`; `test_support`
 forwards `legacy-digests` to `netsuke-build`, allowing Cargo to reuse the
@@ -6593,6 +6594,29 @@ has its own directory, a filtered-out proc macro is simply absent from the
 search path and its dependents fail with `E0463`. The same rule and the same
 reasoning apply to `tests/command_env_ui_tests.rs`, which builds the `netsuke`
 rlib and derives its search path the same way.
+
+JSON-producing Cargo preparations use
+`--message-format=json-render-diagnostics`. Cargo still reports artefacts on
+stdout, while compiler diagnostics reach the stderr included in harness
+failures. The split-build regression checks both a successful artefact handoff
+and a deliberate compiler error, so a preparation failure cannot lose the
+underlying diagnostic again.
+
+Build scripts should watch environment variables supplied by the build
+invocation, not values Cargo injects for package metadata, target, or profile.
+Cargo tracks those inputs through the manifest and build configuration;
+`rerun-if-env-changed` compares the environment of Cargo invocations and cannot
+observe Cargo's build-script-only values there. Keep an explicit watcher for
+external inputs such as `SOURCE_DATE_EPOCH` when their changes affect generated
+outputs.
+
+The `netsuke-build` script follows this boundary: it omits watchers for
+`CARGO_PKG_VERSION`, `CARGO_PKG_DESCRIPTION`, `CARGO_PKG_AUTHORS`, `TARGET`, and
+`PROFILE`, while retaining `SOURCE_DATE_EPOCH` and manifest-file tracking.
+`tests/support/cargo_metadata_reuse.rs` adds a parameterized split-fixture case
+for inherited Cargo metadata and `SOURCE_DATE_EPOCH`. It requires metadata-only
+changes to reuse artefacts and the external source-date input to trigger a
+rebuild.
 
 The cached CLI configuration fixture uses that same `NetsukeRlib` harness. It
 type-checks `ConfigEnvProvider`, `DiscoveredLayers`, diagnostic emission, and

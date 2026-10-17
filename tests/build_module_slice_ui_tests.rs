@@ -126,7 +126,7 @@ impl BuildSliceDependencies {
             .arg("test")
             .arg("--manifest-path")
             .arg(manifest_dir().join("Cargo.toml"))
-            .arg("--message-format=json")
+            .arg("--message-format=json-render-diagnostics")
             .args(cargo_features::GATE_BUILD_ARGUMENTS)
             .output()?;
         if !output.status.success() {
