@@ -47,57 +47,42 @@ pub fn library_path_in_message(line: &str, target_name: &str) -> Option<PathBuf>
         .and_then(|artifact_paths| preferred_library_path(&artifact_paths))
 }
 
+/// Describe the borrowed target and package criteria for stream selection.
+#[derive(Clone, Copy)]
+pub struct LibraryArtefactSelection<'a> {
+    /// Name of the Cargo target to select.
+    pub target_name: &'a str,
+    /// Exact package ID to select, or `None` to require one stream identity.
+    pub expected_package_id: Option<&'a str>,
+}
+
 /// Select one normal, non-test library artefact from a Cargo JSON stream.
 ///
 /// Compilation units are identified by package ID, target source path, the
 /// optional manifest path, and the selected full artefact path. Repeated
 /// messages for the same unit are accepted; distinct matching units are
 /// rejected rather than allowing output order to choose a host or target
-/// artefact.
+/// artefact. A package-scoped selection ignores matching target names from
+/// other packages; an unscoped selection also checks identity across tiers.
 ///
 /// # Errors
 ///
 /// Returns an error for malformed Cargo JSON or identity fields, an ambiguous
 /// set of matching library units, or a stream without the requested library.
-pub fn library_path_in_messages(messages: &str, target_name: &str) -> io::Result<PathBuf> {
-    select_library_path(messages, target_name, None)
-}
-
-/// Select a normal library artefact belonging to one exact Cargo package ID.
-///
-/// Other packages with the same target name are ignored before unit selection.
-///
-/// # Errors
-///
-/// Returns an error for malformed Cargo JSON or identity fields, an ambiguous
-/// set of matching units for `expected_package_id`, or no matching library.
-pub fn library_path_in_messages_for_package(
+pub fn library_path_in_messages(
     messages: &str,
-    target_name: &str,
-    expected_package_id: &str,
-) -> io::Result<PathBuf> {
-    select_library_path(messages, target_name, Some(expected_package_id))
-}
-
-/// Collect matching library units, then apply package and artefact-tier policy.
-///
-/// # Errors
-///
-/// Returns an error for malformed Cargo JSON, ambiguous matching units, or a
-/// stream without the requested normal library.
-fn select_library_path(
-    messages: &str,
-    target_name: &str,
-    expected_package_id: Option<&str>,
+    selection: LibraryArtefactSelection<'_>,
 ) -> io::Result<PathBuf> {
     let mut candidates = Vec::new();
-    for (line_index, line) in messages.lines().enumerate() {
-        if line.trim().is_empty() {
+    for (line_index, text) in messages.lines().enumerate() {
+        let line = CargoJsonLine {
+            text,
+            number: line_index + 1,
+        };
+        if line.text.trim().is_empty() {
             continue;
         }
-        let Some(candidate) =
-            library_unit_from_message(line, target_name, expected_package_id, line_index + 1)?
-        else {
+        let Some(candidate) = library_unit_from_message(line, selection)? else {
             continue;
         };
         if !candidates.contains(&candidate) {
@@ -105,7 +90,16 @@ fn select_library_path(
         }
     }
 
-    select_candidate_tier(&candidates, expected_package_id.is_none(), target_name)
+    select_candidate_tier(&candidates, selection)
+}
+
+/// Keep Cargo JSON text beside the line number used in parse diagnostics.
+#[derive(Clone, Copy)]
+struct CargoJsonLine<'a> {
+    /// Raw JSON message text.
+    text: &'a str,
+    /// One-based line number in Cargo's output stream.
+    number: usize,
 }
 
 /// Identify one library compilation unit and its selected artefact tier.
@@ -131,8 +125,7 @@ struct LibraryArtefactUnit {
 /// the selected tier contains distinct artefacts, or no candidates exist.
 fn select_candidate_tier(
     candidates: &[LibraryArtefactUnit],
-    require_one_identity: bool,
-    target_name: &str,
+    selection: LibraryArtefactSelection<'_>,
 ) -> io::Result<PathBuf> {
     let identity_conflict = candidates.first().and_then(|first| {
         candidates
@@ -145,9 +138,12 @@ fn select_candidate_tier(
             })
             .map(|candidate| (first, candidate))
     });
-    if require_one_identity && let Some((first, candidate)) = identity_conflict {
+    if selection.expected_package_id.is_none()
+        && let Some((first, candidate)) = identity_conflict
+    {
         return Err(io::Error::other(format!(
-            "Cargo JSON stream has ambiguous library artefacts for target {target_name:?}: {first:?} and {candidate:?}",
+            "Cargo JSON stream has ambiguous library artefacts for target {:?}: {first:?} and {candidate:?}",
+            selection.target_name,
         )));
     }
 
@@ -160,7 +156,8 @@ fn select_candidate_tier(
         if let Some(previous) = selected {
             if previous != candidate {
                 return Err(io::Error::other(format!(
-                    "Cargo JSON stream has ambiguous library artefacts for target {target_name:?}: {previous:?} and {candidate:?}",
+                    "Cargo JSON stream has ambiguous library artefacts for target {:?}: {previous:?} and {candidate:?}",
+                    selection.target_name,
                 )));
             }
         } else {
@@ -172,7 +169,8 @@ fn select_candidate_tier(
         .map(|candidate| candidate.artefact_path.clone())
         .ok_or_else(|| {
             io::Error::other(format!(
-                "Cargo JSON stream has no normal, non-test library artefact for target {target_name:?}",
+                "Cargo JSON stream has no normal, non-test library artefact for target {:?}",
+                selection.target_name,
             ))
         })
 }
@@ -269,17 +267,16 @@ fn is_dependency_artefact(path: &Path) -> bool {
 /// Returns an error when Cargo JSON is malformed, a matching message has
 /// invalid identity fields, or it does not report a loadable library artefact.
 fn library_unit_from_message(
-    line: &str,
-    target_name: &str,
-    expected_package_id: Option<&str>,
-    line_number: usize,
+    line: CargoJsonLine<'_>,
+    selection: LibraryArtefactSelection<'_>,
 ) -> io::Result<Option<LibraryArtefactUnit>> {
-    let message: serde_json::Value = serde_json::from_str(line).map_err(|error| {
+    let message: serde_json::Value = serde_json::from_str(line.text).map_err(|error| {
         io::Error::other(format!(
-            "Cargo JSON line {line_number} could not be parsed: {error}",
+            "Cargo JSON line {} could not be parsed: {error}",
+            line.number,
         ))
     })?;
-    let reason = required_string(message.get("reason"), "reason", line_number)?;
+    let reason = required_string(message.get("reason"), "reason", line.number)?;
     if reason != "compiler-artifact" {
         return Ok(None);
     }
@@ -287,27 +284,30 @@ fn library_unit_from_message(
     let target = message
         .get("target")
         .and_then(serde_json::Value::as_object)
-        .ok_or_else(|| malformed_field(line_number, "target object"))?;
-    let name = required_string(target.get("name"), "target.name", line_number)?;
-    if name != target_name {
+        .ok_or_else(|| malformed_field(line.number, "target object"))?;
+    let name = required_string(target.get("name"), "target.name", line.number)?;
+    if name != selection.target_name {
         return Ok(None);
     }
 
-    let package_id = required_string(message.get("package_id"), "package_id", line_number)?;
-    if expected_package_id.is_some_and(|expected| expected != package_id.as_str()) {
+    let package_id = required_string(message.get("package_id"), "package_id", line.number)?;
+    if selection
+        .expected_package_id
+        .is_some_and(|expected| expected != package_id.as_str())
+    {
         return Ok(None);
     }
     let source_path = PathBuf::from(required_string(
         target.get("src_path"),
         "target.src_path",
-        line_number,
+        line.number,
     )?);
-    let manifest_path = optional_manifest_path(&message, line_number)?;
-    if !is_normal_library_unit(&message, target, line_number)? {
+    let manifest_path = optional_manifest_path(&message, line.number)?;
+    if !is_normal_library_unit(&message, target, line.number)? {
         return Ok(None);
     }
 
-    let (artefact_path, metadata_only) = library_artefact_path(line, target_name, line_number)?;
+    let (artefact_path, metadata_only) = library_artefact_path(line, selection)?;
     Ok(Some(LibraryArtefactUnit {
         package_id,
         source_path,
@@ -351,15 +351,15 @@ fn is_normal_library_unit(
 ///
 /// Returns an error when Cargo does not provide a loadable library path.
 fn library_artefact_path(
-    line: &str,
-    target_name: &str,
-    line_number: usize,
+    line: CargoJsonLine<'_>,
+    selection: LibraryArtefactSelection<'_>,
 ) -> io::Result<(PathBuf, bool)> {
-    let (_, paths) = compiler_artifact_paths(line)
-        .ok_or_else(|| malformed_field(line_number, "compiler-artifact filenames array"))?;
+    let (_, paths) = compiler_artifact_paths(line.text)
+        .ok_or_else(|| malformed_field(line.number, "compiler-artifact filenames array"))?;
     let artefact_path = preferred_library_path(&paths).ok_or_else(|| {
         io::Error::other(format!(
-            "Cargo JSON line {line_number} has no loadable library artefact for target {target_name:?}",
+            "Cargo JSON line {} has no loadable library artefact for target {:?}",
+            line.number, selection.target_name,
         ))
     })?;
     let metadata_only = last_with_extension(&paths, "rmeta").is_some()

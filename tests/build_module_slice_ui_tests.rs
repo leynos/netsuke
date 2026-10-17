@@ -147,8 +147,12 @@ impl BuildSliceDependencies {
         let externs = package_ids
             .iter()
             .map(|(name, package_id)| {
-                let artefact = cargo_artifacts::library_path_in_messages_for_package(
-                    &stdout, name, package_id,
+                let artefact = cargo_artifacts::library_path_in_messages(
+                    &stdout,
+                    cargo_artifacts::LibraryArtefactSelection {
+                        target_name: name,
+                        expected_package_id: Some(package_id),
+                    },
                 )?;
                 Ok((*name, artefact))
             })

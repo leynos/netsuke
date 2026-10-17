@@ -62,7 +62,13 @@ impl TestSupportRlib {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        let rlib = cargo_artifacts::library_path_in_messages(&stdout, "test_support")?;
+        let rlib = cargo_artifacts::library_path_in_messages(
+            &stdout,
+            cargo_artifacts::LibraryArtefactSelection {
+                target_name: "test_support",
+                expected_package_id: None,
+            },
+        )?;
         // Dependencies do not necessarily sit beside the uplifted
         // `test_support` metadata artefact: Cargo's `build.build-dir` setting splits
         // intermediate artefacts (where dependencies live) from final ones,

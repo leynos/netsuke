@@ -6711,6 +6711,10 @@ Cargo `compiler-artifact` messages, with
 `tests/support/rustc_response_file.rs`, which renders compiler arguments. The
 UI harnesses retain their case assertions, while the shared support code owns
 the Cargo build, artefact discovery, and direct-`rustc` invocation workflow.
+`LibraryArtefactSelection` is scoped to the single `library_path_in_messages`
+stream selector and carries a borrowed target name and optional exact package
+ID. `CargoJsonLine` pairs JSON text with its diagnostic line number inside that
+parser; it does not own Cargo builds or `rustc` arguments.
 
 Those arguments reach `rustc` through a **response file**, not the command
 line. One `-L dependency=` pair per crate can push the Windows `CreateProcessW`

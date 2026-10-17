@@ -184,7 +184,13 @@ impl NetsukeRlib {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        let rlib = cargo_artifacts::library_path_in_messages(&stdout, "netsuke")?;
+        let rlib = cargo_artifacts::library_path_in_messages(
+            &stdout,
+            cargo_artifacts::LibraryArtefactSelection {
+                target_name: "netsuke",
+                expected_package_id: None,
+            },
+        )?;
         // Dependencies do not sit in one predictable directory. Cargo uplifts
         // the top-level package's artefacts into the profile directory, and
         // the Cargo shipped with the 1.99 nightlies gives every crate its own
