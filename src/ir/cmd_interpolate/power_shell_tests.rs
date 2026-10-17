@@ -92,6 +92,7 @@ fn power_shell_scripts_reject_markers_after_ambiguous_comment_syntax(#[case] tem
 #[case::reversed_single("‛", "‛")]
 #[case::left_right_double("“", "”")]
 #[case::low_double("„", "‟")]
+#[case::double_high_reversed("‟", "‟")]
 fn power_shell_scripts_reject_typographic_quote_markers(#[case] open: &str, #[case] close: &str) {
     let template = format!("Write-Output {open}{INS_TOKEN}{close} > {OUTS_TOKEN}");
     let error = interpolate_script_with_bindings(&template, &script_bindings())

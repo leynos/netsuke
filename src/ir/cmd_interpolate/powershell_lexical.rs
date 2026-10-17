@@ -276,7 +276,14 @@ fn is_here_string_terminator(chars: &[char], pos: usize, quote: char) -> bool {
 const fn is_typographic_quote(ch: char) -> bool {
     matches!(
         ch,
-        '\u{2018}' | '\u{2019}' | '\u{201a}' | '\u{201b}' | '\u{201c}' | '\u{201d}' | '\u{201e}'
+        '\u{2018}'
+            | '\u{2019}'
+            | '\u{201a}'
+            | '\u{201b}'
+            | '\u{201c}'
+            | '\u{201d}'
+            | '\u{201e}'
+            | '\u{201f}'
     )
 }
 
