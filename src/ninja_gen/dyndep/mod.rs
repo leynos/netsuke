@@ -55,8 +55,8 @@ use crate::hex;
 use crate::ir::{BuildEdge, BuildGraph};
 use crate::localization::{self, keys};
 use crate::ninja_gen::{
-    NinjaGenError, RecipeShell, edge_requires_gates, graph_requires_dyndep, join, path_key,
-    reject_unsupported_path_characters, write_action_rules,
+    NinjaGenError, RecipeShell, edge_requires_gates, graph_requires_dyndep, join,
+    ordered_default_targets, ordered_edges, reject_unsupported_path_characters, write_action_rules,
 };
 use camino::Utf8PathBuf;
 use sha2::{Digest, Sha256};
@@ -135,10 +135,9 @@ fn generate_bundle_inner(
     let mut stages = SerialStages::default();
     render_edges(graph, &mut out, &mut stages)?;
 
-    if !graph.default_targets.is_empty() {
-        let mut defs = graph.default_targets.clone();
-        defs.sort();
-        writeln!(out, "default {}", join(&defs))?;
+    let defaults = ordered_default_targets(graph);
+    if !defaults.is_empty() {
+        writeln!(out, "default {}", join(&defaults))?;
     }
 
     Ok(GeneratedNinja {
@@ -153,10 +152,7 @@ fn render_edges(
     out: &mut String,
     stages: &mut SerialStages,
 ) -> Result<(), NinjaGenError> {
-    let mut edges: Vec<_> = graph.edges().collect();
-    edges.sort_by_key(|a| path_key(&a.explicit_outputs));
-
-    for edge in edges {
+    for edge in ordered_edges(graph) {
         render_edge(graph, edge, out, stages)?;
     }
     Ok(())

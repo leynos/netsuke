@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest test-documentation-contracts doctest test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest proptest test-documentation-contracts doctest test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -232,6 +232,48 @@ test-nextest: check-build-tools ## Run all non-doctest Rust tests through cargo-
 .PHONY: test-rfc-stdlib-coverage
 test-rfc-stdlib-coverage: check-build-tools ## Check the RFC 0006 split and its parsers
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test rfc_stdlib_coverage_tests --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+
+# A convenience selector over property-test suites, which `make test` already
+# runs: the suites cost about 6 s of CPU against a 45 s budget, so a separate
+# tier, a `PROPTEST_HEAVY` variable, and a dedicated CI job would all be
+# branches no run ever takes.
+#
+# The selector lives in the recipe rather than in `.config/nextest.toml`, and
+# that is forced rather than preferred. The configuration is held to the
+# anchored-selector grammar by
+# `tests/workflow_contracts/nextest_child_cargo_group_invariants.py`, whose
+# `GROUP_FILTER` captures the name group after a *greedy* `MODULE_PATH`; a
+# `src/`-rooted selector such as `test(/^ninja_gen::property_tests($|::)/)`
+# therefore captures `property_tests`, and
+# `test_filters_match_every_declared_test_they_name` fails it because
+# `declared_test_names()` scans only `tests/` and declares no such name.
+# Measured, not inferred: appending that override to the configuration and
+# running the contract reports
+# "filters name tests that no Rust source declares: ['property_tests']".
+# The recipe is out of that contract's scope, so the selector is written here.
+#
+# The shape is a *segment* anchor, `(^|::)…($|::)`, not a leading anchor.
+# A leading anchor selects nothing at all: the suites are reached through a
+# module path (`ir::cmd_interpolate::property_tests::…`), so
+# `test(/^property_tests($|::)/) | test(/^proptests($|::)/)` matches zero of
+# the 90 selected tests. Both suffixes appear in the tree (`helper_proptests`
+# and `hex::property_tests`), and they diverge at index four, so a single
+# substring cannot cover both. Measured: this spelling selects 90 of the 3848
+# tests `--workspace` lists, exactly the census of names carrying either
+# suffix. Drop `--workspace` and the corpus and the count both shrink (3807
+# and 86), which is why the discharge reads the recipe's own flags.
+#
+# Another agent's tests compiling concurrently are unaffected: this runs the
+# same binaries `make test` does and uses the same build cache.
+# The `$$` is load-bearing, not decoration. `$|` is Make's automatic variable
+# for a target's order-only prerequisites, and it is empty here, so an
+# unescaped `($|::)` is silently rewritten to `(::)`: the anchor branch that
+# matches a bare suite name disappears, and only tests *inside* a submodule are
+# selected. Measured with `make -n proptest` before escaping.
+PROPTEST_FILTER := test(/(^|::)[a-z0-9_]*proptests($$|::)/) | test(/(^|::)[a-z0-9_]*property_tests($$|::)/)
+
+proptest: check-build-tools ## Run the property-test suites alone
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --workspace --all-targets --all-features --no-tests fail -E '$(PROPTEST_FILTER)' $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 test-documentation-contracts: check-build-tools ## Validate marked documentation examples and semantic contracts
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test documentation_examples_loader_tests --test documentation_examples_tests --all-features --no-tests fail -E 'test(malformed_documented_examples_are_rejected) | test(every_documented_fence_has_a_known_unique_identifier) | test(release_wix_extension)' $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
