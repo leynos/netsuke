@@ -126,7 +126,7 @@ fn exit_status(success: bool) -> ExitStatus {
 fn exit_status(success: bool) -> ExitStatus {
     use std::os::windows::process::ExitStatusExt;
 
-    ExitStatus::from_raw(if success { 0 } else { 1 })
+    ExitStatus::from_raw(u32::from(!success))
 }
 
 #[test]
