@@ -6,7 +6,7 @@
 //! order, but a rule only covers the collection it was written for: a future
 //! map keyed on pools, or variables, or anything the generator does not yet
 //! produce would not be varied by any strategy, so no property would notice it.
-//! This crate is the part that generalises — it reads the emitter's own sources
+//! This crate is the part that generalizes — it reads the emitter's own sources
 //! and fails the day an unordered collection appears without an order imposed
 //! before its contents are consumed.
 //!
@@ -318,4 +318,60 @@ fn the_matched_type_list_names_only_unordered_collections() {
         "the contract is stated over the unordered collection types, and the \
          ordered ones already impose the order it asks for"
     );
+}
+
+/// The scan sees the shapes the emitter could adopt, not only today's.
+///
+/// The emitter-side test can only report what the scan can see, so a source
+/// shape the scan cannot reach is a hole no amount of correct emitter code
+/// closes. These cases name a shape and assert a hit, so narrowing the visitor
+/// fails here rather than silently widening what the contract permits.
+mod scan_coverage {
+    use super::scan::{Kind, collect, parse};
+
+    /// Every unordered type named by a constructor is found, including one
+    /// whose type is inferred and one written with a turbofish.
+    #[test]
+    fn an_expression_path_reaches_the_scan() {
+        let source = "
+            fn build() {
+                let inferred = std::collections::HashMap::new();
+                let qualified = std::collections::HashMap::<String, u8>::new();
+                let _ = (inferred, qualified);
+            }
+        ";
+        let parsed = parse(source).expect("the case is a valid source");
+        let hits = collect("case.rs", &parsed);
+        let constructors: Vec<&str> = hits
+            .iter()
+            .filter(|hit| hit.kind == Kind::Other)
+            .map(|hit| hit.type_name.as_str())
+            .collect();
+        assert_eq!(
+            constructors,
+            ["HashMap", "HashMap"],
+            "both the inferred and the turbofished constructor are uses"
+        );
+    }
+
+    /// A collection named inside a test-only item is not a hit.
+    ///
+    /// The counterpart to the case above: widening the visitor must not widen
+    /// what counts as reaching the emitter.
+    #[test]
+    fn a_test_only_expression_path_is_ignored() {
+        let source = "
+            #[cfg(test)]
+            mod tests {
+                fn build() {
+                    let _ = std::collections::HashMap::new();
+                }
+            }
+        ";
+        let parsed = parse(source).expect("the case is a valid source");
+        assert!(
+            collect("case.rs", &parsed).is_empty(),
+            "a release build never compiles the test module"
+        );
+    }
 }

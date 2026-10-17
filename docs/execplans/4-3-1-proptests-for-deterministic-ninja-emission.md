@@ -1636,9 +1636,9 @@ Three preparatory pieces, none of which changes behaviour:
   through that field, not by omitting unselected tests, and its exit code is 0
   even when a selector matches nothing. Record the outcome in `Decision log`.
 
-  `Makefile:228` on `origin/main` uses the bare `test(NAME)` form for a
-  different target. That is pre-existing, outside this plan's scope, and not a
-  precedent to copy here.
+  The `documentation-examples` recipe on `origin/main` uses the bare
+  `test(NAME)` form for a different target. That is pre-existing, outside this
+  plan's scope, and not a precedent to copy here.
 
 *Acceptance:* `make test` passes with no file over 400 lines; the layout
 contract reports zero violations on the rebased tree; `make proptest` runs and
@@ -1795,11 +1795,11 @@ Strategies and library-side properties, all `#[cfg(test)]`, wired from
 - `src/ir/graph/property_tests/mod.rs`, `duplicates.rs`, `cycles.rs`
 
 The intervening `property_tests` segment on the third line is **load-bearing,
-not stylistic**: `PROPTEST_FILTER` (`Makefile:264`) keys on a module segment
-ending in `proptests` or `property_tests`, so without it `make proptest`
-selects **none** of the planned `determinism` suites while still exiting 0. The
-same segment is also what the module-layout contract wants, so the two
-constraints agree on one shape. See the corresponding entry in
+not stylistic**: `PROPTEST_FILTER` (`Makefile` `PROPTEST_FILTER`) keys on a
+module segment ending in `proptests` or `property_tests`, so without it
+`make proptest` selects **none** of the planned `determinism` suites while
+still exiting 0. The same segment is also what the module-layout contract
+wants, so the two constraints agree on one shape. See the corresponding entry in
 `Surprises & discoveries`.
 
 Integration tests (no strategy dependency, so `tests/` placement is sound):
@@ -2156,6 +2156,51 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
 
+- [x] (2026-10-17) **The `EP-M5` CodeRabbit pass returned ten findings and no
+      critical or major one; seven distinct defects were accepted and fixed,
+      and two re-phrasings were the same defect stated twice.** The pass ran
+      `coderabbit review --agent --committed --fresh` over `origin/main
+      (077cf366)…HEAD` at `ed0de1ac`, matching the 43 files of that range,
+      and completed in 966 s with exit 0. Dispositions, each checked against
+      live source rather than taken on trust:
+      **(a) accepted** — `tests/hashmap_boundary/scan.rs` never visited
+      expression paths, so `let x = HashMap::new()` was invisible; the finding
+      is real and the suite could not have seen that shape. Fixing it exposed
+      that the obvious repair was also wrong: an expression path ends in
+      `new`, so the type path's last-segment rule records nothing. A
+      separate `any_segment_unordered` matcher now reads value paths, and a
+      scanner-level case fails before the fix and passes after. A first attempt
+      at that case asserted a hit over an unqualified `HashMap::new()` and
+      **failed**, which is what caught the second defect.
+      **(b) accepted** — `tests/workflow_contracts/nextest_child_cargo_timeout_test.py`
+      imported `nextest_config()` and then re-parsed the file with `tomllib`,
+      so a malformed config raised a bare `KeyError`; the loader is now used
+      and both now-unused imports are gone.
+      **(c) accepted** — six of ADR-030's ten `../src/` links named paths that
+      no longer exist (`src/ir/graph.rs`, `src/ir/from_manifest.rs`,
+      `src/ninja_gen/dyndep.rs`, `src/graph_view/tests_property.rs`, and two
+      others); all ten now resolve to live files, verified by script.
+      **(d) accepted** — the plan carried first- and second-person pronouns at
+      five places, against the style guide's rule at line 39 (the ADR cited in
+      the plan already records the same finding); all are now impersonal.
+      **(e) accepted** — three `PROPTEST_FILTER` citations gave `Makefile:264`
+      where the variable is at `:273`, and two further cites (`:228`, `:364`)
+      were stale as well. All are now cited by recipe or variable name, which
+      cannot rot as the Makefile grows; the line numbers had rotted because the
+      file grew after they were written.
+      **(f) accepted** — one `-ise` spelling of "generalize" in the boundary
+      crate's doc comment became the en-GB-oxendict `-ize` form the rest of the
+      repository uses.
+      **(g) rejected, with evidence** — the finding that the import exemption
+      in `is_permitted` is file-wide rather than type-scoped claims a later
+      `HashMap` import in `dyndep/mod.rs` would pass unnoticed. An import
+      alone cannot be iterated: reading it is the whole of what it does. Every
+      actual use of such an import lands as a `Field` or `Other` hit, and both
+      of those must name the permitted field or fail. The file carries exactly
+      one unordered import and one unordered field, both the permitted pair.
+      Binding the exemption to the type name would add a guard against a
+      second import whose use could not escape the existing checks anyway.
+
 - [x] (2026-10-17) **All eight gates passed against freeze `cf263af7`, and the
       milestone was committed as `9e426d12` at that exact content.** This is
       the run the previous entry said was still owed: `markdownlint` had been
@@ -2485,8 +2530,8 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       `sccache service verified stopped and empty; drain tokens may return` —
       followed by a clean `Stopped`/`Starting`/`Started` cycle and a **new
       PID** (1878261, replacing 1127739). By 20:31 the pool read `capacity 4,
-      held 2, healthy` with a real build waiting on a token, and my own
-      restart of `make typecheck` compiled without a single refusal.
+      held 2, healthy` with a real build waiting on a token, and a restart of
+      `make typecheck` compiled without a single refusal.
       **The trap is that a transient state and a terminal state are
       indistinguishable from `build-limits-status` alone, and the status text
       does not say which it is.** The disambiguating evidence is in the journal
@@ -2497,7 +2542,7 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       means "restarted internally" rather than "refused to restart". The
       earlier reading also leaned on `RestartPreventExitStatus=2` from the
       *previous* outage's exit-status-2 state — a detail that does not carry
-      over to a `stop-sigterm` deactivation, and I applied it anyway.
+      over to a `stop-sigterm` deactivation, and it was applied anyway.
       **`sccache unreachable, compiling directly` is confirmed benign.** The
       status line moved to it across those same three probes, and it persisted
       into the healthy state. It is the degraded mode this plan has seen
@@ -2796,7 +2841,7 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       `EP-M4`, and ran the last `EP-M2` gate batch.
       **Repair 1 — stale artefact paths.** Thirteen live citations gave the six
       property homes as `src/ninja_gen/determinism/<module>.rs`, without the
-      `property_tests` segment `PROPTEST_FILTER` (`Makefile:264`) selects on.
+      `property_tests` segment that `PROPTEST_FILTER` selects on.
       A suite built at those paths would never have run. `EP-M4` would have
       been implemented from them.
       **Repair 2 — an unfalsifiable mutation.** `MUT-EDGEDROP` skipped a
@@ -2871,7 +2916,7 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       `single_file_resolved` — which removes the shadow without a
       suppression, as `Lints must not be silenced except as a **last
       resort**` requires.
-      Clippy aborts `make lint` at `Makefile:364`, so the Whitaker,
+      Clippy aborts `make lint` in the `lint-clippy` recipe, so the Whitaker,
       `lint-python`, `yamllint` and `actionlint` legs have **no evidence** for
       any revision on this branch yet; they run in the next pass.
       Also corrected a stale denominator three lines into the `make proptest`
@@ -3612,7 +3657,7 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
       evaluation, not asserted.** `make proptest` selects suites by a module
       segment, and the plan warns that a selector matching nothing still exits
       0. Measured by reading `filter-match.status` from the real target's filter
-      expression (`Makefile:264`, `$$` intact):
+      expression (`Makefile` `PROPTEST_FILTER`, `$$` intact):
       **selected 75, unselected 1400**, and all four new tests report `matches`:
 
   ```plaintext
@@ -3983,7 +4028,7 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   `property_tests` and `strategy` are declared `#[cfg(test)]`
   (`src/ninja_gen/determinism/mod.rs:17`, `:20`), and `cargo check --lib` does
   not set `cfg(test)`. The flag most naturally read as "check this package's
-  library, which is where my code lives" excludes every line of it. The check
+  library, which is where the code lives" excludes every line of it. The check
   that settles it is intrinsic, not circumstantial: both completed probe builds
   left a library rmeta, and each contains `BuildGraph` — a non-test item — **13
   times** and `arb_graph_spec`, a `cfg(test)`-only item in the same module tree
@@ -4056,29 +4101,29 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   it is the one to trust. **A notification's exit status and the gate's exit
   status are different quantities whenever a pipe, `tee`, or shell wrapper sits
   between them.** Both of these are cheap to check and expensive not to.
-- (2026-10-16) **I read a supervisor recovering from a transient fault as a
-  supervisor that would never recover, and wrote that conclusion into this
-  plan, a Risk entry, and an escalation before checking it.** Three probes over
-  three minutes showed `capacity 4, held 3, UNHEALTHY`, `deactivating` /
-  `stop-sigterm`, and status text that named operator action — *"stop sccache
-  and leave it stopped until admission confirms the empty drain"*. The reading
-  was that the pool was wedged and needed a human. **The pool recovered by
-  itself at 20:28:14, during the probe window, while the probes were still
-  reporting the pre-recovery state.** The journal has the completion the status
-  command never showed:
+- (2026-10-16) **A supervisor recovering from a transient fault was read as a
+  supervisor that would never recover, and that conclusion was written into
+  this plan, a Risk entry, and an escalation before it was checked.** Three
+  probes over three minutes showed `capacity 4, held 3, UNHEALTHY`,
+  `deactivating` / `stop-sigterm`, and status text that named operator action —
+  *"stop sccache and leave it stopped until admission confirms the empty
+  drain"*. The reading was that the pool was wedged and needed a human. **The
+  pool recovered by itself at 20:28:14, during the probe window, while the
+  probes were still reporting the pre-recovery state.** The journal has the
+  completion the status command never showed:
   `sccache service verified stopped and empty; drain tokens may return`, then a
   clean stop/start and a new PID. Six minutes later the same command read
   `healthy` with a build queued behind a token. **The status text was not
   lying; it was describing work in progress in the grammar of work that had
   failed.** `drain check failed` reads as a terminal verdict and is actually
   the name of a check that is still running. The disambiguating evidence was
-  one command away and I did not run it: the supervisor's PID. `NRestarts=0`
-  plus a *changed* PID means the service restarted through a path systemd's
-  counter does not record; `NRestarts=0` plus an *unchanged* PID is the
-  terminal case. **The compounding error was carrying a detail forward from the
-  previous outage.** The earlier wedge ended in `ExecMainStatus=2`, and I
-  reasoned from `RestartPreventExitStatus=2` that this one would not restart
-  either. But this outage never reached exit status 2 — it was a `stop-sigterm`
+  one command away and was not run: the supervisor's PID. `NRestarts=0` plus a
+  *changed* PID means the service restarted through a path systemd's counter
+  does not record; `NRestarts=0` plus an *unchanged* PID is the terminal case.
+  **The compounding error was carrying a detail forward from the previous
+  outage.** The earlier wedge ended in `ExecMainStatus=2`, and the reading was
+  that `RestartPreventExitStatus=2` meant this one would not restart either.
+  But this outage never reached exit status 2 — it was a `stop-sigterm`
   deactivation, a different mechanism that the setting does not govern. **A
   diagnostic detail that explained one occurrence of a recurring fault is not
   automatically evidence about the next one, and reusing it without re-checking
@@ -4434,12 +4479,12 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   run by `make proptest` at all, and this was found only by evaluating the
   filter against the planned *test names* rather than reading it.** This is a
   third defect, independent of the two below, and the most dangerous of the
-  three because it fails *silently*. `PROPTEST_FILTER` (`Makefile:264`) selects
-  a module *segment* ending in `proptests` or `property_tests`. The plan's
-  property homes as first drafted were `src/ninja_gen/determinism/path_key.rs`,
-  `no_loss.rs`, `order.rs`, `defaults.rs`, `declaration.rs`, and
-  `ninja_oracle.rs` — **not one of which ends in either suffix**. Evaluated
-  against the real filter,
+  three because it fails *silently*. `PROPTEST_FILTER` (`Makefile`
+  `PROPTEST_FILTER`) selects a module *segment* ending in `proptests` or
+  `property_tests`. The plan's property homes as first drafted were
+  `src/ninja_gen/determinism/path_key.rs`, `no_loss.rs`, `order.rs`,
+  `defaults.rs`, `declaration.rs`, and `ninja_oracle.rs` — **not one of which
+  ends in either suffix**. Evaluated against the real filter,
   `ninja_gen::determinism::path_key::path_key_is_permutation_invariant` and its
   six siblings each matched **nothing**:
 
@@ -5069,12 +5114,12 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   it into the Makefile recipe. (b) was chosen because (a) would weaken a
   shipped contract that is correct about the class of defect it polices (a
   filter naming a nonexistent test selects nothing and looks enforced), and the
-  plan's own `Makefile:228` precedent already puts a selector in a recipe. The
-  cost accepted is the one `EP-M2` named: a Makefile `-E` argument is
-  unverified by construction, so the selector is discharged by the plan's
-  stated procedure instead — replaying it through real nextest and reading
-  every testcase's `filter-match.status`. Note the plan's **suggested spelling
-  was wrong** and is corrected here:
+  plan's own `documentation-examples` recipe precedent already puts a selector
+  in a recipe. The cost accepted is the one `EP-M2` named: a Makefile `-E`
+  argument is unverified by construction, so the selector is discharged by the
+  plan's stated procedure instead — replaying it through real nextest and
+  reading every testcase's `filter-match.status`. Note the plan's **suggested
+  spelling was wrong** and is corrected here:
   `test(/^property_tests($|::)/) | test(/^proptests($|::)/)` selects **0**
   tests — under either corpus, with or without `--workspace` — because the `^`
   anchor names a leading segment and the suites are reached through a module
@@ -5730,8 +5775,8 @@ generalized mutation-evidence contract held up.
   Findings were therefore re-anchored by quoted content rather than line
   number; the ADR was byte-identical across all five revisions, so two findings
   applied unchanged. The lesson is the one already recorded for drift verdicts,
-  applied to my own dispatch: pin the revision and *stop writing to the tree*
-  until the pass returns.
+  applied to the dispatch itself: pin the revision and *stop writing to the
+  tree* until the pass returns.
 - 2026-10-10 (fifth revision, `EP-M1` review round 2): a second CodeRabbit pass,
   over `74cff9ce`, returned nine findings — six major, three minor. Every
   finding was checked against the tree by hand before anything was changed.

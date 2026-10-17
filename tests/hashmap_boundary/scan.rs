@@ -158,6 +158,28 @@ impl<'ast> Visit<'ast> for Scan {
         }
         visit::visit_type_path(self, node);
     }
+
+    /// Record an expression path naming an unordered collection.
+    ///
+    /// A `TypePath` only covers annotations and aliases, so `let seen =
+    /// HashMap::new()` — where the type is inferred from the constructor — is
+    /// invisible to the rest of this visitor. It is a real use: the binding is
+    /// a collection and can be iterated.
+    ///
+    /// The matching rule differs from a type path's. An expression path names
+    /// a value's *way in*: `HashMap::new()` ends in `new`, and
+    /// `std::collections::HashMap::<K, V>::new()` ends the same way, so
+    /// reading the final segment alone would never see either. Any segment
+    /// naming an unordered collection is therefore a hit. In a value position
+    /// such a segment can only be the collection itself or a module named
+    /// after it, and flagging the latter is a finding a human can dismiss,
+    /// where missing the former is a hole in the contract.
+    fn visit_expr_path(&mut self, node: &'ast syn::ExprPath) {
+        if let Some(type_name) = any_segment_unordered(&node.path) {
+            self.record(Kind::Other, type_name);
+        }
+        visit::visit_expr_path(self, node);
+    }
 }
 
 /// The unordered type a field or binding declares, if it declares one.
@@ -176,10 +198,27 @@ fn unordered_name(ty: &Type) -> Option<&'static str> {
 /// module is not a collection, and its iteration order is the type's.
 fn path_unordered_name(path: &Path) -> Option<&'static str> {
     let segment = path.segments.last()?;
+    unordered_ident(&segment.ident)
+}
+
+/// The unordered type any segment of a path names, if one does.
+///
+/// Used for value paths, where the collection's name is not final: a
+/// constructor call reads `HashMap::new`. Identifiers are compared against the
+/// parse tree, so a method or field that merely starts with a matched spelling
+/// is a different name.
+fn any_segment_unordered(path: &Path) -> Option<&'static str> {
+    path.segments
+        .iter()
+        .find_map(|segment| unordered_ident(&segment.ident))
+}
+
+/// The unordered type `ident` names, if it names one.
+fn unordered_ident(ident: &syn::Ident) -> Option<&'static str> {
     UNORDERED_TYPES
         .iter()
         .copied()
-        .find(|type_name| segment.ident == *type_name)
+        .find(|type_name| ident == *type_name)
 }
 
 /// Return whether any branch of `tree` is the type called `wanted`.
