@@ -12,8 +12,11 @@ Blocked on the `Scope` tolerance, not on a defect: the measured net-added-lines
 figure is 2,597 against a cap of 2,600, with `EP-M5` through `EP-M8` still
 unwritten, so the remaining milestones cannot be implemented without breaching
 the cap. A proposed deviation is recorded in `Decision log`; implementation
-awaits acceptance of one of its options. Separately, the shared compile pool is
-currently refusing every admission, so no milestone could advance regardless.
+awaits acceptance of one of its options. The shared compile pool is **not** a
+blocking factor: on 2026-10-17 it reported
+`capacity 4, held 0, healthy, sccache unreachable, compiling directly`, with no
+requests waiting, no compiler groups, and nothing compiling anywhere on the
+host. A compile can be started. The block is the scope tolerance alone.
 
 `EP-M0` and `EP-M1` are complete and `ADR-030` is written and indexed. The
 approval gate was passed on 2026-09-27. `EP-M2` is complete and gate-verified:
@@ -3522,6 +3525,31 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 - [ ] `EP-M8`: `OBL-NINJA`, documentation, evidence sweep, roadmap.
 
 ## Surprises & discoveries
+
+- (2026-10-17) **A `make proptest` run left no evidence it had ever started, and
+  that absence was the only evidence it had died.** The log at
+  `/tmp/proptest-netsuke-4-3-1-proptests-for-deterministic-ninja-emission.out`
+  is 514 bytes with an mtime of 2026-10-16 21:03:50, and its whole content is
+  the init banner naming head `dc1012eb`, two `build-tools:` lines, and the
+  cargo command line. There is no compile output of any kind — not a
+  `[build-limits]` queue line, not a `Compiling` line, not an error. No `make`,
+  `cargo`, `cargo nextest`, `build-limits-rustc`, or `rustc` process exists.
+  The instructive part is that this is indistinguishable, from the log alone,
+  from a run that is merely early; what distinguishes them is staleness of the
+  mtime plus an empty process table, and the check that settles it is the
+  process table, not the log. A second surprise follows from the first: the run
+  was launched at `dc1012eb`, five commits behind the then-current `f8b2d017`,
+  so even a successful run would have measured the wrong tree. And the
+  conclusion the plan had drawn from the surrounding failures — that the
+  compile pool was refusing every admission, recorded in the `Status` line —
+  was false by the time it was written. `build-limits-status` on 2026-10-17
+  returns
+  `capacity 4, held 0, healthy, sccache unreachable, compiling directly`, no
+  requests waiting, no compiler groups, with an empty process table. **The pool
+  was never the thing standing in the way of a run; the scope tolerance is.** A
+  host-health claim in a living document is a measurement with a timestamp, not
+  a standing fact, and this one had been copied forward past the point where it
+  was true.
 
 - (2026-10-16) **A gate that compiles an isolated copy of the tree cannot see
   work that Git does not hold, and says so in the wrong voice.** `EP-M4`'s
