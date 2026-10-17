@@ -16,13 +16,12 @@ correct mechanism claims this record inherited from the ExecPlan.
 Netsuke's design document states, without qualification, that "the generated
 `build.ninja` will be byte-for-byte identical" given the same `Netsukefile` and
 environment variables (`docs/netsuke-design.md` §1.2). The README advertises "a
-deterministic intermediate build graph" ([`README.md`](../README.md#L172)) and
-"reproducible dependency graphs" for the `graph` renderer
-([`README.md`](../README.md#L178)). The formal-verification survey asks for
-the guarantee to be "strengthened" by deciding "whether byte-for-byte stable
-Ninja output and stable action identifiers are public guarantees or current
-implementation details" (`docs/formal-verification-methods-in-netsuke.md`
-§Determinism contract).
+deterministic intermediate build graph" and "reproducible dependency graphs"
+for the `graph` renderer ([`README.md`](../README.md)). The formal-verification
+survey asks for the guarantee to be "strengthened" by deciding "whether
+byte-for-byte stable Ninja output and stable action identifiers are public
+guarantees or current implementation details"
+(`docs/formal-verification-methods-in-netsuke.md` §Determinism contract).
 
 Three problems follow from that state.
 
@@ -33,11 +32,12 @@ takes a `RecipeShell`. The wrappers pass `RecipeShell::host_default()`:
 `PowerShell` on Windows, `Posix` elsewhere, overridable at runtime by
 `NETSUKE_WINDOWS_SHELL`, whose `Bash` route additionally depends on a
 filesystem probe. PowerShell takes an `rspfile` branch that POSIX does not
-(`src/ninja_gen/mod.rs:379`). Two platforms running the same version on the
-same manifest produce different bytes, correctly and by design.
+(`NamedAction::write_into`, `src/ninja_gen/named_action.rs`). Two platforms
+running the same version on the same manifest produce different bytes,
+correctly and by design.
 
 **Implementers cannot cite it.** `#[cfg(kani)]` replaces the IR's map type with
-a bounded ordered map (`src/ir/graph_kani_map.rs`), so the Kani harnesses are
+a bounded ordered map (`src/ir/graph/kani_map.rs`), so the Kani harnesses are
 structurally incapable of observing the `HashMap` nondeterminism the roadmap
 item names. `ADR-004` records the hand-off: the larger-N graph property "is
 handed off to the future Proptest roadmap item `4.3.1`". A hand-off needs a
@@ -46,7 +46,7 @@ specification to hand off _to_, and there is none.
 **Nothing verifies it.** The eight `tests/snapshots/ninja/*.snap` fixtures are
 single-run goldens. The repository contains no test that emits twice and
 compares, and none that invokes the binary twice over one manifest. The
-`GraphView` insertion-order property (`src/graph_view/tests_property.rs`)
+`GraphView` insertion-order property (`src/graph_view/tests/property.rs`)
 compares projected views, not emitted bytes.
 
 Finally, four different statements travel under the word "deterministic" and
@@ -71,9 +71,9 @@ read.
   also what makes a mutation patch able to demonstrate that the property is
   sensitive to the code it claims to protect.
 - Cross-version byte stability is a trap, not a feature. `PARENT_SCHEMA`
-  (`"netsuke-serial-v1"`) and `DYNDEP_SCHEMA` (`"netsuke-dyndep-v1"`)
-  (`src/ninja_gen/dyndep.rs:68`, `:70`) exist precisely so the staging format
-  can change without colliding with an older namespace.
+  (`"netsuke-serial-v1"`) and `DYNDEP_SCHEMA` (`"netsuke-dyndep-v1"`), both in
+  `src/ninja_gen/dyndep/mod.rs`, exist precisely so the staging format can
+  change without colliding with an older namespace.
 
 ## Requirements
 
@@ -107,9 +107,9 @@ leave `ADR-004`'s deferral pointing nowhere.
 ### Option B: Promise byte stability across Netsuke versions
 
 Rejected. The dyndep schema tags exist so the staging format _can_ change
-(`src/ninja_gen/dyndep.rs:68`); a version-stability promise would make them
-pointless, and every future change to the emitter would become a breaking
-change requiring a migration note.
+(`PARENT_SCHEMA`, `src/ninja_gen/dyndep/mod.rs`); a version-stability promise
+would make them pointless, and every future change to the emitter would become
+a breaking change requiring a migration note.
 
 ### Option C: Port the IR to an ordered map (`BTreeMap`) so determinism is structural
 
@@ -195,10 +195,10 @@ they are the mechanism G-1 rests on and each carries its own preconditions.
   the emitted bytes, for manifests whose rule names are pairwise distinct.
 
   The precondition is load-bearing. `process_rules`
-  (`src/ir/from_manifest.rs:99`) inserts into `rule_map` in declaration order,
-  so a later rule of the same name replaces an earlier one and `process_targets`
-  (`src/ir/from_manifest.rs:118`) resolves every target through the survivor.
-  No `DuplicateRule` variant exists anywhere in `src/`, so duplicate rule names
+  (`src/ir/from_manifest/mod.rs`) inserts into `rule_map` in declaration order,
+  so a later rule of the same name replaces an earlier one and
+  `process_targets` resolves every target through the survivor. No
+  `DuplicateRule` variant exists anywhere in `src/`, so duplicate rule names
   are last-writer-wins rather than an error. Permuting two same-named rules
   with different bodies therefore _does_ change the bytes; the unrestricted
   statement is false. Note also that moving a declaration between
@@ -207,7 +207,7 @@ they are the mechanism G-1 rests on and each carries its own preconditions.
   lists.
 
 - **I-3, two deliberate non-invariances.** Within a single edge,
-  `DisplayEdge` (`src/ninja_gen/display_edge.rs:22`) renders each path vector
+  `DisplayEdge` (`src/ninja_gen/display_edge.rs`) renders each path vector
   verbatim in declaration order. Emission is therefore _not_ invariant under
   permuting an edge's own output, input, implicit-dependency, or
   order-only-dependency lists — even though `path_key` is invariant over the
@@ -224,11 +224,11 @@ is an inference a reader would otherwise draw.
 - **N-1, cross-version.** Byte stability is **not** promised across Netsuke
   versions. A version bump may change emitted bytes for an unchanged manifest,
   environment, platform, and shell selection. This is intended: `PARENT_SCHEMA`
-  and `DYNDEP_SCHEMA` (`src/ninja_gen/dyndep.rs:68`, `:70`) incorporate an
-  explicit format tag into every content-addressed identity so that a
-  staging-format change yields a fresh namespace instead of a silent collision
-  with sidecars written by an older Netsuke. `ninja_required_version` is
-  likewise emitted conditionally, only when staging is present.
+  and `DYNDEP_SCHEMA` (`src/ninja_gen/dyndep/mod.rs`) incorporate an explicit
+  format tag into every content-addressed identity so that a staging-format
+  change yields a fresh namespace instead of a silent collision with sidecars
+  written by an older Netsuke. `ninja_required_version` is likewise emitted
+  conditionally, only when staging is present.
 - **N-2, cross-platform.** Byte stability is **not** promised across platforms
   or across different recipe-shell selections on one platform. PowerShell and
   POSIX are different renderers: they disagree on `rspfile` emission, on
@@ -269,7 +269,7 @@ than a defect.
   dependency, order-only dependency, or default target contains `$`, `:`, `|`,
   or a control character (`src/ninja_gen/path_syntax.rs`), and none lies inside
   or beneath the reserved `.netsuke/serial` or `.netsuke/dyndep` namespaces
-  (`src/ninja_gen/dyndep.rs:338`).
+  (`reject_reserved_paths`, `src/ninja_gen/dyndep/mod.rs`).
 - **P-4, rule-name distinctness.** Required by I-2's declaration-permutation
   form only. It constrains the manifest, not the emitter.
 - **P-5, sampling is not proof.** Every statement here is sampled by Proptest
@@ -280,15 +280,15 @@ than a defect.
 
 ### Why Kani cannot discharge I-1
 
-Under `#[cfg(kani)]`, `src/ir/graph.rs` aliases `IrHashMap` to a bounded
-ordered map defined in `src/ir/graph_kani_map.rs`. The Kani build therefore has
+Under `#[cfg(kani)]`, `src/ir/graph/mod.rs` aliases `IrHashMap` to a bounded
+ordered map defined in `src/ir/graph/kani_map.rs`. The Kani build therefore has
 no `HashMap` in the graph at all, and the nondeterminism I-1 names does not
 exist in the model. Adding a `-Z`-free harness cannot help: the substitution is
 a `cfg`, not a flag, and it is what makes the existing IR harnesses tractable
-(`graph_kani_map.rs` exists so that "Kani harnesses can drive the real lowering
-and cycle-detection logic without depending on `std::collections::HashMap`").
-The unavoidable honest statement is that exhaustiveness and nondeterminism are
-in tension here, and the project has chosen to keep the exhaustive harnesses at
+(`kani_map.rs` exists so that "Kani harnesses can drive the real lowering and
+cycle-detection logic without depending on `std::collections::HashMap`"). The
+unavoidable honest statement is that exhaustiveness and nondeterminism are in
+tension here, and the project has chosen to keep the exhaustive harnesses at
 one to three nodes and hand the larger-N and order-invariance work to Proptest.
 
 ### The alternative that does carry the forward-looking half
@@ -303,18 +303,19 @@ A source-shape contract provides the same immunity more cheaply: a test that
 reads every file under `src/ninja_gen/` and fails when an **unordered**
 collection's iteration order is allowed to reach the output — with
 membership-only use exempt, and with one named exemption,
-`SerialStages::staged_sidecars` (`src/ninja_gen/dyndep.rs:246`). It is the
+`SerialStages::staged_sidecars` (`src/ninja_gen/dyndep/mod.rs`). It is the
 `OBL-NOHASH` obligation, and it is the only element of this work that
 constrains code not yet written.
 
 The obligation is stated over _sorted_ iteration rather than over iteration
 outright, because iteration outright is already false of the code it protects.
-`write_action_rules` (`src/ninja_gen/mod.rs:215`) collects `graph.actions` — an
-ordinary-build `std::collections::HashMap` — into a `Vec` and sorts it by
-action ID at `:216`. That collect-then-sort pair is the correct pattern, and
-`MUT-ACTIONSORT` deletes the sort to produce a real cross-process defect. A
-rule banning all map iteration would reject the correct path; a rule scanning
-for a literal hash map while ignoring the sort would miss the hazard.
+`write_action_rules` (`src/ninja_gen/mod.rs`) walks `graph.actions` — an
+ordinary-build `std::collections::HashMap` — through `ordered_actions`
+(`src/ninja_gen/order.rs`), whose `sort_by_key` imposes action-ID order at
+`src/ninja_gen/order.rs:44`. That collect-then-sort pair is the correct
+pattern, and `MUT-ACTIONSORT` deletes the sort to produce a real cross-process
+defect. A rule banning all map iteration would reject the correct path; a rule
+scanning for a literal hash map while ignoring the sort would miss the hazard.
 
 ## Goals and non-goals
 
@@ -354,13 +355,13 @@ for a literal hash map while ignoring the sort would miss the hazard.
   sampling can support (`a == b` implies equal hashes) and never
   collision-freedom.
 - **A verification cfg selects the domain's collection type.** `IrHashMap`'s
-  definition is chosen by `#[cfg(kani)]` (`src/ir/graph.rs:23`–`:28`). The
-  domain model does not fully own its own representation. Recorded, not fixed.
+  definition is chosen by `#[cfg(kani)]` (`src/ir/graph/mod.rs`). The domain
+  model does not fully own its own representation. Recorded, not fixed.
 - **`default_targets` may repeat.** `process_defaults`
-  (`src/ir/from_manifest.rs:186`) extends without deduplication and `Vec::sort`
-  does not deduplicate, so a manifest naming one default twice emits that
-  operand twice. The behaviour is deliberate — it is the manifest's own
-  ordering, sorted — but it surprises readers, and the obligation pins it.
+  (`process_defaults`) extends without deduplication and `Vec::sort` does not
+  deduplicate, so a manifest naming one default twice emits that operand twice.
+  The behaviour is deliberate — it is the manifest's own ordering, sorted — but
+  it surprises readers, and the obligation pins it.
 
 ## Amendments
 
@@ -396,25 +397,25 @@ syntax, not as a silent drop.
 
 Whether the case is reachable at all is unresolved. `Target::name` is a
 `StringOrList` whose `Empty` variant maps to an empty vector
-(`src/ast/string_or_list.rs:52`), so a typed manifest could in principle carry
-one; `get_target_display_name` (`src/ir/from_manifest_support.rs:363`)
-explicitly tolerates the empty case, returning an empty string "when the target
-declares no explicit outputs". Both are construction-side rather than
-lowering-side, so it is not established that a manifest reaching the loader can
-produce one. This ADR does not settle it. The obligation stands, its domain
-note must not assert the silent drop as fact, and establishing the reachability
-is `EP-M4`'s business.
+(`StringOrList::map_each`, `src/ast/string_or_list.rs`), so a typed manifest
+could in principle carry one; `get_target_display_name`
+(`src/ir/from_manifest/support/mod.rs`) explicitly tolerates the empty case,
+returning an empty string "when the target declares no explicit outputs". Both
+are construction-side rather than lowering-side, so it is not established that
+a manifest reaching the loader can produce one. This ADR does not settle it.
+The obligation stands, its domain note must not assert the silent drop as fact,
+and establishing the reachability is `EP-M4`'s business.
 
 ### Amendment 3: `OBL-NOHASH` exempts one set, not two
 
 `OBL-NOHASH` says membership-only `HashSet` use is exempt "with the two existing
 `seen` sets named as the documented exemptions". There is exactly one
 unordered collection in `src/ninja_gen/`, and it is not called `seen`:
-`SerialStages::staged_sidecars` (`src/ninja_gen/dyndep.rs:246`), a
-`HashSet<Utf8PathBuf>` used solely through `insert` at `:286` and never
-iterated. An earlier revision of the emitter held a `seen` set in the
-per-output storage path that `2c030fd1` removed, and the obligation's wording
-did not follow the refactor.
+`SerialStages::staged_sidecars` (`src/ninja_gen/dyndep/mod.rs`), a
+`HashSet<Utf8PathBuf>` used solely through `insert` and never iterated. An
+earlier revision of the emitter held a `seen` set in the per-output storage
+path that `2c030fd1` removed, and the obligation's wording did not follow the
+refactor.
 
 The requirement is unaffected and arguably simplified: the exemption list is
 asserted to be exactly one set, and adding a second requires a deliberate edit.

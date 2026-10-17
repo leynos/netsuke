@@ -25,12 +25,13 @@
 mod generator;
 
 use crate::ir::BuildGraph;
-use crate::ninja_gen::generate_bundle;
 use camino::Utf8PathBuf;
 use generator::{action, arb_default_case, edge};
 use proptest::prelude::*;
-use proptest::test_runner::{TestCaseError, TestRunner};
+use proptest::test_runner::TestCaseError;
 use std::cell::Cell;
+
+use super::support::{coverage_runner, emit};
 
 proptest! {
     // Emitting one of twenty single-output edges is string building over a
@@ -165,24 +166,6 @@ fn last_build_offset(text: &str) -> Option<usize> {
     last
 }
 
-/// Emit one graph, reporting a rejection as a shrinkable test failure.
-///
-/// Reported rather than unwrapped so a generator defect arrives as a failure
-/// carrying the case, instead of as a panic shrinking cannot reduce. Every path
-/// here is outside the reserved namespaces and free of unsupported characters,
-/// so a refusal is a generator defect rather than an expected outcome.
-///
-/// # Errors
-///
-/// Returns a test failure when the emitter refuses the graph.
-fn emit(graph: &BuildGraph) -> Result<String, TestCaseError> {
-    generate_bundle(graph)
-        .map(|bundle| bundle.build_file().to_owned())
-        .map_err(|error| {
-            TestCaseError::fail(format!("a well-formed generated graph must emit: {error}"))
-        })
-}
-
 /// What a run's declared defaults looked like, tallied so it cannot go quiet.
 ///
 /// The same shape language `OBL-PATHKEY` uses for its path lists, applied to the
@@ -264,15 +247,12 @@ impl DeclaredShape {
 #[test]
 fn the_run_reaches_every_default_shape() {
     let tally: Cell<DefaultShapes> = Cell::new(DefaultShapes::default());
-    TestRunner::new(ProptestConfig {
-        cases: 128,
-        ..ProptestConfig::default()
-    })
-    .run(&arb_default_case(), |case| {
-        tally.set(tally.get().extended(&case.declared));
-        Ok(())
-    })
-    .expect("the default strategy should be generatable");
+    coverage_runner(128)
+        .run(&arb_default_case(), |case| {
+            tally.set(tally.get().extended(&case.declared));
+            Ok(())
+        })
+        .expect("the default strategy should be generatable");
 
     let observed = tally.into_inner();
     macro_rules! covered {
@@ -311,15 +291,11 @@ fn the_run_reaches_every_default_shape() {
 /// as given and fails.
 #[test]
 fn a_descending_declaration_is_emitted_ascending() {
-    let graph = graph_declaring(&["out/0002", "out/0001", "out/0000"]);
-    let text = emit(&graph).expect("a well-formed graph must emit");
-    assert_eq!(
-        default_lines(&text)
-            .first()
-            .map(|line| line.operands.clone()),
-        Some(vec!["out/0000", "out/0001", "out/0002"]),
+    assert_first_default_operands(
+        &["out/0002", "out/0001", "out/0000"],
+        &["out/0000", "out/0001", "out/0002"],
         "the declaration is descending, so an emitted ascending order can only \
-         come from the sort. Emitted text:\n{text}",
+         come from the sort",
     );
 }
 
@@ -330,15 +306,28 @@ fn a_descending_declaration_is_emitted_ascending() {
 /// operand here, and no property over a duplicate-free domain would notice.
 #[test]
 fn a_repeated_target_is_emitted_twice() {
-    let graph = graph_declaring(&["out/0001", "out/0000", "out/0001"]);
+    assert_first_default_operands(
+        &["out/0001", "out/0000", "out/0001"],
+        &["out/0000", "out/0001", "out/0001"],
+        "a repeated default target must survive the sort as two operands",
+    );
+}
+
+/// Assert the first emitted `default` line's operands for `targets`.
+///
+/// Both directed witnesses ask the same question of a hand-built graph and
+/// differ only in the declaration and the expected operands. Stating the
+/// emission, the lookup, and the failure shape once keeps the two cases about
+/// their declarations rather than about the assertion.
+fn assert_first_default_operands(targets: &[&str], expected: &[&str], why: &str) {
+    let graph = graph_declaring(targets);
     let text = emit(&graph).expect("a well-formed graph must emit");
     assert_eq!(
         default_lines(&text)
             .first()
             .map(|line| line.operands.clone()),
-        Some(vec!["out/0000", "out/0001", "out/0001"]),
-        "a repeated default target must survive the sort as two operands. \
-         Emitted text:\n{text}",
+        Some(expected.to_vec()),
+        "{why}. Emitted text:\n{text}",
     );
 }
 

@@ -26,14 +26,12 @@
 //! no gate or sidecar can ever supply a user output's left-hand side. A dropped
 //! edge's outputs disappear from the text and nothing puts them back.
 
-use super::support::materialize;
+use super::support::{coverage_runner, emit, materialize};
 use crate::ast::{CommandIsolation, Recipe, StringOrList};
 use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder, IrGenError};
 use crate::ninja_gen::determinism::strategy::graph::arb_graph_spec;
-use crate::ninja_gen::generate_bundle;
 use camino::Utf8PathBuf;
 use proptest::prelude::*;
-use proptest::test_runner::{TestCaseError, TestRunner};
 use std::cell::Cell;
 use std::collections::BTreeMap;
 
@@ -88,7 +86,7 @@ proptest! {
 fn an_output_less_edge_is_emitted_rather_than_dropped() {
     let with_implicit = graph_of_one_edge(BuildEdge {
         implicit_outputs: vec![Utf8PathBuf::from("out/implicit")],
-        ..no_output_edge()
+        ..edge_with_explicit_outputs(&[])
     })
     .expect("an empty explicit-output list is currently accepted at insertion");
     let text = emit(&with_implicit).expect("a graph with one output-less edge must emit");
@@ -103,7 +101,7 @@ fn an_output_less_edge_is_emitted_rather_than_dropped() {
     // assertion becomes that the edge reaches the text at all: a `build` line
     // with an empty left-hand side is the observable form of "not dropped",
     // and a missing line is the failure this obligation exists to catch.
-    let bare = graph_of_one_edge(no_output_edge())
+    let bare = graph_of_one_edge(edge_with_explicit_outputs(&[]))
         .expect("a fully output-less edge is currently accepted at insertion");
     let bare_text = emit(&bare).expect("a graph with one output-less edge must emit");
     assert_eq!(
@@ -131,10 +129,10 @@ fn an_output_less_edge_is_emitted_rather_than_dropped() {
 /// encoding argument; this case supplies the boundary that lets it be applied.
 #[test]
 fn a_permuted_output_repeat_is_rejected_at_insertion() {
-    let mut graph = graph_of_one_edge(permuted_edge(["out/a", "out/b"]))
+    let mut graph = graph_of_one_edge(edge_with_explicit_outputs(&["out/a", "out/b"]))
         .expect("the first edge's outputs must be fresh");
     let error = graph
-        .insert_edge(permuted_edge(["out/b", "out/a"]))
+        .insert_edge(edge_with_explicit_outputs(&["out/b", "out/a"]))
         .expect_err("the second edge aliases the first and must be rejected");
     assert!(
         matches!(&error, IrGenError::DuplicateOutput { outputs, .. }
@@ -172,29 +170,18 @@ fn graph_of_one_edge(edge: BuildEdge) -> Result<BuildGraph, IrGenError> {
     Ok(graph)
 }
 
-/// An edge that declares no outputs of either kind.
-fn no_output_edge() -> BuildEdge {
+/// An edge naming `outputs` explicitly, and nothing else.
+///
+/// One constructor rather than one per witness: the two directed cases differ
+/// only in which outputs they name, and spelling the six empty fields twice is
+/// how they drift apart unnoticed. The empty slice is the output-less case.
+fn edge_with_explicit_outputs(outputs: &[&str]) -> BuildEdge {
     BuildEdge {
         action_id: ACTION.to_owned(),
         inputs: Vec::new(),
         implicit_deps: Vec::new(),
         dependency_order: DependencyOrder::Parallel,
-        explicit_outputs: Vec::new(),
-        implicit_outputs: Vec::new(),
-        order_only_deps: Vec::new(),
-        phony: false,
-        always: false,
-    }
-}
-
-/// One edge producing `outputs`, in the order given.
-fn permuted_edge(outputs: [&str; 2]) -> BuildEdge {
-    BuildEdge {
-        action_id: ACTION.to_owned(),
-        inputs: Vec::new(),
-        implicit_deps: Vec::new(),
-        dependency_order: DependencyOrder::Parallel,
-        explicit_outputs: outputs.into_iter().map(Utf8PathBuf::from).collect(),
+        explicit_outputs: outputs.iter().copied().map(Utf8PathBuf::from).collect(),
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
         phony: false,
@@ -240,21 +227,6 @@ fn lhs_counts(text: &str) -> BTreeMap<String, usize> {
     counts
 }
 
-/// Emit one graph, reporting a rejection as a shrinkable test failure.
-///
-/// A rejection is a generator defect rather than a property failure: the pool's
-/// slices are disjoint, its names are outside every reserved namespace, and its
-/// characters are printable, so a well-formed graph must emit. Reporting it as
-/// a failure keeps the specification's shape in the diagnostic instead of
-/// letting a panic escape shrinking.
-fn emit(graph: &BuildGraph) -> Result<String, TestCaseError> {
-    generate_bundle(graph)
-        .map(|bundle| bundle.build_file().to_owned())
-        .map_err(|error| {
-            TestCaseError::fail(format!("a well-formed generated graph must emit: {error}"))
-        })
-}
-
 /// How many cases carried a shape this obligation needs to be meaningful.
 ///
 /// The property is only interesting on a graph with an edge owning more than
@@ -270,20 +242,17 @@ fn emit(graph: &BuildGraph) -> Result<String, TestCaseError> {
 #[test]
 fn the_run_reaches_multi_output_and_staged_graphs() {
     let tallies: Cell<Shapes> = Cell::new(Shapes::default());
-    TestRunner::new(ProptestConfig {
-        cases: 128,
-        ..ProptestConfig::default()
-    })
-    .run(&arb_graph_spec(), |spec| {
-        let classes = spec.classification();
-        tallies.set(
-            tallies
-                .get()
-                .extended(classes.multi_output_edges, classes.dyndep_staged_edges),
-        );
-        Ok(())
-    })
-    .expect("the graph specification should be generatable");
+    coverage_runner(128)
+        .run(&arb_graph_spec(), |spec| {
+            let classes = spec.classification();
+            tallies.set(
+                tallies
+                    .get()
+                    .extended(classes.multi_output_edges, classes.dyndep_staged_edges),
+            );
+            Ok(())
+        })
+        .expect("the graph specification should be generatable");
 
     let observed = tallies.into_inner();
     assert!(

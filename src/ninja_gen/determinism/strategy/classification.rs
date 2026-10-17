@@ -176,12 +176,27 @@ const fn combination_bit(always: bool, restat: bool) -> u8 {
 }
 
 /// Whether two edges describe the same content, ignoring list order.
+///
+/// Split into the scalar flags and the path vectors rather than written as one
+/// nine-clause conjunction. The two halves fail for different reasons — a flag
+/// differs because the generator drew a different shape, a path list differs
+/// because a permutation was not normalised — and a reader diagnosing a
+/// counter-example needs to know which.
 fn same_content(left: &BuildEdge, right: &BuildEdge) -> bool {
+    same_flags(left, right) && same_path_lists(left, right)
+}
+
+/// Whether two edges agree on every scalar field.
+fn same_flags(left: &BuildEdge, right: &BuildEdge) -> bool {
     left.action_id == right.action_id
         && left.dependency_order == right.dependency_order
         && left.phony == right.phony
         && left.always == right.always
-        && sorted_paths(&left.explicit_outputs) == sorted_paths(&right.explicit_outputs)
+}
+
+/// Whether two edges agree on every path list, compared as sorted contents.
+fn same_path_lists(left: &BuildEdge, right: &BuildEdge) -> bool {
+    sorted_paths(&left.explicit_outputs) == sorted_paths(&right.explicit_outputs)
         && sorted_paths(&left.implicit_outputs) == sorted_paths(&right.implicit_outputs)
         && sorted_paths(&left.inputs) == sorted_paths(&right.inputs)
         && sorted_paths(&left.implicit_deps) == sorted_paths(&right.implicit_deps)
