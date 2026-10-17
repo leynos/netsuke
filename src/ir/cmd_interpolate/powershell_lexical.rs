@@ -3,6 +3,18 @@
 use super::super::{IrGenError, QuoteContext, find_substitution, invalid_command_error};
 use super::{MarkerProtection, SubstitutionTraversal};
 
+/// Group a PowerShell source offset with the character being traversed.
+///
+/// Keep this carrier local to the PowerShell traversal; it does not model a
+/// general shell character or replace the POSIX scanner's character type.
+#[derive(Clone, Copy)]
+pub(super) struct PowerShellSourceCharacter {
+    /// Identify the source position used for lexical lookahead.
+    pub(super) position: usize,
+    /// Preserve the character at that position.
+    pub(super) value: char,
+}
+
 /// Track the quote delimiter while a PowerShell here-string is active.
 pub(super) struct PowerShellLexicalState {
     /// Retain the opener quote until its matching closing marker.
@@ -120,68 +132,104 @@ impl SubstitutionTraversal<'_, '_> {
     /// Preserve PowerShell text while lowering only manifest-owned markers.
     pub(super) fn append_power_shell_character(
         &mut self,
-        pos: usize,
-        ch: char,
+        character: PowerShellSourceCharacter,
     ) -> Result<usize, IrGenError> {
-        match self.power_shell_lexical.classify_here_string_character(
-            self.chars,
-            pos,
-            find_substitution(self.chars, pos).is_some(),
-        ) {
-            HereStringCharacter::Outside => {}
-            HereStringCharacter::Copied => {
-                self.output.push(ch);
-                return Ok(pos + 1);
-            }
-            HereStringCharacter::Closed(quote) => {
-                self.output.push(quote);
-                self.output.push('@');
-                return Ok(pos + 2);
-            }
-            HereStringCharacter::Placeholder => {
-                return Err(invalid_command_error(self.template.to_owned()));
-            }
+        let pos = character.position;
+        let ch = character.value;
+        if let Some(next) = self.append_here_string_character(character)? {
+            return Ok(next);
         }
         if self.power_shell_lexical.is_in_unquoted_comment() {
-            let changes_scanner_state = comment_character_changes_scanner_state(
-                self.chars,
-                pos,
-                ch,
-                self.is_in_command_substitution(),
-            );
-            self.power_shell_lexical
-                .note_unquoted_comment_character(changes_scanner_state, matches!(ch, '\r' | '\n'));
-            return self.append_marker_for_context(
-                pos,
-                ch,
-                Self::power_shell_marker_protection(self),
-            );
+            return self.append_unquoted_comment_character(character);
         }
-        if self.matches_unquoted_quote_context() && starts_block_comment(self.chars, pos) {
-            self.power_shell_lexical.note_block_comment_opener();
-        }
-        let is_unquoted_site = self.matches_unquoted_quote_context()
-            && !self.in_backticks
-            && !self.is_in_command_substitution();
-        if let Some(quote) =
-            self.power_shell_lexical
-                .try_open_here_string(self.chars, pos, is_unquoted_site)
-        {
-            self.output.push('@');
-            self.output.push(quote);
-            return Ok(pos + 2);
+        self.note_unparsed_block_comment_opener(character);
+        if let Some(next) = self.open_here_string(character) {
+            return Ok(next);
         }
         self.power_shell_lexical.note_character(ch);
         if ch == '#' && self.matches_unquoted_quote_context() {
             self.power_shell_lexical.begin_unquoted_comment();
         }
-        if let Some(next) = self.append_power_shell_escaped_character(pos, ch)? {
+        if let Some(next) = self.append_power_shell_escaped_character(character)? {
             return Ok(next);
         }
-        if self.append_power_shell_doubled_quote(pos, ch) {
+        if self.append_power_shell_doubled_quote(character) {
             return Ok(pos + 2);
         }
         self.append_contextual_character(pos, ch, Self::power_shell_marker_protection)
+    }
+
+    /// Preserve or reject a character in an active PowerShell here-string.
+    fn append_here_string_character(
+        &mut self,
+        character: PowerShellSourceCharacter,
+    ) -> Result<Option<usize>, IrGenError> {
+        let pos = character.position;
+        match self.power_shell_lexical.classify_here_string_character(
+            self.chars,
+            pos,
+            find_substitution(self.chars, pos).is_some(),
+        ) {
+            HereStringCharacter::Outside => Ok(None),
+            HereStringCharacter::Copied => {
+                self.output.push(character.value);
+                Ok(Some(pos + 1))
+            }
+            HereStringCharacter::Closed(quote) => {
+                self.output.push(quote);
+                self.output.push('@');
+                Ok(Some(pos + 2))
+            }
+            HereStringCharacter::Placeholder => {
+                Err(invalid_command_error(self.template.to_owned()))
+            }
+        }
+    }
+
+    /// Track ambiguous syntax and preserve a PowerShell comment character.
+    fn append_unquoted_comment_character(
+        &mut self,
+        character: PowerShellSourceCharacter,
+    ) -> Result<usize, IrGenError> {
+        let changes_scanner_state = comment_character_changes_scanner_state(
+            self.chars,
+            character.position,
+            character.value,
+            self.is_in_command_substitution(),
+        );
+        self.power_shell_lexical.note_unquoted_comment_character(
+            changes_scanner_state,
+            matches!(character.value, '\r' | '\n'),
+        );
+        self.append_marker_for_context(
+            character.position,
+            character.value,
+            Self::power_shell_marker_protection(self),
+        )
+    }
+
+    /// Remember a block comment that the partial scanner cannot parse safely.
+    fn note_unparsed_block_comment_opener(&mut self, character: PowerShellSourceCharacter) {
+        if self.matches_unquoted_quote_context()
+            && starts_block_comment(self.chars, character.position)
+        {
+            self.power_shell_lexical.note_block_comment_opener();
+        }
+    }
+
+    /// Open a here-string only at a safe unquoted PowerShell site.
+    fn open_here_string(&mut self, character: PowerShellSourceCharacter) -> Option<usize> {
+        let is_unquoted_site = self.matches_unquoted_quote_context()
+            && !self.in_backticks
+            && !self.is_in_command_substitution();
+        let quote = self.power_shell_lexical.try_open_here_string(
+            self.chars,
+            character.position,
+            is_unquoted_site,
+        )?;
+        self.output.push('@');
+        self.output.push(quote);
+        Some(character.position + 2)
     }
 
     /// Classify PowerShell quotes and command substitutions as protected regions.
@@ -197,9 +245,10 @@ impl SubstitutionTraversal<'_, '_> {
     /// Preserve a PowerShell backtick escape unless it would hide a recipe marker.
     fn append_power_shell_escaped_character(
         &mut self,
-        pos: usize,
-        ch: char,
+        character: PowerShellSourceCharacter,
     ) -> Result<Option<usize>, IrGenError> {
+        let pos = character.position;
+        let ch = character.value;
         if ch != '`' || self.matches_single_quote_context() {
             return Ok(None);
         }
@@ -215,7 +264,9 @@ impl SubstitutionTraversal<'_, '_> {
     }
 
     /// Preserve doubled quote characters inside a PowerShell string literal.
-    fn append_power_shell_doubled_quote(&mut self, pos: usize, ch: char) -> bool {
+    fn append_power_shell_doubled_quote(&mut self, character: PowerShellSourceCharacter) -> bool {
+        let pos = character.position;
+        let ch = character.value;
         let Some(next) = self.chars.get(pos + 1).copied() else {
             return false;
         };

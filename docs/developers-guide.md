@@ -5469,8 +5469,12 @@ heredoc delimiters are expanded. It queues declarations FIFO, including quoted
 delimiters and `<<-` tab-stripping delimiters, so their text cannot change the
 surrounding quote context. This is a command-interpolation helper, not a
 general shell parser, and is not intended for reuse outside that boundary. The
-sibling `src/ir/cmd_interpolate/command_substitution.rs` owns the local quote
-and parenthesis state needed to keep protected `$()` bodies isolated.
+sibling `src/ir/cmd_interpolate/powershell_lexical.rs` owns PowerShell quote,
+here-string, and fail-closed comment state. Its `PowerShellSourceCharacter`
+groups an offset with its source character only within that scanner; it is not
+a shared shell abstraction. The sibling
+`src/ir/cmd_interpolate/command_substitution.rs` owns the local quote and
+parenthesis state needed to keep protected `$()` bodies isolated.
 
 `src/manifest/render/mod.rs` may emit the internal tokens while rendering the
 only accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell

@@ -11,7 +11,7 @@ use crate::recipe_shell::RecipeShell;
 #[path = "powershell_lexical.rs"]
 mod power_shell;
 
-use power_shell::PowerShellLexicalState;
+use power_shell::{PowerShellLexicalState, PowerShellSourceCharacter};
 
 /// Classify whether the active shell region permits recipe-marker lowering.
 #[derive(Clone, Copy)]
@@ -87,7 +87,10 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             .get(pos)
             .ok_or_else(|| invalid_command_error(self.template.to_owned()))?;
         if self.bindings.shell == RecipeShell::PowerShell {
-            return self.append_power_shell_character(pos, ch);
+            return self.append_power_shell_character(PowerShellSourceCharacter {
+                position: pos,
+                value: ch,
+            });
         }
         self.append_posix_character(pos, ch)
     }
