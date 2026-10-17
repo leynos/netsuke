@@ -5878,6 +5878,38 @@ Text catalogue snapshots must continue to use the unfiltered
 Netsuke generator object, so unrelated `version` fields remain asserted in
 every snapshot.
 
+### The temporary-path snapshot filter
+
+`test_support::temp_path_filter` (`test_support/src/temp_path_filter.rs`) owns
+the single implementation of the temporary-path pattern both snapshot trees
+bind. Each tree still owns its own `insta::Settings` — snapshot directory and
+module-prefix handling differ — but the pattern itself is not restated:
+
+- `src/snapshot_test_support.rs` binds it in `add_temp_dir_filter` for
+  `src/snapshots/`.
+- `tests/manifest_load_options/fixtures/settings.rs` binds it in its own
+  `add_temp_dir_filter` for `tests/snapshots/`.
+
+**Re-use policy:** any snapshot filter that rewrites a path must build its
+pattern here. Do not restate the pattern in a `Settings` builder. The pattern's
+separator class is `[\\/]+`, matching one **or more** of either separator, and
+the `+` is load-bearing: a snapshot can hold a Windows path twice over, because
+a diagnostic quotes the raw single-backslash form while `serde_json` doubles
+every backslash in the serialized half, and it is the serialized half that
+carries the run-specific workspace name. The class `[\\/]` reads as "either
+separator" but matches exactly one character, so the doubled form survives into
+the checked-in snapshot. A trailing separator is trimmed before the class is
+appended, because otherwise two adjacent classes demand two separators where
+the text has one.
+
+The builder is also why its tests are portable. It takes the directory as an
+argument rather than reading `temp_dir()` itself, so the Windows rows run on
+Linux; the defect is invisible on the platform that records the snapshot, and a
+test reading the ambient directory could only ever check that one. The rows
+live beside the builder, so both snapshot trees run the same cases rather than
+each holding a copy — two copies guarded only by their own matching cases can
+drift apart while both stay green.
+
 ### `test_support::fs`
 
 `test_support::fs` (`test_support/src/fs.rs`) is the crate's single

@@ -1,0 +1,6 @@
+---
+source: src/manifest/tests/wrapper_equivalence.rs
+expression: document
+---
+=== pure ===
+invalid operation: Manifest resource budget exhausted during ⁨source⁩ after reaching ⁨8⁩.: manifest resource budget exhausted at Source (limit 8)

@@ -1,0 +1,4 @@
+# Not valid YAML: the sequence is never closed. YAML is parsed before any Jinja
+# runs, so the error text this produces is the same under every registration and
+# the fixture pins the loader's parse-failure path rather than a helper.
+targets: [{name: broken

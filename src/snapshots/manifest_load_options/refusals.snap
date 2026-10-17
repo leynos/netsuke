@@ -1,0 +1,72 @@
+---
+source: src/stdlib/register/refusal_snapshots.rs
+expression: document
+---
+=== 00 env: {{ env('PATH') }} ===
+env is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 01 glob: {{ glob('glob_files/*.txt') }} ===
+glob is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 02 fetch: {{ fetch('https://example.invalid/toolchain.json') }} ===
+fetch is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 03 shell: {{ '' | shell('echo fixture') }} ===
+shell is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 04 grep: {{ 'x' | grep('x') }} ===
+grep is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 05 contents: {{ 'Cargo.toml' | contents }} ===
+contents is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 06 which: {{ 'cargo' | which }} ===
+which is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 07 which: {{ which('cargo') }} ===
+which is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 08 command_available: {{ command_available('cargo') }} ===
+command_available is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 09 now: {{ now() }} ===
+now is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 10 realpath: {{ '.' | realpath }} ===
+realpath is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 11 expanduser: {{ '~' | expanduser }} ===
+expanduser is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 12 size: {{ 'Cargo.toml' | size }} ===
+size is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 13 linecount: {{ 'Cargo.toml' | linecount }} ===
+linecount is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 14 hash: {{ 'Cargo.toml' | hash }} ===
+hash is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 15 digest: {{ 'Cargo.toml' | digest }} ===
+digest is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 16 dir: {{ 'Cargo.toml' is dir }} ===
+dir is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 17 file: {{ 'Cargo.toml' is file }} ===
+file is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 18 symlink: {{ 'Cargo.toml' is symlink }} ===
+symlink is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 19 pipe: {{ 'Cargo.toml' is pipe }} ===
+pipe is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 20 block_device: {{ 'Cargo.toml' is block_device }} ===
+block_device is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 21 char_device: {{ 'Cargo.toml' is char_device }} ===
+char_device is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers
+
+=== 22 device: {{ 'Cargo.toml' is device }} ===
+device is disabled while rendering `netsuke help targets`; manifest queries permit only non-disclosing, side-effect-free template helpers

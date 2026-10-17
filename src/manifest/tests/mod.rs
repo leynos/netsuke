@@ -10,3 +10,4 @@ mod workspace;
 mod env;
 mod expansion_telemetry;
 mod glob;
+mod wrapper_equivalence;
