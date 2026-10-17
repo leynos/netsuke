@@ -6,46 +6,33 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: BLOCKED
+Status: IN PROGRESS
 
-Blocked on the `Scope` tolerance, not on a defect: the measured net-added-lines
-figure is 2,597 against a cap of 2,600, with `EP-M5` through `EP-M8` still
-unwritten, so the remaining milestones cannot be implemented without breaching
-the cap. A proposed deviation is recorded in `Decision log`; implementation
-awaits acceptance of one of its options. The shared compile pool is **not** a
-blocking factor: on 2026-10-17 it reported
-`capacity 4, held 0, healthy, sccache unreachable, compiling directly`, with no
-requests waiting, no compiler groups, and nothing compiling anywhere on the
-host. A compile can be started. The block is the scope tolerance alone.
+The `Scope` tolerance blocked this plan from 2026-10-16 until 2026-10-17, and
+the block is discharged: the user directed "Widen the cap", and the cap is now
+56 files and 6,000 net added lines against a measured 28 files and 2,597 lines,
+with a counted inventory for the rest. The derivation, and the reason the new
+number is a measurement rather than a round figure, are in `Decision log`.
 
-`EP-M0` and `EP-M1` are complete and `ADR-030` is written and indexed. The
-approval gate was passed on 2026-09-27. `EP-M2` is complete and gate-verified:
-its four changes are committed and twelve of thirteen applicable gates pass
-against its revision `c517f6fd`, with the thirteenth — `test-nextest` — failing
-locally on an environmental timeout of the shared compile pool. That timeout
-has now been reproduced across four runs on two *different* tests while every
-other observable stayed identical (573 sccache-unreachable lines,
-`Compile requests 0`, zero assertion failures), and CI at **the identical
-revision** passed both victims — `cli_configuration_fixture_compiles` in 66.986
-s and the boundary test in 37.893 s, against the same 300 s budget. CI has
-therefore resolved the question by direct measurement: the local exhaustion is
-host contention plus an unreachable cache, not a budget that was too small, and
-the allowance is deliberately left unwidened because this suite's
-counter-example seeds are lost when the runner kills a process. CI also caught
-a Windows-only defect in this branch's own test, now fixed in `1e1508ca` and
-confirmed fixed by the Windows job at `c517f6fd`; the Linux gates could not
-have seen it.
+`EP-M0` through `EP-M4` are complete. `ADR-030` is written and indexed, and the
+approval gate was passed on 2026-09-27. `EP-M4` closed on 2026-10-17 by
+execution rather than by reading: its four files compiled for the first time,
+`make proptest` passed 104 of 104 at `1b4b3fb1`, and both assigned mutations
+were applied, observed to fail the named properties, and reverted. `EP-M2`'s
+thirteenth gate — `test-nextest` — remains locally red on an environmental
+timeout of `cli_configuration_fixture_compiles`, which is **not** this branch's
+test and which `origin/main` has since repaired; the rebase onto `origin/main`
+is the next action, and the repair is expected to remove the local failure
+without changing the 300-second budget. That budget is deliberately left alone
+because this suite's counter-example seeds are lost when the runner kills a
+process.
 
-`EP-M3` has not started, and its preparation produced three corrections before
-any of it was written. Two were defects in this plan and are recorded in
-`Surprises & discoveries`: the planned `determinism/` property suites carried no
-`proptests` or `property_tests` module segment, so `make proptest` would have
-selected **none** of them while exiting 0; and the IR artefact list named a
-sibling layout the module-layout contract rejects. The third was a delegated
-implementation packet whose recommendation was falsified by executing that
-contract: its individual claims verified, but it applied them to the wrong
-artefact and contradicted two of this plan's own acceptance criteria. The plan
-was followed over the packet, and the packet has been rewritten.
+`EP-M5` onward is unwritten. The compile pool is not a blocking factor: on
+2026-10-17 it reported
+`capacity 4, held 0, healthy, sccache unreachable, compiling directly`, with
+nothing compiling anywhere on the host, and a compile can be started. Its
+occupancy varies with other agents' work, so a slow gate is a queue measurement
+rather than a failure signal.
 
 One item is genuinely outstanding and is recorded as a blocker rather than a
 pass: the milestone `coderabbit review --agent` is **unobtained**. Seven
@@ -57,12 +44,6 @@ current CodeRabbit assessment, and `docs/roadmap.md:595` shows the house
 pattern treats such a review as completion evidence — a second reason roadmap
 item 4.3.1 stays unchecked. This revision follows a design review, a rebase onto
 `origin/main`, that Windows repair, and gate pass #5.
-
-One item is genuinely outstanding and is recorded as a blocker rather than a
-pass: the milestone `coderabbit review --agent` is **unobtained**. Five
-consecutive attempts across two sessions failed service-side with
-`"Failed to start review. Please try again."`, producing zero findings at any
-revision, so this branch has no current CodeRabbit assessment.
 
 ## Purpose / big picture
 
@@ -481,14 +462,17 @@ question.
 
 ## Tolerances (exception triggers)
 
-- **Scope.** Stop if the change touches more than 34 files beyond this
-  ExecPlan. That number is deliberately larger than the first draft's 16, which
-  its own artefact list breached on day one; a tolerance that fires immediately
-  teaches the reader to ignore tolerances. The budget is roughly 12 new test
-  and strategy files, 5 mutation patches, 1 ADR, 8 edited documents, and 8
-  edited source or configuration files. Also stop if net added lines exceed
-  2,600 — the axis on which the 4.2.3 precedent overran by 2.2x and which its
-  successor dropped.
+- **Scope.** Stop if the change touches more than 56 files beyond this
+  ExecPlan, or if net added lines exceed 6,000. Both figures were **widened on
+  2026-10-17 by user direction**, replacing limits of 34 files and 2,600 lines;
+  the derivation is recorded in `Decision log`. The earlier numbers were set
+  before the remaining artefacts were costed, and the line axis reached three
+  lines of headroom with four milestones unwritten. The replacement is not a
+  round number chosen for comfort: it is the measured 28 files and 2,597 lines
+  already spent, plus an inventory of what `EP-M5` through `EP-M8` still name,
+  plus a stated margin. The 4.2.3 precedent that motivated 2,600 overran by
+  2.2x, so the new cap is still bound to a counted inventory rather than to
+  aspiration.
 - **Production change.** If any property cannot pass without changing
   production behaviour, stop immediately, record the counter-example, and
   escalate. Note that `OBL-E2E` no longer carries a pre-authorized weakening
@@ -3558,21 +3542,27 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
       not fix it, since the issue is the per-case reorder classification
       rather than the sample size.
 
-- [ ] (2026-10-16) **`BLOCKED`: the `Scope` tolerance has no room left for
-      `EP-M5`–`EP-M8`.** Measured at `8a213218` against merge base `e1df2ead`
-      (also the hook's diff base): 2,597 net added lines excluding this
-      ExecPlan, against a cap of 2,600 — three lines of headroom for four
-      milestones. 28 of 34 files, so the file axis is not the constraint. The
-      `EP-M3` and `EP-M4` suites are ~69% of the budget spent. The plan's
-      Exception handling covers exactly this case — stop when "a constraint
-      would be violated", not only once it has been — and the breach is
-      arithmetically certain rather than a risk, because no further milestone
-      fits in three lines. A proposed deviation with three options and a
-      recommendation is in `Decision log`. **No implementation work is
-      blocked by this beyond `EP-M5` onward**, and none could proceed
-      regardless while the compile pool refuses admissions.
+- [x] (2026-10-17) **The `Scope` tolerance was breached and then widened, by
+      user direction, to 56 files and 6,000 net added lines.** The entry below
+      this one recorded the original breach on 2026-10-16 — 2,597 net added
+      lines against a cap of 2,600, with `EP-M5`–`EP-M8` unwritten — and
+      proposed three options. The user answered on 2026-10-17 with "Widen the
+      cap". The derivation of the new figure, including the counted inventory
+      of what the remaining milestones still name, is in `Decision log`. The
+      figure remains measured against merge base `e1df2ead` and excludes
+      `docs/execplans/`, which resolves the inside-or-outside ambiguity the
+      original entry could not.
 
-- [ ] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
+- [x] (2026-10-16) **`BLOCKED`: the `Scope` tolerance had no room left for
+      `EP-M5`–`EP-M8`.** Superseded by the entry above; retained because the
+      breach, and not only its resolution, is part of the plan's history.
+      Measured at `8a213218` against merge base `e1df2ead` (also the hook's
+      diff base): 2,597 net added lines excluding this ExecPlan, against a cap
+      of 2,600 — three lines of headroom for four milestones. 28 of 34 files,
+      so the file axis was not the constraint. The `EP-M3` and `EP-M4` suites
+      are ~69% of the budget as it then stood.
+
+- [x] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [ ] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [ ] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
 - [ ] `EP-M7`: `OBL-DUP`, `OBL-CYCLE`.
@@ -5035,10 +5025,12 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 
 - **The net-lines tolerance is three lines from exhausted, with `EP-M5` through
   `EP-M8` unwritten. This is a proposed deviation, and the plan is `BLOCKED`
-  until it is accepted or the budget is re-scoped.** The `Scope` tolerance
-  permits 34 files and 2,600 net added lines. Measured at `8a213218` against
-  the merge base `e1df2ead` (which is also the hook's diff base, so the figure
-  is not a stale-ref artefact):
+  until it is accepted or the budget is re-scoped.** *(Resolved 2026-10-17 by
+  the "Widen the cap" entry below, which supersedes this one's status. The
+  measurements and options are retained as the record of how the breach was
+  found.)* The `Scope` tolerance permits 34 files and 2,600 net added lines.
+  Measured at `8a213218` against the merge base `e1df2ead` (which is also the
+  hook's diff base, so the figure is not a stale-ref artefact):
 
   ```plaintext
   excluding docs/execplans/   add=3137  del=540  net=2597  / 2600
@@ -5083,6 +5075,51 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   unavailable, so no milestone can advance regardless — and this entry exists
   so the breach is visible before the budget is breached rather than after.
   Date/Author: 2026-10-16 / implementation agent.
+
+- **The `Scope` tolerance is widened, by user direction, to 56 files and 6,000
+  net added lines. The plan is no longer `BLOCKED` on it.** On 2026-10-17 the
+  user answered the deviation above with "Widen the cap", declining both the
+  scope cut and the split at the `EP-M4` plateau. The widening is therefore
+  accepted, and the derivation below is recorded so the new number is a
+  measured bound rather than a round figure someone felt comfortable with.
+
+  The figure still excludes `docs/execplans/`, which resolves the ambiguity the
+  previous entry had to give both ways. The ExecPlan is the document the
+  tolerance protects the reader from, not part of the change under budget; the
+  branch spends 8,352 added lines there and 3,138 everywhere else, so including
+  it would make the cap meaningless as a measure of product scope.
+
+  Spent at HEAD, measured against merge base `e1df2ead`:
+
+  ```plaintext
+  add=3138  del=541  net=2597   28 of 56 files
+  ```
+
+  Still to land, from the artefacts `EP-M5` through `EP-M8` name. Nine new
+  suites, each sized by the nearest measured comparable rather than guessed:
+  `order.rs` (two properties, the largest at ~400), `defaults.rs` (~200),
+  `declaration.rs` (~250), `ninja_oracle.rs` (~400), `hashmap_boundary.rs`
+  (~250), `action_hash_property_tests.rs` (~200), `process_tests.rs` (~300),
+  `duplicates.rs` (~250), `cycles.rs` (~300). That is ~2,550 lines. Add seven
+  mutation patches (`MUT-EDGESORT`, `MUT-ACTIONSORT`, `MUT-DEFSORT`,
+  `MUT-DEFPOS`, `MUT-HASHMETA`, `MUT-DUPWITHIN`, `MUT-CYCLEDEPTH`) at ~14 lines
+  each — the two `EP-M4` patches measure 12 and 14 — for ~100, two module
+  wiring files at ~30, and `EP-M8`'s documentation set at ~250. Remaining
+  inventory is therefore ~3,000 lines, and `2597 + 3000 = 5,597` sits inside
+  6,000 with a margin of just over 400.
+
+  The file axis moves from 34 to 56 for the same inventory: 28 spent, plus nine
+  suites, two wiring files, seven patches and eight edited documents is 54, and
+  56 keeps a two-file margin. The margin is deliberately narrow on both axes. A
+  tolerance with slack invites the same drift that made 34 files look generous
+  and then bind.
+
+  One consequence is recorded rather than silently absorbed: `EP-M8` now owns
+  more documentation than its section currently lists, including the users'-
+  guide guarantee and the six translated READMEs decision. Those were already
+  named there; the widening makes room for them rather than changing what they
+  are. Date/Author: 2026-10-17 / implementation agent, on the user's explicit
+  instruction.
 
 ## Design review findings
 
