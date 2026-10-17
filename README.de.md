@@ -217,9 +217,9 @@ bedeutet: wird im aktiven Rezepttext umgeschrieben; siehe Hinweis unten).
     vorsichtshalber zurückweisen. Ein Apostroph im Kommentar
     kann ebenfalls einen späteren Marker zurückweisen.
     Typografische PowerShell-Anführungszeichen führen ebenfalls dazu, dass
-    spätere Marker vorsichtshalber scheitern. Verwenden Sie Marker nicht in
-    POSIX- und Bash-
-    Kommentaren oder Heredoc-Körpern: Interne Token können dort verbleiben.
+    spätere Marker vorsichtshalber scheitern. Marker gehören nicht in POSIX- und
+    Bash-Kommentare oder Heredoc-Körper: Interne Token können dort im
+    generierten Rezept verbleiben.
 
 Mit einer vorhandenen Datei `input.txt` kopiert dieses POSIX-Manifest deren
 Inhalt nach `output.txt` und prüft, ob die `PATH`-Variable der Shell nicht leer
