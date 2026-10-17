@@ -234,7 +234,7 @@ test-rfc-stdlib-coverage: check-build-tools ## Check the RFC 0006 split and its 
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test rfc_stdlib_coverage_tests --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 test-documentation-contracts: check-build-tools ## Validate marked documentation examples and semantic contracts
-	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test documentation_examples_loader_tests --test documentation_examples_tests --all-features --no-tests fail -E 'test(malformed_documented_examples_are_rejected) | test(every_documented_fence_has_a_known_unique_identifier) | test(release_wix_extension)' $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test documentation_examples_loader_tests --test documentation_examples_tests --all-features --no-tests fail -E 'test(malformed_documented_examples_are_rejected) | test(every_documented_fence_has_a_known_unique_identifier) | test(help_targets_edges_example_matches_live_schema) | test(release_wix_extension)' $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 doctest: check-build-tools ## Run doctests, which cargo-nextest cannot execute
 	$(GATE_RUSTFLAGS) $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)

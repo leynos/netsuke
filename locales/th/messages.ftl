@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = หากไม่มีหัวข้อ ค�
 cli.help.actions_heading = การดำเนินการ:
 cli.help.targets_heading = เป้าหมาย:
 cli.help.targets.about = แสดงรายการเป้าหมายและการดำเนินการในไฟล์รายการที่เลือก
+cli.help.targets.flag.edges.help = รวมเส้นเชื่อมการพึ่งพาและสูตรดิบไว้ในผลลัพธ์ JSON
 cli.help.default_marker = ค่าเริ่มต้น
 cli.help.conditional_marker = มีเงื่อนไข
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = โหลดไฟล์รายการที�
 runner.context.build_graph = สร้างกราฟจากไฟล์รายการไม่สำเร็จ
 runner.context.generate_ninja = สร้างไฟล์รายการ Ninja ไม่สำเร็จ
 runner.context.render_graph = แสดงผลลัพธ์กราฟไม่สำเร็จ
+runner.help.targets_edges_require_json = ตัวเลือก --edges ต้องใช้ --json ในระดับบนสุด
 
 runner.io.create_temp_file = สร้างไฟล์ Ninja ชั่วคราวไม่สำเร็จ
 runner.io.write_temp_ninja = เขียนไฟล์ Ninja ชั่วคราวไม่สำเร็จ

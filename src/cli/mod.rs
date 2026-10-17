@@ -51,7 +51,7 @@ pub use discovery::EnvProvider as ConfigEnvProvider;
 pub use discovery::StdEnvProvider as ConfigStdEnvProvider;
 /// Record the discovery metric series for an already-timed phase.
 pub use discovery::record_discovery_outcome;
-pub use help::{HelpArgs, HelpTopic};
+pub use help::{HelpArgs, HelpTargetsArgs, HelpTopic};
 /// Input for an event-collecting merge using previously discovered layers.
 pub use merge::CachedMergeInput;
 /// Bounded events and the production tracing adapter for application-side replay.

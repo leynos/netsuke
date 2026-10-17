@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Без темы это соответствуе
 cli.help.actions_heading = Действия:
 cli.help.targets_heading = Цели:
 cli.help.targets.about = Вывести список целей и действий в выбранном файле.
+cli.help.targets.flag.edges.help = Включить рёбра зависимостей и необработанные рецепты в вывод JSON.
 cli.help.default_marker = по умолчанию
 cli.help.conditional_marker = условный
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Не удалось загрузить маниф
 runner.context.build_graph = Не удалось построить граф по манифесту.
 runner.context.generate_ninja = Не удалось создать манифест Ninja.
 runner.context.render_graph = Не удалось отобразить артефакт графа.
+runner.help.targets_edges_require_json = Для параметра --edges требуется --json верхнего уровня.
 
 runner.io.create_temp_file = Не удалось создать временный файл Ninja.
 runner.io.write_temp_ninja = Не удалось записать временный файл Ninja.

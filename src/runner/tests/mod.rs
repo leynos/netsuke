@@ -355,14 +355,17 @@ proptest! {
     }
 }
 
-#[test]
-fn help_targets_bypasses_ninja_program_resolution() -> Result<()> {
+#[rstest]
+#[case::catalogue(false)]
+#[case::graph_export(true)]
+fn help_targets_bypasses_ninja_program_resolution(#[case] edges: bool) -> Result<()> {
     let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
     let _guard = set_en_localizer();
     let cli = Cli {
         file: Utf8PathBuf::from("missing-help-targets-manifest.yml"),
+        json: edges,
         command: Some(Commands::Help(HelpArgs {
-            topic: Some(HelpTopic::Targets),
+            topic: Some(HelpTopic::Targets(crate::cli::HelpTargetsArgs { edges })),
         })),
         ..Cli::default()
     };

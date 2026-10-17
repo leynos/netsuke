@@ -87,7 +87,9 @@ before execution, a critical requirement for compatibility with Ninja.
    `conditional` JSON field. The catalogue retains conditional unresolved
    alternatives, but graph validation excludes them, so those alternatives are
    not treated as simultaneously active. Full rendering and normal build
-   selection remain unchanged.
+   selection remain unchanged. The opt-in versioned graph projection and its
+   inherited validation limits are defined in
+   [ADR-0044](adrs/adr-0044-hermetic-help-targets-graph-json.md).
 
 - Stage 5: IR Generation & Validation
 

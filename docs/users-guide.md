@@ -1142,6 +1142,11 @@ netsuke generate --output build.ninja
 unless `--output` is supplied. HTML output contains a server-rendered SVG, a
 textual outline and a `<noscript>` DOT representation.
 
+`netsuke graph` uses the full manifest loader, including normal template
+rendering, and is not a hermetic manifest query. For a side-effect-free JSON
+catalogue with authored dependency edges and raw recipe bodies, use
+`netsuke --json help targets --edges` below.
+
 `generate` writes Ninja without running it. With no `--output`, stdout contains
 only the generated Ninja manifest. With `--output <FILE>`, Netsuke writes the
 manifest to that file and leaves stdout empty. For a serial dependency list,
@@ -1209,6 +1214,91 @@ normal colour, accessibility, locale, and JSON-output conventions; with
 The standard-library reference describes the full helper set available while
 rendering a normal build manifest. The query allowlist above is the deliberate
 exception for `netsuke help targets`.
+
+#### Export dependency edges and raw recipes
+
+Add `--edges` to the JSON help-targets command to include a separate v1 `graph`
+object alongside the existing action and target catalogue:
+
+<!-- tested-example: guide-help-targets-edges-json -->
+
+```json
+{
+  "schema_version": 1,
+  "generator": {
+    "name": "netsuke",
+    "version": "0.1.0-beta4"
+  },
+  "result": {
+    "command": "help-targets",
+    "actions": [],
+    "targets": [
+      {
+        "name": "hello.txt",
+        "description": "Build hello.txt",
+        "default": true,
+        "conditional": false
+      }
+    ],
+    "graph": {
+      "defaults": ["hello.txt"],
+      "rules": [],
+      "nodes": [
+        {
+          "kind": "target",
+          "names": [{"name": "hello.txt", "default": true}],
+          "description": "Build hello.txt",
+          "conditional": false,
+          "phony": false,
+          "always": false,
+          "dependency_order": "parallel",
+          "edges": {
+            "sources": [],
+            "deps": [],
+            "order_only_deps": []
+          },
+          "recipe": {
+            "kind": "command",
+            "form": "string",
+            "commands": ["touch hello.txt"]
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+Run the example with `netsuke --json help targets --edges`. The `graph` object
+contains `defaults` in authored order (including duplicates), `rules` in
+declaration order, and declaration-level `nodes`, with actions before targets.
+Each node contains its expanded `names`, optional `description` (JSON `null`
+when absent), `conditional`, `phony`, `always`, `dependency_order`, authored
+`edges`, and a tagged `recipe`. The edge object has `sources`, `deps`, and
+`order_only_deps` arrays. A node name's `default` flag is true exactly when
+that name appears in `defaults`.
+
+Recipe kinds are closed in schema v1: `command` carries `form` (`string` or
+`list`) and raw `commands`; `script` carries raw script text; `rule` carries
+rendered selector names; and `dependency_only` represents an empty-command
+aggregate. The query renders names, edges, descriptions, and rule selectors
+through its restricted Jinja surface. It never renders command or script recipe
+bodies, executes them, or invokes helpers inside them. Defaults retain their
+authored values. Manifest-query rendering does not resolve a recipe shell, so
+`shell_quote` and `shell_join` calls in query-rendered metadata use the
+host-default dialect. Calls inside recipe bodies are not evaluated during the
+export. When a build later renders those bodies, the selected recipe shell's
+dialect applies, or the host default when no shell is selected; pin a dialect
+when rendered command text must be host-independent. The export records no
+`cwd`, shell, argv, variable, or macro fields. Structured-command recipes are
+reserved for milestone 12.1.2, and literal `cwd` for 12.2.3.
+
+The export inherits query validation: unresolved conditional nodes remain in
+the catalogue but are excluded from graph validation; lowering errors fail the
+export; and `foreach` that requires a query-disabled, host-dependent helper
+fails. Names, edges, descriptions, and rule selectors that call disabled
+helpers also fail. These limits preserve the existing `help targets` validation
+order and rules.
 
 Recipe-body skipping and conditional catalogue entries are beta3 behaviour.
 Published beta2 `help targets` does not provide those semantics.

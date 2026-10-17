@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Utan ämne motsvarar detta `--help`. Använd `h
 cli.help.actions_heading = Åtgärder:
 cli.help.targets_heading = Mål:
 cli.help.targets.about = Lista mål och åtgärder i det valda manifestet.
+cli.help.targets.flag.edges.help = Ta med beroendekanterna och råa recept i JSON-utdata.
 cli.help.default_marker = standard
 cli.help.conditional_marker = villkorlig
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Manifestet i { $path } kunde inte läsas in.
 runner.context.build_graph = Grafen kunde inte byggas utifrån manifestet.
 runner.context.generate_ninja = Ninja-manifestet kunde inte skapas.
 runner.context.render_graph = Grafartefakten kunde inte renderas.
+runner.help.targets_edges_require_json = Alternativet --edges kräver --json på toppnivå.
 
 runner.io.create_temp_file = Den tillfälliga Ninja-filen kunde inte skapas.
 runner.io.write_temp_ninja = Den tillfälliga Ninja-filen kunde inte skrivas.

@@ -279,6 +279,9 @@ operator, user, and contributor references are easier to find.
   0010, RFC 0011, and ADR-0019: the `cwd` stream-path base, absolute-`cwd`
   rejection, the two capture forms, the two temporary-directory spellings, and
   the reserved `1.1.0` manifest minor version.
+- [ADR-0044](adrs/adr-0044-hermetic-help-targets-graph-json.md):
+  Versioned graph JSON from the restricted help-targets query, with
+  declaration-level nodes, authored edges, and raw legacy recipes.
 - [ADR-0045](adrs/adr-0045-isolate-command-list-entries.md): Opt-in command-list
   entry isolation with shared mode preserved as the default.
 - [ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md):

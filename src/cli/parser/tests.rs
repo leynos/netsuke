@@ -79,6 +79,26 @@ const HELP_SNAPSHOT_SUFFIX: &str = if cfg!(feature = "lint") {
     ""
 };
 
+/// Verifies localized `help targets` output documents the opt-in graph flag.
+#[rstest]
+#[case::en_us("en-US", "Include dependency edges and raw recipes in JSON output.")]
+#[case::es_es(
+    "es-ES",
+    "Incluir aristas de dependencias y recetas sin procesar en la salida JSON."
+)]
+fn localized_help_targets_documents_edges_flag(#[case] locale: &str, #[case] expected: &str) {
+    let rendered_help = render_localized_help_targets_long_help(locale);
+
+    assert!(
+        rendered_help.contains("--edges"),
+        "help targets for {locale} should include --edges"
+    );
+    assert!(
+        rendered_help.contains(expected),
+        "help targets for {locale} should contain {expected:?}: {rendered_help}"
+    );
+}
+
 /// Accept localized long-help snapshots by reading or writing snapshot files on disk.
 #[rstest]
 #[case::en_us("en-US", "help_en_us")]

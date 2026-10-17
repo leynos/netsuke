@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = بدون موضوع، يطابق هذا `--help
 cli.help.actions_heading = الإجراءات:
 cli.help.targets_heading = الأهداف:
 cli.help.targets.about = سرد الأهداف والإجراءات في الملف المحدد.
+cli.help.targets.flag.edges.help = تضمين حواف التبعيات والوصفات الخام في مخرجات JSON.
 cli.help.default_marker = الافتراضي
 cli.help.conditional_marker = مشروط
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = تعذّر تحميل ملف البيانات م�
 runner.context.build_graph = تعذّر بناء الرسم من ملف البيانات.
 runner.context.generate_ninja = تعذّر توليد ملف بيانات Ninja.
 runner.context.render_graph = تعذّر عرض مخرج الرسم.
+runner.help.targets_edges_require_json = يتطلب الخيار --edges وجود --json على المستوى الأعلى.
 
 runner.io.create_temp_file = تعذّر إنشاء ملف Ninja المؤقت.
 runner.io.write_temp_ninja = تعذّرت الكتابة إلى ملف Ninja المؤقت.

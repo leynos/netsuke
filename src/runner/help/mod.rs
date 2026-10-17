@@ -18,9 +18,10 @@ use crate::output_prefs::{self, OutputPrefs};
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 use crate::theme::ThemeContext;
 
-use super::process;
+use super::{RunnerError, process};
 use telemetry::instrument_help_targets;
 
+mod graph_json;
 mod query;
 mod telemetry;
 
@@ -39,21 +40,32 @@ use query::{HelpEntry, HelpTargetsQueryFailure, query_help_targets};
 ///
 /// Returns an error when the manifest cannot be resolved, loaded, rendered, or
 /// validated, or when the catalogue cannot be serialized.
-pub(super) fn handle_help_targets(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
-    let query =
-        match instrument_help_targets(|| query_help_targets(cli).map_err(anyhow::Error::new)) {
-            Ok(query) => query,
-            Err(error) => {
-                report_query_failure_stages(reporter, &error);
-                return Err(error);
-            }
-        };
+pub(super) fn handle_help_targets(
+    cli: &Cli,
+    edges: bool,
+    reporter: &dyn StatusReporter,
+) -> Result<()> {
+    if edges && !cli.json {
+        return Err(RunnerError::HelpTargetsEdgesRequireJson {
+            message: localization::message(keys::RUNNER_HELP_TARGETS_EDGES_REQUIRE_JSON),
+        }
+        .into());
+    }
+    let query = match instrument_help_targets(|| {
+        query_help_targets(cli, edges).map_err(anyhow::Error::new)
+    }) {
+        Ok(query) => query,
+        Err(error) => {
+            report_query_failure_stages(reporter, &error);
+            return Err(error);
+        }
+    };
     report_query_stages(reporter, &query.stages);
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
     let status_key: LocalizationKey = keys::STATUS_TOOL_HELP_TARGETS.into();
     report_pipeline_stage(reporter, PipelineStage::GraphRendering, Some(status_key));
     if cli.json {
-        let rendered = render_json(&query.entries)?;
+        let rendered = render_json(&query.entries, query.graph.as_ref())?;
         process::write_text_stdout(&rendered)?;
     } else {
         let rendered = render_text(&query.entries, resolved_prefs(cli));
@@ -249,6 +261,9 @@ struct HelpTargetsResult<'a> {
     actions: Vec<HelpEntryJson<'a>>,
     /// JSON rows for the manifest build targets.
     targets: Vec<HelpEntryJson<'a>>,
+    /// Optional v1 graph projection, absent from the established catalogue.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    graph: Option<&'a graph_json::GraphJson>,
 }
 
 #[derive(Debug, Serialize)]
@@ -269,7 +284,7 @@ struct HelpEntryJson<'a> {
 /// # Errors
 ///
 /// Returns an error when the catalogue cannot be serialized.
-fn render_json(entries: &[HelpEntry]) -> Result<String> {
+fn render_json(entries: &[HelpEntry], graph: Option<&graph_json::GraphJson>) -> Result<String> {
     serde_json::to_string_pretty(&HelpTargetsDocument {
         schema_version: SCHEMA_VERSION,
         generator: GeneratorInfo::current(),
@@ -277,6 +292,7 @@ fn render_json(entries: &[HelpEntry]) -> Result<String> {
             command: "help-targets",
             actions: json_entries(entries.iter().filter(|entry| entry.is_action)),
             targets: json_entries(entries.iter().filter(|entry| !entry.is_action)),
+            graph,
         },
     })
     .context("serialize help targets catalogue")

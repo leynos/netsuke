@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Bez tématu odpovídá příkazu `--help`. Pomo
 cli.help.actions_heading = Akce:
 cli.help.targets_heading = Cíle:
 cli.help.targets.about = Vypsat cíle a akce ve vybraném manifestu.
+cli.help.targets.flag.edges.help = Zahrnout hrany závislostí a nezpracované recepty do výstupu JSON.
 cli.help.default_marker = výchozí
 cli.help.conditional_marker = podmíněný
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Manifest v { $path } se nepodařilo načíst.
 runner.context.build_graph = Z manifestu se nepodařilo sestavit graf.
 runner.context.generate_ninja = Manifest Ninja se nepodařilo vytvořit.
 runner.context.render_graph = Artefakt grafu se nepodařilo vykreslit.
+runner.help.targets_edges_require_json = Volba --edges vyžaduje --json na nejvyšší úrovni.
 
 runner.io.create_temp_file = Dočasný soubor Ninja se nepodařilo vytvořit.
 runner.io.write_temp_ninja = Dočasný soubor Ninja se nepodařilo zapsat.
