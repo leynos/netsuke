@@ -86,7 +86,7 @@ The work also discharges obligations that earlier items deferred here. Roadmap
 and cycle rejection only for one to three nodes, and that "the larger-N graph
 property is handed off to the future Proptest roadmap item `4.3.1`". There is a
 crisp reason Kani cannot close this itself: under `#[cfg(kani)]`, `IrHashMap`
-becomes an ordered bounded map (`src/ir/graph_kani_map.rs`), so the
+becomes an ordered bounded map (`src/ir/graph/kani_map.rs`), so the
 nondeterminism under test does not exist in the verification build.
 
 Finally, the plan settles a contract question that
@@ -142,36 +142,42 @@ Nothing in this plan changes the compiled behaviour of the shipped binary.
 
 ### The emission pipeline this plan targets
 
-`src/ir/graph.rs` defines the build graph:
+`src/ir/graph/mod.rs` defines the build graph:
 
 ```rust
 pub struct BuildGraph {
     pub actions: IrHashMap<String, Action>,
-    pub targets: IrHashMap<Utf8PathBuf, BuildEdge>,
+    edges: EdgeArena<BuildEdge>,
+    targets: IrHashMap<Utf8PathBuf, EdgeId>,
     pub default_targets: Vec<Utf8PathBuf>,
 }
 ```
 
-`IrHashMap<K, V>` is a plain `std::collections::HashMap` in ordinary builds
-(`src/ir/graph.rs:28`) and an ordered bounded map under `#[cfg(kani)]`. An
-`Action` is a recipe plus Ninja rule metadata; a `BuildEdge` is one `build`
-statement.
+An edge is owned once in the `edges` arena; `targets` indexes each output alias
+to the `EdgeId` of its canonical edge, so a multi-output edge appears once and
+is reachable under every alias. Both the arena and `targets` are private, and
+`graph.edges()` is the public way to walk the arena.
 
-`src/ir/from_manifest.rs` builds the graph. Four facts are load-bearing:
+`IrHashMap<K, V>` is a plain `std::collections::HashMap` in ordinary builds
+(`src/ir/graph/mod.rs`) and an ordered bounded map under `#[cfg(kani)]`; the
+arena is a `Vec` ordinarily and a bounded `IrVec` under Kani. An `Action` is a
+recipe plus Ninja rule metadata; a `BuildEdge` is one `build` statement.
+
+`src/ir/from_manifest/mod.rs` builds the graph. Four facts are load-bearing:
 
 1. Actions are interned by content hash. `register_action`
-   (`src/ir/from_manifest_support.rs:48`) hashes the `Action` with
+   (`src/ir/from_manifest/support/mod.rs`) hashes the `Action` with
    `crate::hasher::ActionHasher::hash` and uses the hexadecimal digest as the
    map key.
 2. Duplicate outputs are rejected. `find_duplicates`
-   (`src/ir/from_manifest_support.rs:306`) fails the lowering if any output
+   (`src/ir/from_manifest/support/mod.rs`) fails the lowering if any output
    path is claimed twice, across targets or within one target. So no two
    distinct edges in a graph built this way share an output path.
 3. A multi-output edge is stored **once**, not once per output.
-   `insert_edge_for_outputs` (`src/ir/from_manifest_support.rs:142`) is a thin
+   `insert_edge_for_outputs` (`src/ir/from_manifest/support/mod.rs`) is a thin
    wrapper over `graph.insert_edge`, which validates the output aliases and
    calls `insert_canonical_edge` to push a single arena entry
-   (`src/ir/graph.rs:82`). An output-less edge is pushed the same way and is
+   (`src/ir/graph/mod.rs`). An output-less edge is pushed the same way and is
    therefore *not* dropped: `render_edges` emits a `build` line for it with an
    empty left-hand side. Whether a manifest can construct one is unresolved and
    is `EP-M4`'s question, not an established drop. See `ADR-030` amendments 1
@@ -180,25 +186,30 @@ statement.
    `depfile: None, deps_format: None, pool: None, restat: false`. No manifest
    can currently populate those fields.
 
-`src/ninja_gen/` emits the text. `generate` (`src/ninja_gen/mod.rs:105`) is the
+`src/ninja_gen/` emits the text. `generate` (`src/ninja_gen/mod.rs`) is the
 simple path and rejects graphs needing staged serial lowering. `generate_bundle`
-(`src/ninja_gen/dyndep.rs:88`) is what production uses and returns
+(`src/ninja_gen/dyndep/mod.rs`) is what production uses and returns
 `GeneratedNinja { build_file, dyndep_files }`. Both:
 
 1. `reject_unsupported_path_characters` — rejects `$`, `:`, `|`, and any
-   Unicode control character including NUL (`src/ninja_gen/path_syntax.rs:52`).
+   Unicode control character including NUL (`src/ninja_gen/path_syntax.rs`).
 2. `reject_reserved_paths` — rejects paths under `.netsuke/serial` or
    `.netsuke/dyndep`.
 3. `write_action_rules` — sorts `graph.actions` by map key, writes one `rule`
    block per non-dependency-only action.
-4. Edge rendering — sorts `graph.targets.values()` by
-   `path_key(&edge.explicit_outputs)`, deduplicates on the same key, writes one
-   `build` statement per surviving edge.
+4. Edge rendering — `ordered_edges(graph.edges())` sorts the arena by
+   `path_key(&edge.explicit_outputs)` and writes one `build` statement per
+   edge. The arena already holds each edge once, so no deduplication is needed
+   at this layer.
 
-Then, if `default_targets` is non-empty, both clone it, `sort()`, and write one
+Every one of those orderings is a named pure function in
+`src/ninja_gen/order.rs` (`ordered_edges`, `ordered_actions`,
+`ordered_default_targets`), which is what lets a property state the rule
+directly instead of re-stating two hand-copied sort calls. Then, if
+`default_targets` is non-empty, both clone it, `sort()`, and write one
 `default` line last.
 
-`path_key` (`src/ninja_gen/mod.rs:242`):
+`path_key` (`src/ninja_gen/mod.rs`):
 
 ```rust
 pub(crate) fn path_key(paths: &[Utf8PathBuf]) -> String {
@@ -231,18 +242,19 @@ The **platform-and-shell parameter**, which the first draft wrongly omitted.
 `PowerShell` on Windows and `Posix` elsewhere, overridable at runtime by
 `NETSUKE_WINDOWS_SHELL` whose `Bash` route additionally depends on a filesystem
 probe. PowerShell takes an `rspfile` branch that POSIX does not
-(`src/ninja_gen/mod.rs:379`). Emitted bytes are therefore a function of
+(`src/ninja_gen/named_action.rs`). Emitted bytes are therefore a function of
 (manifest, environment, platform, shell selection, Netsuke version). The design
 document's unqualified claim is false across platforms as written, and the
 contract must name the parameter tuple.
 
 What is explicitly **not** claimed: within a single edge, `DisplayEdge`
-(`src/ninja_gen/display_edge.rs:22`) renders each path vector verbatim in
+(`src/ninja_gen/display_edge.rs`) renders each path vector verbatim in
 declaration order, so emission is *not* invariant under permuting an edge's own
 output list — even though `path_key` is. Nor is determinism claimed for error
 paths: `reject_unsupported_path_characters` and `reject_reserved_paths` both
-iterate `graph.targets.values()` and return on the *first* offender, so which
-error a multi-fault graph reports is insertion-order dependent.
+walk `graph.edges()` — the arena, in insertion order — and return on the
+*first* offender, so which error a multi-fault graph reports is insertion-order
+dependent.
 
 ### Prior art in this repository
 
@@ -998,13 +1010,13 @@ documented exemption.
   visitor; a *file* named by a `#[cfg(test)] mod` declaration is skipped whole
   by the walk. The second is forced by `src/ninja_gen/property_tests/mod.rs`,
   whose `use std::collections::{HashMap, HashSet}` carries no attribute of its
-  own: its test-only-ness exists only in `#[cfg(test)] mod property_tests;` at
-  `src/ninja_gen/mod.rs:251`. Measured, not inferred: before the walk honoured
-  the declaration, the unmodified tree failed with those two imports reported.
-  The whole-file strip therefore propagates down a subtree, and a directory
-  whose children are declared by a sibling file rather than a `mod.rs` is read
-  from that sibling. `property_tests/defaults/` was the live case for that
-  path: its `generator.rs` was named by `property_tests/defaults.rs`. Clippy's
+  own: its test-only-ness exists only in `#[cfg(test)] mod property_tests;` in
+  `src/ninja_gen/mod.rs`. Measured, not inferred: before the walk honoured the
+  declaration, the unmodified tree failed with those two imports reported. The
+  whole-file strip therefore propagates down a subtree, and a directory whose
+  children are declared by a sibling file rather than a `mod.rs` is read from
+  that sibling. `property_tests/defaults/` was the live case for that path: its
+  `generator.rs` was named by `property_tests/defaults.rs`. Clippy's
   `self_named_module_files` then required the directory and the file to share
   one form, so `defaults.rs` became `defaults/mod.rs` and the tree no longer
   exercises the sibling path. The helper is retained and documented because a
@@ -1085,7 +1097,7 @@ lowers successfully, and every permutation of its `targets` list, lowering and
 emitting the permuted manifest yields byte-identical output.
 
 The rule-name precondition is required, not cosmetic. `process_rules`
-(`src/ir/from_manifest.rs:100`) is last-writer-wins on duplicate names and no
+(`src/ir/from_manifest/mod.rs`) is last-writer-wins on duplicate names and no
 `DuplicateRule` error exists anywhere in `src/`. Permuting two same-named rules
 with different bodies changes which body every referencing target resolves, and
 so changes the bytes. The first draft asserted the unrestricted claim, which is
@@ -1316,11 +1328,10 @@ permutations.
   developer machines; the PowerShell `rspfile` branch is therefore covered only
   on the Windows lane and only by existing tests.
 - Determinism of **error paths** is not claimed and not tested. Both rejection
-  passes return on the first offender found while iterating
-  `graph.targets.values()`, so which error a multi-fault graph reports is
-  insertion-order dependent, as is the order of
-  `CycleDetectionReport::missing_dependencies`. `ADR-NNN` states this exclusion
-  explicitly rather than leaving a reader to assume coverage.
+  passes return on the first offender found while walking `graph.edges()`, so
+  which error a multi-fault graph reports is insertion-order dependent, as is
+  the order of `CycleDetectionReport::missing_dependencies`. `ADR-NNN` states
+  this exclusion explicitly rather than leaving a reader to assume coverage.
 - Cross-version byte stability is explicitly **not** promised; see `ADR-NNN`.
 - `src/graph_view/` has its own determinism guarantee and its own property. It
   is out of scope here, and `ADR-NNN` records it as adjacent.
@@ -1850,7 +1861,7 @@ count them. Handwritten patches earn their keep where `cargo-mutants` cannot
 produce a *building* mutant of the same class: the reordering one,
 `MUT-DEFPOS`, and the dropping one, `MUT-EDGEDROP`. `EP-M8` additionally
 records a scoped
-`cargo mutants -f src/ninja_gen/mod.rs -f src/ninja_gen/dyndep.rs` run with
+`cargo mutants -f 'src/ninja_gen/mod.rs' -f 'src/ninja_gen/dyndep/**'` run with
 survivors tabulated.
 
 ### The shared graph strategy
@@ -2167,6 +2178,80 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
 
+- [x] (2026-10-18) **The first batch over the review repairs went red on
+      `check-fmt`, and the red was a formatting regression the repair itself
+      introduced.** `markdownlint` (16 s, spelling prerequisite included, 0
+      issues over 186 files), `nixie` (1 s, `All diagrams validated
+      successfully!` over 187 files) and `test` (80 s, nextest 4,110 of 4,110
+      with 6 skipped, doctests 39 passed and 6 ignored) all passed;
+      `check-fmt` exited 2 after 2 s because `mdtablefix --check` reported
+      `docs/execplans/4-3-1-proptests-for-deterministic-ninja-emission.md +17
+      -17`. `cargo fmt` and Ruff were clean, so the whole failure was Markdown
+      canonicalization. The cause is that the reflowed paragraphs above were
+      wrapped by eye at 80 columns rather than by the tool, and 80 columns is
+      not the same thing as `mdtablefix` canonical form: the tool re-measures
+      the whole paragraph, so a hand-wrapped line that looks correct can still
+      be one the tool would join. The repair was
+      `mdtablefix --in-place --wrap --renumber --breaks --ellipsis --fences`
+      on that single file, which converges in one pass; a second pass is a
+      no-op, and `--check` over both changed documents is now clean. The lesson
+      is that a prose repair must be reflowed by the same tool that will check
+      it, never by hand, and that `make check-fmt` is not optional for a
+      docs-only delta. Freeze identities for this batch matched before and
+      after — HEAD `67a48312`, the same two modified paths, and
+      `git diff | sha256sum`
+      `3d972fe4a4fe4566ce626a64f921554754939679f59954e30fd06e5341f83079` — so
+      the red is a property of the content, not of a tree that moved under the
+      gates. Logs are `/tmp/<gate>-netsuke-4-3-1-epm5-crconfirm2.out` with exit
+      codes in `/tmp/epm5-crconfirm2-gates-meta.txt`.
+- [x] (2026-10-18) **The `EP-M5` confirmation batch passed all four gates and
+      the confirming review, which returned three minor documentation findings
+      that are now repaired.** The batch ran sequentially against the frozen
+      `67a48312` after the previous milestone-review round: `check-fmt` (2 s,
+      259 Python files formatted, 186 Markdown unchanged), `markdownlint`
+      (16 s, spelling prerequisite included, 0 issues over 186 files), `nixie`
+      (1 s, `All diagrams validated successfully!` over 187 files), and `test`
+      (83 s, nextest 4,110 of 4,110 with 6 skipped, doctests 162 passed across
+      29 targets). A sweep of all four logs for `^FAILED`, `^ERROR`, `error[E`,
+      `^error:` and `failed (` returned zero matches. HEAD, `git status
+      --porcelain` and `git diff 077cf366..HEAD`, whose sha256 is
+      `fb3e62c0e501dc67f94f274c7524d77c046c17d4c2b23479d164ba8acd70987a`,
+      were identical before the first gate and after the last, so the batch
+      binds to that content. Logs are
+      `/tmp/<gate>-netsuke-4-3-1-epm5-confirm-67a48312.out`.
+      The confirming `coderabbit review --agent --committed --base main
+      --fresh` was admitted — the counter moved 9 → 7 as a concurrent reviewer
+      on another branch also took one, the run took 275 s, and stdout ended
+      `{"type":"complete","status":"review_completed","findings":3}` — and its
+      checkpoint records `head` `67a48312` and comparison base `077cf366`,
+      matching the frozen pair exactly, with 43 reviewed files against 43 diff
+      files and an empty symmetric difference.
+      All three findings were **accepted**, all were verified against the tree
+      before being actioned, and all were documentation-only:
+      **(1)** first-person prose in this plan's gate-batch entry is now
+      impersonal, preserving that an authoring edit changed the diff hash after
+      dispatch, that the batch stopped after three gates, and that its evidence
+      is not cited.
+      **(2)** `ADR-030`'s `process_defaults` citation repeated the symbol name
+      where a file belongs, and now names `src/ir/from_manifest/mod.rs`.
+      **(3)** the `Context and orientation` section still cited five paths that
+      `#811`/`#813` moved into directory modules —
+      `src/ir/graph_kani_map.rs`, `src/ir/graph.rs`,
+      `src/ir/from_manifest.rs`, `src/ir/from_manifest_support.rs` and
+      `src/ninja_gen/dyndep.rs` — none of which exist, while every replacement
+      does. Repairing that passage exposed three further inaccuracies in the
+      same block, each checked against source rather than assumed: the
+      `BuildGraph` sketch showed `targets: IrHashMap<Utf8PathBuf, BuildEdge>`
+      where the type is `IrHashMap<Utf8PathBuf, EdgeId>` over a private arena;
+      edge rendering was described as deduplicating, which it does not, because
+      the arena already holds one entry per edge; and both rejection passes were
+      said to walk `graph.targets.values()` when they walk `graph.edges()`. The
+      stale line numbers in that block became symbol or file citations, which is
+      the same treatment `ADR-030`'s review round applied for the same reason.
+      Line numbers in *dated* historical entries were left verbatim, per this
+      plan's own precedent: a historical record naming a path as it was is
+      correct as written.
+
 - [x] (2026-10-18) **Hosted CI is fully green at `a4a86f67`, which clears both
       failures it carried at `d4225faf`.** CI run `39076397969` concluded
       `success`; the `Netsukefile Build Test` run `39076397939` and the
@@ -2214,8 +2299,8 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       Python narrowing and `cb455c57` for the review repairs — and
       `git diff d4225faf HEAD` reproduces the gated diffstat exactly, so the
       committed tree is the gated tree rather than a later edit of it. **The
-      first batch against this content was void by my own doing:** I edited
-      this plan's header after dispatching it, which changed the diff sha256
+      first batch against this content was voided by an authoring edit:** this
+      plan's header was edited after dispatch, which changed the diff sha256
       under the running agent. That batch was stopped after three gates and
       none of its evidence is cited here.
 
@@ -2899,7 +2984,8 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       (`src/prelude.rs:35-44`), so `prop::collection::vec` needs no extra
       import. `prop_shuffle` is a `Strategy` trait method
       (`src/strategy/traits.rs:500`), and `Shuffleable` is implemented for
-      `Vec<T>` (`src/strategy/shuffle.rs:39,52`), so
+      `Vec<T>` (the `proptest::arbitrary::Arbitrary`/`Shuffleable` impls in
+      `proptest` 1.11.0), so
       `Just(paths).prop_shuffle()` type-checks. `TestRunner` is **not** in the
       prelude, and both suites import it explicitly from
       `proptest::test_runner` (`path_key.rs:23`, `no_loss.rs:36`) — correct,
@@ -3621,7 +3707,7 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   Three facts together rule out a source defect: this branch touches **zero**
   files in that test's dependency set (an empty `git diff --name-only` across
   `tests/build_module_slice_ui_tests.rs`, `tests/ui/`, `build.rs`,
-  `src/cli/merge.rs` and `.config/nextest.toml`); the log carries **573**
+  `src/cli/merge/mod.rs` and `.config/nextest.toml`); the log carries **573**
   `sccache server is unreachable` lines, the exact count previously measured
   alongside timeouts with zero source failures; and `sccache --show-stats`
   reports `Compile requests 0`, meaning the server was *reset* rather than
