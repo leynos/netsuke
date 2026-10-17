@@ -214,15 +214,15 @@ se reescribe en el texto activo de la receta; consulta la nota siguiente).
     comentarios y del cuerpo de los heredoc como tokens internos, sin expandirlos;
     los marcadores de los delimitadores de heredoc sí se expanden. Las recetas
     `command:` y `script:` de PowerShell rechazan marcadores entre comillas
-    simples o dobles, en here-strings, en `$()` y justo después de una tilde
+    simples o dobles, en here-strings, en `$()` y justo después de un acento
     grave. Los scripts de PowerShell no tratan los comentarios como regiones
     inertes: el texto normal de un comentario permite interpolar marcadores sin
     comillas posteriores, pero el inicio de un comentario en bloque, las
-    comillas, las comillas invertidas o la sintaxis de sustitución en un
+    comillas, los acentos graves o la sintaxis de sustitución en un
     comentario de una línea pueden hacer que se rechacen marcadores posteriores.
     Un apóstrofo en un comentario también puede rechazarlos.
     Las comillas tipográficas de PowerShell también hacen que los marcadores
-    posteriores se rechacen de forma conservadora. No pongas marcadores en
+    posteriores se rechacen de forma conservadora. No ponga marcadores en
     comentarios ni cuerpos de heredoc POSIX o Bash: los tokens internos pueden
     permanecer en la receta generada.
 

@@ -216,7 +216,7 @@ ci-dessous).
     les développer ; les marqueurs des délimiteurs de heredoc sont développés.
     Les recettes PowerShell `command:` et `script:` rejettent les marqueurs entre
     guillemets simples ou doubles, dans les here-strings, dans `$()` et juste après
-    une accent grave. Les scripts PowerShell ne traitent pas les commentaires
+    un accent grave. Les scripts PowerShell ne traitent pas les commentaires
     comme des zones inertes : le texte ordinaire d'un commentaire laisse les
     marqueurs non cités suivants être interpolés, mais l'ouverture d'un
     commentaire de bloc, des guillemets, des accents graves ou une syntaxe de
