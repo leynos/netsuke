@@ -8,10 +8,9 @@ use super::{
 };
 use crate::recipe_shell::RecipeShell;
 
-#[path = "powershell_lexical.rs"]
-mod power_shell;
+mod powershell_lexical;
 
-use power_shell::{PowerShellLexicalState, PowerShellSourceCharacter};
+use powershell_lexical::{PowerShellLexicalState, PowerShellSourceCharacter};
 
 /// Classify whether the active shell region permits recipe-marker lowering.
 #[derive(Clone, Copy)]

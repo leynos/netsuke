@@ -212,10 +212,9 @@ bedeutet: wird im aktiven Rezepttext umgeschrieben; siehe Hinweis unten).
     Here-Strings, `$()` sowie direkt nach einem Backtick zurück. PowerShell-
     Skripte behandeln Kommentare nicht als inerte Bereiche: gewöhnlicher
     Kommentartext lässt spätere ungequotete Marker zur Interpolation zu, aber
-    ein Blockkommentar-Anfang oder Anführungszeichen, Backticks und
-    Substitutionssyntax in einem einzeiligen Kommentar können spätere Marker
-    vorsichtshalber zurückweisen. Ein Apostroph im Kommentar
-    kann ebenfalls einen späteren Marker zurückweisen.
+    ein Blockkommentar-Anfang oder Anführungszeichen (einschließlich
+    Apostrophen), Backticks oder Substitutionssyntax in einem einzeiligen
+    Kommentar können spätere Marker vorsichtshalber zurückweisen.
     Typografische PowerShell-Anführungszeichen führen ebenfalls dazu, dass
     spätere Marker vorsichtshalber scheitern. Marker gehören nicht in POSIX- und
     Bash-Kommentare oder Heredoc-Körper: Interne Token können dort im

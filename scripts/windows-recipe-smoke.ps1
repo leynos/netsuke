@@ -267,7 +267,7 @@ function Test-AutomaticPathQuoting {
         -Expected 'automatic-path-quoting' -Message 'The discovered target did not build'
 }
 
-function Test-PathPlaceholderScripts {
+function Test-PathPlaceholderScript {
     param(
         [Parameter(Mandatory)]
         [string]$Netsuke
@@ -298,20 +298,27 @@ function Test-QuotedScriptPlaceholderRejection {
         [string]$Netsuke,
 
         [Parameter(Mandatory)]
-        [string]$Manifest
+        [string]$Manifest,
+
+        [Parameter(Mandatory)]
+        [string]$FixtureName,
+
+        [Parameter(Mandatory)]
+        [string]$TargetName
     )
 
-    $quotedManifest = Join-Path (Split-Path -Parent $Manifest) `
-        'windows-recipe-smoke-quoted-script.yml'
-    $workspace = Join-Path $env:RUNNER_TEMP "netsuke-windows-quoted-script-smoke-$PID"
+    $quotedManifest = Join-Path (Split-Path -Parent $Manifest) $FixtureName
+    $tempRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
+    $workspace = Join-Path $tempRoot "netsuke-windows-quoted-script-smoke-$PID"
 
     try {
         New-Item -ItemType Directory -Path $workspace | Out-Null
         Copy-Item -LiteralPath $quotedManifest -Destination (Join-Path $workspace 'Netsukefile')
         Push-Location $workspace
         try {
-            New-Item -ItemType File -Path $workspace -Name '; New-Item pwned; Write-Output x' | Out-Null
-            $failure = & $Netsuke --json build 'quoted-script-single.txt' 2>&1
+            $payloadSource = Join-Path $workspace '; New-Item pwned; Write-Output x'
+            New-Item -ItemType File -Path $payloadSource | Out-Null
+            $failure = & $Netsuke --json build $TargetName 2>&1
             if ($LASTEXITCODE -eq 0) {
                 throw 'A quoted PowerShell script marker unexpectedly built successfully.'
             }
@@ -380,7 +387,8 @@ function Invoke-WindowsRecipeSmoke {
     $Manifest = (Resolve-Path -LiteralPath $Manifest).Path
     Test-PowerShellCoreHost
 
-    $workspace = Join-Path $env:RUNNER_TEMP "netsuke-windows-recipe-smoke-$PID"
+    $tempRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
+    $workspace = Join-Path $tempRoot "netsuke-windows-recipe-smoke-$PID"
     $environmentState = @(
         Get-EnvironmentVariableState -Name 'NETSUKE_WINDOWS_SHELL'
         Get-EnvironmentVariableState -Name 'NETSUKE_SMOKE_OPTION'
@@ -410,8 +418,8 @@ function Invoke-WindowsRecipeSmoke {
             $env:NETSUKE_ISOLATION_ROOT = $workspace
 
             $payloadName = '; New-Item pwned; Write-Output x'
-            New-Item -ItemType File -Path $workspace -Name $payloadName | Out-Null
             $payloadSource = Join-Path $workspace $payloadName
+            New-Item -ItemType File -Path $payloadSource | Out-Null
             Set-Content -NoNewline -LiteralPath $payloadSource -Value 'path-derived-content'
 
             Test-TargetDiscovery -Netsuke $Netsuke
@@ -423,8 +431,13 @@ function Invoke-WindowsRecipeSmoke {
             Test-LargeRecipeTransport -Netsuke $Netsuke
             Test-AutomaticPathQuoting -Netsuke $Netsuke
             Test-ExplicitBashIsolation -Netsuke $Netsuke
-            Test-PathPlaceholderScripts -Netsuke $Netsuke
-            Test-QuotedScriptPlaceholderRejection -Netsuke $Netsuke -Manifest $Manifest
+            Test-PathPlaceholderScript -Netsuke $Netsuke
+            Test-QuotedScriptPlaceholderRejection -Netsuke $Netsuke -Manifest $Manifest `
+                -FixtureName 'windows-recipe-smoke-quoted-script.yml' `
+                -TargetName 'quoted-script-single.txt'
+            Test-QuotedScriptPlaceholderRejection -Netsuke $Netsuke -Manifest $Manifest `
+                -FixtureName 'windows-recipe-smoke-quoted-script-double.yml' `
+                -TargetName 'quoted-script-double.txt'
             Test-MissingBashRuntimeDiagnostic -Netsuke $Netsuke -Workspace $workspace
         }
         finally {

@@ -134,8 +134,8 @@ such a recipe is rejected. PowerShell also rejects a marker immediately after a
 backtick because it escapes the following character. Substituting into a region
 the shell will re-evaluate cannot be made safe, so the rejection is policy. It
 is implemented by `SubstitutionTraversal::append_protected_character`
-(`src/ir/cmd_interpolate/substitution.rs`) and the POSIX/Bash script traversal
-(`append_substitution_or_character` in
+(`src/ir/cmd_interpolate/substitution/mod.rs`) and the POSIX/Bash script
+traversal (`append_substitution_or_character` in
 `src/ir/cmd_interpolate/script_substitution.rs`).
 
 **A conservative check, not promised.** A `command:` recipe whose substituted

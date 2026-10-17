@@ -119,6 +119,9 @@ fn quote_power_shell_literal(value: &str) -> String {
 }
 
 /// Report whether `character` is one of PowerShell's single-quote delimiters.
+///
+/// PowerShell recognizes the full U+2018–U+201B typographic range as string
+/// delimiters, so path literals must double each character in that range.
 const fn is_power_shell_single_quote(character: char) -> bool {
     matches!(
         character,
@@ -259,6 +262,8 @@ mod tests {
     #[case::single_quote("it's", "'it''s'")]
     #[case::right_smart_quote("it’s", "'it’’s'")]
     #[case::left_smart_quote("‘quoted’", "'‘‘quoted’’'")]
+    #[case::low_single_quote("a‚b", "'a‚‚b'")]
+    #[case::reversed_single_quote("a‛b", "'a‛‛b'")]
     #[case::dollar("$HOME", "'$HOME'")]
     #[case::empty("", "''")]
     fn power_shell_quoting_doubles_quotes(#[case] value: &str, #[case] expected: &str) {
