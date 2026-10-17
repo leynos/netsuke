@@ -216,7 +216,7 @@ Netsuke自身のパス置換だけです。POSIXとBashは `shell-quote` と
 コンテキストに応じたエンコードを使います。PowerShellは引用符のない位置でのみ
 パスを単一引用符リテラルにエンコードします。この形式は既存のPowerShell文字列内
 では安全ではありません。既存の `input file.txt`
-がある場合、このPOSIX例は入力パスを1つの 引数として渡し、 `output.txt`
+がある場合、このPOSIX例は入力パスを1つの引数として渡し、`output.txt`
 を生成します。
 
 ```yaml

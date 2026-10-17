@@ -217,6 +217,22 @@ fn power_shell_scripts_track_here_string_terminators() {
     );
 }
 
+/// Keep typographic quotes in here-string data from changing later marker sites.
+#[rstest]
+#[case::single_quoted(format!("@'\nbody ’\n'@\nWrite-Output {INS_TOKEN}"), INS_TOKEN, "'; New-Item pwned; Write-Output x'")]
+#[case::double_quoted(format!("@\"\nbody “\n\"@\nWrite-Output {OUTS_TOKEN}"), OUTS_TOKEN, "'output file.txt'")]
+fn power_shell_scripts_keep_here_string_quotes_literal_after_terminator(
+    #[case] template: String,
+    #[case] marker: &str,
+    #[case] encoded_path: &str,
+) {
+    let actual = interpolate_script_with_bindings(&template, &script_bindings())
+        .expect("quotes inside a here-string are literal data");
+    let expected = template.replace(marker, encoded_path);
+
+    assert_eq!(actual, expected);
+}
+
 /// Reject markers after here-string or braced-variable syntax the scanner cannot model.
 #[rstest]
 #[case::here_string_inside_command_substitution(format!(

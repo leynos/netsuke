@@ -109,6 +109,7 @@ impl PowerShellLexicalState {
         if has_marker {
             return HereStringCharacter::Placeholder;
         }
+        // PowerShell treats quotes inside a here-string as literal body text.
         HereStringCharacter::Copied
     }
 
