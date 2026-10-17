@@ -78,15 +78,21 @@ Its jobs are:
    `./scripts/windows-recipe-smoke.ps1`, skipped on a dry run except for the
    `ready_for_review` event.
 4. `release-admission-canaries` — the ADR-020 admission-evidence gate.
-5. `release` — creates a **draft** GitHub Release, downloads the workflow
-   artefacts into `dist/`, hoists the cargo-binstall archives to the release
-   root, and calls the shared `upload-release-assets` action at pin `a5765019…`.
-6. `publish-release` — added by #834 after this plan was drafted. It holds
-   `contents: write`, and is where API-bound publication was isolated so that
-   read-only staging could stay reachable from dry runs. It calls the same
-   `upload-release-assets` action but at the newer pin `0606ca89…`, so the
+5. `release` — the read-only **rehearsal**. It runs only when
+   `dry_run == 'true'` (`release.yml:412`), holds `contents: read`, downloads
+   the workflow artefacts into `dist/`, hoists the cargo-binstall archives to
+   the release root, and calls the shared `upload-release-assets` action at pin
+   `a5765019…` with `dry-run: true`. It creates no release and uploads nothing.
+6. `publish-release` — added by #834 after this plan was drafted. It runs only
+   when `should_publish == 'true'` (`release.yml:545`), holds
+   `contents: write`, and creates the draft release
+   (`scripts/ensure_draft_release.py` at `release.yml:586`), then runs the same
+   download, hoist and upload sequence. It calls the shared
+   `upload-release-assets` action at the newer pin `0606ca89…`, so the
    repository now invokes one shared action at two revisions, chosen by job.
 
+The two jobs are mutually exclusive: a dry run takes `release`, a tag push takes
+`publish-release`, and a job that needs a skipped job is itself skipped.
 Nothing in that path publishes to a registry, and nothing un-drafts the
 release: today a human publishes the draft.
 
@@ -142,7 +148,12 @@ name), and an **optional environment**. Two properties of that design drive
 this plan: the exchange must therefore happen in a job that lives in
 `release.yml` itself, not in a reusable workflow (whose filename would be
 presented instead); and the crate must already exist on crates.io, because the
-very first publication cannot be trusted-published and needs a manual API token.
+very first publication cannot be trusted-published and needs a manual API
+token. That precondition is **already satisfied**: `netsuke-build` is
+published, with four unyanked versions — `0.1.0-beta1` (2026-08-05), `beta2`,
+`beta3` and `beta4` (2026-09-27, the current `max_version`). No first
+publication remains to be done, and the risk recorded at *Risks* for it is
+stale; see the corresponding entry in `Surprises & discoveries`.
 
 ## Signposts: documentation and skills
 
@@ -277,11 +288,20 @@ Stop and escalate when any of these is breached.
   test; and state plainly in the PR and the runbook that no live exchange was
   validated.
 
-- Risk: the initial publication cannot be trusted-published at all, because
-  the package does not yet exist on crates.io. Severity: high Likelihood: high
-  Mitigation: record it as the first item of the maintainer checklist, and have
-  the publisher detect the registry's "crate does not exist" response and fail
-  with an actionable message rather than a stack trace.
+- Risk: the registry's crate metadata is not what the release expects, so the
+  trusted-publisher exchange or the byte verification fails against a package
+  name that is absent, yanked, or owned by another publisher. Severity: medium
+  Likelihood: low, now that the package is known to exist. Mitigation: have the
+  publisher detect the registry's "crate does not exist" response and fail with
+  an actionable message rather than a stack trace, record the trust boundary as
+  an item of the maintainer checklist, and reconcile the published bytes
+  against the recorded digest as EP-M5 specifies. This entry previously read
+  that "the initial publication cannot be trusted-published at all, because the
+  package does not yet exist on crates.io", rated severity and likelihood both
+  high. That premise is false: `netsuke-build` was first published 2026-08-05
+  and has four unyanked versions, so no first publication remains. The entry is
+  rescoped rather than deleted, because the failure it names is still reachable
+  for a different reason.
 
 - Risk: `cargo publish --dry-run` is slow on the release lane and blows the
   job timeout, as it already does on Windows for the existing packaging test
@@ -541,8 +561,14 @@ New pure modules under `scripts/`, each stdlib-only and under 400 lines:
    implementing LEM-4.
 5. `scripts/release_digest.py` — SHA-256 of a file, sidecar parsing and
    comparison, constant-time compare.
-6. `scripts/verify_crates_io_bytes.py` — token-free download and digest
-   comparison of the published `.crate`.
+6. `scripts/verify_crates_io_bytes.py` — digest comparison of a downloaded
+   `.crate`, given a local path. **This module performs no download.** The
+   workflow step performs the request and writes the bytes to a file; the
+   module reads that file. Its names predate the split — `download_url` builds
+   the URL the workflow step fetches, and `required_headers` returns what that
+   step must send — but neither opens a connection, and
+   `test_policy_modules_import_no_network_client` in
+   `release_publication_test.py` enforces that with a positive control.
 
 Each gains a `scripts/tests/test_<module>.py`. The contract tests gain:
 
@@ -702,13 +728,17 @@ cap on workflow YAML — no such contract exists. `release.yml` is 685 lines on
 
 **EP-M2 — pure policy modules and their tests.**
 
-- Outcome: six pure modules under `scripts/`, each with a focused suite, all
-  runnable locally without network access.
+- Outcome: seven pure modules under `scripts/`, each with a focused suite, all
+  runnable locally without network access. The plan first named six;
+  `release_semver` was added during Stage B to hold the version grammar the
+  identity resolver and the inventory both consult.
 - Requirements: LEM-1, LEM-2, LEM-3, LEM-4 discharged.
 - Acceptance evidence: `make test-release-publication` passes; each module's
   reject rows fail before the module exists.
-- Conformance check: no module exceeds 400 lines; no module performs
-  network I/O; Ruff, Pylint, Interrogate, and ty pass.
+- Conformance check: no module exceeds 400 lines; no module imports a network
+  client, asserted by `test_policy_modules_import_no_network_client` over every
+  `SOURCE_MODULES` entry (with a positive control, so the check cannot pass by
+  matching nothing); Ruff, Pylint, Interrogate, and ty pass.
 - Recovery: the modules are additive; revert the commit.
 - Remaining gaps: no workflow wiring yet.
 - Compatibility decision: none; these are new private modules.
@@ -727,8 +757,10 @@ cap on workflow YAML — no such contract exists. `release.yml` is 685 lines on
   `workflow_call` inputs are unchanged.
 - Recovery: the sequence is additive after `release`; a revert restores the
   current behaviour exactly.
-- Remaining gaps: no crate is published by any run, because the registry
-  registration and the initial publication are maintainer actions.
+- Remaining gaps: no crate is published by any run, because the trusted
+  publisher's registration is a maintainer action. The package already exists
+  on crates.io (`0.1.0-beta1` through `beta4`), so no initial publication is
+  outstanding; only the registration and the account settings are.
 - Compatibility decision: the reusable interface is preserved because
   `release-dry-run.yml` and the repository's release runbook depend on it.
 
@@ -1183,18 +1215,24 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   That second timeout is stronger evidence than the first, and it changes the
   disposition. The timed-out test is
   `locale_stub_ui_tests::split_build_fixture_compiles_through_the_direct_rustc_harness`.
-  In `.config/nextest.toml` it sits in the **same
-  `[[profile.default.overrides]]` block** (`:98-100`) as
-  `production_build_module_slice_has_expected_boundary`, which
-  `docs/developers-guide.md` documents as a known host-contention timeout whose
-  wall clock "is the queue's to decide rather than the test's". Both runs hit
-  the cap at 300.007 s and 300.010 s, 0.003 s apart, because
-  `period = "60s", terminate-after = 5` is arithmetic and not a measurement.
-  `make test` is therefore adjudicated **environmental for the second time and
-  at the same site**, reproducing across two revisions eleven hours apart, and
-  is **not** evidence against this branch. The doctest half again did not run —
-  for the same reason, and it remains **unobserved evidence**, not a pass. That
-  is attempt two of the `Tolerances` limit of three for the `test` target
+  In `.config/nextest.toml` it sits in an `[[profile.default.overrides]]` block
+  (`:98-101`) alongside `production_build_module_slice_has_expected_boundary`
+  and four others; that block sets only `test-group = "nested-cargo-builds"` and
+  `success-output = "immediate"`, **no** `slow-timeout`, so the test keeps the
+  profile's own five periods. The same file's argument for leaving such a test
+  on that allowance is written against its *sibling*
+  `cli_configuration_fixture_compiles` (`:57-63`), whose child `cargo check`
+  runs in the same four-slot compiler-admission pool: its wall clock "is the
+  queue's to decide rather than the test's". `docs/developers-guide.md`
+  (`:9431`) records the timed-out test itself only as retaining "a small
+  isolated nested build to cover the complete Cargo-to-rustc boundary". What
+  both share is the pool, and so the exposure. Both runs hit the cap at 300.007
+  s and 300.010 s, 0.003 s apart, because `period = "60s", terminate-after = 5`
+  is arithmetic and not a measurement. `make test` is therefore adjudicated
+  **environmental for the second time and at the same site**, and is **not**
+  evidence against this branch. The doctest half again did not run — for the
+  same reason, and it remains **unobserved evidence**, not a pass. That is
+  attempt two of the `Tolerances` limit of three for the `test` target
   specifically; the `spelling` red is a different target, and it is repaired
   rather than tolerated.
 - [x] (2026-10-16) Plan maintenance before the re-gate, in two parts. First,
@@ -1302,6 +1340,75 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   real failures recorded against that target; the later refusals are admission
   unavailability and are not counted as failed attempts against the
   `Tolerances` limit of three.
+- [x] (2026-10-16) Ran the full ten-gate batch at `9494a7e8`. Six gates
+  passed: `check-fmt`, `spelling`, `markdownlint`, `nixie`,
+  `test-workflow-contracts` (1291 passed, 3 skipped) and
+  `test-release-publication` (212 passed). Four were killed by admission
+  refusals and carry **no verdict**: `test` (one refusal), `doc-coverage` (one),
+  `typecheck` (seventeen) and `lint` (sixteen). The `lint` run is worth
+  recording in detail because it got further than any previous attempt:
+  `cargo doc` finished in 2 m 08 s and
+  `cargo clippy --all-targets --all-features` finished clean in 43 m 36 s, with
+  **zero** refusals, before `lint-whitaker` (`Makefile:373`) went down with the
+  supervisor when its dylint dependency build was refused. `typecheck` likewise
+  compiled for roughly forty minutes before the supervisor went unhealthy
+  mid-build and refused the remaining invocations: the log holds **17
+  `build-limits: the supervisor refused` lines, zero rustc diagnostics and zero
+  `-->` location lines**, and each `could not compile` wrapper is caused by
+  `build-limits-rustc` itself exiting 1 rather than by a compiler error. That
+  is the distinguishing evidence: a candidate defect would carry a rustc
+  diagnostic with a source location, and there is none. The doctest half of
+  `make test` again did not run and remains unobserved. An earlier attempt at
+  this same revision is retained as `-r2` and refused identically, so the
+  outcome is not a single unlucky invocation.
+- [x] (2026-10-16) Repaired three factual defects in this plan, all found while
+  checking the pull request description's claims against retained evidence. (1)
+  The Progress entry of `ce5ff20f` attributed the sentence "is the queue's to
+  decide rather than the test's" to `docs/developers-guide.md` and to the test
+  that times out. Neither holds: the sentence is at
+  `.config/nextest.toml:59-60`, it is written against the *sibling*
+  `cli_configuration_fixture_compiles`, and the timed-out test's own override
+  block (`:98-101`) sets no `slow-timeout` at all. The guide's real sentence
+  about the timed-out test is at `:9431`. Corrected to cite both accurately and
+  to claim only the shared compiler-admission pool. (2) The same entry dated
+  the two timeout runs "eleven hours apart"; the retained commit timestamps are
+  20:25:08 and 22:47:49 on the same day, roughly two hours twenty minutes
+  apart, and the sidecars record only `DURATION=1671` and `DURATION=1613`. The
+  unsupported interval is removed. (3) The first-publication premise was stale
+  in two places (the Trusted Publishing paragraph and the EP-M3 remaining-gaps
+  bullet) and one `Risks` entry rated it severity and likelihood both **high**.
+  `netsuke-build` has been published since 2026-08-05 and carries four unyanked
+  versions, `0.1.0-beta1` through `beta4` (`beta4` is the current
+  `max_version`, published 2026-09-27). The plan contradicted itself: line 26
+  already offers `cargo install netsuke-build --version 0.1.0-beta4`, and the
+  reconnaissance at `:1657-1660` records beta2–beta4 release assets, so the
+  plan assumed publication had happened while its risk register assumed it had
+  not. The risk is rescoped rather than deleted, because the failure it names
+  is still reachable for a different reason. All three repairs are prose only:
+  this branch changes no Rust source, no workflow body and no gate
+  configuration, so they alter no executed behaviour.
+- [x] (2026-10-17) Closed the review's third defect — the verifier's network
+  boundary — by making the invariant executable rather than by rewording the
+  claim. `scripts/verify_crates_io_bytes.py` already took a local path and did
+  no I/O, so the implementation was right and the *statement* was wrong: Stage
+  B described it as a "token-free download" while EP-M2 requires the modules to
+  perform none. Stage B item 6 now says what the module does and what the
+  workflow step does, and EP-M2's conformance check names the test that holds
+  it. The test is `test_policy_modules_import_no_network_client` in
+  `tests/workflow_contracts/release_publication_test.py`: it parses each of the
+  seven `SOURCE_MODULES`, collects every `import` and `from … import` name, and
+  fails on any that equals or nests under a network client. Non-vacuity is
+  proved in two directions — a positive control over four spellings
+  (`import urllib.request`, `from urllib.request import urlopen`,
+  `import http.client as client`, `from socket import create_connection`) and a
+  negative control over three non-network imports — and was checked against the
+  real tree once by hand: all seven modules clean, and a copy of the verifier
+  with `import urllib.request` inserted at line 1 reports `['urllib.request']`.
+  Also corrected two stale counts found while editing: the modules are seven,
+  not six (`release_semver` was added in Stage B), and the orientation's job
+  list said `release` creates the draft when it is read-only and runs only for
+  a dry run; `publish-release` creates it at `release.yml:586`. Prose and one
+  test; no workflow body, Rust source, or gate configuration changed.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
   Scope correction from recon at `c1f3f2ed`: this is not an extraction of
   existing bodies. `release.yml` has no `package-crate`, `publish-crates-io`,
@@ -1449,12 +1556,16 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   publication out of staging into a new `publish-release` job holding
   `contents: write`. Evidence: `git show --stat 24293a1b`; the permissive job
   header is at `release.yml:537` on `main`. Impact: Stage B must extend these
-  modules rather than introduce parallel ones, and Stage C must add the
-  registry exchange *inside* the existing `publish-release` job rather than
-  create a competing publication job. The plan's own permission-separation
-  obligation (EP-M3) is therefore partly already discharged by a test that
-  exists; the work is to make the crates.io exchange satisfy it, not to write
-  the separation from scratch.
+  modules rather than introduce parallel ones. **Corrected 2026-10-12:** this
+  entry first concluded that Stage C must add the registry exchange *inside*
+  the existing `publish-release` job. That job holds `contents: write`, so the
+  exchange would have put a registry credential and GitHub release-write
+  authority in one job — the split LEM-5 exists to forbid. The exchange is a
+  separate `publish-crates-io` job (see `Plan of work`), and `publish-release`
+  keeps its name, its scope, and its steps unchanged. The plan's own
+  permission-separation obligation (EP-M3) is therefore partly already
+  discharged by a test that exists; the work is to make the crates.io exchange
+  satisfy it, not to write the separation from scratch.
 
 - Observation: `docs/terms-of-reference.md` (Draft v0.2) was added by #786
   after this plan was drafted, and does state release-adjacent criteria —
@@ -1935,6 +2046,24 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   assertion that sounds stricter" is not evidence that it is correct, and a
   stricter-sounding claim needs the same check against the design as a weaker
   one. Date/Author: 2026-10-15, implementation agent.
+
+- Decision: resolve the verifier's network boundary as **orchestration
+  downloads, the module decides**, and enforce EP-M2's no-network claim with a
+  test rather than leaving it as conformance prose. Rationale: EP-M2 says the
+  six — now seven — modules perform no network I/O, while Stage B described
+  `verify_crates_io_bytes.py` as a "token-free download". The two cannot both
+  be true, and the choice that keeps the property is the one that makes the
+  policy testable without a socket: the workflow step issues the request and
+  writes the bytes, and the module compares a path's digest against the
+  identity record. The module's names still say "download" (`download_url`,
+  `required_headers`, `verify_downloaded_archive`) because they describe the
+  orchestration it serves; none of them opens a connection. Rather than fix the
+  wording alone, `test_policy_modules_import_no_network_client` now parses every
+  `SOURCE_MODULES` entry and fails on an import of `urllib`, `http`, `socket`,
+  `ssl`, `requests`, `httpx`, `ftplib`, or `urllib3`, with a positive control
+  over four spellings and a negative control over three. A claim in a
+  Conformance check that nothing executes is the Cuprum #499 failure this plan
+  exists to avoid, one layer up. Date/Author: 2026-10-17, implementation agent.
 
 ## Outcomes & retrospective
 
