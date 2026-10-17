@@ -14,11 +14,17 @@ the block is discharged: the user directed "Widen the cap", and the cap is now
 with a counted inventory for the rest. The derivation, and the reason the new
 number is a measurement rather than a round figure, are in `Decision log`.
 
-`EP-M0` through `EP-M4` are complete. `ADR-030` is written and indexed, and the
+`EP-M0` through `EP-M5` are complete. `ADR-030` is written and indexed, and the
 approval gate was passed on 2026-09-27. `EP-M4` closed on 2026-10-17 by
 execution rather than by reading: its four files compiled for the first time,
 `make proptest` passed 104 of 104 at `1b4b3fb1`, and both assigned mutations
-were applied, observed to fail the named properties, and reverted.
+were applied, observed to fail the named properties, and reverted. `EP-M5`
+closed on 2026-10-18: its eight gates passed against `f0a2831f`, its milestone
+`coderabbit review --agent` pass was finally obtained against `d4225faf`, and
+every finding from that pass has a recorded disposition. Hosted CI then caught
+one defect the local batch could not have caught, because `make typecheck` was
+missing from it; the repair is in the working tree and the re-run batch is
+`EP-M5`'s ninth local gate.
 
 `EP-M2`'s thirteenth gate — `test-nextest` — is red on an environmental timeout
 of `cli_configuration_fixture_compiles`, which is **not** this branch's test.
@@ -34,23 +40,23 @@ fixtures. The measurement and the reasoning are in `Surprises & discoveries` and
 be the one that pays it. No test's own behaviour is relaxed, and the per-test
 tier is raised inside the unchanged 960 s whole-run budget.
 
-`EP-M5` onward is unwritten. The compile pool is not a blocking factor: on
+`EP-M6` onward is unwritten. The compile pool is not a blocking factor: on
 2026-10-17 it reported
 `capacity 4, held 0, healthy, sccache unreachable, compiling directly`, with
 nothing compiling anywhere on the host, and a compile can be started. Its
 occupancy varies with other agents' work, so a slow gate is a queue measurement
 rather than a failure signal.
 
-One item is genuinely outstanding and is recorded as a blocker rather than a
-pass: the milestone `coderabbit review --agent` is **unobtained**. Seven
-consecutive attempts across two sessions and three revisions (`8fc7a2fa`,
-`bc101f4c`, `1d46fb20`) failed service-side with
-`"Failed to start review. Please try again."`, each in 7-8 s with the `--usage`
-counter unchanged, producing zero findings at any revision. This branch has no
-current CodeRabbit assessment, and `docs/roadmap.md:595` shows the house
-pattern treats such a review as completion evidence — a second reason roadmap
-item 4.3.1 stays unchecked. This revision follows a design review, a rebase onto
-`origin/main`, that Windows repair, and gate pass #5.
+The `EP-M5` milestone `coderabbit review --agent` pass is **obtained**, after
+the seven service-side refusals recorded below. The successful run reviewed
+`origin/main (077cf366)…HEAD` at `d4225faf` — the 43 files of that range — and
+completed with exit 0 and six findings. Each has a disposition in `Progress`:
+finding 1 is rejected with clock evidence, and findings 2 through 6 are
+repaired. `docs/roadmap.md:595` shows the house pattern treats such a review as
+completion evidence, and roadmap item 4.3.1 stays unchecked until `EP-M8`.
+
+This revision follows a design review, a rebase onto `origin/main`, that
+Windows repair, gate pass #5, and the `EP-M5` review round.
 
 ## Purpose / big picture
 
@@ -469,7 +475,11 @@ question.
     no gate catches it.
 12. `make check-fmt`, `make typecheck`, `make lint`, `make doc-coverage`,
     `make test`, `make markdownlint`, and `make nixie` pass at every milestone
-    boundary.
+    boundary. `make typecheck` is not optional even when the milestone adds no
+    Rust: it is the only gate that runs `ty check`, so a Python change reviewed
+    without it is reviewed with no type checking at all. `EP-M5`'s first local
+    batch omitted it and hosted CI caught a `ty` error the batch could not
+    have.
 
 ## Tolerances (exception triggers)
 
@@ -1343,7 +1353,7 @@ recorded in `Artefacts and notes`.
 5. *(Answered — **falsified**.)* Integration-test regression seeds persist and
    replay. The plan's "probably inert" risk is wrong.
 6. *(Answered — superseded.)* `adr-021` was claimed on four branches, but
-   `origin/main` has since absorbed `add-020`…`add-029`; the next free number
+   `origin/main` has since absorbed `adr-020`…`adr-029`; the next free number
    is **`ADR-030`**.
 7. *(Answered — no.)* A `src/`-side `#[cfg(test)]` module cannot receive a
    `netsuke`-typed value from `test_support`.
@@ -2156,6 +2166,111 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
 
+- [x] (2026-10-18) **Hosted CI found a `ty` failure in the `EP-M5` review round
+      that no local gate could have caught, because `make typecheck` is not in
+      the local batch.** Run `39073698348` at `d4225faf` — the exact revision
+      the local batch was about to bind to — failed `build-test` in 5 m 54 s on
+      `typecheck-python`, with one diagnostic:
+      `error[not-subscriptable]: Cannot subscript object of type 'object' with
+      no '__getitem__' method` at
+      `tests/workflow_contracts/nextest_child_cargo_timeout_test.py:102`,
+      `profile = config["profile"]["default"]`.
+      This is a genuine branch-introduced defect, not an environmental one: the
+      test was added by this branch, `nextest_config()` returns
+      `dict[str, object]`, and indexing an `object` with `["profile"]` is
+      exactly what `ty` refuses. The other 19 check runs at that revision — the
+      whole Windows lane, `kani-smoke`, `netsukefile`, and all five release
+      build jobs — concluded **success**, so the failure is isolated to the one
+      Python diagnostic. The repair keeps the test's semantics and replaces
+      raw subscripting with the module's own narrowing helpers
+      (`require_mapping`, `require_list`), which this file already imports and
+      uses in its sibling test. It also narrows with `str(override.get(...))`
+      for the filter key, so a missing filter fails the assertion rather than
+      `ty`. Verified after the repair: `make typecheck-python` exits 0 with
+      `All checks passed!`, the file passes `ruff format --check` and
+      `ruff check`, and
+      `pytest tests/workflow_contracts/nextest_child_cargo_timeout_test.py`
+      reports 4 passed. **Process lesson:** the local gate set used for the
+      `EP-M5` round omitted `make typecheck`, which is where this class of
+      defect is caught deterministically. The re-dispatched batch includes it,
+      and so must every later review round on this branch.
+
+- [x] (2026-10-18) **The `EP-M5` re-review returned six findings: five were
+      accepted and repaired, and one is rejected with clock evidence.** The
+      pass ran `coderabbit review --agent --committed --base main --fresh`
+      over `origin/main (077cf366)…HEAD` at `d4225faf`, matched the 43 files of
+      that range, and completed with exit 0 in 855 s. It was the first
+      successful milestone review after the seven service-side refusals noted
+      below. Dispositions, each verified against live source:
+      **(1) rejected, with clock evidence.** The entry dated `2026-10-18`
+      immediately below this one was called future-dated, on the reading that
+      the eighteenth had not happened. It had: the host runs CEST (+02:00), so
+      `date` reported `Sun Oct 18 00:19 CEST 2026` while `date -u` still
+      reported `Sat Oct 17 22:19 UTC`; the `crgate2` gate logs are timestamped
+      `Oct 18 00:03` local. The reviewer reasoned in UTC. The date is correct
+      and is left alone; changing it to the seventeenth would make the entry
+      disagree with the logs it cites.
+      **(2) accepted.** Six first-person phrasings survived the earlier
+      pronoun sweep; all are now impersonal, and a second sweep found two
+      more. This is the second round on the same rule, so the lesson is
+      recorded in `Surprises & discoveries`: a sweep that searches only for
+      the subject forms misses the possessive predicates that read naturally
+      in first person.
+      **(3) accepted, and found to be broader than reported.** The reviewer
+      named `emit` duplicated between two suites and a third `materialize`
+      copy in the graph-strategy suite. `materialize` had four copies, not
+      three, and five suites built their own random-seeded `TestRunner`. All
+      five now share one `support::coverage_runner`, and all four
+      `materialize` copies are gone.
+      **(4) accepted.** `add-020`…`add-029` is `adr-020`…`adr-029`.
+      **(5) accepted.** The ADR's inline citations named files that had been
+      moved into directories and the stale line numbers had rotted; every one
+      now names a live path, and the ones most likely to drift cite a symbol
+      instead — `PARENT_SCHEMA`, `process_rules`, `process_targets`,
+      `process_defaults`, `reject_reserved_paths`, `get_target_display_name`,
+      `StringOrList::map_each`, `NamedAction::write_into`. The paragraph
+      describing `write_action_rules` was rewritten: it no longer collects and
+      sorts, it delegates to `ordered_actions` in `src/ninja_gen/order.rs`,
+      and that is the sort `MUT-ACTIONSORT` mutates. The two
+      `README.md#L172`/`#L178` anchors were broken relative links as well, and
+      now point at the file.
+      **(6) accepted, and the repair is the one this plan's own precedent
+      prescribes.** See the entry below on the pinned coverage seed.
+      Three CodeScene findings arrived by a separate route and were repaired
+      in the same round: two duplication findings and one complex-method
+      finding. Each was fixed by extracting genuinely shared code or by
+      splitting a predicate along its natural seam, not by suppressing the
+      metric.
+
+- [x] (2026-10-18) **Every coverage tally now runs under one pinned seed, and
+      the seed is proved non-vacuous rather than assumed to be.** The reviewer
+      put the chance of a spurious tally failure at about 1.81 % per run on
+      one generator, and named only the default-shape tally. Grepping every
+      `TestRunner::new` call found five tallies sharing the defect, not one:
+      the default-shape, list-shape, graph-class, emission-order and
+      no-loss suites. All five now call `support::coverage_runner`, which pins
+      `RngSeed::Fixed(0x4e45_5453_4b45)`.
+      The reasoning is not invented here; it is the rule already written at
+      `src/stdlib/canonical_value/tests/properties.rs`, which keeps Proptest's
+      random seed for its law suites and pins a fixed seed for its coverage
+      tallies. Restated: a law *is* worth checking against inputs no earlier
+      run has tried, but a coverage assertion is a claim about the generator,
+      so a random seed makes it a lottery over whether the generator was
+      observed to emit a class it does emit.
+      A pinned seed is only an improvement if it still covers what the tally
+      asserts, so the claim was measured rather than trusted. A temporary
+      probe printed the default-shape tally at that seed:
+      `DefaultShapes { empty: 6, singleton: 7, already_sorted: 2,
+      reverse_sorted: 6, with_repeats: 104 }`.
+      All five shapes are reached, and the narrowest margin — `already_sorted`
+      at 2 of 128 — is the class the reviewer's 0.73 % figure applied to.
+      Under a pinned seed that 2 is guaranteed rather than drawn.
+      The probe was reverted immediately; only the pinned runner remains.
+      Verified after the repair: `cargo check --workspace --all-targets
+      --all-features` under `-D warnings` finished clean in 15 s, and
+      `cargo nextest run --lib --all-features
+      -E 'test(/determinism::property_tests/)'` reported 25 of 25 passed.
+
 - [x] (2026-10-18) **All eight gates passed against `f0a2831f`, which is the
       review-response content plus one lint repair, and the earlier batch that
       went red on that repair is superseded.** The first batch against
@@ -2268,11 +2383,11 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       acceptance rather than here.
 
 - [x] (2026-10-17) **Seven of eight gates passed against freeze `168a932f`; the
-      eighth was red on one misspelt word, and that word was ours.** The run
-      took 71 minutes of wall clock with the compile pool saturated and the
-      managed sccache server unreachable throughout, so every build compiled
-      uncached — a performance note, not a failure. `check-fmt` (3 s), `lint`
-      (764 s, through Clippy, Whitaker, Ruff, Pylint, the df12 lints,
+      eighth was red on one misspelt word, and the word was in this branch.**
+      The run took 71 minutes of wall clock with the compile pool saturated and
+      the managed sccache server unreachable throughout, so every build
+      compiled uncached — a performance note, not a failure. `check-fmt` (3 s),
+      `lint` (764 s, through Clippy, Whitaker, Ruff, Pylint, the df12 lints,
       `ambrleaks`, `yamllint` and `actionlint`), `doc-coverage` (195 s, 98.89%
       against the 80% bar), `test` (2,985 s, nextest 4,108 of 4,108 passed with
       6 skipped, then every doctest target), `nixie` (1 s),
@@ -2472,8 +2587,9 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       against the amended candidate, then the milestone CodeRabbit pass.
 - [ ] (2026-10-16T00:00:00Z) `make typecheck` re-run on the recovered pool, and
       **failed a second time for a different environmental reason**, having
-      again never reached our crate. Recorded because the two failures have
-      distinct causes and only one of them is the outage already described, and
+      again never reached the `netsuke` crate. Recorded because the two
+      failures have distinct causes and only one of them is the outage already
+      described, and
       because a reader who sees "typecheck failed twice" will otherwise assume
       the same cause twice.
       **This time the refusal is `launch-failed`, not `unhealthy`.** The log
@@ -2495,7 +2611,7 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       compile queue backs this up: 125 requests waiting at the point of death,
       with load average 33.70 (15 min) on six cores, and another agent's
       `cargo-mutants` run inside Podman.
-      **Our crate was never reached, again.** No `--crate-name netsuke`
+      **The `netsuke` crate was never reached, again.** No `--crate-name netsuke`
       anywhere in 733 lines. Two full gate runs have now compiled ~90 minutes
       of dependencies between them without once reaching `src/`. The four new
       files still have never been seen by a compiler, so the `path_key.rs`
@@ -2517,8 +2633,9 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       **What is and is not established.** Neither run says anything about the
       correctness of this change. What they do establish is that this machine
       cannot currently complete a cold Rust build of this workspace: two
-      attempts, two kills, zero lines of our source compiled. The next attempt
-      should wait for the queue to drain rather than adding a third build to a
+      attempts, two kills, zero lines of this branch's source compiled. The next
+      attempt should wait for the queue to drain rather than adding a third
+      build to a
       pool already 125 deep, which is what the `launch-failed` memory warns
       against explicitly: *"Do not 'help' by building."*
 - [ ] (2026-10-16T00:00:00Z) `make typecheck` ran on the candidate and **failed
@@ -2526,7 +2643,7 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       first run of the gate that touches the four new files is evidence
       whatever its verdict, and because the tempting reading of its output is
       the wrong one.
-      **The failure is not ours.** Every one of the 18 `error: could not
+      **The failure is not in this branch.** Every one of the 18 `error: could not
       compile` lines names a *third-party* crate — `dirs-sys`, `unic-langid`
       (twice), `pear`, `self_cell`, `gherkin`'s build script, `anstyle-parse`,
       `fluent-syntax`, `tempfile`, `rustls-pki-types`, `time-core`,
@@ -2536,7 +2653,7 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       …rustc … -D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold` that pins the
       cause to the wrapper. The wrapper's own message appears 18 times:
       `build-limits: the supervisor refused: unhealthy`.
-      **Our crate was never reached.** No line carries `--crate-name netsuke`,
+      **The `netsuke` crate was never reached.** No line carries `--crate-name netsuke`,
       and every occurrence of the string `netsuke` in the log is inside this
       worktree's path. 161 crates compiled or checked before the kill. So this
       run establishes *nothing* about the four new files — it does not even
@@ -2861,7 +2978,7 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       558023, a `--unit-graph` render adopted from a shell whose parent had
       died) exited on its own with `rc=0` and a **0-byte** `/tmp/ug-checklib.json`.
       Its rmeta shows the same `arb_graph_spec = 0`, so it too was a non-test
-      render. Nothing of mine was left holding a token or a scope.
+      render. No probe process from this session was left holding a token or a scope.
 - [x] (2026-10-15T00:00:00Z) Corrected two plan defects before implementing
       `EP-M4`, and ran the last `EP-M2` gate batch.
       **Repair 1 — stale artefact paths.** Thirteen live citations gave the six
@@ -4107,7 +4224,7 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   normally protected.
 - (2026-10-16) **A gate that fails for infrastructure reasons still produces
   output shaped exactly like an output that failed for code reasons, and the
-  difference is only visible if you read the `Caused by:` lines.**
+  difference is only visible by reading the `Caused by:` lines.**
   `make typecheck` exited 101 and printed 18 `error: could not compile` lines.
   Read at the level a busy human reads them, that is "18 broken crates". Read
   one level down, every one is a third-party crate whose compiler process was
@@ -4117,11 +4234,11 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   line. The wrapper's refusal is the error; the crate names are casualties.
   **The transferable lesson is to classify a gate failure by the failure's
   *cause line* before acting on it, and specifically to check whether the
-  failing crate is one you own.** Had this been read as "18 crates are broken",
-  the next hour would have gone into investigating `toml` and `tempfile`. A
-  second trap sits on top of the first: the background-task notification for
-  this run reported `completed (exit code 0)`. That status is the wrapper's, not
-  `make`'s. The log's own last line —
+  failing crate is one this repository owns.** Had this been read as "18 crates
+  are broken", the next hour would have gone into investigating `toml` and
+  `tempfile`. A second trap sits on top of the first: the background-task
+  notification for this run reported `completed (exit code 0)`. That status is
+  the wrapper's, not `make`'s. The log's own last line —
   `make: *** [Makefile:423: typecheck] Error 101` — is the gate's verdict, and
   it is the one to trust. **A notification's exit status and the gate's exit
   status are different quantities whenever a pipe, `tee`, or shell wrapper sits
@@ -4176,7 +4293,7 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   happened, and the message is a different resource with the same errno.
   `rust-cleanup.service` is also running on a repeating schedule against lody
   worktrees — it reported `deleted=0, eligible=0` on its 20:31 pass, so it is
-  not currently deleting anything of mine.
+  not currently deleting anything in this worktree.
 - (2026-10-15) **The mutation `OBL-NOLOSS` was designed against could not
   fail it, and the test its acceptance names asserted the claim the statement
   correction had just removed.** Correcting the count conjunct above left two
@@ -4677,7 +4794,7 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   checks. Nothing this branch changed produced them — the branch touches four
   Markdown files and no Rust — so a branch can be entirely innocent of a
   contract it violates, purely by falling behind the migration that satisfied
-  it. "My diff is clean" and "the tree passes" are different claims.
+  it. "The diff is clean" and "the tree passes" are different claims.
 
 - (2026-09-09) The emitter's edge sort is *stable* and its key is unique only
   because `from_manifest` rejects duplicate outputs. Weaken that and ties fall
@@ -4786,7 +4903,7 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   footnote findings are new and are now named in `EP-M8`'s scope. **Correction
   to an earlier note in this session:** the `[^9]` path was believed broken
   too. It is not. Probe the path before recording a documentation defect, and
-  re-probe at the tree you are correcting.
+  re-probe at the tree being corrected.
 - (2026-10-10) `EP-M2`'s two splits are governed by a module-layout contract
   this branch does not yet carry, and the shape this plan implied is rejected
   by it. `fce1a746` ("Group prefix-named modules under directory modules",
@@ -4819,8 +4936,8 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   there with `NamedAction` still in it. So every `EP-M2` path and seam must be
   re-derived at implementation time rather than carried from here. **Lesson:**
   a file split is a *structural* change, governed by whatever structure
-  contracts are in flight rather than by this plan alone. Reading a rule tells
-  you what it forbids; only running it against the tree tells you which of the
+  contracts are in flight rather than by this plan alone. Reading a rule states
+  what it forbids; only running it against the tree reveals which of the
   remaining shapes is clean. Do the probe before choosing the shape, not after
   lint rejects it.
 - (2026-10-10) Prose written *for* a gate can still fail a gate, and the two
@@ -4929,9 +5046,9 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   `nextest_child_cargo_timeout_test.py` already existed, already held the
   targeted cold-build allowances, and already declared that it pins the
   family's shared override. The whole test moved there. **Lesson:** when a cap
-  is breached by an addition that is in the wrong module anyway, the cap is
-  telling you where the code belongs; trimming it to fit hides the misfiling
-  behind a passing gate.
+  is breached by an addition that belongs in another module anyway, the cap
+  shows where the code belongs; trimming it to fit hides the misfiling behind a
+  passing gate.
 
   **Second lesson from the same failure, on the plan's own provenance rule.**
   The cold child build was recorded as **456 s** at five sites in the plan, the
@@ -5832,8 +5949,9 @@ generalized mutation-evidence contract held up.
 
   Accepted — findings 7 and 9 (minor). `G-1` now names the `netsuke generate`
   entry point and distinguishes its scope from the library entry points `P-2`
-  qualifies. "You can observe success" becomes "Success is observable", per the
-  second-person ban at `docs/documentation-style-guide.md:39`.
+  qualifies. The acceptance criterion is now phrased as "Success is
+  observable", per the second-person ban at
+  `docs/documentation-style-guide.md:39`.
 
   Accepted in substance, misread in part — finding 5 (major, the `OBL-PATHKEY`
   reorder check). The warning that `prop_shuffle` may return the input order,

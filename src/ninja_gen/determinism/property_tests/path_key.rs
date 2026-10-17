@@ -16,11 +16,10 @@
 //! near the foot of this module record why each half of that restriction is
 //! load-bearing rather than decorative.
 
-use super::support::{MAX_PATHS, keyable_paths};
+use super::support::{MAX_PATHS, coverage_runner, keyable_paths};
 use crate::ninja_gen::path_key;
 use camino::Utf8PathBuf;
 use proptest::prelude::*;
-use proptest::test_runner::TestRunner;
 use std::cell::Cell;
 
 proptest! {
@@ -209,15 +208,12 @@ impl ListShapes {
 #[test]
 fn the_run_reaches_lists_of_every_shape() {
     let tallies: Cell<ListShapes> = Cell::new(ListShapes::default());
-    TestRunner::new(ProptestConfig {
-        cases: 256,
-        ..ProptestConfig::default()
-    })
-    .run(&permuted_pairs(), |(paths, permuted)| {
-        tallies.set(tallies.get().extended(&paths, &permuted));
-        Ok(())
-    })
-    .expect("the path strategy should be generatable");
+    coverage_runner(256)
+        .run(&permuted_pairs(), |(paths, permuted)| {
+            tallies.set(tallies.get().extended(&paths, &permuted));
+            Ok(())
+        })
+        .expect("the path strategy should be generatable");
 
     let observed = tallies.into_inner();
     macro_rules! covered {

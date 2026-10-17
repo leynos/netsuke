@@ -18,7 +18,7 @@
 //! a pass over identical inputs. The tally is what `EP-M0` question 1 found
 //! missing at one key, where no alternative order exists at all.
 
-use super::support::materialize;
+use super::support::{coverage_runner, materialize};
 use crate::ir::BuildEdge;
 use crate::ninja_gen::determinism::strategy::classification::{
     ALWAYS_RESTAT_ALL, Classification, edge_lists_differ,
@@ -28,7 +28,7 @@ use crate::ninja_gen::generate_bundle;
 use crate::ninja_gen::order::{ordered_actions, ordered_edges};
 use crate::ninja_gen::path_key;
 use proptest::prelude::*;
-use proptest::test_runner::{TestCaseError, TestRunner};
+use proptest::test_runner::TestCaseError;
 use std::cell::Cell;
 
 proptest! {
@@ -255,16 +255,13 @@ fn orders_diverge(spec: &GraphSpec) -> Result<(bool, bool), TestCaseError> {
 #[test]
 fn the_run_diverges_and_reaches_every_required_class() {
     let tally: Cell<RunShape> = Cell::new(RunShape::default());
-    TestRunner::new(ProptestConfig {
-        cases: 128,
-        ..ProptestConfig::default()
-    })
-    .run(&arb_graph_spec(), |spec| {
-        let (diverged, actions_diverged) = orders_diverge(&spec)?;
-        tally.set(tally.get().extended(&spec, diverged, actions_diverged));
-        Ok(())
-    })
-    .expect("the graph strategy should be generatable");
+    coverage_runner(128)
+        .run(&arb_graph_spec(), |spec| {
+            let (diverged, actions_diverged) = orders_diverge(&spec)?;
+            tally.set(tally.get().extended(&spec, diverged, actions_diverged));
+            Ok(())
+        })
+        .expect("the graph strategy should be generatable");
 
     let observed = tally.into_inner();
     macro_rules! covered {

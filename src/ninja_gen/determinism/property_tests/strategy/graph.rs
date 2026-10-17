@@ -25,8 +25,9 @@ use crate::ninja_gen::determinism::strategy::graph::{
 };
 use crate::ninja_gen::determinism::strategy::{ALWAYS_RESTAT_ALL, Classification};
 use proptest::prelude::*;
-use proptest::test_runner::TestRunner;
 use std::cell::Cell;
+
+use super::super::support::{coverage_runner, materialize};
 
 /// A generous ceiling on the rendered `Debug` output, in characters.
 ///
@@ -108,20 +109,6 @@ proptest! {
     }
 }
 
-/// Build one materialization, reporting a generator defect as a test failure.
-///
-/// The error is returned rather than asserted so that a colliding pool reaches
-/// proptest as a shrinkable failure carrying the specification's shape, not as
-/// a panic shrinking cannot reduce.
-fn materialize(
-    spec: &crate::ninja_gen::determinism::strategy::graph::GraphSpec,
-    order: &[usize],
-) -> Result<crate::ir::BuildGraph, TestCaseError> {
-    spec.materialize(order).map_err(|error| {
-        TestCaseError::fail(format!("the pool's slices must not collide: {error}"))
-    })
-}
-
 /// A materialized graph's edges, in the arena's sequence.
 fn edges_of(graph: &crate::ir::BuildGraph) -> Vec<crate::ir::BuildEdge> {
     graph.edges().cloned().collect()
@@ -184,15 +171,12 @@ impl Reach {
 #[test]
 fn the_generator_reaches_every_required_class_across_a_run() {
     let tallies: Cell<Reach> = Cell::new(Reach::default());
-    TestRunner::new(ProptestConfig {
-        cases: 64,
-        ..ProptestConfig::default()
-    })
-    .run(&arb_graph_spec(), |spec| {
-        tallies.set(tallies.get().extended(spec.classification()));
-        Ok(())
-    })
-    .expect("the graph specification should be generatable");
+    coverage_runner(64)
+        .run(&arb_graph_spec(), |spec| {
+            tallies.set(tallies.get().extended(spec.classification()));
+            Ok(())
+        })
+        .expect("the graph specification should be generatable");
 
     let observed = tallies.into_inner();
     assert!(
