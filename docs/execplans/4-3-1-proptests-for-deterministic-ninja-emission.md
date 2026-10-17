@@ -2167,6 +2167,22 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
 
+- [x] (2026-10-18) **Hosted CI is fully green at `a4a86f67`, which clears both
+      failures it carried at `d4225faf`.** CI run `39076397969` concluded
+      `success`; the `Netsukefile Build Test` run `39076397939` and the
+      `Release Dry Run` `39076398034` also concluded `success` at the same
+      head. Of the 24 check runs, **20 pass and 4 are deliberately skipped**
+      (`Kody Code Review`, `automerge`, `release / publish-release`, and
+      `release / windows-native-recipe-smoke`), with none failing and none
+      pending. The two previously red checks both flip: `build-test`
+      (`22 m 1 s`) now passes, which is the hosted confirmation that the `ty`
+      repair in `8fe31258` fixed the `not-subscriptable` error that failed run
+      `39073698348` in 5 m 54 s; and `CodeScene Code Health Review (main)`
+      (`49 s`) now passes, which confirms `cb455c57` resolved the two
+      duplication findings and the complex-method finding. Every Windows lane,
+      `kani-smoke` (`16 m 7 s`), `netsukefile` (`1 m 36 s`) and all five
+      release build jobs pass as well, so the platform that caught the
+      earlier `Debug`-escaping defect still passes.
 - [x] (2026-10-18) **All nine gates passed against HEAD `d4225faf`, including
       the `make typecheck` gate the previous batch omitted, and the gated
       content is now committed unchanged.** Freeze: HEAD
