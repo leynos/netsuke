@@ -138,7 +138,7 @@ jobs:
           awk --version
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@e693d81d176d2305e2b736a0be0f9038085dec7f
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup.
@@ -167,7 +167,7 @@ jobs:
         run: ninja --version
       - name: Install mdtablefix
         uses: >-
-          leynos/shared-actions/.github/actions/install-mdtablefix@0606ca899ce2995a0c4bc78e660e80832e6e8855
+          leynos/shared-actions/.github/actions/install-mdtablefix@e693d81d176d2305e2b736a0be0f9038085dec7f
         # The gate cache owns `~/.local/bin`, so a warm run finds it present.
         with:
           version: ${{ env.MDTABLEFIX_VERSION }}
@@ -225,7 +225,7 @@ jobs:
         shell: bash
       - name: Install Nixie
         uses: >-
-          leynos/shared-actions/.github/actions/install-nixie@2f58fab140cc8dfe69756aaa6a3bbb987c426023
+          leynos/shared-actions/.github/actions/install-nixie@e693d81d176d2305e2b736a0be0f9038085dec7f
         with:
           python-version: '3.14'
       - name: Format
@@ -242,7 +242,7 @@ jobs:
           globs: '**/*.md'
       - name: Install Whitaker
         uses: >-
-          leynos/shared-actions/.github/actions/install-whitaker@6dea5677a84fec60ca51b07202570e3af12ffdb4
+          leynos/shared-actions/.github/actions/install-whitaker@e693d81d176d2305e2b736a0be0f9038085dec7f
         with:
           installer-version: '0.2.9'
           # The gate cache owns `~/.cargo/bin` and `~/.local/share`, so the
@@ -281,7 +281,7 @@ jobs:
           # from `setup-rust`, so the exclusion is visible at the step it
           # applies to and a contract has something to read.
           RUSTFLAGS: -D warnings
-        uses: leynos/shared-actions/.github/actions/generate-coverage@7d751eded578e48dacf43ab173d5820e6437c474
+        uses: leynos/shared-actions/.github/actions/generate-coverage@e693d81d176d2305e2b736a0be0f9038085dec7f
         with:
           language: rust
           output-path: lcov.info
@@ -494,7 +494,7 @@ jobs:
           runner-image: ${{ env.NETSUKE_RUNNER_IMAGE }}
       - name: Setup Rust
         if: steps.scope.outputs.run-proofs == 'true'
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@e693d81d176d2305e2b736a0be0f9038085dec7f
         with:
           # Resolved from the job's own `env`, which declares the pinned
           # nightly. This input does double duty: a non-empty value selects
