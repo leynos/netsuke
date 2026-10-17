@@ -6,7 +6,7 @@
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use netsuke::cli::{Cli, Commands, HelpArgs, HelpTopic};
+use netsuke::cli::{Cli, Commands, HelpArgs, HelpTargetsArgs, HelpTopic};
 use netsuke::output_prefs;
 use netsuke::runner::run;
 use rstest::{fixture, rstest};
@@ -14,6 +14,8 @@ use test_support::{fluent::normalize_fluent_isolates, localizer_test_lock, set_e
 
 #[path = "runner_help_targets_tests/catalogue.rs"]
 mod catalogue;
+#[path = "runner_help_targets_tests/edges.rs"]
+mod edges;
 mod fixtures;
 #[path = "runner_help_targets_tests/query_helpers.rs"]
 mod query_helpers;
@@ -66,6 +68,26 @@ fn run_help_targets(cli: &Cli) -> Result<()> {
     run(cli, output_prefs::resolve(None)).context("running help targets subcommand")
 }
 
+/// Reject graph export without root JSON before resolving a manifest path.
+#[test]
+fn graph_export_requires_json_before_loading_manifest() -> Result<()> {
+    let cli = Cli {
+        file: Utf8PathBuf::from("missing-graph-manifest.yml"),
+        command: Some(Commands::Help(HelpArgs {
+            topic: Some(HelpTopic::Targets(HelpTargetsArgs { edges: true })),
+        })),
+        ..Cli::default()
+    };
+    let error = run_help_targets(&cli).expect_err("graph export must require root JSON");
+    ensure!(
+        error.chain().any(|cause| cause
+            .to_string()
+            .contains("--edges option requires root-level --json")),
+        "failure should precede manifest lookup and name the required flag: {error:#}"
+    );
+    Ok(())
+}
+
 fn assert_help_targets_rejects_manifest(
     fixture_name: &str,
     manifest: &[u8],
@@ -84,7 +106,7 @@ fn assert_help_targets_rejects_manifest(
     let cli = Cli {
         file: manifest_path,
         command: Some(Commands::Help(HelpArgs {
-            topic: Some(HelpTopic::Targets),
+            topic: Some(HelpTopic::Targets(HelpTargetsArgs::default())),
         })),
         ..Cli::default()
     };
@@ -153,7 +175,7 @@ fn help_targets_with_invalid_manifest_reports_error() -> Result<()> {
     let cli = Cli {
         file: manifest_path,
         command: Some(Commands::Help(HelpArgs {
-            topic: Some(HelpTopic::Targets),
+            topic: Some(HelpTopic::Targets(HelpTargetsArgs::default())),
         })),
         ..Cli::default()
     };

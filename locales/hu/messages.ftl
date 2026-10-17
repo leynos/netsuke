@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Téma nélkül ez a `--help`-nek felel meg. A `
 cli.help.actions_heading = Műveletek:
 cli.help.targets_heading = Célok:
 cli.help.targets.about = A kiválasztott fájl céljainak és műveleteinek listázása.
+cli.help.targets.flag.edges.help = A függőségi élek és a nyers receptek felvétele a JSON-kimenetbe.
 cli.help.default_marker = alapértelmezett
 cli.help.conditional_marker = feltételes
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = A jegyzéket nem sikerült betölteni innen: { $p
 runner.context.build_graph = A gráfot nem sikerült felépíteni a jegyzékből.
 runner.context.generate_ninja = A Ninja-jegyzéket nem sikerült előállítani.
 runner.context.render_graph = A gráfterméket nem sikerült megjeleníteni.
+runner.help.targets_edges_require_json = Az --edges kapcsolóhoz a legfelső szintű --json kapcsoló szükséges.
 
 runner.io.create_temp_file = Az ideiglenes Ninja-fájlt nem sikerült létrehozni.
 runner.io.write_temp_ninja = Az ideiglenes Ninja-fájlt nem sikerült megírni.

@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = बिना विषय के यह `--help
 cli.help.actions_heading = क्रियाएँ:
 cli.help.targets_heading = लक्ष्य:
 cli.help.targets.about = चयनित मैनिफेस्ट में लक्ष्यों और क्रियाओं की सूची बनाएँ।
+cli.help.targets.flag.edges.help = JSON आउटपुट में निर्भरता किनारे और कच्ची रेसिपी शामिल करें।
 cli.help.default_marker = डिफ़ॉल्ट
 cli.help.conditional_marker = सशर्त
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = { $path } से मैनिफ़ेस्ट �
 runner.context.build_graph = मैनिफ़ेस्ट से ग्राफ़ नहीं बनाया जा सका।
 runner.context.generate_ninja = Ninja मैनिफ़ेस्ट नहीं बनाया जा सका।
 runner.context.render_graph = ग्राफ़ का उत्पाद प्रस्तुत नहीं किया जा सका।
+runner.help.targets_edges_require_json = --edges विकल्प के लिए शीर्ष स्तर पर --json आवश्यक है।
 
 runner.io.create_temp_file = अस्थायी Ninja फ़ाइल नहीं बनाई जा सकी।
 runner.io.write_temp_ninja = अस्थायी Ninja फ़ाइल में नहीं लिखा जा सका।

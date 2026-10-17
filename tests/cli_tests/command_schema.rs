@@ -5,7 +5,7 @@
 //! rather than runtime command behaviour.
 
 use anyhow::{Context, Result, ensure};
-use netsuke::cli::{BuildArgs, Commands, GraphArgs, HelpArgs, HelpTopic};
+use netsuke::cli::{BuildArgs, Commands, GraphArgs, HelpArgs, HelpTargetsArgs, HelpTopic};
 use netsuke::cli_localization;
 use ortho_config::Localizer;
 use rstest::{fixture, rstest};
@@ -59,7 +59,13 @@ fn omitted_subcommand_selects_the_default_build_command(
 #[case(
     vec!["netsuke", "help", "targets"],
     Commands::Help(HelpArgs {
-        topic: Some(HelpTopic::Targets),
+        topic: Some(HelpTopic::Targets(HelpTargetsArgs::default())),
+    })
+)]
+#[case(
+    vec!["netsuke", "--json", "help", "targets", "--edges"],
+    Commands::Help(HelpArgs {
+        topic: Some(HelpTopic::Targets(HelpTargetsArgs { edges: true })),
     })
 )]
 fn supported_commands_parse_to_their_schema_variants(

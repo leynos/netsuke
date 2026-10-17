@@ -47,6 +47,13 @@ pub enum RunnerError {
         #[help]
         help: LocalizedMessage,
     },
+    /// The graph-bearing help catalogue requires machine-readable output.
+    #[error("{message}")]
+    #[diagnostic(code(netsuke::runner::help_targets_edges_require_json))]
+    HelpTargetsEdgesRequireJson {
+        /// Localized diagnostic explaining the required root flag.
+        message: LocalizedMessage,
+    },
 }
 
 /// Promote budget exhaustion after command contexts have been attached.

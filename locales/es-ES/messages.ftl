@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Sin tema, esto coincide con `--help`. Use `help
 cli.help.actions_heading = Acciones:
 cli.help.targets_heading = Objetivos:
 cli.help.targets.about = Enumerar objetivos y acciones en el manifiesto seleccionado.
+cli.help.targets.flag.edges.help = Incluir aristas de dependencias y recetas sin procesar en la salida JSON.
 cli.help.default_marker = predeterminado
 cli.help.conditional_marker = condicional
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = No se pudo cargar el manifiesto en { $path }.
 runner.context.build_graph = No se pudo construir el grafo desde el manifiesto.
 runner.context.generate_ninja = No se pudo generar el manifiesto Ninja.
 runner.context.render_graph = No se pudo renderizar el artefacto de grafo.
+runner.help.targets_edges_require_json = La opción --edges requiere --json en el nivel raíz.
 
 runner.io.create_temp_file = No se pudo crear el archivo Ninja temporal.
 runner.io.write_temp_ninja = No se pudo escribir el archivo Ninja temporal.

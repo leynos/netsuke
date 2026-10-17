@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Fără subiect, acest lucru corespunde cu `--he
 cli.help.actions_heading = Acțiuni:
 cli.help.targets_heading = Ținte:
 cli.help.targets.about = Listează țintele și acțiunile din fișierul selectat.
+cli.help.targets.flag.edges.help = Include muchiile dependențelor și rețetele neprelucrate în ieșirea JSON.
 cli.help.default_marker = implicit
 cli.help.conditional_marker = condițional
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Manifestul din { $path } nu a putut fi încărcat
 runner.context.build_graph = Graful nu a putut fi construit din manifest.
 runner.context.generate_ninja = Manifestul Ninja nu a putut fi generat.
 runner.context.render_graph = Artefactul grafului nu a putut fi redat.
+runner.help.targets_edges_require_json = Opțiunea --edges necesită --json la nivelul rădăcină.
 
 runner.io.create_temp_file = Fișierul Ninja temporar nu a putut fi creat.
 runner.io.write_temp_ninja = Fișierul Ninja temporar nu a putut fi scris.

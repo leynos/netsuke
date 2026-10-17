@@ -455,6 +455,7 @@ identifier remains reserved, not checked off as implemented.
   - [x] Emit exactly one JSON result document on successful JSON-mode commands.
   - [x] Emit exactly one JSON diagnostic document on failing JSON-mode commands.
   - [x] Suppress progress, colour, emoji, tracing, and timing text in JSON mode.
+  - [x] Snapshot the `help targets --edges` graph schema as a v1 JSON schema.
   - [ ] Snapshot every v1 JSON schema.
   - [ ] Depend on OrthoConfig `7.2.3` to `7.2.5`, `7.3.1`, `8.1.1`, and
     `8.1.2` for shared result, stream, exit-code, and enumerable-error
@@ -2619,6 +2620,8 @@ contract before any new command can execute.
     bounded stale-plan cleanup are now defined in RFC 0001 §13.3 and §17.4.
 - [ ] 12.1.2. Add the closed structured-command AST and schema version gate.
   - Requires 12.1.1 and 11.2.1.
+  - Follow up the help-targets graph export with structured-command recipe
+    variants after the AST and schema version gate are defined.
   - Preserve scalar commands and all-string lists; accept an `invoke` mapping
     or a non-empty heterogeneous list containing strings, structured blocks,
     single-key rule references, and single-key script items. Retain source
@@ -2692,6 +2695,8 @@ process state. It supplies the execution boundary needed by Ninja and streams.
     subsequent units and the parent retain their original environment.
 - [ ] 12.2.3. Apply capability-scoped literal working directories at spawn.
   - Requires 12.1.1 and 12.2.2.
+  - Follow up the help-targets graph export with literal per-command `cwd`
+    fields after this milestone defines their manifest and execution contract.
   - Implement the consolidated RFC 0009 contract: normalize literal `cwd`
     against the effective workspace after `-C`, reject text escapes, and
     revalidate directory existence and type immediately before spawning.

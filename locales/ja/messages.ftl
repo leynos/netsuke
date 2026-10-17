@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = トピックなしの場合、これは `--help
 cli.help.actions_heading = アクション:
 cli.help.targets_heading = ターゲット:
 cli.help.targets.about = 選択したファイルのターゲットとアクションを一覧表示します。
+cli.help.targets.flag.edges.help = 依存関係のエッジと未加工のレシピを JSON 出力に含めます。
 cli.help.default_marker = 既定
 cli.help.conditional_marker = 条件付き
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = { $path } のマニフェストを読み込めま
 runner.context.build_graph = マニフェストからグラフを構築できませんでした。
 runner.context.generate_ninja = Ninja マニフェストを生成できませんでした。
 runner.context.render_graph = グラフ成果物を描画できませんでした。
+runner.help.targets_edges_require_json = --edges オプションには最上位の --json が必要です。
 
 runner.io.create_temp_file = 一時 Ninja ファイルを作成できませんでした。
 runner.io.write_temp_ninja = 一時 Ninja ファイルに書き込めませんでした。

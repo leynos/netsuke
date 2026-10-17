@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = بدون موضوع، این با `--help` یک
 cli.help.actions_heading = اقدامات:
 cli.help.targets_heading = اهداف:
 cli.help.targets.about = فهرست کردن اهداف و اقدامات در پروندهٔ انتخاب‌شده.
+cli.help.targets.flag.edges.help = یال‌های وابستگی و دستورالعمل‌های خام ساخت را در خروجی JSON بگنجانید.
 cli.help.default_marker = پیش‌فرض
 cli.help.conditional_marker = مشروط
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = بارگذاری مانیفست از { $path } م
 runner.context.build_graph = ساخت گراف از روی مانیفست ممکن نشد.
 runner.context.generate_ninja = تولید مانیفست Ninja ممکن نشد.
 runner.context.render_graph = نمایش فرآوردهٔ گراف ممکن نشد.
+runner.help.targets_edges_require_json = گزینهٔ --edges به --json در سطح اصلی نیاز دارد.
 
 runner.io.create_temp_file = ساخت پروندهٔ موقت Ninja ممکن نشد.
 runner.io.write_temp_ninja = نوشتن در پروندهٔ موقت Ninja ممکن نشد.

@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Konu olmadan bu, `--help` ile aynıdır. Seçil
 cli.help.actions_heading = Eylemler:
 cli.help.targets_heading = Hedefler:
 cli.help.targets.about = Seçilen bildirimdeki hedef ve eylemleri listele.
+cli.help.targets.flag.edges.help = Bağımlılık kenarlarını ve işlenmemiş tarifleri JSON çıktısına ekle.
 cli.help.default_marker = varsayılan
 cli.help.conditional_marker = koşullu
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = { $path } konumundaki bildirim yüklenemedi.
 runner.context.build_graph = Bildirimden çizge oluşturulamadı.
 runner.context.generate_ninja = Ninja bildirimi üretilemedi.
 runner.context.render_graph = Çizge ürünü işlenemedi.
+runner.help.targets_edges_require_json = --edges seçeneği en üst düzeyde --json gerektirir.
 
 runner.io.create_temp_file = Geçici Ninja dosyası oluşturulamadı.
 runner.io.write_temp_ninja = Geçici Ninja dosyası yazılamadı.

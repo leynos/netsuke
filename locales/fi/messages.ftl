@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Ilman aihetta tämä vastaa `--help`-komentoa. 
 cli.help.actions_heading = Toiminnot:
 cli.help.targets_heading = Kohteet:
 cli.help.targets.about = Luettele valitun tiedoston kohteet ja toiminnot.
+cli.help.targets.flag.edges.help = Sisällytä riippuvuuskaaret ja käsittelemättömät reseptit JSON-tulosteeseen.
 cli.help.default_marker = oletus
 cli.help.conditional_marker = ehdollinen
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Manifestia ei voitu ladata polusta { $path }.
 runner.context.build_graph = Graafia ei voitu muodostaa manifestista.
 runner.context.generate_ninja = Ninja-manifestia ei voitu luoda.
 runner.context.render_graph = Graafituotosta ei voitu hahmontaa.
+runner.help.targets_edges_require_json = --edges-valinta edellyttää ylimmän tason --json-valintaa.
 
 runner.io.create_temp_file = Väliaikaista Ninja-tiedostoa ei voitu luoda.
 runner.io.write_temp_ninja = Väliaikaista Ninja-tiedostoa ei voitu kirjoittaa.

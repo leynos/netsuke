@@ -276,6 +276,9 @@ operator, user, and contributor references are easier to find.
   0010, RFC 0011, and ADR-019: the `cwd` stream-path base, absolute-`cwd`
   rejection, the two capture forms, the two temporary-directory spellings, and
   the reserved `1.1.0` manifest minor version.
+- [ADR-044](adr-044-hermetic-help-targets-graph-json.md): Versioned graph JSON
+  from the restricted help-targets query, with declaration-level nodes,
+  authored edges, and raw legacy recipes.
 
 ## Proposals
 

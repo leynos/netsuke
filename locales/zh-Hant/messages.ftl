@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = 沒有主題時，此命令等同於 `--help`�
 cli.help.actions_heading = 動作：
 cli.help.targets_heading = 目標：
 cli.help.targets.about = 列出所選資訊清單中的目標和動作。
+cli.help.targets.flag.edges.help = 在 JSON 輸出中包含相依邊與原始配方。
 cli.help.default_marker = 預設
 cli.help.conditional_marker = 條件式
 
@@ -99,6 +100,7 @@ runner.context.load_manifest = 無法載入 { $path } 的資訊清單。
 runner.context.build_graph = 無法依資訊清單建立圖。
 runner.context.generate_ninja = 無法產生 Ninja 資訊清單。
 runner.context.render_graph = 無法算繪圖產物。
+runner.help.targets_edges_require_json = --edges 選項需要在最上層指定 --json。
 
 runner.io.create_temp_file = 無法建立暫存的 Ninja 檔案。
 runner.io.write_temp_ninja = 無法寫入暫存的 Ninja 檔案。
