@@ -26,6 +26,7 @@ pub use output::{mode as output_mode, prefs as output_prefs};
 pub mod recipe_shell;
 mod result_json;
 pub mod runner;
+pub mod shell_selection;
 mod shell_word;
 #[cfg(test)]
 mod snapshot_test_support;
