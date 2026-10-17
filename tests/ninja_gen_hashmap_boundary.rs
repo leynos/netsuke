@@ -320,13 +320,15 @@ fn the_matched_type_list_names_only_unordered_collections() {
     );
 }
 
-/// The scan sees the shapes the emitter could adopt, not only today's.
-///
-/// The emitter-side test can only report what the scan can see, so a source
-/// shape the scan cannot reach is a hole no amount of correct emitter code
-/// closes. These cases name a shape and assert a hit, so narrowing the visitor
-/// fails here rather than silently widening what the contract permits.
 mod scan_coverage {
+    //! The scan sees the shapes the emitter could adopt, not only today's.
+    //!
+    //! The emitter-side test can only report what the scan can see, so a
+    //! source shape the scan cannot reach is a hole no amount of correct
+    //! emitter code closes. These cases name a shape and assert a hit, so
+    //! narrowing the visitor fails here rather than silently widening what the
+    //! contract permits.
+
     use super::scan::{Kind, collect, parse};
 
     /// Every unordered type named by a constructor is found, including one
