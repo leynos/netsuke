@@ -18,6 +18,7 @@ module, long after this branch is merged.
 Run via ``make test-workflow-contracts``.
 """
 
+import ast
 import re
 import typing as typ
 
@@ -160,6 +161,105 @@ def test_each_source_module_carries_docstring_examples(module: str) -> None:
         f"{TARGET} command line adds no coverage; either restore an example "
         f"or drop the module from SOURCE_MODULES"
     )
+
+
+#: Modules a release-policy module must never import, because each one opens
+#: a socket, a URL, or a process that does. The policy modules decide *what* a
+#: published byte is; only workflow steps touch the network, so that the
+#: decision itself stays testable without one.
+NETWORK_MODULES = frozenset({
+    "ftplib",
+    "http",
+    "http.client",
+    "httpx",
+    "requests",
+    "socket",
+    "ssl",
+    "urllib",
+    "urllib.request",
+    "urllib3",
+})
+
+
+def _imported_modules(source: str) -> set[str]:
+    """Return every module name a source file imports, however it is spelled.
+
+    Covers ``import x``, ``import x.y as z``, ``from x import y``, and
+    ``from x.y import z``. Relative imports yield no name and are ignored:
+    they name a sibling, never a standard-library client.
+
+    Returns
+    -------
+    set[str]
+        Every imported module name, with ``import a.b`` recorded as ``a.b``.
+    """
+    imported: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        match node:
+            case ast.Import():
+                imported.update(alias.name for alias in node.names)
+            case ast.ImportFrom(module=str() as module):
+                imported.add(module)
+    return imported
+
+
+def _opens_a_socket(module: str) -> bool:
+    """Report whether an imported module name is a network client or a parent of one."""
+    return any(
+        module == banned or module.startswith(f"{banned}.")
+        for banned in NETWORK_MODULES
+    )
+
+
+@pytest.mark.parametrize("module", SOURCE_MODULES)
+def test_policy_modules_import_no_network_client(module: str) -> None:
+    """Require every policy module to be testable with no network at all.
+
+    EP-M2 states the policy modules perform no network I/O and each is runnable
+    locally without one. The statement is only worth making if something
+    checks it: an import added later would otherwise leave the claim in prose
+    while the suite silently needed a socket. The verifier is the module most
+    at risk — its name says "download" — so it takes a local path and returns
+    a digest, and the workflow step that writes that file is what downloads.
+    """
+    source = (REPO_ROOT / module).read_text(encoding="utf-8")
+    offenders = sorted(
+        name for name in _imported_modules(source) if _opens_a_socket(name)
+    )
+    assert not offenders, (
+        f"{module} imports {offenders!r}, so the module is no longer pure "
+        f"policy; move the request into the workflow step and pass the "
+        f"resulting path in"
+    )
+
+
+def test_the_no_network_check_would_notice_an_offender() -> None:
+    """Exercise the detector on a module that does open a connection.
+
+    Without this, :func:`test_policy_modules_import_no_network_client` could
+    pass because :func:`_imported_modules` parses nothing or because the
+    banned set matches no spelling. The positive control is a synthetic
+    source, not a fixture file, so it cannot be mistaken for a real module.
+    """
+    positives = (
+        "import urllib.request",
+        "from urllib.request import urlopen",
+        "import http.client as client",
+        "from socket import create_connection",
+    )
+    for source in positives:
+        assert any(_opens_a_socket(name) for name in _imported_modules(source)), (
+            f"the detector must flag {source!r}, or the no-network check is vacuous"
+        )
+    negatives = (
+        "import release_digest",
+        "from pathlib import Path",
+        "import typing as typ",
+    )
+    for source in negatives:
+        assert not any(_opens_a_socket(name) for name in _imported_modules(source)), (
+            f"the detector must not flag {source!r}, a non-network import"
+        )
 
 
 def test_the_target_is_declared_phony() -> None:
