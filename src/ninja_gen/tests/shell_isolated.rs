@@ -36,6 +36,69 @@ fn direct_command_payload(rendered: &str) -> Result<&str> {
         .context("generated PowerShell command should carry an encoded payload")
 }
 
+/// Check that the parent runs each encoded child and preserves failure status.
+fn verify_isolated_parent(parent: &str) -> Result<()> {
+    ensure!(parent.starts_with("$ErrorActionPreference = 'Continue'\n$LASTEXITCODE = 0\n"));
+    for fragment in [
+        "$LASTEXITCODE = 0\n& $netsukeChildExecutable ",
+        "$netsukeChildExecutable = \"$PSHOME\\powershell.exe\"",
+        "$netsukeChildCommandLineLength = 2 + $netsukeChildExecutable.Length + 1 + ",
+        "if ($netsukeChildCommandLineLength -gt 32766)",
+        "& $netsukeChildExecutable -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ",
+    ] {
+        ensure!(
+            parent.contains(fragment),
+            "isolated parent should contain `{fragment}`"
+        );
+    }
+    ensure!(parent.matches("-EncodedCommand ").count() == 2);
+    ensure!(
+        parent
+            .matches("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }")
+            .count()
+            == 3
+    );
+    ensure!(!parent.contains("NETSUKE_ISOLATED"));
+    ensure!(
+        !parent.contains("failure: action"),
+        "PowerShell adds no POSIX failure markers"
+    );
+    Ok(())
+}
+
+/// Decode child payloads and verify their commands retain independent state.
+fn verify_isolated_children(parent: &str) -> Result<()> {
+    let children = parent
+        .lines()
+        .filter_map(|line| {
+            line.split_once("-EncodedCommand ")
+                .map(|(_, payload)| payload)
+        })
+        .map(decode_power_shell_payload)
+        .collect::<Result<Vec<_>>>()?;
+    ensure!(children.len() == 2);
+    let first = children
+        .first()
+        .context("first isolated child should exist")?;
+    let second = children
+        .get(1)
+        .context("second isolated child should exist")?;
+    ensure!(first.starts_with(
+        "$ErrorActionPreference = 'Continue'\n$PSDefaultParameterValues['*:ErrorAction'] = 'Stop'\n$LASTEXITCODE = 0\n"
+    ));
+    for (child, fragment) in [
+        (first, "Set-Location nested"),
+        (second, "Write-Output second"),
+    ] {
+        ensure!(
+            child.contains(fragment),
+            "isolated child should contain `{fragment}`"
+        );
+    }
+    ensure!(second.ends_with("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"));
+    Ok(())
+}
+
 /// Decode child payloads and verify isolated PowerShell entries run independently.
 #[test]
 fn isolated_power_shell_lists_use_fresh_encoded_children() -> Result<()> {
@@ -62,54 +125,8 @@ fn isolated_power_shell_lists_use_fresh_encoded_children() -> Result<()> {
     .write_into(&mut rendered)?;
 
     let parent = decode_power_shell_payload(direct_command_payload(&rendered)?)?;
-    ensure!(parent.starts_with("$ErrorActionPreference = 'Continue'\n$LASTEXITCODE = 0\n"));
-    ensure!(
-        parent.contains("$LASTEXITCODE = 0\n& $netsukeChildExecutable "),
-        "the parent must reset native status before launching each child"
-    );
-    ensure!(parent.contains("$netsukeChildExecutable = \"$PSHOME\\powershell.exe\""));
-    ensure!(
-        parent
-            .contains("$netsukeChildCommandLineLength = 2 + $netsukeChildExecutable.Length + 1 + ")
-    );
-    ensure!(parent.contains("if ($netsukeChildCommandLineLength -gt 32766)"));
-    ensure!(parent.contains(
-        "& $netsukeChildExecutable -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand "
-    ));
-    ensure!(parent.matches("-EncodedCommand ").count() == 2);
-    ensure!(
-        parent
-            .matches("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }")
-            .count()
-            == 3
-    );
-    ensure!(!parent.contains("NETSUKE_ISOLATED"));
-
-    let children = parent
-        .lines()
-        .filter_map(|line| {
-            line.split_once("-EncodedCommand ")
-                .map(|(_, payload)| payload)
-        })
-        .map(decode_power_shell_payload)
-        .collect::<Result<Vec<_>>>()?;
-    ensure!(children.len() == 2);
-    let first = children
-        .first()
-        .context("first isolated child should exist")?;
-    let second = children
-        .get(1)
-        .context("second isolated child should exist")?;
-    ensure!(first.starts_with(
-        "$ErrorActionPreference = 'Continue'\n$PSDefaultParameterValues['*:ErrorAction'] = 'Stop'\n$LASTEXITCODE = 0\n"
-    ));
-    ensure!(first.contains("Set-Location nested"));
-    ensure!(second.contains("Write-Output second"));
-    ensure!(second.ends_with("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"));
-    ensure!(
-        !parent.contains("failure: action"),
-        "PowerShell adds no POSIX failure markers"
-    );
+    verify_isolated_parent(&parent)?;
+    verify_isolated_children(&parent)?;
     Ok(())
 }
 

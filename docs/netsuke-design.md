@@ -619,7 +619,7 @@ Its `shared` default preserves legacy execution, while `isolated` gives each
 entry the action's working-directory and environment baseline on every route.
 The field does not make shell text portable: POSIX `${VAR:-default}` expansion
 is unavailable on the default Windows PowerShell route. See
-[ADR-043](adr-043-isolate-command-list-entries.md) for the decision and
+[ADR-045](adr-045-isolate-command-list-entries.md) for the decision and
 compatibility constraints.
 
 Netsuke should add four complementary capabilities.
@@ -2549,8 +2549,16 @@ PowerShell recipes are encoded as UTF-16LE Base64 and emitted as
 -EncodedCommand …`,
 so the shell that launched Netsuke does not select the recipe interpreter. On
 Windows, `NETSUKE_WINDOWS_SHELL=bash` selects the explicit Bash compatibility
-route; the runner verifies `bash.exe --version` before build or Ninja-tool
-execution and reports an actionable error when the runtime is unavailable.
+route. Before a build or Ninja-tool operation, the runner searches the injected
+`PATH` entries from left to right, resolves the selected `bash.exe` to an
+absolute path, and probes that exact executable with `--version`. The runner
+passes the same path to Ninja command rendering, preventing process launch from
+selecting a different application- or system-directory executable. A failed
+probe reports the selected path, exit status, and bounded, sanitized child
+output; the path and output remain outside telemetry labels. `generate` and
+target discovery do not require an installed Bash runtime. A saved plan from
+`generate` retains the literal `bash.exe` command name and resolves it from the
+execution-time `PATH`; a build plan binds the path selected for that operation.
 
 The PowerShell route gives each scalar command and script a fresh process. A
 shared command list uses one process and checks `$LASTEXITCODE` immediately

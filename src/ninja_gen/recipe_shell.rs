@@ -4,7 +4,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 use super::NinjaGenError;
 use super::escape::{NinjaValue, ShellText, escape_ninja_value};
-use crate::recipe_shell::RecipeShell;
+use crate::recipe_shell::{BashExecutable, RecipeShell};
 
 /// Leave space for Windows' terminating command-line NUL character.
 const MAX_POWER_SHELL_COMMAND_LINE: usize = 32_766;
@@ -94,11 +94,26 @@ impl RenderedRecipeCommand {
 
 impl RecipeShell {
     /// Render completed recipe text as a safe Ninja command binding value.
+    #[cfg(test)]
     pub(super) fn command_value(
         self,
         script: &ShellText,
     ) -> Result<RenderedRecipeCommand, NinjaGenError> {
-        self.command_value_with_error_action(script, PowerShellErrorAction::Stop)
+        self.command_value_with_bash(script, None)
+    }
+
+    /// Render completed recipe text with an optional runner-selected Bash path.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NinjaGenError`] when the selected renderer rejects the recipe
+    /// text or its command transport exceeds a supported limit.
+    pub(super) fn command_value_with_bash(
+        self,
+        script: &ShellText,
+        bash_executable: Option<&BashExecutable>,
+    ) -> Result<RenderedRecipeCommand, NinjaGenError> {
+        self.command_value_with_error_action(script, PowerShellErrorAction::Stop, bash_executable)
     }
 
     /// Render a recipe with the error policy required by isolated PowerShell lists.
@@ -106,7 +121,11 @@ impl RecipeShell {
         self,
         script: &ShellText,
     ) -> Result<RenderedRecipeCommand, NinjaGenError> {
-        self.command_value_with_error_action(script, PowerShellErrorAction::ContinueNativeStderr)
+        self.command_value_with_error_action(
+            script,
+            PowerShellErrorAction::ContinueNativeStderr,
+            None,
+        )
     }
 
     /// Render a command after selecting its PowerShell error policy.
@@ -114,6 +133,7 @@ impl RecipeShell {
         self,
         script: &ShellText,
         error_action: PowerShellErrorAction,
+        bash_executable: Option<&BashExecutable>,
     ) -> Result<RenderedRecipeCommand, NinjaGenError> {
         match self {
             Self::Posix => escape_ninja_value(script).map(RenderedRecipeCommand::Direct),
@@ -127,7 +147,9 @@ impl RecipeShell {
                 Self::validate_power_shell_recipe_size(&power_shell_script)?;
                 Self::power_shell_command(&power_shell_script)
             }
-            Self::Bash => Self::bash_command(script).map(RenderedRecipeCommand::Direct),
+            Self::Bash => {
+                Self::bash_command(script, bash_executable).map(RenderedRecipeCommand::Direct)
+            }
         }
     }
 
@@ -284,8 +306,15 @@ impl RecipeShell {
     }
 
     /// Wrap one POSIX recipe in the explicit Windows Bash compatibility runtime.
-    fn bash_command(script: &ShellText) -> Result<NinjaValue, NinjaGenError> {
-        let command = format!("bash.exe -e -c {}", windows_argument(script.as_str()));
+    fn bash_command(
+        script: &ShellText,
+        bash_executable: Option<&BashExecutable>,
+    ) -> Result<NinjaValue, NinjaGenError> {
+        let executable = bash_executable.map_or_else(
+            || "bash.exe".to_owned(),
+            |path| windows_argument(path.as_path().as_str()),
+        );
+        let command = format!("{executable} -e -c {}", windows_argument(script.as_str()));
         escape_ninja_value(&ShellText::new(command))
     }
 }
@@ -353,5 +382,5 @@ pub(super) fn escape_posix_script(script: &str) -> String {
 }
 
 #[cfg(test)]
-#[path = "recipe_shell_tests.rs"]
+#[path = "shell_tests.rs"]
 mod tests;

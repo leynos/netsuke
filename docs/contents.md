@@ -276,7 +276,7 @@ operator, user, and contributor references are easier to find.
   0010, RFC 0011, and ADR-019: the `cwd` stream-path base, absolute-`cwd`
   rejection, the two capture forms, the two temporary-directory spellings, and
   the reserved `1.1.0` manifest minor version.
-- [ADR-043](adr-043-isolate-command-list-entries.md): Opt-in command-list
+- [ADR-045](adr-045-isolate-command-list-entries.md): Opt-in command-list
   entry isolation with shared mode preserved as the default.
 
 ## Proposals

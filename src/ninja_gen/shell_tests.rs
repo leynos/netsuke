@@ -7,7 +7,9 @@ use super::{
     encode_power_shell_script, windows_argument,
 };
 use crate::ninja_gen::escape::ShellText;
+use crate::recipe_shell::BashExecutable;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
+use camino::Utf8PathBuf;
 use proptest::prelude::*;
 
 /// Verify that encoded PowerShell commands hide recipe dollars from Ninja.
@@ -40,6 +42,24 @@ fn bash_command_value_uses_the_explicit_windows_compatibility_runtime() {
         .command()
         .to_string();
     assert_eq!(rendered, "bash.exe -e -c \"echo \\\"hello world\\\"\\\\\"");
+}
+
+/// Bind a selected Bash path and apply Windows quoting before Ninja escaping.
+#[test]
+fn bash_command_value_uses_the_preflighted_executable_path() -> anyhow::Result<()> {
+    let executable =
+        BashExecutable::from_absolute_path(Utf8PathBuf::from("/opt/Git Bash λ $/bin/bash.exe"))?;
+
+    let rendered = RecipeShell::Bash
+        .command_value_with_bash(&ShellText::new("echo ready".into()), Some(&executable))?
+        .command()
+        .to_string();
+
+    anyhow::ensure!(
+        rendered == "\"/opt/Git Bash λ $$/bin/bash.exe\" -e -c \"echo ready\"",
+        "unexpected preflighted Bash command: {rendered}"
+    );
+    Ok(())
 }
 
 /// Verify that a PowerShell list checks native failure before its next entry.

@@ -747,10 +747,11 @@ executable work continue to require exactly one of `command`, `script`, or
 
 Manifest-to-IR lowering keeps the dependency list as `BuildEdge::implicit_deps`
 and registers the dependency-only action without a command. The shared action
-rule emission in `src/ninja_gen/mod.rs` omits that action from the generated
-Ninja `rule` blocks; its edge selects Ninja's built-in `phony` rule instead.
-The direct generator and the serial-dependency bundle use this same path, so a
-dependency-only aggregate does not need a synthetic `command: ":"` recipe.
+rule emission in `src/ninja_gen/rule_utils.rs` omits that action from the
+generated Ninja `rule` blocks; its edge selects Ninja's built-in `phony` rule
+instead. The direct generator and the serial-dependency bundle use this same
+path, so a dependency-only aggregate does not need a synthetic `command: ":"`
+recipe.
 
 The lowering stages have deliberately separate responsibilities:
 
@@ -805,9 +806,18 @@ The lowering stages have deliberately separate responsibilities:
   Cmdlet errors and non-zero native exits stop isolated entries; native stderr
   alone does not. The POSIX command-list analyser is deliberately not applied
   to this route; PowerShell does not emit POSIX failure markers. The runner
-  resolves `NETSUKE_WINDOWS_SHELL` and preflights `bash.exe` only when the
-  optional compatibility route is selected; `help targets` stays outside this
-  execution boundary.
+  resolves `NETSUKE_WINDOWS_SHELL` and preflights Bash for build and Ninja-tool
+  operations only when the optional compatibility route is selected. Target
+  discovery and `generate` stay outside the runtime probe. The runner-owned
+  `src/runner/recipe_shell/bash_runtime.rs` lookup reads injected `PATH` once,
+  follows its left-to-right order, and skips empty entries. It does not call
+  Jinja's `which` resolver, whose workspace fallback has different semantics.
+  The selected absolute path is stored as `BashExecutable` and passed through
+  runner bundle generation, so preflight and rule execution use one identity.
+  Query-only and library generators keep `bash.exe` as a logical command name;
+  a plan saved by `generate` resolves it from `PATH` when Ninja later runs.
+  Runner build plans contain the selected absolute path and assume that
+  executable remains available there.
 - The brace-group, `eval`, background-job, and `exec` validation rules described
   above apply only to Unix and the explicit Windows Bash compatibility route.
   PowerShell uses its per-entry `$LASTEXITCODE` and cmdlet-error policy
@@ -5456,8 +5466,10 @@ composition here; callers must not measure graph-generation time with `Instant`
 or add manifest-controlled values to telemetry.
 
 The runner-internal `GraphGenerationContext` in
-`src/runner/graph/generation/mod.rs` groups the selected `RecipeShell` and
-injected monotonic clock solely for this graph-generation composition path. It
+`src/runner/graph/generation/mod.rs` groups the selected `RecipeShell`, an
+optional preflighted `BashExecutable`, and injected monotonic clock solely for
+this graph-generation composition path. Build and Ninja-tool operations attach
+the runtime binding after preflight; query-only generation leaves it absent. It
 is not a general runner context, shared state container, or reusable public
 API; keep unrelated runner inputs and concerns outside it.
 

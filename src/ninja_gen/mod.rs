@@ -8,16 +8,19 @@
 
 pub mod dyndep;
 mod path_syntax;
+mod rule_utils;
 
 use dyndep::reject_reserved_paths;
 pub use dyndep::{GeneratedDyndep, GeneratedNinja, generate_bundle};
 pub(crate) use path_syntax::{reject_unsupported_path_characters, validated_ninja_path};
+pub(crate) use rule_utils::{
+    edge_requires_gates, graph_requires_dyndep, join, path_key, write_action_rules,
+};
 
 use crate::ast::{CommandIsolation, Recipe, StringOrList};
-use crate::ir::{BuildEdge, BuildGraph};
+use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
-use camino::Utf8PathBuf;
-use itertools::Itertools;
+use crate::recipe_shell::BashExecutable;
 use std::fmt::Write;
 
 pub(crate) mod command_list;
@@ -33,7 +36,6 @@ pub use error::NinjaGenError;
 use escape::{ShellText, escape_metadata_value};
 pub use explicit_shell::generate_with_shell;
 use recipe_shell::escape_posix_script;
-use validation::{validate_action_metadata, validate_action_recipe};
 /// Write `key = value` to a Ninja file when `opt` holds a value.
 ///
 /// The indented assignment is emitted only for present values, so optional
@@ -172,7 +174,7 @@ pub(crate) fn generate_into_with_shell<W: Write>(
             message: localization::message(keys::NINJA_GEN_DYNDEP_FILES_REQUIRED),
         });
     }
-    write_action_rules(graph, out, shell)?;
+    write_action_rules(graph, out, shell, None)?;
     let mut edges: Vec<_> = graph.edges().collect();
     edges.sort_by_key(|a| path_key(&a.explicit_outputs));
     for edge in edges {
@@ -210,47 +212,6 @@ pub(crate) fn generate_into_with_shell<W: Write>(
     Ok(())
 }
 
-/// Write executable rules in stable action-ID order, omitting dependency-only `phony` nodes.
-pub(crate) fn write_action_rules<W: Write>(
-    graph: &BuildGraph,
-    out: &mut W,
-    shell: RecipeShell,
-) -> Result<(), NinjaGenError> {
-    let mut actions: Vec<_> = graph.actions.iter().collect();
-    actions.sort_by_key(|(id, _)| *id);
-    for (zero_based_action_index, (id, action)) in actions.into_iter().enumerate() {
-        if action.recipe.is_dependency_only() {
-            continue;
-        }
-        validate_action_recipe(action, zero_based_action_index + 1, shell)?;
-        validate_action_metadata(action)?;
-        NamedAction { id, action, shell }.write_into(out)?;
-    }
-    Ok(())
-}
-/// Convert a slice of paths into a space-separated string.
-pub(crate) fn join(paths: &[Utf8PathBuf]) -> String {
-    paths
-        .iter()
-        .map(|path| path_syntax::clone_validated_ninja_path(path.as_str()))
-        .join(" ")
-}
-
-/// Generate a stable key for a list of paths.
-pub(crate) fn path_key(paths: &[Utf8PathBuf]) -> String {
-    let mut parts: Vec<String> = paths.iter().map(|p| p.as_str().to_owned()).collect();
-    parts.sort_unstable();
-    parts.join(&char::from(0).to_string())
-}
-/// Whether the graph contains an edge whose serial list needs dyndep gates.
-pub(crate) fn graph_requires_dyndep(graph: &BuildGraph) -> bool {
-    graph.edges().any(edge_requires_gates)
-}
-
-/// Whether one edge's serial dependency list needs staged dyndep gates.
-pub(crate) fn edge_requires_gates(edge: &BuildEdge) -> bool {
-    edge.dependency_order == crate::ir::DependencyOrder::Serial && edge.implicit_deps.len() > 1
-}
 /// Wrapper struct to display a rule with its identifier.
 pub(crate) struct NamedAction<'a> {
     /// The rule identifier bound to the action.
@@ -263,6 +224,11 @@ pub(crate) struct NamedAction<'a> {
 
 impl NamedAction<'_> {
     /// Write the action's optional metadata bindings followed by a blank line.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NinjaGenError`] when a metadata binding cannot be escaped or
+    /// the output writer fails.
     fn write_metadata<W: Write>(&self, f: &mut W) -> Result<(), NinjaGenError> {
         let description = escape_metadata_value(self.action.description.as_deref())?;
         let depfile = escape_metadata_value(self.action.depfile.as_deref())?;
@@ -358,6 +324,20 @@ impl NamedAction<'_> {
     }
     /// Writes this action's Ninja rule, escaping only the shell-text boundary.
     fn write_into<W: Write>(&self, output: &mut W) -> Result<(), NinjaGenError> {
+        self.write_into_with_bash(output, None)
+    }
+
+    /// Write one action using the optional runner-selected Bash executable.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NinjaGenError`] when the recipe, metadata, or output cannot be
+    /// rendered safely.
+    fn write_into_with_bash<W: Write>(
+        &self,
+        output: &mut W,
+        bash_executable: Option<&BashExecutable>,
+    ) -> Result<(), NinjaGenError> {
         let shell_text = self.shell_text()?;
         let command = match (&self.action.recipe, self.shell) {
             (
@@ -367,7 +347,9 @@ impl NamedAction<'_> {
                 },
                 RecipeShell::PowerShell,
             ) => self.shell.isolated_command_list_value(&shell_text)?,
-            _ => self.shell.command_value(&shell_text)?,
+            _ => self
+                .shell
+                .command_value_with_bash(&shell_text, bash_executable)?,
         };
         writeln!(output, "rule {}", self.id)?;
         writeln!(output, "  command = {}", command.command())?;

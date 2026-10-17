@@ -483,12 +483,16 @@ netsuke build
 
 MSYS2 Bash is also supported when `bash.exe` is on `PATH`. Before `build` or
 Ninja-tool execution, Netsuke checks this selection. If `bash.exe --version`
-cannot run, it stops with instructions to install Git for Windows or MSYS2, add
-Bash to `PATH`, or unset `NETSUKE_WINDOWS_SHELL`. `generate` and `help targets`
-do not execute recipes, so they do not require Bash. In CI, install Git
-explicitly, prepend its `bin` directory to `PATH`, set
-`NETSUKE_WINDOWS_SHELL=bash`, and launch Netsuke normally from a `pwsh` step;
-do not rely on a workflow-wide `shell: bash` setting.
+cannot run, it stops with the selected path, probe status, and bounded output.
+Netsuke searches `PATH` from left to right and uses that same absolute
+executable for the probe and generated build commands. It does not fall back to
+an executable outside `PATH` when the selected runtime fails. `generate` does
+not probe Bash: its output retains the `bash.exe` command name, so Ninja
+resolves Bash from `PATH` when that saved plan is later run. `help targets`
+does not require Bash. In CI, install Git explicitly, prepend its `bin`
+directory to `PATH`, set `NETSUKE_WINDOWS_SHELL=bash`, and launch Netsuke
+normally from a `pwsh` step; do not rely on a workflow-wide `shell: bash`
+setting.
 
 For the Unix default and the explicit Bash route, each list entry is evaluated
 inside its own brace group and the groups are joined with `&&`. The entry is

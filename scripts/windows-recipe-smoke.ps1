@@ -16,6 +16,9 @@ param(
     [string]$Manifest
 )
 
+$smokeScriptDirectory = Join-Path $PSScriptRoot 'windows-recipe-smoke'
+. (Join-Path $smokeScriptDirectory 'bash.ps1')
+
 function Assert-Equal {
     param(
         [Parameter(Mandatory)]
@@ -204,33 +207,6 @@ function Test-IsolatedPowerShellLists {
         -Expected 'complete' -Message 'The isolated list did not continue after native stderr output'
 }
 
-function Test-ExplicitBashIsolation {
-    param(
-        [Parameter(Mandatory)]
-        [string]$Netsuke
-    )
-
-    if (-not (Get-Command bash.exe -CommandType Application -ErrorAction SilentlyContinue)) {
-        throw 'The Windows smoke environment must provide bash.exe for the explicit Bash route.'
-    }
-    Remove-Item Env:NETSUKE_BASH_ENV -ErrorAction SilentlyContinue
-    $bashBaseline = & bash.exe -c 'pwd'
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not determine the Bash working-directory baseline: $bashBaseline"
-    }
-    $env:NETSUKE_WINDOWS_SHELL = 'bash'
-    $env:NETSUKE_BASH_BASELINE = $bashBaseline.Trim()
-    try {
-        Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'bash-isolated-state')
-        Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'bash-isolated-state.txt') `
-            -Expected 'isolated' -Message 'Windows Bash did not isolate command-list shell state'
-    }
-    finally {
-        Remove-Item Env:NETSUKE_WINDOWS_SHELL -ErrorAction SilentlyContinue
-        Remove-Item Env:NETSUKE_BASH_BASELINE -ErrorAction SilentlyContinue
-    }
-}
-
 function Test-DependencyOrdering {
     param(
         [Parameter(Mandatory)]
@@ -291,29 +267,6 @@ function Test-AutomaticPathQuoting {
         -Expected 'automatic-path-quoting' -Message 'The discovered target did not build'
 }
 
-function Test-MissingBashRuntimeDiagnostic {
-    param(
-        [Parameter(Mandatory)]
-        [string]$Netsuke,
-
-        [Parameter(Mandatory)]
-        [string]$Workspace
-    )
-
-    $env:NETSUKE_NINJA = (Get-Command ninja -CommandType Application).Path
-    $env:NETSUKE_WINDOWS_SHELL = 'bash'
-    $env:PATH = $Workspace
-    $bashFailure = & $Netsuke build scalar 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        throw 'Selecting Bash without bash.exe unexpectedly succeeded.'
-    }
-    if (-not ($bashFailure -match 'bash\.exe.*(not found on PATH|exited with)')) {
-        throw "Bash runtime diagnostics were not actionable: $bashFailure"
-    }
-    # The expected child-process failure must not become the smoke script's exit status.
-    $global:LASTEXITCODE = 0
-}
-
 function Invoke-WindowsRecipeSmoke {
     param(
         [Parameter(Mandatory)]
@@ -371,8 +324,6 @@ function Invoke-WindowsRecipeSmoke {
         finally {
             Pop-Location
         }
-        # The expected child-process failure must not become the smoke script's exit status.
-        $global:LASTEXITCODE = 0
     }
     finally {
         foreach ($state in $environmentState) {

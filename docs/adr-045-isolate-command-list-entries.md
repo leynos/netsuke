@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 043: Isolate command-list entries
+# Architectural decision record (ADR) 045: Isolate command-list entries
 
 ## Status
 
@@ -35,6 +35,8 @@ in Netsuke.
 - Apply the same isolation guarantee on POSIX, Windows Bash, and Windows
   PowerShell.
 - Keep rules, direct targets, and actions on one recipe-level contract.
+- Make the Windows Bash executable selected by preflight the one used by
+  generated build recipes.
 
 ## Requirements
 
@@ -63,6 +65,12 @@ in Netsuke.
 - Reject statically oversized PowerShell child command lines during
   generation, and check the expanded `$PSHOME` executable path before each
   child launch; keep the 1 MiB limit on parent recipe text, including payloads.
+- Resolve Bash from the injected `PATH` snapshot in left-to-right order, then
+  probe and bind the same absolute executable path for build and Ninja-tool
+  operations. `generate` keeps a logical `bash.exe` binding so it needs no
+  installed runtime; saved plans resolve that name from execution-time `PATH`.
+- Keep runtime lookup in the runner boundary. It must not inherit the Jinja
+  `which` helper's workspace fallback or other search sources outside `PATH`.
 - The manifest format version remains unchanged. Adding a public field to
   `Recipe::Command` is an accepted Rust source break for the unstable v0.1 API.
 
@@ -112,6 +120,22 @@ subshell. A non-zero status still stops the chain, and failure markers are
 emitted only for failed isolated entries. The shared wrapper and its output
 remain unchanged.
 
+For Windows Bash execution, shell dialect and executable identity are separate
+values. The runner's path lookup reads one injected `PATH` snapshot, selects
+the first regular `bash.exe`, probes it with `--version`, and passes that
+absolute path through bundle generation. The search skips empty entries and
+does not consult the application directory, system directories, current
+directory, or workspace unless an entry explicitly names one of them. A failed
+probe does not fall through to a later executable. The bounded child output is
+sanitized for the diagnostic and is never added to telemetry labels.
+
+The public and query-only generators remain deterministic and do not perform
+environment lookup. Their Windows Bash commands retain the literal `bash.exe`
+name; a file produced by `generate` therefore binds at the later Ninja
+execution environment. `build` and Ninja-tool operations preflight Bash and
+bind their temporary plans to the selected absolute path, ensuring that the
+probe and recipe launch name one runtime.
+
 Each PowerShell entry runs in a new child process from the parent action's
 initial directory and environment. The child leaves `$ErrorActionPreference` at
 `Continue` so native stderr from a successful command remains informational,
@@ -142,5 +166,8 @@ and the old interpretation remains the default.
   they must still interpret recipe text according to its selected shell.
 - Gate authors can request entry isolation immediately, while portable recipe
   authors must avoid shell-specific defaults such as `${VAR:-default}`.
+- Windows build plans use the executable selected by the current `PATH` at
+  generation time; plans emitted by `generate` use the executable found on
+  `PATH` when Ninja later runs them.
 - Structured per-unit `cwd` remains planned work under RFC 0009 and roadmap
   items 12.1.1 and 12.2.3; this decision does not ship it.
