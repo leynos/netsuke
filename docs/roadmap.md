@@ -618,7 +618,7 @@ and test workflow intact. See
   - [ ] Prove Ninja output is stable across equivalent insertion orders
     (generated graphs bounded to 50 actions and 100 edges).
   - [ ] Prove `default` target ordering is stable.
-  - [ ] Prove `path_key` is invariant for equivalent output sets.
+  - [x] Prove `path_key` is invariant for equivalent output sets.
 - [ ] 4.3.2. Add Proptest coverage for manifest expansion invariants. Requires
   4.1.1. See the
   [Proptest section](formal-verification-methods-in-netsuke.md#proptest-for-determinism-and-manifest-semantics).
