@@ -8,9 +8,9 @@ use super::{
 };
 use crate::recipe_shell::RecipeShell;
 
-mod powershell_lexical;
+mod powershell;
 
-use powershell_lexical::{PowerShellLexicalState, PowerShellSourceCharacter};
+use powershell::{PowerShellLexicalState, PowerShellSourceCharacter, PowerShellStopParsingState};
 
 /// Classify whether the active shell region permits recipe-marker lowering.
 #[derive(Clone, Copy)]
@@ -46,8 +46,10 @@ pub(super) struct SubstitutionTraversal<'template, 'bindings> {
     output: String,
     /// Record whether the current position is protected by backticks.
     in_backticks: bool,
-    /// Retain the quote delimiter while traversing a PowerShell here-string.
+    /// Track PowerShell here-strings, comments, and fail-closed lexical state.
     power_shell_lexical: PowerShellLexicalState,
+    /// Track native-command arguments following PowerShell's `--%` token.
+    power_shell_stop_parsing: PowerShellStopParsingState,
     /// Record the active shell quote context outside command substitutions.
     quote_context: QuoteContext,
     /// Retain nested `$()` parsing state where path insertion is refused.
@@ -70,6 +72,7 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             output: String::with_capacity(template.len()),
             in_backticks: false,
             power_shell_lexical: PowerShellLexicalState::new(),
+            power_shell_stop_parsing: PowerShellStopParsingState::new(),
             quote_context: QuoteContext::Unquoted,
             command_substitutions: Vec::new(),
             posix_lexical: PosixLexicalState::new(),

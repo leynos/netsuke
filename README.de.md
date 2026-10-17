@@ -207,18 +207,21 @@ bedeutet: wird im aktiven Rezepttext umgeschrieben; siehe Hinweis unten).
 
 [^inert]: Auf POSIX- und Bash-Routen kopiert Netsuke Marker in Kommentaren und
     in Heredoc-Körpern als interne Token, statt sie zu expandieren; Marker in
-    Heredoc-Begrenzern werden expandiert. PowerShell-`command:`- und `script:`-
-    Rezepte weisen Marker in einfachen und doppelten Anführungszeichen,
-    Here-Strings, `$()` sowie direkt nach einem Backtick zurück. PowerShell-
-    Skripte behandeln Kommentare nicht als inerte Bereiche: gewöhnlicher
-    Kommentartext lässt spätere ungequotete Marker zur Interpolation zu, aber
-    ein Blockkommentar-Anfang oder Anführungszeichen (einschließlich
-    Apostrophen), Backticks oder Substitutionssyntax in einem einzeiligen
-    Kommentar können spätere Marker vorsichtshalber zurückweisen.
+    Heredoc-Begrenzern werden expandiert. PowerShell-`command:`- und
+    `script:`-Rezepte weisen Marker in einfachen und doppelten
+    Anführungszeichen, Here-Strings, `$()` sowie direkt nach einem Backtick
+    zurück. PowerShell-Skripte behandeln Kommentare nicht als inerte Bereiche:
+    gewöhnlicher Kommentartext lässt spätere ungequotete Marker zur
+    Interpolation zu, aber ein Blockkommentar-Anfang oder Anführungszeichen
+    (einschließlich Apostrophen), Backticks oder Substitutionssyntax in einem
+    einzeiligen Kommentar können spätere Marker vorsichtshalber zurückweisen.
     Typografische PowerShell-Anführungszeichen führen ebenfalls dazu, dass
-    spätere Marker vorsichtshalber scheitern. Marker gehören nicht in POSIX- und
-    Bash-Kommentare oder Heredoc-Körper: Interne Token können dort im
-    generierten Rezept verbleiben.
+    spätere Marker vorsichtshalber scheitern. Im rohen nativen Befehlsbereich
+    nach dem Stop-Parsing-Token `--%` werden Marker bis zum nächsten
+    Zeilenumbruch oder Pipe-Zeichen abgelehnt; danach wird die Prüfung
+    fortgesetzt. Ein Semikolon beendet diesen Bereich nicht. Marker gehören
+    nicht in POSIX- und Bash-Kommentare oder Heredoc-Körper: Interne Token
+    können dort im generierten Rezept verbleiben.
 
 Mit einer vorhandenen Datei `input.txt` kopiert dieses POSIX-Manifest deren
 Inhalt nach `output.txt` und prüft, ob die `PATH`-Variable der Shell nicht leer

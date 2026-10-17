@@ -222,7 +222,10 @@ se reescribe en el texto activo de la receta; consulta la nota siguiente).
     comentario de una línea pueden hacer que se rechacen marcadores posteriores.
     Un apóstrofo en un comentario también puede rechazarlos.
     Las comillas tipográficas de PowerShell también hacen que los marcadores
-    posteriores se rechacen de forma conservadora. No ponga marcadores en
+    posteriores se rechacen de forma conservadora. En la región literal del
+    comando nativo tras `--%`, se rechazan los marcadores hasta el siguiente
+    salto de línea o carácter de canalización; después se reanuda el análisis.
+    El punto y coma no termina esa región. No ponga marcadores en
     comentarios ni cuerpos de heredoc POSIX o Bash: los tokens internos pueden
     permanecer en la receta generada.
 
