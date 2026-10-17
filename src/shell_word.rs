@@ -122,10 +122,18 @@ fn quote_power_shell_literal(value: &str) -> String {
 ///
 /// PowerShell recognizes the full U+2018–U+201B typographic range as string
 /// delimiters, so path literals must double each character in that range.
-const fn is_power_shell_single_quote(character: char) -> bool {
+pub(crate) const fn is_power_shell_single_quote(character: char) -> bool {
     matches!(
         character,
         '\'' | '\u{2018}' | '\u{2019}' | '\u{201a}' | '\u{201b}'
+    )
+}
+
+/// Report whether `character` is one of PowerShell's double-quote delimiters.
+pub(crate) const fn is_power_shell_double_quote(character: char) -> bool {
+    matches!(
+        character,
+        '"' | '\u{201c}' | '\u{201d}' | '\u{201e}' | '\u{201f}'
     )
 }
 
