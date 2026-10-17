@@ -198,7 +198,11 @@ fn netsuke_owned_path_substitutions_are_quoted() -> Result<()> {
 
 #[test]
 fn readme_documents_power_shell_script_marker_restrictions() {
-    let readme = include_str!("../README.md");
+    let normalized_readme = include_str!("../README.md")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let readme = normalized_readme.as_str();
 
     assert_that!(
         readme,

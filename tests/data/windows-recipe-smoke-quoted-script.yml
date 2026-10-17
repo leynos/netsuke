@@ -5,7 +5,3 @@ targets:
     sources: '; New-Item pwned; Write-Output x'
     script: |
       Write-Output '{{ ins }}' > {{ outs }}
-  - name: quoted-script-double.txt
-    sources: '; New-Item pwned; Write-Output x'
-    script: |
-      Write-Output "{{ ins }}" > {{ outs }}

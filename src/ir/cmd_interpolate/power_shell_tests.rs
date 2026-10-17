@@ -53,9 +53,13 @@ fn script_bindings() -> CommandBindings {
 #[case::doubled_double_quote(format!("Write-Output \"prefix \"\"{INS_TOKEN}\" > {OUTS_TOKEN}"))]
 #[case::single_quoted_here_string_input(format!("@'\n{INS_TOKEN}\n'@ > {OUTS_TOKEN}"))]
 #[case::single_quoted_here_string_output(format!("@'\n{OUTS_TOKEN}\n'@ > {INS_TOKEN}"))]
+#[case::single_quoted_here_string_space_after_opener(format!("@' \n{INS_TOKEN}\n'@"))]
+#[case::single_quoted_here_string_tab_after_opener(format!("@'\t\n{INS_TOKEN}\n'@"))]
 #[case::single_quoted_here_string_crlf(format!("@'\r\nbody ' quote {INS_TOKEN}\r\n'@"))]
 #[case::double_quoted_here_string_input(format!("@\"\n{INS_TOKEN}\n\"@ > {OUTS_TOKEN}"))]
 #[case::double_quoted_here_string_output(format!("@\"\n{OUTS_TOKEN}\n\"@ > {INS_TOKEN}"))]
+#[case::double_quoted_here_string_space_after_opener(format!("@\" \n{INS_TOKEN}\n\"@"))]
+#[case::double_quoted_here_string_tab_after_opener(format!("@\"\t\n{INS_TOKEN}\n\"@"))]
 #[case::double_quoted_here_string_crlf(format!("@\"\r\nbody \" quote {OUTS_TOKEN}\r\n\"@"))]
 #[case::single_quoted_here_string_after_literal_quote(format!("@'\nbody ' quote {INS_TOKEN}\n'@"))]
 #[case::double_quoted_here_string_after_literal_quote(format!("@\"\nbody \" quote {OUTS_TOKEN}\n\"@"))]
@@ -72,7 +76,7 @@ fn power_shell_scripts_reject_protected_markers(#[case] template: String) {
     );
 }
 
-/// Reject markers after comment syntax could desynchronise the partial scanner.
+/// Reject markers after comment syntax could desynchronize the partial scanner.
 #[rstest]
 #[case::comment_quote(format!("# '\nWrite-Output '{INS_TOKEN}'"))]
 #[case::comment_closes_substitution(format!(
@@ -186,6 +190,7 @@ fn posix_scripts_still_interpolate_quoted_markers(
     let actual = interpolate_script_with_bindings(&template, &bindings)
         .expect("POSIX script quoting keeps the marker inside one literal");
 
+    // `output' file.txt'` is the measured `Sh` encoding of the spaced path.
     assert_eq!(actual, expected);
 }
 
@@ -202,11 +207,32 @@ fn power_shell_scripts_track_here_string_terminators() {
     );
 
     let same_line_template = format!("@'\nbody\n'@; Write-Output {OUTS_TOKEN}");
-    let error = interpolate_script_with_bindings(&same_line_template, &script_bindings())
-        .expect_err("a here-string terminator must end its line before later markers");
-    assert!(
-        matches!(error, IrGenError::InvalidCommand { command, .. } if command == same_line_template)
+    let same_line_actual =
+        interpolate_script_with_bindings(&same_line_template, &script_bindings())
+            .expect("a here-string terminator may be followed by another command on its line");
+
+    assert_eq!(
+        same_line_actual,
+        "@'\nbody\n'@; Write-Output 'output file.txt'"
     );
+}
+
+/// Reject markers after here-string or braced-variable syntax the scanner cannot model.
+#[rstest]
+#[case::here_string_inside_command_substitution(format!(
+    "Write-Output $(@'\n'\n'@)') {OUTS_TOKEN} '"
+))]
+#[case::braced_variable_name(format!("Write-Output ${{a'b}} '{OUTS_TOKEN}'"))]
+fn power_shell_scripts_reject_markers_after_unmodelled_syntax(#[case] template: String) {
+    let bindings = CommandBindings::new(
+        &[],
+        &[Utf8PathBuf::from("; New-Item pwned; Write-Output x")],
+        RecipeShell::PowerShell,
+    );
+    let error = interpolate_script_with_bindings(&template, &bindings)
+        .expect_err("unmodelled PowerShell syntax must keep later markers protected");
+
+    assert!(matches!(error, IrGenError::InvalidCommand { command, .. } if command == template));
 }
 
 /// Fail closed when a comment quote changes the shared PowerShell quote state.

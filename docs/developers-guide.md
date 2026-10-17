@@ -5456,7 +5456,7 @@ constants, which `src/ir/mod.rs` re-exports for runner-facing direct IR recipe
 tests. The constants are not manifest markers, Ninja syntax, or a general token
 registry. The module also defines the `CommandBindings` path encodings, the
 `QuoteContext` classification, and the `find_substitution` marker recognizer.
-The sibling `src/ir/cmd_interpolate/substitution.rs` owns
+The sibling `src/ir/cmd_interpolate/substitution/mod.rs` owns
 `SubstitutionTraversal`, which walks one recipe and applies those bindings only
 after analysing its shell context. Keep this split private to `ir`; it is an
 implementation boundary, not a public command-template API.
@@ -5469,10 +5469,10 @@ heredoc delimiters are expanded. It queues declarations FIFO, including quoted
 delimiters and `<<-` tab-stripping delimiters, so their text cannot change the
 surrounding quote context. This is a command-interpolation helper, not a
 general shell parser, and is not intended for reuse outside that boundary. The
-sibling `src/ir/cmd_interpolate/powershell_lexical.rs` owns PowerShell quote,
-here-string, and fail-closed comment state. Its `PowerShellSourceCharacter`
-groups an offset with its source character only within that scanner; it is not
-a shared shell abstraction. The sibling
+sibling `src/ir/cmd_interpolate/substitution/powershell_lexical.rs` owns
+PowerShell quote, here-string, and fail-closed comment state. Its
+`PowerShellSourceCharacter` groups an offset with its source character only
+within that scanner; it is not a shared shell abstraction. The sibling
 `src/ir/cmd_interpolate/command_substitution.rs` owns the local quote and
 parenthesis state needed to keep protected `$()` bodies isolated.
 

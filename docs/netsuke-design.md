@@ -2910,9 +2910,8 @@ single-quoted literals and doubles embedded apostrophes. This automatic quoting
 applies only to Netsuke-owned `{{ ins }}` and `{{ outs }}` substitutions;
 arbitrary Jinja values and handwritten shell fragments remain the manifest
 author's responsibility. Unmatched-backtick checks and `shlex` command
-validation apply only to POSIX and Bash routes. PowerShell treats backticks as
-native escape syntax rather than interpolation-protection delimiters, so a
-marker immediately after one is rejected instead of being interpolated.
+validation apply only to POSIX and Bash routes. PowerShell backticks are escape
+characters, so a marker immediately after one is rejected.
 
 ### 6.3 Implementation Strategy
 
@@ -2938,7 +2937,7 @@ and double-quoted sites while rejecting protected command substitutions. The
 private `PowerShellLexicalState` in `powershell_lexical.rs` tracks here-string
 bodies and typographic-quote fail-closed state; it is not a general PowerShell
 parser or a shared shell API. Longer identifiers such as `$input` and
-non-placeholder text inside backticks, remain unchanged. In `command:` recipes
+non-placeholder text inside backticks remain unchanged. In `command:` recipes
 on the POSIX and Bash routes, unbalanced backticks or command text that `shlex`
 cannot parse produce an IR error before an action is hashed; `script:` recipes
 and the PowerShell route are outside that check. Ninja generation then receives

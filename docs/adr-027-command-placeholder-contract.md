@@ -2,37 +2,10 @@
 
 ## Status
 
-Accepted. The command placeholder set, the backtick handling boundary, and the
-scope of the `shlex` guard are fixed as stated below. Roadmap item 4.4.1
-carries them to users in the
-[README section](../README.md#security-and-command-interpolation) *Security and
-command interpolation* and in every translated README. This record explains the
-decisions behind that user-facing contract.
+Accepted.
 
-Revised on 2026-09-23. The first draft of this record described the placeholder
-set as differing by recipe kind, because `script:` recipes then lowered bare
-`$in` and `$out` to paths.
-[ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md) subsequently
-removed that lowering, so the set is now uniform. ADR-034 owns that decision;
-this record states the resulting contract and is revised to agree with it. The
-backtick and `shlex` decisions below are unaffected and were re-verified
-against the implementation on the revision date.
-
-Amended on 2026-10-12 for issue #846. A security finding showed that
-PowerShell's standalone single-quoted path literal is unsafe when inserted
-inside an existing string. Both PowerShell recipe kinds now use the same
-PowerShell-aware traversal and accept markers only at unquoted insertion sites.
-
-Amended on 2026-10-17 after review of the #846 fix. PowerShell treats
-typographic quote characters as string delimiters. Because the traversal does
-not model their pairing, it fails closed for later markers after encountering
-one. Path literals double every PowerShell single-quote delimiter, including
-typographic forms. A here-string terminator is accepted only at the start of a
-line when followed by a newline or the end of the template. Plain line-comment
-text does not poison later marker sites, but an unquoted block-comment opener
-or scanner-sensitive syntax inside a line comment makes later markers fail
-closed because the traversal does not parse comment text. In particular, an
-apostrophe in a comment can cause rejection.
+- Amended 2026-10-12 for issue #846.
+- Amended 2026-10-17 after review of the #846 fix.
 
 ## Date
 
@@ -134,8 +107,8 @@ such a recipe is rejected. PowerShell also rejects a marker immediately after a
 backtick because it escapes the following character. Substituting into a region
 the shell will re-evaluate cannot be made safe, so the rejection is policy. It
 is implemented by `SubstitutionTraversal::append_protected_character`
-(`src/ir/cmd_interpolate/substitution.rs`) and the POSIX/Bash script traversal
-(`append_substitution_or_character` in
+(`src/ir/cmd_interpolate/substitution/mod.rs`) and the POSIX/Bash script
+traversal (`append_substitution_or_character` in
 `src/ir/cmd_interpolate/script_substitution.rs`).
 
 **A conservative check, not promised.** A `command:` recipe whose substituted
