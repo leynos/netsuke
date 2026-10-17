@@ -2156,6 +2156,31 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
 
+- [x] (2026-10-18) **All eight gates passed against `f0a2831f`, which is the
+      review-response content plus one lint repair, and the earlier batch that
+      went red on that repair is superseded.** The first batch against
+      `fbeafee7` passed seven gates and failed `make lint` at the Whitaker leg:
+      `module scan_coverage must start with an inner doc comment`. Whitaker
+      wants a `//!` as the module's first item, and the outer `///` above the
+      `mod` does not satisfy it. That rule had never fired before because every
+      earlier lint run aborted earlier in the recipe — the `EP-M5` Clippy
+      errors, then the `src/ninja_gen/order.rs` shadow-reuse errors — so the
+      Whitaker leg had not reached this file since it was written. The module
+      comment is now inner, `make lint-whitaker` was confirmed clean on its
+      own, and `f0a2831f` carries the fix. The re-run, sequentially against
+      that exact commit: `check-fmt` (2 s), `lint` (35 s, Whitaker over both
+      `netsuke-build` and `test_support`, Pylint 10.00/10 twice, `interrogate`
+      100%), `doc-coverage` (7 s, 98.89%, 5,079 of 5,136), `test` (97 s,
+      nextest 4,110 of 4,110 with 6 skipped, doctests 162 passed and 32
+      ignored across 29 targets), `markdownlint` (16 s, 186 files, 0 issues),
+      `nixie` (all diagrams), `test-workflow-contracts` (94 s, 1,317 passed and
+      3 skipped, plus 27) and `test-documentation-contracts` (14 passed, 42
+      skipped). HEAD and `git status --porcelain` were identical before the
+      first gate and after the last, so the batch binds to that commit. No
+      `launch-failed`, `refused`, `UNHEALTHY` or non-benign `build-limits` line
+      appeared in any log. Logs are
+      `/tmp/<gate>-netsuke-4-3-1-epm5-crgate2-<gate>.out`.
+
 - [x] (2026-10-17) **The `EP-M5` CodeRabbit pass returned ten findings and no
       critical or major one; seven distinct defects were accepted and fixed,
       and two re-phrasings were the same defect stated twice.** The pass ran
