@@ -358,10 +358,10 @@ scanning for a literal hash map while ignoring the sort would miss the hazard.
   definition is chosen by `#[cfg(kani)]` (`src/ir/graph/mod.rs`). The domain
   model does not fully own its own representation. Recorded, not fixed.
 - **`default_targets` may repeat.** `process_defaults`
-  (`process_defaults`) extends without deduplication and `Vec::sort` does not
-  deduplicate, so a manifest naming one default twice emits that operand twice.
-  The behaviour is deliberate — it is the manifest's own ordering, sorted — but
-  it surprises readers, and the obligation pins it.
+  (`src/ir/from_manifest/mod.rs`) extends without deduplication and `Vec::sort`
+  does not deduplicate, so a manifest naming one default twice emits that
+  operand twice. The behaviour is deliberate — it is the manifest's own
+  ordering, sorted — but it surprises readers, and the obligation pins it.
 
 ## Amendments
 
