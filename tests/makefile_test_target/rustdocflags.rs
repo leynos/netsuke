@@ -7,19 +7,36 @@
 //! unsupported name, preventing Cargo from warning about it. The Unix
 //! behavioural test exercises that real Make-to-Cargo boundary with a fake
 //! Cargo executable; static checks keep the safe export shape intact.
+//!
+//! Those behavioural tests inject the build-tools boundary. `doctest` depends
+//! on `check-build-tools`, so a test that ran Make against the ambient host
+//! would cross the real capability preflight and fail on any machine without
+//! the pinned `mold` — reporting a linker fault when its subject is
+//! `RUSTDOCFLAGS` propagation, and telling a reader nothing about RUSTDOCFLAGS
+//! when it did so. The sandbox supplies a fake `mold` at the committed pin and
+//! a fake `rustup`, so these tests reach the fake Cargo on a host with neither
+//! tool. Real-preflight validation belongs to `build_tools_check_tests.rs` and
+//! `build_tools_pin_tests.rs`; the `doctest` case added to the former is what
+//! holds the prerequisite relation this module deliberately stops depending on.
 
 use super::{read_repo_file, target_recipe};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 
 #[cfg(unix)]
-use assert_cmd::Command;
+use camino::Utf8PathBuf;
 #[cfg(unix)]
 use proptest::prelude::*;
 #[cfg(unix)]
-use std::path::{Path, PathBuf};
+use rstest::rstest;
 #[cfg(unix)]
-use tempfile::tempdir;
+use std::io::ErrorKind;
+#[cfg(unix)]
+use std::path::Path;
+#[cfg(unix)]
+use test_support::build_tools::{
+    MakeInvocation, Sandbox, combined, pinned_mold_version, pinned_toolchain,
+};
 #[cfg(unix)]
 use test_support::{fs, write_exec_with_content};
 
@@ -33,6 +50,10 @@ const RUSTDOCFLAGS_EXPORT: &str = "export RUSTDOCFLAGS := $(value RUSTDOC_FLAGS)
 /// An override whose shell-sensitive values must reach Rustdoc unchanged.
 #[cfg(unix)]
 const SHELL_SENSITIVE_RUSTDOC_FLAGS: &str = r#"--cfg marker="price$5 \"path\\name\"; &"#;
+
+/// The variable naming the file the fake Cargo records into.
+#[cfg(unix)]
+const ENVIRONMENT_LOG: &str = "RUSTDOC_ENVIRONMENT_LOG";
 
 /// Describe one caller-supplied Rustdoc override source and value.
 #[cfg(unix)]
@@ -117,40 +138,88 @@ fn behavioural_makefile_never_exports_or_shell_expands_rustdoc_flags() -> Result
     Ok(())
 }
 
-/// Run `doctest` with a caller-supplied Rustdoc override through one source.
+/// A `doctest` run whose build-tools prerequisite is satisfied by fakes.
+///
+/// The sandbox supplies the `mold` and `rustup` that `check-build-tools`
+/// demands, so the recipe reaches the fake Cargo however the host is
+/// provisioned. See the module comment for why that boundary is injected
+/// rather than crossed.
 #[cfg(unix)]
-fn run_doctest_with_override(
-    fake_cargo: &Path,
-    log: &Path,
-    override_config: &RustdocOverride<'_>,
-) -> Result<String> {
-    let mut make = Command::new("make");
-    make.current_dir(env!("CARGO_MANIFEST_DIR"))
-        .arg("--no-print-directory")
-        .arg("-f")
-        .arg("Makefile")
-        .env("CARGO", fake_cargo)
-        .env("RUSTDOC_ENVIRONMENT_LOG", log);
-    if override_config.command_line {
-        make.arg(format!("RUSTDOC_FLAGS={}", override_config.rustdoc_flags));
-    } else {
-        make.env("RUSTDOC_FLAGS", override_config.rustdoc_flags);
-    }
-    make.arg("doctest");
+struct DoctestHarness {
+    /// The hermetic `PATH` and `HOME`, and the install prefix mold sits under.
+    sandbox: Sandbox,
+    /// The fake Cargo, which records what the recipe exported to it.
+    cargo: Utf8PathBuf,
+    /// Where that fake writes its record; rewritten on every invocation.
+    log: Utf8PathBuf,
+}
 
-    let output = make.output().with_context(|| {
-        format!(
-            "run doctest with a {} Rustdoc override",
-            override_config.source
-        )
-    })?;
-    ensure!(
-        output.status.success(),
-        "doctest with a {} override should call fake Cargo successfully: {}",
-        override_config.source,
-        String::from_utf8_lossy(&output.stderr)
-    );
-    fs::read_to_string(log).context("read fake Cargo environment log")
+#[cfg(unix)]
+impl DoctestHarness {
+    /// Build a sandbox holding the fake Cargo and both pinned tools.
+    fn new() -> Result<Self> {
+        let sandbox = Sandbox::new()?;
+        // Mold goes under the install prefix, which the Makefile puts first on
+        // `PATH` and which `check-build-tools` reports the resolved path of.
+        sandbox.write_mold(&sandbox.prefix().join("bin"), &pinned_mold_version()?)?;
+        sandbox.write_rustup(&pinned_toolchain()?)?;
+        let cargo = write_fake_cargo(sandbox.bin().as_std_path())?;
+        let log = sandbox.home().join(ENVIRONMENT_LOG);
+        Ok(Self {
+            sandbox,
+            cargo,
+            log,
+        })
+    }
+
+    /// Run `doctest` with one caller-supplied Rustdoc override.
+    ///
+    /// Returns the fake Cargo's record of what the recipe handed it. The log
+    /// is removed first, so a record read here is always this run's: the fake
+    /// truncates what it writes, and removing the file additionally means a
+    /// run that never reached Cargo fails rather than reporting the previous
+    /// case's values.
+    fn run(&self, override_config: &RustdocOverride<'_>) -> Result<String> {
+        discard_log(&self.log)?;
+        let mut invocation = MakeInvocation::new("doctest")
+            .variable("CARGO", &self.cargo)
+            .environment(ENVIRONMENT_LOG, &self.log);
+        // Both routes must stay: the distinction between a Make command-line
+        // assignment and an environment value is what this test exists to
+        // hold.
+        invocation = if override_config.command_line {
+            invocation.variable("RUSTDOC_FLAGS", override_config.rustdoc_flags)
+        } else {
+            invocation.environment("RUSTDOC_FLAGS", override_config.rustdoc_flags)
+        };
+
+        let output = self.sandbox.run_make(&invocation).with_context(|| {
+            format!(
+                "run doctest with a {} Rustdoc override",
+                override_config.source
+            )
+        })?;
+        // The whole of both streams, not just stderr: a Make failure reports
+        // its cause on whichever stream the recipe used, and a reader of this
+        // message has only the message.
+        ensure!(
+            output.status.success(),
+            "doctest with a {} override should call fake Cargo successfully: {}",
+            override_config.source,
+            combined(&output)
+        );
+        fs::read_to_string(self.log.as_std_path()).context("read fake Cargo environment log")
+    }
+}
+
+/// Remove a previous run's environment log, tolerating its absence.
+#[cfg(unix)]
+fn discard_log(log: &Utf8Path) -> Result<()> {
+    match fs::remove_file(log.as_std_path()) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("remove stale {log}")),
+    }
 }
 
 /// Assert that Cargo receives the exact supported Rustdoc configuration.
@@ -192,9 +261,13 @@ fn assert_doctest_record(record: &str, rustdoc_flags: &str, source: &str) -> Res
 }
 
 /// Create a Cargo stand-in that records its environment and arguments.
+///
+/// The recipe reaches this through the `CARGO` Make variable, so it needs no
+/// name on `PATH`; it is placed in the sandbox `bin` because that is a
+/// directory the harness already owns.
 #[cfg(unix)]
-fn write_fake_cargo(directory: &Path) -> Result<PathBuf> {
-    write_exec_with_content(
+fn write_fake_cargo(directory: &Path) -> Result<Utf8PathBuf> {
+    let stub = write_exec_with_content(
         directory,
         "cargo",
         concat!(
@@ -207,7 +280,9 @@ fn write_fake_cargo(directory: &Path) -> Result<PathBuf> {
             "} > \"$RUSTDOC_ENVIRONMENT_LOG\"\n"
         ),
     )
-    .context("write fake Cargo executable")
+    .context("write fake Cargo executable")?;
+    Utf8PathBuf::from_path_buf(stub)
+        .map_err(|non_utf8| anyhow::anyhow!("fake Cargo path {} is not UTF-8", non_utf8.display()))
 }
 
 /// Generate valid, shell-sensitive Rustdoc overrides with bounded entropy.
@@ -217,22 +292,24 @@ fn rustdoc_flags_strategy() -> impl Strategy<Value = String> {
 }
 
 #[cfg(unix)]
-#[test]
-fn behavioural_doctest_passes_shell_sensitive_overrides_only_as_rustdocflags() -> Result<()> {
-    let temporary = tempdir().context("create fake Cargo directory")?;
-    let log = temporary.path().join("cargo-environment.log");
-    let fake_cargo = write_fake_cargo(temporary.path())?;
-
-    for (source, command_line) in [("environment", false), ("command line", true)] {
-        let override_config = RustdocOverride {
-            rustdoc_flags: SHELL_SENSITIVE_RUSTDOC_FLAGS,
-            source,
-            command_line,
-        };
-        let record = run_doctest_with_override(&fake_cargo, &log, &override_config)?;
-        assert_doctest_record(&record, SHELL_SENSITIVE_RUSTDOC_FLAGS, source)?;
-    }
-    Ok(())
+#[rstest]
+#[case("environment", false)]
+#[case("command line", true)]
+fn behavioural_doctest_passes_shell_sensitive_overrides_only_as_rustdocflags(
+    #[case] source: &'static str,
+    #[case] command_line: bool,
+) -> Result<()> {
+    // One sandbox per case rather than per test: each case is an independent
+    // claim about one override route, and a shared log would let a case that
+    // never reached Cargo read the other case's record.
+    let harness = DoctestHarness::new()?;
+    let override_config = RustdocOverride {
+        rustdoc_flags: SHELL_SENSITIVE_RUSTDOC_FLAGS,
+        source,
+        command_line,
+    };
+    let record = harness.run(&override_config)?;
+    assert_doctest_record(&record, SHELL_SENSITIVE_RUSTDOC_FLAGS, source)
 }
 
 #[cfg(unix)]
@@ -243,9 +320,9 @@ proptest! {
     fn property_doctest_preserves_rustdoc_override_values(
         rustdoc_flags in rustdoc_flags_strategy(),
     ) {
-        let temporary = tempdir().expect("create fake Cargo directory");
-        let log = temporary.path().join("cargo-environment.log");
-        let fake_cargo = write_fake_cargo(temporary.path()).expect("write fake Cargo executable");
+        // A harness per case: building the sandbox is the expensive part of
+        // this test, and 16 cases × 2 sources would otherwise stage 32.
+        let harness = DoctestHarness::new().expect("build the doctest harness");
 
         for (source, command_line) in [("environment", false), ("command line", true)] {
             let override_config = RustdocOverride {
@@ -253,12 +330,9 @@ proptest! {
                 source,
                 command_line,
             };
-            let record = run_doctest_with_override(
-                &fake_cargo,
-                &log,
-                &override_config,
-            )
-            .expect("run doctest through fake Cargo");
+            let record = harness
+                .run(&override_config)
+                .expect("run doctest through fake Cargo");
             assert_doctest_record(&record, &rustdoc_flags, source)
                 .expect("preserve the Rustdoc override in Cargo's environment");
         }

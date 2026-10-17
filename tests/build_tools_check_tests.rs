@@ -244,9 +244,16 @@ fn unusable_prerequisites_fail_with_an_actionable_message(#[case] case: FailureC
 /// Both are installed rather than left absent. Inferring "it did not run" from
 /// an empty `PATH` would also hold for a recipe that invoked the binary and
 /// swallowed the failure, which is a different and much worse bug.
+///
+/// `doctest` is in this list rather than only in the sibling suite that also
+/// covers it, because the rustdoc-override tests in `makefile_test_target`
+/// inject this boundary and so no longer exercise the real prerequisite. This
+/// case is what holds it: a missing mold must stop `make doctest` before the
+/// fake Cargo runs, which is the failure that left the mutation baseline red.
 #[rstest]
 #[case("build")]
 #[case("test-nextest")]
+#[case("doctest")]
 #[case("lint-clippy")]
 #[case("lint-whitaker")]
 #[case("typecheck")]
