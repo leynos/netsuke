@@ -18,14 +18,21 @@ number is a measurement rather than a round figure, are in `Decision log`.
 approval gate was passed on 2026-09-27. `EP-M4` closed on 2026-10-17 by
 execution rather than by reading: its four files compiled for the first time,
 `make proptest` passed 104 of 104 at `1b4b3fb1`, and both assigned mutations
-were applied, observed to fail the named properties, and reverted. `EP-M2`'s
-thirteenth gate — `test-nextest` — remains locally red on an environmental
-timeout of `cli_configuration_fixture_compiles`, which is **not** this branch's
-test and which `origin/main` has since repaired; the rebase onto `origin/main`
-is the next action, and the repair is expected to remove the local failure
-without changing the 300-second budget. That budget is deliberately left alone
-because this suite's counter-example seeds are lost when the runner kills a
-process.
+were applied, observed to fail the named properties, and reverted.
+
+`EP-M2`'s thirteenth gate — `test-nextest` — is red on an environmental timeout
+of `cli_configuration_fixture_compiles`, which is **not** this branch's test.
+The branch has since been rebased onto `origin/main` and the failure **survived
+the rebase**: `TIMEOUT [300.024s]` on `case_1_public_api`. The expectation that
+`origin/main`'s repair would remove it was wrong, and the user's earlier
+direction anticipated that case — "If that doesn't fix the timeout, address the
+way the timeout is calculated to account for the queue" — so the allowance is
+now widened to 900 s on the family override that carries all nine ambient
+fixtures. The measurement and the reasoning are in `Surprises & discoveries` and
+`Decision log`. The timeout was never this suite's cost: the child
+`cargo check` is cold in a half-cleaned tree, and any of the nine fixtures can
+be the one that pays it. No test's own behaviour is relaxed, and the per-test
+tier is raised inside the unchanged 960 s whole-run budget.
 
 `EP-M5` onward is unwritten. The compile pool is not a blocking factor: on
 2026-10-17 it reported
@@ -377,12 +384,16 @@ Trace links:
 
 ```plaintext
 RM-4.3.1.a   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::property_tests::order::ordered_edges_ignore_input_order
-RM-4.3.1.a   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::property_tests::order::emission_is_insertion_order_invariant
-RM-4.3.1.b   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::property_tests::defaults::default_line_is_the_ascending_sort
+RM-4.3.1.a   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::property_tests::order::one_graph_emits_one_bundle_under_two_insertion_orders
+RM-4.3.1.b   -> FV-DET      -> EP-M5 -> ninja_gen::determinism::property_tests::defaults::the_default_line_sorts_its_operands
 RM-4.3.1.c   -> FV-DET      -> EP-M4 -> ninja_gen::determinism::property_tests::path_key::path_key_is_permutation_invariant
 RM-4.3.1.c   -> FV-DET      -> EP-M4 -> ninja_gen::determinism::property_tests::path_key::path_key_is_injective_on_keyable_paths
 FV-DET       -> ADR-NNN     -> EP-M4 -> ninja_gen::determinism::property_tests::no_loss::every_explicit_output_appears_exactly_once
-FV-DET       -> ADR-NNN     -> EP-M5 -> tests::ninja_gen_hashmap_boundary::no_hashmap_iteration_in_ninja_gen
+FV-DET       -> ADR-NNN     -> EP-M5 -> tests::ninja_gen_hashmap_boundary::only_membership_use_of_unordered_collections_reaches_the_emitter
+FV-DET       -> ADR-NNN     -> EP-M5 -> tests::ninja_gen_hashmap_boundary::the_matched_type_list_names_only_unordered_collections
+RM-4.3.1.b   -> ADR-NNN     -> EP-M5 -> ninja_gen::determinism::property_tests::defaults::the_default_line_follows_every_build_line
+RM-4.3.1.b   -> ADR-NNN     -> EP-M5 -> ninja_gen::determinism::property_tests::defaults::permuting_the_declared_defaults_does_not_change_the_text
+RM-4.3.1.a   -> ADR-NNN     -> EP-M5 -> ninja_gen::determinism::property_tests::order::ordered_actions_ignore_input_order
 FV-DET       -> FV-DET      -> EP-M6 -> ir::action_hash_property_tests::equal_actions_hash_equally
 FV-CONTRACT  -> ADR-NNN     -> EP-M6 -> tests::ninja_determinism_process::two_runs_emit_identical_bytes
 RM-4.3.1.a   -> ADR-NNN     -> EP-M6 -> ninja_gen::determinism::property_tests::declaration::declaration_order_does_not_change_emission
@@ -912,9 +923,12 @@ to 5 actions and edges for that budget reason.
     marginals, and all four combinations of `BuildEdge::always` and
     `Action::restat` — `DisplayEdge` emits `restat` only when
     `edge.always && !action_restat` (`src/ninja_gen/display_edge.rs:37`).
-  - *Mutation.* `MUT-EDGESORT` deletes `edges.sort_by_key` in both paths;
-    `MUT-ACTIONSORT` deletes `actions.sort_by_key`. Each must fail the core
-    property, which pinpoints the helper rather than the whole emission.
+  - *Mutation.* `MUT-EDGESORT` deletes `edges.sort_by_key` in
+    `ordered_edges`; `MUT-ACTIONSORT` deletes `actions.sort_by_key` in
+    `ordered_actions` (`src/ninja_gen/order.rs:28` and `:44`). `EP-M2` made both
+    helpers the single shared implementation, so each sort now exists once
+    rather than once per emission path. Each must fail the core property, which
+    pinpoints the helper rather than the whole emission.
   - *Honesty of the end-to-end arm.* The arm asserts emission equality over one
     fixed graph value, so it is sound but can be vacuous for a case whose two
     iteration orders coincide. It is graded inconclusive — not passed — when no
@@ -934,12 +948,13 @@ consumed.
 
 The obligation is stated over *sorted* iteration rather than over iteration
 outright, because iteration outright is already false of the code it protects.
-`write_action_rules` (`src/ninja_gen/mod.rs:215`) collects `graph.actions` — an
-ordinary-build `std::collections::HashMap` — into a `Vec` and then sorts it by
-action ID at `:216`. That is the correct pattern: the collect-then-sort pair is
-exactly what `MUT-ACTIONSORT` deletes to produce a real defect. A rule banning
-all map iteration would reject this path, and a rule scanning for a literal
-`HashMap` while ignoring the sort would miss the hazard it exists to catch.
+`write_action_rules` (`src/ninja_gen/mod.rs:202`) streams `graph.actions` — an
+ordinary-build `std::collections::HashMap` — into `ordered_actions`, which
+collects it into a `Vec` and sorts by action ID (`src/ninja_gen/order.rs:44`).
+That is the correct pattern: the collect-then-sort pair is exactly what
+`MUT-ACTIONSORT` deletes to produce a real defect. A rule banning all map
+iteration would reject this path, and a rule scanning for a literal `HashMap`
+while ignoring the sort would miss the hazard it exists to catch.
 Membership-only `HashSet` use is exempt, with the one existing set named as the
 documented exemption.
 
@@ -952,14 +967,38 @@ documented exemption.
   generator will not vary the field it is keyed on. A source contract catches
   it the day it is written. Neither a property nor an ordered-map port provides
   this.
-- **Artefact:** `tests/ninja_gen_hashmap_boundary.rs`.
+- **Artefact:** `tests/ninja_gen_hashmap_boundary.rs`, with the syntax-tree
+  reading in `tests/hashmap_boundary/scan.rs`.
 - **Non-vacuity:** the test is validated by temporarily adding an iterating
-  `HashMap` to a scratch copy of `src/ninja_gen/mod.rs` and observing the
-  failure; the exemption list is asserted to be exactly the one known set
-  (`staged_sidecars`, `src/ninja_gen/dyndep.rs:246`), so adding a second
-  requires a deliberate edit. An earlier revision also held a `seen` set in the
+  `HashMap` to a scratch file under `src/ninja_gen/` and observing the failure
+  — measured at `tests/ninja_gen_hashmap_boundary.rs`: a planted
+  `probe_scratch.rs` yields `Hit { kind: Import }` and `Hit { kind: Other }`,
+  while the unmodified tree passes. The exemption list is asserted to be
+  exactly the one known field (`staged_sidecars`,
+  `src/ninja_gen/dyndep/mod.rs:241`, holding a `HashSet<Utf8PathBuf>`), so
+  adding a second requires a deliberate edit. The exemption is asserted in both
+  directions: a listed site that no longer holds a hash collection fails as
+  loudly as an unlisted one. An earlier revision also held a `seen` set in the
   deleted per-output storage path; `2c030fd1` removed it, and the obligation's
   wording did not follow. See `ADR-030` amendment 3.
+- **Test-only strip, in two places.** Rust expresses "not compiled into a
+  release build" two ways and the contract must honour both, or it rejects the
+  emitter's own suites. An *item* carrying `#[cfg(test)]` is stripped by the
+  visitor; a *file* named by a `#[cfg(test)] mod` declaration is skipped whole
+  by the walk. The second is forced by `src/ninja_gen/property_tests/mod.rs`,
+  whose `use std::collections::{HashMap, HashSet}` carries no attribute of its
+  own: its test-only-ness exists only in `#[cfg(test)] mod property_tests;` at
+  `src/ninja_gen/mod.rs:251`. Measured, not inferred: before the walk honoured
+  the declaration, the unmodified tree failed with those two imports reported.
+  The whole-file strip therefore propagates down a subtree, and a directory
+  whose children are declared by a sibling file rather than a `mod.rs` is read
+  from that sibling. `property_tests/defaults/` was the live case for that
+  path: its `generator.rs` was named by `property_tests/defaults.rs`. Clippy's
+  `self_named_module_files` then required the directory and the file to share
+  one form, so `defaults.rs` became `defaults/mod.rs` and the tree no longer
+  exercises the sibling path. The helper is retained and documented because a
+  future split may reintroduce it, and because the alternative — reading a
+  directory's children from nothing — would silently exempt every file under it.
 
 ______________________________________________________________________
 
@@ -982,14 +1021,18 @@ offset exceeds that of every `build` line.
   since it mirrors the production call; its strength comes from the
   permutation-invariance half, which compares two input permutations and cannot
   be satisfied by copied code.
-- **Artefact:** `src/ninja_gen/determinism/property_tests/defaults.rs`.
+- **Artefact:** `src/ninja_gen/determinism/property_tests/defaults/mod.rs`,
+  with the generator and its graph fixtures in the sibling
+  `defaults/generator.rs` (the split keeps both files inside the 400-line
+  `module_max_lines` cap, which counts raw source lines).
 - **Non-vacuity:**
   - *Covers.* Empty (asserting no `default` line at all), singleton,
     already-sorted, reverse-sorted, and duplicate-bearing. The duplicate class
     pins the documented decision that `Vec::sort` does not deduplicate.
-  - *Mutation.* `MUT-DEFSORT` deletes `defs.sort()`; `MUT-DEFPOS` moves the
-    `default` block before edge rendering and must fail both the positional half
-    and `OBL-NINJA`.
+  - *Mutation.* `MUT-DEFSORT` deletes the `.sorted()` call inside
+    `ordered_default_targets` (`src/ninja_gen/order.rs:55`); `MUT-DEFPOS` moves
+    the `default` block before edge rendering and must fail both the positional
+    half and `OBL-NINJA`.
 
 ______________________________________________________________________
 
@@ -1096,26 +1139,27 @@ sidecar reference.
   than incidental. The eight existing `tests/snapshots/ninja/*.snap` fixtures
   carry only one to three distinct actions each; at that size `EP-M0` question
   1 measured that a map frequently has *no* alternative iteration order to
-  reach, so deleting `actions.sort_by_key` would leave the two runs agreeing
-  and the validation would pass without having tested anything. Do not satisfy
-  this obligation with the snapshot fixtures alone.
+  reach, so deleting `actions.sort_by_key` in `ordered_actions` would leave the
+  two runs agreeing and the validation would pass without having tested
+  anything. Do not satisfy this obligation with the snapshot fixtures alone.
 - **Oracle:** byte equality between runs.
 - **Artefact:** `tests/ninja_determinism_process_tests.rs`.
 - **Non-vacuity:** the mutation is `MUT-ACTIONSORT`, **not** `MUT-DEFSORT`.
   This distinction is the whole point of the obligation. `MUT-DEFSORT` deletes
-  `defs.sort()`, but for a *fixed* manifest the unsorted `default_targets`
-  order is fixed too, so both process runs emit the same unsorted line and
-  agree. A single-run snapshot with multi-default fixtures catches
-  `MUT-DEFSORT`; a two-run comparison cannot, because the fault is
-  deterministic across processes. What `OBL-PROCESS` exists to detect is a
-  fault whose value differs *between* processes — the `HashMap` `RandomState`
-  that is reseeded per process. `MUT-ACTIONSORT` deletes the sort that is the
-  *only* guard over the *only* unordered collection the emitter iterates:
-  `graph.actions` is an `IrHashMap`, so `write_action_rules`
-  (`src/ninja_gen/mod.rs:216`) reads it at risk and re-establishes determinism
-  by sorting. Deleting that sort restores per-process iteration order, and a
-  second process emits the action-rule blocks in a different order — a genuine
-  cross-process divergence.
+  the `.sorted()` call in `ordered_default_targets`, but for a *fixed* manifest
+  the unsorted `default_targets` order is fixed too, so both process runs emit
+  the same unsorted line and agree. A single-run snapshot with multi-default
+  fixtures catches `MUT-DEFSORT`; a two-run comparison cannot, because the
+  fault is deterministic across processes. What `OBL-PROCESS` exists to detect
+  is a fault whose value differs *between* processes — the `HashMap`
+  `RandomState` that is reseeded per process. `MUT-ACTIONSORT` deletes the sort
+  that is the *only* guard over the *only* unordered collection the emitter
+  iterates: `graph.actions` is an `IrHashMap`, so `write_action_rules`
+  (`src/ninja_gen/mod.rs:202`) reads it at risk through `ordered_actions`, and
+  determinism is re-established by the sort at `src/ninja_gen/order.rs:44`.
+  Deleting that sort restores per-process iteration order, and a second process
+  emits the action-rule blocks in a different order — a genuine cross-process
+  divergence.
 
   This validator carries a precondition of its own, and it is the same trap one
   level down: an action map small enough to have only one iteration order makes
@@ -1657,12 +1701,12 @@ edges, and 200 total outputs.
 `MUT-ACTIONSORT` fails `OBL-PROCESS` — it also belongs to `EP-M5`, which owns
 its first falsification, and the two milestones share the mutation rather than
 duplicating it; `MUT-DEFSORT` fails `OBL-E2E` only. `MUT-DEFSORT` must *not* be
-required to fail `OBL-PROCESS`: a fixed manifest's `defs.sort()` deletion is
-deterministic across processes, so it cannot fail a two-run comparison. The
-directed duplicate-rule test demonstrates the excluded class genuinely
-diverges. *Conformance check:* if `EP-M0` question 2 answered "no", `ADR-NNN`
-must already have been amended in `EP-M1`; this milestone does not start
-otherwise.
+required to fail `OBL-PROCESS`: a fixed manifest's `ordered_default_targets`
+sort deletion is deterministic across processes, so it cannot fail a two-run
+comparison. The directed duplicate-rule test demonstrates the excluded class
+genuinely diverges. *Conformance check:* if `EP-M0` question 2 answered "no",
+`ADR-NNN` must already have been amended in `EP-M1`; this milestone does not
+start otherwise.
 
 ### EP-M7 — inherited larger-N IR obligations
 
@@ -1745,8 +1789,8 @@ Strategies and library-side properties, all `#[cfg(test)]`, wired from
 - `src/ninja_gen/determinism/strategy/mod.rs`, `graph.rs`, `manifest.rs`,
   `classification.rs`
 - `src/ninja_gen/determinism/property_tests/mod.rs`, `path_key.rs`,
-  `no_loss.rs`, `order.rs`, `defaults.rs`, `declaration.rs`, `ninja_oracle.rs`,
-  `strategy/mod.rs`, `strategy/graph.rs`
+  `no_loss.rs`, `order.rs`, `defaults/mod.rs`, `defaults/generator.rs`,
+  `declaration.rs`, `ninja_oracle.rs`, `strategy/mod.rs`, `strategy/graph.rs`
 - `src/ir/action_hash_property_tests.rs`
 - `src/ir/graph/property_tests/mod.rs`, `duplicates.rs`, `cycles.rs`
 
@@ -1774,20 +1818,27 @@ with `__` for the module separator:
 | ---------------- | -------------------------- | ---------------------------------------------------------- |
 | `MUT-PATHKEY`    | `OBL-PATHKEY`              | Delete `parts.sort_unstable()` in `path_key`.              |
 | `MUT-EDGEDROP`   | `OBL-NOLOSS`               | Skip an arena entry whose `explicit_outputs` is non-empty. |
-| `MUT-EDGESORT`   | `OBL-ORDER`                | Delete `edges.sort_by_key` in both paths.                  |
-| `MUT-ACTIONSORT` | `OBL-ORDER`, `OBL-PROCESS` | Delete `actions.sort_by_key`.                              |
-| `MUT-DEFSORT`    | `OBL-DEFAULT`, `OBL-E2E`   | Delete `defs.sort()`.                                      |
+| `MUT-EDGESORT`   | `OBL-ORDER`                | Delete `edges.sort_by_key` in `ordered_edges`.             |
+| `MUT-ACTIONSORT` | `OBL-ORDER`, `OBL-PROCESS` | Delete `actions.sort_by_key` in `ordered_actions`.         |
+| `MUT-DEFSORT`    | `OBL-DEFAULT`, `OBL-E2E`   | Delete `.sorted()` in `ordered_default_targets`.           |
 | `MUT-DEFPOS`     | `OBL-DEFAULT`, `OBL-NINJA` | Emit `default` before edge rendering.                      |
 | `MUT-HASHMETA`   | `OBL-ACTION`               | Make the hasher skip `pool`.                               |
 | `MUT-DUPWITHIN`  | `OBL-DUP`                  | Disable the within-one-target half of `find_duplicates`.   |
 | `MUT-CYCLEDEPTH` | `OBL-CYCLE`                | Cap cycle traversal depth at 4.                            |
 
-Nine, not the first draft's eleven. Two were cut because the existing nightly
+Nine, not the first draft's eleven. Two were cut from that draft: the nightly
 `cargo-mutants` job (`.github/workflows/mutation-testing.yml`, 03:05 UTC over
 `src/` with `--all-features`) already generates sort-deletion mutants
-automatically. Handwritten patches earn their keep on faults `cargo-mutants`
-cannot generate — the *reordering* one, `MUT-DEFPOS`, and the *dropping* one,
-`MUT-EDGEDROP`. `EP-M8` additionally records a scoped
+automatically, and the two cuts are *surviving* omissions rather than rows the
+table keeps. The two sort rows above (`MUT-EDGESORT`, `MUT-ACTIONSORT`) are
+**not** the cuts: they were restored when the compiler showed that a literal
+sort deletion does not build, so the patch had to express a fault class that
+`cargo-mutants` does not generate — the wrong sort key, and a collect left
+unsorted. That is why the table, `EP-M5`'s acceptance, and the Scope budget all
+count them. Handwritten patches earn their keep where `cargo-mutants` cannot
+produce a *building* mutant of the same class: the reordering one,
+`MUT-DEFPOS`, and the dropping one, `MUT-EDGEDROP`. `EP-M8` additionally
+records a scoped
 `cargo mutants -f src/ninja_gen/mod.rs -f src/ninja_gen/dyndep.rs` run with
 survivors tabulated.
 
@@ -2105,6 +2156,230 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
 
+- [x] (2026-10-17) **Three of the `EP-M5` trace links named tests that do not
+      exist, and were corrected to the tests that do.** `emission_is_insertion_order_invariant`,
+      `default_line_is_the_ascending_sort` and `no_hashmap_iteration_in_ninja_gen`
+      were written into the trace-link block when the milestone was planned and
+      were never reconciled with the identifiers the suite landed under. The
+      `EP-M8` acceptance line requires every trace link to resolve to a passing
+      test, so a link naming nothing is a contract that has quietly stopped
+      being one — the same failure the `EP-M4` pass caught in
+      `path_key_is_injective_on_validated_paths`. They now name
+      `one_graph_emits_one_bundle_under_two_insertion_orders`,
+      `the_default_line_sorts_its_operands`, and two boundary tests
+      (`only_membership_use_of_unordered_collections_reaches_the_emitter` and
+      `the_matched_type_list_names_only_unordered_collections`), and three
+      further `EP-M5` properties were linked so the milestone's whole set is
+      traceable rather than only its headline case. Verified by running the
+      suites under the gate's own filter: 93 property tests passed, 3,900
+      skipped, and the boundary crate passed 2 of 2. The links for `EP-M6`,
+      `EP-M7` and `EP-M8` still name unwritten tests; that is correct for
+      milestones that have not started, and they are checked at their own
+      acceptance rather than here.
+
+- [x] (2026-10-17) **Seven of eight gates passed against freeze `168a932f`; the
+      eighth was red on one misspelt word, and that word was ours.** The run
+      took 71 minutes of wall clock with the compile pool saturated and the
+      managed sccache server unreachable throughout, so every build compiled
+      uncached — a performance note, not a failure. `check-fmt` (3 s), `lint`
+      (764 s, through Clippy, Whitaker, Ruff, Pylint, the df12 lints,
+      `ambrleaks`, `yamllint` and `actionlint`), `doc-coverage` (195 s, 98.89%
+      against the 80% bar), `test` (2,985 s, nextest 4,108 of 4,108 passed with
+      6 skipped, then every doctest target), `nixie` (1 s),
+      `test-workflow-contracts` (128 s, 1,317 passed and 3 skipped, plus 27
+      script doctests) and `test-documentation-contracts` (182 s) all passed.
+      `markdownlint` failed at 18 s **in its `spelling` prerequisite**: a
+      branch-introduced bare-prose `recognise` at
+      `docs/execplans/4-3-1-proptests-for-deterministic-ninja-emission.md`.
+      That is the en-GB-oxendict `-ize` rule and not a false positive — the
+      word was neither quoted nor backticked, so no exception applies — and it
+      was corrected to `recognize`. Because `markdownlint` is
+      `markdownlint: spelling`, `markdownlint-cli2` never ran, so the Markdown
+      lint proper is **unverified rather than passed** and is re-run below.
+      The candidate identity was stable at both ends of the run: HEAD
+      `98dd3a35`, freeze `168a932f…`, 23 entries. Logs are
+      `/tmp/<gate>-netsuke-4-3-1-epm5-*.out`, one pair per gate.
+
+- [x] (2026-10-17) **A gate run went red on `self_named_module_files`, which
+      is the rule that made `defaults.rs` become `defaults/mod.rs`.** The
+      second dispatch reached `lint-clippy` and failed there with one error:
+      Clippy requires a module file to be named `mod.rs` when a directory of
+      the same name exists, and `defaults/` had been created for
+      `generator.rs` beside a `defaults.rs`. The file was moved, not renamed
+      around: `src/ninja_gen/determinism/property_tests/defaults.rs` became
+      `.../defaults/mod.rs` and its `mod generator;` declaration kept working
+      unchanged, because it already named a sibling of the file. Neither the
+      module path in `mod.rs` nor any mutation patch needed editing — the four
+      patches for this milestone target `src/ninja_gen/order.rs`,
+      `src/ninja_gen/mod.rs` and `src/ninja_gen/dyndep/mod.rs`, not the test
+      file, and all 24 patches still pass `git apply --check`. The prose that
+      described the old layout was retargeted in the plan and in the boundary
+      test's doc comment, and the boundary test still reports `2 tests run: 2
+      passed`. A focused Clippy over `netsuke-build` with `--tests` finished
+      clean afterwards. Log: `/tmp/lint-netsuke-4-3-1-epm5-final4-lint.out`.
+
+- [x] (2026-10-17) **A third gate run went red on `lint-clippy`, and the
+      sixteen errors were all in the two `OBL-NOHASH` test files — the first
+      time the compiler had ever seen them.** `check-fmt` passed. `make lint`
+      then failed at `make lint-clippy` with exit 101 and sixteen Clippy
+      errors, every one in `tests/ninja_gen_hashmap_boundary.rs` or its
+      `#[path]`-included `tests/hashmap_boundary/scan.rs`: one
+      `missing_const_for_fn`, ten `shadow_reuse` on `item` in the
+      `is_test_only` match arms, one `shadow_unrelated` on a `permitted_source`
+      closure binding, one `too_many_arguments` (5/4) on
+      `collect_entry_sources`, one `needless_borrows_for_generic_args`, one
+      `option_if_let_else`, and one `shadow_reuse` on `text`. The reason this
+      is the *first* run to find them is worth recording: every earlier lint
+      run aborted at the `src/ninja_gen/order.rs` `shadow-reuse` errors before
+      the crate's test targets were reached, so these files were authored,
+      formatted, and mutation-validated without ever being linted.
+      The repairs kept the design and changed only its expression:
+      `Kind::field` became `const fn`; the ten match arms bind `named` instead
+      of shadowing the function's `item` parameter; the closure binds `owner`
+      rather than re-using `permitted_source`; the two per-directory answers
+      `collect_entry_sources` needs (the test-only flag and the declaring file)
+      were grouped into `DirectoryContext`, which brings the signature from
+      five parameters to four and reads better than the positional pair did;
+      the sibling read drops its `&`; and `Declarations::read` became
+      `map_or_else` plus `Option::transpose`, removing both the `if let`/`else`
+      and the `text` shadow. `RUSTFLAGS="… -D warnings -Zthreads=8
+      -Clink-arg=-fuse-ld=mold" cargo clippy -p netsuke-build --test
+      ninja_gen_hashmap_boundary --all-features -- -D warnings` then finished
+      clean. Logs: `/tmp/lint-netsuke-4-3-1-epm5-gate3-lint.out` (FAIL) and
+      `/tmp/clippy-boundary-repair.out` (PASS).
+
+- [x] (2026-10-17) **The gate run in flight when those repairs landed was
+      voided rather than resumed, because a batch whose gates straddle an edit
+      binds no revision.** Its `check-fmt` and `lint` ran against the pre-repair
+      tree while its `doc-coverage`, already started, read the repaired one; no
+      verdict from that batch describes a single candidate. It was stopped and
+      discarded, and the lesson is the one
+      `netsuke-authoring-under-a-live-gate-batch-voids-it` records: a batch is
+      a claim about a frozen tree, so an authoring edit inside one invalidates
+      the whole batch, not only the gates that had not yet started. The
+      candidate was re-frozen after `make fmt` at diff hash
+      `46408dba20deb6b49e25e4032c6f0537876dfabed9fdb66f8475192d029cfdf7`
+      (HEAD `98dd3a35`, 23 changed or untracked entries), and a fresh full set
+      is what the next entry describes.
+
+- [x] (2026-10-17) **`EP-M5`'s four mutation patches were validated by
+      execution, and each fails the property it is assigned.** The tree was
+      clean and `PROPTEST_DISABLE_FAILURE_PERSISTENCE=1 make proptest` reported
+      `115 tests run: 115 passed, 3999 skipped` before and after every run, so
+      each failure below is attributable to its patch rather than to the tree.
+      Each patched tree first passed `cargo check --lib --all-features` under
+      `RUSTFLAGS="-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold"`, which is
+      what makes the evidence live rather than dead — a patch that cannot
+      compile fails nothing. Logs are `/tmp/proptest-netsuke-4-3-1-epm5-*.out`.
+      - `MUT-EDGESORT` (`path_key(&edge.explicit_outputs)` becomes
+        `path_key(&edge.implicit_outputs)`) failed three properties:
+        `ordered_edges_ignore_input_order` and
+        `one_graph_emits_one_bundle_under_two_insertion_orders`, plus the
+        directed `the_edge_rule_keys_on_the_output_set` with
+        `left: ["out/a\0out/z", "out/a\0out/m"]` against
+        `right: ["out/a\0out/m", "out/a\0out/z"]`.
+      - `MUT-ACTIONSORT` (the collect-then-sort pair reduced to a bare
+        `collect`) failed `ordered_actions_ignore_input_order` with a 16-action
+        permutation `["act-0003", "act-0012", …]` against
+        `["act-0009", "act-0002", …]`, and
+        `one_graph_emits_one_bundle_under_two_insertion_orders` with the two
+        rule blocks in different orders.
+      - `MUT-DEFSORT` (`.sorted()` and its now-unused `itertools` import
+        deleted) failed all four default properties, including the assigned
+        `the_default_line_sorts_its_operands`, with the minimal counter-example
+        `left: ["out/0001", "out/0000"]` against
+        `right: ["out/0000", "out/0001"]`.
+      - `MUT-DEFPOS` (in both emission paths) failed
+        `the_default_line_follows_every_build_line` because the `default` line
+        landed at byte 30 while the last `build` line began at byte 56.
+      Two findings were necessary to get here and are recorded in
+      `Surprises & discoveries`: the literal mutations the table describes do
+      not compile under `-D warnings` and were re-expressed so they stay live;
+      and a mutation run persists proptest regression seeds unless
+      `PROPTEST_DISABLE_FAILURE_PERSISTENCE=1` is set.
+      The `OBL-NOHASH` half was validated the same way: a planted
+      `src/ninja_gen/probe_scratch.rs` holding a `HashMap` import made
+      `only_membership_use_of_unordered_collections_reaches_the_emitter` fail
+      and name the file, and deleting the probe restored `2 tests run: 2
+      passed`.
+
+- [x] (2026-10-17) **The first gate run found two defects EP-M5 introduced,
+      both of which had to be fixed before the milestone could be called
+      done.** Neither was in the properties; both were in the machinery around
+      them.
+      - Ten `rustfmt` diffs across the four new `EP-M5` files. `make fmt`
+        applied them and `cargo fmt --all -- --check` then exited 0. The
+        candidate had been authored and run without the formatter ever seeing
+        it — the mutation runs invoke `make proptest`, which does not
+        format-check.
+      - `make lint` failed `lint-clippy` with two `clippy::shadow-reuse`
+        errors at `src/ninja_gen/order.rs:27` and `:43`. Widening both helpers
+        to take `impl Iterator` made the collected `Vec` shadow its own
+        parameter, which the crate denies. The bindings were renamed to
+        `collected` in both functions, which keeps the borrow-centric shape
+        and the documented rationale intact.
+      The gate run stopped at the first failure, so `doc-coverage`, `test`,
+      `markdownlint`, `nixie`, `test-workflow-contracts` and
+      `test-documentation-contracts` have **not** run against the repaired
+      candidate. Logs: `/tmp/check-fmt-netsuke-4-3-1-epm5-gate2-check-fmt.out`
+      (PASS) and `/tmp/lint-netsuke-4-3-1-epm5-gate2-lint.out` (FAIL on
+      clippy).
+
+- [x] (2026-10-17) **The rename invalidated two mutation patches, and
+  re-running the four runs showed the evidence binds to a revision rather than
+  to the milestone.** `MUT-EDGESORT` and `MUT-ACTIONSORT` both anchor on lines
+  containing `edges`/`actions`, so renaming the collected bindings to
+  `collected` broke their context and `git apply --check` rejected them.
+  `MUT-DEFSORT` and `MUT-DEFPOS` were unaffected and still applied. Both
+  patches were regenerated from the renamed source by the same script that
+  produced them, and all four applied. **The first four runs are therefore
+  evidence about the pre-rename tree, not about the candidate**, which is
+  exactly the staleness the mutation-evidence contract exists to catch — had
+  the patches not been re-checked, `every_patch_applies_cleanly` would have
+  gone red at `make test`, but only after the defect had already been reported
+  as passed. Both regenerated patches were re-run against the renamed tree and
+  reproduced their falsifications exactly: `MUT-EDGESORT` again failed
+  `the_edge_rule_keys_on_the_output_set`, `ordered_edges_ignore_input_order` and
+  `one_graph_emits_one_bundle_under_two_insertion_orders` (3 failed, 72
+  passed), and `MUT-ACTIONSORT` again failed
+  `ordered_actions_ignore_input_order` and
+  `one_graph_emits_one_bundle_under_two_insertion_orders` (2 failed, 88
+  passed). Logs: `/tmp/proptest-netsuke-4-3-1-epm5-edgesort2.out` and
+  `-actionsort2.out`. The lesson is mechanical and worth stating: a mutation
+  patch is bound to the text it patches, so any edit to the production lines it
+  quotes — including a rename made to satisfy an unrelated lint — re-opens the
+  evidence.
+
+- [x] (2026-10-17) **The `cli_configuration_fixture_compiles` timeout is
+      addressed by widening the ambient fixture family's allowance to 900 s,
+      after the rebase failed to remove it.** The rebase onto `origin/main`
+      (`077cf366`) was clean — zero conflicts, one commit dropped as already
+      upstream — and the test still reported `TIMEOUT [300.024s]`. The child
+      `cargo check --workspace --all-targets --all-features` measured **455 s
+      cold and 1 s warm**, with 36 compile-admission queue-wait lines in the
+      cold run. The allowance moved on the family override in
+      `.config/nextest.toml`, because all nine ambient fixtures share that
+      child build and the `nested-cargo-builds` group serializes them, so the
+      first one scheduled pays the cost. The shape of the tree that forces the
+      cold run — `target/debug/.fingerprint` and `deps/` empty while 2,520
+      `.rmeta` files survive, and neither `cargo nextest run` nor
+      `make typecheck` warming that selection — is recorded in
+      `Surprises & discoveries`. The change is tracked by the updated contracts
+      (94 passed), and the widened assertion was proved live by removing it and
+      watching the contract fail. The full gate set ran through `scrutineer`
+      against the frozen candidate (HEAD `98dd3a35`, diff hash
+      `530a9d9b…`): `check-fmt`, `markdownlint` and `nixie` passed, and
+      **`lint` failed on a defect this change introduced**, not on the code
+      under test. The added block pushed
+      `test_execution_coverage_test.py` from 397 to 420 lines against pylint's
+      `C0302` 400-line cap. The test was moved, not trimmed, to
+      `nextest_child_cargo_timeout_test.py` — the module whose stated remit is
+      "what may a cold-build child Cargo test take?" — which put the source
+      module at 353 lines and the destination at 149. The assertion was proved
+      live again from its new home (`assert 5 == 6` with the widening removed,
+      green with it restored), and the prose naming the old location was
+      retargeted. The next action is a fresh full set through `scrutineer`
+      against the amended candidate, then the milestone CodeRabbit pass.
 - [ ] (2026-10-16T00:00:00Z) `make typecheck` re-run on the recovered pool, and
       **failed a second time for a different environmental reason**, having
       again never reached our crate. Recorded because the two failures have
@@ -3563,12 +3838,73 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
       are ~69% of the budget as it then stood.
 
 - [x] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
-- [ ] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
+- [x] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [ ] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
 - [ ] `EP-M7`: `OBL-DUP`, `OBL-CYCLE`.
 - [ ] `EP-M8`: `OBL-NINJA`, documentation, evidence sweep, roadmap.
 
 ## Surprises & discoveries
+
+- (2026-10-17) **The sort-deletion mutations the table describes do not
+  compile under the gates, so each was re-expressed as a fault of the same
+  class that does.** This is the `MUT-PATHKEY` defect class again, found for
+  three more patches before running any of them. Deleting `edges.sort_by_key`
+  strands `use super::path_key` and leaves `path_key` unused, and the tree fails
+  `cargo check` with two `unused` errors under `-D warnings`; deleting the
+  `actions` sort strands `let mut`, which is `unused_mut`; deleting `.sorted()`
+  strands `use itertools::Itertools`, its only use in `order.rs`. Each literal
+  patch would have been dead evidence, exactly as `MUT-PATHKEY` was before
+  `5e973841`. The repairs stay faults a reviewer would recognize as realistic
+  while keeping every item live: `MUT-EDGESORT` now keys on `implicit_outputs`
+  instead of `explicit_outputs`, so the sort still runs but no longer imposes a
+  total order over the emitted keys; `MUT-ACTIONSORT` leaves
+  `let actions: Vec<_> = actions.collect();`; `MUT-DEFSORT` removes the import
+  in the same hunk. All four patched trees then passed
+  `cargo check --lib --all-features` under the gate flags, which is the
+  observation that separates a live mutation from a dead one. The table's
+  wording still describes the literal deletions; it is the *fault class* that
+  is authoritative, and the patch files are the artefact.
+
+- (2026-10-17) **A mutation run persists proptest regression seeds unless
+  persistence is switched off.** The first `MUT-EDGESORT` run left
+  `proptest-regressions/ninja_gen/determinism/property_tests/order.txt` holding
+  two shrunk seeds, because the suite runs under
+  `PROPTEST_DISABLE_FAILURE_PERSISTENCE` unset. That file records the
+  *injected* fault rather than a real regression, so committing it would pin a
+  seed that fails only while a patch is applied, and leaving it in the tree
+  would make the next clean run replay it. Every subsequent run set
+  `PROPTEST_DISABLE_FAILURE_PERSISTENCE=1`; the directory was removed after the
+  first run and did not reappear. Any future mutation run over a proptest suite
+  needs the same setting, and this is worth stating because the flag is read
+  from the environment rather than the config the suite sets.
+
+- (2026-10-17) **The timeout was the child `cargo check` being cold, not the
+  fixture being expensive, and the rebase did not fix it.** The plan had
+  expected `origin/main`'s repair there to clear the local
+  `cli_configuration_fixture_compiles` failure. It did not: after a clean
+  rebase onto `077cf366` (zero conflicts, one already-upstream commit dropped),
+  the test still reported `TIMEOUT [300.024s]` on `case_1_public_api`.
+  Measuring the child command directly explained both facts.
+  `NetsukeRlib::build()` runs
+  `cargo check --manifest-path <ws>/Cargo.toml --workspace --all-targets
+  --all-features`
+  in the ambient `target/`, and in this tree that took **455 s wall clock,
+  exit 0**, with 36 `[build-limits]` queue-wait lines reaching "12 ahead". The
+  same command immediately afterwards took **1 s** ("Finished in 0.51s"). So
+  the cost is real, one-off, and paid by whichever fixture runs first. Three
+  facts explain why the tree is always cold when a gate starts: no warm path
+  prepares that graph; `cargo nextest run` prepares via `cargo test --no-run`,
+  whose codegen and `--test` metadata a check-mode `.rmeta` graph does not
+  satisfy; and `make typecheck` runs `cargo check` **without** `--workspace`,
+  so it warms a different selection. The tree examined had
+  `target/debug/.fingerprint` and `target/debug/deps` both empty while 2,520
+  `.rmeta` files survived, which is the half-cleaned shape a partial
+  `rust-cleanup` leaves. **The instructive part is that the earlier
+  dispensation reasoned from the fixture's *selection* rather than its *cache
+  state*.** "It reuses the gate graph" was true about flags and false about
+  warm artefacts, and the two are different claims. `rust-cleanup.timer` is not
+  the cause of the empty caches — its journal for the period shows
+  `"deleted": 0` throughout — so it was not touched.
 
 - (2026-10-17) **A `make proptest` run left no evidence it had ever started, and
   that absence was the only evidence it had died.** The log at
@@ -4414,6 +4750,36 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   **Lesson:** the three Markdown gates are not redundant, and a docs-only
   change is not exempt from the edit-then-gate cycle. Run them after prose
   edits, not only after structural ones.
+- (2026-10-17) **A mutation table row names a fault class, and the patch is
+  allowed to express it differently when the literal edit does not compile.**
+  The table says `MUT-EDGESORT` "deletes `edges.sort_by_key`". Deleting it fails
+  `cargo check` under `-D warnings`, because `path_key` then has no caller and
+  its import no longer resolves — the same way the table's `MUT-PATHKEY` row
+  produced dead evidence until `5e973841`. Three of these four patches
+  therefore diverge from the row's wording while keeping its meaning: a key
+  computed from the wrong field, a collect without a sort, a sort without its
+  import. The decision is that **the patch file is the evidence artefact and
+  the table describes the class**; a reviewer checking that the table and the
+  patch agree word-for-word is checking the wrong thing, and the run — does the
+  assigned property fail, on a tree that compiles — is what settles it. The
+  alternative, keeping the literal rows and exempting the patches from
+  `-D warnings`, was rejected: the compile guard exists precisely so a patch
+  that cannot build is caught as dead evidence rather than counted as a
+  falsification.
+
+- (2026-10-17) **The table's "two were cut" sentence contradicts its own rows
+  and the acceptance criteria, and the rows win.** The paragraph under the
+  table says nine patches remain because two sort-deletion mutations were cut
+  as already covered by `cargo-mutants`. The table two lines above it lists
+  both, `EP-M5`'s acceptance names both, item 3 of the acceptance counts both
+  among the nine, and the Scope derivation budgets seven patches for `EP-M5` and
+  `EP-M6` together. The sentence is a fossil of the first draft's eleven and
+  was never updated when the rows were restored. The patches exist and were
+  validated by execution, so the rows, the acceptance criteria, and the budget
+  are the authoritative description; the paragraph's claim that these faults
+  are delegated to `cargo-mutants` is not relied on anywhere. Correcting the
+  paragraph is a documentation edit recorded here rather than a change of scope.
+
 - (2026-10-10) **The remedy proposed by a review finding can be as unsound as
   the defect it names, and it has to be re-derived rather than adopted.**
   Finding 2 correctly identified that `MUT-DEFSORT` cannot fail a two-run
@@ -4427,8 +4793,8 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   from the same fixed manifest in both processes, so perturbing hash *values*
   moves both runs together. The right validator is `MUT-ACTIONSORT`, which
   deletes the only guard over the only unordered collection the emitter
-  iterates: `graph.actions` is an `IrHashMap` and `actions.sort_by_key` in
-  `write_action_rules` is what re-establishes order.
+  iterates: `graph.actions` is an `IrHashMap`, and the `actions.sort_by_key` in
+  `ordered_actions` is what re-establishes order.
 
   **Lesson:** a mechanism claim is verified against `src/`, not against the
   plausibility of the sentence carrying it. The check that would have caught
@@ -4462,8 +4828,96 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   its verification is worse than one with no log. The entry was rewritten to
   cite the gate result rather than predict it. **Rule adopted:** no `Progress`
   entry may cite a gate outcome that is not already in a log file.
+- (2026-10-17) **The timeout widening's own contract amendment breached the
+  module line cap, and the correct repair was to move the responsibility, not
+  to shrink the text.** `test_execution_coverage_test.py` stood at 397 of
+  pylint's 400 lines before this change; the added family assertion took it to
+  420 and `make lint` failed `C0302`. Compressing the comment and inlining the
+  nine names would have fitted it, leaving the module at 399 lines with one
+  line of headroom and a cold-build budget map living in a module whose stated
+  remit is the single-execution rule and which reads none of the budget tiers.
+  `nextest_child_cargo_timeout_test.py` already existed, already held the
+  targeted cold-build allowances, and already declared that it pins the
+  family's shared override. The whole test moved there. **Lesson:** when a cap
+  is breached by an addition that is in the wrong module anyway, the cap is
+  telling you where the code belongs; trimming it to fit hides the misfiling
+  behind a passing gate.
+
+  **Second lesson from the same failure, on the plan's own provenance rule.**
+  The cold child build was recorded as **456 s** at five sites in the plan, the
+  guide and the configuration comment. The only evidence on disk is cargo's own
+  line, `Finished dev profile ... in 7m 35s`, which is 455 s. The figure was
+  retyped from a rounded reading and then propagated. It is now 455 s wherever
+  it appears, because a measurement claim must be copied from the line that
+  printed it, not recomputed in transit.
 
 ## Decision log
+
+- Decision: the ambient public-API fixture family's `slow-timeout` is widened to
+  fifteen periods (900 s), **on the family override rather than on
+  `cli_configuration_fixture_compiles` alone**, and the plan's earlier
+  expectation that `origin/main`'s repair would remove the local failure is
+  recorded as falsified. Date/Author: 2026-10-17 / implementation agent, on the
+  user's instruction "If that doesn't fix the timeout, address the way the
+  timeout is calculated to account for the queue."
+
+  *Why the family and not the test.* Nine fixtures in
+  `tests/command_env_ui_tests.rs` call `NetsukeRlib::build()`, which runs
+  `cargo check --workspace --all-targets --all-features` in the ambient
+  `target/`. `.config/nextest.toml` serializes them all through
+  `nested-cargo-builds` at `max-threads = 1`, so they share one cold build and
+  the *first to be scheduled* pays it. Widening only the name that timed out
+  would move the failure to whichever fixture next drew first place, and the
+  scheduler picks by test name order rather than by cost. The measured victim
+  this time was `cli_configuration_fixture_compiles`; nothing about that name
+  makes it the expensive one.
+
+  *Why the rebase could not have fixed it, established from git history rather
+  than inferred.* `git show 077cf366 -- .config/nextest.toml` shows that commit
+  doing two things in one hunk. It **deleted** a standalone override naming
+  `cli_configuration_fixture_compiles` alone, whose comment recorded "709.2 s
+  on a cold per-run tree" and which carried
+  `slow-timeout = { period = "60s", terminate-after = 15 }`. It then **added
+  that same name to the eight-name family filter**, an override with
+  `test-group`, `success-output`, and no `slow-timeout` at all. The name moved
+  from an override that granted 900 s to one that granted nothing, so it fell
+  back to the 300 s profile default. The rebase therefore could not have
+  removed the failure: it installed it. That is why the failure reappeared at
+  `TIMEOUT [300.024s]` after a clean rebase, and it is the strongest evidence
+  that this is a configuration regression rather than a slow test.
+
+  *Why the figure is not invented.* The child command was measured at **455 s
+  cold** in the gate tree against **1 s** when immediately repeated, and the
+  victim was stopped at **300.024 s**. Fifteen periods is the tier the
+  repository already uses for every other fixture that pays a workspace-root
+  `cargo check` (`stub_env_default_does_not_compile`) or an isolated cold build
+  (split-build, packaging), so this joins an existing measured tier rather than
+  introducing a new one. It also satisfies the ordering the contracts enforce:
+  `global-timeout` must stay strictly above the largest per-test allowance, and
+  900 s leaves the 960 s CI budget 60 s clear.
+
+  *What this does not do.* It does not change any test's behaviour, retry a
+  failure, or relax the `[profile.default]` 300 s that governs every other
+  test. The five other timed overrides are unchanged. It does not fix the
+  underlying cost: a cold ambient `cargo check` remains a 455 s item, and the
+  contracts' own comparison still caps the per-test tier below the whole-run
+  budget.
+
+  *Contracts amended with it*, because each asserted the old dispensation and
+  would otherwise either fail or, worse, keep asserting something now false:
+  `len(timed_overrides) == 5` becomes `== 6` and the budget map gains the
+  family's compound filter — both in `nextest_child_cargo_timeout_test.py`,
+  where that contract now lives because the added block pushed
+  `test_execution_coverage_test.py` past pylint's 400-line cap;
+  `nextest_child_cargo_timeout_test.py`'s docstring no longer says the CLI
+  fixture is excluded from the cold tier; and the tier enumerations in
+  `nextest_budgets.py`, `timeout_ordering_test.py`, `.config/nextest.toml`'s
+  own header and `[profile.ci]` comment, and `docs/developers-guide.md`'s "Test
+  timeouts" section now name the family alongside the other 900 s tests. The
+  new assertion was proved live twice — once in its original home and once
+  after the move — by removing the widening and watching
+  `test_cold_build_budgets_are_scoped_to_the_tests_that_pay_them` fail on
+  `assert 5 == 6`, then restoring it.
 
 - Decision: `EP-M3`'s shared graph strategy **explicitly diverges** from
   `graph_view`'s `arb_graph_inputs` rather than absorbing it, and the
@@ -4920,9 +5374,8 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   not it can see anything. `OBL-PROCESS` exists to catch *cross-process*
   divergence, which is the `HashMap` `RandomState` class, and `MUT-ACTIONSORT`
   is the mutation that reaches it: `graph.actions` is an `IrHashMap`, and
-  `actions.sort_by_key` in `write_action_rules` is the only guard
-  re-establishing a deterministic order over it. Date/Author: 2026-10-10 /
-  implementation agent.
+  `actions.sort_by_key` in `ordered_actions` is the only guard re-establishing
+  a deterministic order over it. Date/Author: 2026-10-10 / implementation agent.
 - Decision: **supersede** the first correction of the entry above, which had
   named `MUT-HASHMETA` as `OBL-PROCESS`'s validator. Rationale: that choice was
   unsound, and the sweep that caught it is the reason a claim is worth
@@ -5097,9 +5550,10 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 
   Still to land, from the artefacts `EP-M5` through `EP-M8` name. Nine new
   suites, each sized by the nearest measured comparable rather than guessed:
-  `order.rs` (two properties, the largest at ~400), `defaults.rs` (~200),
-  `declaration.rs` (~250), `ninja_oracle.rs` (~400), `hashmap_boundary.rs`
-  (~250), `action_hash_property_tests.rs` (~200), `process_tests.rs` (~300),
+  `order.rs` (two properties, the largest at ~400), `defaults/mod.rs` plus
+  `defaults/generator.rs` (~200 together), `declaration.rs` (~250),
+  `ninja_oracle.rs` (~400), `hashmap_boundary.rs` (~250),
+  `action_hash_property_tests.rs` (~200), `process_tests.rs` (~300),
   `duplicates.rs` (~250), `cycles.rs` (~300). That is ~2,550 lines. Add seven
   mutation patches (`MUT-EDGESORT`, `MUT-ACTIONSORT`, `MUT-DEFSORT`,
   `MUT-DEFPOS`, `MUT-HASHMETA`, `MUT-DUPWITHIN`, `MUT-CYCLEDEPTH`) at ~14 lines

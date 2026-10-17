@@ -9863,12 +9863,12 @@ fed back upstream.
 
 All four tiers are set here.
 
-| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                                              |
-| ------------------------ | ---------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation; 900 s stub-environment compile-fail, split-build, and packaging smoke tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally                                                                          |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step                                                              |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                                                                                      |
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                                                                                             |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation; 900 s ambient public-API fixtures, stub-environment, split-build, and packaging smoke tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally                                                                                                                         |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step                                                                                                             |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                                                                                                                                     |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
@@ -9894,7 +9894,7 @@ frontend into a target directory no cache restores.
 `production_build_module_slice_has_expected_boundary` uses the default 300 s
 allowance because it checks source text only; Cargo compiles the production
 slice in the workspace library build, before the test's timed execution.
-`stub_env_default_does_not_compile`,
+The nine ambient public-API fixtures, `stub_env_default_does_not_compile`,
 `split_build_fixture_compiles_through_the_direct_rustc_harness`, and the
 packaging smoke test each get fifteen periods, 900 s. The split-build fixture
 uses a private fixture workspace. Packaging verifies fresh extracted crate
@@ -9926,13 +9926,32 @@ the supported `cli::Cli` surface and reject runtime-only `cli::discovery`
 through the already-built library. No child Cargo command or test-specific
 timeout is needed.
 
+The nine ambient public-API fixtures are the family declared in
+`tests/command_env_ui_tests.rs`, and they share one override because they share
+one cost. Each reaches `NetsukeRlib::build()`, which runs `cargo check` over
+the workspace with the gate's targets and features against the ambient target
+directory; `nested-cargo-builds` then serializes them at one thread. The first
+fixture to run therefore pays a cold metadata build and the rest reuse it,
+which makes the expense a property of the family rather than of whichever name
+the scheduler started first. That distinction is what the earlier dispensation
+missed: it reasoned from the fixture's *selection* — the gate's workspace,
+targets, and features — and concluded that a warm gate tree must already hold
+the graph. It does not. `cargo nextest run` prepares with
+`cargo test --no-run`, whose codegen units and `--test` metadata the check-mode
+graph does not satisfy, and `make typecheck` runs `cargo check` without
+`--workspace`, so neither warms the child's selection. Measured on 2026-10-17
+in a tree whose `target/debug` held no `.fingerprint` or `deps/`, the child
+command took 455 s cold and 1 s warm, while
+`cli_configuration_fixture_compiles` was stopped at 300.024 s. The allowance is
+widened on the family override rather than on that one test, since any of the
+nine can be the first to run.
+
 `stub_env_default_does_not_compile` uses `TestSupportRlib` to prepare the
 `test_support` library metadata with package-scoped `cargo check` before
 invoking `rustc` through its direct-compile harness. The full suite reached the
 default 300 s cap on this fixture, so it now has a targeted 900 s allowance for
 potentially cold or contended ambient preparation. The nested-Cargo test group
-still serializes child builds; the compile-pass fixture retains the default
-allowance, and unrelated tests retain their own allowances.
+still serializes child builds, and unrelated tests retain their own allowances.
 
 Those overrides are the targeted, written-rationale case
 `.config/nextest.toml`'s own policy asks for, and the mutation gate is worth
@@ -9953,13 +9972,13 @@ full-suite runs passed at 208.921 s and reached the 300.017 s cap during
 concurrent Cargo work, confirming that its timing varies with host load. The
 latest cold-target run reached 600 s while compiler admission was saturated.
 The candidate gives this test fifteen warning periods, 900 s, which remains
-strictly below the 960 s whole-run budget. The stub-environment compile-fail
-fixture, split-build fixture, and packaging smoke test share that allowance.
-The production module-slice check and the CLI fixture use the 300 s default
-after reusing the gate-built workspace graph. Each override binds only because
-its filter carries the test's module path; earlier passing runs did not prove
-the wider allowance was in force because the test completed inside the 300 s
-default. See "nextest configuration" for the rule.
+strictly below the 960 s whole-run budget. The ambient public-API fixture
+family, the stub-environment compile-fail fixture, and the split-build fixture
+share that allowance. The production module-slice check and the CLI fixture use
+the 300 s default after reusing the gate-built workspace graph. Each override
+binds only because its filter carries the test's module path; earlier passing
+runs did not prove the wider allowance was in force because the test completed
+inside the 300 s default. See "nextest configuration" for the rule.
 
 ### The whole-run budget, and how 16 minutes was arrived at
 

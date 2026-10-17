@@ -27,7 +27,7 @@
 //! edge's outputs disappear from the text and nothing puts them back.
 
 use super::support::materialize;
-use crate::ast::{Recipe, StringOrList};
+use crate::ast::{CommandIsolation, Recipe, StringOrList};
 use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder, IrGenError};
 use crate::ninja_gen::determinism::strategy::graph::arb_graph_spec;
 use crate::ninja_gen::generate_bundle;
@@ -159,6 +159,7 @@ fn graph_of_one_edge(edge: BuildEdge) -> Result<BuildGraph, IrGenError> {
         Action {
             recipe: Recipe::Command {
                 command: StringOrList::String("echo 00".to_owned()),
+                isolation: CommandIsolation::Shared,
             },
             description: None,
             depfile: None,

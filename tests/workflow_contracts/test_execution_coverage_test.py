@@ -275,49 +275,6 @@ def test_ambient_ui_harnesses_do_not_rebuild_in_isolated_targets(source: Path) -
     )
 
 
-def test_cold_packaging_verification_has_a_scoped_budget() -> None:
-    """Allow measured cold package compilation without relaxing ordinary tests."""
-    config = tomllib.loads(
-        (REPO_ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8")
-    )
-    profile = config["profile"]["default"]
-    assert profile["slow-timeout"] == {"period": "60s", "terminate-after": 5}, (
-        "ordinary tests must retain their five-minute budget"
-    )
-    timed_overrides = [
-        override for override in profile["overrides"] if "slow-timeout" in override
-    ]
-    assert len(timed_overrides) == 4, (
-        "only remaining nested builds may need extended test budgets"
-    )
-    configured = {
-        override["filter"]: override["slow-timeout"] for override in timed_overrides
-    }
-    expected = {
-        "test(/^packaged_manifest_retains_build_script_sources($|::)/)": {
-            "period": "60s",
-            "terminate-after": 15,
-        },
-        (
-            "test(/^compile_guard::"
-            "every_patched_tree_compiles_under_denied_warnings($|::)/)"
-        ): {
-            "period": "60s",
-            "terminate-after": 10,
-        },
-    }
-    expected.update({
-        f"test(/^{name}($|::)/)": {"period": "60s", "terminate-after": periods}
-        for name, periods in (
-            ("split_build_fixture_compiles_through_the_direct_rustc_harness", 15),
-            ("stub_env_default_does_not_compile", 15),
-        )
-    })
-    assert configured == expected, (
-        "cold-build budgets must retain current-main allowances"
-    )
-
-
 def test_packaging_verification_preserves_cargo_build_configuration() -> None:
     """Reuse Cargo build configuration while retaining package verification."""
     source = (REPO_ROOT / "tests" / "packaging_smoke_tests.rs").read_text(

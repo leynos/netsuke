@@ -175,7 +175,7 @@ pub(crate) fn generate_into_with_shell<W: Write>(
         });
     }
     write_action_rules(graph, out, shell, None)?;
-    for edge in ordered_edges(graph) {
+    for edge in ordered_edges(graph.edges()) {
         let action =
             graph
                 .actions

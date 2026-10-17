@@ -171,7 +171,7 @@ fn render_edges(
     out: &mut String,
     stages: &mut SerialStages,
 ) -> Result<(), NinjaGenError> {
-    for edge in ordered_edges(graph) {
+    for edge in ordered_edges(graph.edges()) {
         render_edge(graph, edge, out, stages)?;
     }
     Ok(())

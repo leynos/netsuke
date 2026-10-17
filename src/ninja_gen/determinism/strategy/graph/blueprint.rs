@@ -8,7 +8,7 @@
 //! path allocation is what carries it.
 
 use super::{EXTERNAL_PREFIX, EdgePlan, GraphSpec, MAX_OUTPUTS, OUTPUT_PREFIX, rotate};
-use crate::ast::{Recipe, StringOrList};
+use crate::ast::{CommandIsolation, Recipe, StringOrList};
 use crate::ir::{Action, BuildEdge, DependencyOrder};
 use camino::Utf8PathBuf;
 
@@ -82,10 +82,12 @@ impl Blueprint {
                 let recipe = if index < self.phony_count {
                     Recipe::Command {
                         command: StringOrList::Empty,
+                        isolation: CommandIsolation::Shared,
                     }
                 } else {
                     Recipe::Command {
                         command: StringOrList::String(format!("echo {index:02}")),
+                        isolation: CommandIsolation::Shared,
                     }
                 };
                 (
