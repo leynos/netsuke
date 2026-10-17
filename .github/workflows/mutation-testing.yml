@@ -27,7 +27,7 @@ jobs:
     permissions:
       contents: read
       id-token: write  # OIDC workflow-source resolution
-    uses: leynos/shared-actions/.github/workflows/mutation-cargo.yml@0606ca899ce2995a0c4bc78e660e80832e6e8855
+    uses: leynos/shared-actions/.github/workflows/mutation-cargo.yml@e693d81d176d2305e2b736a0be0f9038085dec7f
     with:
       # test_support is deliberately omitted from extra crates: it is a
       # test-fixture crate whose survivors are noise.
