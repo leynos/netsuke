@@ -1360,9 +1360,14 @@ the last entry of this section rather than recited here.
   removed, so **272 net lines excluding Markdown** against a 250 limit, and
   2,739 net lines including the ExecPlan. Repairing the assessment findings
   adds the I1 guard and its negative control, taking the same measurement to
-  `58 + 7 + 136 + 222 = 423` added and the same 71 removed — **352 net
+  `58 + 7 + 136 + 231 = 432` added and the same 71 removed — **361 net
   non-Markdown lines**. Both numbers are stated because reporting only the
-  smaller one would describe a head that is no longer the candidate. The
+  smaller one would describe a head that is no longer the candidate, and
+  because the first repair attempt was itself amended twice: the plan's
+  Markdown needed `mdtablefix` canonicalization, and the Python guard needed a
+  `Returns` section and a `match` statement before `make lint` would accept it.
+  Neither amendment changed behaviour, but both changed the count, which is why
+  the figure is re-derived from the artefacts rather than carried forward. The
   overrun is small and entirely accounted for by the two contract tests the
   findings required and by provenance prose; it is nonetheless recorded as an
   **escalation** rather than absorbed silently, because post-hoc approval of a
