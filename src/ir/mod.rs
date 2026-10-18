@@ -27,6 +27,8 @@
 //! graph.default_targets.push(Utf8PathBuf::from("hello"));
 //! ```
 
+#[cfg(test)]
+mod action_hash_property_tests;
 mod cmd_interpolate;
 mod cycle;
 mod from_manifest;
