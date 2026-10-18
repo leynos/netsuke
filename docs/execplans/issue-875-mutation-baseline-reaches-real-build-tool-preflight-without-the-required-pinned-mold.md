@@ -1413,6 +1413,7 @@ the last entry of this section rather than recited here.
   reason*.
 
 [assess-911]: https://github.com/leynos/netsuke/pull/911#issuecomment-6250838137
+[follow-up-927]: https://github.com/leynos/netsuke/issues/927
 
 ## Surprises & discoveries
 
@@ -1640,8 +1641,12 @@ Unexpected findings during implementation that were not anticipated as risks.
   tests no longer cross the build-tools preflight at all — and there is direct
   evidence of that landing (see Progress, 19:20Z). It does **not** address the
   second, so the mutation baseline may still go red for an unrelated reason
-  after this merges. That is escalated rather than silently widened into scope:
-  the Worker dispatch section states what to look for.
+  after this merges. That is escalated rather than silently widened into scope,
+  and the escalation now has an owner: [#927][follow-up-927] records the
+  reproduction and diagnostic requirement, and states explicitly that the
+  `manifest_structure_telemetry` failure and the `which::tracing_capture` flake
+  share a symptom and a helper family but **not** a proven cause. The Worker
+  dispatch section states what to look for in a future baseline.
 
   Two smaller inferences recorded because they are traps. First, the 3 Oct
   shard used a *different* pin (`ff1dd759…`, not the current `0606ca89…`) and
