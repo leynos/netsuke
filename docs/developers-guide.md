@@ -1082,11 +1082,11 @@ extra `check` line. The test selects the snapshot name with
 under each feature configuration in turn and reviewing the resulting
 `.snap.new` file before accepting it.
 
-**`GATE_FEATURE_ARGUMENTS`.** `tests/support/cargo_features.rs` defines
-`GATE_FEATURE_ARGUMENTS` twice — `["--all-features"]` when `lint` is enabled,
-`[]` otherwise — so that nested Cargo builds spawned by the user-interface test
-harness match whichever lane compiled them instead of recompiling the whole
-dependency graph.
+**`GATE_BUILD_ARGUMENTS`.** `tests/support/cargo_features.rs` defines
+`GATE_BUILD_ARGUMENTS` twice — `--workspace --all-targets --all-features` when
+`lint` is enabled, and `--workspace --all-targets` otherwise — so that the
+Cargo checks the user-interface test harness spawns match whichever lane
+compiled them instead of recompiling the whole dependency graph.
 
 ## Package and target naming
 
