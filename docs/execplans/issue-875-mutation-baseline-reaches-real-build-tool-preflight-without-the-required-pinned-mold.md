@@ -1562,6 +1562,63 @@ practice is stated here rather than rediscovered: read `date -u`, never `date`.
   are both clean. The four static rows are the ones that now also run on macOS;
   their Linux pass shows the gate did not disturb them, not that macOS executes
   them.
+- [x] (2026-10-18 20:25Z) **The final gate set closes the scrutineer's two
+  scope objections, and the local `make test` red is the documented
+  admission-queue timeout rather than a candidate defect.**
+
+  The scrutineer ran `check-fmt`, `lint`, `doc-coverage` and `test`
+  sequentially on the `713a5e4d` tree and returned **red** overall: three green
+  and one red, with the red confined to a single nextest row,
+  `netsuke-build::command_env_ui_tests cli_configuration_fixture_compiles`,
+  ending at `TIMEOUT [300.012s]`. That row spawns a nested Cargo build inside
+  the `nested-cargo-builds` group (`max-threads = 1`), so admission-queue wait
+  counts against its 300 s allowance; its sibling
+  `production_build_module_slice_has_expected_boundary`, in the same group and
+  the same run, passed at `152.142s` against the same cap.
+  `build-limits-status` read `capacity 4, held 4, healthy` with more than ten
+  waiters. This is the adjudication already recorded in
+  `docs/developers-guide.md` under *The per-test budget is a product, not a
+  period*: "The code was not slow; the cap was too near the cost." No allowance
+  was widened and no retry was added, because both would hide the condition
+  rather than measure it.
+
+  **Two scrutineer findings that were objections to my briefing, not to the
+  candidate, are now discharged on the exact head.** It observed that the
+  branch touches `.github/workflows/mutation-testing.yml` and
+  `tests/workflow_contracts/mutation_testing_test.py`, so
+  `make test-workflow-contracts` is required by the repository rule, and that
+  the brief had waived it on a premise that did not match the diff. It also
+  observed that three of the four gates ran after HEAD advanced to `44edbbd9`,
+  so the set spanned two commits. The hosted `build-test` job for `44edbbd9`
+  (job `117772055040`, run `39160222954`) records both gaps closed on the head
+  itself: step 26 **Workflow contract tests** (`make test-workflow-contracts`)
+  `success`, and step 29 **Test and Measure Coverage**, which is the lane's
+  only test execution and runs the full nextest and doctest set, `success`. The
+  step names and their `run:` lines were read from
+  `.github/workflows/ci.yml:262` and `:268`, not inferred from labels. The
+  hosted verdict therefore binds `44edbbd9` for both obligations the local
+  batch could not settle; the local `test` red stands as recorded and is not
+  counted as a pass.
+
+  **What the local batch does establish.** `check-fmt` exit 0, `lint` exit 0 in
+  973 s (which closes the full-lint debt the description had recorded), and
+  `doc-coverage` exit 0 at `aggregate 4972/5029 98.87%`. Those ran on
+  `713a5e4d`; `44edbbd9` adds ExecPlan Markdown only, which `check-fmt`'s
+  mdtablefix stage covers, so no code byte that a Rust gate would exercise
+  differs between the two.
+
+- [x] (2026-10-18 20:25Z) **The description no longer risks closing `#875`,
+  and the mistake was real rather than theoretical.** Its first line read
+  "Fixes the reported defect in #875", which is a closing-keyword spelling;
+  GitHub agreed, because `gh pr view 911 --json closingIssuesReferences`
+  returned `[{"number": 875}]` while the body's own prose, three lines later,
+  said the PR deliberately does not close the issue. The body was right about
+  intent and wrong about effect. The line and the quoted "closes #875" phrase
+  are both reworded, and the oracle — `closingIssuesReferences`, never the
+  rendered text — is re-read after the patch. The repository allows **squash
+  only** (`allow_squash_merge` true, `allow_merge_commit` and
+  `allow_rebase_merge` false), so the squash subject and body are a second
+  place a closing keyword could reattach the issue and are checked too.
 
 [assess-911]: https://github.com/leynos/netsuke/pull/911#issuecomment-6250838137
 [follow-up-927]: https://github.com/leynos/netsuke/issues/927
@@ -1598,6 +1655,23 @@ Unexpected findings during implementation that were not anticipated as risks.
   family that happens to contain the platform you develop on; and check the
   sibling call sites before inventing an exception, because in this case the
   majority pattern was the correct one and was one `rg` away.
+
+- **Observation:** a pull-request description can say, in prose, that it does
+  not close an issue and still close it, because GitHub parses closing keywords
+  positionally rather than semantically. Impact: this description opened with
+  "Fixes the reported defect in #875" and then argued three lines later that
+  `#875` must stay open; the API adjudicated for the first line —
+  `closingIssuesReferences` returned `#875` — so a squash merge would have
+  attached the closing reference to the landed commit and closed an issue whose
+  remaining work review had explicitly ordered to stay open. Recourse: treat
+  the API field as the only oracle, because the rendered body cannot
+  distinguish the two cases (both read correctly to a human), and re-read it
+  after every patch; also check the other places a reference can travel, since
+  this repository permits **squash merges only**, so the squash subject and
+  message are a second carrier. Note the tension with the repository's own
+  Markdown rule, which pushes a bare `#NNN` away from line start to avoid
+  creating a heading: that rule governs tracked Markdown, and applying it to a
+  description disables the close rather than protecting it.
 
 - **Observation:** the clock was read from `git log`'s local-time formatting
   and written into the Progress section, which states that its timestamps are
