@@ -130,7 +130,7 @@ fn check_refuses_an_effectful_template_helper() -> Result<()> {
         .pointer("/diagnostics/0/code")
         .and_then(Value::as_str);
     ensure!(
-        !code.is_some_and(|code| code.starts_with("netsuke::lint::")),
+        !code.is_some_and(|found| found.starts_with("netsuke::lint::")),
         "a refused helper is a load failure, not a lint finding, got {document}"
     );
     Ok(())
