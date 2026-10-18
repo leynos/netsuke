@@ -33,6 +33,8 @@ the shared revision declares none and the repository's pin lives in
 Run via ``make test-workflow-contracts``.
 """
 
+import copy
+
 import pytest
 from workflow_loading import (
     MUTATION_TESTING_WORKFLOW_PATH,
@@ -179,6 +181,84 @@ def test_triggers_keep_schedule_and_plain_dispatch() -> None:
     assert "branch" not in inputs, (
         "on.workflow_dispatch must not declare a branch input; the Actions "
         "run-workflow control selects the ref"
+    )
+
+
+def _flag_override_problems(workflow: dict[str, object]) -> list[str]:
+    """Return every place the caller sets a compiler-flag variable.
+
+    Invariant I1 of the ExecPlan forbids the caller from setting
+    ``RUSTFLAGS`` or ``CARGO_ENCODED_RUSTFLAGS`` anywhere, because Cargo takes
+    an assigned ``RUSTFLAGS`` over every ``rustflags`` table in
+    ``.cargo/config.toml``: an ``env:`` block here would silently displace the
+    project configuration the build standard is defined by. The whole-workflow
+    walk is deliberate — the prohibition is on *any* scope, so a future job,
+    step, or reusable-workflow argument cannot introduce the override in a
+    corner this test never looks at.
+
+    Kept separate from the assertion itself so a seeded edit can be checked
+    against the same predicate: that is the negative control the ExecPlan
+    promises, and it cannot be run by re-reading only the file on disk.
+    """
+    found: list[str] = []
+
+    def walk(node: object, path: str) -> None:
+        if isinstance(node, dict):
+            for key, child in node.items():
+                child_path = f"{path}.{key}"
+                if key in FLAG_VARIABLES:
+                    found.append(f"{child_path} (a {key} key)")
+                walk(child, child_path)
+        elif isinstance(node, list):
+            for index, child in enumerate(node):
+                walk(child, f"{path}[{index}]")
+
+    walk(workflow, "workflow")
+    return found
+
+
+def test_no_compiler_flag_variable_is_set_anywhere_in_the_caller() -> None:
+    """The caller never assigns a compiler-flag variable, at any scope.
+
+    ``setup-rust`` already exports ``RUSTFLAGS`` in the worker, and Cargo
+    prefers an assigned ``RUSTFLAGS`` over the ``rustflags`` table in
+    ``.cargo/config.toml``. Setting it here — to "help" with the linker, or to
+    override anything else — would displace the build standard rather than
+    configure it, so the prohibition is asserted over the whole parsed
+    workflow and not only over the job's ``with:`` block. Printing the
+    variables in ``setup-commands`` is unaffected: a ``printf`` reads them, it
+    does not assign them.
+    """
+    problems = _flag_override_problems(load_workflow(MUTATION_TESTING_WORKFLOW_PATH))
+    assert not problems, (
+        "the caller must not set a compiler-flag variable anywhere, because "
+        "Cargo takes an assigned RUSTFLAGS over the project's rustflags table; "
+        f"found {problems}"
+    )
+
+
+def test_flag_guard_rejects_a_seeded_override() -> None:
+    """The I1 guard fails on a caller that sets ``RUSTFLAGS``.
+
+    This is the ExecPlan's promised negative control, kept as a test rather
+    than a one-off manual edit so it stays runnable: a guard that cannot fail
+    on the defect it names is not a guard. The fixture mirrors the shape the
+    real caller could grow — an ``env:`` block on the calling job — and the
+    control would also catch it at workflow, step, or argument scope.
+    """
+    workflow = load_workflow(MUTATION_TESTING_WORKFLOW_PATH)
+    seeded = copy.deepcopy(workflow)
+    job = require_mapping(
+        require_mapping(seeded.get("jobs"), "jobs")["mutation"], "jobs.mutation"
+    )
+    job["env"] = {"RUSTFLAGS": "-D warnings"}
+
+    assert _flag_override_problems(seeded), (
+        "the I1 guard must reject a caller that seeds an env.RUSTFLAGS "
+        "override; it accepted one"
+    )
+    assert not _flag_override_problems(workflow), (
+        "the unmodified caller must satisfy the I1 guard"
     )
 
 

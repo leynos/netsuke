@@ -1213,11 +1213,29 @@ the last entry of this section rather than recited here.
   local time mislabelled again. Applying the offset gives `19:40Z`, which
   invents a different error; the truth is that the notice was written in local
   time without an offset and the honest UTC value is not recoverable from that
-  label alone. It is therefore set to `21:25Z`, **earlier** than every artefact
-  it cites: the corrected entries it fixes (`20:05Z`, `20:52Z`), the commits
-  carrying them, and the mtime above. An entry ordered before its own evidence
-  is ordinary for a retrospective; one ordered after the file that holds it is
-  the contradiction being repaired.
+  label alone. Two different facts are being carried by one value, and
+  separating them is the whole repair.
+
+  The **unknown** is when this entry was originally written. The mislabelled
+  local label plus the mtime interval does not determine it, and no clock
+  reading recovers it; it stays unknown.
+
+  The **measured window** is what the same evidence does establish. The entry
+  cannot precede the artefacts it corrects — the corrected entries at `20:05Z`
+  and `20:52Z`, whose introducing commits are `20:28:40Z` and `20:57:48Z` — and
+  it cannot follow the file's last write before the correction, `21:29:03Z`.
+  The written value `21:25Z` sits inside that window. It is a **chosen bound
+  within a measured interval, not a recovered measurement of the original
+  write**, and it is written here to say so rather than to imply an accuracy
+  the evidence does not support.
+
+  An earlier version of this paragraph justified `21:25Z` by calling it
+  *earlier* than every artefact it cites. That claim was false on the
+  paragraph's own figures: `21:25Z` is later than the corrected entries at
+  `20:05Z` and `20:52Z` and later than their committer dates. The comparison
+  also conflated *position in this list* with *clock order*, which need not
+  agree. The claim is retracted rather than reworded; only the window argument
+  above survives.
 
   **The honest limit of the check.** Only the three `2026-10-16` entries were
   audited this way. The `2026-10-14` entries (`02:05Z`, `03:10Z`, `04:20Z`,
@@ -1297,6 +1315,92 @@ the last entry of this section rather than recited here.
   unchanged by anything this head does. The description states that criterion
   and the local `make test` discharge on `6558fd1f`, and those remain the
   reasons the draft state is correct rather than an oversight.
+
+- [x] (2026-10-17 19:45Z) **An external completeness assessment found three
+  gaps this plan had promised to close and had not, and all three are now
+  closed.** The assessment was requested on `91a8ec69` and answered in
+  [PR #911 comment 6250838137][assess-911]. Each finding was verified against
+  the source before being actioned; none was accepted on the reviewer's word.
+
+  1. **I1 had no assertion.** The invariant promised a contract check,
+     `"env" not in job`, plus a seeded negative control. Neither existed:
+     `mutation_testing_test.py` validated the `with:` block by whole-block
+     equality and never looked for an `env:` key. `_flag_override_problems`
+     now walks the entire parsed workflow (not just the job) for `RUSTFLAGS`
+     and `CARGO_ENCODED_RUSTFLAGS`, and
+     `test_no_compiler_flag_variable_is_set_anywhere_in_the_caller` asserts it
+     is empty. `test_flag_guard_rejects_a_seeded_override` supplies the
+     promised control as a permanent test rather than a one-off edit, and the
+     control was **also** run out of process against a scratch copy of the
+     workflow with `env: {RUSTFLAGS: "-D warnings"}` seeded onto the job: the
+     clean tree yielded `[]` and the seeded copy yielded
+     `['workflow.jobs.mutation.env.RUSTFLAGS (a RUSTFLAGS key)']`. The
+     focused suite passes 10 tests.
+  2. **The provenance paragraph overstated what it knew.** It called `21:25Z`
+     *earlier* than every artefact it cited, which is false against its own
+     table (`20:05Z`, `20:52Z` and the committer dates are all earlier), and
+     it presented a chosen value as though it were a recovered measurement.
+     The paragraph now separates the genuinely unknown original write time
+     from the measured window the evidence does bound — it cannot precede the
+     corrected entries (`20:28:40Z`, `20:57:48Z`) and cannot follow the last
+     write of the file (`21:29:03Z`) — and states that `21:25Z` is a chosen
+     bound inside that window, not a measurement. The retracted claim is
+     named as retracted rather than silently reworded.
+  3. **Two verification obligations were undischarged.** The I3 negative
+     control (remove `check-build-tools` from `doctest`'s prerequisites in a
+     scratch copy and confirm the case fails) had no result recorded, and the
+     *Tolerances* escalation at 250 net lines had been exceeded without an
+     entry. The control is recorded below; the escalation is recorded here.
+
+  **Tolerance escalation — the scope threshold was exceeded, and the repair
+  widened it.** *Tolerances* sets "more than 250 net lines" as a
+  stop-and-escalate trigger. At the assessed head `91a8ec69` the branch's
+  non-Markdown delta was `git diff --numstat c65ad970 91a8ec69` summed over the
+  four code files: `58 + 7 + 136 + 142 = 343` added, `0 + 0 + 62 + 9 = 71`
+  removed, so **272 net lines excluding Markdown** against a 250 limit, and
+  2,739 net lines including the ExecPlan. Repairing the assessment findings
+  adds the I1 guard and its negative control, taking the same measurement to
+  `58 + 7 + 136 + 222 = 423` added and the same 71 removed — **352 net
+  non-Markdown lines**. Both numbers are stated because reporting only the
+  smaller one would describe a head that is no longer the candidate. The
+  overrun is small and entirely accounted for by the two contract tests the
+  findings required and by provenance prose; it is nonetheless recorded as an
+  **escalation** rather than absorbed silently, because post-hoc approval of a
+  threshold is exactly the kind of quiet drift the threshold exists to
+  prevent. No authorization for the overrun is claimed from anywhere; the
+  reviewer is asked to accept it explicitly or to direct a split.
+
+  **I3 negative control — executed, passed, and not on the first attempt.** The
+  control runs the real `Makefile` in a scratch copy outside the worktree,
+  with a fake `cargo` that records its invocations, and compares the target
+  with and without the prerequisite. It took two attempts to make the control
+  faithful, and the first attempt is recorded because it was *silently wrong
+  in a way that still looked green-ish*: the host carries a real but
+  wrong-version `/usr/bin/mold` (2.40.4), so a `PATH` that merely omitted a
+  mold *directory* still resolved that one and the restored case failed for
+  the wrong reason — `mold 2.40.4 at /usr/bin/mold does not match the pin
+  2.41.0`, which is version drift, not the missing-tool diagnostic the test
+  asserts. The control establishes nothing until the failure is the one under
+  test. The faithful environment is a `bin/` holding every utility the recipe
+  calls — `make`, `bash`, `sh`, `awk`, `sed`, `grep`, `tr`, `cut`, `sort`,
+  `uname`, `dirname`, `readlink`, `cat` — plus a `rustup` that answers the
+  toolchain query, and **no** `mold` on it. In that environment:
+  restored (`doctest: check-build-tools`) exits `2` after `0` Cargo
+  invocations with `build-tools: mold not found on PATH (pinned 2.41.0)`; with
+  the prerequisite seeded back out (`doctest:`) it exits `0` after `1` Cargo
+  invocation. That is the relation, exercised in both directions, and the
+  diagnostic is the exact string `build_targets_stop_when_the_check_fails`
+  asserts. The same trap bit the control twice more before it worked: a
+  `grep` symlink was created as the relative name `grep`, which resolves
+  nowhere from an unrelated `PATH`, so `read_pin` reported `found ` and the
+  run failed on a pin-read rather than on mold; and `env -i PATH=…` without
+  `make` on it fails with `make: No such file or directory`. Each of those
+  produces a non-zero exit that a careless reading would score as "the
+  control fired". Non-vacuity here is therefore not a formality: three
+  different broken environments all exit non-zero, and only the fourth exits
+  non-zero *for the asserted reason*.
+
+[assess-911]: https://github.com/leynos/netsuke/pull/911#issuecomment-6250838137
 
 ## Surprises & discoveries
 
@@ -2299,7 +2403,11 @@ Push over SSH, then open a draft pull request titled
   `doctest` case in `build_targets_stop_when_the_check_fails`, which asserts
   both the diagnostic and that the recording Cargo saw zero invocations.
   *Non-vacuity:* remove `check-build-tools` from `doctest`'s prerequisites in a
-  scratch copy and confirm the case fails; restore.
+  scratch copy and confirm the failure the case asserts; restore. The control
+  drives the real `Makefile` target the case exercises rather than the Rust
+  fixture itself, because the fixture only ever passes a target name to `make`;
+  both directions, the exact diagnostic, and the two failed attempts at a
+  faithful `PATH` are recorded under `Progress`.
 - **I4 — The sandbox allowlist is unchanged.** Verified by the existing
   `check-fmt`/`lint` gates plus an explicit diff inspection of `utilities.rs`.
 - **I5 — The two rustdoc assertions still carry their full strength.** The
