@@ -76,11 +76,12 @@ or a whole category, `--limit` bounds the report, and `--explain` prints the
 rule reference instead of analysing a manifest.
 
 In JSON mode a run below the threshold writes a result document whose
-`result.findings` array holds every finding; a run at or above it writes a
-diagnostic document whose top-level entry is the threshold summary and whose
-`related` array holds the same findings. Both use the same per-finding shape as
-every other Netsuke diagnostic, so the envelope contract is unchanged and a
-consumer parses one representation.
+`result.findings` array holds the reported findings, at most `--limit` of them
+in source order, while its summary counts every finding before truncation; a
+run at or above it writes a diagnostic document whose top-level entry is the
+threshold summary and whose `related` array holds the same reported findings.
+Both use the same per-finding shape as every other Netsuke diagnostic, so the
+envelope contract is unchanged and a consumer parses one representation.
 
 The [manifest linter design](netsuke-linter-design.md) specifies the rule model
 and the output schemas, and

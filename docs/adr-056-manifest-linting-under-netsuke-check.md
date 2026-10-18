@@ -144,12 +144,14 @@ command the roadmap defers.
 **Findings are data.** A finding is a typed record with a severity resolved
 from policy. `--fail-on` sets the threshold at which findings fail the command,
 defaulting to `error`. Below the threshold the command succeeds and writes a
-result document to stdout whose `result.findings` array holds every finding. At
-or above it the command fails and writes a diagnostic document to stderr whose
-single top-level diagnostic is the threshold summary and whose `related` array
-holds the same findings in the same order. Both arrays use the existing
-diagnostic-entry shape, so a consumer parses one finding representation and
-selects the array by presence. The envelope invariant is preserved unchanged.
+result document to stdout whose `result.findings` array holds the reported
+findings, at most `--limit` of them in source order, while its summary counts
+every finding before truncation. At or above it the command fails and writes a
+diagnostic document to stderr whose single top-level diagnostic is the
+threshold summary and whose `related` array holds the same reported findings in
+the same order. Both arrays use the existing diagnostic-entry shape, so a
+consumer parses one finding representation and selects the array by presence.
+The envelope invariant is preserved unchanged.
 
 **Identity.** A rule is identified by a stable, unique, kebab-case name, for
 example `directory-dep-not-order-only`. Category is metadata, never part of the

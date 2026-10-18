@@ -234,9 +234,12 @@ The linter therefore reads the source a second time, but not to reinterpret it.
 the same version, which yields `(Event, Span)` pairs, and assembles a spanned
 tree: every scalar, sequence, and mapping node carries the byte range it
 occupies. This is a position index over the same bytes `serde_saphyr` consumed,
-read by the same grammar, not a second opinion about their meaning. If the two
-disagree the manifest did not parse, and `netsuke check` reports the parse
-error instead of running any rule.
+read by the same grammar, not a second opinion about their meaning. By the time
+the index is built the compiler has already accepted the manifest and lowered
+it to a graph, so a failure here is a disagreement between the two readers, not
+a failed manifest parse: `lint::analyse` returns `ParseFailure` without running
+any rule, and `netsuke check` reports it as a source-indexing failure naming
+the line where the readers diverged.
 
 Span availability by stage:
 
