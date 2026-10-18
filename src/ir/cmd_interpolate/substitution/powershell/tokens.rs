@@ -67,6 +67,14 @@ pub(super) fn is_power_shell_token_boundary(chars: &[char], pos: usize) -> bool 
             .is_some_and(|ch| is_power_shell_token_separator(*ch))
 }
 
+/// Report whether a source position can start a PowerShell comment token.
+pub(super) fn is_power_shell_comment_boundary(chars: &[char], pos: usize) -> bool {
+    pos == 0
+        || chars
+            .get(pos - 1)
+            .is_some_and(|ch| *ch == '=' || is_power_shell_token_separator(*ch))
+}
+
 /// Report whether a character separates PowerShell command tokens.
 const fn is_power_shell_token_separator(ch: char) -> bool {
     ch.is_ascii_whitespace()

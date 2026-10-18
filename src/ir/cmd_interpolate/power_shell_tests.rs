@@ -99,6 +99,8 @@ fn power_shell_scripts_reject_protected_markers(#[case] template: String) {
 /// Reject markers after comment syntax could desynchronize the partial scanner.
 #[rstest]
 #[case::comment_quote(format!("# '\nWrite-Output '{INS_TOKEN}'"))]
+#[case::comment_after_assignment_input(format!("$x=#'\nWrite-Output '{INS_TOKEN}'"))]
+#[case::comment_after_assignment_output(format!("$x=#'\nWrite-Output '{OUTS_TOKEN}'"))]
 #[case::comment_closes_substitution(format!(
     "Write-Output $(Write-Output x # )\n{OUTS_TOKEN})"
 ))]

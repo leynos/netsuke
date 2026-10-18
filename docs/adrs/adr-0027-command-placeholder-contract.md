@@ -40,6 +40,9 @@ command as literal text, so Netsuke's standalone path literal is not a safe
 encoder there. The scanner resumes after the raw region ends at its newline or
 pipeline terminator; a semicolon does not end it.
 
+Amended on 2026-10-18 to document the quoted PowerShell script placeholder
+security fix for issue #846.
+
 ## Date
 
 2026-09-19

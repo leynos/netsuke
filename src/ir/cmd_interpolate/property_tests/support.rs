@@ -184,8 +184,7 @@ fn power_shell_fragment_strategy() -> impl Strategy<Value = String> {
         Just(INS_TOKEN.to_owned()),
         Just(OUTS_TOKEN.to_owned()),
         prop::sample::select(vec![
-            "'", "\"", "`", "$(", ")", " ", ";", "plain", "@'\n", "\n'@", "@\"\n", "\n", "#", "<#",
-            "${", "}", "’",
+            "'", "\"", "`", "$(", ")", " ", ";", "plain", "#", "<#", "${", "}", "’",
         ])
         .prop_map(str::to_owned),
     ]

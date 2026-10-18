@@ -3,7 +3,7 @@
 use super::super::super::{IrGenError, QuoteContext, find_substitution, invalid_command_error};
 use super::super::{MarkerProtection, SubstitutionTraversal};
 use super::tokens::{
-    comment_character_changes_scanner_state, here_string_opener, is_power_shell_token_boundary,
+    comment_character_changes_scanner_state, here_string_opener, is_power_shell_comment_boundary,
     is_typographic_quote, starts_block_comment, starts_stop_parsing_token,
 };
 
@@ -171,7 +171,7 @@ impl SubstitutionTraversal<'_, '_> {
 
     /// Report whether an unquoted hash begins a PowerShell comment token.
     fn is_unquoted_comment_start(&self, pos: usize) -> bool {
-        self.matches_unquoted_quote_context() && is_power_shell_token_boundary(self.chars, pos)
+        self.matches_unquoted_quote_context() && is_power_shell_comment_boundary(self.chars, pos)
     }
 
     /// Preserve or reject a character in an active PowerShell here-string.

@@ -3040,16 +3040,21 @@ comment make later markers fail closed. In particular, an apostrophe in a
 comment may make a later marker fail closed. POSIX and Bash script lowering
 retains comments and multiline shell syntax and uses the script-only
 `ScriptSubstitutionTraversal`; it encodes markers for unquoted, single-quoted,
-and double-quoted sites while rejecting protected command substitutions. The
-private `PowerShellLexicalState` in `powershell_lexical.rs` tracks here-string
-bodies and typographic-quote fail-closed state; it is not a general PowerShell
-parser or a shared shell API. Longer identifiers such as `$input` and
-non-placeholder text inside backticks remain unchanged. In `command:` recipes
-on the POSIX and Bash routes, unbalanced backticks or command text that `shlex`
-cannot parse produce an IR error before an action is hashed; `script:` recipes
-and the PowerShell route are outside that check. Ninja generation then receives
-fully expanded command text and is responsible only for preserving the scalar
-form or constructing the list-entry shell boundaries.
+and double-quoted sites while rejecting protected command substitutions.
+PowerShell also rejects markers in raw native-command arguments after an
+unquoted `--%` until a newline or pipeline; a semicolon does not end that
+region. The private `PowerShellLexicalState` in
+`src/ir/cmd_interpolate/substitution/powershell/lexical.rs` tracks here-string
+bodies and typographic-quote fail-closed state, while
+`PowerShellStopParsingState` tracks raw native-command arguments. These helpers
+are not a general PowerShell parser or a shared shell API. Longer identifiers
+such as `$input` and non-placeholder text inside backticks remain unchanged. In
+`command:` recipes on the POSIX and Bash routes, unbalanced backticks or
+command text that `shlex` cannot parse produce an IR error before an action is
+hashed; `script:` recipes and the PowerShell route are outside that check.
+Ninja generation then receives fully expanded command text and is responsible
+only for preserving the scalar form or constructing the list-entry shell
+boundaries.
 
 [ADR-0027](adrs/adr-0027-command-placeholder-contract.md) settles which parts
 of this behaviour are promises: the marker invariant is contractual, the
