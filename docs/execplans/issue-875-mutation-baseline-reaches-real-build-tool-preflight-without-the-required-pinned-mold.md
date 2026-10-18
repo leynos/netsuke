@@ -33,8 +33,10 @@ shared workflow documents survives only through the `linker` key. Review on
 reading, and directed that it be delivered as a separate build-policy change
 under #875 rather than inside #911 — an unconditional Linux wrapper is not the
 design, because the release, packaging and coverage exclusions depend on the
-present displacement. See *Surprises & discoveries* and *Outcomes &
-retrospective*.
+present displacement. Review then withdrew its accompanying draft-retention
+requirement and confirmed the delivery order: this pull request lands as the
+provisioning and test-boundary fix with #875 left open for the linker change.
+See *Surprises & discoveries* and *Outcomes & retrospective*.
 
 ## Purpose / big picture
 
@@ -1490,6 +1492,22 @@ the last entry of this section rather than recited here.
   behind the linker change; the draft state is retained until it answers.
   Recorded as the live blocker at this head, not as a gap in the code.
 
+  **Answered, 2026-10-18 18:40Z, 52 seconds after the question was posted**
+  (review comment `6253660113`, verified at `529c1291`): **reading 1 — "land
+  `#911` first as the provisioning and test-boundary fix, after the normal
+  formal review. Keep `#875` open for the separate linker-selection change."**
+  Review withdrew the draft-retention requirement as "an unnecessary
+  dependency", ordering delivery as (1) readiness and formal review, (2) merge,
+  (3) the linker change separately under `#875`. The answer does not waive the
+  acceptance clause: it requires the description stay explicit that
+  provisioning proves installation and not linker selection, and that `#875`
+  not be closed when `#911` merges. Both are already true of the description.
+  The reply states it "is not an approval or a formal review". The paragraph
+  above is kept rather than rewritten because it records what was true when
+  written; the disposition it asked for is the one stated here, and the draft
+  state is now held only until readiness conditions are met rather than pending
+  an answer.
+
 [assess-911]: https://github.com/leynos/netsuke/pull/911#issuecomment-6250838137
 [follow-up-927]: https://github.com/leynos/netsuke/issues/927
 
@@ -2091,6 +2109,17 @@ stays open in this plan, and the wrapper is deliberately not written into this
 branch. This is the second finding on the branch that a green gate cannot
 settle; the first was that installing a linker on another job does not
 provision this one.
+
+The delivery order was put to review because its two directives could not both
+hold, and review resolved it on 2026-10-18 by withdrawing the draft-retention
+requirement: **this pull request lands as the provisioning and test-boundary
+fix, and #875 stays open for the linker change.** That is a disposition, not a
+waiver. The paragraph above still governs what this branch does and does not
+claim, and the follow-up change inherits four boundaries review restated when
+it gave the order: it must produce actual mutation-worker evidence that the
+baseline selects the pinned mold, it must preserve the release, packaging and
+coverage exclusions, it must leave macOS and Windows behaviour unchanged, and
+it must treat the displaced `-Zthreads=8` frontend setting as its own question.
 
 **Three lessons worth carrying forward.** First, the issue's premise needed
 re-cutting: the reported symptom was accurate, but "the baseline reaches the
@@ -2809,7 +2838,14 @@ says the defect is current; the latter says a green badge on that workflow is
 not by itself evidence of a measured run.
 
 The status line stays `COMPLETE` for the plan and the acceptance clause stays
-open for the issue: nothing in this revision changes the code, and the boundary
-question — whether a repository-owned `linker` change discharges "required
-linker selection remains intact", and whether it may ride in this pull request
-— is put to CodeRabbit on #911 and is unanswered as of this entry.
+open for the issue: nothing in this revision changes the code.
+
+The boundary question's second half is now answered. It asked both whether a
+repository-owned `linker` change discharges "required linker selection remains
+intact" and whether it may ride in this pull request; the first answer stands
+as recorded above, and the second was resolved on 2026-10-18 when review
+withdrew its draft-retention requirement and set the order: **#911 lands as the
+provisioning and test-boundary fix, and the linker change follows separately
+under #875.** The plan keeps the clause open and keeps the draft state until
+readiness, but no longer waits on a disposition — the remaining work is the
+ordinary path through readiness and formal review.
