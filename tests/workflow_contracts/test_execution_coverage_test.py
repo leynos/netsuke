@@ -220,29 +220,23 @@ def test_ambient_target_harnesses_check_only_the_library_they_consume() -> None:
     build dependencies. None needs Cargo to check every workspace target
     before compiling a small direct-rustc fixture.
     """
-    module = GATE_FEATURES_MODULE.read_text(encoding="utf-8")
-    declarations = dict(
+    # `lint` marks the all-features lane; the default-features lane passes no
+    # feature selection, so a nested check must not add `--all-features` there
+    # or Cargo recompiles the graph.
+    lanes = dict(
         re.findall(
             r'#\[cfg\((feature = "lint"|not\(feature = "lint"\))\)\]\s*'
             r"pub const LIBRARY_BUILD_ARGUMENTS:\s*&\[&str\]\s*=\s*&\[(.*?)\];",
-            module,
+            GATE_FEATURES_MODULE.read_text(encoding="utf-8"),
             re.DOTALL,
         )
     )
-    # The all-features lane (`make test-nextest`) is the one with `lint` on; the
-    # default-features lane passes no feature selection, so a nested check must
-    # not add `--all-features` there or Cargo recompiles the graph.
-    expected_lanes = {
-        'feature = "lint"': ["--lib", "--all-features"],
-        'not(feature = "lint")': ["--lib"],
-    }
-    for lane, expected in expected_lanes.items():
-        assert lane in declarations, (
-            f"the shared module must define library arguments under cfg({lane})"
-        )
-        assert re.findall(r'"([^"]+)"', declarations[lane]) == expected, (
-            f"ambient checks under cfg({lane}) must select {expected!r}"
-        )
+    for lane, expected in (
+        ('feature = "lint"', ["--lib", "--all-features"]),
+        ('not(feature = "lint")', ["--lib"]),
+    ):
+        arguments = re.findall(r'"([^"]+)"', lanes.get(lane, ""))
+        assert arguments == expected, f"cfg({lane}) must select exactly {expected}"
     for package, source in AMBIENT_TARGET_NESTED_BUILD_PACKAGES:
         text = source.read_text(encoding="utf-8")
         required_composition = (
