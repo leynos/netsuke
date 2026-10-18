@@ -204,16 +204,23 @@ proptest::proptest! {
     }
 }
 
-/// One generated target: which nested fields it declares, and whether a blank
-/// line separates it from the next declaration.
-#[derive(Debug, Clone, Copy)]
+/// A nested field a generated target may declare.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Field {
+    /// A one-line `command`.
+    Command,
+    /// A two-line `deps` list.
+    Deps,
+    /// A one-line `phony` flag.
+    Phony,
+}
+
+/// One generated target: the nested fields it declares, each at most once,
+/// and whether a blank line separates it from the next declaration.
+#[derive(Debug, Clone)]
 struct GeneratedTarget {
-    /// Whether the target declares a `command`.
-    has_command: bool,
-    /// Whether the target declares a two-line `deps` list.
-    has_deps: bool,
-    /// Whether the target declares `phony`.
-    has_phony: bool,
+    /// The fields the target declares, in declaration order.
+    fields: Vec<Field>,
     /// Whether a blank line follows the target.
     blank_after: bool,
 }
@@ -226,6 +233,9 @@ enum Placement {
     /// One directive trailing the target's declaration line.
     Trailing,
 }
+
+/// The directive text every generated layout uses.
+const DIRECTIVE: &str = "# netsuke-lint: allow unused-var -- generated";
 
 /// A generated manifest with the expected coverage of each content line.
 struct Layout {
@@ -251,11 +261,46 @@ impl Layout {
         self.text.push_str(line);
         self.text.push('\n');
     }
+
+    /// Append one target, writing the directive into it when it is directed.
+    fn target(&mut self, index: usize, target: &GeneratedTarget, directed: Option<Placement>) {
+        let covered = directed.is_some();
+        let mut name = format!("  - name: t{index}");
+        match directed {
+            Some(Placement::Above(count)) => {
+                (0..count).for_each(|_| self.raw(&format!("  {DIRECTIVE}")));
+                self.directives = count;
+            }
+            Some(Placement::Trailing) => {
+                name = format!("{name}  {DIRECTIVE}");
+                self.directives = 1;
+            }
+            None => {}
+        }
+        self.content(&name, covered);
+        for field in &target.fields {
+            self.field(index, *field, covered);
+        }
+        if target.blank_after {
+            self.raw("");
+        }
+    }
+
+    /// Append one nested field of target `index`.
+    fn field(&mut self, index: usize, field: Field, covered: bool) {
+        match field {
+            Field::Command => self.content(&format!("    command: \"echo {index}\""), covered),
+            Field::Deps => {
+                self.content("    deps:", covered);
+                self.content(&format!("      - dep{index}"), covered);
+            }
+            Field::Phony => self.content("    phony: true", covered),
+        }
+    }
 }
 
 /// Build a manifest whose `directed` target carries the directive.
 fn build_layout(targets: &[GeneratedTarget], directed: usize, placement: Placement) -> Layout {
-    const DIRECTIVE: &str = "# netsuke-lint: allow unused-var -- generated";
     let mut layout = Layout {
         text: String::new(),
         probes: Vec::new(),
@@ -264,37 +309,7 @@ fn build_layout(targets: &[GeneratedTarget], directed: usize, placement: Placeme
     layout.content("netsuke_version: \"1.0.0\"", false);
     layout.content("targets:", false);
     for (index, target) in targets.iter().enumerate() {
-        let covered = index == directed;
-        let mut name = format!("  - name: t{index}");
-        if covered {
-            match placement {
-                Placement::Above(count) => {
-                    for _ in 0..count {
-                        layout.raw(&format!("  {DIRECTIVE}"));
-                    }
-                    layout.directives = count;
-                }
-                Placement::Trailing => {
-                    name.push_str("  ");
-                    name.push_str(DIRECTIVE);
-                    layout.directives = 1;
-                }
-            }
-        }
-        layout.content(&name, covered);
-        if target.has_command {
-            layout.content(&format!("    command: \"echo {index}\""), covered);
-        }
-        if target.has_deps {
-            layout.content("    deps:", covered);
-            layout.content(&format!("      - dep{index}"), covered);
-        }
-        if target.has_phony {
-            layout.content("    phony: true", covered);
-        }
-        if target.blank_after {
-            layout.raw("");
-        }
+        layout.target(index, target, (index == directed).then_some(placement));
     }
     layout.content("defaults:", false);
     layout.content("  - t0", false);
@@ -303,14 +318,14 @@ fn build_layout(targets: &[GeneratedTarget], directed: usize, placement: Placeme
 
 /// Generate one target's shape.
 fn generated_target() -> impl Strategy<Value = GeneratedTarget> {
-    (any::<bool>(), any::<bool>(), any::<bool>(), any::<bool>()).prop_map(
-        |(has_command, has_deps, has_phony, blank_after)| GeneratedTarget {
-            has_command,
-            has_deps,
-            has_phony,
-            blank_after,
-        },
+    (
+        proptest::sample::subsequence(vec![Field::Command, Field::Deps, Field::Phony], 0..=3),
+        any::<bool>(),
     )
+        .prop_map(|(fields, blank_after)| GeneratedTarget {
+            fields,
+            blank_after,
+        })
 }
 
 /// Generate where the directive is written.
@@ -333,10 +348,10 @@ proptest::proptest! {
     #[test]
     fn a_node_directive_covers_exactly_its_declaration(
         targets in proptest::collection::vec(generated_target(), 1..6),
-        directed in any::<proptest::sample::Index>(),
+        directed_seed in any::<proptest::sample::Index>(),
         placement in placement(),
     ) {
-        let directed = directed.index(targets.len());
+        let directed = directed_seed.index(targets.len());
         let layout = build_layout(&targets, directed, placement);
         let doc = Document::parse(layout.text.clone()).expect("generated layout should index");
         let found = collect(&doc);
