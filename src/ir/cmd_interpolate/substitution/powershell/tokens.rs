@@ -15,6 +15,7 @@ pub(super) fn comment_character_changes_scanner_state(
         || (is_in_command_substitution && matches!(ch, '(' | ')'))
         // Deliberately over-reject here-string-looking text inside comments.
         || here_string_opener(chars, pos).is_some()
+        || starts_stop_parsing_token(chars, pos)
 }
 
 /// Return the quote character when a here-string opener starts at `pos`.
@@ -67,12 +68,17 @@ pub(super) fn is_power_shell_token_boundary(chars: &[char], pos: usize) -> bool 
             .is_some_and(|ch| is_power_shell_token_separator(*ch))
 }
 
-/// Report whether a source position can start a PowerShell comment token.
+/// Report whether a source position may start a PowerShell comment token.
+///
+/// Treat punctuation as a possible boundary because operators and closing
+/// delimiters can place a comment marker at the start of a token.
 pub(super) fn is_power_shell_comment_boundary(chars: &[char], pos: usize) -> bool {
     pos == 0
-        || chars
-            .get(pos - 1)
-            .is_some_and(|ch| *ch == '=' || is_power_shell_token_separator(*ch))
+        || chars.get(pos - 1).is_some_and(|ch| {
+            *ch == '='
+                || is_power_shell_token_separator(*ch)
+                || matches!(*ch, '+' | '-' | '<' | '>' | ']')
+        })
 }
 
 /// Report whether a character separates PowerShell command tokens.

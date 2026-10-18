@@ -43,6 +43,9 @@ pipeline terminator; a semicolon does not end it.
 Amended on 2026-10-18 to document the quoted PowerShell script placeholder
 security fix for issue #846.
 
+Amended on 2026-10-18 after review of PowerShell comment and stop-parsing
+edges.
+
 ## Date
 
 2026-09-19
@@ -179,9 +182,11 @@ context-safe encoder inside an existing PowerShell string. PowerShell scripts
 do not have inert comment regions in this scanner: plain line-comment text
 leaves later markers eligible for interpolation, while a block-comment opener
 or scanner-sensitive syntax such as an apostrophe can make later markers fail
-closed. The `shlex` guard remains `command:`-only: a `script:` recipe bypasses
-it because scripts may contain heredocs and other text that `shlex` cannot
-model.
+closed. The raw native-command region after `--%` models only ASCII double
+quotes for pipeline detection; a single quote, backtick, or typographic quote
+there makes later markers fail closed. The `shlex` guard remains
+`command:`-only: a `script:` recipe bypasses it because scripts may contain
+heredocs and other text that `shlex` cannot model.
 
 ### The `shlex` guard is part of the acceptance contract, not a stability commitment
 

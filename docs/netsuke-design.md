@@ -3043,7 +3043,9 @@ retains comments and multiline shell syntax and uses the script-only
 and double-quoted sites while rejecting protected command substitutions.
 PowerShell also rejects markers in raw native-command arguments after an
 unquoted `--%` until a newline or pipeline; a semicolon does not end that
-region. The private `PowerShellLexicalState` in
+region. Pipeline detection models ASCII double quotes only; a single quote,
+backtick, or typographic quote in the raw region makes later markers fail
+closed. The private `PowerShellLexicalState` in
 `src/ir/cmd_interpolate/substitution/powershell/lexical.rs` tracks here-string
 bodies and typographic-quote fail-closed state, while
 `PowerShellStopParsingState` tracks raw native-command arguments. These helpers

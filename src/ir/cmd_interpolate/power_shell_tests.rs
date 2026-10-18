@@ -45,6 +45,21 @@ fn power_shell_commands_reject_markers_after_stop_parsing_token() {
     assert!(matches!(error, IrGenError::InvalidCommand { command, .. } if command == template));
 }
 
+/// Reject command markers after stop-parsing quote syntax the scanner cannot model.
+#[rstest]
+#[case::single_quote(format!("cmd /c --% 'prefix | text' | Write-Output {OUTS_TOKEN}"))]
+#[case::backtick_before_double_quote(format!(
+    "cmd /c --% \"prefix`\" still \" | Write-Output {OUTS_TOKEN}"
+))]
+fn power_shell_commands_reject_markers_after_ambiguous_stop_parsing_syntax(
+    #[case] template: String,
+) {
+    let error = interpolate_command_with_bindings(&template, &script_bindings())
+        .expect_err("ambiguous stop-parsing syntax must fail closed for commands");
+
+    assert!(matches!(error, IrGenError::InvalidCommand { command, .. } if command == template));
+}
+
 /// Prepare bindings with a Windows-valid path that can expose source injection.
 fn script_bindings() -> CommandBindings {
     CommandBindings::new(
@@ -83,6 +98,15 @@ fn script_bindings() -> CommandBindings {
 #[case::stop_parsing_after_at_hash_in_argument(format!("cmd /c echo prefix@#suffix --% {INS_TOKEN}"))]
 #[case::stop_parsing_after_semicolon(format!("cmd /c --% literal; Write-Output {INS_TOKEN}"))]
 #[case::quoted_pipe_in_stop_parsing_region(format!("cmd /c --% echo \"prefix | {INS_TOKEN}\""))]
+#[case::stop_parsing_single_quote_before_pipeline(format!(
+    "cmd /c --% 'prefix | text' | Write-Output {OUTS_TOKEN}"
+))]
+#[case::stop_parsing_backtick_before_quote_and_pipeline(format!(
+    "cmd /c --% \"prefix`\" still \" | Write-Output {OUTS_TOKEN}"
+))]
+#[case::typographic_quote_before_pipe_in_stop_parsing_region(format!(
+    "cmd /c --% echo “ | Write-Output {OUTS_TOKEN}"
+))]
 fn power_shell_scripts_reject_protected_markers(#[case] template: String) {
     let result = interpolate_script_with_bindings(&template, &script_bindings());
     let error = result.expect_err("PowerShell scripts must reject protected markers");
@@ -101,6 +125,16 @@ fn power_shell_scripts_reject_protected_markers(#[case] template: String) {
 #[case::comment_quote(format!("# '\nWrite-Output '{INS_TOKEN}'"))]
 #[case::comment_after_assignment_input(format!("$x=#'\nWrite-Output '{INS_TOKEN}'"))]
 #[case::comment_after_assignment_output(format!("$x=#'\nWrite-Output '{OUTS_TOKEN}'"))]
+#[case::comment_after_assignment_stop_parsing_token(format!(
+    "$x=# --% raw comment text\nWrite-Output {OUTS_TOKEN}"
+))]
+#[case::comment_after_plus_operator(format!("$x = 1 +#'\nWrite-Output '{INS_TOKEN}'"))]
+#[case::comment_after_minus_operator(format!("$x = 1 -#'\nWrite-Output '{OUTS_TOKEN}'"))]
+#[case::comment_after_redirection_operator(format!(
+    "Write-Output x >#'\nWrite-Output '{INS_TOKEN}'"
+))]
+#[case::comment_after_type_literal(format!("[int]#'\nWrite-Output '{OUTS_TOKEN}'"))]
+#[case::comment_stop_parsing_token(format!("# --% raw comment text\nWrite-Output {OUTS_TOKEN}"))]
 #[case::comment_closes_substitution(format!(
     "Write-Output $(Write-Output x # )\n{OUTS_TOKEN})"
 ))]

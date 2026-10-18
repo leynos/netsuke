@@ -317,7 +317,7 @@ function Test-QuotedScriptPlaceholderRejection {
         Push-Location $workspace
         try {
             $payloadSource = Join-Path $workspace '; New-Item pwned; Write-Output x'
-            New-Item -ItemType File -LiteralPath $payloadSource | Out-Null
+            New-Item -ItemType File -Path $payloadSource | Out-Null
             $failure = & $Netsuke --json build $TargetName 2>&1
             if ($LASTEXITCODE -eq 0) {
                 throw 'A quoted PowerShell script marker unexpectedly built successfully.'
@@ -419,7 +419,7 @@ function Invoke-WindowsRecipeSmoke {
 
             $payloadName = '; New-Item pwned; Write-Output x'
             $payloadSource = Join-Path $workspace $payloadName
-            New-Item -ItemType File -LiteralPath $payloadSource | Out-Null
+            New-Item -ItemType File -Path $payloadSource | Out-Null
             Set-Content -NoNewline -LiteralPath $payloadSource -Value 'path-derived-content'
 
             Test-TargetDiscovery -Netsuke $Netsuke
