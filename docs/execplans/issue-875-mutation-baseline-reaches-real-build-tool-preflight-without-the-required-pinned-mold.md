@@ -257,6 +257,12 @@ Three entries dated `2026-10-16` were corrected to UTC after being written in
 local time; the defect, its proof and the limits of the audit are recorded in
 the last entry of this section rather than recited here.
 
+A fourth, the `2026-10-18` P2 repair entry, repeated it: the clock was read as
+`21:40Z` when the worktree's clock was `21:40+02:00`, so it was corrected to
+`19:40Z` in the commit after the one that carried it. The same issue in the
+same section, a year apart in the narrative and a day apart in fact, so the
+practice is stated here rather than rediscovered: read `date -u`, never `date`.
+
 - [x] (2026-10-12 14:45Z) Reconnaissance: confirmed the upstream diagnostic
   reproduces locally. With `PATH` and `HOME` both free of `mold`/`rustup`,
   `make … doctest` exits 2 at
@@ -1507,7 +1513,7 @@ the last entry of this section rather than recited here.
   written; the disposition it asked for is the one stated here, and the draft
   state is now held only until readiness conditions are met rather than pending
   an answer.
-- [x] (2026-10-18 21:40Z) **Codex's P2 is repaired: the harness-backed
+- [x] (2026-10-18 19:40Z) **Codex's P2 is repaired: the harness-backed
   `rustdocflags` items are Linux-only, and the four static contract tests stay
   platform-neutral.** The finding (inline `4308356032`, on
   `tests/makefile_test_target/rustdocflags.rs:161`) is correct on every
@@ -1563,6 +1569,42 @@ the last entry of this section rather than recited here.
 ## Surprises & discoveries
 
 Unexpected findings during implementation that were not anticipated as risks.
+
+- **Observation:** gating an item out with `cfg(false)` proves *less* than it
+  appears to, and two of the three probes used to check this repair were
+  worthless for opposite reasons. Impact: a `make typecheck` run with the new
+  gate forced false exited 0 and printed no `dead_code`, which reads as a clean
+  bill of health; the log holds no line for the target's own crate, so the
+  target's warnings simply were not in it. A standalone `rustc` probe then
+  "confirmed" warning-freedom on a file that **did not compile at all** — two
+  `E0432`/`E0601` errors, rc 1, zero warnings. Recourse: the only probe that
+  binds is a deliberate fault in the real file, compiled by the real target:
+  add an unused import, shape the gate, and require the compiler to name the
+  import. It did, at rc 101, so the same shape without the fault recompiling in
+  6.27 s is a real compile rather than a cache hit. Note the asymmetry: a
+  passing compile with `-D warnings` says something, but a *failing* compile
+  says nothing about warnings, and the two look alike if only the warning count
+  is read.
+
+- **Observation:** a test module can be gated `cfg(unix)` and still be
+  Linux-only in effect, because `#[cfg(unix)]` guards the *attribute*, not the
+  transitive requirement. Impact: the `rustdocflags` harness gate read as a
+  portability decision and was in fact a defect — `Sandbox::new` resolves
+  `sha256sum`, so the harness could never construct off Linux, and the gate
+  suppressed the compile rather than the symptom. Every other `Sandbox`
+  consumer in the suite had already reached the same conclusion with
+  `all(unix, target_os = "linux")`. Recourse: when a helper has an eager
+  platform-specific requirement, gate on the requirement, not on the broadest
+  family that happens to contain the platform you develop on; and check the
+  sibling call sites before inventing an exception, because in this case the
+  majority pattern was the correct one and was one `rg` away.
+
+- **Observation:** the clock was read from `git log`'s local-time formatting
+  and written into the Progress section, which states that its timestamps are
+  UTC. Impact: a `21:40Z` entry described work done at `19:40Z`, and the same
+  defect had already been recorded for three `2026-10-16` entries. Recourse:
+  read `date -u` and nothing else when writing a UTC timestamp; commit
+  `%cI`/`%aI` output carries an offset and looking at it is not reading UTC.
 
 - **Observation:** no gate can see a wrong number in prose, and the two numbers
   that were wrong here had been re-derived from the plan's own summary rather
