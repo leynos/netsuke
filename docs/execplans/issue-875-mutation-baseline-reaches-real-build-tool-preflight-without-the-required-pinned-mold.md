@@ -10,23 +10,30 @@ Status: COMPLETE
 
 All four milestones are closed and draft pull request #911 carries the work.
 The status describes this plan, not the issue: the issue's acceptance clause
-that required linker selection remains intact — its second clause — is unmet
-under its strict reading and is **recorded as an upstream gap rather than
-resolved**, because the fix needs a `rustflags` input on the shared reusable
-workflow that no *merged* revision of it declares. A fix is proposed —
-shared-actions#628 adds the input — but it is unmerged as of 2026-10-16, and a
-caller can only pin a revision that exists. See *Outcomes & retrospective*.
+that required linker selection to remain intact — its second clause — is unmet
+under its strict reading and is **recorded as a gap rather than resolved**. See
+*Outcomes & retrospective*.
 
-Two corrections to that paragraph, made 2026-10-18. First, the exported
-`RUSTFLAGS` is emitted by the downstream `setup-rust-toolchain` action, not by
-`setup-rust` itself; `setup-rust`'s non-empty default is what keeps that export
-alive. Second, and this changes the disposition, **#628 is not this issue's
-remedy**: it replaces `RUSTFLAGS` for the cargo-mutants child only, which is
-the opposite direction from adding `-Clink-arg=-fuse-ld=mold`. A three-way
-build measurement now establishes that a config-declared `rustflags` entry is
-displaced by an exported `RUSTFLAGS` while a config-declared `linker` entry is
-not, so the consumer-repository route the shared workflow documents survives
-only through the `linker` key. See *Surprises & discoveries* and *Outcomes &
+Two corrections to the plan's earlier account of that gap, made 2026-10-18.
+First, the exported `RUSTFLAGS` is emitted by the downstream
+`setup-rust-toolchain` action, not by `setup-rust` itself; `setup-rust`'s
+non-empty default is what keeps that export alive. Second, shared-actions#628
+is **not** the remedy this plan had been carrying: it supplies a child-only
+flag-replacement mechanism for the cargo-mutants child. It does not preserve
+configuration-owned flags, and it does not, by itself, resolve this issue's
+linker-selection criterion. A replacement value *can* name
+`-Clink-arg=-fuse-ld=mold`, so the reason it is rejected here is not incapacity
+but that this plan forbids caller-owned flag replacement.
+
+A three-way build measurement then established that a config-declared
+`rustflags` entry is displaced by an exported `RUSTFLAGS` while a
+config-declared `linker` entry is not, so the consumer-repository route the
+shared workflow documents survives only through the `linker` key. Review on
+2026-10-18 held that route valid in principle, rejected the upstream-only
+reading, and directed that it be delivered as a separate build-policy change
+under #875 rather than inside #911 — an unconditional Linux wrapper is not the
+design, because the release, packaging and coverage exclusions depend on the
+present displacement. See *Surprises & discoveries* and *Outcomes &
 retrospective*.
 
 ## Purpose / big picture
@@ -1819,10 +1826,12 @@ Unexpected findings during implementation that were not anticipated as risks.
   `RUSTFLAGS` replacement for the Cargo child" and is passed to the Python
   command builder for the cargo-mutants child process only. That serves a
   Cranelift consumer who must *remove* development backend flags from the
-  mutant child. This issue needs the mutant child to carry *more* flags, and a
-  replacement input cannot add `-Clink-arg=-fuse-ld=mold`. Even at upstream
-  head, `mutation-cargo.yml` calls `setup-rust` with `install-mold` alone, so
-  the `-D warnings` export survives. So #628 is not the remedy for this issue's
+  mutant child. This issue needs the mutant child to carry *more* flags, and
+  the replacement value could in principle name `-Clink-arg=-fuse-ld=mold`, but
+  a caller-owned replacement does not preserve configuration-owned flags and
+  does not, by itself, resolve the selection criterion. Even at upstream head,
+  `mutation-cargo.yml` calls `setup-rust` with `install-mold` alone, so the
+  `-D warnings` export survives. So #628 is not the remedy for this issue's
   linker clause, and the plan's earlier framing of it as "the proposed fix" is
   retracted.
 
@@ -2012,22 +2021,30 @@ owned upstream.
 
 The remediation route recorded here on 2026-10-16 — "a `rustflags` input on
 `mutation-cargo.yml`, now proposed as shared-actions#628" — is **retracted**,
-because two measurements do not support it. #628's input is a literal
-`RUSTFLAGS` *replacement* applied to the cargo-mutants child only; it exists to
-strip a Cranelift consumer's backend flags, so it can only remove flags and
-never add `-Clink-arg=-fuse-ld=mold`. And a config-declared `rustflags` entry
-does not survive an exported `RUSTFLAGS` at all — the three-way compile
-measurement in *Surprises & discoveries* shows the table being displaced while
-the `linker` key survives. What is left is the route the shared workflow's own
-`install-mold` description points at, "select mold in the project's Cargo
-configuration", expressed through the one key an exported `RUSTFLAGS` does not
-displace. That is either a repository-owned `linker` wrapper — which would make
-mold the linker for every build, mutation or not, and so is a design change —
-or an upstream change to what the shared workflow exports. Neither was taken
-unilaterally: the boundary question is on the pull request as of 2026-10-18,
-and the criterion stays open until it is answered. This is the second finding
-on the branch that a green gate cannot settle; the first was that installing a
-linker on another job does not provision this one.
+because two measurements do not support it. #628 supplies a child-only
+flag-replacement mechanism: a literal `RUSTFLAGS` value applied to the
+cargo-mutants child only. Its replacement *can* name
+`-Clink-arg=-fuse-ld=mold`, but it does not preserve configuration-owned flags
+and does not, by itself, resolve the selection criterion; caller-owned flag
+replacement is what this plan's constraints forbid. And a config-declared
+`rustflags` entry does not survive an exported `RUSTFLAGS` at all — the
+three-way compile measurement in *Surprises & discoveries* shows the table
+being displaced while the `linker` key survives. What is left is the route the
+shared workflow's own `install-mold` description points at, "select mold in the
+project's Cargo configuration", expressed through the one key an exported
+`RUSTFLAGS` does not displace. That is either a repository-owned `linker`
+wrapper — which would make mold the linker for every build, mutation or not,
+and so is a design change — or an upstream change to what the shared workflow
+exports. The boundary question went to review on the pull request on 2026-10-18
+and was answered: repository-owned selection is valid in principle, but it is a
+build-policy change to be delivered **separately from #911**, because the
+release, packaging and coverage exclusions rely on an assigned `RUSTFLAGS`
+displacing the configured table, and a wrapper that survives that displacement
+would survive in those builds too. That separate change is tracked under #875;
+#544 keeps the broader flag-ownership defect. So the criterion stays open in
+this plan, and the wrapper is deliberately not written into this branch. This
+is the second finding on the branch that a green gate cannot settle; the first
+was that installing a linker on another job does not provision this one.
 
 **Three lessons worth carrying forward.** First, the issue's premise needed
 re-cutting: the reported symptom was accurate, but "the baseline reaches the
@@ -2714,9 +2731,11 @@ points, both measured rather than reasoned. First, the exported `RUSTFLAGS`
 comes from the downstream `setup-rust-toolchain` action's `GITHUB_ENV` append,
 not from `setup-rust`'s own description; the earlier wording pointed one layer
 too high and is corrected in `Progress`. Second, shared-actions#628 is **not**
-the remedy this plan had been carrying: its input is a literal `RUSTFLAGS`
-replacement for the cargo-mutants child, which cannot add linker selection, and
-it is scoped to that child. A three-configuration compile measurement
+the remedy this plan had been carrying: it supplies a child-only
+flag-replacement mechanism. Its replacement value *can* name
+`-Clink-arg=-fuse-ld=mold`, but it does not preserve configuration-owned flags
+and does not, by itself, resolve the selection criterion, and caller-owned
+replacement is forbidden here. A three-configuration compile measurement
 established that an exported `RUSTFLAGS` displaces a config-declared
 `rustflags` table but leaves a config-declared `linker` key intact, which makes
 the `linker` key the only surviving in-repository route and makes it a design
@@ -2724,6 +2743,16 @@ change rather than a configuration tweak. The retraction is recorded in
 `Outcomes & retrospective`; the measurement and the #628 reading are in
 `Surprises & discoveries`; Axiom A3 now records the measured half separately
 from the part that remains upstream.
+
+Same day, later: review answered the boundary question the plan had left open.
+Repository-owned `linker` selection is valid in principle; it must be delivered
+as a separate build-policy change under #875 rather than inside #911, because
+the release, packaging and coverage exclusions depend on an assigned
+`RUSTFLAGS` displacing the configured table; macOS and Windows are unchanged;
+and the upstream-only reading is rejected, so #544 remains the broader
+flag-ownership defect rather than the criterion's sole home. The plan records
+that disposition in its header, `Outcomes & retrospective` and the workflow
+comment, and does not adopt the wrapper here.
 
 Also recorded in this revision, and live rather than historical: four scheduled
 mutation runs on `main` between 13 and 17 October failed with the issue's exact
