@@ -1,9 +1,10 @@
 //! Tests for directive scanning and scoping.
 
+use proptest::prelude::*;
 use rstest::rstest;
 
 use super::{Scope, collect};
-use crate::lint::document::Document;
+use crate::lint::document::{Document, Span};
 
 /// Parse `text` and collect its directives.
 macro_rules! directives {
@@ -200,5 +201,161 @@ proptest::proptest! {
             "a script block's contents are shell text, not directives: {}",
             yaml
         );
+    }
+}
+
+/// One generated target: which nested fields it declares, and whether a blank
+/// line separates it from the next declaration.
+#[derive(Debug, Clone, Copy)]
+struct GeneratedTarget {
+    /// Whether the target declares a `command`.
+    has_command: bool,
+    /// Whether the target declares a two-line `deps` list.
+    has_deps: bool,
+    /// Whether the target declares `phony`.
+    has_phony: bool,
+    /// Whether a blank line follows the target.
+    blank_after: bool,
+}
+
+/// Where the directive under test is written.
+#[derive(Debug, Clone, Copy)]
+enum Placement {
+    /// A run of this many directive lines above the target's declaration.
+    Above(usize),
+    /// One directive trailing the target's declaration line.
+    Trailing,
+}
+
+/// A generated manifest with the expected coverage of each content line.
+struct Layout {
+    /// The manifest text.
+    text: String,
+    /// The offset of each content line's first non-space byte, paired with
+    /// whether the directive must cover it.
+    probes: Vec<(usize, bool)>,
+    /// How many directives the text carries.
+    directives: usize,
+}
+
+impl Layout {
+    /// Append a content line whose coverage is known by construction.
+    fn content(&mut self, line: &str, covered: bool) {
+        let indent = line.len() - line.trim_start().len();
+        self.probes.push((self.text.len() + indent, covered));
+        self.raw(line);
+    }
+
+    /// Append a comment or blank line, which no finding can start on.
+    fn raw(&mut self, line: &str) {
+        self.text.push_str(line);
+        self.text.push('\n');
+    }
+}
+
+/// Build a manifest whose `directed` target carries the directive.
+fn build_layout(targets: &[GeneratedTarget], directed: usize, placement: Placement) -> Layout {
+    const DIRECTIVE: &str = "# netsuke-lint: allow unused-var -- generated";
+    let mut layout = Layout {
+        text: String::new(),
+        probes: Vec::new(),
+        directives: 0,
+    };
+    layout.content("netsuke_version: \"1.0.0\"", false);
+    layout.content("targets:", false);
+    for (index, target) in targets.iter().enumerate() {
+        let covered = index == directed;
+        let mut name = format!("  - name: t{index}");
+        if covered {
+            match placement {
+                Placement::Above(count) => {
+                    for _ in 0..count {
+                        layout.raw(&format!("  {DIRECTIVE}"));
+                    }
+                    layout.directives = count;
+                }
+                Placement::Trailing => {
+                    name.push_str("  ");
+                    name.push_str(DIRECTIVE);
+                    layout.directives = 1;
+                }
+            }
+        }
+        layout.content(&name, covered);
+        if target.has_command {
+            layout.content(&format!("    command: \"echo {index}\""), covered);
+        }
+        if target.has_deps {
+            layout.content("    deps:", covered);
+            layout.content(&format!("      - dep{index}"), covered);
+        }
+        if target.has_phony {
+            layout.content("    phony: true", covered);
+        }
+        if target.blank_after {
+            layout.raw("");
+        }
+    }
+    layout.content("defaults:", false);
+    layout.content("  - t0", false);
+    layout
+}
+
+/// Generate one target's shape.
+fn generated_target() -> impl Strategy<Value = GeneratedTarget> {
+    (any::<bool>(), any::<bool>(), any::<bool>(), any::<bool>()).prop_map(
+        |(has_command, has_deps, has_phony, blank_after)| GeneratedTarget {
+            has_command,
+            has_deps,
+            has_phony,
+            blank_after,
+        },
+    )
+}
+
+/// Generate where the directive is written.
+fn placement() -> impl Strategy<Value = Placement> {
+    prop_oneof![
+        (1_usize..4).prop_map(Placement::Above),
+        Just(Placement::Trailing)
+    ]
+}
+
+proptest::proptest! {
+    /// A node-scoped directive covers exactly the declaration it governs.
+    ///
+    /// The expectation comes from how the manifest was built, not from the
+    /// resolver: every line of the directed target, nested fields included,
+    /// must be covered, and no line of a sibling target or of the surrounding
+    /// top-level keys may be. A run of directives above one declaration must
+    /// all resolve to it, and a blank separator must not let a block reach
+    /// the next declaration.
+    #[test]
+    fn a_node_directive_covers_exactly_its_declaration(
+        targets in proptest::collection::vec(generated_target(), 1..6),
+        directed in any::<proptest::sample::Index>(),
+        placement in placement(),
+    ) {
+        let directed = directed.index(targets.len());
+        let layout = build_layout(&targets, directed, placement);
+        let doc = Document::parse(layout.text.clone()).expect("generated layout should index");
+        let found = collect(&doc);
+        prop_assert_eq!(found.len(), layout.directives, "directives in {}", layout.text);
+        for directive in &found {
+            prop_assert!(
+                matches!(directive.scope, Scope::Node(_)),
+                "a node directive should resolve to a node in {}",
+                layout.text
+            );
+            for &(offset, expected) in &layout.probes {
+                prop_assert_eq!(
+                    directive.covers(Some(Span::new(offset, offset + 1))),
+                    expected,
+                    "offset {} in {}",
+                    offset,
+                    layout.text
+                );
+            }
+        }
     }
 }
