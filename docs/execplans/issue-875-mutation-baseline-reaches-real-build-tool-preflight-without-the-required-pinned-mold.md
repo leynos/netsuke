@@ -17,6 +17,18 @@ workflow that no *merged* revision of it declares. A fix is proposed —
 shared-actions#628 adds the input — but it is unmerged as of 2026-10-16, and a
 caller can only pin a revision that exists. See *Outcomes & retrospective*.
 
+Two corrections to that paragraph, made 2026-10-18. First, the exported
+`RUSTFLAGS` is emitted by the downstream `setup-rust-toolchain` action, not by
+`setup-rust` itself; `setup-rust`'s non-empty default is what keeps that export
+alive. Second, and this changes the disposition, **#628 is not this issue's
+remedy**: it replaces `RUSTFLAGS` for the cargo-mutants child only, which is
+the opposite direction from adding `-Clink-arg=-fuse-ld=mold`. A three-way
+build measurement now establishes that a config-declared `rustflags` entry is
+displaced by an exported `RUSTFLAGS` while a config-declared `linker` entry is
+not, so the consumer-repository route the shared workflow documents survives
+only through the `linker` key. See *Surprises & discoveries* and *Outcomes &
+retrospective*.
+
 ## Purpose / big picture
 
 The scheduled mutation-testing run fails intermittently, and when it fails it
@@ -624,17 +636,24 @@ the last entry of this section rather than recited here.
 
   On flag ownership, the chain is now evidenced end to end:
   `mutation-cargo.yml` calls `setup-rust` with **only** `install-mold`, and
-  `setup-rust`'s `rustflags` input defaults to `'-D warnings'`, whose own
-  description says a non-empty value is what stops `.cargo/config.toml`
-  applying. So mold is installed, on `PATH`, and asserted at the pin, while
-  `.cargo/config.toml`'s `cfg(target_os = "linux")` table — the one carrying
+  `setup-rust`'s `rustflags` input defaults to `'-D warnings'` and passes it
+  straight through to `actions-rust-lang/setup-rust-toolchain`, which is the
+  action that actually appends `RUSTFLAGS=$NEW_RUSTFLAGS` to `GITHUB_ENV`; the
+  non-empty default is what keeps that export alive. So mold is installed, on
+  `PATH`, and asserted at the pin, while `.cargo/config.toml`'s
+  `cfg(target_os = "linux")` `rustflags` table — the one carrying
   `-Clink-arg=-fuse-ld=mold` — is displaced. That is shared-actions#544, open
-  at 2026-10-07 with no fixing release (the newest `setup-rust` commit,
+  at 2026-10-07 with no merged fixing release (the newest `setup-rust` commit,
   `3c0fa8e7` on 2026-10-10, is `(#583)`, unrelated). Per *Surprises*, the
   response is **no local workaround**, with the finding linked from the pull
   request. `ci.yml:279`'s own `RUSTFLAGS: -D warnings` is the *coverage*
   exclusion from the build standard, so this repository's workflows stay
   consistent with it.
+
+  (Corrected 2026-10-18: this entry previously attributed the export to
+  `setup-rust`'s own description rather than naming the downstream action. The
+  earlier wording pointed at the wrong layer of the chain, which matters when
+  deciding which upstream change fixes it.)
 
   Runner, cache and concurrency are unchanged:
   `git diff c65ad970 HEAD -- .github/workflows/` is `+39` lines, all inside
@@ -668,10 +687,13 @@ the last entry of this section rather than recited here.
   1. `shared-actions#544` is `OPEN` with `closedAt: null`, **zero** comments,
      and `updatedAt` of 2026-10-07 — three days before the pinned revision was
      cut. Re-checked 2026-10-16: still open, still zero comments, so no
-     *merged* revision fixes it. What has changed is that a fix now exists
-     unmerged — shared-actions#628, "Add optional mutation Rustflags override
-     (#544)", open, `mergeStateStatus` `BLOCKED` — so there is a fixing commit
-     to pin *later*, at merge, and none to pin now.
+     *merged* revision fixes it. What has changed is that a related change now
+     exists unmerged — shared-actions#628, "Add optional mutation Rustflags
+     override (#544)", open, `mergeStateStatus` `BLOCKED` — but see the
+     *Surprises* entry of 2026-10-18: #628 overrides `RUSTFLAGS` for the
+     cargo-mutants **child only** and therefore does not add linker selection.
+     It is a candidate to pin for the Cranelift consumer case it was written
+     for, not for this one.
   2. `mutation-cargo.yml` at the pin (`0606ca89`) declares 13 `workflow_call`
      inputs and **none** of them is `rustflags`; re-checked at the upstream tip
      `e693d81d` (2026-10-14) it declares 17, the additions being
@@ -687,12 +709,15 @@ the last entry of this section rather than recited here.
      `.cargo/config.toml` is unchanged upstream.
 
   The finding is therefore **confirmed as diagnosed and confirmed as not
-  actionable here**: it needs an upstream `rustflags` input, or a
-  `mutation-cargo.yml` that forwards one, before any pin can carry it. Adding a
-  local `RUSTFLAGS` override would violate the plan's own constraint and would
-  be the workaround the finding explicitly forbids ("do not override
-  `RUSTFLAGS` in this workflow caller"). No change made; the finding stands as
-  an upstream dependency against #544.
+  actionable here**: adding a local `RUSTFLAGS` override would violate the
+  plan's own constraint and would be the workaround the finding explicitly
+  forbids ("do not override `RUSTFLAGS` in this workflow caller"). No change
+  made; the finding stands as an upstream dependency against #544.
+
+  (Qualified 2026-10-18: #628's input is a child-scoped literal replacement, so
+  it is **not** the remedy for this clause. The route that survives measurement
+  is a config-owned `linker` entry, which an exported `RUSTFLAGS` does not
+  displace. See the *Surprises* entry of that date.)
 
   **Recurrence.** The finding was raised a third time on 2026-10-13 with one
   new clause: "verify a compiler invocation". That clause is already
@@ -924,15 +949,16 @@ the last entry of this section rather than recited here.
   eleventh time, at `mutation-testing.yml:78`. Checking it rather than
   re-asserting the recorded gap found that the record had *decayed*: the
   workflow comment named `aea9c14c24b7` as the upstream tip (now `e693d81d`, 17
-  inputs) and said #544 "has no fixing commit" (shared-actions#628 now proposes
-  exactly the missing input, `BLOCKED`). The verdict is unchanged — no merged
-  revision declares `rustflags` — but the cited reasons had rotted. Every copy
-  now names only stable anchors and states the claim as "no merged revision",
-  cites #628 with its state, and carries a re-check instruction. The census
-  re-derived to 17 invocations, 23 finding records, 11 mold instances, still
-  eleven distinct defects. **This head is the first since `52084776` that is
-  not docs-only**, so it takes the full gate set rather than the four-target
-  subset.
+  inputs) and said #544 "has no fixing commit" (shared-actions#628 then
+  appeared to propose the missing input, `BLOCKED` — though the 2026-10-18
+  entry above records that its input is child-scoped and does not add linker
+  selection). The verdict is unchanged — no merged revision declares
+  `rustflags` — but the cited reasons had rotted. Every copy now names only
+  stable anchors and states the claim as "no merged revision", cites #628 with
+  its state, and carries a re-check instruction. The census re-derived to 17
+  invocations, 23 finding records, 11 mold instances, still eleven distinct
+  defects. **This head is the first since `52084776` that is not docs-only**,
+  so it takes the full gate set rather than the four-target subset.
 - [x] (2026-10-14 05:20Z) **`df475f2e` is gated, and the plan stopped editing
   itself there.** Superseded as a stopping point by every later commit,
   including this document's own revision notes; retained as the record of that
@@ -1764,6 +1790,52 @@ Unexpected findings during implementation that were not anticipated as risks.
   The distinction matters because the responses differ: a refusal is a reason
   to re-dispatch, saturation is a reason to stop adding work to the machine.
 
+- **Observation (2026-10-18): `RUSTFLAGS` displaces a config-declared
+  `rustflags` table but *not* a config-declared `linker`, and the plan's
+  recorded remedy for the linker clause was wrong.** Two claims in this plan
+  had been carried without measurement: that a consumer can regain the mold
+  flag by declaring it in `.cargo/config.toml`, and that shared-actions#628 is
+  the upstream fix. Both are now settled by direct measurement and by reading
+  #628's actual diff.
+
+  The measurement is a two-line crate compiled three ways, with the `rustc`
+  argv read each time:
+
+  | Configuration                                                   | `RUSTFLAGS`                            | `-C linker=` in argv | `-Clink-arg=-fuse-ld=mold` |
+  | --------------------------------------------------------------- | -------------------------------------- | -------------------- | -------------------------- |
+  | `linker = "clang"` + `rustflags = ["-Clink-arg=-fuse-ld=mold"]` | unset                                  | `clang`              | present                    |
+  | same                                                            | `-D warnings`                          | `clang`              | **absent**                 |
+  | same                                                            | `-D warnings -Clink-arg=-fuse-ld=mold` | `clang`              | present                    |
+
+  A fourth configuration puts a wrapper script in the `linker` key and was
+  invoked with `-D warnings` exported and without it, so the `linker` key is
+  measured to survive the export while the `rustflags` table is measured not
+  to. netsuke's `.cargo/config.toml` selects mold through the `rustflags` table
+  and declares no `linker` key, which is the precise reason the worker's
+  exported `-D warnings` drops the mold flag — and why the census reads 0 of
+  569 invocations carrying it while all 569 carry `-D warnings`.
+
+  The #628 reading is that its `rustflags` input is documented as a "literal
+  `RUSTFLAGS` replacement for the Cargo child" and is passed to the Python
+  command builder for the cargo-mutants child process only. That serves a
+  Cranelift consumer who must *remove* development backend flags from the
+  mutant child. This issue needs the mutant child to carry *more* flags, and a
+  replacement input cannot add `-Clink-arg=-fuse-ld=mold`. Even at upstream
+  head, `mutation-cargo.yml` calls `setup-rust` with `install-mold` alone, so
+  the `-D warnings` export survives. So #628 is not the remedy for this issue's
+  linker clause, and the plan's earlier framing of it as "the proposed fix" is
+  retracted.
+
+  Impact: the surviving in-repository route is the `linker` key — either a
+  wrapper script, which makes mold the linker for *every* build rather than
+  only mutation and is therefore a design change rather than a configuration
+  tweak, or an upstream change to what the shared workflow exports. Neither was
+  acted on unilaterally; the boundary question is put to CodeRabbit on the pull
+  request, and the clause stays open in the meantime. The lesson is the one
+  this plan has already recorded twice in other forms: a plausible mechanism is
+  a hypothesis until a command distinguishes it, and here the distinguishing
+  command was cheap.
+
 ## Decision log
 
 Record every significant decision made while working on the plan.
@@ -1930,18 +2002,32 @@ from "no mold, no selection" to "mold installed, still no selection", which is
 the improvement the issue asked for but not the whole of it.
 
 The strict reading is the one to carry forward, because the no-regression
-reading is satisfied by doing nothing. The rectification is out of reach from
-this repository either way: it needs a `rustflags` input on
-`mutation-cargo.yml`, which no merged revision declares, or a fix upstream of
-shared-actions#544, which is now proposed as shared-actions#628 but is unmerged
-and `BLOCKED`. **A worker-scoped `RUSTFLAGS` override is the one remedy
-explicitly forbidden** — by the issue's own wording, by *Constraints*, and by
-CodeRabbit's finding — and it would displace the `.cargo/config.toml` state the
-build standard is defined by. So the strict criterion is left unmet and
-recorded rather than silently satisfied, and the mutation worker's results must
-be read with that caveat until an upstream input exists. This is the second
-finding on the branch that a green gate cannot settle; the first was that
-installing a linker on another job does not provision this one.
+reading is satisfied by doing nothing. **A worker-scoped `RUSTFLAGS` override
+is the one remedy explicitly forbidden** — by the issue's own wording, by
+*Constraints*, and by CodeRabbit's finding — and it would displace the
+`.cargo/config.toml` state the build standard is defined by. So the strict
+criterion is left unmet and recorded rather than silently satisfied, and the
+mutation worker's results must be read with that caveat until selection is
+owned upstream.
+
+The remediation route recorded here on 2026-10-16 — "a `rustflags` input on
+`mutation-cargo.yml`, now proposed as shared-actions#628" — is **retracted**,
+because two measurements do not support it. #628's input is a literal
+`RUSTFLAGS` *replacement* applied to the cargo-mutants child only; it exists to
+strip a Cranelift consumer's backend flags, so it can only remove flags and
+never add `-Clink-arg=-fuse-ld=mold`. And a config-declared `rustflags` entry
+does not survive an exported `RUSTFLAGS` at all — the three-way compile
+measurement in *Surprises & discoveries* shows the table being displaced while
+the `linker` key survives. What is left is the route the shared workflow's own
+`install-mold` description points at, "select mold in the project's Cargo
+configuration", expressed through the one key an exported `RUSTFLAGS` does not
+displace. That is either a repository-owned `linker` wrapper — which would make
+mold the linker for every build, mutation or not, and so is a design change —
+or an upstream change to what the shared workflow exports. Neither was taken
+unilaterally: the boundary question is on the pull request as of 2026-10-18,
+and the criterion stays open until it is answered. This is the second finding
+on the branch that a green gate cannot settle; the first was that installing a
+linker on another job does not provision this one.
 
 **Three lessons worth carrying forward.** First, the issue's premise needed
 re-cutting: the reported symptom was accurate, but "the baseline reaches the
@@ -2006,15 +2092,30 @@ sampling behaviour stated as a measurement rather than a caveat: a "clean
 review" is a property of one sample, so the exit condition this plan uses is a
 stated disposition per finding, not a finding count.
 
-**Upstream, unresolved by design.** shared-actions#544 remains open. It now has
-a proposed fix rather than none: shared-actions#628 would add the missing
-`rustflags` input to `mutation-cargo.yml`, but it is `BLOCKED` and unmerged, so
-a caller still cannot both request mold and keep the project's linker flag.
-shared-actions#590 covers the shard evidence, and shared-actions#591 the
-preflight consolidation. None of the four is reconcilable within this
-repository, and `Conformance basis` records them as external dependencies
-rather than gaps in this change. Because #628 is a claim about upstream state
-that upstream moves, re-check it before treating this paragraph as current.
+**Upstream, unresolved by design.** shared-actions#544 remains open, and it now
+has no settled remedy: shared-actions#628 is `BLOCKED` and unmerged, and as
+recorded above its child-scoped replacement input is not the change this clause
+needs. So a caller still cannot both request mold and have Cargo select it
+through the project's own `rustflags` table. shared-actions#590 covers the
+shard evidence, and shared-actions#591 the preflight consolidation. None of the
+four is reconcilable within this repository, and `Conformance basis` records
+them as external dependencies rather than gaps in this change. Because #628 is
+a claim about upstream state that upstream moves, and because its *scope* was
+misread here once already, re-read it before treating this paragraph as current.
+
+**Live on `main`, not historical (recorded 2026-10-18).** The issue's symptom
+is not a 3 October artefact. Four scheduled runs that actually executed a
+baseline failed with the exact diagnostic, all with `install-mold: false` and
+empty `setup-commands`: 13 Oct (`38382037308`, `Found 151`), 14 Oct
+(`38535334915`, `Found 151`), 16 Oct (`38870493586`, `Found 62`) and 17 Oct
+(`39014183758`, `Found 140`), the last three reporting the diagnostic after
+`FAILED Unmutated baseline`. The 16 and 17 October logs also state
+`has_changes=True`, which is the cleanest witness of a non-empty change set
+reaching a linker-less worker. Two further scheduled runs concluded `success`
+while measuring nothing — 15 Oct (`38702941267`) and 18 Oct (`39109192091`),
+both `no matching changes` with `has_changes=False` and every downstream job
+`skipped` — so their green badges must not be read as mutation testing being
+healthy. That pairing is the completeness gap in shared-actions#590.
 
 ## Context and orientation
 
@@ -2461,7 +2562,12 @@ Push over SSH, then open a draft pull request titled
 - **Axiom A3:** `shared-actions#544` (whether `setup-rust`'s `RUSTFLAGS` export
   displaces the project's linker flag) is an upstream question this repository
   cannot settle. *Method:* the printed flag values at EP-M3 are recorded as
-  evidence for that issue rather than resolved locally.
+  evidence for that issue rather than resolved locally. The axiom's premise was
+  measured on 2026-10-18 rather than assumed: an exported `RUSTFLAGS` does
+  displace a config-declared `rustflags` table, and does not displace a
+  config-declared `linker` key. The measured part is recorded in *Surprises &
+  discoveries*; the remaining upstream part, which change makes the workflow
+  stop exporting, stays an axiom.
 
 ### No new formal obligations
 
@@ -2602,3 +2708,33 @@ derived from its timestamps against the commit times — or from an embedded
 `HEAD` marker — rather than read off its name. Checking a claim against the
 artefact it cites is what caught this; the claim had been re-asserted across
 several entries on the strength of having been written down.
+
+Revisions, 2026-10-18. Corrected the plan's account of the linker clause on two
+points, both measured rather than reasoned. First, the exported `RUSTFLAGS`
+comes from the downstream `setup-rust-toolchain` action's `GITHUB_ENV` append,
+not from `setup-rust`'s own description; the earlier wording pointed one layer
+too high and is corrected in `Progress`. Second, shared-actions#628 is **not**
+the remedy this plan had been carrying: its input is a literal `RUSTFLAGS`
+replacement for the cargo-mutants child, which cannot add linker selection, and
+it is scoped to that child. A three-configuration compile measurement
+established that an exported `RUSTFLAGS` displaces a config-declared
+`rustflags` table but leaves a config-declared `linker` key intact, which makes
+the `linker` key the only surviving in-repository route and makes it a design
+change rather than a configuration tweak. The retraction is recorded in
+`Outcomes & retrospective`; the measurement and the #628 reading are in
+`Surprises & discoveries`; Axiom A3 now records the measured half separately
+from the part that remains upstream.
+
+Also recorded in this revision, and live rather than historical: four scheduled
+mutation runs on `main` between 13 and 17 October failed with the issue's exact
+mold diagnostic (`install-mold: false`, empty `setup-commands`, non-empty
+change sets), while two others — 15 and 18 October — concluded `success` having
+evaluated zero mutants because the detection window matched nothing. The former
+says the defect is current; the latter says a green badge on that workflow is
+not by itself evidence of a measured run.
+
+The status line stays `COMPLETE` for the plan and the acceptance clause stays
+open for the issue: nothing in this revision changes the code, and the boundary
+question — whether a repository-owned `linker` change discharges "required
+linker selection remains intact", and whether it may ride in this pull request
+— is put to CodeRabbit on #911 and is unanswered as of this entry.
