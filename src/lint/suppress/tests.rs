@@ -202,3 +202,30 @@ proptest::proptest! {
         );
     }
 }
+
+/// A directive trailing a block scalar's `|` header is a YAML comment, not
+/// body text, so it is collected and suppresses the finding in that body.
+#[test]
+fn a_directive_on_a_block_scalar_header_suppresses_its_body() {
+    const TEXT: &str = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  - name: out\n",
+        "    script: | # netsuke-lint: allow background-job -- the viewer must outlive the build\n",
+        "      feh preview &\n",
+    );
+    let directive = first!(TEXT);
+    assert!(directive.names("background-job"));
+    let outcome = crate::lint_fixture!(TEXT);
+    assert_eq!(
+        outcome.suppressed, 1,
+        "the header directive should suppress"
+    );
+    assert!(
+        !outcome
+            .findings
+            .iter()
+            .any(|finding| finding.meta.name == "background-job"),
+        "the suppressed finding should not be reported"
+    );
+}

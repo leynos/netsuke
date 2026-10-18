@@ -111,9 +111,12 @@ fn the_rule_catalogue_shape_is_pinned() -> Result<()> {
 
 #[test]
 fn the_summary_line_states_every_count() -> Result<()> {
-    let report = report(0)?;
-    let summary =
-        test_support::fluent::normalize_fluent_isolates(&text::summary_line(report.report()));
+    let summary = with_locale("en-US", || {
+        let report = report(0)?;
+        Ok(test_support::fluent::normalize_fluent_isolates(
+            &text::summary_line(report.report()),
+        ))
+    })?;
     for expected in ["errors", "warnings", "advice", "suppressed"] {
         ensure!(
             summary.contains(expected),
@@ -125,16 +128,19 @@ fn the_summary_line_states_every_count() -> Result<()> {
 
 #[test]
 fn the_truncation_line_states_both_counts() -> Result<()> {
-    let report = report(1)?;
-    let omitted = report.report().truncated();
-    let line =
-        test_support::fluent::normalize_fluent_isolates(&text::truncation_line(report.report()));
-    ensure!(
-        line.contains(&report.report().findings().len().to_string())
-            && line.contains(&omitted.to_string()),
-        "the notice should state what was shown and what was omitted, got {line}"
-    );
-    Ok(())
+    with_locale("en-US", || {
+        let report = report(1)?;
+        let shown = report.report().findings().len();
+        let omitted = report.report().truncated();
+        let line = test_support::fluent::normalize_fluent_isolates(&text::truncation_line(
+            report.report(),
+        ));
+        ensure!(
+            line.contains(&shown.to_string()) && line.contains(&omitted.to_string()),
+            "the notice should state what was shown and what was omitted, got {line}"
+        );
+        Ok(())
+    })
 }
 
 /// One expected truncation notice for the five-finding fixture.
