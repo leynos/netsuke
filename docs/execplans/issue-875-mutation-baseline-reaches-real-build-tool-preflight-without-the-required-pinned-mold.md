@@ -1366,39 +1366,40 @@ the last entry of this section rather than recited here.
   overrun is small and entirely accounted for by the two contract tests the
   findings required and by provenance prose; it is nonetheless recorded as an
   **escalation** rather than absorbed silently, because post-hoc approval of a
-  threshold is exactly the kind of quiet drift the threshold exists to
-  prevent. No authorization for the overrun is claimed from anywhere; the
-  reviewer is asked to accept it explicitly or to direct a split.
+  threshold is exactly the kind of quiet drift the threshold exists to prevent.
+  No authorization for the overrun is claimed from anywhere; the reviewer is
+  asked to accept it explicitly or to direct a split.
 
   **I3 negative control — executed, passed, and not on the first attempt.** The
-  control runs the real `Makefile` in a scratch copy outside the worktree,
-  with a fake `cargo` that records its invocations, and compares the target
-  with and without the prerequisite. It took two attempts to make the control
-  faithful, and the first attempt is recorded because it was *silently wrong
-  in a way that still looked green-ish*: the host carries a real but
-  wrong-version `/usr/bin/mold` (2.40.4), so a `PATH` that merely omitted a
-  mold *directory* still resolved that one and the restored case failed for
-  the wrong reason — `mold 2.40.4 at /usr/bin/mold does not match the pin
-  2.41.0`, which is version drift, not the missing-tool diagnostic the test
-  asserts. The control establishes nothing until the failure is the one under
-  test. The faithful environment is a `bin/` holding every utility the recipe
-  calls — `make`, `bash`, `sh`, `awk`, `sed`, `grep`, `tr`, `cut`, `sort`,
-  `uname`, `dirname`, `readlink`, `cat` — plus a `rustup` that answers the
-  toolchain query, and **no** `mold` on it. In that environment:
-  restored (`doctest: check-build-tools`) exits `2` after `0` Cargo
-  invocations with `build-tools: mold not found on PATH (pinned 2.41.0)`; with
-  the prerequisite seeded back out (`doctest:`) it exits `0` after `1` Cargo
-  invocation. That is the relation, exercised in both directions, and the
-  diagnostic is the exact string `build_targets_stop_when_the_check_fails`
-  asserts. The same trap bit the control twice more before it worked: a
-  `grep` symlink was created as the relative name `grep`, which resolves
-  nowhere from an unrelated `PATH`, so `read_pin` reported `found ` and the
-  run failed on a pin-read rather than on mold; and `env -i PATH=…` without
-  `make` on it fails with `make: No such file or directory`. Each of those
-  produces a non-zero exit that a careless reading would score as "the
-  control fired". Non-vacuity here is therefore not a formality: three
-  different broken environments all exit non-zero, and only the fourth exits
-  non-zero *for the asserted reason*.
+  control runs the real `Makefile` in a scratch copy outside the worktree, with
+  a fake `cargo` that records its invocations, and compares the target with and
+  without the prerequisite. It took two attempts to make the control faithful,
+  and the first attempt is recorded because it was *silently wrong in a way
+  that still looked green-ish*: the host carries a real but wrong-version
+  `/usr/bin/mold` (2.40.4), so a `PATH` that merely omitted a mold *directory*
+  still resolved that one and the restored case failed for the wrong reason —
+  `mold 2.40.4 at /usr/bin/mold does not match the pin 2.41.0`, which is
+  version drift, not the missing-tool diagnostic the test asserts. The control
+  establishes nothing until the failure is the one under test. The faithful
+  environment is a `bin/` holding every utility the recipe calls — `make`,
+  `bash`, `sh`, `awk`, `sed`, `grep`, `tr`, `cut`, `sort`, `uname`, `dirname`,
+  `readlink`, `cat` — plus a `rustup` that answers the toolchain query, and
+  **no** `mold` on it. In that environment: restored
+  (`doctest: check-build-tools`) exits `2` after `0` Cargo invocations with
+  `build-tools: mold not found on PATH (pinned 2.41.0)`; with the prerequisite
+  seeded back out (`doctest:`) it exits `0` after `1` Cargo invocation. That is
+  the relation, exercised in both directions, and the diagnostic is the exact
+  string `build_targets_stop_when_the_check_fails` asserts. The same trap bit
+  the control twice more before it worked: a `grep` symlink was created as the
+  relative name `grep`, which resolves nowhere from an unrelated `PATH`, so
+  `read_pin` reported an empty count
+  (`expected one line in version pin: tools/mold/VERSION, found` with nothing
+  after it) and the run failed on a pin-read rather than on mold; and
+  `env -i PATH=…` without `make` on it fails with
+  `make: No such file or directory`. Each of those produces a non-zero exit
+  that a careless reading would score as "the control fired". Non-vacuity here
+  is therefore not a formality: three different broken environments all exit
+  non-zero, and only the fourth exits non-zero *for the asserted reason*.
 
 [assess-911]: https://github.com/leynos/netsuke/pull/911#issuecomment-6250838137
 
