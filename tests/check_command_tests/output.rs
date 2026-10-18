@@ -90,6 +90,52 @@ fn check_is_read_only_at_the_process_boundary() -> Result<()> {
     Ok(())
 }
 
+/// Check refuses a template helper with side effects instead of running it.
+///
+/// `check` loads through the source-preserving query loader, so it must apply
+/// the same restricted standard library as the other query commands: a
+/// `shell` helper in an evaluated field is rejected by name, never runs, and
+/// the failure is a load error rather than a lint finding.
+#[test]
+fn check_refuses_an_effectful_template_helper() -> Result<()> {
+    let workspace = Workspace::new(concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  - name: hello\n",
+        "    description: >-\n",
+        "      {{ 'ignored' | shell('touch helper-ran-marker') }}\n",
+        "    command: echo hi\n",
+    ))?;
+    let run = workspace.run(&["--json", "check"])?;
+    ensure!(
+        !run.success,
+        "check should refuse the effectful helper: {}",
+        run.stdout
+    );
+    for path in ["helper-ran-marker", ".netsuke"] {
+        ensure!(
+            !test_fs::exists(workspace.directory.path().join(path)),
+            "check must not run the helper or create {path}"
+        );
+    }
+    ensure!(
+        run.stderr.contains("shell"),
+        "the diagnostic should name the refused helper, got {}",
+        run.stderr
+    );
+    // A template load failure carries no diagnostic code, so the assertion is
+    // only that no lint code appears.
+    let document = diagnostic(&run)?;
+    let code = document
+        .pointer("/diagnostics/0/code")
+        .and_then(Value::as_str);
+    ensure!(
+        !code.is_some_and(|code| code.starts_with("netsuke::lint::")),
+        "a refused helper is a load failure, not a lint finding, got {document}"
+    );
+    Ok(())
+}
+
 /// Human output goes to stdout and carries the source snippet a reader needs.
 #[rstest]
 fn human_output_shows_the_offending_source(warning_workspace: Result<Workspace>) -> Result<()> {
