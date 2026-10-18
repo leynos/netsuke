@@ -267,4 +267,6 @@ fn scalar_spans(doc: &Document) -> Vec<Span> {
 }
 
 #[cfg(test)]
+mod proptests;
+#[cfg(test)]
 mod tests;
