@@ -137,50 +137,51 @@ fn the_truncation_line_states_both_counts() -> Result<()> {
     Ok(())
 }
 
-/// The shown count selects its CLDR plural variant rather than the default.
+/// One expected truncation notice for the five-finding fixture.
+#[derive(Debug, Clone, Copy)]
+struct Notice {
+    /// The locale the notice is rendered in.
+    locale: &'static str,
+    /// The `--limit` applied, which leaves `5 - limit` findings omitted.
+    limit: usize,
+    /// How the notice must begin, pinning the shown-count clause.
+    starts: &'static str,
+    /// How the notice must end, pinning the omitted-count clause, where the
+    /// case covers it.
+    ends: Option<&'static str>,
+}
+
+/// Each count in the truncation notice selects its own CLDR plural variant.
 ///
 /// Polish is included because its `few` category (2-4) is what a
 /// string-typed argument could never reach; English alone would only tell
 /// `one` from `other`. Arabic adds a `two` category, and both of its first two
-/// forms express the count in the noun rather than as a numeral.
+/// forms express the count in the noun rather than as a numeral. The Italian
+/// and Polish omitted clauses select independently of the shown count, so one
+/// omitted finding must read as singular whatever was shown.
 #[rstest]
-#[case::english_one("en-US", 1, "Showing 1 finding;")]
-#[case::english_other("en-US", 2, "Showing 2 findings;")]
-#[case::polish_one("pl", 1, "Pokazano 1 ustalenie;")]
-#[case::polish_few("pl", 2, "Pokazano 2 ustalenia;")]
-#[case::arabic_one("ar", 1, "يجري عرض نتيجة واحدة؛")]
-#[case::arabic_two("ar", 2, "يجري عرض نتيجتين؛")]
-fn the_truncation_line_agrees_with_the_shown_count(
-    #[case] locale: &str,
-    #[case] limit: usize,
-    #[case] expected: &str,
-) -> Result<()> {
-    let line = with_locale(locale, || truncation_line(limit))?;
+#[case::english_one(Notice { locale: "en-US", limit: 1, starts: "Showing 1 finding;", ends: Some("--limit omitted 4 more.") })]
+#[case::english_other(Notice { locale: "en-US", limit: 2, starts: "Showing 2 findings;", ends: Some("--limit omitted 3 more.") })]
+#[case::polish_one(Notice { locale: "pl", limit: 1, starts: "Pokazano 1 ustalenie;", ends: Some("--limit pominął kolejne 4 ustalenia.") })]
+#[case::polish_few(Notice { locale: "pl", limit: 2, starts: "Pokazano 2 ustalenia;", ends: Some("--limit pominął kolejne 3 ustalenia.") })]
+#[case::polish_omitted_one(Notice { locale: "pl", limit: 4, starts: "Pokazano 4 ustalenia;", ends: Some("--limit pominął jeszcze 1 ustalenie.") })]
+#[case::italian_omitted_one(Notice { locale: "it", limit: 4, starts: "Vengono mostrati 4 rilievi;", ends: Some("--limit ne ha omesso 1 altro.") })]
+#[case::italian_omitted_other(Notice { locale: "it", limit: 3, starts: "Vengono mostrati 3 rilievi;", ends: Some("--limit ne ha omessi altri 2.") })]
+#[case::arabic_one(Notice { locale: "ar", limit: 1, starts: "يجري عرض نتيجة واحدة؛", ends: None })]
+#[case::arabic_two(Notice { locale: "ar", limit: 2, starts: "يجري عرض نتيجتين؛", ends: None })]
+fn the_truncation_line_agrees_with_both_counts(#[case] notice: Notice) -> Result<()> {
+    let line = with_locale(notice.locale, || truncation_line(notice.limit))?;
     ensure!(
-        line.starts_with(expected),
-        "expected {expected:?}, got {line:?}"
+        line.starts_with(notice.starts),
+        "expected the notice to start {:?}, got {line:?}",
+        notice.starts
     );
-    Ok(())
-}
-
-/// The omitted count selects its own plural variant, independently of the
-/// shown count: the fixture's five findings leave one omitted at a limit of
-/// four and two omitted at a limit of three.
-#[rstest]
-#[case::italian_one("it", 4, "--limit ne ha omesso 1 altro.")]
-#[case::italian_other("it", 3, "--limit ne ha omessi altri 2.")]
-#[case::polish_one("pl", 4, "--limit pominął jeszcze 1 ustalenie.")]
-#[case::polish_few("pl", 3, "--limit pominął kolejne 2 ustalenia.")]
-fn the_truncation_line_agrees_with_the_omitted_count(
-    #[case] locale: &str,
-    #[case] limit: usize,
-    #[case] expected: &str,
-) -> Result<()> {
-    let line = with_locale(locale, || truncation_line(limit))?;
-    ensure!(
-        line.ends_with(expected),
-        "expected {expected:?}, got {line:?}"
-    );
+    if let Some(ends) = notice.ends {
+        ensure!(
+            line.ends_with(ends),
+            "expected the notice to end {ends:?}, got {line:?}"
+        );
+    }
     Ok(())
 }
 
