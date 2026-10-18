@@ -1322,10 +1322,13 @@ the last entry of this section rather than recited here.
   [PR #911 comment 6250838137][assess-911]. Each finding was verified against
   the source before being actioned; none was accepted on the reviewer's word.
 
-  1. **I1 had no assertion.** The invariant promised a contract check,
-     `"env" not in job`, plus a seeded negative control. Neither existed:
+  1. **I1 had no assertion.** The invariant promised a contract check over the
+     parsed caller plus a seeded negative control, and the plan's sketch of it
+     — `"env" not in job` — had not been written at all:
      `mutation_testing_test.py` validated the `with:` block by whole-block
-     equality and never looked for an `env:` key. `_flag_override_problems`
+     equality and never looked for an `env:` key. The check that was added is
+     deliberately wider than the sketch, for the reason given in
+     *Verification plan*: `_flag_override_problems`
      now walks the entire parsed workflow (not just the job) for `RUSTFLAGS`
      and `CARGO_ENCODED_RUSTFLAGS`, and
      `test_no_compiler_flag_variable_is_set_anywhere_in_the_caller` asserts it
@@ -1378,9 +1381,11 @@ the last entry of this section rather than recited here.
   **I3 negative control — executed, passed, and not on the first attempt.** The
   control runs the real `Makefile` in a scratch copy outside the worktree, with
   a fake `cargo` that records its invocations, and compares the target with and
-  without the prerequisite. It took two attempts to make the control faithful,
-  and the first attempt is recorded because it was *silently wrong in a way
-  that still looked green-ish*: the host carries a real but wrong-version
+  without the prerequisite. It took four attempts for the control to be
+  faithful, and the three failures are recorded for the same reason the
+  provenance corrections are: each one produced a non-zero exit that a careless
+  reading would score as success. The first was *silently wrong in a way that
+  still looked green-ish*: the host carries a real but wrong-version
   `/usr/bin/mold` (2.40.4), so a `PATH` that merely omitted a mold *directory*
   still resolved that one and the restored case failed for the wrong reason —
   `mold 2.40.4 at /usr/bin/mold does not match the pin 2.41.0`, which is
@@ -1395,16 +1400,17 @@ the last entry of this section rather than recited here.
   seeded back out (`doctest:`) it exits `0` after `1` Cargo invocation. That is
   the relation, exercised in both directions, and the diagnostic is the exact
   string `build_targets_stop_when_the_check_fails` asserts. The same trap bit
-  the control twice more before it worked: a `grep` symlink was created as the
+  the control twice more before it worked. A `grep` symlink was created as the
   relative name `grep`, which resolves nowhere from an unrelated `PATH`, so
   `read_pin` reported an empty count
   (`expected one line in version pin: tools/mold/VERSION, found` with nothing
-  after it) and the run failed on a pin-read rather than on mold; and
+  after it) and the run failed on a pin-read rather than on mold. An
   `env -i PATH=…` without `make` on it fails with
   `make: No such file or directory`. Each of those produces a non-zero exit
   that a careless reading would score as "the control fired". Non-vacuity here
-  is therefore not a formality: three different broken environments all exit
-  non-zero, and only the fourth exits non-zero *for the asserted reason*.
+  is therefore not a formality: of the four environments tried, three broken
+  ones all exit non-zero and only the fourth exits non-zero *for the asserted
+  reason*.
 
 [assess-911]: https://github.com/leynos/netsuke/pull/911#issuecomment-6250838137
 
@@ -2393,12 +2399,23 @@ Push over SSH, then open a draft pull request titled
 
 ### Invariants
 
-- **I1 — The caller never sets `RUSTFLAGS`.** No `env:` block, no `RUSTFLAGS`
-  key, anywhere in `mutation-testing.yml`. Verified by a contract assertion
-  over the parsed job mapping (`"env" not in job`), plus the existing
-  whole-block `with:` equality. *Non-vacuity:* a seeded edit adding
-  `env: {RUSTFLAGS: ""}` to the job must fail that assertion. Run it once as a
-  negative control.
+- **I1 — The caller never sets a compiler-flag variable.** No `RUSTFLAGS` or
+  `CARGO_ENCODED_RUSTFLAGS` key at any scope in `mutation-testing.yml`, not
+  merely on the job. Verified by `_flag_override_problems`, which walks the
+  entire parsed workflow (mappings and sequences, at any depth) and reports
+  every offending dotted path;
+  `test_no_compiler_flag_variable_is_set_anywhere_in_the_caller` asserts the
+  walk returns empty, and the existing whole-block `with:` equality still pins
+  the shipped configuration. The walk is deliberately wider than the original
+  `"env" not in job` sketch: a future step, job, or reusable-workflow argument
+  could introduce the override where a job-scoped predicate would never look.
+  *Non-vacuity:* two controls, both permanent. In-suite,
+  `test_flag_guard_rejects_a_seeded_override` deep-copies the parsed workflow,
+  seeds `job["env"] = {"RUSTFLAGS": "-D warnings"}`, asserts the predicate
+  rejects it, and asserts the unmodified caller still passes — so the control
+  stays runnable rather than being a one-off edit. Out of process, against a
+  scratch copy of the real workflow, the clean tree yielded `[]` and the seeded
+  copy yielded `['workflow.jobs.mutation.env.RUSTFLAGS (a RUSTFLAGS key)']`.
 - **I2 — The rustdoc tests reach the fake Cargo on a mold-free host.** Verified
   by running the focused suite with `PATH` stripped of any real `mold`, and by
   the positive control of the same suite on a `PATH` that has one.
@@ -2412,8 +2429,8 @@ Push over SSH, then open a draft pull request titled
   scratch copy and confirm the failure the case asserts; restore. The control
   drives the real `Makefile` target the case exercises rather than the Rust
   fixture itself, because the fixture only ever passes a target name to `make`;
-  both directions, the exact diagnostic, and the two failed attempts at a
-  faithful `PATH` are recorded under `Progress`.
+  both directions, the exact diagnostic, and all three failed attempts at a
+  faithful `PATH` before the fourth succeeded are recorded under `Progress`.
 - **I4 — The sandbox allowlist is unchanged.** Verified by the existing
   `check-fmt`/`lint` gates plus an explicit diff inspection of `utilities.rs`.
 - **I5 — The two rustdoc assertions still carry their full strength.** The
