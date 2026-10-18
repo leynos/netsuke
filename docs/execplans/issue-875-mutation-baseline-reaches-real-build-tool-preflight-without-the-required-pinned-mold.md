@@ -2041,10 +2041,11 @@ build-policy change to be delivered **separately from #911**, because the
 release, packaging and coverage exclusions rely on an assigned `RUSTFLAGS`
 displacing the configured table, and a wrapper that survives that displacement
 would survive in those builds too. That separate change is tracked under #875;
-#544 keeps the broader flag-ownership defect. So the criterion stays open in
-this plan, and the wrapper is deliberately not written into this branch. This
-is the second finding on the branch that a green gate cannot settle; the first
-was that installing a linker on another job does not provision this one.
+shared-actions#544 keeps the broader flag-ownership defect. So the criterion
+stays open in this plan, and the wrapper is deliberately not written into this
+branch. This is the second finding on the branch that a green gate cannot
+settle; the first was that installing a linker on another job does not
+provision this one.
 
 **Three lessons worth carrying forward.** First, the issue's premise needed
 re-cutting: the reported symptom was accurate, but "the baseline reaches the
