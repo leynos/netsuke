@@ -4,9 +4,9 @@
 //! default Rustdoc configuration, but Cargo accepts only `RUSTDOCFLAGS`.
 //! Make exports the supported name directly, which preserves literal caller
 //! values without re-parsing them in a shell. It explicitly unexports the
-//! unsupported name, preventing Cargo from warning about it. The Unix
-//! behavioural test exercises that real Make-to-Cargo boundary with a fake
-//! Cargo executable; static checks keep the safe export shape intact.
+//! unsupported name, preventing Cargo from warning about it. The behavioural
+//! test exercises that real Make-to-Cargo boundary with a fake Cargo
+//! executable; static checks keep the safe export shape intact.
 //!
 //! Those behavioural tests inject the build-tools boundary. `doctest` depends
 //! on `check-build-tools`, so a test that ran Make against the ambient host
@@ -18,26 +18,35 @@
 //! tool. Real-preflight validation belongs to `build_tools_check_tests.rs` and
 //! `build_tools_pin_tests.rs`; the `doctest` case added to the former is what
 //! holds the prerequisite relation this module deliberately stops depending on.
+//!
+//! The harness-backed items are Linux-only, matching every other `Sandbox`
+//! consumer in the suite. `Sandbox::new` resolves its whole utility allowlist
+//! eagerly and that list names `sha256sum`, which GNU coreutils provides and
+//! stock macOS does not, so a wider gate would fail while building the
+//! sandbox rather than while checking `RUSTDOCFLAGS`. The four static contract
+//! tests read only the committed Makefile and stay platform-neutral, so macOS
+//! still checks the export shape; only the behavioural Make-to-Cargo
+//! observation is confined to Linux.
 
 use super::{read_repo_file, target_recipe};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 use camino::Utf8PathBuf;
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 use proptest::prelude::*;
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 use rstest::rstest;
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 use std::io::ErrorKind;
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 use std::path::Path;
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 use test_support::build_tools::{
     MakeInvocation, Sandbox, combined, pinned_mold_version, pinned_toolchain,
 };
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 use test_support::{fs, write_exec_with_content};
 
 /// The caller-overridable Make default for the Rustdoc configuration.
@@ -48,15 +57,15 @@ const RUSTDOC_FLAGS_UNEXPORT: &str = "unexport RUSTDOC_FLAGS";
 const RUSTDOCFLAGS_EXPORT: &str = "export RUSTDOCFLAGS := $(value RUSTDOC_FLAGS)";
 
 /// An override whose shell-sensitive values must reach Rustdoc unchanged.
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 const SHELL_SENSITIVE_RUSTDOC_FLAGS: &str = r#"--cfg marker="price$5 \"path\\name\"; &"#;
 
 /// The variable naming the file the fake Cargo records into.
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 const ENVIRONMENT_LOG: &str = "RUSTDOC_ENVIRONMENT_LOG";
 
 /// Describe one caller-supplied Rustdoc override source and value.
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 struct RustdocOverride<'flags> {
     /// Store the exact Rustdoc flags supplied by the caller.
     rustdoc_flags: &'flags str,
@@ -144,7 +153,7 @@ fn behavioural_makefile_never_exports_or_shell_expands_rustdoc_flags() -> Result
 /// demands, so the recipe reaches the fake Cargo however the host is
 /// provisioned. See the module comment for why that boundary is injected
 /// rather than crossed.
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 struct DoctestHarness {
     /// The hermetic `PATH` and `HOME`, and the install prefix mold sits under.
     sandbox: Sandbox,
@@ -154,7 +163,7 @@ struct DoctestHarness {
     log: Utf8PathBuf,
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 impl DoctestHarness {
     /// Build a sandbox holding the fake Cargo and both pinned tools.
     fn new() -> Result<Self> {
@@ -213,7 +222,7 @@ impl DoctestHarness {
 }
 
 /// Remove a previous run's environment log, tolerating its absence.
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 fn discard_log(log: &Utf8Path) -> Result<()> {
     match fs::remove_file(log.as_std_path()) {
         Ok(()) => Ok(()),
@@ -223,7 +232,7 @@ fn discard_log(log: &Utf8Path) -> Result<()> {
 }
 
 /// Assert that Cargo receives the exact supported Rustdoc configuration.
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 fn assert_doctest_record(record: &str, rustdoc_flags: &str, source: &str) -> Result<()> {
     let mut fields = record.lines().map(|line| {
         line.split_once('\t')
@@ -265,7 +274,7 @@ fn assert_doctest_record(record: &str, rustdoc_flags: &str, source: &str) -> Res
 /// The recipe reaches this through the `CARGO` Make variable, so it needs no
 /// name on `PATH`; it is placed in the sandbox `bin` because that is a
 /// directory the harness already owns.
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 fn write_fake_cargo(directory: &Path) -> Result<Utf8PathBuf> {
     let stub = write_exec_with_content(
         directory,
@@ -286,12 +295,12 @@ fn write_fake_cargo(directory: &Path) -> Result<Utf8PathBuf> {
 }
 
 /// Generate valid, shell-sensitive Rustdoc overrides with bounded entropy.
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 fn rustdoc_flags_strategy() -> impl Strategy<Value = String> {
     "[a-z]{0,12}".prop_map(|suffix| format!(r#"--cfg marker="price$5 \"path\\name\"; & {suffix}""#))
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 #[rstest]
 #[case("environment", false)]
 #[case("command line", true)]
@@ -312,7 +321,7 @@ fn behavioural_doctest_passes_shell_sensitive_overrides_only_as_rustdocflags(
     assert_doctest_record(&record, SHELL_SENSITIVE_RUSTDOC_FLAGS, source)
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, target_os = "linux"))]
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(16))]
 

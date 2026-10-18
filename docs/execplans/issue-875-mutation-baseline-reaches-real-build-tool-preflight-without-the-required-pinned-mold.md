@@ -1507,6 +1507,55 @@ the last entry of this section rather than recited here.
   written; the disposition it asked for is the one stated here, and the draft
   state is now held only until readiness conditions are met rather than pending
   an answer.
+- [x] (2026-10-18 21:40Z) **Codex's P2 is repaired: the harness-backed
+  `rustdocflags` items are Linux-only, and the four static contract tests stay
+  platform-neutral.** The finding (inline `4308356032`, on
+  `tests/makefile_test_target/rustdocflags.rs:161`) is correct on every
+  checkable claim, which is why it was repaired rather than answered.
+  `test_support/src/build_tools/sandbox/utilities.rs` names `sha256sum` in
+  `SANDBOX_UTILITIES`; `Sandbox::new` resolves that whole allowlist eagerly and
+  bails on the first miss; `sha256sum` is GNU-only; and this module's harness
+  is the only `Sandbox` consumer in the repository that was not already gated
+  `all(unix, target_os = "linux")`. Every sibling carries that gate —
+  `tests/build_tools_check_tests.rs:9`, `build_tools_checksum_tests.rs:14`,
+  `build_tools_install_tests.rs:12`, `build_tools_make_target_tests.rs:5`,
+  `build_tools_pin_tests.rs:12`, `build_tools_bench_tests.rs:19`,
+  `build_tools_bench_lock_tests.rs:10`, `build_tools_cargo_config_tests.rs:7`,
+  `kani_scope_wrapper_e2e_tests.rs:59` — so this was a missed convention, not a
+  deliberate exception. CI cannot catch it: `ci.yml` has no macOS test job, so
+  only a local macOS developer would have met the failure.
+
+  The gate was moved on all 18 items the harness needs and **not** on the four
+  static contract tests, which read the committed `Makefile` through
+  `read_repo_file` and hold the export shape. Those four still run on macOS and
+  Windows. Repairing this way keeps the finding's own two options — "restrict
+  this harness to Linux or use a portable/minimal sandbox" — on the first,
+  which needs no new sandbox surface.
+
+  **The soundness of the fix was measured rather than assumed, and the first
+  attempt at measuring it was wrong.** `make typecheck` with the new gate
+  forced false printed no `dead_code` and exited 0, which looked like proof
+  that gating eight items out is warning-free. It is not proof of anything: the
+  log is 384 lines of dependency compilation and contains **no** line for this
+  target's own crate. A first, standalone `rustc` probe then "confirmed"
+  warning-freedom with a file that did not compile at all — only two errors, no
+  warnings, rc 1. The check that actually binds is the deliberate-fault
+  technique from the `cfg`-gating lesson: add an unused import to the real
+  file, shape the gates, compile the real target, and require the fault to be
+  reported. It was
+  (`unused import: std::ffi::OsString as _DeliberateUnusedProbe`,
+  `-D unused-imports implied by -D warnings`, rc 101), so the same shape
+  recompiled without the fault and exited 0 in 6.27 s. That rules out a cached
+  "success" and makes the warning-freedom claim about this file rather than
+  about the build directory. The probes are logged under `/tmp/probe-cfg/`
+  (`deliberate-unused.out`, `gate-false-real-target.out`).
+
+  After restoring the file, the focused suite passes all seven `rustdocflags`
+  rows on Linux — four static, two `#[rstest]` cases, one 16-case `proptest` —
+  and `cargo fmt --check` and a focused `clippy --test makefile_test_target`
+  are both clean. The four static rows are the ones that now also run on macOS;
+  their Linux pass shows the gate did not disturb them, not that macOS executes
+  them.
 
 [assess-911]: https://github.com/leynos/netsuke/pull/911#issuecomment-6250838137
 [follow-up-927]: https://github.com/leynos/netsuke/issues/927
