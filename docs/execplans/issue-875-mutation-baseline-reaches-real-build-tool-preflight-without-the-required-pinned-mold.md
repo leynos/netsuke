@@ -1445,6 +1445,51 @@ the last entry of this section rather than recited here.
   ones all exit non-zero and only the fourth exits non-zero *for the asserted
   reason*.
 
+- [x] (2026-10-18 20:11Z) **`529c1291` is the first fully green head on the
+  corrections, and it exists because the previous head was genuinely red.**
+  `a5fce3b8` failed `build-test` (job `117749581606`) at step 19 "Lint
+  Markdown" with `MD018/no-missing-space-atx` at
+  `docs/execplans/issue-875-….md:2044:1`, context
+  `"#544 keeps the broader flag-ow…"`. The cause was this plan's own prose: a
+  rewrap put a bare `#544` at column 0, which markdownlint parses as a
+  malformed ATX heading. `529c1291` rewords the clause to the qualified
+  `shared-actions#544`, the form every other reference in the plan uses. The
+  defect is worth recording for what it says about the local gate set rather
+  than about the repository: `make check-fmt` ran and passed before that push,
+  but its mdtablefix step only *reflows* prose and never runs markdownlint, so
+  MD018 is invisible to it. The pre-push pair for any Markdown delta is
+  `make check-fmt` **and** `make markdownlint`; both were re-run at `529c1291`
+  (`0` issues in `181` files; `220` files formatted, `181` unchanged).
+
+  `529c1291f80e446e4ecd8b4e82dddfd140478618` reads, from the check-run list and
+  the run list rather than from a badge: all four required checks
+  `COMPLETED`/`SUCCESS`; 21 check runs of which 17 `SUCCESS`, 4 `SKIPPED` by
+  design and 0 failed; `CI` `39153043662`, `Netsukefile Build Test`
+  `39153043614` and `Release Dry Run` `39153043703` all `completed`/`success`
+  on attempt 1. The four skipped rows are `release / publish-release`,
+  `release / windows-native-recipe-smoke`, `automerge` and `Kody Code Review`.
+  The `CodeRabbit` commit status is `success` with description "Review skipped:
+  draft pull request" — a skip, not an approval, and it is not read as one.
+
+  The workflow delta was also re-derived rather than carried forward, because
+  an earlier report of it was wrong. Against base `c65ad970` at `529c1291` the
+  delta is `+66 / -0`, of which **61 lines are comments and 5 are functional**
+  (`install-mold: 'true'`, `setup-commands: |`, `make check-build-tools`, and
+  the two `printf` lines). At `7f0e6c03` it was `+58` with the same 5
+  functional lines and 53 comment lines. "All comments" was never true, and the
+  eight additional lines at `529c1291` are comment text from the review
+  corrections.
+
+  A disposition question was put to review at the same time and is unanswered
+  at the time of writing: review directed that the `linker` build-policy change
+  be delivered **separately from** `#911`, while also directing that `#911`
+  retain its draft state until "a validated resolution exists". If that
+  resolution must live in the separate change, the two directives hold the
+  draft open indefinitely. The comment asks review to choose between landing
+  `#911` as the provisioning fix with `#875` left open, and holding `#911`
+  behind the linker change; the draft state is retained until it answers.
+  Recorded as the live blocker at this head, not as a gap in the code.
+
 [assess-911]: https://github.com/leynos/netsuke/pull/911#issuecomment-6250838137
 [follow-up-927]: https://github.com/leynos/netsuke/issues/927
 
