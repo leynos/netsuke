@@ -2153,8 +2153,10 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   or quotes, backticks, or substitution syntax in a line comment make later
   markers fail closed. In particular, an apostrophe in a comment can make a
   later marker fail closed. Typographic PowerShell quote characters also make
-  later markers fail closed. PowerShell path bindings use a single-quoted
-  literal that is unsafe inside an existing string.
+  later markers fail closed. A braced variable such as `${env:NAME}` or a
+  here-string opened inside `$()` also makes later markers fail closed.
+  PowerShell path bindings use a single-quoted literal that is unsafe inside an
+  existing string.
 - Build and default-target paths escape a literal space as a `$` followed by a
   space, Ninja's own path escape. They reject `|` and control characters, which
   Ninja's path grammar cannot represent, and also reject `$` and colon, which

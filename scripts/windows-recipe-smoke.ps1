@@ -318,7 +318,7 @@ function Test-QuotedScriptPlaceholderRejection {
         try {
             $payloadSource = Join-Path $workspace '; New-Item pwned; Write-Output x'
             New-Item -ItemType File -Path $payloadSource | Out-Null
-            $failure = & $Netsuke --json build $TargetName 2>&1
+            $failure = & $Netsuke --json --locale en-GB build $TargetName 2>&1
             if ($LASTEXITCODE -eq 0) {
                 throw 'A quoted PowerShell script marker unexpectedly built successfully.'
             }

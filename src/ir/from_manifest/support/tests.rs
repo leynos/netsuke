@@ -47,10 +47,14 @@ fn power_shell_manifest_rejects_quoted_input_marker(#[case] recipe_kind: &str) {
     let error = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)
         .expect_err("quoted PowerShell recipe markers must fail during IR lowering");
 
-    assert!(matches!(
-        error,
-        crate::ir::IrGenError::InvalidCommand { .. }
-    ));
+    assert!(
+        matches!(
+            &error,
+            crate::ir::IrGenError::InvalidCommand { command, .. }
+                if command.contains(crate::ir::INS_TOKEN)
+        ),
+        "expected the quoted-marker rejection, got {error:?}"
+    );
 }
 
 proptest! {

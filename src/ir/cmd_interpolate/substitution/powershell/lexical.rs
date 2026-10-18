@@ -64,7 +64,7 @@ impl PowerShellLexicalState {
         self.has_typographic_quote
     }
 
-    /// Begin tracking a comment after an unquoted hash character.
+    /// Begin tracking a line comment at a PowerShell comment boundary.
     pub(in crate::ir::cmd_interpolate::substitution) const fn begin_unquoted_comment(&mut self) {
         self.in_unquoted_comment = true;
     }
@@ -157,7 +157,9 @@ impl SubstitutionTraversal<'_, '_> {
             return Ok(next);
         }
         self.power_shell_lexical.note_character(ch);
-        if ch == '#' && self.is_unquoted_comment_start(pos) {
+        // Preserve hashes inside argument tokens while recognizing comments
+        // at input start, after token separators, `=`, or `]`.
+        if self.is_unquoted_comment_start(character) {
             self.power_shell_lexical.begin_unquoted_comment();
         }
         if let Some(next) = self.append_power_shell_escaped_character(character)? {
@@ -170,8 +172,10 @@ impl SubstitutionTraversal<'_, '_> {
     }
 
     /// Report whether an unquoted hash begins a PowerShell comment token.
-    fn is_unquoted_comment_start(&self, pos: usize) -> bool {
-        self.matches_unquoted_quote_context() && is_power_shell_comment_boundary(self.chars, pos)
+    fn is_unquoted_comment_start(&self, character: PowerShellSourceCharacter) -> bool {
+        character.value == '#'
+            && self.matches_unquoted_quote_context()
+            && is_power_shell_comment_boundary(self.chars, character.position)
     }
 
     /// Preserve or reject a character in an active PowerShell here-string.

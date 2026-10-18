@@ -49,6 +49,14 @@ pub(super) fn starts_block_comment(chars: &[char], pos: usize) -> bool {
     chars.get(pos) == Some(&'<') && chars.get(pos + 1) == Some(&'#')
 }
 
+/// Report whether a hash starts a PowerShell comment rather than an argument token.
+pub(super) fn is_power_shell_comment_boundary(chars: &[char], pos: usize) -> bool {
+    pos == 0
+        || chars
+            .get(pos - 1)
+            .is_some_and(|ch| is_power_shell_token_separator(*ch) || matches!(*ch, '=' | ']'))
+}
+
 /// Report whether PowerShell's exact `--%` token starts at `pos`.
 pub(super) fn starts_stop_parsing_token(chars: &[char], pos: usize) -> bool {
     is_power_shell_token_boundary(chars, pos)
@@ -68,19 +76,6 @@ pub(super) fn is_power_shell_token_boundary(chars: &[char], pos: usize) -> bool 
             .is_some_and(|ch| is_power_shell_token_separator(*ch))
 }
 
-/// Report whether a source position may start a PowerShell comment token.
-///
-/// Treat punctuation as a possible boundary because operators and closing
-/// delimiters can place a comment marker at the start of a token.
-pub(super) fn is_power_shell_comment_boundary(chars: &[char], pos: usize) -> bool {
-    pos == 0
-        || chars.get(pos - 1).is_some_and(|ch| {
-            *ch == '='
-                || is_power_shell_token_separator(*ch)
-                || matches!(*ch, '+' | '-' | '<' | '>' | ']')
-        })
-}
-
 /// Report whether a character separates PowerShell command tokens.
 const fn is_power_shell_token_separator(ch: char) -> bool {
     ch.is_ascii_whitespace()
@@ -94,4 +89,26 @@ const fn is_power_shell_token_separator(ch: char) -> bool {
 fn is_line_break_after(chars: &[char], pos: usize) -> bool {
     matches!(chars.get(pos), Some(&'\n'))
         || (chars.get(pos) == Some(&'\r') && chars.get(pos + 1) == Some(&'\n'))
+}
+
+#[cfg(test)]
+mod tests {
+    //! Verify which token boundaries allow a PowerShell comment to start.
+
+    use super::is_power_shell_comment_boundary;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case::after_space(' ', true)]
+    #[case::after_assignment('=', true)]
+    #[case::after_closing_bracket(']', true)]
+    #[case::after_asterisk('*', false)]
+    #[case::after_plus('+', false)]
+    #[case::after_redirection('>', false)]
+    fn classify_comment_boundaries(#[case] preceding: char, #[case] expected: bool) {
+        let source = [preceding, '#'];
+
+        assert_eq!(is_power_shell_comment_boundary(&source, 1), expected);
+        assert!(is_power_shell_comment_boundary(&['#'], 0));
+    }
 }

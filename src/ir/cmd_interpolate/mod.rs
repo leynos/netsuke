@@ -354,3 +354,6 @@ mod tests;
 
 #[cfg(test)]
 mod power_shell_tests;
+
+#[cfg(test)]
+mod powershell_script_tests;
