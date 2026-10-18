@@ -67,6 +67,20 @@ def test_ci_calls_the_default_feature_lane_with_the_workflow_pin() -> None:
     )
 
 
+def test_the_lane_skips_the_nightly_schedule() -> None:
+    """The lane must not run on the schedule that exists for the Kani proofs.
+
+    The scheduled run only re-proves the Kani harnesses; the default-feature
+    lint and test gates would hold a runner for up to an hour each night to
+    repeat what every pull request already ran. The Windows gate skips the
+    schedule with the same guard.
+    """
+    call = workflow_job(load_workflow(CI_WORKFLOW_PATH), LANE_JOB)
+    assert call.get("if") == "github.event_name != 'schedule'", (
+        "the default-feature lane must skip the nightly schedule"
+    )
+
+
 @pytest.mark.parametrize(
     ("step_name", "target"),
     [

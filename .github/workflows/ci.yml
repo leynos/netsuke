@@ -382,6 +382,8 @@ jobs:
     # for the same line-budget reason as `windows`, and repeats the nextest pin
     # as a literal for the same reason; see ci-default-features.yml.
     name: Default features
+    # The nightly schedule exists for the Kani proofs alone.
+    if: github.event_name != 'schedule'
     permissions:
       contents: read
     uses: ./.github/workflows/ci-default-features.yml

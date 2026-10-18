@@ -100,9 +100,10 @@ Scanner suspects that turned out not to be NLL residue:
 The toolchain policy is contract-tested: `tests/polonius_toolchain_contract.rs`
 requires the pinned channel to be a dated nightly at or after 2026-08-04, fails
 if any build configuration reintroduces a `-Zpolonius` directive, and pins the
-shared-action `with.rustflags` and toolchain inputs in the CI, Netsukefile,
-coverage, and packaging workflows. The `RUSTFLAGS` shape of each Makefile
-recipe is covered separately by `tests/makefile_test_target.rs`.
+shared-action `with.rustflags` and toolchain inputs in the CI (including its
+Windows and default-feature lanes), Netsukefile, coverage, and packaging
+workflows. The `RUSTFLAGS` shape of each Makefile recipe is covered separately
+by `tests/makefile_test_target.rs`.
 
 ## Harness consequences
 

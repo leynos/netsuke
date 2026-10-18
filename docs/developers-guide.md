@@ -3041,10 +3041,10 @@ predates it does not fail the run — an unrecognized `with:` key on a composite
 action is a warning, not an error — it simply never exports the flag, so the
 build fails later as a borrow-check error rather than as a configuration error.
 
-`tests/polonius_toolchain_contract.rs` therefore requires the four workflows'
-shared-action references to agree, rather than restating the expected pin as a
-constant. It extracts every `leynos/shared-actions` reference from the checked
-workflows with the shared YAML-parsing helper in
+`tests/polonius_toolchain_contract.rs` therefore requires the checked
+workflows' shared-action references to agree, rather than restating the
+expected pin as a constant. It extracts every `leynos/shared-actions` reference
+from the checked workflows with the shared YAML-parsing helper in
 `tests/support/shared_actions.rs`, validates that each is a full 40-character
 lowercase-hex commit SHA, and derives the pin the workflows must share from
 that set. A complete bump — Dependabot's or a manual one — moves every

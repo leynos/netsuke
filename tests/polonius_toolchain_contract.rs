@@ -97,6 +97,18 @@ const CI_WINDOWS_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     rustflags: Some(DENY_WARNINGS_RUSTFLAGS),
     pins_toolchain_env: true,
 };
+/// The default-feature lane, a reusable workflow with its own pinned toolchain.
+///
+/// GitHub does not pass the caller's `env` to a reusable workflow, so the lane
+/// restates `NETSUKE_RUST_TOOLCHAIN`; registering it here holds that restated
+/// pin equal to `rust-toolchain.toml`, as for the Windows gate.
+const CI_DEFAULT_FEATURES_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
+    path: ".github/workflows/ci-default-features.yml",
+    job: "default-features",
+    action: SETUP_RUST_ACTION,
+    rustflags: Some(DENY_WARNINGS_RUSTFLAGS),
+    pins_toolchain_env: true,
+};
 const NETSUKEFILE_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/netsukefile-test.yml",
     job: "netsukefile",
@@ -120,10 +132,11 @@ const PACKAGING_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
 };
 
 /// Every workflow under the shared-action toolchain contract.
-const WORKFLOW_EXPECTATIONS: [WorkflowExpectation; 6] = [
+const WORKFLOW_EXPECTATIONS: [WorkflowExpectation; 7] = [
     CI_WORKFLOW,
     CI_KANI_SMOKE_WORKFLOW,
     CI_WINDOWS_WORKFLOW,
+    CI_DEFAULT_FEATURES_WORKFLOW,
     NETSUKEFILE_WORKFLOW,
     COVERAGE_WORKFLOW,
     PACKAGING_WORKFLOW,
