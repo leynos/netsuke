@@ -199,19 +199,28 @@ def _flag_override_problems(workflow: dict[str, object]) -> list[str]:
     Kept separate from the assertion itself so a seeded edit can be checked
     against the same predicate: that is the negative control the ExecPlan
     promises, and it cannot be run by re-reading only the file on disk.
+
+    Returns
+    -------
+    list[str]
+        One entry per offending key, naming the dotted path and the variable,
+        or an empty list when the caller satisfies the invariant. An empty
+        result is the passing outcome, so the caller asserts on truthiness
+        rather than on a sentinel.
     """
     found: list[str] = []
 
     def walk(node: object, path: str) -> None:
-        if isinstance(node, dict):
-            for key, child in node.items():
-                child_path = f"{path}.{key}"
-                if key in FLAG_VARIABLES:
-                    found.append(f"{child_path} (a {key} key)")
-                walk(child, child_path)
-        elif isinstance(node, list):
-            for index, child in enumerate(node):
-                walk(child, f"{path}[{index}]")
+        match node:
+            case dict():
+                for key, child in node.items():
+                    child_path = f"{path}.{key}"
+                    if key in FLAG_VARIABLES:
+                        found.append(f"{child_path} (a {key} key)")
+                    walk(child, child_path)
+            case list():
+                for index, child in enumerate(node):
+                    walk(child, f"{path}[{index}]")
 
     walk(workflow, "workflow")
     return found
