@@ -2414,13 +2414,14 @@ Push over SSH, then open a draft pull request titled
   the shipped configuration. The walk is deliberately wider than the original
   `"env" not in job` sketch: a future step, job, or reusable-workflow argument
   could introduce the override where a job-scoped predicate would never look.
-  *Non-vacuity:* two controls, both permanent. In-suite,
-  `test_flag_guard_rejects_a_seeded_override` deep-copies the parsed workflow,
-  seeds `job["env"] = {"RUSTFLAGS": "-D warnings"}`, asserts the predicate
-  rejects it, and asserts the unmodified caller still passes — so the control
-  stays runnable rather than being a one-off edit. Out of process, against a
-  scratch copy of the real workflow, the clean tree yielded `[]` and the seeded
-  copy yielded `['workflow.jobs.mutation.env.RUSTFLAGS (a RUSTFLAGS key)']`.
+  *Non-vacuity:* two controls: a permanent in-suite test and a recorded
+  out-of-process run. In-suite, `test_flag_guard_rejects_a_seeded_override`
+  deep-copies the parsed workflow, seeds
+  `job["env"] = {"RUSTFLAGS": "-D warnings"}`, asserts the predicate rejects
+  it, and asserts the unmodified caller still passes — so the control stays
+  runnable rather than being a one-off edit. Out of process, against a scratch
+  copy of the real workflow, the clean tree yielded `[]` and the seeded copy
+  yielded `['workflow.jobs.mutation.env.RUSTFLAGS (a RUSTFLAGS key)']`.
 - **I2 — The rustdoc tests reach the fake Cargo on a mold-free host.** Verified
   by running the focused suite with `PATH` stripped of any real `mold`, and by
   the positive control of the same suite on a `PATH` that has one.
