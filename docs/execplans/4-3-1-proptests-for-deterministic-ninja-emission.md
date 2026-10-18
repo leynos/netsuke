@@ -1077,7 +1077,10 @@ by sampling. A passing run would have read as proving it.
   value with exactly one field mutated.
 - **Oracle:** structural equality via the derived `PartialEq`, independent of
   the serialization path.
-- **Artefact:** `src/ir/action_hash_property_tests.rs`.
+- **Artefact:** `src/ir/action_hash_property_tests/`, a directory module whose
+  `mod.rs` holds the properties and their evidence and whose `generator.rs`
+  holds the strategies and the arm taxonomy. Entry point
+  `src/ir/action_hash_property_tests/mod.rs`.
 - **Non-vacuity:**
   - *Covers.* All three arms fire; the single-field arm reaches each of the six
     `Action` fields. Record explicitly that `depfile`, `deps_format`, `pool`,
@@ -1085,16 +1088,34 @@ by sampling. A passing run would have read as proving it.
     (`register_action` hard-codes them), so this obligation's evidence over
     those fields concerns the emitter's input domain, not the shipped pipeline.
     Stating that prevents the evidence being read as stronger than it is.
-  - *Mutation.* `MUT-HASHMETA` makes the hasher skip `pool`.
+  - *Mutation.* `MUT-HASHMETA` makes the hasher skip `pool`. It is detected by
+    `unequal_generated_actions_are_observed_to_differ` through a single-field
+    pair that differs only in `pool` — **not** by the equality property and
+    **not** by the independent arm. Measured on 2026-10-18: the equality law
+    passes under the mutation, because a pair that agrees on `pool` loses it
+    from both sides and the digests stay equal; and an independent-draw form of
+    the collision property passed too, because two independent draws differ in
+    many fields at once. See the `Progress` entry for that date.
 
 ______________________________________________________________________
 
-**OBL-E2E** — *permuting target declaration order does not change the emitted
-bytes, for manifests with distinct rule names.*
+**OBL-E2E** — *permuting target and default declaration order does not change
+the emitted bytes, for manifests with distinct rule names.*
 
 Statement: for every generated manifest with pairwise-distinct rule names that
-lowers successfully, and every permutation of its `targets` list, lowering and
-emitting the permuted manifest yields byte-identical output.
+lowers successfully, and every permutation of its `targets` list and of its
+declared `defaults` list, lowering and emitting the permuted manifest yields
+byte-identical output.
+
+The `defaults` list is permuted with the targets, and that is load-bearing
+rather than incidental. Lowering copies the declared list verbatim —
+`process_defaults` (`src/ir/from_manifest/mod.rs:185`) is
+`defaults.extend(manifest.defaults.iter().map(Utf8PathBuf::from))` — and the
+emitter's only ordering of it is `ordered_default_targets`
+(`src/ninja_gen/order.rs:54`). A targets-only transform therefore leaves
+`graph.default_targets` unchanged, so `MUT-DEFSORT` could not fail this
+obligation and the *Mutation* note below would be unsatisfiable. See the
+`Decision log` entry dated 2026-10-18.
 
 The rule-name precondition is required, not cosmetic. `process_rules`
 (`src/ir/from_manifest/mod.rs`) is last-writer-wins on duplicate names and no
@@ -1112,10 +1133,12 @@ within a list, not across the two.
 - **Method:** Proptest, metamorphic, end-to-end from typed manifest through
   `from_manifest` to `generate_bundle`.
 - **Domain:** typed `NetsukeManifest` values (not YAML text — parsing and Jinja
-  belong to 4.3.2 and 4.3.3) with 1 to 12 rules and 1 to 30 targets. Outputs
-  allocated without replacement; dependencies drawn only from lower indices so
-  acyclicity holds by construction. `NetsukeManifest` does not derive `Clone`,
-  so permutation rebuilds from the spec rather than cloning.
+  belong to 4.3.2 and 4.3.3) with 1 to 12 rules and 1 to 30 targets, plus a
+  declared `defaults` list of one to six generated target names in an order
+  that is not already ascending. Outputs allocated without replacement;
+  dependencies drawn only from lower indices so acyclicity holds by
+  construction. `NetsukeManifest` does not derive `Clone`, so permutation
+  rebuilds from the spec rather than cloning.
 - **Oracle:** the permuted manifest's emission — metamorphic.
 - **Artefact:** `src/ninja_gen/determinism/property_tests/declaration.rs`.
 - **Non-vacuity:**
@@ -1126,9 +1149,10 @@ within a list, not across the two.
     asserting that the emission *does* differ under permutation. Without it the
     precondition is an unexamined escape hatch rather than a documented
     boundary.
-  - *Mutation.* `MUT-DEFSORT` must fail this property too, since
-    `default_targets` is the field that carries declaration order into the
-    graph.
+  - *Mutation.* `MUT-DEFSORT` must fail this property. It is observable here
+    only because the transform permutes `defaults` as well as `targets`; with
+    the sort deleted, the `default` line follows declaration order and the two
+    permutations disagree.
 - **Note on strength.** The first draft called this "strictly stronger" than
   `OBL-ORDER`. It is not. `from_manifest` can never produce `implicit_outputs`,
   `pool`, `depfile`, `deps_format`, or `restat`, so `OBL-ORDER`'s direct-graph
@@ -1195,18 +1219,20 @@ sidecar reference.
   An earlier revision of this obligation named `MUT-HASHMETA` here, on the
   theory that a hasher deriving an `Action`'s identity from a per-process
   `RandomState` would be caught. That theory is wrong. `MUT-HASHMETA` is a
-  sound validator for `OBL-ACTION`, which generates `Action` values directly,
-  sets `pool` to `Some`, and asserts that unequal actions do not collide — so
-  skipping `pool` merges two distinct generated actions and fails it. It is
-  *not* a sound validator here, because `OBL-PROCESS` never sees a generated
-  `Action`: `pool` is never `Some` in any construction site in `src/`, and the
-  hash `register_action` computes is recomputed identically in both processes
-  for a fixed manifest. Perturbing the hash *values* changes both runs alike,
-  so the two-run comparison cannot notice. Validate the test with
-  `MUT-ACTIONSORT`, and state in the test's own documentation which class of
-  fault it can and cannot see: it detects cross-process divergence, and it is
-  not a substitute for the single-run properties. `OBL-E2E` remains the place
-  where `MUT-DEFSORT` must fail.
+  sound validator for `OBL-ACTION`, which generates `Action` values directly
+  and includes a single-field arm that can produce a pair differing only in
+  `pool` — so skipping `pool` merges that pair and fails it. (Correction,
+  2026-10-18: the mechanism is the single-field arm specifically. A pair
+  differing in several fields stays distinct under the mutation, and the
+  equality law cannot see it at all.) It is *not* a sound validator here,
+  because `OBL-PROCESS` never sees a generated `Action`: `pool` is never `Some`
+  in any construction site in `src/`, and the hash `register_action` computes
+  is recomputed identically in both processes for a fixed manifest. Perturbing
+  the hash *values* changes both runs alike, so the two-run comparison cannot
+  notice. Validate the test with `MUT-ACTIONSORT`, and state in the test's own
+  documentation which class of fault it can and cannot see: it detects
+  cross-process divergence, and it is not a substitute for the single-run
+  properties. `OBL-E2E` remains the place where `MUT-DEFSORT` must fail.
 
 ______________________________________________________________________
 
@@ -1999,7 +2025,7 @@ is stronger and matches the discipline `ADR-004` established:
    be required to: for a fixed manifest the unsorted `default_targets` order is
    fixed too, so the fault is deterministic across processes and both runs
    agree. `MUT-DEFSORT` belongs to `OBL-E2E`, which compares emissions within
-   one process.
+   one process and permutes the `defaults` declaration, not only the targets.
 7. `docs/users-guide.md` states a guarantee, and `ADR-NNN` explains which
    statements are public, under which parameter tuple, and that cross-version
    stability is not promised.
@@ -2148,6 +2174,11 @@ about 6 s of CPU and 2–3 s wall under nextest parallelism — well inside the
 45-second budget, which is why no light/heavy split is planned. Recommended
 case counts: `OBL-PATHKEY` 1024; `OBL-ACTION` 512; `OBL-NOLOSS`, `OBL-DEFAULT`,
 `OBL-E2E`, `OBL-DUP`, `OBL-CYCLE` 256 each; `OBL-ORDER` 256; `OBL-NINJA` 64.
+The 512 for `OBL-ACTION` is the law properties' budget. Its coverage tally runs
+the same 512 cases under one pinned seed rather than the default 256 under a
+random one, because a coverage assertion is a claim about the generator: at 256
+cases an eight-way arm draw gives each field a margin of only a few cases, and
+a random seed could then fail a true statement.
 
 Also measured: `ninja -t commands` 1.63 ms, `ninja -n` 1.91 ms; a missing
 dyndep sidecar exits 0 under `-t commands` and fails only under `-n`; a
@@ -2177,6 +2208,97 @@ above; the placeholder survives only so that trace links written before
 allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
+
+- [x] (2026-10-18) **The `OBL-ACTION` first full gate batch was stopped
+      RED on `lint`, on five Clippy errors in the new module, and the batch
+      was abandoned rather than run to completion.** `check-fmt` passed (5 s,
+      259 Python files formatted, 186 Markdown unchanged) and so did the
+      first stage of `lint` — `cargo doc --workspace --no-deps` completed
+      clean — but `cargo clippy --workspace --all-targets --all-features`
+      failed with five diagnostics, all in `src/ir/action_hash_property_tests/`:
+      an unused `action_strategy` import (the module imports it and calls it
+      only from `generator.rs`), a missing semicolon on the
+      `mutated.description = …` arm of `Field::mutate`, and three
+      `clippy::shadow_reuse` errors where the inner `prop_map` closure
+      rebound `left`, `right` and `arm` from the enclosing `prop_flat_map`.
+      All five are branch-introduced, not environmental.
+      Two process points. First, the batch had to be abandoned after the
+      `lint` failure rather than allowed to finish: a red gate means the
+      tree will change before the next gate runs, so any later gate result
+      would bind to bytes the `lint` failure had already invalidated. The
+      remaining gates were never started, so no compiler time was spent on a
+      set that could not be used. Second, the `lint` attempt had already
+      restarted once: attempt 1 was killed by the harness background time
+      limit at 04:14Z (not by a build failure) after 60 minutes of queueing,
+      and the scrutineer relaunched it against the same frozen `2ef92d65`
+      with `attempt=2` recorded in the log header. The restart is why two
+      logs exist for one gate, `/tmp/gate-lint-4-3-1.out` (attempt 1, ends
+      mid-`cargo doc`) and `/tmp/gate-lint-4-3-1-2.out` (attempt 2, carries
+      the failure). The tree was verified frozen at dispatch, at the restart
+      and again at the stop: HEAD `2ef92d65` and the same six staged paths.
+      The compiler pool was also checked before the failure was accepted as
+      real. `build-limits-status` reported `capacity 4, held 4, healthy` with
+      `drain fault kind: live_work` and 39–47 s waiters including this
+      worktree's own `test_support`; that is ordinary saturation, not the
+      retained-token wedge, whose signature is `held == capacity` together
+      with `visible compiler roots=0`. A `rustc` process was live throughout
+      (`pgrep -c rustc` = 1–2), so the queue was draining and the failure was
+      a genuine compile error rather than a stalled gate.
+      The repairs are three edits: drop `action_strategy` from the parent
+      module's `use`, add the semicolon, and rename the inner closure
+      bindings to `first`, `second` and `label` so they no longer shadow the
+      outer `left`, `right` and `arm`. Renaming the parameters rather than
+      suppressing the lint is deliberate — `shadow_reuse` catches exactly the
+      reading error that made these three worth fixing.
+
+- [x] (2026-10-18) **`OBL-ACTION` is implemented, and proving it against the
+      mutation found that the obligation's stated mechanism was false.** The
+      suite lives at `src/ir/action_hash_property_tests/` and passes 5 of 5.
+      Three findings, all measured rather than reasoned:
+      **(1) The equality law was written as an unconditional assertion and
+      failed on its own Independent arm.** The statement is an implication —
+      `a == b` implies `hash(a) == hash(b)` — but the property asserted the
+      two hashes were equal for *every* generated pair. The shrunk
+      counter-example was an Independent case whose two draws differed in
+      `restat`, so the run demanded that two unequal actions collide. An arm
+      that is designed to produce unequal pairs cannot be fed to a property
+      whose antecedent those pairs fail. The property now states the
+      implication and returns `Ok(())` when the antecedent is absent, with a
+      comment recording that the coverage tally is what proves the equal-pair
+      arms still fire.
+      **(2) The single-field mutation arm belongs to the collision property,
+      not to the equality law, and the plan said otherwise.** The plan's
+      non-vacuity note reads "`MUT-HASHMETA` makes the hasher skip `pool`" and
+      the OBL-PROCESS discussion says `OBL-ACTION`'s domain is what fails it
+      because that obligation's property "generates `Action` values directly,
+      sets `pool` to `Some`, and asserts that unequal actions do not collide".
+      Applying `MUT-HASHMETA` disproves the
+      mechanism: with the hasher skipping `pool` on every call, the equality
+      law still **passed**. It has to. A pair that agrees on `pool` has
+      `pool` removed from *both* sides, so the two digests stay equal — the
+      mutation is invisible to a law that only ever compares equal values.
+      Detecting it required the collision property to be rewired from two
+      independent `action_strategy()` draws onto `action_case()`, so its
+      single-field arm can produce a pair differing in exactly `pool`. With
+      that change the mutation fails two tests, the directed
+      `a_pool_difference_is_not_interned_away` witness and the property
+      itself, whose shrunk witness is `arm: Mutated(Pool)`. The earlier
+      independent-draw form **passed** under the same mutation.
+      **(3) A mutation patch can be a syntactic no-op while applying
+      cleanly.** The first `MUT-HASHMETA` patch inserted
+      `serde_json::to_value` and removed `pool` from the resulting `Value`,
+      but left `to_writer(action, …)` in place, so the filtered value was
+      computed and discarded. It passed `git apply --check` and the suite
+      stayed green, which initially read as "the property is vacuous". The
+      check that distinguishes the two is `grep` for the mutation's own
+      effect on the serialized path — `to_writer(&value, …)` — not for the
+      inserted lines. The patch was regenerated mechanically by diffing a
+      modified copy against the original rather than by hand-writing hunk
+      counts.
+      The regression seeds written during these runs were **not** committed:
+      the first recorded a defect in the property (since fixed), and the
+      second recorded a mutation the repository does not ship. Neither is a
+      real bug in `src/`.
 
 - [x] (2026-10-18) **The first batch over the review repairs went red on
       `check-fmt`, and the red was a formatting regression the repair itself
@@ -4191,6 +4313,56 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 
 ## Surprises & discoveries
 
+- (2026-10-18) **A background gate can be killed by the harness time limit
+  while it is making progress, and the log it leaves looks like a hang.** The
+  `OBL-ACTION` batch's `lint` attempt ran for 60 minutes inside `cargo doc` and
+  stopped with no `finished_at` and no `exit_status` line — the signature this
+  plan elsewhere treats as a gate still running. It was in fact dead: the
+  harness's background-task limit had terminated the shell, and the process
+  tree was gone. Two checks separate the two cases without guessing. `ps` for
+  the worktree path shows whether any `make`/`cargo` survives, and a restarted
+  log records `attempt=N` in its header. The distinction matters because the
+  two look identical in the log tail and lead to opposite actions: a live gate
+  is waited on, a killed one must be relaunched. Adding the `attempt=` header
+  line at launch is what made the second log self-describing, and it is worth
+  keeping in every future dispatch.
+
+- (2026-10-18) **A field-skipping hasher is invisible to every property except
+  one that differs in exactly that field, and the plan had the mechanism
+  wrong.** Three separate facts had to be measured before the suite could see
+  `MUT-HASHMETA`:
+
+  *The equality law cannot see it, and must not be asked to.* A pair satisfying
+  the antecedent agrees on `pool`, so the mutation removes `pool` from both
+  sides and the digests remain equal. An earlier revision of the property
+  asserted hash equality unconditionally and failed on its own `Independent`
+  arm, whose shrunk witness had `left`/`right` differing only in `restat` — the
+  property was demanding that two unequal actions collide, which is the
+  negation of the obligation. It now states the implication and documents that
+  detection belongs to its companion.
+
+  *Independent draws cannot see it either.* The collision property originally
+  drew twice from `action_strategy()`. With `MUT-HASHMETA` live, that form
+  **passed** — two independent draws differ in many fields, so removing one
+  still leaves them separate. Rewiring the property to `action_case()`, whose
+  single-field arm produces a pair differing only in `pool`, made the mutation
+  fail it with shrunk witness `arm: Mutated(Pool)`, `pool: None` vs
+  `pool: Some("mutated")`.
+
+  *A "certified" mutation can be a no-op.* The first patch computed
+  `serde_json::to_value`, removed `pool` from the map, and then called
+  `to_writer(action, …)`, discarding the filtered value. It applied cleanly and
+  the suite stayed green, which reads exactly like a vacuous property. The
+  distinguishing check is whether the mutation's own output reaches the code
+  path under test — `to_writer(&value, …)` — not whether the inserted lines are
+  present. Patches are now generated by diffing a modified copy rather than by
+  hand-counting hunks.
+
+  The lesson generalizes beyond this obligation: **"the mutation fails the
+  property" is a claim to measure, not to derive.** The plan asserted it in
+  three places on the strength of a plausible sentence, and two of those three
+  statements were false as written.
+
 - (2026-10-17) **The sort-deletion mutations the table describes do not
   compile under the gates, so each was re-expressed as a fault of the same
   class that does.** This is the `MUT-PATHKEY` defect class again, found for
@@ -5133,14 +5305,16 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   grounds that the hasher would then derive an `Action`'s identity from a
   per-process `RandomState` — was written into three places before it was
   checked, and it is wrong. `OBL-ACTION` generates `Action` values directly and
-  does set `pool`, so `MUT-HASHMETA` is a sound validator *there*; but
-  `OBL-PROCESS` never sees a generated `Action`. `pool` is never `Some` at any
-  construction site in `src/`, and `register_action` recomputes the same hash
-  from the same fixed manifest in both processes, so perturbing hash *values*
-  moves both runs together. The right validator is `MUT-ACTIONSORT`, which
-  deletes the only guard over the only unordered collection the emitter
-  iterates: `graph.actions` is an `IrHashMap`, and the `actions.sort_by_key` in
-  `ordered_actions` is what re-establishes order.
+  does set `pool`, so `MUT-HASHMETA` is a sound validator *there* — refined on
+  2026-10-18 to: the validator is sound because the *single-field mutation arm*
+  can produce a pair differing only in `pool`, and that is the only shape the
+  mutation merges; but `OBL-PROCESS` never sees a generated `Action`. `pool` is
+  never `Some` at any construction site in `src/`, and `register_action`
+  recomputes the same hash from the same fixed manifest in both processes, so
+  perturbing hash *values* moves both runs together. The right validator is
+  `MUT-ACTIONSORT`, which deletes the only guard over the only unordered
+  collection the emitter iterates: `graph.actions` is an `IrHashMap`, and the
+  `actions.sort_by_key` in `ordered_actions` is what re-establishes order.
 
   **Lesson:** a mechanism claim is verified against `src/`, not against the
   plausibility of the sentence carrying it. The check that would have caught
@@ -5198,6 +5372,45 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   printed it, not recomputed in transit.
 
 ## Decision log
+
+- Decision: `OBL-E2E`'s metamorphic transform **permutes the declared `defaults`
+  list alongside `targets`**, and the obligation's statement is amended to say
+  so, so that `MUT-DEFSORT` remains observable from this obligation. Date/
+  Author: 2026-10-18 / implementation agent, from a source reading taken while
+  preparing `EP-M6`.
+
+  *Why the original transform could not see `MUT-DEFSORT`.* `OBL-E2E` as first
+  written permuted `manifest.targets` only, and its *Mutation* note required
+  `MUT-DEFSORT` to fail it "since `default_targets` is the field that carries
+  declaration order into the graph". That reasoning does not hold against the
+  code. Lowering copies the declared default list verbatim — `process_defaults`
+  (`src/ir/from_manifest/mod.rs:185`) is
+  `defaults.extend(manifest.defaults.iter().map(Utf8PathBuf::from))` — and the
+  emitter's only sort is `ordered_default_targets`
+  (`src/ninja_gen/order.rs:54`), applied at emission. A targets-only
+  permutation therefore leaves `graph.default_targets` byte-identical and
+  `MUT-DEFSORT` cannot be observed; the two runs would agree for the wrong
+  reason, and the acceptance line "`MUT-DEFSORT` fails `OBL-E2E` only" would be
+  unsatisfiable as stated.
+
+  *The amendment.* The generator emits a manifest whose declared `defaults`
+  names several generated targets, and the transform permutes that list with
+  the target list. With the sort present, both runs still order the line
+  identically; with `MUT-DEFSORT` applied, the line follows declaration order,
+  so the two permutations disagree and the property fails. This keeps the
+  obligation's claim exactly as strong as before — emission is invariant under
+  declaration order — while making the declaration order of `defaults` one of
+  the orders it is invariant under. The generator must supply a `defaults` list
+  that is not already ascending, or the mutation would be invisible because
+  both declaration orders would emit the same line.
+
+  *What was explicitly rejected.* Requiring `MUT-DEFSORT` to fail `OBL-PROCESS`
+  as well. `OBL-PROCESS` runs one fixed manifest twice, so
+  `ordered_default_targets` is deterministic either way and the mutation is
+  unobservable there; the plan already says `MUT-DEFSORT` must *not* be
+  required to fail `OBL-PROCESS`, and that stands. Also rejected: leaving the
+  statement alone and reassigning `MUT-DEFSORT` to another obligation, because
+  no other obligation emits a `default` line from a permuted declaration.
 
 - Decision: the ambient public-API fixture family's `slow-timeout` is widened to
   fifteen periods (900 s), **on the family override rather than on
@@ -5727,13 +5940,14 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   unsound, and the sweep that caught it is the reason a claim is worth
   re-deriving before it is preferred to another agent's. `MUT-HASHMETA` does
   validly falsify `OBL-ACTION` — that property generates `Action` values
-  directly with `pool` set — but `OBL-PROCESS` never sees a generated `Action`.
-  `pool` is never `Some` in any construction site in `src/`, and the hash
-  `register_action` computes is recomputed identically in both processes for a
-  fixed manifest, so perturbing hash *values* moves both runs together. The
-  earlier entry's own *premise* about `MUT-DEFSORT` was and remains correct;
-  only its replacement was wrong. Date/Author: 2026-10-10 / implementation
-  agent.
+  directly with `pool` set, and its single-field arm supplies the pair the
+  mutation merges (measured 2026-10-18; the equality law alone does not) — but
+  `OBL-PROCESS` never sees a generated `Action`. `pool` is never `Some` in any
+  construction site in `src/`, and the hash `register_action` computes is
+  recomputed identically in both processes for a fixed manifest, so perturbing
+  hash *values* moves both runs together. The earlier entry's own *premise*
+  about `MUT-DEFSORT` was and remains correct; only its replacement was wrong.
+  Date/Author: 2026-10-10 / implementation agent.
 - Decision: **decline** the review finding that `ADR-030`'s `Status` must be a
   bare closed-set value, and keep `Accepted` with its date and a one-sentence
   summary on the following line. Rationale: the review cited the style guide's
@@ -5920,6 +6134,33 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   named there; the widening makes room for them rather than changing what they
   are. Date/Author: 2026-10-17 / implementation agent, on the user's explicit
   instruction.
+- Decision: split `OBL-ACTION` into a directory module at
+  `src/ir/action_hash_property_tests/`, with `generator.rs` holding the
+  strategies and arm taxonomy and `mod.rs` holding the properties and their
+  evidence. Rationale: `module_max_lines` (Whitaker, default 400, no
+  `dylint.toml` override) measures a `mod` item's whole source span including
+  `#[cfg(test)]` children, and the combined content exceeded it. The flat file
+  was **deleted** rather than kept beside the directory: the layout contract
+  (`tests/workflow_contracts/rust_module_layout_test.py`) groups files by
+  `(directory, stem-before-first-underscore)` and rejects a `<dir>_*.rs`
+  sibling of `<dir>/` as an unrecorded prefix group, so the hybrid shape is
+  illegal. The seam mirrors the same split in the `defaults` property module,
+  which exists for the same reason. Date/Author: 2026-10-18 / implementation
+  agent.
+- Decision: register `MUT-HASHMETA` under the stem
+  `ir__action_hash_property_tests__equal_actions_hash_equally`, even though the
+  property that actually fails it is
+  `unequal_generated_actions_are_observed_to_differ`. Rationale: the
+  supplemental-patch contract requires the stem to resolve to a live property
+  in a real module, and the resolver
+  (`tests/kani_mutation_evidence_tests/contracts.rs:66`) tries
+  `parent/leaf/mod.rs` before `parent/leaf.rs`, so the directory form resolves
+  to `mod.rs` with no contract change. Naming the detecting property in the
+  stem would have been more precise, but the patch applies to the hasher and
+  the pair of properties is a single obligation's evidence; the stem names the
+  obligation's headline law, and the *Mutation* note beside `OBL-ACTION` now
+  states which property does the detecting. Date/Author: 2026-10-18 /
+  implementation agent.
 
 ## Design review findings
 

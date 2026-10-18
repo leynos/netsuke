@@ -1,0 +1,21 @@
+--- a/src/hasher.rs
++++ b/src/hasher.rs
+@@ -56,11 +56,17 @@
+     ///
+     /// Returns an error if the action cannot be serialised to JSON.
+     pub fn hash(action: &Action) -> Result<String, serde_json::Error> {
++        // MUT-HASHMETA: drop `pool` before canonicalising, so two actions
++        // differing only in their throttling pool intern to one identifier.
++        let mut value = serde_json::to_value(action)?;
++        if let serde_json::Value::Object(fields) = &mut value {
++            fields.remove("pool");
++        }
+         let mut hasher = Sha256::new();
+         {
+             // Canonical JSON: compact formatting with sorted keys.
+             let mut writer = DigestWriter(&mut hasher);
+-            to_writer(action, &mut writer)?;
++            to_writer(&value, &mut writer)?;
+         }
+         Ok(to_lower_hex(&hasher.finalize()))
+     }
