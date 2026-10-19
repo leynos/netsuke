@@ -318,6 +318,13 @@ remains `1747496f`, and the original combined candidate is preserved under
   logs use the
   `/tmp/*-f900fc37-c6fe-4ed1-8700-ec572d9952c3-11-2-1-add-the-manifest-facing-shell-selection-vocabulary-final56757f4.out`
   suffix. M1's exact-candidate local assessment, M2, and M3 remain open.
+- [x] (2026-10-19) The first committed M1 local review covered all 13 changed
+  paths on `84b7058e` against `051358ee` and found two overlapping major
+  findings: fenced `command | tee` examples could mask a failed gate or allow a
+  later passing command to hide it. Source and shell review confirmed the
+  issue. The ExecPlan examples are being corrected with fail-fast and
+  `pipefail` settings in each runnable Bash block; docs gates and the
+  exact-head reassessment remain pending.
 - [ ] EP-M1: host family, built-in registry, and `ShellName` landed with
   tests.
 - [ ] EP-M2: `ShellSelection` codec, parity tests, properties, and behavioural
@@ -326,6 +333,13 @@ remains `1747496f`, and the original combined candidate is preserved under
 
 ## Surprises & discoveries
 
+- Observation (2026-10-19): the first committed M1 local review found that
+  validation examples piped through `tee` did not preserve gate failures.
+  Bash's default pipeline status is the final command's status, and separate
+  fenced blocks do not share shell options. The two reported findings are
+  duplicate evidence for this one issue. Add fail-fast pipeline settings to
+  each validation block and retain the review result pending exact-head
+  reassessment.
 - Observation (2026-10-17): Clippy requires `mod.rs` for the new modules with
   child tests, beyond the workflow contract's prefix grouping. Production
   owners therefore move to `name/mod.rs` and `built_in/mod.rs`, preserving
@@ -1397,6 +1411,7 @@ the `scrutineer` agent is preferred.
 Baseline and full gates:
 
 ```bash
+set -euo pipefail
 BRANCH="$(git branch --show-current)"
 make check-fmt 2>&1 | tee "/tmp/check-fmt-netsuke-${BRANCH}.out"
 make typecheck 2>&1 | tee "/tmp/typecheck-netsuke-${BRANCH}.out"
@@ -1416,6 +1431,8 @@ flags are `-Zthreads=8 -Clink-arg=-fuse-ld=mold`; drop the linker flag on other
 hosts.
 
 ```bash
+set -euo pipefail
+BRANCH="$(git branch --show-current)"
 GATE_FLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold"
 RUSTFLAGS="$GATE_FLAGS" cargo nextest run --workspace --all-targets --all-features \
   -E 'test(/shell_selection/)' 2>&1 | tee "/tmp/focused-netsuke-${BRANCH}.out"
@@ -1429,6 +1446,9 @@ Behavioural scenarios only (generated scenario tests are named after the
 feature file stem, so the filter matches them):
 
 ```bash
+set -euo pipefail
+BRANCH="$(git branch --show-current)"
+GATE_FLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold"
 RUSTFLAGS="$GATE_FLAGS" cargo nextest run --workspace --all-features --test bdd_tests \
   -E 'test(/shell_selection/)' 2>&1 | tee "/tmp/bdd-netsuke-${BRANCH}.out"
 ```
@@ -1436,6 +1456,9 @@ RUSTFLAGS="$GATE_FLAGS" cargo nextest run --workspace --all-features --test bdd_
 Doctests for the new module:
 
 ```bash
+set -euo pipefail
+BRANCH="$(git branch --show-current)"
+GATE_FLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold"
 RUSTFLAGS="$GATE_FLAGS" RUSTDOCFLAGS="--cfg docsrs -D warnings" \
   cargo test --workspace --doc --all-features shell_selection \
   2>&1 | tee "/tmp/doctest-netsuke-${BRANCH}.out"
@@ -1468,6 +1491,8 @@ a failure was found and fixed),
 Markdown gates after documentation edits:
 
 ```bash
+set -euo pipefail
+BRANCH="$(git branch --show-current)"
 make fmt 2>&1 | tee "/tmp/fmt-netsuke-${BRANCH}.out"
 make markdownlint 2>&1 | tee "/tmp/markdownlint-netsuke-${BRANCH}.out"
 make nixie 2>&1 | tee "/tmp/nixie-netsuke-${BRANCH}.out"
