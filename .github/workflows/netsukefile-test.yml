@@ -29,8 +29,12 @@ jobs:
     # a second condition. Keep the continuation at this indent: a deeper
     # one keeps its break inside the folded scalar and puts a newline in
     # the expression, which GitHub evaluates anyway.
+    # Dependabot pull requests run on the hosted pool too (free on a public
+    # repository). The author is tested, not the actor, which changes when
+    # someone else pushes to the branch.
     runs-on: >-
-      ${{ github.event.pull_request.head.repo.fork
+      ${{ (github.event.pull_request.head.repo.fork
+      || github.event.pull_request.user.login == 'dependabot[bot]')
       && 'ubuntu-22.04' || 'ubicloud-standard-2-ubuntu-2204' }}
     timeout-minutes: 45
     permissions:

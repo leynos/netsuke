@@ -39,6 +39,17 @@ if typ.TYPE_CHECKING:  # pragma: no cover - typing only
 #: pull request down one arm while the declaration still looked right.
 FORK_GUARD: typ.Final[str] = "github.event.pull_request.head.repo.fork"
 
+#: The pull request's author, not ``github.actor``: the actor is whoever
+#: triggered the run, so a person pushing to a Dependabot branch would flip the
+#: runner. Dependabot's pull requests take the fork arm because hosted minutes
+#: cost nothing on a public repository.
+DEPENDABOT_GUARD: typ.Final[str] = (
+    "github.event.pull_request.user.login == 'dependabot[bot]'"
+)
+
+#: The exact guard a pull-request lane branches on: a fork or Dependabot.
+HOSTED_GUARD: typ.Final[str] = f"({FORK_GUARD} || {DEPENDABOT_GUARD})"
+
 #: The runner a fork's pull request falls back to, for a lane that pins no
 #: particular image. The point of the arm is that it names a runner GitHub
 #: hosts, and `ubuntu-latest` is the one that tracks whatever the estate builds
@@ -136,7 +147,9 @@ def _split_operands(declaration: str) -> tuple[str, str, str] | None:
     if body is None or "&&" not in body:
         return None
     guard, arms = body.split("&&", 1)
-    if "||" not in arms or not _is_context_path(guard):
+    if "||" not in arms or not (
+        _is_context_path(guard) or guard.strip() == HOSTED_GUARD
+    ):
         return None
     fork_text, owned_text = arms.split("||", 1)
     return guard.strip(), fork_text, owned_text
@@ -248,7 +261,7 @@ def _is_well_formed_fallback(placement: Placement | None, expected_fork: str) ->
     """
     return (
         placement is not None
-        and placement.guard == FORK_GUARD
+        and placement.guard == HOSTED_GUARD
         and placement.fork == expected_fork
         and placement.owned.startswith(UBICLOUD_PREFIX)
     )
@@ -280,7 +293,7 @@ def fork_fallback_offences(declarations: cabc.Mapping[str, object]) -> list[str]
     Examples
     --------
     >>> owned = "ubicloud-standard-2-ubuntu-2404"
-    >>> ok = f"${{{{ {FORK_GUARD} && '{FORK_FALLBACK_RUNNER}' || '{owned}' }}}}"
+    >>> ok = f"${{{{ {HOSTED_GUARD} && '{FORK_FALLBACK_RUNNER}' || '{owned}' }}}}"
     >>> fork_fallback_offences({"ci.build-test": ok})
     []
     >>> fork_fallback_offences({"ci.build-test": owned})
