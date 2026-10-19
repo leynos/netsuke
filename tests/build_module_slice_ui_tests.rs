@@ -122,14 +122,15 @@ struct BuildSliceDependencies {
 }
 
 impl BuildSliceDependencies {
-    /// Check the gate-selected targets and collect fixture metadata artefacts.
+    /// Check the production library and collect fixture metadata artefacts.
     fn build() -> io::Result<Self> {
         let output = Command::new(cargo())
             .arg("check")
             .arg("--manifest-path")
             .arg(manifest_dir().join("Cargo.toml"))
             .arg("--message-format=json-render-diagnostics")
-            .args(cargo_features::GATE_BUILD_ARGUMENTS)
+            .args(["--package", "netsuke-build"])
+            .args(cargo_features::LIBRARY_BUILD_ARGUMENTS)
             .output()?;
         if !output.status.success() {
             return Err(io::Error::other(format!(

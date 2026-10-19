@@ -45,14 +45,17 @@ REQUIRED_COVERAGE_INPUTS = {
     "doctests": "true",
 }
 
-#: Ambient-target UI checks must retain the gate's workspace/target/features.
+#: Ambient-target UI checks select only the library whose artefacts they use.
 #: Isolated fixture and packaging builds intentionally retain shipped defaults.
 GATE_FEATURES_MODULE: Path = REPO_ROOT / "tests" / "support" / "cargo_features.rs"
 TEST_SUPPORT_MANIFEST: Path = REPO_ROOT / "test_support" / "Cargo.toml"
-AMBIENT_TARGET_NESTED_BUILD_SOURCES: tuple[Path, ...] = (
-    REPO_ROOT / "tests" / "support" / "test_support_rlib.rs",
-    REPO_ROOT / "tests" / "command_env_ui_tests.rs",
-    REPO_ROOT / "tests" / "build_module_slice_ui_tests.rs",
+AMBIENT_TARGET_NESTED_BUILD_PACKAGES: tuple[tuple[str, Path], ...] = (
+    ("test_support", REPO_ROOT / "tests" / "support" / "test_support_rlib.rs"),
+    ("netsuke-build", REPO_ROOT / "tests" / "command_env_ui_tests.rs"),
+    ("netsuke-build", REPO_ROOT / "tests" / "build_module_slice_ui_tests.rs"),
+)
+AMBIENT_TARGET_NESTED_BUILD_SOURCES: tuple[Path, ...] = tuple(
+    source for _, source in AMBIENT_TARGET_NESTED_BUILD_PACKAGES
 )
 
 #: Every job that measures coverage, and the event it is restricted to. Two
@@ -210,35 +213,27 @@ def test_the_local_test_target_still_runs_both_passes() -> None:
         assert "-D warnings" in recipe, f"the local {label} pass must deny warnings"
 
 
-def test_ambient_target_harnesses_match_the_gate_build_selection() -> None:
-    """Require ambient Cargo checks to retain the gate's target selection.
+def test_ambient_target_harnesses_check_only_the_library_they_consume() -> None:
+    """Keep direct-rustc preparation within each fixture's dependency graph.
 
-    The direct-rustc UI harnesses check workspace packages in the ambient
-    target directory. Workspace, target, and feature selection must match
-    `make test-nextest` because development dependencies can enable features a
-    library-only check would omit. Check mode supplies metadata without linking
-    integration executables while the suite is using them; it need not match
-    the test build mode or cache identity.
+    The support fixture selects its library; the production fixtures select
+    the application library, which also runs its build script and prepares its
+    build dependencies. None needs Cargo to check every workspace target
+    before compiling a small direct-rustc fixture.
     """
     module = GATE_FEATURES_MODULE.read_text(encoding="utf-8")
-    declaration = re.search(
-        r"pub const GATE_BUILD_ARGUMENTS:\s*&\[&str\]\s*=\s*&\[(.*?)\];",
-        module,
-        re.DOTALL,
+    declaration = module.split("pub const LIBRARY_BUILD_ARGUMENTS:", maxsplit=1)
+    assert len(declaration) == 2, "the shared module must define library arguments"
+    selected_arguments = declaration[1].split(";", maxsplit=1)[0]
+    assert '"--lib"' in selected_arguments, "ambient checks must select library targets"
+    assert '"--all-features"' in selected_arguments, (
+        "ambient checks must enable all features"
     )
-    assert declaration, (
-        "the shared module must define the complete gate build selection"
-    )
-    arguments = re.findall(r'"([^"]+)"', declaration.group(1))
-    assert arguments == [
-        "--workspace",
-        "--all-targets",
-        "--all-features",
-    ], "ambient checks must retain the gate's workspace, targets, and features"
-    for source in AMBIENT_TARGET_NESTED_BUILD_SOURCES:
+    for package, source in AMBIENT_TARGET_NESTED_BUILD_PACKAGES:
         text = source.read_text(encoding="utf-8")
         required_composition = (
-            "cargo_features::GATE_BUILD_ARGUMENTS",
+            f'args(["--package", "{package}"])',
+            "cargo_features::LIBRARY_BUILD_ARGUMENTS",
             'manifest_dir().join("Cargo.toml")',
             '.arg("check")',
         )
@@ -246,8 +241,8 @@ def test_ambient_target_harnesses_match_the_gate_build_selection() -> None:
             fragment for fragment in required_composition if fragment not in text
         ]
         assert not missing, (
-            f"{source.relative_to(REPO_ROOT)} must compose Cargo check preparation "
-            f"with the shared selection and root manifest; missing {missing!r}"
+            f"{source.relative_to(REPO_ROOT)} must compose Cargo check with "
+            f"the {package} library selector and root manifest; missing {missing!r}"
         )
     manifest = tomllib.loads(TEST_SUPPORT_MANIFEST.read_text(encoding="utf-8"))
     features = manifest.get("features")
@@ -321,25 +316,27 @@ def test_cold_packaging_verification_has_a_scoped_budget() -> None:
     )
 
 
-def test_packaging_build_stays_out_of_system_temporary_storage() -> None:
-    """Keep the isolated full package build beneath the workspace target root."""
+def test_packaging_verification_preserves_cargo_build_configuration() -> None:
+    """Reuse Cargo build configuration while retaining package verification."""
     source = (REPO_ROOT / "tests" / "packaging_smoke_tests.rs").read_text(
         encoding="utf-8"
     )
-    smoke_test = source.split(
-        "fn packaged_manifest_retains_build_script_sources()", maxsplit=1
-    )[1].split("\n#[test]", maxsplit=1)[0]
-    assert "tempfile::tempdir()" not in smoke_test, (
-        "full package verification must stay out of system temporary storage"
+    forbidden = (
+        r"\b(?:TempDir|tempdir(?:_in)?)\b|"
+        r'\.env(?:_remove)?\(\s*"CARGO_(?:TARGET_DIR|BUILD_TARGET_DIR|BUILD_BUILD_DIR)"'
     )
-    required_placement = (
-        'Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("target")',
-        "tempfile::tempdir_in(&target_root)",
+    assert not re.search(forbidden, source), "preserve Cargo's build placement"
+    required = (
+        ".args(PUBLISH_DRY_RUN_ARGS)",
+        '.args(["package", "--list", "--allow-dirty", "-p", "netsuke-build"])',
+        "assert_required_paths_present(&packaged_paths, &readme_paths, &source_paths);",
+        "assert_forbidden_roots_absent(&packaged_paths);",
     )
-    missing = [
-        fragment for fragment in required_placement if fragment not in smoke_test
-    ]
-    assert not missing, f"package verification must use workspace storage: {missing!r}"
+    assert all(fragment in source for fragment in required), (
+        "package verification and source-list assertions must remain intact"
+    )
+    linux = source.split("} else {", maxsplit=1)[1].split("};", maxsplit=1)[0]
+    assert '"--no-verify"' not in linux, "Linux must verify the extracted package"
 
 
 @pytest.mark.parametrize(

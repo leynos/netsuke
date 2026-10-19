@@ -51,16 +51,17 @@ max-threads = 1
 # through `filter` and no `test-group`, the same field carrying the same defect,
 # and a guard reading only the group's filters could not see it.
 [[profile.default.overrides]]
-# `cargo publish --dry-run` builds into a fresh target directory. Allow fifteen
-# periods for shared-cache and compiler-queue delays without widening unrelated
-# tests or adding retries.
+# `cargo publish --dry-run` verifies fresh package sources while reusing the
+# caller's build directory for matching dependency artefacts. Allow fifteen
+# periods for cold dependencies and compiler-queue delays without widening
+# unrelated tests or adding retries.
 #
 # Previous full-suite runs passed at 208.921 s and reached the default cap at
-# 300.017 s during concurrent Cargo work. Cold-target runs later reached 600 s
-# and 720 s while compiler admission was saturated; the latest was still
-# running when Nextest stopped it at 720.021 s. Fifteen periods allow another
-# three minutes for that isolated package build, with the override kept scoped
-# to this one test.
+# 300.017 s during concurrent Cargo work. Runs with the former private-target
+# harness later reached 600 s and 720 s while compiler admission was saturated;
+# the latest was still running when Nextest stopped it at 720.021 s. Fifteen
+# periods allow another three minutes for cold or contended package builds,
+# with the override kept scoped to this one test.
 filter = 'test(/^packaged_manifest_retains_build_script_sources($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
@@ -77,10 +78,10 @@ test-group = "nested-cargo-builds"
 success-output = "immediate"
 
 [[profile.default.overrides]]
-# This direct-rustc fixture prepares the workspace test graph before checking
-# the production module boundary. It hit the default 300 s cap in the full
-# gate while compiler admission was saturated, so widen only this test to
-# twelve periods (720 s), below the 960 s CI whole-run cap.
+# This direct-rustc fixture needs the production library and build-script
+# dependencies, not every workspace test target. Its old all-target check hit
+# the 720 s cap while the follow-up Cargo metadata query waited on the shared
+# package-cache lock. Keep the scoped allowance while narrowing that work.
 filter = 'test(/^production_build_module_slice_has_expected_boundary($|::)/)'
 success-output = "immediate"
 slow-timeout = { period = "60s", terminate-after = 12 }

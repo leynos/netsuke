@@ -160,21 +160,23 @@ struct NetsukeRlib {
 }
 
 impl NetsukeRlib {
-    /// Check the gate-selected targets and locate the `netsuke` metadata artefact.
+    /// Check the production library and locate the `netsuke` metadata artefact.
     ///
-    /// Cargo inherits the ambient `RUSTFLAGS` and pinned toolchain. The
-    /// workspace, target, and feature selection matches the test gate, while
-    /// check mode avoids linking integration executables and does not promise
+    /// Cargo inherits the ambient `RUSTFLAGS` and pinned toolchain. This checks
+    /// `netsuke-build --lib --all-features`, including its build script and
+    /// build dependencies, without checking unrelated workspace test targets.
+    /// Check mode avoids linking integration executables and does not promise
     /// the same test build mode or cache identity. The package is named
-    /// `netsuke-build`, but the lib target — and therefore the `--extern`
-    /// name — is `netsuke`.
+    /// `netsuke-build`, but the lib target — and therefore the `--extern` name
+    /// — is `netsuke`.
     fn build() -> io::Result<Self> {
         let output = Command::new(cargo())
             .arg("check")
             .arg("--manifest-path")
             .arg(manifest_dir().join("Cargo.toml"))
             .arg("--message-format=json-render-diagnostics")
-            .args(cargo_features::GATE_BUILD_ARGUMENTS)
+            .args(["--package", "netsuke-build"])
+            .args(cargo_features::LIBRARY_BUILD_ARGUMENTS)
             .output()?;
         if !output.status.success() {
             return Err(io::Error::other(format!(
