@@ -45,7 +45,12 @@ function Test-ExplicitBashIsolation {
         $env:NETSUKE_WINDOWS_SHELL = 'bash'
         $env:NETSUKE_BASH_BASELINE = $bashBaseline.Trim()
         Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'bash-isolated-state')
-        Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'bash-isolated-state.txt') `
+
+        $bashIsolationState = @(Get-Content -LiteralPath 'bash-isolated-state.txt')
+        if ($bashIsolationState.Count -ne 1) {
+            throw "Windows Bash isolation state should contain one line, got $($bashIsolationState.Count)."
+        }
+        Assert-Equal -Actual $bashIsolationState[0] `
             -Expected 'isolated' -Message 'Windows Bash did not isolate command-list shell state'
     }
     finally {
