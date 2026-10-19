@@ -2,10 +2,10 @@
 
 use super::super::super::{IrGenError, SubstitutionTraversal};
 use super::super::tokens::{
-    comment_character_changes_scanner_state, hash_follows_ambiguous_expression_boundary,
-    is_power_shell_comment_boundary, starts_block_comment,
+    PowerShellCommandSubstitutionContext, PowerShellSourceCharacter,
+    comment_character_changes_scanner_state,
 };
-use super::{PowerShellCommentState, PowerShellLexicalState, PowerShellSourceCharacter};
+use super::{PowerShellCommentState, PowerShellLexicalState};
 
 impl PowerShellLexicalState {
     /// Begin tracking a line comment at a PowerShell comment boundary.
@@ -28,26 +28,14 @@ impl PowerShellLexicalState {
         matches!(self.comment_state, PowerShellCommentState::Ambiguous)
     }
 
-    /// Track scanner-sensitive syntax inside a confirmed line comment.
-    const fn note_unquoted_comment_character(
+    /// Accumulate scanner-sensitive syntax and end comment mode at line breaks.
+    pub(super) fn note_comment_character(
         &mut self,
-        changes_scanner_state: bool,
-        is_line_break: bool,
+        character: PowerShellSourceCharacter<'_>,
+        context: PowerShellCommandSubstitutionContext,
     ) {
-        self.has_unmodelled_syntax |= changes_scanner_state;
-        if is_line_break {
-            self.comment_state = PowerShellCommentState::None;
-        }
-    }
-
-    /// Track scanner-sensitive syntax after a hash with an uncertain boundary.
-    pub(super) const fn note_ambiguous_comment_character(
-        &mut self,
-        changes_scanner_state: bool,
-        is_line_break: bool,
-    ) {
-        self.has_unmodelled_syntax |= changes_scanner_state;
-        if is_line_break {
+        self.has_unmodelled_syntax |= comment_character_changes_scanner_state(character, context);
+        if character.is_line_break() {
             self.comment_state = PowerShellCommentState::None;
         }
     }
@@ -55,69 +43,63 @@ impl PowerShellLexicalState {
 
 impl SubstitutionTraversal<'_, '_> {
     /// Report whether an unquoted hash begins a PowerShell comment token.
-    pub(super) fn is_unquoted_comment_start(&self, character: PowerShellSourceCharacter) -> bool {
-        character.value == '#'
+    pub(super) fn is_unquoted_comment_start(
+        &self,
+        character: PowerShellSourceCharacter<'_>,
+    ) -> bool {
+        character.value() == '#'
             && self.matches_unquoted_quote_context()
-            && is_power_shell_comment_boundary(self.chars, character.position)
+            && character.is_token_boundary()
     }
 
     /// Identify a mid-token hash whose tokenizer boundary may be ambiguous.
     pub(super) fn is_ambiguous_unquoted_comment_start(
         &self,
-        character: PowerShellSourceCharacter,
+        character: PowerShellSourceCharacter<'_>,
     ) -> bool {
-        character.value == '#'
+        character.value() == '#'
             && self.matches_unquoted_quote_context()
-            && hash_follows_ambiguous_expression_boundary(self.chars, character.position)
+            && character.hash_follows_ambiguous_expression_boundary()
     }
 
     /// Track scanner-sensitive syntax while a mid-token hash may be a comment.
     pub(super) fn note_ambiguous_comment_character(
         &mut self,
-        character: PowerShellSourceCharacter,
+        character: PowerShellSourceCharacter<'_>,
     ) {
-        let changes_scanner_state = comment_character_changes_scanner_state(
-            self.chars,
-            character.position,
-            character.value,
-            self.is_in_command_substitution(),
-        );
-        self.power_shell_lexical.note_ambiguous_comment_character(
-            changes_scanner_state,
-            matches!(character.value, '\r' | '\n'),
-        );
+        self.note_comment_character(character);
     }
 
     /// Track ambiguous syntax and preserve a PowerShell comment character.
     pub(super) fn append_unquoted_comment_character(
         &mut self,
-        character: PowerShellSourceCharacter,
+        character: PowerShellSourceCharacter<'_>,
     ) -> Result<usize, IrGenError> {
-        let changes_scanner_state = comment_character_changes_scanner_state(
-            self.chars,
-            character.position,
-            character.value,
-            self.is_in_command_substitution(),
-        );
-        self.power_shell_lexical.note_unquoted_comment_character(
-            changes_scanner_state,
-            matches!(character.value, '\r' | '\n'),
-        );
+        self.note_comment_character(character);
         self.append_marker_for_context(
-            character.position,
-            character.value,
+            character.position(),
+            character.value(),
             Self::power_shell_marker_protection(self),
         )
+    }
+
+    /// Record comment-sensitive syntax without merging its two traversal paths.
+    fn note_comment_character(&mut self, character: PowerShellSourceCharacter<'_>) {
+        let context = if self.is_in_command_substitution() {
+            PowerShellCommandSubstitutionContext::Inside
+        } else {
+            PowerShellCommandSubstitutionContext::Outside
+        };
+        self.power_shell_lexical
+            .note_comment_character(character, context);
     }
 
     /// Remember a block comment that the partial scanner cannot parse safely.
     pub(super) fn note_unparsed_block_comment_opener(
         &mut self,
-        character: PowerShellSourceCharacter,
+        character: PowerShellSourceCharacter<'_>,
     ) {
-        if self.matches_unquoted_quote_context()
-            && starts_block_comment(self.chars, character.position)
-        {
+        if self.matches_unquoted_quote_context() && character.starts_block_comment() {
             self.power_shell_lexical.note_unmodelled_syntax();
         }
     }

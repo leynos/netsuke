@@ -2,7 +2,7 @@
 
 use super::super::super::{IrGenError, find_substitution, invalid_command_error};
 use super::super::SubstitutionTraversal;
-use super::lexical::PowerShellSourceCharacter;
+use super::tokens::PowerShellSourceCharacter;
 
 /// Retain raw argument double-quote state until PowerShell resumes parsing.
 pub(in crate::ir::cmd_interpolate::substitution) struct PowerShellStopParsingState {
@@ -42,10 +42,10 @@ impl PowerShellStopParsingState {
     fn append_character(
         &mut self,
         output: &mut String,
-        character: PowerShellSourceCharacter,
+        character: PowerShellSourceCharacter<'_>,
     ) -> usize {
-        let pos = character.position;
-        let ch = character.value;
+        let pos = character.position();
+        let ch = character.value();
         output.push(ch);
         if matches!(ch, '\r' | '\n') {
             self.end();
@@ -83,15 +83,15 @@ impl SubstitutionTraversal<'_, '_> {
     /// Returns `InvalidCommand` when a recipe marker occurs in raw arguments.
     pub(super) fn append_stop_parsing_character(
         &mut self,
-        character: PowerShellSourceCharacter,
+        character: PowerShellSourceCharacter<'_>,
     ) -> Result<usize, IrGenError> {
-        if find_substitution(self.chars, character.position).is_some() {
+        if find_substitution(self.chars, character.position()).is_some() {
             return Err(invalid_command_error(self.template.to_owned()));
         }
-        if matches!(character.value, '\'' | '`') {
+        if matches!(character.value(), '\'' | '`') {
             self.power_shell_lexical.note_unmodelled_syntax();
         }
-        self.power_shell_lexical.note_character(character.value);
+        self.power_shell_lexical.note_character(character);
         Ok(self
             .power_shell_stop_parsing
             .append_character(&mut self.output, character))

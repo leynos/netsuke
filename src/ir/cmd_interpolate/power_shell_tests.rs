@@ -5,6 +5,52 @@ use super::*;
 use camino::Utf8PathBuf;
 use rstest::rstest;
 
+enum PowerShellCommandPathBindings {
+    HostileInputAndOutput,
+    OutputOnly,
+    HostileInputOnly,
+}
+
+struct PowerShellCommandRejectionScenario {
+    template: String,
+    paths: PowerShellCommandPathBindings,
+}
+
+impl PowerShellCommandRejectionScenario {
+    /// Interpolate a command and require an error retaining its original template.
+    fn verify(self) {
+        let hostile_path = Utf8PathBuf::from("; New-Item pwned; Write-Output x");
+        let output_path = Utf8PathBuf::from("out");
+        let bindings = match self.paths {
+            PowerShellCommandPathBindings::HostileInputAndOutput => {
+                CommandBindings::new(&[hostile_path], &[output_path], RecipeShell::PowerShell)
+            }
+            PowerShellCommandPathBindings::OutputOnly => {
+                CommandBindings::new(&[], &[output_path], RecipeShell::PowerShell)
+            }
+            PowerShellCommandPathBindings::HostileInputOnly => {
+                CommandBindings::new(&[hostile_path], &[], RecipeShell::PowerShell)
+            }
+        };
+        let error = interpolate_command_with_bindings(&self.template, &bindings)
+            .expect_err("scanner-sensitive contexts must reject command markers");
+
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { command, .. } if command == self.template),
+            "the diagnostic should retain the original template"
+        );
+    }
+}
+
+macro_rules! command_rejection_case {
+    ($template:expr, $paths:expr) => {
+        PowerShellCommandRejectionScenario {
+            template: $template,
+            paths: $paths,
+        }
+    };
+}
+
 /// Verify PowerShell rejects markers in quote and command-substitution regions.
 #[rstest]
 #[case::single_quoted(format!("Write-Output '{OUTS_TOKEN}'"))]
@@ -20,31 +66,30 @@ fn power_shell_rejects_markers_without_a_context_safe_encoder(#[case] template: 
     );
 }
 
-/// Reject command markers when a mid-token hash may hide quote syntax in a comment.
+/// Reject markers after comment and stop-parsing syntax that the scanner cannot model.
 #[rstest]
-#[case::input(format!("$value#'\nWrite-Output '{INS_TOKEN}'"))]
-#[case::output(format!("$value#'\nSet-Content output '{OUTS_TOKEN}'"))]
-fn power_shell_commands_reject_markers_after_ambiguous_comment_quotes(#[case] template: String) {
-    let bindings = CommandBindings::new(
-        &[Utf8PathBuf::from("; New-Item pwned; Write-Output x")],
-        &[Utf8PathBuf::from("out")],
-        RecipeShell::PowerShell,
-    );
-    let error = interpolate_command_with_bindings(&template, &bindings)
-        .expect_err("ambiguous comment quotes must not expose marker sites");
-
-    assert!(matches!(error, IrGenError::InvalidCommand { command, .. } if command == template));
-}
-
-/// Reject a command marker when a postfix operator may start a comment.
-#[test]
-fn power_shell_commands_reject_markers_after_increment_comment_quotes() {
-    let template = format!("$i++#'\nWrite-Output '{OUTS_TOKEN}'");
-    let bindings = CommandBindings::new(&[], &[Utf8PathBuf::from("out")], RecipeShell::PowerShell);
-    let error = interpolate_command_with_bindings(&template, &bindings)
-        .expect_err("postfix-expression comments must not expose quoted marker sites");
-
-    assert!(matches!(error, IrGenError::InvalidCommand { command, .. } if command == template));
+#[case::ambiguous_comment_input(
+    command_rejection_case!(format!("$value#'\nWrite-Output '{INS_TOKEN}'"), PowerShellCommandPathBindings::HostileInputAndOutput)
+)]
+#[case::ambiguous_comment_output(
+    command_rejection_case!(format!("$value#'\nSet-Content output '{OUTS_TOKEN}'"), PowerShellCommandPathBindings::HostileInputAndOutput)
+)]
+#[case::postfix_operator_comment(
+    command_rejection_case!(format!("$i++#'\nWrite-Output '{OUTS_TOKEN}'"), PowerShellCommandPathBindings::OutputOnly)
+)]
+#[case::stop_parsing_token(
+    command_rejection_case!(format!("cmd /c --% type {INS_TOKEN}"), PowerShellCommandPathBindings::HostileInputOnly)
+)]
+#[case::stop_parsing_single_quote(
+    command_rejection_case!(format!("cmd /c --% 'prefix | text' | Write-Output {OUTS_TOKEN}"), PowerShellCommandPathBindings::OutputOnly)
+)]
+#[case::stop_parsing_backtick_before_quote(
+    command_rejection_case!(format!("cmd /c --% \"prefix`\" still \" | Write-Output {OUTS_TOKEN}"), PowerShellCommandPathBindings::OutputOnly)
+)]
+fn power_shell_commands_reject_markers_after_ambiguous_syntax(
+    #[case] scenario: PowerShellCommandRejectionScenario,
+) {
+    scenario.verify();
 }
 
 /// Verify a PowerShell escape cannot hide a recipe marker from validation.
@@ -55,37 +100,6 @@ fn power_shell_rejects_markers_after_backticks() {
         interpolate_command_with_bindings(&format!("Write-Output `{OUTS_TOKEN}"), &bindings)
             .expect_err("PowerShell backticks before markers must not bypass validation");
     assert!(matches!(error, IrGenError::InvalidCommand { .. }));
-}
-
-/// Reject a command marker in PowerShell's raw native-command argument region.
-#[test]
-fn power_shell_commands_reject_markers_after_stop_parsing_token() {
-    let template = format!("cmd /c --% type {INS_TOKEN}");
-    let bindings = CommandBindings::new(
-        &[Utf8PathBuf::from("; New-Item pwned; Write-Output x")],
-        &[],
-        RecipeShell::PowerShell,
-    );
-    let error = interpolate_command_with_bindings(&template, &bindings)
-        .expect_err("raw native-command arguments cannot contain path markers");
-
-    assert!(matches!(error, IrGenError::InvalidCommand { command, .. } if command == template));
-}
-
-/// Reject command markers after stop-parsing quote syntax the scanner cannot model.
-#[rstest]
-#[case::single_quote(format!("cmd /c --% 'prefix | text' | Write-Output {OUTS_TOKEN}"))]
-#[case::backtick_before_double_quote(format!(
-    "cmd /c --% \"prefix`\" still \" | Write-Output {OUTS_TOKEN}"
-))]
-fn power_shell_commands_reject_markers_after_ambiguous_stop_parsing_syntax(
-    #[case] template: String,
-) {
-    let bindings = CommandBindings::new(&[], &[Utf8PathBuf::from("out")], RecipeShell::PowerShell);
-    let error = interpolate_command_with_bindings(&template, &bindings)
-        .expect_err("ambiguous stop-parsing syntax must fail closed for commands");
-
-    assert!(matches!(error, IrGenError::InvalidCommand { command, .. } if command == template));
 }
 
 /// Preserve an argument hash after punctuation that remains part of its token.

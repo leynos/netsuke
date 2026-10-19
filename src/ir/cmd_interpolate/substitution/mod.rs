@@ -89,10 +89,9 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             .get(pos)
             .ok_or_else(|| invalid_command_error(self.template.to_owned()))?;
         if self.bindings.shell == RecipeShell::PowerShell {
-            return self.append_power_shell_character(PowerShellSourceCharacter {
-                position: pos,
-                value: ch,
-            });
+            let character = PowerShellSourceCharacter::new(self.chars, pos)
+                .ok_or_else(|| invalid_command_error(self.template.to_owned()))?;
+            return self.append_power_shell_character(character);
         }
         self.append_posix_character(pos, ch)
     }

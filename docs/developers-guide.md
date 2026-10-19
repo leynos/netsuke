@@ -5743,10 +5743,11 @@ PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
 tracks raw native-command arguments, and `tokens.rs` recognizes the token
 boundaries and syntax used by those scanners. They share a shell-specific
 boundary but keep distinct state responsibilities. `PowerShellSourceCharacter`
-groups an offset with its source character only within the PowerShell scanner;
-it is not a shared shell abstraction. The sibling
-`src/ir/cmd_interpolate/command_substitution.rs` owns the local quote and
-parenthesis state needed to keep protected `$()` bodies isolated.
+binds a Unicode-scalar index to the borrowed source buffer and provides checked
+lookaround only within the PowerShell scanner; it is not a shared shell
+abstraction. The sibling `src/ir/cmd_interpolate/command_substitution.rs` owns
+the local quote and parenthesis state needed to keep protected `$()` bodies
+isolated.
 
 `src/manifest/render/mod.rs` may emit the internal tokens while rendering the
 only accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell
