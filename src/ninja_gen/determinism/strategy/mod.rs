@@ -14,5 +14,6 @@
 
 pub(crate) mod classification;
 pub(crate) mod graph;
+pub(crate) mod manifest;
 
 pub(crate) use classification::{ALWAYS_RESTAT_ALL, Classification};
