@@ -1463,6 +1463,38 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   host, or accept that a nested `cargo build` under a shared four-slot pool
   cannot be gated in the same interval it is measured in. Widening the budget
   stays excluded for the reason given above.
+- [x] (2026-10-19) Began Stage C with the first of its five seams:
+  `scripts/release_candidate_cli.py` records the identity the packaging job is
+  authorized to publish, and `scripts/tests/test_release_candidate_cli.py` pins
+  it in five cases. The red step was observed before the module existed — the
+  suite failed on importing a module that was not there — and the green step
+  then passed. The CLI is a *thin* seam by construction: argument parsing, one
+  call to `release_candidate.resolve_identity`, one write. A rejected identity
+  returns `EXIT_IDENTITY_REJECTED` **before** the write is attempted, which the
+  third test checks as an absence (`not destination.exists()`) rather than by
+  trusting the branch's shape, so a future reordering that wrote first and
+  validated second would fail it. The doctest uses `/nonexistent/identity.json`
+  for the same reason: an example that wrongly accepted the tag would raise
+  `FileNotFoundError` instead of quietly recording an identity, and one that
+  wrongly refused would still return `1` — so the destination is chosen to make
+  the wrong path observable. The diagnostic itself goes to standard error,
+  which a doctest does not compare; that is stated in the docstring rather than
+  left for a reader to infer from why the expected block has one line.
+
+  Wiring landed in the same commit, as the orphan guard requires: the recipe
+  `test-release-publication` names both the suite and the source module, so the
+  target collects the CLI's doctest as well. Measured: **218 passed**, up from
+  212, the difference being five suite tests and one doctest. Lint was not
+  assumed. `make lint-python` was run to completion, and it took four
+  iterations to reach green, each a distinct stage that the previous one had
+  masked — exactly the lower-bound behaviour recorded on 2026-10-15:
+  `missing-return-type-private-function` (Ruff), then
+  `typing-only-standard-library-import` (Ruff, one stage further on the same
+  file), then `C9112` plus eight `C9102` and one `R9108` (df12 house lints),
+  then two `line-too-long` (Ruff, after the house-lint repair rewrote the
+  assertions). The final state exits 0 through all five stages at 10.00/10
+  Pylint and 100.0% interrogate. `local_reference_coverage_test.py` also
+  passes, which it would not have if the CLI were unreferenced.
 
 ## Surprises & discoveries
 
@@ -2110,6 +2142,33 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   over four spellings and a negative control over three. A claim in a
   Conformance check that nothing executes is the Cuprum #499 failure this plan
   exists to avoid, one layer up. Date/Author: 2026-10-17, implementation agent.
+
+- Decision: give each workflow-facing job a **thin CLI sibling** rather than
+  adding `main()` to a policy module or building one multi-command dispatcher.
+  Rationale: all seven EP-M2 modules are pure libraries — none defines `main`,
+  `__main__`, or an `argparse` surface, and nothing outside their own tests
+  imports them — so Stage C has no callable entry point to invoke and
+  `release.yml` cannot reach them as written. Reversing the earlier plan text's
+  implicit assumption here is unavoidable: the plan named the modules and the
+  jobs but never named the seam between them. The sibling keeps EP-M2's claimed
+  property intact — `test_policy_modules_import_no_network_client` constrains
+  `SOURCE_MODULES`, and a CLI that performed no I/O could not satisfy its own
+  job, so putting the argument parsing and any file reads in a separate module
+  leaves the policy modules holding the same no-I/O contract they were proved
+  against. A single dispatcher was rejected because five commands with distinct
+  arguments would push one file toward the 400-line cap and make the dispatch
+  table the thing under test. Date/Author: 2026-10-19, implementation agent.
+
+- Decision: add a new contract module,
+  `tests/workflow_contracts/release_publication_graph_test.py`, rather than
+  extending `release_publish_path_permissions_test.py` or
+  `release_publish_path_contract.py`. Rationale: the two existing files are
+  imported by other contract modules and pin the *current* two-job shape by
+  exact assertion; the new jobs need LEM-5 permission separation and
+  skip-propagation reachability proved, which is a different claim from "the
+  staging job is read-only". Editing the pinned files would couple an unchanged
+  invariant to a changing one and make a failure ambiguous between them.
+  Date/Author: 2026-10-19, implementation agent.
 
 ## Outcomes & retrospective
 

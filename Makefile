@@ -363,13 +363,15 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with pytest==9.0.2 --with hypothesis==6.151.9 python -m pytest \
 		scripts/tests/test_release_candidate.py \
+		scripts/tests/test_release_candidate_cli.py \
 		scripts/tests/test_release_inventory.py \
 		scripts/tests/test_release_semver.py \
 		scripts/tests/test_release_digest.py \
 		scripts/tests/test_verify_crates_io_bytes.py \
 		scripts/tests/test_release_reconcile_crates.py \
 		scripts/tests/test_release_reconcile_github.py \
-		scripts/release_candidate.py scripts/release_inventory.py \
+		scripts/release_candidate.py scripts/release_candidate_cli.py \
+		scripts/release_inventory.py \
 		scripts/release_semver.py scripts/release_digest.py \
 		scripts/verify_crates_io_bytes.py scripts/release_reconcile_crates.py \
 		scripts/release_reconcile_github.py -c /dev/null --rootdir=. \
