@@ -42,15 +42,23 @@ def lane_recipe(target: str) -> str:
     )
 
 
-def test_ci_calls_the_default_feature_lane_with_the_workflow_pin() -> None:
-    """``ci.yml`` must call the lane and pass it the gate's nextest pin.
+def test_ci_calls_the_default_feature_lane_with_the_workflow_pins() -> None:
+    """``ci.yml`` must call the lane and pass it both of the gate's pins.
 
     GitHub does not expose the ``env`` context to a reusable workflow's
-    ``with`` block, so the caller repeats the literal; this holds the copies
-    equal, as the Windows gate's contract does for its own call.
+    ``with`` block, so the caller repeats the literals; this holds the copies
+    equal, as the Windows gate's contract does for its own call. The toolchain
+    pin is checked here rather than in the called workflow for the same reason:
+    the caller's ``env`` is the authoritative value, and the lane must receive
+    it rather than restate it.
     """
     caller = load_workflow(CI_WORKFLOW_PATH)
     caller_env = require_mapping(caller.get("env"), "the CI workflow env")
+    # `ci.yml` declares its pins on the job that reads them, not at workflow
+    # scope, so the authoritative values are the `build-test` job's.
+    lint_env = require_mapping(
+        workflow_job(caller, "build-test").get("env"), "the build-test job env"
+    )
     call = workflow_job(caller, LANE_JOB)
     uses = call.get("uses")
     assert uses == "./.github/workflows/ci-default-features.yml", (
@@ -60,10 +68,39 @@ def test_ci_calls_the_default_feature_lane_with_the_workflow_pin() -> None:
     assert inputs.get("nextest-version") == caller_env.get("NEXTEST_VERSION"), (
         "the default-feature call must pass the workflow's NEXTEST_VERSION pin"
     )
+    assert inputs.get("rust-toolchain") == lint_env.get("NETSUKE_RUST_TOOLCHAIN"), (
+        "the default-feature call must pass the same NETSUKE_RUST_TOOLCHAIN pin "
+        "the all-features lane builds with"
+    )
     called = load_workflow(CI_DEFAULT_FEATURES_WORKFLOW_PATH)
     called_env = require_mapping(called.get("env"), "the default-feature workflow env")
     assert called_env.get("NEXTEST_VERSION") == "${{ inputs['nextest-version'] }}", (
         "the default-feature workflow must read NEXTEST_VERSION from its input"
+    )
+    # The toolchain is narrower than the workflow: only the job that runs the
+    # gates declares it, so the pin cannot silently outlive a removed job.
+    lane_env = require_mapping(
+        workflow_job(called, LANE_JOB).get("env"), "the default-feature job env"
+    )
+    assert (
+        lane_env.get("NETSUKE_RUST_TOOLCHAIN") == "${{ inputs['rust-toolchain'] }}"
+    ), "the default-feature job must read NETSUKE_RUST_TOOLCHAIN from its input"
+
+
+def test_the_lane_requires_the_toolchain_input() -> None:
+    """A missing input must fail the call, not expand to an empty toolchain.
+
+    ``required: true`` is what turns a forgotten ``with`` entry into a rejected
+    workflow call. Without it the expression would resolve to the empty string
+    and the job would provision whatever compiler the runner happened to have.
+    """
+    called = load_workflow(CI_DEFAULT_FEATURES_WORKFLOW_PATH)
+    on = require_mapping(called.get("on"), "the default-feature workflow triggers")
+    call = require_mapping(on.get("workflow_call"), "the lane's workflow_call")
+    inputs = require_mapping(call.get("inputs"), "the default-feature inputs")
+    declared = require_mapping(inputs.get("rust-toolchain"), "the rust-toolchain input")
+    assert declared.get("required") is True, (
+        "the default-feature lane must require its rust-toolchain input"
     )
 
 

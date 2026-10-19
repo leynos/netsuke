@@ -1847,10 +1847,14 @@ failure, not permission to compile a tool from source.
 pin it to the channel in `rust-toolchain.toml` so those jobs provision the
 dated nightly explicitly; coverage and packaging must leave it unset, because
 they select their toolchain through the action's own `toolchain` input and a
-second, independently edited pin would let the two disagree.
+second, independently edited pin would let the two disagree. The
+`default-features` lane is a reusable workflow, which cannot read its caller's
+`env`, so the channel reaches it as a required `rust-toolchain` input from
+`ci.yml` rather than a literal inside the lane. That keeps one authoritative
+value per pin, as the nextest pin does.
 
 [`tests/polonius_toolchain_contract.rs`](../tests/polonius_toolchain_contract.rs)
-enforces all five callers. For each one it asserts:
+enforces all seven callers. For each one it asserts:
 
 - the job uses the expected shared-action reference — path *and* pinned
   revision, the latter derived from the checked workflows themselves rather
@@ -1860,8 +1864,9 @@ enforces all five callers. For each one it asserts:
   two jobs that must pass no `rustflags` input at all;
 - the job declares no `env.RUSTFLAGS`;
 - the `NETSUKE_RUST_TOOLCHAIN` policy above — pinned to the
-  `rust-toolchain.toml` channel for the CI jobs and Netsukefile, absent for
-  coverage and packaging.
+  `rust-toolchain.toml` channel for the CI jobs and Netsukefile, read from the
+  caller's input for the default-feature lane, absent for coverage and
+  packaging.
 
 The same test carries the two toolchain-level assertions: that the pinned
 channel is a dated nightly at or after 2026-08-04, the first nightly on which

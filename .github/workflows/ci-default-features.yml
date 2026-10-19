@@ -16,14 +16,21 @@ name: CI (default features)
 # tests/workflow_contracts/ci_default_features_test.py holds it to that shape.
 #
 # It lives in its own reusable workflow for the reason ci-windows.yml does:
-# `ci.yml` is past its line budget. Version pins stay in the caller and arrive
-# as inputs, so there is exactly one place to edit each one.
+# `ci.yml` is past its line budget. Every version pin — cargo-nextest and the
+# Rust toolchain alike — stays in the caller and arrives as a required input,
+# so there is exactly one place to edit each one. A pin restated here would be
+# a second authoritative value, and the two could disagree without any call
+# site changing.
 
 'on':
   workflow_call:
     inputs:
       nextest-version:
         description: cargo-nextest release the caller pins for the whole gate
+        required: true
+        type: string
+      rust-toolchain:
+        description: Rust toolchain channel the caller pins for the whole gate
         required: true
         type: string
 
@@ -51,7 +58,7 @@ jobs:
       CARGO_BUILD_JOBS: '4'
       NEXTEST_TEST_THREADS: '4'
       NEXTEST_PROFILE: ci
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+      NETSUKE_RUST_TOOLCHAIN: ${{ inputs['rust-toolchain'] }}
       # Ninja-dependent tests skip silently without it; this lane must run
       # them, as `build-test` does.
       NETSUKE_REQUIRE_NINJA: '1'
