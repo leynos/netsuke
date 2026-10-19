@@ -6,6 +6,58 @@ Exercises explicit Windows Bash selection in the native recipe smoke suite.
 Keeps Bash-specific executable identity and missing-runtime cases separate
 from the PowerShell transport cases in the parent smoke script.
 #>
+function Find-BashExecutableOnPath {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    foreach ($pathEntry in ($Path -split [regex]::Escape([string][IO.Path]::PathSeparator))) {
+        if ([string]::IsNullOrWhiteSpace($pathEntry)) {
+            continue
+        }
+        $candidate = Join-Path -Path $pathEntry -ChildPath 'bash.exe'
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+    return $null
+}
+
+function Assert-BashExecutableVersion {
+    param(
+        [Parameter(Mandatory)]
+        [string]$BashPath
+    )
+
+    $bashVersion = & $BashPath --version 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "The selected Bash executable failed '--version': $BashPath ($LASTEXITCODE): $bashVersion"
+    }
+}
+
+function Get-BashWorkingDirectoryBaseline {
+    param(
+        [Parameter(Mandatory)]
+        [string]$BashPath
+    )
+
+    $bashBaseline = & $BashPath -c 'pwd' 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not determine the Bash working-directory baseline using ${BashPath}: $bashBaseline"
+    }
+    $bashBaseline.Trim()
+}
+
+function Assert-BashIsolationState {
+    $bashIsolationState = @(Get-Content -LiteralPath 'bash-isolated-state.txt')
+    if ($bashIsolationState.Count -ne 1) {
+        throw "Windows Bash isolation state should contain one line, got $($bashIsolationState.Count)."
+    }
+    Assert-Equal -Actual $bashIsolationState[0] `
+        -Expected 'isolated' -Message 'Windows Bash did not isolate command-list shell state'
+}
+
 function Test-ExplicitBashIsolation {
     param(
         [Parameter(Mandatory)]
@@ -18,40 +70,17 @@ function Test-ExplicitBashIsolation {
         Get-EnvironmentVariableState -Name 'NETSUKE_BASH_ENV'
     )
     try {
-        $bashPath = $null
-        foreach ($pathEntry in ($env:PATH -split [regex]::Escape([string][IO.Path]::PathSeparator))) {
-            if ([string]::IsNullOrWhiteSpace($pathEntry)) {
-                continue
-            }
-            $candidate = Join-Path -Path $pathEntry -ChildPath 'bash.exe'
-            if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-                $bashPath = (Resolve-Path -LiteralPath $candidate).Path
-                break
-            }
-        }
+        $bashPath = Find-BashExecutableOnPath -Path $env:PATH
         if (-not $bashPath) {
             throw 'The Windows smoke environment must provide bash.exe on PATH for the explicit Bash route.'
         }
         Write-Host "Windows smoke Bash path from PATH: $bashPath"
-        $bashVersion = & $bashPath --version 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "The selected Bash executable failed '--version': $bashPath ($LASTEXITCODE): $bashVersion"
-        }
+        Assert-BashExecutableVersion -BashPath $bashPath
         Remove-Item Env:NETSUKE_BASH_ENV -ErrorAction SilentlyContinue
-        $bashBaseline = & $bashPath -c 'pwd' 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "Could not determine the Bash working-directory baseline using ${bashPath}: $bashBaseline"
-        }
+        $env:NETSUKE_BASH_BASELINE = Get-BashWorkingDirectoryBaseline -BashPath $bashPath
         $env:NETSUKE_WINDOWS_SHELL = 'bash'
-        $env:NETSUKE_BASH_BASELINE = $bashBaseline.Trim()
         Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'bash-isolated-state')
-
-        $bashIsolationState = @(Get-Content -LiteralPath 'bash-isolated-state.txt')
-        if ($bashIsolationState.Count -ne 1) {
-            throw "Windows Bash isolation state should contain one line, got $($bashIsolationState.Count)."
-        }
-        Assert-Equal -Actual $bashIsolationState[0] `
-            -Expected 'isolated' -Message 'Windows Bash did not isolate command-list shell state'
+        Assert-BashIsolationState
     }
     finally {
         foreach ($state in $environmentState) {
