@@ -589,6 +589,24 @@ question.
   and say plainly in the Progress entry that the run establishes nothing about
   the file. See `Surprises & discoveries` for the class of defect and why
   reading dependency source is what caught it.
+- **A gate batch is mistaken for the full set of gates the repository
+  requires.** *Severity: moderate. Likelihood: certain if the scope is
+  inherited rather than re-derived.* The `EP-M6` batch ran eight targets:
+  `check-fmt`, `lint`, `typecheck`, `doc-coverage`, `test`, `proptest`,
+  `markdownlint`, `nixie`. `AGENTS.md` names four conditional extras —
+  `test-workflow-contracts`, `test-documentation-contracts`,
+  `test-coverage-artifact`, and `test-podman` — which none of the eight
+  subsumes. For `EP-M6`'s surface (Rust sources, new test fixtures, one plan
+  document) none is indicated: no workflow or `tests/workflow_contracts/` file
+  changed, no validator under `scripts/` changed, and there is no `ansible/`
+  path for `test-podman`. *Mitigation:* re-derive the four per milestone
+  instead of copying this batch. `EP-M8` changes `docs/users-guide.md`,
+  `README.md` and `docs/` prose, which puts `test-documentation-contracts` and
+  possibly `test-workflow-contracts` squarely in scope; adding them after the
+  work rather than before would make the batch a retrospective formality.
+  Record the per-milestone decision and its reason in the Progress entry, not
+  just the gate list.
+
 - **A property fails against current production code.** *Severity: high.
   Likelihood: moderate.* Most likely on `OBL-E2E`, which depends on the
   lowering never smuggling declaration order into an edge. *Mitigation:*
@@ -1152,7 +1170,13 @@ within a list, not across the two.
   - *Mutation.* `MUT-DEFSORT` must fail this property. It is observable here
     only because the transform permutes `defaults` as well as `targets`; with
     the sort deleted, the `default` line follows declaration order and the two
-    permutations disagree.
+    permutations disagree. Measured on 2026-10-19: the patch fails
+    `declaration_order_does_not_change_emission` on the minimal case
+    `targets: 2, defaults: [1, 0], first: [0, 1], second: [1, 0]`, where the
+    two runs emit `default out/0001 out/0000` and `default out/0000 out/0001`.
+    It also fails the three `OBL-DEFAULT` properties, which is expected — they
+    are the single-run arm of the same fault — and it does **not** fail
+    `OBL-PROCESS`, confirming the obligation split `EP-M6` records.
 - **Note on strength.** The first draft called this "strictly stronger" than
   `OBL-ORDER`. It is not. `from_manifest` can never produce `implicit_outputs`,
   `pool`, `depfile`, `deps_format`, or `restat`, so `OBL-ORDER`'s direct-graph
@@ -1834,8 +1858,8 @@ Strategies and library-side properties, all `#[cfg(test)]`, wired from
 `src/ninja_gen/mod.rs` and `src/ir/mod.rs`:
 
 - `src/ninja_gen/determinism/mod.rs`
-- `src/ninja_gen/determinism/strategy/mod.rs`, `graph.rs`, `manifest.rs`,
-  `classification.rs`
+- `src/ninja_gen/determinism/strategy/mod.rs`, `graph.rs`, `manifest/mod.rs`,
+  `manifest/blueprint.rs`, `classification.rs`
 - `src/ninja_gen/determinism/property_tests/mod.rs`, `path_key.rs`,
   `no_loss.rs`, `order.rs`, `defaults/mod.rs`, `defaults/generator.rs`,
   `declaration.rs`, `ninja_oracle.rs`, `strategy/mod.rs`, `strategy/graph.rs`
@@ -2208,6 +2232,210 @@ above; the placeholder survives only so that trace links written before
 allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
+
+- [x] (2026-10-19) **`OBL-PROCESS` is implemented as a directed, two-process
+      byte comparison, and `MUT-ACTIONSORT` is measured to fail it.** The test
+      is `tests/ninja_determinism_process_tests.rs`, with a purpose-built
+      fixture at `tests/data/ninja_determinism_process.yml`. It is directed
+      rather than a property because the obligation is about a process
+      boundary: `proptest` runs every case inside one process, so no property
+      can start the second process the obligation names. Emission goes
+      through `assert_cmd::cargo::cargo_bin_cmd!`, so both runs execute the
+      built binary rather than calling the library. Each run gets its own
+      `TempDir` workspace, and the comparison covers three things — the
+      `build.ninja` text, the set of sidecar paths under `.netsuke/dyndep`,
+      and each sidecar's body. A sidecar path is content-addressed, so two
+      bundles that differed only in a sidecar name would still be different
+      artefacts and comparing bodies alone would miss it.
+      Three tests, all passing (3 of 3):
+      `two_runs_emit_identical_bytes` compares four fixtures across two
+      processes; `a_changed_environment_does_not_change_the_bundle` runs a
+      third process with `TMPDIR`, `NETSUKE_LOCALE`, `LANG` and `LC_ALL`
+      perturbed via `Command::env`, which is the permitted subprocess
+      isolation and never touches this process's own environment;
+      `the_process_fixture_reaches_the_required_classes` is a guard that fails
+      if the dedicated fixture ever drops below five distinct `rule` lines or
+      stages no sidecar, because either drift would leave the comparison
+      passing without having tested the mechanism.
+      The fixture itself carries six distinct commands, a serial edge over
+      three dependencies (the only edge shape `edge_requires_gates` turns
+      into a sidecar), and `defaults: [fifth, third, first]`, which is not
+      ascending. The module doc records what the test cannot see as well as
+      what it can: a fault whose output is fixed for a fixed manifest — the
+      `MUT-DEFSORT` class — emits identically in both processes, so this
+      obligation is not a substitute for the single-run properties and they
+      are not a substitute for it.
+      Measured evidence. `MUT-ACTIONSORT` (deleting the sort in
+      `ordered_actions`) fails `two_runs_emit_identical_bytes` with
+      `first difference at line 9` — two different rule digests — and also
+      fails the environment-perturbation case; the guard test passes, so the
+      failure is the comparison biting and not a fixture precondition, 3 run
+      with 1 passed and 2 failed
+      (`/tmp/mut-actionsort-4-3-1-proptests-for-deterministic-ninja-emission.out`).
+      Under the same patch the process suite is the only suite affected: the
+      single-process properties are seed-deterministic and cannot see it.
+
+- [x] (2026-10-19) **`OBL-E2E` is implemented as a `ManifestSpec` property, and
+      `MUT-DEFSORT` is measured to fail it on a two-target case.** The suite
+      lives at `src/ninja_gen/determinism/property_tests/declaration.rs`, with
+      its generator at `src/ninja_gen/determinism/strategy/manifest/`
+      (`mod.rs` plus `blueprint.rs`; the former `strategy/manifest.rs` was
+      deferred from `EP-M5` and is delivered as a directory module because a
+      single file would have exceeded the 400-line cap). Well-formedness is
+      established by construction, not filtering: rule names are indexed, so
+      they are pairwise distinct — the obligation's precondition, since
+      `process_rules` is last-writer-wins; output names are indexed and
+      allocated once; dependencies are drawn only from strictly lower slots,
+      so the graph is acyclic by construction; and the declared defaults are
+      a descending list of distinct slots, so the list is *not already
+      ascending* and deleting the emitter's sort must change the line. Rule
+      slots zero and one are pinned to a token-free shared rule, so any case
+      with two targets exercises action interning. The property runs at 128
+      cases and compares the full emitted bundle for two declaration orders,
+      with a coverage tally (`the_run_reaches_every_required_class`) recording
+      the classes a run actually reached rather than assuming them. A directed
+      companion, `same_named_rules_reorder_emission`, pins the excluded class:
+      same-named rules genuinely do make declaration order observable, which
+      is why the generator forbids them.
+      Measured evidence. `MUT-DEFSORT` (`.sorted().cloned()` → `.cloned()` in
+      `ordered_default_targets`) fails `declaration_order_does_not_change_emission`
+      with minimal input
+      `ManifestSpec { targets: 2, rules: 4, defaults: [1, 0],`
+      `first: [0, 1], second: [1, 0] }`,
+      emitting `default out/0001 out/0000` against `default out/0000 out/0001`.
+      It also fails the three `OBL-DEFAULT` properties
+      (`a_descending_declaration_is_emitted_ascending`,
+      `a_repeated_target_is_emitted_twice`,
+      `permuting_the_declared_defaults_does_not_change_the_text`), which is
+      expected: those predate this milestone and sort the same line. 72 of 120
+      tests ran, 68 passed and 4 failed
+      (`/tmp/mut-defsort-proptest-4-3-1-proptests-for-deterministic-ninja-emission.out`).
+      Under the same patch the process suite passes 3 of 3
+      (`/tmp/mut-defsort-process-4-3-1-proptests-for-deterministic-ninja-emission.out`),
+      which is the acceptance condition the milestone states explicitly: a
+      fixed manifest's unsorted default order is a property of the declaration,
+      not of the process, so `MUT-DEFSORT` must **not** be required to fail
+      `OBL-PROCESS`.
+      `MUT-HASHMETA` was re-measured against the current tree and still fails
+      `OBL-ACTION`: `a_pool_difference_is_not_interned_away` and
+      `unequal_generated_actions_are_observed_to_differ` both fail with
+      `arm: Mutated(Pool)` and `pool: Some("mutated")`, 5 run with 3 passed
+      and 2 failed
+      (`/tmp/mut-hashmeta-epm6-4-3-1-proptests-for-deterministic-ninja-emission.out`).
+      The clean baseline for the two new suites plus `OBL-ACTION` is 9 of 9
+      passing with 3,995 skipped
+      (`/tmp/proptest-epm6-baseline-4-3-1-proptests-for-deterministic-ninja-emission.out`).
+      No new mutation patch was needed: `MUT-ACTIONSORT` already exists and is
+      registered under the `OBL-ORDER` stem in `SUPPLEMENTAL_PROPERTY_PATCHES`.
+      Every patch was reverted after measurement, and the reverted
+      `src/ninja_gen/order.rs` was compared against a pre-patch copy rather
+      than assumed clean.
+
+- [x] (2026-10-19) **The fourth `EP-M6` gate batch passed all eight gates
+      against one frozen candidate, and `nixie` ran for the first time in the
+      milestone.** Candidate content hash `57f11eaf…` (same HEAD `ae1cf794`,
+      7 paths), reproduced by the scrutineer before gate 1 and after gate 8,
+      with no drift. `check-fmt` 3 s, `lint` 87 s (all four sub-gates),
+      `typecheck` 31 s, `doc-coverage` 31 s at 98.89%, `test` 357 s (nextest
+      4122/4122, doctests 39 passed and 6 ignored), `proptest` 6 s
+      (124/124), `markdownlint` 20 s (0 issues in 186 files), `nixie` 3 s
+      ("All diagrams validated successfully!", 187 files). `gates_unrun=none`.
+      Re-running the six gates that had already passed in v3 was deliberate:
+      evidence from four different byte states is a composite, not a batch,
+      and the whole point of a gate batch is that every result binds to the
+      same bytes. Warm caches made the cost 87 s and 31 s rather than 547 s
+      and 130 s. The batch scope note is recorded under Risks: the four
+      conditional extras (`test-workflow-contracts`,
+      `test-documentation-contracts`, `test-coverage-artifact`,
+      `test-podman`) are not indicated for EP-M6's change surface, and that
+      judgement must be re-made per milestone rather than inherited.
+
+- [x] (2026-10-19) **The third `EP-M6` gate batch ran seven of eight gates
+      green and was stopped RED on `markdownlint` by one over-long line of my
+      own prose.** `check-fmt` (2 s), `lint` (547 s, *all four* sub-gates —
+      `lint-clippy`, `lint-whitaker`, `lint-python`, `github-actions-lint` —
+      passing for the first time in any batch), `typecheck` (130 s),
+      `doc-coverage` (197 s, 98.89% against the 80% bar), `test` (522 s,
+      nextest 4122/4122 with `ninja_determinism_process_tests` included as a
+      three-test binary, doctests 39 passed and 6 ignored), and `proptest`
+      (3 s, 124/124 with 4,004 skipped — the acceptance gate the milestone
+      names) all passed. `markdownlint` then failed at
+      `docs/execplans/…:2285:81`, a 95-character line, so `nixie` never ran.
+      The offending text was the minimal `ManifestSpec` counter-example in my
+      own `OBL-E2E` Progress entry, and the reason it survived `make fmt` is
+      the recorded one: `mdtablefix` does not reflow list-item continuation
+      lines, so only `markdownlint` sees them. The span alone is 89
+      characters, so no rewrapping could bring the line under 80 while it
+      remained one span; it is now split across two adjacent code spans whose
+      rendering is the same string. A `markdownlint-cli2` run over the file
+      reports 0 issues. Note also that `make markdownlint` regenerates
+      `typos.toml` through its `spelling` prerequisite; the freeze hashes were
+      identical before and after, so the regeneration was content-identical
+      and produced no candidate drift.
+
+- [x] (2026-10-19) **The second `EP-M6` gate batch was also stopped RED on
+      `lint`, on three further Clippy denials — in a different file from the
+      first batch.** This is the per-compilation-unit cascade, not a failed
+      repair: `cargo clippy` aborts a unit that has a denial, so repairing
+      `tests/ninja_determinism_process_tests.rs` let compilation proceed far
+      enough to reach `src/ninja_gen/determinism/property_tests/declaration.rs`,
+      which v1 never compiled. `check-fmt` passed again (3 s, "186 files left
+      unchanged"). `lint` failed at `lint-clippy` (`Makefile:386`, exit 101,
+      73 s) on `pair[0] > pair[1]` inside a `windows(2)` closure
+      (`clippy::indexing_slicing`, twice) and on
+      `lower(manifest).map(…).unwrap_or(0)` (`clippy::map_unwrap_or`). The
+      fixes are a two-element slice pattern
+      (`matches!(pair, [higher, lower] if higher > lower)`), which destructures
+      instead of indexing and so carries its own length proof, and `map_or(0,
+      |graph| graph.actions.len())`. Because the cascade is per-unit, a
+      targeted `cargo clippy -p netsuke-build --all-targets --all-features -- -D
+      warnings` was run to completion before re-freezing — exit 0 in 1 m 36 s —
+      rather than discovering the next unit's denials on a third batch. That
+      sweep also covered the new `manifest/` and `declaration` modules in their
+      `cfg(test)` form, which `--lib` alone does not compile.
+
+- [x] (2026-10-19) **The first `EP-M6` gate batch was stopped RED on `lint`,
+      on two Clippy errors in the new `OBL-PROCESS` test file, and both were
+      repaired before re-freezing.** `check-fmt` passed against the frozen
+      candidate (`ae1cf794`, 3 s, "186 files left unchanged", 259 Python files
+      formatted). `lint` then failed in its first sub-target, `lint-clippy`
+      (`Makefile:386`, exit 101, 416 s), on
+      `tests/ninja_determinism_process_tests.rs`, so `typecheck`,
+      `doc-coverage`, `test`, `proptest`, `markdownlint` and `nixie` were
+      never started. The two denials were `clippy::shadow_reuse` at 197:38,
+      where `.map(|entry| entry.and_then(|entry| …))` rebound `entry` in a
+      nested closure, and `clippy::string_slice` at 310:21, where `truncate`
+      ended its `is_char_boundary` walk on `&line[..end]` even though the walk
+      had already established the boundary. The first is a rebinding; the
+      second is the trap worth recording, because the manual boundary walk
+      made the slice *safe* but did not make it *lint-clean* — Clippy flags
+      the byte-slicing form itself. `truncate` now rebuilds the prefix
+      character by character through `char::len_utf8`, which cannot slice a
+      multi-byte character because it never indexes at all. A targeted
+      `cargo clippy -p netsuke-build --test ninja_determinism_process_tests`
+      then exited 0 in 25 s, and the whole eight-gate batch was re-dispatched
+      against the repaired tree. The batch also recorded a provenance caveat:
+      the freeze's HEAD (`ae1cf794`), porcelain status hash, and exact
+      seven-path set all matched, but the supplied diff hash `f74c5cb0…` was
+      not reproducible by the documented recipe, which computed `29bc7a14…`;
+      the scrutineer recorded the mismatch rather than accepting it and bound
+      pre and post to its own documented recipe (`/tmp/epm6-diffhash.sh`),
+      which agreed with itself across the batch. The candidate is bound by
+      HEAD, status, and path set; it is not bound by byte-identity with the
+      supplied hash, and that is stated rather than glossed.
+
+- [x] (2026-10-19) **`cargo fmt --check` found two of the `OBL-E2E` files
+      unformatted, because the suite had been authored and run without the
+      formatter ever seeing it.** `declaration.rs` had imports out of order
+      (`use crate::ninja_gen::RecipeShell;` before `use crate::ir::BuildGraph;`)
+      and `strategy/manifest/mod.rs` had a `.prop_flat_map(...)` chain the
+      formatter rewrites. Both files compile and pass their tests, so no test
+      gate would ever have reported this; only `make check-fmt` or a direct
+      `cargo fmt --check` catches it. `cargo fmt --all` fixed both and a
+      re-run of `cargo fmt --all -- --check` exits 0. The lesson is narrow but
+      worth recording: running a suite with `cargo nextest run <filter>` or
+      `cargo test <filter>` says nothing about formatting, and a new file is
+      the most likely thing in a delta to have never been formatted.
 
 - [x] (2026-10-18) **The `OBL-ACTION` first full gate batch was stopped
       RED on `lint`, on five Clippy errors in the new module, and the batch
@@ -4307,11 +4535,26 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 
 - [x] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [x] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
-- [ ] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
+- [x] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
 - [ ] `EP-M7`: `OBL-DUP`, `OBL-CYCLE`.
 - [ ] `EP-M8`: `OBL-NINJA`, documentation, evidence sweep, roadmap.
 
 ## Surprises & discoveries
+
+- (2026-10-19) **The `MUT-DEFSORT` run repeated the persistence lesson the plan
+  had already recorded, and the repeat is the point.** The run left
+  `proptest-regressions/ninja_gen/determinism/property_tests/declaration.txt`
+  and `.../defaults/mod.txt`, exactly the artefact the 2026-10-17 entry above
+  warns about: the seeds record an injected fault, so committing them would pin
+  a seed that fails only while a patch is applied, and leaving them would make
+  the next clean run replay a fault that no longer exists. The directory was
+  deleted and every run after the first set
+  `PROPTEST_DISABLE_FAILURE_PERSISTENCE=1`; the tracked
+  `proptest-regressions/stdlib/*` files were untouched. Knowing the lesson was
+  not sufficient to prevent it, because the first run of a *new* suite is
+  exactly the run without an established habit around it. The practical rule is
+  to set the flag when writing the mutation command, not when reading the
+  failure.
 
 - (2026-10-18) **A background gate can be killed by the harness time limit
   while it is making progress, and the log it leaves looks like a hang.** The
@@ -5412,6 +5655,29 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   statement alone and reassigning `MUT-DEFSORT` to another obligation, because
   no other obligation emits a `default` line from a permuted declaration.
 
+- Decision: `OBL-PROCESS`'s fixture set is **four manifests — three existing
+  ones plus one purpose-built** — rather than the "two or three existing" the
+  obligation first named. Date/Author: 2026-10-19 / implementation agent.
+
+  *The measurement.* Every `tests/data/*.yml` was enumerated by action count.
+  None has five distinct actions: the largest non-conditional fixture has four,
+  and those four include `duplicate_rules.yml`, whose same-named rules the
+  lowering collapses. The obligation's own domain note already required "one
+  manifest with at least five distinct actions" and forbade the snapshot
+  fixtures, so the fixture had to be written rather than found. It carries six
+  distinct commands, a serial edge over three dependencies (the only shape
+  `edge_requires_gates` turns into a sidecar), and a declared default list that
+  is not ascending.
+
+  *Why three existing ones remain.* `target_defaults.yml`, `multi_command.yml`
+  and `implicit_deps.yml` each exercise a different part of the lowering: an
+  implicit default list computed from every target, a rule-backed command list,
+  and implicit plus action-level dependencies. `generate` never reads the files
+  a manifest names, so all three emit from an empty workspace.
+  `the_process_fixture_reaches_the_required_classes` asserts the action count
+  and at least one staged sidecar, so a later edit that flattened the fixture
+  would fail rather than silently weaken the comparison.
+
 - Decision: the ambient public-API fixture family's `slow-timeout` is widened to
   fifteen periods (900 s), **on the family override rather than on
   `cli_configuration_fixture_compiles` alone**, and the plan's earlier
@@ -5571,7 +5837,10 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   `Constraint 7`'s requirement that every generator be mutation-audited. The
   deferral keeps this milestone's plateau honest: every artefact delivered here
   is exercised by a property that runs in `make proptest`. `EP-M6` inherits the
-  obligation to add the file *and* the property that falsifies it.
+  obligation to add the file *and* the property that falsifies it. Delivered as
+  a directory module (`strategy/manifest/mod.rs` plus `blueprint.rs`): the
+  resolution step and the type definitions together exceeded the 400-line file
+  cap, and the same split already exists in `property_tests/defaults/`.
 
 - Decision: `make proptest`'s selector lives in the **Makefile recipe**, not in
   `.config/nextest.toml`, and this is **forced by measurement** rather than

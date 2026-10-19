@@ -1,0 +1,24 @@
+netsuke_version: "1.0.0"
+# Purpose-built for tests/ninja_determinism_process_tests.rs (OBL-PROCESS).
+# Six distinct actions, so deleting the action sort changes the rule order in a
+# way a second process can observe; a serial edge over three dependencies, so
+# the bundle comparison reaches dyndep sidecars rather than comparing two empty
+# lists; and a declared default list that is not already ascending, so the
+# `default` line is exercised without pretending a two-run comparison can see a
+# deterministic sort deletion.
+targets:
+  - name: first
+    command: "echo first"
+  - name: second
+    command: "echo second"
+  - name: third
+    command: "echo third"
+  - name: fourth
+    command: "echo fourth"
+  - name: fifth
+    command: "echo fifth"
+  - name: gates
+    dependency_order: serial
+    deps: [first, second, third]
+    command: "echo gates"
+defaults: [fifth, third, first]
