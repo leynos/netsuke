@@ -234,6 +234,7 @@ fn build_configuration_does_not_restate_the_retired_polonius_flag() -> Result<()
 #[rstest]
 #[case::ci(CI_WORKFLOW)]
 #[case::ci_kani_smoke(CI_KANI_SMOKE_WORKFLOW)]
+#[case::ci_default_features(CI_DEFAULT_FEATURES_WORKFLOW)]
 #[case::ci_windows(CI_WINDOWS_WORKFLOW)]
 #[case::netsukefile(NETSUKEFILE_WORKFLOW)]
 #[case::coverage(COVERAGE_WORKFLOW)]
