@@ -6769,31 +6769,24 @@ build boundary.
 Public API checks must not select their own `CARGO_TARGET_DIR`. The previous
 CLI fixture created an unlocked standalone Cargo project, resolved a different
 dependency graph, and rebuilt it inside Nextest. The current harness prepares
-the workspace dependency graph with the workspace lockfile, gate target and
-feature selection, and ambient target directory, then uses the workspace
-metadata. Its preparation uses
-`cargo check --package netsuke-build --lib --all-features`, preserving the
-production library's feature selection without checking every integration
-target. The CLI fixture remains in the serialized child-Cargo group because
-Cargo check can still run build scripts and update generated outputs. It uses
-the ordinary 300-second allowance; it has no separate cold-graph timeout. The
-workflow contract rejects isolated target-directory overrides in these ambient
-UI harnesses.
+the workspace dependency graph with the workspace lockfile and shared workspace
+target directory, then uses the workspace metadata. It prepares only the
+package library each fixture needs, with all features: `NetsukeRlib` and the
+module-slice boundary use `netsuke-build`; `TestSupportRlib` uses
+`test_support`, which depends on `netsuke-build`. The module-slice check also
+runs its build script and prepares its build dependencies.
+`tests/support/cargo_features.rs` shares the `--lib --all-features` arguments;
+each caller selects its package, and the workflow contract pins those
+arguments, package, command mode, and root manifest. These checks avoid
+unrelated integration targets. Cargo check can still run build scripts or
+generators, so the child-command scanner treats it as build-capable and
+requires the exclusive group policy.
 
-The ambient checks select the package and library whose artefacts each
-direct-`rustc` fixture consumes. `NetsukeRlib` and the build-module boundary
-fixture check `netsuke-build --lib --all-features`; the latter also runs the
-build script and prepares its build dependencies. `TestSupportRlib` checks
-`test_support --lib --all-features`, which includes its dependency on
-`netsuke-build`. This avoids checking unrelated test targets while preserving
-the features needed by each fixture. `tests/support/cargo_features.rs` shares
-the library-target and all-features arguments, while each caller selects its
-package; the workflow contract pins those package arguments, command mode, and
-root manifest. Cargo check prepares metadata for the direct-`rustc` checks, but
-may still do work, including running build scripts; the shared target does not
-promise a no-op preparation. The child-command scanner treats this Cargo
-command as build-capable and requires the same exclusive group policy, since
-build scripts or generators can update shared outputs.
+The CLI fixture remains in the serialized child-Cargo group because Cargo check
+can run build scripts and update generated outputs. It uses the ordinary
+300-second allowance; it has no separate cold-graph timeout. The workflow
+contract rejects isolated target-directory overrides in these ambient UI
+harnesses.
 
 Generated completion contract tests share the `nested-cargo-builds` group with
 the preparations that may regenerate their target/profile staging files.
