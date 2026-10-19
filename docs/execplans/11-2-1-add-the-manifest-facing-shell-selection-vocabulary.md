@@ -9,19 +9,17 @@ Status: IN PROGRESS
 
 The user approved this plan on 2026-10-13 and resumed implementation on
 2026-10-17 after the rebase. Historical prerequisite [PR 913][cli-timeout-pr]
-merged into `main` as `077cf366`. On 2026-10-19, rebasing onto current
-`origin/main` at `7d1e4c12` exposed a nested Cargo timeout in the module-slice
-fixture. Its separate repair is published as [PR 930][timeout-pr], targeting
-`main` at `8d75cc4f`; CodeRabbit confirmed its documentation warning is
-resolved, while hosted CI and release checks remain in progress. The eight
-feature commits are locally rebased without conflicts onto that exact head, and
-the range-diff confirms their patches are unchanged. The previous feature
-candidate passed all eight local gates sequentially: 4,173 Nextest tests (six
-skipped), 39 doctests (six ignored), and 98.90% documentation coverage, along
-with formatting, typecheck, lint, workflow contracts, Markdown, and Mermaid
-validation. PR 778's remote head and base still await stack publication and
-hosted review. EP-M1 is in progress. The 26-file tolerance applies to this
-feature diff and excludes the separate timeout repair.
+merged into `main` as `077cf366`. The separate module-slice timeout repair in
+[PR 930][timeout-pr] merged into `main` on 2026-10-19 as
+`051358ee360a97fcbebe2a836e25e106917ed845`. The feature branch was rebased onto
+that landing without conflicts; its range-diff preserves the feature patches.
+The rebased candidate `56757f4417b9b0ed79d16d69d82e0d3f9bba3e15` passed all
+eight local gates sequentially: 4,173 Nextest tests (six skipped), 151 doctests
+(32 ignored), 98.90% documentation coverage, formatting, typecheck, lint,
+workflow contracts, Markdown, and Mermaid validation. PR 778 still needs the
+codec and documentation milestones, publication of the rebased head, and hosted
+review. EP-M1's exact-candidate local assessment remains open. The 26-file
+tolerance applies to this feature diff and excludes the separate timeout repair.
 
 [cli-timeout-pr]: https://github.com/leynos/netsuke/pull/913
 [timeout-pr]: https://github.com/leynos/netsuke/pull/930
@@ -301,12 +299,25 @@ remains `1747496f`, and the original combined candidate is preserved under
   feature commits were replayed onto `36f207d1` without conflicts; `range-diff`
   matches the published series exactly. The resulting #778 candidate still
   needs its own gates and remote stack update.
-- [ ] (2026-10-17) EP-M1 Red-Green evidence covers 91 cases, 15 doctests,
+- [x] (2026-10-17) EP-M1 Red-Green evidence covers 91 cases, 15 doctests,
   both sensitivity unions, and all three O7 negative controls. FULL5's code and
   workflow gates plus FULL6's fresh Rust and documentation gates now pass on
   byte-identical non-plan files: 4,171 Nextest passes (six skipped), 151
   doctest passes (32 ignored), and documentation coverage 98.90%. Commit and
-  completed local review remain pending. No Red state is committed.
+  exact-candidate local review were still pending at that point. No Red state
+  is committed.
+- [x] (2026-10-19) PR 930 merged into `main` as
+  `051358ee360a97fcbebe2a836e25e106917ed845`. Rebased the feature branch onto
+  that landing without conflicts; `range-diff` confirms the feature patches are
+  unchanged. Candidate `56757f4417b9b0ed79d16d69d82e0d3f9bba3e15` passed,
+  sequentially, `make check-fmt`, `make lint`, `make typecheck`, `make test`,
+  `make doc-coverage`, `make test-workflow-contracts`, `make markdownlint`, and
+  `make nixie`. Results: 4,173 Nextest passes (six skipped), 151 doctest passes
+  (32 ignored), 1,324 workflow contract passes (three skipped) plus 27 script
+  tests, 98.90% doc coverage, and zero Markdown issues across 186 files. Gate
+  logs use the
+  `/tmp/*-f900fc37-c6fe-4ed1-8700-ec572d9952c3-11-2-1-add-the-manifest-facing-shell-selection-vocabulary-final56757f4.out`
+  suffix. M1's exact-candidate local assessment, M2, and M3 remain open.
 - [ ] EP-M1: host family, built-in registry, and `ShellName` landed with
   tests.
 - [ ] EP-M2: `ShellSelection` codec, parity tests, properties, and behavioural
@@ -688,10 +699,19 @@ pre-commit gates pass using FULL5 and FULL6 receipts on unchanged non-plan
 files. FULL6 passed 4,171 Nextest tests (six skipped) and 151 doctests (32
 ignored), including the unchanged fixture that timed out in FULL5. These
 results do not establish the exact historical timeout cause or imply a source
-repair. Commit and completed local assessment remain pending. Roadmap 11.2.1
-and EP-M1 acceptance remain open. The combined file-count blocker is resolved
-by separating the two PR scopes; the feature's exclusive diff retains its
-approved limits.
+repair. The combined file-count blocker is resolved by separating the two PR
+scopes; the feature's exclusive diff retains its approved limits.
+
+On 2026-10-19, PR 930's module-slice repair merged as
+`051358ee360a97fcbebe2a836e25e106917ed845`, and the feature was rebased onto
+that landing without conflicts. All eight candidate gates passed sequentially on
+`56757f4417b9b0ed79d16d69d82e0d3f9bba3e15`: 4,173 Nextest tests passed (six
+skipped), 151 doctests passed (32 ignored), workflow contracts passed 1,324
+cases (three skipped) plus 27 script tests, documentation coverage was 98.90%,
+and format, type, lint, Markdown, and Mermaid checks passed. The candidate
+still needs its exact-head local review and the EP-M2 codec and EP-M3
+documentation milestones. The eight passing gates establish the rebased M1
+candidate's quality, but do not close the plan or mark roadmap 11.2.1 complete.
 
 The original untouched-tree run is retained as historical evidence. Its clean
 Git environment run passed `make check-fmt`, `make typecheck`, `make lint`, and
@@ -1860,4 +1880,9 @@ executable path belongs to 11.2.3, and the IR's `ResolvedShell` belongs to
 - 2026-10-17: recorded FULL6's complete Rust and documentation passes and
   verified non-plan byte equivalence with the successful FULL5 gates. Retained
   the earlier timeout as failed history; no product or timeout policy changed.
-  M1 acceptance and the roadmap remain open pending commit and local review.
+  The rebased 2026-10-19 gates supersede those candidate-specific receipts.
+
+- 2026-10-19: recorded the merged timeout prerequisite, conflict-free feature
+  rebase, and eight sequential gates on the rebased M1 candidate. The
+  exact-head local assessment remains outstanding; EP-M2 and EP-M3 are not yet
+  complete.
