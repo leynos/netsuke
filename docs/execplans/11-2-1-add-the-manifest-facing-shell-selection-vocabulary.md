@@ -9,16 +9,19 @@ Status: IN PROGRESS
 
 The user approved this plan on 2026-10-13 and resumed implementation on
 2026-10-17 after the rebase. Historical prerequisite [PR 913][cli-timeout-pr]
-merged into `main` as `077cf366`. On 2026-10-19, the feature branch was locally
-rebased without conflicts onto current `origin/main` at `7d1e4c12`. That
-candidate exposed another nested Cargo timeout. Its separate repair is now
-published as [PR 930][timeout-pr], targeting `main`; all eight local gates pass
-and its hosted CodeScene check passes, while hosted Actions remain in progress.
-The seven feature commits are locally rebased without conflicts onto PR 930's
-head, with an exact range-diff match to the published feature series. PR 778's
-remote head and base still await top-layer validation and stack publication.
-EP-M1 is in progress. The 26-file tolerance applies to this feature diff and
-excludes the separate timeout repair.
+merged into `main` as `077cf366`. On 2026-10-19, rebasing onto current
+`origin/main` at `7d1e4c12` exposed a nested Cargo timeout in the module-slice
+fixture. Its separate repair is published as [PR 930][timeout-pr], targeting
+`main` at `8d75cc4f`; CodeRabbit confirmed its documentation warning is
+resolved, while hosted CI and release checks remain in progress. The eight
+feature commits are locally rebased without conflicts onto that exact head, and
+the range-diff confirms their patches are unchanged. The previous feature
+candidate passed all eight local gates sequentially: 4,173 Nextest tests (six
+skipped), 39 doctests (six ignored), and 98.90% documentation coverage, along
+with formatting, typecheck, lint, workflow contracts, Markdown, and Mermaid
+validation. PR 778's remote head and base still await stack publication and
+hosted review. EP-M1 is in progress. The 26-file tolerance applies to this
+feature diff and excludes the separate timeout repair.
 
 [cli-timeout-pr]: https://github.com/leynos/netsuke/pull/913
 [timeout-pr]: https://github.com/leynos/netsuke/pull/930
@@ -1810,8 +1813,9 @@ executable path belongs to 11.2.3, and the IR's `ResolvedShell` belongs to
   behavioural examples, the interface sketch, and the acceptance criteria. The
   milestone structure is unchanged.
 - 2026-10-13: recorded the final EP-M0 gate results and stopped at Stage A
-  after the untouched-tree nextest timeout; status is `BLOCKED` pending its
-  resolution.
+  after the untouched-tree nextest timeout. The plan was `BLOCKED` at that
+  point; the next revision records that blocker’s repair and supersedes that
+  status.
 
 - 2026-10-14: repaired the baseline timeout, then followed the user's direction
   to separate the fix into prerequisite PR #913 targeting `main` and restack
