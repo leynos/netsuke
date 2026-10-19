@@ -29,8 +29,8 @@
 //!
 //! [`generator`] holds the strategies and the arm taxonomy; this file holds the
 //! properties and their evidence. The split is forced by `module_max_lines`:
-//! the 400-line ceiling applies to this directory module as a whole, and the
-//! combined content was over it. Generation and assertion also change for
+//! the 400-line ceiling applies to each module's own file, and the combined
+//! content in one file was over it. Generation and assertion also change for
 //! different reasons — a new field widens one, a new law joins the other.
 
 mod generator;

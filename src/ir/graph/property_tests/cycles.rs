@@ -296,7 +296,17 @@ proptest! {
     fn cycles_are_rejected_at_larger_n(case in arb_cycle_case()) {
         let result = BuildGraph::from_manifest_for_shell(&case.manifest, SHELL);
         if case.shape.is_cyclic() {
-            let error = result.expect_err("a constructed cycle must be rejected");
+            // `prop_assert!` rather than `expect_err` so a case that wrongly
+            // lowered reports its shape; a panic would reach Proptest with a
+            // message that omits the very class being exercised.
+            let Err(error) = result else {
+                prop_assert!(
+                    false,
+                    "{:?}: a constructed cycle must be rejected, but the manifest lowered",
+                    case.shape,
+                );
+                return Ok(());
+            };
             prop_assert!(
                 matches!(error, IrGenError::CircularDependency { .. }),
                 "{:?}: expected CircularDependency, got {error:?}",

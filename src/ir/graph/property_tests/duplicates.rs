@@ -275,7 +275,17 @@ proptest! {
                 );
             }
             mode => {
-                let error = result.expect_err("an injected duplicate must be rejected");
+                // `prop_assert!` rather than `expect_err` so a case that wrongly
+                // lowered reports the planted mode; a panic would reach Proptest
+                // with a message that omits which collision produced it.
+                let Err(error) = result else {
+                    prop_assert!(
+                        false,
+                        "{mode:?}: an injected duplicate must be rejected, \
+                         but the manifest lowered",
+                    );
+                    return Ok(());
+                };
                 let IrGenError::DuplicateOutput { outputs, .. } = error else {
                     prop_assert!(false, "{mode:?}: expected DuplicateOutput, got {error:?}");
                     return Ok(());
