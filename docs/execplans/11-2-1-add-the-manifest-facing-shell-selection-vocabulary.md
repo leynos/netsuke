@@ -322,9 +322,11 @@ remains `1747496f`, and the original combined candidate is preserved under
   paths on `84b7058e` against `051358ee` and found two overlapping major
   findings: fenced `command | tee` examples could mask a failed gate or allow a
   later passing command to hide it. Source and shell review confirmed the
-  issue. The ExecPlan examples are being corrected with fail-fast and
-  `pipefail` settings in each runnable Bash block; docs gates and the
-  exact-head reassessment remain pending.
+  issue. Each runnable Bash block now enables fail-fast and `pipefail`, and
+  docs gates passed on the correction. The exact-head reassessment confirmed
+  that finding is resolved and identified one additional arithmetic edge in the
+  near-miss name generator. That repair passed all eight sequential gates; the
+  exact-head reassessment remains pending.
 - [ ] EP-M1: host family, built-in registry, and `ShellName` landed with
   tests.
 - [ ] EP-M2: `ShellSelection` codec, parity tests, properties, and behavioural
@@ -338,8 +340,11 @@ remains `1747496f`, and the original combined candidate is preserved under
   Bash's default pipeline status is the final command's status, and separate
   fenced blocks do not share shell options. The two reported findings are
   duplicate evidence for this one issue. Add fail-fast pipeline settings to
-  each validation block and retain the review result pending exact-head
-  reassessment.
+  each validation block. The exact-head reassessment confirmed the repair and
+  found that the property generator's literal `64 - name.len()` relied on the
+  current 63-character grammar bound. Derive the overlength target from
+  `ShellName::MAX_LEN` and use saturating arithmetic so the negative-case
+  generator remains safe if the grammar bound changes.
 - Observation (2026-10-17): Clippy requires `mod.rs` for the new modules with
   child tests, beyond the workflow contract's prefix grouping. Production
   owners therefore move to `name/mod.rs` and `built_in/mod.rs`, preserving
@@ -726,6 +731,21 @@ and format, type, lint, Markdown, and Mermaid checks passed. The candidate
 still needs its exact-head local review and the EP-M2 codec and EP-M3
 documentation milestones. The eight passing gates establish the rebased M1
 candidate's quality, but do not close the plan or mark roadmap 11.2.1 complete.
+
+The committed M1 review follow-up confirmed both overlapping `tee` findings
+were fixed. It also found that the near-miss generator hard-coded 64 when
+constructing an overlength name. That branch now derives its target from
+`ShellName::MAX_LEN` and uses saturating arithmetic. The implementation and
+plan edit passed all eight sequential gates on the same source candidate:
+check-fmt, lint, typecheck, test, doc-coverage, workflow contracts, Markdown
+lint, and Nixie. Nextest passed 4,173 tests (six skipped); Netsuke doctests
+passed 110 (26 ignored) plus two compile-fail cases; test-support doctests
+passed 39 (six ignored); workflow contracts passed 1,324 (three skipped) plus
+27 script tests; documentation coverage was 98.90%, and Markdown lint found
+zero issues. Logs use the
+`/tmp/*-f900fc37-c6fe-4ed1-8700-ec572d9952c3-11-2-1-add-the-manifest-facing-shell-selection-vocabulary-review-followups.out`
+suffix. Compilation proceeded uncached because managed sccache was
+unavailable; admission remained healthy. Exact-head reassessment remains open.
 
 The original untouched-tree run is retained as historical evidence. Its clean
 Git environment run passed `make check-fmt`, `make typecheck`, `make lint`, and

@@ -61,7 +61,14 @@ fn near_misses() -> impl Strategy<Value = String> {
                 changed.insert(index, forbidden);
                 changed
             }
-            3 => format!("{name}{}", "a".repeat(64 - name.len())),
+            3 => format!(
+                "{name}{}",
+                "a".repeat(
+                    ShellName::MAX_LEN
+                        .saturating_add(1)
+                        .saturating_sub(name.len())
+                )
+            ),
             _ => BOOLEAN_WORDS
                 .get(
                     usize::from(position)
