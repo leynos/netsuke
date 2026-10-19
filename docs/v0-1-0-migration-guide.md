@@ -231,11 +231,16 @@ Clap-specific validation and help metadata remain an internal CLI concern.
 
 ## Opting into ordered command lists
 
-Existing scalar `command` recipes remain valid, so no migration is required. To
-run a short sequence of commands in declaration order, change a recipe to a
-non-empty YAML list. The entries run in one shell process and stop at the first
-non-zero exit. See [Rules and recipes](users-guide.md#rules-and-recipes) for
-the syntax, shell semantics, and examples.
+Existing scalar `command` recipes remain valid, and command lists remain
+opt-in, ordered and fail-fast. Their `command_isolation` mode defaults to
+`shared`, so entries share one shell and its state. Set
+`command_isolation: isolated` to start each entry from the action's initial
+working directory and environment. POSIX and Bash use a subshell per entry;
+Windows PowerShell uses a child process per entry. Isolated mode has a distinct
+action identity; existing manifests need no migration. See
+[Rules and recipes](users-guide.md#rules-and-recipes) and the
+[Windows legacy recipe contract](users-guide.md#windows-legacy-recipe-contract)
+for the syntax and shell-specific behaviour.
 
 ## Replace script `$in` and `$out` path substitution
 
@@ -309,26 +314,31 @@ In the default route, write `$name` for a PowerShell variable and `$env:NAME`
 for an environment variable. PowerShell parses the braced variable name in
 `${VAR:-default}`, but does not perform POSIX default-value expansion. The
 v0.1.0 dollar-escaping fix means these are ordinary, single dollars, not
-Ninja-escaped `$$` forms. Ordered lists share one PowerShell process: Netsuke
-checks `$LASTEXITCODE` immediately after each generated list entry, so a
-non-zero status or terminating error stops the list before a later entry can
-overwrite it. Multiple native commands inside one entry are not individually
-instrumented. Variables, environment assignments, and current-directory changes
-persist between entries. Each scalar, script, action, and target has a fresh
-shell process. In PowerShell, `{{ ins }}` and `{{ outs }}` remain path-quoted.
-Build and default-target paths containing spaces are escaped for Ninja, so
-whitespace-containing outputs remain valid; quote any other path or argument
-with the selected shell's syntax. Encoded PowerShell commands are retained
-while they fit the Windows command-line limit. Larger recipes up to 1 MiB use
-Ninja's `rspfile` and `rspfile_content` bindings, with a unique `$out`-derived
-`.ps1` name per edge, created in that edge's working directory, containing an
-ASCII PowerShell bootstrap and the Base64 UTF-16LE recipe payload. Recipes
-above that limit are rejected before Netsuke allocates their encoded payload.
-The command invokes it with `powershell.exe -File "$rspfile"`. The bootstrap
-removes its own `$PSCommandPath` in a `finally` block after the recipe succeeds
-or fails. Queries do not create response files. On POSIX and Bash routes, `$$`
-means the process identifier; in PowerShell, `$$` is the automatic variable
-containing the last token received by the session.
+Ninja-escaped `$$` forms. With `command_isolation: shared` (the default),
+ordered lists share one PowerShell process. Netsuke checks `$LASTEXITCODE`
+immediately after each generated list entry, so a non-zero status or
+terminating error stops the list before a later entry can overwrite it.
+Multiple native commands inside one entry are not individually instrumented.
+Variables, environment assignments, and current-directory changes persist
+between entries in this mode. With `command_isolation: isolated`, each ordered
+entry runs in a child process starting from the action's initial working
+directory and environment. Netsuke checks each child's exit status before
+starting the next entry, preserving fail-fast behaviour. Each scalar, script,
+action, and target has a fresh shell process. In PowerShell, `{{ ins }}` and
+`{{ outs }}` remain path-quoted. Build and default-target paths containing
+spaces are escaped for Ninja, so whitespace-containing outputs remain valid;
+quote any other path or argument with the selected shell's syntax. Encoded
+PowerShell commands are retained while they fit the Windows command-line limit.
+Larger recipes up to 1 MiB use Ninja's `rspfile` and `rspfile_content`
+bindings, with a unique `$out`-derived `.ps1` name per edge, created in that
+edge's working directory, containing an ASCII PowerShell bootstrap and the
+Base64 UTF-16LE recipe payload. Recipes above that limit are rejected before
+Netsuke allocates their encoded payload. The command invokes it with
+`powershell.exe -File "$rspfile"`. The bootstrap removes its own
+`$PSCommandPath` in a `finally` block after the recipe succeeds or fails.
+Queries do not create response files. On POSIX and Bash routes, `$$` means the
+process identifier; in PowerShell, `$$` is the automatic variable containing
+the last token received by the session.
 
 For reproducible Windows CI, use a `pwsh` step and let Netsuke select
 PowerShell; do not use a workflow-level `shell: bash` setting as evidence of

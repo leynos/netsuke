@@ -19,7 +19,7 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 #[rstest]
 #[case::phony_target_runs_command(
     Action {
-        recipe: Recipe::Command { command: "true".into() },
+        recipe: Recipe::Command { command: "true".into(), isolation: netsuke::ast::CommandIsolation::Shared },
         description: None,
         depfile: None,
         deps_format: None,
@@ -45,7 +45,7 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 )]
 #[case::standard_build(
     Action {
-        recipe: Recipe::Command { command: "cc -c 'a.c' 'b.c' -o 'ab.o'".into() },
+        recipe: Recipe::Command { command: "cc -c 'a.c' 'b.c' -o 'ab.o'".into(), isolation: netsuke::ast::CommandIsolation::Shared },
         description: None,
         depfile: None,
         deps_format: None,
@@ -71,7 +71,7 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 )]
 #[case::complex_dependencies(
     Action {
-        recipe: Recipe::Command { command: "true".into() },
+        recipe: Recipe::Command { command: "true".into(), isolation: netsuke::ast::CommandIsolation::Shared },
         description: None,
         depfile: None,
         deps_format: None,
@@ -97,7 +97,7 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 )]
 #[case::explicit_inputs_plus_implicit_deps(
     Action {
-        recipe: Recipe::Command { command: "true".into() },
+        recipe: Recipe::Command { command: "true".into(), isolation: netsuke::ast::CommandIsolation::Shared },
         description: None,
         depfile: None,
         deps_format: None,
@@ -123,7 +123,7 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 )]
 #[case::implicit_deps_without_explicit_inputs(
     Action {
-        recipe: Recipe::Command { command: "true".into() },
+        recipe: Recipe::Command { command: "true".into(), isolation: netsuke::ast::CommandIsolation::Shared },
         description: None,
         depfile: None,
         deps_format: None,
@@ -149,7 +149,7 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 )]
 #[case::all_dependency_classes(
     Action {
-        recipe: Recipe::Command { command: "true".into() },
+        recipe: Recipe::Command { command: "true".into(), isolation: netsuke::ast::CommandIsolation::Shared },
         description: None,
         depfile: None,
         deps_format: None,
@@ -175,7 +175,7 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 )]
 #[case::phony_action_with_implicit_deps(
     Action {
-        recipe: Recipe::Command { command: "true".into() },
+        recipe: Recipe::Command { command: "true".into(), isolation: netsuke::ast::CommandIsolation::Shared },
         description: None,
         depfile: None,
         deps_format: None,

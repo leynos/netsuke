@@ -179,6 +179,8 @@ manifest.glob.unknown_pattern_error = nieznany błąd wzorca.
 manifest.glob.io_failed = Wzorzec glob „{ $pattern }” zawiódł: { $detail }.
 manifest.glob.unknown_io_error = nieznany błąd wejścia/wyjścia.
 manifest.command_list_empty = Pole „command” nie może być puste: podaj łańcuch polecenia lub niepustą listę.
+manifest.command_isolation_recipe = Pole „command_isolation” wymaga receptury z listą poleceń.
+manifest.command_isolation_scalar = „command_isolation: isolated” wymaga listy poleceń.
 
 # Błędy reprezentacji pośredniej.
 ir.rule_not_found = Nie znaleziono reguły „{ $rule }”, do której odwołuje się cel „{ $target }”.

@@ -9,10 +9,9 @@
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use netsuke::ast::{Recipe, StringOrList};
+use netsuke::ast::{CommandIsolation, Recipe, StringOrList};
 use netsuke::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
 use netsuke::ninja_gen::{NinjaGenError, generate};
-use rstest::rstest;
 use std::process::Command;
 use tempfile::TempDir;
 use test_support::ninja_gen::ninja_integration_setup;
@@ -20,11 +19,11 @@ use test_support::ninja_gen::ninja_integration_setup;
 fn run_command_list(
     dir: &TempDir,
     entries: Vec<String>,
-    expected_file: &str,
-    expected_content: &str,
+    isolation: CommandIsolation,
+    expected_output: (&str, &str),
 ) -> Result<()> {
     let dir_path = temp_workspace_path(dir)?;
-    let action = command_list_action(entries);
+    let action = command_list_action(entries, isolation);
     let target = Utf8PathBuf::from("out");
     let edge = BuildEdge {
         action_id: "chain".into(),
@@ -56,6 +55,7 @@ fn run_command_list(
         ninja_output.status.success(),
         "command list should run successfully: {ninja_output:?}"
     );
+    let (expected_file, expected_content) = expected_output;
     let content = handle
         .read_to_string(expected_file)
         .with_context(|| format!("read {expected_file} written by the second entry"))?;
@@ -77,8 +77,8 @@ fn command_list_entry_with_inline_comment_preserves_the_next_boundary() -> Resul
             "echo first # a comment that formerly consumed the closing brace".into(),
             "echo second > after-comment.txt".into(),
         ],
-        "after-comment.txt",
-        "second",
+        CommandIsolation::Shared,
+        ("after-comment.txt", "second"),
     )
 }
 
@@ -93,8 +93,8 @@ fn command_list_entry_ending_in_background_operator_preserves_the_next_boundary(
             "(sleep 1 && echo waited > waited-background-job.txt) &".into(),
             "echo second > after-background.txt".into(),
         ],
-        "after-background.txt",
-        "second",
+        CommandIsolation::Shared,
+        ("after-background.txt", "second"),
     )?;
     let workspace = open_temp_workspace(&dir)?;
     ensure!(
@@ -104,10 +104,11 @@ fn command_list_entry_ending_in_background_operator_preserves_the_next_boundary(
     Ok(())
 }
 
-const fn command_list_action(entries: Vec<String>) -> Action {
+const fn command_list_action(entries: Vec<String>, isolation: CommandIsolation) -> Action {
     Action {
         recipe: Recipe::Command {
             command: StringOrList::List(entries),
+            isolation,
         },
         description: None,
         depfile: None,
@@ -117,8 +118,8 @@ const fn command_list_action(entries: Vec<String>) -> Action {
     }
 }
 
-fn command_list_command_line(entries: Vec<String>) -> Result<String> {
-    let action = command_list_action(entries);
+fn command_list_command_line(entries: Vec<String>, isolation: CommandIsolation) -> Result<String> {
+    let action = command_list_action(entries, isolation);
     let mut graph = BuildGraph::default();
     graph.actions.insert("chain".into(), action);
     let ninja = generate(&graph)?;
@@ -131,9 +132,10 @@ fn command_list_command_line(entries: Vec<String>) -> Result<String> {
 
 fn assert_multiple_background_jobs_are_rejected(
     entries: Vec<String>,
+    isolation: CommandIsolation,
     expectation: &str,
 ) -> Result<()> {
-    let Err(error) = command_list_command_line(entries) else {
+    let Err(error) = command_list_command_line(entries, isolation) else {
         anyhow::bail!("{expectation}");
     };
     ensure!(
@@ -178,10 +180,13 @@ fn command_list_exit_entry_preserves_status_and_emits_attribution() -> Result<()
     let Some(dir) = ninja_integration_setup() else {
         return Ok(());
     };
-    let command = command_list_command_line(vec![
-        "exit 23".into(),
-        "echo unexpected > continued-after-exit.txt".into(),
-    ])?;
+    let command = command_list_command_line(
+        vec![
+            "exit 23".into(),
+            "echo unexpected > continued-after-exit.txt".into(),
+        ],
+        CommandIsolation::Shared,
+    )?;
     let shell_command = command.replace("$$", "$");
     let output = Command::new("sh")
         .args(["-c", &shell_command])
@@ -226,10 +231,13 @@ fn command_list_exec_entries_preserve_attribution_and_success() -> Result<()> {
     let Some(dir) = ninja_integration_setup() else {
         return Ok(());
     };
-    let successful_command = command_list_command_line(vec![
-        "exec true".into(),
-        "echo unexpected > continued-after-successful-exec.txt".into(),
-    ])?;
+    let successful_command = command_list_command_line(
+        vec![
+            "exec true".into(),
+            "echo unexpected > continued-after-successful-exec.txt".into(),
+        ],
+        CommandIsolation::Shared,
+    )?;
     let successful_output = run_generated_command_with_ninja(&dir, &successful_command)?;
     ensure!(
         successful_output.status.success(),
@@ -251,10 +259,13 @@ fn command_list_exec_entries_preserve_attribution_and_success() -> Result<()> {
         !workspace.exists("continued-after-successful-exec.txt"),
         "a successful exec must retain process-replacement semantics"
     );
-    let command = command_list_command_line(vec![
-        "FOO=1 exec false".into(),
-        "echo unexpected > continued-after-exec.txt".into(),
-    ])?;
+    let command = command_list_command_line(
+        vec![
+            "FOO=1 exec false".into(),
+            "echo unexpected > continued-after-exec.txt".into(),
+        ],
+        CommandIsolation::Shared,
+    )?;
     let output = run_generated_command_with_ninja(&dir, &command)?;
     ensure!(
         !output.status.success(),
@@ -280,10 +291,13 @@ fn command_list_background_failure_waits_before_the_next_entry() -> Result<()> {
     let Some(dir) = ninja_integration_setup() else {
         return Ok(());
     };
-    let command = command_list_command_line(vec![
-        "sh -c 'sleep 0.1; exit 1' &".into(),
-        "echo unexpected > continued-after-background.txt".into(),
-    ])?;
+    let command = command_list_command_line(
+        vec![
+            "sh -c 'sleep 0.1; exit 1' &".into(),
+            "echo unexpected > continued-after-background.txt".into(),
+        ],
+        CommandIsolation::Shared,
+    )?;
     let shell_command = command.replace("$$", "$");
     let output = Command::new("sh")
         .args(["-c", &shell_command])
@@ -312,27 +326,8 @@ fn command_list_background_failure_waits_before_the_next_entry() -> Result<()> {
     Ok(())
 }
 
-#[rstest]
-#[case::multiple_background_jobs(
-    "true & sh -c 'sleep 0.1; exit 1' &",
-    "echo unexpected > continued-after-multiple-background-jobs.txt",
-    "multiple background jobs should be rejected before Ninja runs"
-)]
-#[case::nested_eval_background_jobs(
-    "eval 'false & true &'",
-    "echo unexpected > continued-after-nested-eval.txt",
-    "nested eval background jobs should be rejected before Ninja runs"
-)]
-fn command_list_rejects_unattributable_background_jobs(
-    #[case] entry: &str,
-    #[case] later_entry: &str,
-    #[case] expectation: &str,
-) -> Result<()> {
-    assert_multiple_background_jobs_are_rejected(
-        vec![entry.into(), later_entry.into()],
-        expectation,
-    )
-}
-
 #[path = "support/ninja_gen_direct_target_command_list.rs"]
 mod direct_target_tests;
+
+#[path = "ninja_gen_command_list_integration_tests/isolation.rs"]
+mod isolation;

@@ -16,6 +16,9 @@ param(
     [string]$Manifest
 )
 
+$smokeScriptDirectory = Join-Path $PSScriptRoot 'windows-recipe-smoke'
+. (Join-Path $smokeScriptDirectory 'bash.ps1')
+
 function Assert-Equal {
     param(
         [Parameter(Mandatory)]
@@ -163,6 +166,47 @@ function Test-OrderedCommandList {
     Test-ExpectedRecipeFailure -Netsuke $Netsuke -Failure $expectedFailure
 }
 
+function Test-IsolatedPowerShellLists {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Netsuke
+    )
+
+    Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'isolated-state')
+    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'isolated state.txt') `
+        -Expected 'baseline' -Message 'An isolated PowerShell entry inherited location or variables'
+
+    Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'isolated-exit-zero')
+    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'isolated exit zero.txt') `
+        -Expected 'continued' -Message 'A successful isolated exit stopped later entries'
+
+    $expectedFailure = [pscustomobject]@{
+        Target = 'isolated-list-fails'
+        NotCreatedPath = 'isolated must not exist.txt'
+        ExitCodeMessage = "An isolated recipe exit code of 29 should become Netsuke's documented failure exit code 1"
+        UnexpectedExecutionMessage = 'An isolated entry ran after the native command failed'
+    }
+    Test-ExpectedRecipeFailure -Netsuke $Netsuke -Failure $expectedFailure
+
+    $expectedPowerShellFailure = [pscustomobject]@{
+        Target = 'isolated-powershell-error'
+        NotCreatedPath = 'isolated powershell error.txt'
+        ExitCodeMessage = "A terminating PowerShell cmdlet error should become Netsuke's documented failure exit code 1"
+        UnexpectedExecutionMessage = 'A command after the isolated PowerShell error ran'
+    }
+    Test-ExpectedRecipeFailure -Netsuke $Netsuke -Failure $expectedPowerShellFailure
+
+    $nativeError = & $Netsuke build isolated-native-stderr 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "The isolated native-stderr target failed with ${LASTEXITCODE}: $nativeError"
+    }
+    if (-not ($nativeError -match 'isolated-native-stderr')) {
+        throw "The isolated child did not pass native stderr through: $nativeError"
+    }
+    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'isolated stderr.txt') `
+        -Expected 'complete' -Message 'The isolated list did not continue after native stderr output'
+}
+
 function Test-DependencyOrdering {
     param(
         [Parameter(Mandatory)]
@@ -198,6 +242,10 @@ function Test-LargeRecipeTransport {
     Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'large list.txt') -Expected 'first' `
         -Message 'A large ordered recipe did not preserve PowerShell state'
 
+    Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'isolated-large-list')
+    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'isolated large list.txt') -Expected 'second' `
+        -Message 'A large isolated recipe did not use the response-file transport'
+
     $expectedFailure = [pscustomobject]@{
         Target = 'large-list-fails'
         NotCreatedPath = 'large list must not exist.txt'
@@ -219,29 +267,6 @@ function Test-AutomaticPathQuoting {
         -Expected 'automatic-path-quoting' -Message 'The discovered target did not build'
 }
 
-function Test-MissingBashRuntimeDiagnostic {
-    param(
-        [Parameter(Mandatory)]
-        [string]$Netsuke,
-
-        [Parameter(Mandatory)]
-        [string]$Workspace
-    )
-
-    $env:NETSUKE_NINJA = (Get-Command ninja -CommandType Application).Path
-    $env:NETSUKE_WINDOWS_SHELL = 'bash'
-    $env:PATH = $Workspace
-    $bashFailure = & $Netsuke build scalar 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        throw 'Selecting Bash without bash.exe unexpectedly succeeded.'
-    }
-    if (-not ($bashFailure -match 'bash\.exe.*(not found on PATH|exited with)')) {
-        throw "Bash runtime diagnostics were not actionable: $bashFailure"
-    }
-    # The expected child-process failure must not become the smoke script's exit status.
-    $global:LASTEXITCODE = 0
-}
-
 function Invoke-WindowsRecipeSmoke {
     param(
         [Parameter(Mandatory)]
@@ -261,6 +286,12 @@ function Invoke-WindowsRecipeSmoke {
         Get-EnvironmentVariableState -Name 'NETSUKE_WINDOWS_SHELL'
         Get-EnvironmentVariableState -Name 'NETSUKE_SMOKE_OPTION'
         Get-EnvironmentVariableState -Name 'NETSUKE_SMOKE_VALUE'
+        Get-EnvironmentVariableState -Name 'NETSUKE_ISOLATION_ROOT'
+        Get-EnvironmentVariableState -Name 'NETSUKE_ISOLATED_ENV'
+        Get-EnvironmentVariableState -Name 'NETSUKE_ISOLATED_LARGE'
+        Get-EnvironmentVariableState -Name 'NETSUKE_BASH_BASELINE'
+        Get-EnvironmentVariableState -Name 'NETSUKE_BASH_ENV'
+        Get-EnvironmentVariableState -Name 'NETSUKE_BASH_VARIABLE'
         Get-EnvironmentVariableState -Name 'NETSUKE_NINJA'
         Get-EnvironmentVariableState -Name 'PATH'
     )
@@ -273,22 +304,26 @@ function Invoke-WindowsRecipeSmoke {
         try {
             Remove-Item Env:NETSUKE_WINDOWS_SHELL -ErrorAction SilentlyContinue
             Remove-Item Env:NETSUKE_SMOKE_OPTION -ErrorAction SilentlyContinue
+            Remove-Item Env:NETSUKE_ISOLATED_ENV -ErrorAction SilentlyContinue
+            Remove-Item Env:NETSUKE_ISOLATED_LARGE -ErrorAction SilentlyContinue
+            Remove-Item Env:NETSUKE_BASH_VARIABLE -ErrorAction SilentlyContinue
             $env:NETSUKE_SMOKE_VALUE = 'value with spaces'
+            $env:NETSUKE_ISOLATION_ROOT = $workspace
 
             Test-TargetDiscovery -Netsuke $Netsuke
             Test-InterpreterSelection -Netsuke $Netsuke
             Test-DollarSyntax -Netsuke $Netsuke
             Test-OrderedCommandList -Netsuke $Netsuke
+            Test-IsolatedPowerShellLists -Netsuke $Netsuke
             Test-DependencyOrdering -Netsuke $Netsuke
             Test-LargeRecipeTransport -Netsuke $Netsuke
             Test-AutomaticPathQuoting -Netsuke $Netsuke
+            Test-ExplicitBashIsolation -Netsuke $Netsuke
             Test-MissingBashRuntimeDiagnostic -Netsuke $Netsuke -Workspace $workspace
         }
         finally {
             Pop-Location
         }
-        # The expected child-process failure must not become the smoke script's exit status.
-        $global:LASTEXITCODE = 0
     }
     finally {
         foreach ($state in $environmentState) {

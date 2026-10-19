@@ -44,7 +44,7 @@ fn lower_recipe_for_shell(source: &str, shell: RecipeShell) -> Result<(String, B
         .next()
         .context("README action is absent")?;
     let recipe = match &action.recipe {
-        Recipe::Command { command } => command.to_string_vec().join("\n"),
+        Recipe::Command { command, .. } => command.to_string_vec().join("\n"),
         Recipe::Script { script } => script.clone(),
         Recipe::Rule { .. } => bail!("README action unexpectedly uses a rule"),
     };

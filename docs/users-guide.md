@@ -374,6 +374,22 @@ same Jinja context, including `{{ ins }}` and `{{ outs }}`; those two
 placeholders are resolved later to the concrete target's shell-quoted input and
 output paths. An empty command list is rejected when the manifest is parsed.
 
+Set `command_isolation: isolated` alongside a command list to start every entry
+from the action's working directory and environment. The default is `shared`;
+omitting the key or writing `command_isolation: shared` preserves the legacy
+shared-state behaviour. The key is literal schema data, not a Jinja expression.
+It belongs beside `command`, including on a reusable rule whose mode is then
+inherited by targets that reference the rule. The key is rejected without a
+recipe or beside `script` or `rule`, and `isolated` is rejected for scalar
+commands. A scalar may use the explicit `shared` value.
+
+On Unix and in the explicit Windows Bash route, entries use the existing
+brace-group and `eval` wrapper. In `shared` mode the groups run in the current
+shell, so `cd`, environment assignments, and shell variables carry forward. In
+`isolated` mode each group runs in a subshell; a successful `exit` or direct
+`exec` ends only that entry, and the next entry runs. In either mode entries
+remain ordered and fail fast on a non-zero status.
+
 ### Windows legacy recipe contract
 
 On Windows, v0.1.x interprets every legacy `command` string, `command` list, and
@@ -384,15 +400,20 @@ started from PowerShell, `cmd.exe`, an IDE, or Git Bash therefore uses the same
 recipe interpreter. This is a Windows PowerShell contract, not a PowerShell Core
 (`pwsh`) contract.
 
-Scalar commands and scripts each receive a fresh PowerShell process. A command
-list receives one shared process: entries run in declaration order, and each
-generated entry is followed immediately by a `$LASTEXITCODE` check. A non-zero
-status stops the list before a later entry can overwrite it. An entry remains
-opaque recipe text, so multiple native commands separated by semicolons inside
-one entry are not checked individually; only the status left by that entry is
-observed. PowerShell terminating errors also fail the recipe. Later entries see
+Scalar commands and scripts each receive a fresh PowerShell process. A `shared`
+command list receives one PowerShell process: entries run in declaration order,
+and each generated entry is followed immediately by a `$LASTEXITCODE` check;
+shared lists retain the existing PowerShell error policy. Later entries see
 PowerShell variables, `$env:` assignments, and locations left by earlier
-entries, but state does not cross action or target boundaries.
+entries. With `command_isolation: isolated`, Netsuke starts a fresh
+`powershell.exe` for each entry from the action's unchanged working-directory
+and environment baseline. Each child passes through native stderr from
+successful commands and applies a default `ErrorAction` of `Stop` to cmdlets.
+An immediate `$LASTEXITCODE` check stops on a non-zero native status, and a
+successful `exit` ends only that child. Cmdlet errors also fail the recipe. In
+both modes, an entry remains opaque recipe text, so multiple native commands
+separated by semicolons inside one entry are not checked individually. State
+does not cross action or target boundaries.
 
 Use PowerShell syntax in the default route. `$name` is a PowerShell variable and
 `$env:NAME` reads an environment variable. PowerShell parses the braced
@@ -420,9 +441,34 @@ when the recipe succeeds or fails. Query-only generation emits these bindings
 but does not create files. Response-file setup failures are reported by Ninja
 as execution errors.
 
+An isolated PowerShell list also encodes each entry for its child process.
+Ninja generation rejects child command lines that already exceed 32,766
+characters, and the parent checks the expanded `$PSHOME` executable path before
+launching each child. If that path takes the final command line over the limit,
+the parent reports the entry and measured length, then stops. The 1 MiB limit
+applies to the complete parent script, including its encoded child payloads. On
+Unix and the Windows Bash route, isolated entries use subshells instead of
+PowerShell child processes.
+
 Ninja turns a failed recipe into its own non-zero result, and `netsuke` returns
 failure after forwarding Ninja's output. The CLI contract distinguishes success
 from failure; it does not promise to return the recipe's exact child value.
+
+### What a static reader may rely on
+
+- Isolated entries start with the action's working directory and environment on
+  every route.
+- In shared mode, state changed by `cd`, `Set-Location`, assignments, or shell
+  variables reaches later entries in that action.
+- State never crosses action or target boundaries.
+- Recipe text remains dialect-specific, and POSIX `${VAR:-default}` expansion
+  is unavailable on the default Windows PowerShell route.
+
+Quality gates that need an entry's command and directory to be independently
+auditable should use `command_isolation: isolated` and avoid shell-specific
+defaults in recipes that may run on different routes. Structured commands with
+literal per-unit `cwd` fields are planned by RFC 0009 and roadmap items 12.1.1
+and 12.2.3; they are not shipped behaviour.
 
 To retain POSIX interpretation on Windows, explicitly select a Git
 Bash-compatible runtime:
@@ -437,25 +483,31 @@ netsuke build
 
 MSYS2 Bash is also supported when `bash.exe` is on `PATH`. Before `build` or
 Ninja-tool execution, Netsuke checks this selection. If `bash.exe --version`
-cannot run, it stops with instructions to install Git for Windows or MSYS2, add
-Bash to `PATH`, or unset `NETSUKE_WINDOWS_SHELL`. `generate` and `help targets`
-do not execute recipes, so they do not require Bash. In CI, install Git
-explicitly, prepend its `bin` directory to `PATH`, set
-`NETSUKE_WINDOWS_SHELL=bash`, and launch Netsuke normally from a `pwsh` step;
-do not rely on a workflow-wide `shell: bash` setting.
+cannot run, it stops with the selected path, probe status, and bounded output.
+Netsuke searches `PATH` from left to right and uses that same absolute
+executable for the probe and generated build commands. It does not fall back to
+an executable outside `PATH` when the selected runtime fails. `generate` does
+not probe Bash: its output retains the `bash.exe` command name, so Ninja
+resolves Bash from `PATH` when that saved plan is later run. `help targets`
+does not require Bash. In CI, install Git explicitly, prepend its `bin`
+directory to `PATH`, set `NETSUKE_WINDOWS_SHELL=bash`, and launch Netsuke
+normally from a `pwsh` step; do not rely on a workflow-wide `shell: bash`
+setting.
 
 For the Unix default and the explicit Bash route, each list entry is evaluated
 inside its own brace group and the groups are joined with `&&`. The entry is
 passed to `eval` as a shell-quoted payload, so an inline `#` comment or a
 trailing control operator such as `&` cannot consume the generated group's
-closing boundary. Brace groups run in the current shell rather than a subshell:
-a changed working directory, environment assignment, or shell variable can
-therefore be used by later entries. A failed entry stops the chain, and the
-diagnostic identifies the generated action and one-based list-entry positions,
-for example `netsuke command-list failure: action HASH, entry 2`. These
-brace-group, `eval`, background-job, and `exec` restrictions apply only to the
-Unix renderer and the explicit Windows Bash compatibility route; the Windows
-PowerShell route uses its native-command and error checks instead.
+closing boundary. In `shared` mode, brace groups run in the current shell
+rather than a subshell, so a changed working directory, environment assignment,
+or shell variable can be used by later entries. In `isolated` mode, each
+brace/eval wrapper runs inside a subshell and its state changes do not reach
+later entries. A failed entry stops the chain, and the diagnostic identifies
+the generated action and one-based list-entry positions, for example
+`netsuke command-list failure: action HASH, entry 2`. These brace-group,
+`eval`, background-job, and `exec` restrictions apply only to the Unix renderer
+and the explicit Windows Bash compatibility route; the Windows PowerShell route
+uses its native-command and error checks instead.
 
 <!-- tested-example: guide-command-list -->
 
@@ -1859,29 +1911,27 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   may retain the original input so invalid patterns can be explained.
 - `raw` template output and handwritten shell fragments remain the manifest
   author's responsibility.
-- On Unix and in the explicit Windows Bash compatibility route, each
-  `command` list entry is joined into a single shell chain; a later entry
-  inherits the working directory, environment, and shell variables left by an
-  earlier entry, and runs only when that earlier entry exits with status zero.
-  A failed entry may still leave side effects behind before it halts the chain.
-  The generated brace/eval boundary keeps comments and trailing control
-  operators inside an entry from changing the chain's structure. An entry may
-  start at most one background job; Netsuke waits for that job before moving to
-  a later entry, and rejects an entry that starts more than one background job
-  during Ninja generation. It also rejects an entry whose nested `eval` payload
-  makes the background-job count dynamic because the wrapper cannot safely
-  determine which jobs to wait for. A direct simple `exec`, optionally prefixed
-  by shell assignments, is supervised so its success or failure retains the
-  list's status semantics: a successful `exec` ends the remaining chain, while
-  structured or nested `exec` forms are rejected during Ninja generation.
-  Failure diagnostics include the action fingerprint and one-based entry
-  position when Netsuke can attribute the failed list entry.
-- On Windows in the default PowerShell route, each command list shares one
-  PowerShell process. Netsuke checks `$LASTEXITCODE` immediately after every
-  generated list entry and stops before a later entry can overwrite a failure.
-  Multiple native commands inside one entry are not individually instrumented;
-  terminating PowerShell errors also stop the list. The POSIX brace-group,
-  `eval`, background-job, and `exec` restrictions do not apply to this route.
+- On Unix and in the explicit Windows Bash compatibility route, `shared` is
+  the default for command lists: each entry uses the generated brace/eval
+  boundary in the current shell, so its working-directory, environment, and
+  shell-variable changes reach later entries. In isolated mode, each brace/eval
+  group runs in a subshell from the action baseline; a successful `exit` or
+  direct `exec` ends only that entry. Both modes keep the fail-fast `&&` chain.
+  An entry may start at most one background job; Netsuke waits for that job
+  before moving to a later entry and rejects multiple or dynamically hidden
+  jobs during Ninja generation. Structured or nested `exec` forms are also
+  rejected. Failure diagnostics include the action fingerprint and one-based
+  entry position when Netsuke can attribute the failed list entry.
+- On Windows in the default PowerShell route, `shared` command lists use one
+  PowerShell process and carry location, `$env:`, and variable changes forward.
+  With `command_isolation: isolated`, each entry runs in a fresh child process
+  from the action's working-directory and environment baseline; a successful
+  `exit` ends only that entry. Netsuke checks `$LASTEXITCODE` after each entry
+  and stops before a later entry can overwrite a failure. Multiple native
+  commands inside one entry are not individually instrumented; isolated
+  children keep cmdlet errors fail-fast while native stderr alone does not stop
+  the list. The POSIX brace-group, `eval`, background-job, and `exec`
+  restrictions do not apply to this route.
 - Write shell dollar expressions normally. `$PATH`, `$RUSTFLAGS`, `$in`,
   `$out`, `$ins`, and `$outs` are literal shell variables in both `command:` and
   `script:` recipes; PowerShell routes use `$name` or `$env:NAME`. Netsuke

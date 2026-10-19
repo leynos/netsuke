@@ -103,6 +103,7 @@ fn large_power_shell_recipes_use_ninja_response_files() -> Result<()> {
     assert_large_recipe_uses_ninja_response_file(
         Recipe::Command {
             command: StringOrList::String(format!("# {padding}\nWrite-Output large-scalar")),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         "Write-Output large-scalar",
     )?;
@@ -118,6 +119,7 @@ fn large_power_shell_recipes_use_ninja_response_files() -> Result<()> {
                 format!("# {padding}\n$env:NETSUKE_LARGE = 'shared'"),
                 "if ($env:NETSUKE_LARGE -ne 'shared') { exit 1 }; Write-Output large-list".into(),
             ]),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         "Write-Output large-list",
     )
@@ -129,6 +131,7 @@ fn large_power_shell_rules_use_distinct_response_files() -> Result<()> {
     let action = Action {
         recipe: Recipe::Command {
             command: StringOrList::String("x".repeat(12_500)),
+            isolation: crate::ast::CommandIsolation::Shared,
         },
         description: None,
         depfile: None,
@@ -170,6 +173,10 @@ fn power_shell_command_lists_preserve_state_and_stop_on_native_failure() -> Resu
     }
     .write_into(&mut rendered)?;
     let generated = GeneratedNinja::new(&rendered);
+    ensure!(
+        generated.recipe_contains(RecipeNeedle::new("$ErrorActionPreference = 'Stop'"))?,
+        "shared PowerShell output must retain its existing error policy"
+    );
     ensure!(
         generated.recipe_contains(RecipeNeedle::new("$env:NETSUKE_ORDER = 'first'"))?,
         "the decoded recipe should preserve command-list state"

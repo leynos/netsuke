@@ -164,6 +164,8 @@ define_keys! {
     MANIFEST_GLOB_IO_FAILED => "manifest.glob.io_failed",
     MANIFEST_GLOB_UNKNOWN_IO_ERROR => "manifest.glob.unknown_io_error",
     MANIFEST_COMMAND_LIST_EMPTY => "manifest.command_list_empty",
+    MANIFEST_COMMAND_ISOLATION_RECIPE => "manifest.command_isolation_recipe",
+    MANIFEST_COMMAND_ISOLATION_SCALAR => "manifest.command_isolation_scalar",
     IR_RULE_NOT_FOUND => "ir.rule_not_found",
     IR_MULTIPLE_RULES => "ir.multiple_rules",
     IR_EMPTY_RULE => "ir.empty_rule",

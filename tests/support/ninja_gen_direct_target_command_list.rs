@@ -34,7 +34,7 @@ fn assert_rendered_direct_target(manifest: &NetsukeManifest) -> Result<()> {
         .targets
         .first()
         .context("rendered direct target missing")?;
-    let Recipe::Command { command } = &target.recipe else {
+    let Recipe::Command { command, .. } = &target.recipe else {
         anyhow::bail!("direct target should retain its command recipe");
     };
     ensure!(
@@ -59,6 +59,7 @@ fn direct_target_command_list_graph() -> Result<BuildGraph> {
         .context("direct target action missing")?;
     let Recipe::Command {
         command: lowered_command,
+        ..
     } = &action.recipe
     else {
         anyhow::bail!("lowered direct target should retain a command recipe");

@@ -179,6 +179,8 @@ manifest.glob.unknown_pattern_error = خطأ نمط غير معروف.
 manifest.glob.io_failed = فشل glob للنمط «{ $pattern }»: { $detail }.
 manifest.glob.unknown_io_error = خطأ إدخال/إخراج غير معروف.
 manifest.command_list_empty = يجب ألّا يكون الحقل «command» فارغًا: قدِّم سلسلة أمر أو قائمة غير فارغة.
+manifest.command_isolation_recipe = يتطلب الحقل «command_isolation» وصفةً تتضمن قائمة أوامر.
+manifest.command_isolation_scalar = يتطلب «command_isolation: isolated» قائمة أوامر.
 
 # أخطاء التمثيل الوسيط.
 ir.rule_not_found = تعذّر العثور على القاعدة «{ $rule }» التي يشير إليها الهدف «{ $target }».

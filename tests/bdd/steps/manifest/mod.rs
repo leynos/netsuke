@@ -336,7 +336,9 @@ fn action_name_n(world: &TestWorld, index: usize, name: &str) -> Result<()> {
 fn action_command_n(world: &TestWorld, index: usize, command: &str) -> Result<()> {
     let command = crate::bdd::types::CommandText::new(command);
     with_action(world, index, |action| match &action.recipe {
-        Recipe::Command { command: actual } => {
+        Recipe::Command {
+            command: actual, ..
+        } => {
             ensure!(
                 actual.as_single() == Some(command.as_str()),
                 "expected action {index} command '{command}', got '{actual:?}'"

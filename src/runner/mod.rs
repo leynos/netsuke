@@ -152,6 +152,7 @@ fn run_with_ninja_program_resolver(
         ninja_program: &ninja_program,
         graph_generation: GraphGenerationContext {
             recipe_shell,
+            bash_executable: None,
             clock: &clock,
         },
     };
@@ -174,7 +175,15 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
     instrument_legacy_recipe_operation(
         LegacyRecipeOperation::Build,
         context.graph_generation.recipe_shell,
-        || execute_build(cli, args, context),
+        || {
+            let graph_generation =
+                context
+                    .graph_generation
+                    .with_bash_executable(recipe_shell::resolve_bash_runtime(
+                        context.graph_generation.recipe_shell,
+                    )?);
+            execute_build(cli, args, context, &graph_generation)
+        },
     )
 }
 
@@ -183,12 +192,17 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
 /// # Errors
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
-fn execute_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> Result<()> {
+fn execute_build(
+    cli: &Cli,
+    args: &BuildArgs,
+    context: &ExecutionContext<'_>,
+    graph_generation: &GraphGenerationContext<'_>,
+) -> Result<()> {
     let bundle = generate_ninja_with_shell(
         cli,
         context.reporter,
         Some(keys::STATUS_TOOL_BUILD.into()),
-        &context.graph_generation,
+        graph_generation,
     )?;
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
@@ -257,7 +271,15 @@ fn handle_ninja_tool(
     instrument_legacy_recipe_operation(
         LegacyRecipeOperation::NinjaTool,
         context.graph_generation.recipe_shell,
-        || execute_ninja_tool(cli, tool, context),
+        || {
+            let graph_generation =
+                context
+                    .graph_generation
+                    .with_bash_executable(recipe_shell::resolve_bash_runtime(
+                        context.graph_generation.recipe_shell,
+                    )?);
+            execute_ninja_tool(cli, tool, context, &graph_generation)
+        },
     )
 }
 
@@ -270,18 +292,15 @@ fn execute_ninja_tool(
     cli: &Cli,
     tool: NinjaToolSpec<'_>,
     context: &ExecutionContext<'_>,
+    graph_generation: &GraphGenerationContext<'_>,
 ) -> Result<()> {
     info!(
         target: "netsuke::subcommand",
         subcommand = tool.name,
         "Preparing Ninja tool invocation"
     );
-    let bundle = generate_ninja_with_shell(
-        cli,
-        context.reporter,
-        Some(tool.key),
-        &context.graph_generation,
-    )?;
+    let bundle =
+        generate_ninja_with_shell(cli, context.reporter, Some(tool.key), graph_generation)?;
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     let (ninja_file, dyndep_files) = bundle.into_parts();
     let ninja = NinjaContent::new(ninja_file);

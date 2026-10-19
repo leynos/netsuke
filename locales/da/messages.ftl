@@ -179,6 +179,8 @@ manifest.glob.unknown_pattern_error = ukendt mønsterfejl.
 manifest.glob.io_failed = Glob mislykkedes for "{ $pattern }": { $detail }.
 manifest.glob.unknown_io_error = ukendt I/O-fejl.
 manifest.command_list_empty = Feltet "command" må ikke være tomt: angiv en kommandostreng eller en ikke-tom liste.
+manifest.command_isolation_recipe = Feltet ‘command_isolation’ kræver en opskrift med en kommandoliste.
+manifest.command_isolation_scalar = ‘command_isolation: isolated’ kræver en kommandoliste.
 
 # Fejl i den interne repræsentation.
 ir.rule_not_found = Reglen "{ $rule }", som målet "{ $target }" henviser til, blev ikke fundet.

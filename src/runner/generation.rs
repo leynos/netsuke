@@ -19,6 +19,7 @@ use crate::ast::NetsukeManifest;
 use crate::cli::Cli;
 use crate::ir::{BuildGraph, IrGenError};
 use crate::localization::{self, keys};
+use crate::recipe_shell::BashExecutable;
 use crate::{manifest, ninja_gen};
 use crate::{
     manifest::{EnvAccessPolicy, ManifestEnvironment},
@@ -206,9 +207,26 @@ pub(super) fn build_graph_for_shell(
 /// # Errors
 ///
 /// Returns an error when Ninja synthesis fails.
+#[cfg(test)]
 pub(super) fn ninja_text_for_shell(
     graph: &BuildGraph,
     shell: crate::recipe_shell::RecipeShell,
 ) -> Result<ninja_gen::GeneratedNinja, ninja_gen::NinjaGenError> {
     ninja_gen::dyndep::generate_bundle_for_shell(graph, shell)
+}
+
+/// Generate a Ninja bundle with one runner-resolved Bash executable binding.
+///
+/// A missing binding keeps pure generation deterministic and leaves the
+/// executable name to be resolved by Ninja's execution environment.
+///
+/// # Errors
+///
+/// Returns an error when Ninja synthesis fails.
+pub(super) fn ninja_text_for_shell_with_bash(
+    graph: &BuildGraph,
+    shell: crate::recipe_shell::RecipeShell,
+    bash_executable: Option<&BashExecutable>,
+) -> Result<ninja_gen::GeneratedNinja, ninja_gen::NinjaGenError> {
+    ninja_gen::dyndep::generate_bundle_for_shell_with_bash(graph, shell, bash_executable)
 }
