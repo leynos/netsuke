@@ -4810,12 +4810,14 @@ governs the non-doctest pass only, and deliberately stays small:
   slow documentation end-to-end suites, which shell out to real Ninja.
 - **Targeted cold-build allowances.**
   `packaged_manifest_retains_build_script_sources` runs
-  `cargo publish --dry-run` into a fresh target directory. Its measured runtime
-  reached the targeted 600s cap during a cold build under shared compiler
-  admission, so it now receives fifteen warning periods (900s). The isolated
-  `split_build_fixture_compiles_through_the_direct_rustc_harness` test receives
-  fifteen warning periods (900s) after reaching its 720s cap while compiler
-  admission was saturated.
+  `cargo publish --dry-run` with the invoking workspace's build directory for
+  matching dependency artefacts while Cargo verifies the freshly extracted
+  package sources. The earlier private-target harness reached the targeted 600s
+  cap during a cold build under shared compiler admission, so this test retains
+  fifteen warning periods (900s) for cold or contended package builds. The
+  isolated `split_build_fixture_compiles_through_the_direct_rustc_harness` test
+  receives fifteen warning periods (900s) after reaching its 720s cap while
+  compiler admission was saturated.
   `production_build_module_slice_has_expected_boundary` also runs a nested
   `cargo build --lib` before its direct-rustc checks; it reached the default
   300s cap in a full gate with compiler admission saturated, so it gets the
