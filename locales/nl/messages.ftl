@@ -49,7 +49,7 @@ cli.subcommand.help.long_about = Zonder onderwerp komt dit overeen met `--help`.
 cli.help.actions_heading = Acties:
 cli.help.targets_heading = Doelen:
 cli.help.targets.about = Doelen en acties in het geselecteerde manifest weergeven.
-cli.help.targets.flag.edges.help = Neem afhankelijkheidsranden en onbewerkte recepten op in de JSON-uitvoer.
+cli.help.targets.flag.edges.help = Neem afhankelijkheidskanten en onbewerkte recepten op in de JSON-uitvoer.
 cli.help.default_marker = standaard
 cli.help.conditional_marker = voorwaardelijk
 

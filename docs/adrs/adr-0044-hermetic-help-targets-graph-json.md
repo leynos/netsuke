@@ -102,9 +102,11 @@ As a result:
 - a query-disabled helper in a `when` condition retains the declaration as a
   conditional alternative, following the existing catalogue contract.
 
-The restricted query does not evaluate helpers in command and script bodies. It
-does not resolve a recipe shell, so `shell_quote` and `shell_join` calls in
-query-rendered metadata use the host-default dialect. When recipe bodies are
+The restricted query does not evaluate helpers in command and script bodies.
+For shell filters in query-rendered metadata, an omitted `dialect` uses a fixed
+`sh` dialect on every host, while an explicit dialect is honoured as written.
+This keeps the metadata projection independent of the build shell and avoids
+resolving shell configuration during a read-only query. When recipe bodies are
 later rendered for a build, those helpers use the recipe shell's dialect, or
 the host default when no shell is selected. Authors who need stable rendered
 command text should pin the helper dialect. The graph export preserves recipe

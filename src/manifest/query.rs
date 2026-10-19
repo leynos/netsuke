@@ -124,14 +124,10 @@ enum ManifestLoadMode {
     },
     /// A metadata-only load that must not construct an ambient stdlib config.
     ///
-    /// The query surface quotes recipe text for the host default interpreter
-    /// rather than for the shell the build will resolve. **This divergence is
-    /// deliberate**: `resolve_recipe_shell` sits behind the runner's command
-    /// dispatch, and reaching it from here would make `netsuke help targets`
-    /// fail on a host whose `NETSUKE_WINDOWS_SHELL` is malformed — turning a
-    /// metadata query into a command that can error on configuration it never
-    /// uses. `tests/stdlib_manifest_query_tests.rs` pins the divergence so it
-    /// stays a decision rather than becoming a surprise.
+    /// Query-rendered metadata uses a fixed `sh` dialect for shell quoting,
+    /// independent of the host and build-shell configuration. Resolving the
+    /// build shell here would make a metadata query inspect a setting it does
+    /// not use and could make help fail on an unrelated malformed override.
     ManifestQuery,
 }
 

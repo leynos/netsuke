@@ -49,7 +49,7 @@ cli.subcommand.help.long_about = Utan ämne motsvarar detta `--help`. Använd `h
 cli.help.actions_heading = Åtgärder:
 cli.help.targets_heading = Mål:
 cli.help.targets.about = Lista mål och åtgärder i det valda manifestet.
-cli.help.targets.flag.edges.help = Ta med beroendekanterna och råa recept i JSON-utdata.
+cli.help.targets.flag.edges.help = Ta med beroendekanter och råa recept i JSON-utdata.
 cli.help.default_marker = standard
 cli.help.conditional_marker = villkorlig
 

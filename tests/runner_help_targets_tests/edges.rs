@@ -345,14 +345,15 @@ fn graph_export_is_hermetic_and_matches_catalogue_rows() -> Result<()> {
 
 /// Reject impure helpers in structural metadata without writing partial JSON.
 #[rstest]
-#[case::name("name")]
-#[case::description("description")]
-fn graph_export_rejects_disabled_helpers_in_metadata(#[case] field: &str) -> Result<()> {
-    let metadata = match field {
-        "name" => "name: '{{ env(\"PATH\") }}'\n".to_owned(),
-        "description" => "name: stable\n    description: '{{ env(\"PATH\") }}'\n".to_owned(),
-        _ => anyhow::bail!("unexpected metadata field {field:?}"),
-    };
+#[case::name("name", "name: '{{ env(\"PATH\") }}'\n")]
+#[case::description(
+    "description",
+    "name: stable\n    description: '{{ env(\"PATH\") }}'\n"
+)]
+fn graph_export_rejects_disabled_helpers_in_metadata(
+    #[case] field: &str,
+    #[case] metadata: &str,
+) -> Result<()> {
     let manifest =
         format!("netsuke_version: \"1.0.0\"\ntargets:\n  - {metadata}    command: echo hi\n");
     let (temp, manifest_path, workspace) = edge_export_workspace(&manifest)?;
@@ -366,6 +367,11 @@ fn graph_export_rejects_disabled_helpers_in_metadata(#[case] field: &str) -> Res
     ensure!(
         output.stdout.is_empty(),
         "failed graph export must not write partial JSON"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    ensure!(
+        stderr.contains("env is disabled"),
+        "impure {field} should fail because of the disabled env helper: {stderr}"
     );
     assert_recipes_not_run(&workspace)
 }

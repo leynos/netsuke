@@ -1284,14 +1284,17 @@ rendered selector names; and `dependency_only` represents an empty-command
 aggregate. The query renders names, edges, descriptions, and rule selectors
 through its restricted Jinja surface. It never renders command or script recipe
 bodies, executes them, or invokes helpers inside them. Defaults retain their
-authored values. Manifest-query rendering does not resolve a recipe shell, so
-`shell_quote` and `shell_join` calls in query-rendered metadata use the
-host-default dialect. Calls inside recipe bodies are not evaluated during the
-export. When a build later renders those bodies, the selected recipe shell's
-dialect applies, or the host default when no shell is selected; pin a dialect
-when rendered command text must be host-independent. The export records no
-`cwd`, shell, argv, variable, or macro fields. Structured-command recipes are
-reserved for milestone 12.1.2, and literal `cwd` for 12.2.3.
+authored values. Manifest-query rendering does not resolve a recipe shell. For
+shell filters in query-rendered metadata, an omitted `dialect` uses the fixed
+`sh` dialect on every host; an explicit dialect is honoured as written. This
+keeps exported metadata independent of the build shell and avoids resolving
+shell configuration during a read-only query. Calls inside recipe bodies are
+not evaluated during the export. When a build later renders those bodies, the
+selected recipe shell's dialect applies, or the host default when no shell is
+selected; pin a dialect when rendered command text must be host-independent.
+The export records no `cwd`, shell, argv, variable, or macro fields.
+Structured-command recipes are reserved for milestone 12.1.2, and literal `cwd`
+for 12.2.3.
 
 The export inherits query validation: unresolved conditional nodes remain in
 the catalogue but are excluded from graph validation; lowering errors fail the
