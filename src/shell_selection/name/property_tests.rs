@@ -130,41 +130,56 @@ fn scalar_like_names_round_trip(#[case] text: &str) {
     );
 }
 
+/// Count accepted names across exactly 1,000 draws from the supplied runner.
+///
+/// Share the runner to preserve the audit's generator order and random state.
+///
+/// # Errors
+///
+/// Propagate strategy-generation failures without counting them as rejections.
+fn count_accepted_samples<S: Strategy<Value = String>>(
+    strategy: S,
+    runner: &mut TestRunner,
+) -> Result<usize, String> {
+    let mut accepted = 0;
+    for _ in 0..1_000 {
+        let text = strategy
+            .new_tree(runner)
+            .map_err(|error| error.to_string())?
+            .current();
+        accepted += usize::from(ShellName::parse(&text).is_ok());
+    }
+    Ok(accepted)
+}
+
 #[test]
 fn generators_reach_their_claimed_classes() -> Result<(), String> {
     let mut runner = TestRunner::deterministic();
-    let strategies = [
+    let [valid, near_miss, ascii, unicode] = [
         valid_names().boxed(),
         near_misses().boxed(),
         ascii_names().boxed(),
         any::<String>().boxed(),
     ];
-    for (class, strategy) in strategies.into_iter().enumerate() {
-        let mut accepted = 0;
-        for _ in 0..1_000 {
-            let text = strategy
-                .new_tree(&mut runner)
-                .map_err(|error| error.to_string())?
-                .current();
-            accepted += usize::from(ShellName::parse(&text).is_ok());
-        }
-        match class {
-            0 if accepted != 1_000 => {
-                return Err(format!(
-                    "valid generator accepted {accepted} of 1000 samples"
-                ));
-            }
-            1 if accepted != 0 => {
-                return Err(format!("near-miss generator accepted {accepted} samples"));
-            }
-            // Both classes are seed-dependent because valid ASCII is rare.
-            2 if !(1..1_000).contains(&accepted) => {
-                return Err(format!(
-                    "ASCII generator accepted {accepted} of 1000 samples"
-                ));
-            }
-            _ => {}
-        }
+    let valid_accepted = count_accepted_samples(valid, &mut runner)?;
+    if valid_accepted != 1_000 {
+        return Err(format!(
+            "valid generator accepted {valid_accepted} of 1000 samples"
+        ));
     }
+    let near_miss_accepted = count_accepted_samples(near_miss, &mut runner)?;
+    if near_miss_accepted != 0 {
+        return Err(format!(
+            "near-miss generator accepted {near_miss_accepted} samples"
+        ));
+    }
+    let ascii_accepted = count_accepted_samples(ascii, &mut runner)?;
+    // Both classes are seed-dependent because valid ASCII is rare.
+    if !(1..1_000).contains(&ascii_accepted) {
+        return Err(format!(
+            "ASCII generator accepted {ascii_accepted} of 1000 samples"
+        ));
+    }
+    count_accepted_samples(unicode, &mut runner)?;
     Ok(())
 }

@@ -416,7 +416,11 @@ Its unit and property tests are plain child modules under `name/`;
 use `mod.rs` because they have child modules, as required by Clippy. The
 property helpers are visible only inside `shell_selection` for the selector
 properties; production code must never depend on them. This preserves Rust
-module and snapshot identities without sibling `#[path]` declarations.
+module and snapshot identities without sibling `#[path]` declarations. The
+private `count_accepted_samples` helper belongs only to the local name strategy
+audit. It counts exactly 1,000 parser outcomes using that audit's shared
+runner; it is neither a production helper nor a selector decoding helper. Other
+property helpers retain their existing narrow sharing boundary.
 
 ## Placement conventions
 

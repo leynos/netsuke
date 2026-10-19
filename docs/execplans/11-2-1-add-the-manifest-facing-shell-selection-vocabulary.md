@@ -8,13 +8,20 @@ be kept up to date as work proceeds.
 Status: IN PROGRESS
 
 The user approved this plan on 2026-10-13 and resumed implementation on
-2026-10-17 after the rebase. Prerequisite [PR 913][timeout-pr] merged into
-`main` as `077cf366`; [PR 778][feature-pr] now targets `main`. EP-M1 is in
-progress. The 26-file tolerance applies to this feature diff and excludes the
-already merged prerequisite repair.
+2026-10-17 after the rebase. Historical prerequisite [PR 913][cli-timeout-pr]
+merged into `main` as `077cf366`. On 2026-10-19, the feature branch was locally
+rebased without conflicts onto current `origin/main` at `7d1e4c12`. That
+candidate exposed another nested Cargo timeout. Its separate repair is now
+published as [PR 930][timeout-pr], targeting `main`; all eight local gates pass
+and its hosted CodeScene check passes, while hosted Actions remain in progress.
+The seven feature commits are locally rebased without conflicts onto PR 930's
+head, with an exact range-diff match to the published feature series. PR 778's
+remote head and base still await top-layer validation and stack publication.
+EP-M1 is in progress. The 26-file tolerance applies to this feature diff and
+excludes the separate timeout repair.
 
-[timeout-pr]: https://github.com/leynos/netsuke/pull/913
-[feature-pr]: https://github.com/leynos/netsuke/pull/778
+[cli-timeout-pr]: https://github.com/leynos/netsuke/pull/913
+[timeout-pr]: https://github.com/leynos/netsuke/pull/930
 
 ## Purpose / big picture
 
@@ -259,6 +266,38 @@ remains `1747496f`, and the original combined candidate is preserved under
   4,080 Nextest tests (six skipped), 136 doctests (32 ignored), typechecking,
   lint, formatting, Markdown/spelling, Mermaid, and documentation coverage
   98.89% (5,074/5,131). Logs: `/tmp/*-netsuke-shell-rebase-20261017.out`.
+- [x] (2026-10-19) Rebased the local feature branch onto current `origin/main`
+  at `7d1e4c127d621501f3015b0f86b58c2d633e3f62` without conflicts. A fresh
+  lower-branch `make test` then exposed
+  `netsuke_build::build_module_slice_ui_tests::production_build_module_slice_has_expected_boundary`
+  timing out at its 720-second limit: 4,057 passed, one timed out, six
+  skipped, and 24 not run. Its nested `cargo metadata` child was observed
+  waiting 2m46 on Cargo's shared package-cache lock; this is context, not a
+  proven sole cause. The separate candidate narrows the direct-rustc fixture's
+  preparation from all workspace targets/features to the owning package's
+  library with all features. The focused test passed in 71.043 seconds on its
+  first scoped run and 2.822 seconds warm on the final argument layout. Its
+  first full gates passed `make check-fmt`, `make test` (4,082 passed, six
+  skipped; 39 doctests passed, six ignored), and `make typecheck`. Package
+  verification passed in 186.067 seconds and the module-slice fixture in
+  122.127 seconds. `make lint` stopped on one Ruff composite-assertion finding
+  in the new workflow-contract guard; that assertion is split and `make fmt`
+  passes. The corrected lower candidate has diff hash
+  `77e42c1ec1102d12cebff436d99748fc0b22cef01ea7afa49a18ad5e8c1015fb`; its
+  complete sequential gates are restarting. Semantic review then corrected two
+  stale Rust comments about the old workspace-wide selection. The final
+  eight-path diff hash is
+  `10fbcd50bd67681f0534d362115f3e5e81001aac20d155d5798c9933741dbb8e`. All eight
+  gates then passed on that exact candidate: Nextest 4,082 passed/six skipped,
+  doctests passed, typecheck and lint passed, doc coverage was 98.89%, workflow
+  contracts passed 1,321 tests/three skipped plus 27 script tests, Markdown
+  lint reported zero issues, and Mermaid validation passed. The module-slice
+  test took 33.70 seconds and package verification 10.90 seconds. Commit
+  `36f207d1` was published as draft [PR 930][timeout-pr] against `main` at base
+  `7d1e4c12`; hosted CodeScene passed and hosted Actions are running. The seven
+  feature commits were replayed onto `36f207d1` without conflicts; `range-diff`
+  matches the published series exactly. The resulting #778 candidate still
+  needs its own gates and remote stack update.
 - [ ] (2026-10-17) EP-M1 Red-Green evidence covers 91 cases, 15 doctests,
   both sensitivity unions, and all three O7 negative controls. FULL5's code and
   workflow gates plus FULL6's fresh Rust and documentation gates now pass on
@@ -288,6 +327,22 @@ remains `1747496f`, and the original combined candidate is preserved under
   six of eight cells are true, two false. D6's old `Named("n")` example was
   obsolete after D8 reserved `n`; `Named("null")` is the valid scalar-like
   round-trip witness. Neither correction changes the approved contract.
+
+- Observation (2026-10-19): rebasing onto current `origin/main` exposed a new
+  timeout in the build-module boundary fixture before the package smoke test
+  ran. The failing run had 4,057 passes, one timeout at 720 seconds, six
+  skipped, and 24 not run. Its nested `cargo metadata` process waited 2m46 on
+  the shared Cargo package-cache lock, but that observation alone does not
+  establish the root cause. The lower-branch candidate now limits fixture
+  preparation to the owning package's library targets with all features; the
+  exact focused fixture passed in 71.043 seconds cold and 2.822 seconds warm.
+  The first full test run on the scoped candidate passed, including 4,082
+  Nextest cases and 39 doctests, but lint found a composite assertion in the
+  regression contract. The assertion is split; all eight sequential local gates
+  now pass on the final candidate. Package verification took 10.90 seconds and
+  the module-slice fixture took 33.70 seconds. PR 930 is open as a draft against
+  `main`; CodeScene passed and its GitHub Actions are still running. The
+  rebased #778 candidate is undergoing its own validation.
 
 - Observation: the untouched-tree test baseline timed out in a nested Cargo
   fixture. Evidence: `tests/command_env_ui_tests.rs` gives
@@ -567,6 +622,16 @@ remains `1747496f`, and the original combined candidate is preserved under
   The combined 34-file ceiling proposal is withdrawn. Date/Author: 2026-10-14,
   implementation supervisor; user-authorized stack separation.
 
+  Follow-up (2026-10-19): after rebasing to current `origin/main`, a distinct
+  720-second timeout appeared in the build-module slice fixture. Per the user's
+  renewed direction to isolate the cause and keep the fix below #778, the
+  repair is published as [PR 930][timeout-pr], targeting `main`; its local
+  gates pass and hosted Actions remain in progress. The seven feature commits
+  are replayed locally on its head without conflicts, with the published patch
+  series preserved exactly. PR #778 still needs top-layer validation and
+  retargeting. PR #913 remains the historical repair for the earlier CLI
+  fixture and is not evidence for this distinct failure.
+
 - Decision D12 (2026-10-17): place production modules in `name/mod.rs` and
   `built_in/mod.rs`, with tests in their plain child-module directories. The
   rebased-main workflow contract rejects repeated first prefixes even when a
@@ -585,14 +650,31 @@ remains `1747496f`, and the original combined candidate is preserved under
 
 ## Outcomes & retrospective
 
-The timeout repair clears the pre-feature test baseline and belongs to the
-separate prerequisite PR #913. Its fresh current-main validation passed 3,934
-Nextest tests (six skipped), 129 doctests (32 ignored), 1,271 workflow
-contracts (three skipped), and 27 script tests. Formatting, typechecking, lint,
-documentation coverage (98.87%), spelling, Markdown lint, and Mermaid
-validation passed. CLI cases completed in 9.849 and 5.959 seconds; the module
-boundary took 151.141 seconds and packaging took 167.123 seconds. The debugging
-plan and prerequisite PR retain the detailed evidence and review state.
+The original CLI configuration timeout was repaired in the separate
+prerequisite PR #913. Its fresh validation passed 3,934 Nextest tests (six
+skipped), 129 doctests (32 ignored), 1,271 workflow contracts (three skipped),
+and 27 script tests. Formatting, typechecking, lint, documentation coverage
+(98.87%), spelling, Markdown lint, and Mermaid validation passed. CLI cases
+completed in 9.849 and 5.959 seconds; the module boundary took 151.141 seconds
+and packaging took 167.123 seconds. That evidence remains valid for its
+candidate, but it predates current `origin/main` at `7d1e4c12`.
+
+The 2026-10-19 rebase exposed a separate module-slice timeout on the new base.
+The lower candidate scopes direct-rustc fixture preparation to the library each
+fixture consumes and lets package verification inherit Cargo's build
+configuration, retaining verification while reusing matching dependency
+artefacts. All eight local gates passed on commit `36f207d1`: Nextest ran 4,082
+tests (six skipped), doctests passed, typecheck and lint passed, doc coverage
+was 98.89%, workflow contracts passed 1,321 tests (three skipped) plus 27
+script tests, Markdown lint reported zero issues, and Mermaid validation
+passed. The module-slice fixture took 33.70 seconds and package verification
+10.90 seconds. Draft PR 930 targets `main`; its CodeScene check passed and
+hosted Actions remain active. The feature commits were replayed onto its head
+without conflicts, but #778's new head still needs its own gates and hosted
+review. The earlier combined candidate's 3,370-test result and EP-M1's
+FULL5/FULL6 results remain historical evidence. The feature's exclusive diff
+retains its approved file and line limits, and the timeout repair stays in its
+separate lower PR.
 
 The earlier combined candidate passed 3,370 Nextest tests and 39 doctests;
 these are historical results, distinct from the prerequisite's fresh run. That
@@ -726,13 +808,14 @@ execution, so the three-way selector is Netsuke-specific.
 
 ## Conformance basis
 
-The original design basis was `dcac7634`. Implementation resumes against the
-frozen remote target `077cf366` after rebase to `5b32a37f`. Current-main
-orientation changes are mechanical: `HostPattern` is in `src/host/pattern.rs`
-and re-exported as `crate::host_pattern`; the new public module precedes private
-`shell_word` in `src/lib.rs`. Owned tests now use plain child modules to
-satisfy current-main's executable layout contract; production filenames and
-Rust module identities are unchanged.
+The original design basis was `dcac7634`. Implementation began against the
+frozen remote target `077cf366` after rebase to `5b32a37f`; the local branch
+has since been rebased onto current `origin/main` `7d1e4c12` as `1619d474`.
+Current-main orientation changes are mechanical: `HostPattern` is in
+`src/host/pattern.rs` and re-exported as `crate::host_pattern`; the new public
+module precedes private `shell_word` in `src/lib.rs`. Owned tests now use plain
+child modules to satisfy current-main's executable layout contract; production
+filenames and Rust module identities are unchanged.
 
 Upstream artefacts, rechecked against `077cf366`:
 
@@ -1089,6 +1172,13 @@ test-harness repair separately, run the full gates on the repaired pre-feature
 tree, and require a green result before EP-M1. The original failure and its
 diagnostic evidence remain in this plan and the debugging record; do not
 present the repaired baseline as the original untouched run.
+
+The 2026-10-17 green M0 run is historical for its then-current tree. The
+2026-10-19 rebase onto `origin/main` `7d1e4c12` exposed a separate module-slice
+timeout. The narrowed lower candidate now passes all local gates and is
+published as draft PR 930 against `main`, with hosted Actions still running.
+The local feature branch is replayed on that lower head; validate its own
+candidate before publishing or treating PR 778 as ready.
 
 ### EP-M1: host family, built-in registry, and names
 
