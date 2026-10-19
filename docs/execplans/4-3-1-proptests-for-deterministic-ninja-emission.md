@@ -2233,6 +2233,100 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
 
+- [x] (2026-10-19) **The `EP-M7` candidate failed `make lint` on three Whitaker
+      findings, and all three were real.** The gate log is
+      `/tmp/lint-netsuke-4-3-1-proptests-for-deterministic-ninja-emission.out`;
+      `cargo doc` and `cargo clippy` both passed, and the recipe aborted in
+      `lint-whitaker`, so `lint-python` and `github-actions-lint` never ran and
+      are unobserved for that candidate rather than green.
+  - `module_max_lines` named `src/ir/graph/property_tests/mod.rs:23:16`, the
+    declaration `pub(super) mod cycles;`: `cycles.rs` spanned 441 lines against
+    the 400-line cap. The lint measures each out-of-line module's *own file*,
+    so the fix is to split the file rather than to shave lines.
+  - `module_must_have_inner_docs` named `cycles.rs:345` and `duplicates.rs:294`,
+    the two `#[cfg(test)] mod tests` blocks whose first item was
+    `use super::*;`. A `//!` inner doc must be the first item of the module.
+  - **The repair keeps every test name and module path.** `cycles.rs`'s unit
+    tests moved to `src/ir/graph/property_tests/cycles/tests.rs` (107 lines),
+    declared from `cycles.rs` by `#[cfg(test)] #[path = "cycles/tests.rs"] mod
+    tests;`, following the existing `src/cli/discovery/project_policy.rs`
+    convention. `cycles.rs` is now 345 lines. The property itself stays in
+    `cycles.rs`, so the mutation stem
+    `ir__graph__property_tests__cycles__cycles_are_rejected_at_larger_n` and
+    the contract test that resolves it are unchanged. The full test paths are
+    still `ir::graph::property_tests::cycles::tests::…` and
+    `duplicates::tests::…`, verified by running the suites.
+  - **A sibling file could not be used.** `rust_module_layout_test.py` groups
+    siblings by their first `_` prefix and rejects an unrecorded group, so a
+    `cycles_tests.rs` beside `cycles.rs` would have created a forbidden
+    `cycles` group; a `cycles/` directory whose only child is `tests.rs` does
+    not, because `tests` has no shared prefix with `cycles`. The layout
+    contract passes (5 tests).
+  - Verified after the edit: `cargo fmt --all -- --check` clean,
+    `cargo clippy -p netsuke-build --all-targets --all-features -D warnings`
+    clean, `make lint-whitaker` exit 0, and the two suites' 14 tests all
+    passing. The candidate must be re-frozen and the full gate batch re-run;
+    this entry does not claim that batch.
+
+- [x] (2026-10-19) **`EP-M7` implements `OBL-DUP` and `OBL-CYCLE`, and both
+      mutation patches were measured to fail exactly the class they name.**
+      The suites live in `src/ir/graph/property_tests/`, a new directory module
+      registered from `src/ir/graph/mod.rs` behind `#[cfg(test)]`.
+      `duplicates.rs` generates a manifest and plants a collision in one of
+      three modes — across two targets, within one target's list, or none —
+      and asserts rejection for the first two and a *successful* lowering for
+      the third. `cycles.rs` constructs a self-edge, a short closed chain and
+      an eight-node closed chain, plus two acyclic shapes of which one carries
+      a dependency no target produces.
+  - **Three generator defects were found and fixed before the suites were
+    green, and each was a false oracle rather than a flake.** The `Across`
+    mode could not be planted at one target, yet the case still recorded
+    `Across` and demanded a rejection that could not happen; an empty target's
+    `Within` plant pushed its default path once rather than twice, producing a
+    valid single-output manifest; and picks were drawn with replacement, so
+    the control arm could collide by accident. `plant` now returns the mode it
+    actually planted, `plant_within` inserts the default twice, and each
+    target allocates from its own `out/<slot>/<pick>` namespace so unplanted
+    collisions are impossible.
+  - **A long-cycle case could be truncated into a short one.** The target
+    count was drawn independently of the shape, so a `Long` draw on a small
+    manifest produced an ordinary short cycle while the tally still counted it
+    as long — over-reporting the one class Kani cannot reach. `Shape::min_targets`
+    now floors the draw at `LONG_CYCLE_MIN`, and
+    `a_long_case_is_never_truncated_to_a_short_chain` pins it.
+  - **`MUT-DUPWITHIN` needed two layers disabled, and discovering that is the
+    finding.** Disabling only `from_manifest`'s seen-list left all 13 tests
+    green, because `BuildGraph::insert_edge`'s `duplicate_output` keeps its own
+    seen-set. The shipped patch removes the within-target arm at both layers
+    and leaves `edge_id_for_output` (across targets) untouched; measured, it
+    fails `duplicate_outputs_are_rejected_at_larger_n` and the two
+    within-target unit tests while every across-target case still passes.
+    `MUT-CYCLEDEPTH` adds a six-deep cap in `CycleDetector::visit`; measured,
+    it fails only `Long` cases, with the eight-target long cycle as the minimal
+    counter-example.
+  - **Kani itself cannot run on this host.** `cargo kani --only-codegen`
+    fails in `libc`'s build script because `kani-compiler` cannot load
+    `libLLVM.so.21.1-rust-1.93.0-nightly`. The patches were therefore validated
+    by ordinary compilation and by the property runs rather than by CBMC; the
+    compile guard in `tests/kani_mutation_evidence_tests` remains unrun for the
+    same reason and must be reported as such rather than counted as a pass.
+  - `make proptest` selects both suites (14 tests, 138 total, all passing) and
+    the four `kani_mutation_evidence_tests` contracts pass, including
+    `every_patch_applies_cleanly` over both new patches.
+
+- [x] (2026-10-19) **The three `EP-M6` CodeRabbit findings were verified against
+      source and all three were valid.** Two were first-person pronouns in a
+      Progress entry, now impersonal. One was a spelling call the reviewer got
+      right and the first reading of this plan got wrong: `recognisable` is
+      listed in the generated `typos.toml` as wanting `recognizable`, so the
+      repository's en-GB-oxendict standard mandates the `-ize` form even though
+      the general British spelling is `-ise`. The third was substantive: the
+      `OBL-E2E` intersection tally documented itself as "all of the above at
+      once" but omitted `descending_defaults`, so a run could report an
+      intersection while no such case was observable to `MUT-DEFSORT`. The
+      conjunction and the assertion message now include it, and all 29
+      determinism properties still pass.
+
 - [x] (2026-10-19) **`OBL-PROCESS` is implemented as a directed, two-process
       byte comparison, and `MUT-ACTIONSORT` is measured to fail it.** The test
       is `tests/ninja_determinism_process_tests.rs`, with a purpose-built
@@ -2351,8 +2445,8 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       judgement must be re-made per milestone rather than inherited.
 
 - [x] (2026-10-19) **The third `EP-M6` gate batch ran seven of eight gates
-      green and was stopped RED on `markdownlint` by one over-long line of my
-      own prose.** `check-fmt` (2 s), `lint` (547 s, *all four* sub-gates —
+      green and was stopped RED on `markdownlint` by one over-long line of
+      plan prose.** `check-fmt` (2 s), `lint` (547 s, *all four* sub-gates —
       `lint-clippy`, `lint-whitaker`, `lint-python`, `github-actions-lint` —
       passing for the first time in any batch), `typecheck` (130 s),
       `doc-coverage` (197 s, 98.89% against the 80% bar), `test` (522 s,
@@ -2361,8 +2455,8 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       (3 s, 124/124 with 4,004 skipped — the acceptance gate the milestone
       names) all passed. `markdownlint` then failed at
       `docs/execplans/…:2285:81`, a 95-character line, so `nixie` never ran.
-      The offending text was the minimal `ManifestSpec` counter-example in my
-      own `OBL-E2E` Progress entry, and the reason it survived `make fmt` is
+      The offending text was the minimal `ManifestSpec` counter-example in the
+      `OBL-E2E` Progress entry, and the reason it survived `make fmt` is
       the recorded one: `mdtablefix` does not reflow list-item continuation
       lines, so only `markdownlint` sees them. The span alone is 89
       characters, so no rewrapping could bring the line under 80 while it
@@ -4536,7 +4630,7 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 - [x] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [x] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [x] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
-- [ ] `EP-M7`: `OBL-DUP`, `OBL-CYCLE`.
+- [x] `EP-M7`: `OBL-DUP`, `OBL-CYCLE`.
 - [ ] `EP-M8`: `OBL-NINJA`, documentation, evidence sweep, roadmap.
 
 ## Surprises & discoveries

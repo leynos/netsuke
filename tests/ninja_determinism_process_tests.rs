@@ -277,7 +277,7 @@ fn sidecar_paths(bundle: &Bundle) -> Vec<&str> {
 /// Describe the first line on which two texts differ.
 ///
 /// Lines are truncated because an emitted command can run to hundreds of
-/// characters, and the reader needs the location and a recognisable fragment
+/// characters, and the reader needs the location and a recognizable fragment
 /// rather than the whole wrapper.
 fn describe_difference(first: &str, second: &str) -> String {
     for (index, (left, right)) in first.lines().zip(second.lines()).enumerate() {
