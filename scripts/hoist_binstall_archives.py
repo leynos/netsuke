@@ -8,9 +8,18 @@
 The release workflow downloads one workflow artefact per target into
 ``dist/<artefact>/<staging-dir>/``, where ``stage-release-artefacts`` placed a
 ``{package}-{version}-{target}.tar.gz`` archive and its ``.sha256`` sidecar.
-``upload-release-assets`` namespaces nested paths, so the archives must sit at
-the ``dist/`` root to upload under the plain names the
-``[package.metadata.binstall]`` template in ``Cargo.toml`` resolves.
+The archives must sit at the ``dist/`` root so that they upload under the
+plain names the ``[package.metadata.binstall]`` template in ``Cargo.toml``
+resolves: ``gh release upload`` names an asset from the source file's
+basename, so a nested archive would publish under whatever the nesting last
+segment happened to be, and the template resolves from the release root only.
+
+This docstring previously gave a different reason — that
+``upload-release-assets`` namespaces any file not already at the root. That
+is false. The action computes a namespaced name and passes it as ``gh``'s
+``#label``, which is a display label; the asset is still named from the
+source basename. The hoist remains correct and necessary, for the reason
+above rather than the one first stated.
 
 The expected archive set is derived from ``.github/release-staging.toml``
 (the target triples) and ``Cargo.toml`` (the package name), keeping those

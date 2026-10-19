@@ -102,8 +102,20 @@ release: today a human publishes the draft.
 five shell completions, per-platform manual pages or PowerShell help, and the
 `cargo-binstall` archive shape. `scripts/hoist_binstall_archives.py` moves the
 `{name}-{version}-{target}.tar.gz` archives and their `.sha256` sidecars from
-the nested workflow-artefact layout to `dist/` root, because the shared upload
-action namespaces any file not already at the root.
+the nested workflow-artefact layout to `dist/` root.
+
+The hoist's original docstring gave the reason as "the shared action namespaces
+any file not already at the root". That reason is **false**, not merely
+imprecise: the action computes a namespaced name but passes it as `gh`'s
+`#label`, and `gh release upload` names the asset from the source file's
+basename, so nesting does not survive the upload either way. The observed
+consequence is recorded under `Surprises & discoveries`: the 86 candidate files
+the beta4 run uploaded collapsed onto 29 published names. The root placement is
+still required, for a different reason — the binstall `pkg-url` template
+resolves from the release root, and the basename rule means a nested archive
+would publish under its last path segment. The hoist's docstring and the
+`conftest.py` that describes it were corrected on 2026-10-19; the behaviour is
+unchanged and no test asserted the false reason.
 
 **The upload action's real selection rule.** Read from `leynos/shared-actions`
 at pin `0606ca899ce2995a0c4bc78e660e80832e6e8855` (the newer of the two pins
@@ -890,8 +902,13 @@ Stage D wiring change is committed after the gate that covers it passes.
 Every step is re-runnable. The publisher inspects registry state before acting,
 so a second run over an already-published version with a matching digest is a
 no-op success, and a second run with a differing digest fails closed. The
-GitHub finalizer inspects the draft and uploads only missing assets. Nothing in
-this change deletes a remote object.
+GitHub finalizer inspects the draft and **refuses** rather than repairing: it
+plans an action per declared asset, reports `EXIT_UPLOAD_REQUIRED` when one is
+missing and `EXIT_CONFLICT` when one disagrees, and only un-drafts when every
+asset is already the declared one. Its own upload path was removed by the
+2026-10-19 Decision entry, because a job that both verified and wrote could not
+report a missing asset as a failure. Nothing in this change deletes a remote
+object.
 
 Local recovery: `git switch --detach ebcedaef` restores the pre-change tree.
 Re-running a release is a maintainer action and is documented, not performed
@@ -1532,8 +1549,115 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   Markdown only. Widening the budget stays excluded for the reason recorded on
   2026-10-17.
 
+- [x] (2026-10-19) Resolved the staging-layout ambiguity the three asset-name
+  findings opened, **before** writing the declared-name producer, so Stage C's
+  remaining work has one settled target rather than a choice deferred into
+  code. The Decision log entry records the outcome — a flat twenty-name
+  consumer set — and the two release-path consequences that follow from it.
+  Also corrected two docstrings that still asserted the falsified namespace
+  reason (`scripts/hoist_binstall_archives.py`,
+  `tests/workflow_contracts/conftest.py`) and the `Idempotence and recovery`
+  sentence that credited the finalizer with an upload it never performs. `grep`
+  over `tests/` confirms no assertion pinned either claim, so both corrections
+  are documentation-only and change no behaviour.
+- [x] (2026-10-19) Established the exact contract coupling that governs the
+  remaining Stage C commits, before writing any of them, so each dependency is
+  an obligation recorded in advance rather than a red gate discovered after the
+  fact. Two couplings are hard and both are same-commit edits:
+
+  1. `release_publish_path_publication.py:_publication_needs` compares
+     `set(publish-release.needs)` against `REQUIRED_NEEDS` by **exact set
+     equality**, so growing `publish-release.needs` with `package-crate`
+     obliges the matching edit to `REQUIRED_NEEDS` in
+     `release_publish_path_scenarios.py`. Growing one without the other fails
+     with "expected metadata, build and smoke dependencies", which names the
+     symptom but not the second file.
+  2. The same module anchors the publication step list on four exact
+     identifiers — `Ensure release exists (draft)`,
+     `actions/download-artifact@`, `hoist_binstall_archives.py`, and
+     `id: upload_assets` — and `_check_publication_step_order` pins their
+     order. `check_upload_plan` additionally requires the `with.dry-run` key on
+     the step named `Upload artefacts to release` to resolve `False` on a
+     publication, and `tests/workflow_release.rs:77` pins that expression as
+     raw text. A per-name `gh release upload` rewrite therefore has to keep the
+     step's id, its name, its position, and a `dry-run` key — or edit those
+     four assertions in the same commit, which would move the contract away
+     from the property it states.
+
+  A third coupling is informational: `release_publish_path_mutations.py`
+  mutates the release job's upload step through
+  `named_step(…, "Upload artefacts to release")` and `with.dry-run`, so the
+  same anchors recur in the mutation suite.
+  `release_operation_observability_test.py` reads
+  `steps.upload_assets.outputs.upload-error`, which means the upload step must
+  continue to publish that output however its body changes.
+- [x] (2026-10-19) Built the declared-name producer and wired it into the
+  gates in the same commit, so Stage C's remaining work has one settled target
+  rather than a naming rule invented inside the upload step. The producer is
+  two modules because `scripts/release_inventory.py` is pinned at the 400-line
+  module cap and cannot carry it:
+
+  - `scripts/release_declaration.py` states the flat consumer set. The archive
+    and sidecar half comes from configuration through
+    `release_inventory.binstall_asset_names`, which delegates to the hoist's
+    own authority, so it needs no staged file and a build that shipped no
+    archive still declares all twelve. The operating-system half is read from
+    the staged tree — three external shared actions own those names — and is
+    held to `target_count × len(formats)` per platform, so a package that
+    failed to build refuses the declaration rather than shrinking it.
+    `PUBLISHED_CHARACTERS = {"~": "."}` is the only normalization, and its
+    docstring says why a general sanitizer would be wrong.
+  - `scripts/release_declaration_cli.py` is the thin seam the workflow
+    invokes. It separates `EXIT_MISSING_ASSETS` (the tree disagrees with the
+    build's promise) from `EXIT_INPUT_UNUSABLE` (the configuration or manifest
+    was wrong before any asset was considered) and writes the file only on
+    success, because a partial declaration would let a later stage verify a
+    shorter release against itself.
+  - `scripts/hoist_binstall_discovery.py` promoted `_walk_files` to public
+    `walk_files` rather than duplicating its traversal. A second walk would
+    have had to re-earn the `Path.rglob` error propagation, or silently differ
+    from it.
+  - The refusals are classified by exception family:
+    `ConfigurationError` (no targets, malformed target, unpackageable
+    platform) and `StagedTreeError` (missing package, duplicate published
+    name), both under `DeclarationError`. The CLI's two exit codes are that
+    distinction, not a re-derivation of it.
+
+  Wired in the same commit: `SECTION_MODULES` and `SOURCE_MODULES` in
+  `tests/workflow_contracts/release_publication_test.py` and the
+  `test-release-publication` recipe gained the same four paths in the same
+  order, since the contract compares them by exact list equality. Verified
+  green: `make lint-python`, `make typecheck-python`,
+  `make test-release-publication` (300 passed), `make test-workflow-contracts`
+  (1320 passed, 3 skipped), and `make check-fmt`.
+- [x] (2026-10-19) Repaired four lint families at source while wiring the
+  producer, none of them by suppression. Ruff's
+  `typing-only-standard-library-import` moved `pathlib` under `TYPE_CHECKING`;
+  `docstring-missing-exception` and `docstring-extraneous-exception` required
+  the `Raises` blocks to name only what the function body raises itself, with
+  propagated helpers documented in `Notes`; `escape-sequence-in-docstring` was
+  cleared by building the doctest's TOML with `chr(10).join` rather than a
+  doubled backslash, because an `r"""` prefix would have changed the example's
+  own escapes. The df12 house lints required a failure message on the last bare
+  `assert`, and `typing.Iterable` gave way to `collections.abc.Iterable`.
+
 ## Surprises & discoveries
 
+- Observation: **a linter can demand two mutually exclusive fixes, so the
+  finding to act on is the one that names a real defect.** Ruff reported both
+  `escape-sequence-in-docstring` ("use an `r"""` prefix") and `line-too-long`
+  on the same doctest. Adding `r` would have kept `\\n` as two literal
+  characters and broken the example's TOML; the actual defect was the doubled
+  backslash, and rewriting the fixture through `chr(10).join` cleared both
+  findings without a suppression. Take the finding that describes the code's
+  fault, not the one that offers the cheapest edit.
+- Observation: **`docstring-missing-exception` and
+  `docstring-extraneous-exception` divide on "raised here" versus "raised by a
+  helper".** Documenting a propagated helper exception in `Raises` produced
+  `extraneous-exception`, because the function body never names it. The house
+  style is `Raises` for what the body raises and `Notes` for what propagates;
+  the two findings are a style guide expressed as two checks, not a
+  contradiction.
 - Observation: **a failing Make prerequisite can hide a downstream gate
   entirely, so a gate's silence is not a gate's pass.** `make markdownlint`
   depends on `spelling` (`Makefile:448`), and when `spelling` exited 2 the
@@ -1906,6 +2030,105 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   the staging config, and the binstall metadata; none of them observes the
   published asset list, which is where the loss happens.
 
+- Observation: **the uploaded asset names are not the names the action
+  computes, so 86 candidates collapse onto 29 bare basenames.** This is a
+  second, independent fault stacked under the `.gz` one, found on 2026-10-19 by
+  reconstructing the beta4 `dist/` from its six workflow artefacts and
+  replaying the pinned uploader over it. Evidence: the reconstruction holds
+  **86** candidate paths *excluding* the six archives and **92** *including*
+  them, which reproduces the run's own `Successfully processed 86 asset(s)`
+  (`0_release.txt`, `2026-09-27T00:17:33.3478165Z`) and confirms the `.gz`
+  exclusion independently. Those 86 paths yield 86 *distinct* values from
+  `_resolve_asset_name`, and **zero** collisions, so `_register_asset` never
+  fires — yet their 86 computed names collapse onto only **29** distinct bare
+  basenames, which is exactly the number `gh release view` reports. The
+  mechanism is in `gh` itself: at `v2.97.0`, `pkg/cmd/release/shared/upload.go`
+  splits `path#label` at the first `#`, uses the left side as the file to read
+  and `Name: fi.Name()` — the source file's basename — as the asset name,
+  carrying the right side as a display `Label` only. So `_resolve_asset_name`'s
+  `linux-amd64__netsuke_linux_x86_64/netsuke` descriptor uploads as `netsuke`.
+  With `clobber` defaulting to `"true"`, the last source in `sorted()` path
+  order wins each name. Impact: the damage is not limited to the missing
+  archives, and it is worse than a missing asset because it is silent. The
+  published `netsuke` at beta4 is not the Linux binary but
+  `netsuke_windows_aarch64/.../completions/bash/netsuke`, and the published
+  `netsuke.exe` (`7f8606b6682ddfcd…`) is the **aarch64** build rather than the
+  distinct amd64 bytes (`b6f4cfda6e341e5c…`) staged under `windows-x86_64`.
+  `netsuke.sha256` records `0b4da8d4…`, the digest of the *published* file, so
+  the sidecar verifies and the release is internally consistent while shipping
+  the wrong bytes — exactly the failure a digest-only check cannot see, and the
+  one INV-1 exists to prevent. The archive sidecars (`a852c3a5…` for the x86_64
+  Linux target) do publish correctly and point at archives that return **404**.
+  Two consequences for this plan: the statement corrected above, that the
+  action "namespaces any file not already at the root", is false, and the
+  declared-name producer must mirror `_is_candidate` **and** the basename
+  semantics — modelling `_resolve_asset_name` would reproduce the defect in the
+  oracle. The uploader is byte-identical at both pins (`diff` of
+  `a5765019912a8ab6882b12db049c7cde635f3a85` and
+  `0606ca899ce2995a0c4bc78e660e80832e6e8855` printed nothing), so the dry-run
+  lane shares the defect.
+
+  A **third** renaming happens after that, inside GitHub rather than in the
+  uploader: asset filenames containing special or non-alphanumeric characters,
+  and leading or trailing periods, are rewritten by GitHub itself. The staged
+  `netsuke-0.1.0~beta4-1.x86_64.rpm` (digest
+  `4a94f0be3cafb8a0621514b7c046a41a8eb959ed3d50be73bbf5a8ad34501d90`) publishes
+  as `netsuke-0.1.0.beta4-1.x86_64.rpm` — the tilde becomes a dot, the bytes do
+  not change. The same substitution applies to all four RPM/DEB assets:
+  `netsuke_0.1.0~beta4-1_amd64.deb` (`1a5e283f…`) publishes as
+  `netsuke_0.1.0.beta4-1_amd64.deb`, and the aarch64/arm64 pair (`c68ff1fe…`,
+  `17a4d115…`) likewise; each published digest equals its staged digest. The
+  payload keeps the tilde (`Version: 0.1.0~beta4-1` in the extracted `.deb`
+  control file), so only the asset name is transformed, and the MSI and PKG
+  names contain no such character and pass through unchanged. Consequence:
+  staging directly into `dist/` does not make staged and published names agree,
+  so the declared-name producer must model this normalization as a third
+  transformation on top of `_is_candidate` and `fi.Name()`. An oracle that
+  compared staged names to published names would report a `MissingAssetError`
+  for each RPM/DEB beside an `UnexpectedAssetError` for its published twin — a
+  false alarm on a correct release. The `[package.metadata.binstall]` `pkg-url`
+  template is unaffected, because the archive names it interpolates contain no
+  character GitHub rewrites. Date/Author: 2026-10-19, implementation agent.
+
+  The replacement is **narrower than the documentation's wording suggests**.
+  GitHub's sentence covers "special characters, non-alphanumeric characters,
+  and leading or trailing periods"; over the beta4 reconstruction the only
+  character outside `[A-Za-z0-9._-]` anywhere in a staged name is the `~` in
+  the four RPM/DEB names, and each of the four published names is exactly its
+  staged basename with `~` mapped to `.`. So the producer's rule is stated as
+  the observed mapping over the staged names this repository produces, not as a
+  general `gh` sanitizer: a broader "strip everything unusual" rule would
+  invent names for characters that never occur, and an oracle that predicts a
+  name no upload produces is as wrong as one that predicts the staged name.
+
+  One more measurement from the same reconstruction, because it constrains what
+  the inventory can honestly verify: **44 distinct normalized basenames carry
+  130 staged files, and 29 distinct names carry all 86 candidates.** Under the
+  uploader's real naming rule the release therefore presents 29 names where the
+  tree holds 130 files, and the collisions are not marginal — `netsuke` has 12
+  sources, `netsuke.sha256` 10, and `netsuke.1` 4. Replaying `clobber: true` in
+  sorted path order gives the published set exactly, and it is the same set
+  `gh release view` reports. LEM-2's exact set equality is therefore
+  satisfiable **only after** the declared-name producer applies this reduction:
+  a declaration built from the staged tree would name 130 assets and be
+  rejected against the 29 GitHub holds. This is the same defect the producer
+  exists to prevent, one layer up, and it is why the producer is a separate
+  module with its own suite rather than a comprehension inside the verifier.
+
+  **That reduction is a defect, not a contract, and modelling it would make the
+  oracle certify the wrong release.** The beta4 release is not merely missing
+  its archives: `netsuke` publishes as 11 132 bytes of bash completion with
+  digest `0b4da8d4…`, `netsuke.exe` as the **aarch64** binary (`7f8606b6…`), and
+  `netsuke.1` as the macOS x86_64 man page — each the last source in sorted
+  path order. So the verifier must not adopt the uploader's basename rule as
+  its declaration; doing so would produce a green check over exactly the
+  release INV-1 exists to fail. The producer therefore declares the names a
+  **correct** upload would publish, and the inventory check's job is to
+  disagree with beta4's 29 names rather than to reproduce them. The separate
+  decision — which staging layout the release should present so that a correct
+  upload is possible at all — is recorded in the Decision log and is a change
+  to the release path, not to the oracle.
+
 - Observation: the docstring examples this plan counts as LEM-1 and LEM-2
   evidence were **inert** when they were first written. The seven collected
   doctest **items** in `release_candidate.py` and `release_semver.py` (four and
@@ -2242,6 +2465,87 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   the fields later is a schema change to a record the plan's own criterion
   compares by exact set equality, so the separation is recorded now rather than
   left as an apparent gap. Date/Author: 2026-10-19, implementation agent.
+
+- Decision: the release publishes a **flat consumer set of twenty names** —
+  the six binstall archives, their six `.sha256` sidecars, and the eight
+  operating-system packages — and the declared-name producer emits exactly that
+  set. Everything else the build stages (per-platform binaries, completions,
+  manual pages, PowerShell help, `LICENSE`) ships **inside** the packages and
+  is not a release asset. Rationale: a GitHub release is a flat namespace and
+  the build produces six distinct `netsuke` binaries, so no staging layout that
+  publishes the binaries separately can be correct without renaming every one
+  of them; the beta4 release is the measurement, with 12 `netsuke` sources
+  collapsing onto a single name. The twenty-name set is the only one whose
+  members are already unique and already consumed by a documented install path
+  (`cargo binstall`, `.deb`, `.rpm`, `.pkg`, `.msi`), so it is the smallest
+  declaration that is both correct and checkable.
+
+  The producer's rule, stated as three parts so that no part can drift into a
+  model of the uploader's defect:
+
+  1. Archives and sidecars come from
+     `hoist_binstall_discovery.expected_archive_names`, already the single
+     authority the hoist and the inventory share — not from the staged tree.
+  2. Operating-system packages come from the staged tree's `.deb`, `.rpm`,
+     `.pkg` and `.msi` entries, because three external shared actions own
+     their naming and reimplementing those rules here would be an unverifiable
+     guess. `~` is mapped to `.` in each name, which is the only normalization
+     GitHub performs over a name this repository produces.
+  3. Nothing else is declared. In particular the producer never applies
+     `_is_candidate`'s basename rule, because that rule is the defect: it is
+     what turns a bash completion into `netsuke` and the aarch64 build into
+     `netsuke.exe`.
+
+  Because parts 1 and 2 have different sources, the declaration is not vacuous
+  when a package fails to build: part 1 fixes twelve names from configuration,
+  and part 2 is held to a per-platform format count derived from
+  `.github/release-staging.toml`'s `platform` fields (linux yields `.deb` and
+  `.rpm`, macos `.pkg`, windows `.msi`, two targets each). A missing package
+  therefore shrinks neither half silently.
+
+  Two consequences for the release path follow from the set, not from taste.
+
+  First, `publish-release` can no longer hand `dist/` wholesale to
+  `upload-release-assets`: that action's `_is_candidate` rejects `.tar.gz` at
+  both pins, so the six archives — the only asset `cargo binstall` fetches —
+  are unreachable through it however the tree is arranged, and any selection
+  rule that admits them is the same rule that admits all 86 basenames. The
+  upload step therefore hands `gh release upload` exactly the declared names,
+  one call per name, and the working directory it uploads from must hold them
+  under their **published** spelling. That is what makes the `~` → `.` mapping
+  load-bearing rather than cosmetic: `gh` names an asset from the source file's
+  basename, so an RPM still called `netsuke-0.1.0~beta4-1.x86_64.rpm` on disk
+  publishes as `netsuke-0.1.0.beta4-1.x86_64.rpm` and would disagree with the
+  declaration by one character. The step materializes each name before
+  uploading it. This supersedes the 2026-10-12 statement that `publish-release`
+  keeps "its steps unchanged"; the supersession is forced by the uploader's
+  rule, not by a preference for a different layout, and it is the smallest
+  change that publishes an archive at all.
+
+  Second, the ordering does not move. `publish-release` uploads, then
+  `verify-release-inventory` compares the whole release against the
+  declaration, then `finalize-github-release` un-drafts — and the finalizer
+  continues to **refuse** rather than upload: `finalize_github_release_cli`
+  reports `EXIT_UPLOAD_REQUIRED` when an asset is missing. That corrects the
+  `Idempotence and recovery` sentence "The GitHub finalizer inspects the draft
+  and uploads only missing assets", which the implemented CLI never did and
+  could not do after the verifier it depends on. A re-run that finds an asset
+  missing fails closed at the verifier, which is the honest outcome: the
+  missing asset is a defect in the upload step, and repairing it by having a
+  second job write to the same release is the competing-writer shape LEM-5
+  exists to keep out.
+
+  User-visible consequence: `README.md` and `docs/users-guide.md` currently say
+  SHA-256 sidecars "accompany standalone binaries and staged help and licence
+  files". That sentence describes files this change stops publishing. Stage D
+  corrects it rather than leaving a documented asset that the release no longer
+  carries. Escalated under the `Ambiguity` tolerance on 2026-10-19 (two
+  materially different asset-inventory semantics: publish the consumer set, or
+  namespace the full staged tree) and resolved in favour of the consumer set
+  because the namespaced alternative multiplies the published surface by
+  roughly six and contradicts the plan's own scope tolerance for a release
+  layout the users' guide does not document. Date/Author: 2026-10-19,
+  implementation agent.
 
 ## Outcomes & retrospective
 
