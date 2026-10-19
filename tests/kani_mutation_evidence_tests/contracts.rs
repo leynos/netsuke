@@ -36,6 +36,8 @@ const EXEMPT_HARNESSES: &[(&str, &str)] = &[];
 /// has to apply cleanly below.
 const SUPPLEMENTAL_PROPERTY_PATCHES: &[&str] = &[
     "ir__action_hash_property_tests__equal_actions_hash_equally",
+    "ir__graph__property_tests__cycles__cycles_are_rejected_at_larger_n",
+    "ir__graph__property_tests__duplicates__duplicate_outputs_are_rejected_at_larger_n",
     "ir__cmd_interpolate__property_tests__guard_uses_the_substituted_command",
     "ir__cmd_interpolate__property_tests__scanner_agrees_with_independent_specification",
     "ir__cmd_interpolate__property_tests__substituted_odd_backticks_are_rejected",

@@ -197,7 +197,7 @@ impl RunShape {
             descending_defaults: self.descending_defaults + usize::from(descending_defaults),
             cross_target_deps: self.cross_target_deps + usize::from(cross_target_deps),
             intersections: self.intersections
-                + usize::from(reordered && interned && with_defaults && cross_target_deps),
+                + usize::from(reordered && interned && descending_defaults && cross_target_deps),
         }
     }
 }
@@ -270,8 +270,9 @@ fn the_run_reaches_every_required_class() {
     );
     covered!(
         intersections,
-        "no case reached reordering, interning, defaults, and cross-target \
-         dependencies together, which is the intersection OBL-E2E names"
+        "no case reached reordering, interning, descending defaults, and \
+         cross-target dependencies together, which is the intersection OBL-E2E \
+         names"
     );
 }
 
