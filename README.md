@@ -260,9 +260,10 @@ defaults: [output.txt]
 **What Netsuke quotes.** Only its own path substitutions receive automatic
 shell quoting. POSIX and Bash use `shell-quote` and context-aware encoding;
 PowerShell uses a single-quoted path literal only at unquoted insertion sites.
-That literal is not safe inside an existing PowerShell string, so both recipe
-kinds reject quoted markers. With an existing `input file.txt`, this POSIX
-example passes the input path as one argument, producing `output.txt`:
+That literal is not safe inside an existing PowerShell string, so PowerShell
+`command:` and `script:` recipes reject quoted markers. With an existing
+`input file.txt`, this POSIX example passes the input path as one argument,
+producing `output.txt`:
 
 <!-- tested-example: readme-quoted-path-manifest -->
 

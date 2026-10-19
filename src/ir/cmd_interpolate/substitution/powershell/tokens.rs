@@ -49,12 +49,87 @@ pub(super) fn starts_block_comment(chars: &[char], pos: usize) -> bool {
     chars.get(pos) == Some(&'<') && chars.get(pos + 1) == Some(&'#')
 }
 
-/// Report whether a hash starts a PowerShell comment rather than an argument token.
+/// Report whether a hash certainly starts a PowerShell comment.
 pub(super) fn is_power_shell_comment_boundary(chars: &[char], pos: usize) -> bool {
-    pos == 0
-        || chars
-            .get(pos - 1)
-            .is_some_and(|ch| is_power_shell_token_separator(*ch) || matches!(*ch, '=' | ']'))
+    is_power_shell_token_boundary(chars, pos)
+}
+
+/// Report whether a here-string opener may follow a token or expression boundary.
+pub(super) fn is_power_shell_here_string_boundary(chars: &[char], pos: usize) -> bool {
+    is_power_shell_token_boundary(chars, pos)
+        || pos
+            .checked_sub(1)
+            .and_then(|previous| chars.get(previous))
+            .is_some_and(|ch| matches!(*ch, '=' | ']'))
+}
+
+/// Report whether `#` may begin a comment immediately after an unbraced variable.
+pub(super) fn hash_follows_unbraced_variable(chars: &[char], pos: usize) -> bool {
+    if chars.get(pos) != Some(&'#') || is_power_shell_comment_boundary(chars, pos) {
+        return false;
+    }
+    unescaped_variable_before(chars, pos).is_some()
+}
+
+/// Report whether a mid-token hash may begin a comment in expression syntax.
+pub(super) fn hash_follows_ambiguous_expression_boundary(chars: &[char], pos: usize) -> bool {
+    if chars.get(pos) != Some(&'#') || is_power_shell_comment_boundary(chars, pos) {
+        return false;
+    }
+    let follows_assignment_or_bracket = pos
+        .checked_sub(1)
+        .and_then(|previous| chars.get(previous))
+        .is_some_and(|ch| matches!(*ch, '=' | ']'));
+    follows_assignment_or_bracket
+        || hash_follows_unbraced_variable(chars, pos)
+        || hash_follows_postfix_operator(chars, pos)
+}
+
+/// Report whether `#` follows a postfix increment or decrement of a variable.
+fn hash_follows_postfix_operator(chars: &[char], pos: usize) -> bool {
+    let Some(operator_start) = pos.checked_sub(2) else {
+        return false;
+    };
+    let Some(&operator) = chars.get(operator_start) else {
+        return false;
+    };
+    matches!(operator, '+' | '-')
+        && chars.get(operator_start + 1) == Some(&operator)
+        && unescaped_variable_before(chars, operator_start).is_some()
+}
+
+/// Find an unescaped variable whose name ends immediately before `end`.
+fn unescaped_variable_before(chars: &[char], end: usize) -> Option<usize> {
+    let mut variable_start = end;
+    while variable_start > 0
+        && chars
+            .get(variable_start - 1)
+            .is_some_and(|ch| is_unbraced_variable_name_character(*ch))
+    {
+        variable_start -= 1;
+    }
+    if variable_start == end {
+        return None;
+    }
+    let dollar_pos = variable_start.checked_sub(1)?;
+    (chars.get(dollar_pos) == Some(&'$') && !is_escaped_by_backtick(chars, dollar_pos))
+        .then_some(dollar_pos)
+}
+
+/// Recognize characters that can occur in an unbraced PowerShell variable name.
+fn is_unbraced_variable_name_character(ch: char) -> bool {
+    ch.is_alphanumeric() || matches!(ch, '_' | ':' | '?' | '^')
+}
+
+/// Report whether an odd run of backticks escapes the character at `pos`.
+fn is_escaped_by_backtick(chars: &[char], pos: usize) -> bool {
+    let mut cursor = pos;
+    let mut is_escaped = false;
+    while cursor > 0 && chars.get(cursor - 1) == Some(&'`') {
+        cursor -= 1;
+        is_escaped = !is_escaped;
+    }
+    is_escaped
 }
 
 /// Report whether PowerShell's exact `--%` token starts at `pos`.
@@ -76,9 +151,19 @@ pub(super) fn is_power_shell_token_boundary(chars: &[char], pos: usize) -> bool 
             .is_some_and(|ch| is_power_shell_token_separator(*ch))
 }
 
+/// Match PowerShell whitespace without treating the unlisted U+0085 as one.
+const fn is_power_shell_whitespace(ch: char) -> bool {
+    ch.is_ascii_whitespace()
+        || matches!(
+            ch,
+            '\u{000b}' | '\u{00a0}' | '\u{1680}' | '\u{2000}'
+                ..='\u{200a}' | '\u{2028}' | '\u{2029}' | '\u{202f}' | '\u{205f}' | '\u{3000}'
+        )
+}
+
 /// Report whether a character separates PowerShell command tokens.
 const fn is_power_shell_token_separator(ch: char) -> bool {
-    ch.is_ascii_whitespace()
+    is_power_shell_whitespace(ch)
         || matches!(
             ch,
             '\'' | '"' | '`' | ',' | ';' | '(' | ')' | '{' | '}' | '|' | '&'
@@ -95,13 +180,20 @@ fn is_line_break_after(chars: &[char], pos: usize) -> bool {
 mod tests {
     //! Verify which token boundaries allow a PowerShell comment to start.
 
+    use super::hash_follows_ambiguous_expression_boundary;
     use super::is_power_shell_comment_boundary;
+    use super::is_power_shell_here_string_boundary;
+    use super::starts_stop_parsing_token;
     use rstest::rstest;
 
     #[rstest]
     #[case::after_space(' ', true)]
-    #[case::after_assignment('=', true)]
-    #[case::after_closing_bracket(']', true)]
+    #[case::after_nonbreaking_space('\u{00a0}', true)]
+    #[case::after_ideographic_space('\u{3000}', true)]
+    #[case::after_line_separator('\u{2028}', true)]
+    #[case::after_next_line_control('\u{0085}', false)]
+    #[case::after_assignment('=', false)]
+    #[case::after_closing_bracket(']', false)]
     #[case::after_asterisk('*', false)]
     #[case::after_plus('+', false)]
     #[case::after_redirection('>', false)]
@@ -110,5 +202,39 @@ mod tests {
 
         assert_eq!(is_power_shell_comment_boundary(&source, 1), expected);
         assert!(is_power_shell_comment_boundary(&['#'], 0));
+    }
+
+    #[rstest]
+    #[case::after_assignment('=', true)]
+    #[case::after_closing_bracket(']', true)]
+    #[case::after_space(' ', true)]
+    #[case::after_asterisk('*', false)]
+    fn classify_here_string_boundaries(#[case] preceding: char, #[case] expected: bool) {
+        let source = [preceding, '@', '\''];
+
+        assert_eq!(is_power_shell_here_string_boundary(&source, 1), expected);
+    }
+
+    #[rstest]
+    #[case::after_postfix_increment("$i++#", true)]
+    #[case::after_postfix_decrement("$i--#", true)]
+    #[case::after_assignment("a=#", true)]
+    #[case::after_bracket("a]#", true)]
+    #[case::after_argument_asterisk("foo*#", false)]
+    fn classify_ambiguous_expression_hashes(#[case] source: &str, #[case] expected: bool) {
+        let characters = source.chars().collect::<Vec<_>>();
+        let hash_position = characters.len() - 1;
+
+        assert_eq!(
+            hash_follows_ambiguous_expression_boundary(&characters, hash_position),
+            expected
+        );
+    }
+
+    #[test]
+    fn recognize_stop_parsing_token_after_unicode_whitespace() {
+        let characters = "\u{00a0}--%\u{3000}".chars().collect::<Vec<_>>();
+
+        assert!(starts_stop_parsing_token(&characters, 1));
     }
 }

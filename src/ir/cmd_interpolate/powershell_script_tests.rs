@@ -52,6 +52,9 @@ fn script_bindings() -> CommandBindings {
 #[case::typographic_quote_before_pipe_in_stop_parsing_region(format!(
     "cmd /c --% echo “ | Write-Output {OUTS_TOKEN}"
 ))]
+#[case::typographic_here_string_terminator(format!(
+    "@'\n’@ + \"\n'@\nWrite-Output {INS_TOKEN}\n\""
+))]
 fn power_shell_scripts_reject_protected_markers(#[case] template: String) {
     let result = interpolate_script_with_bindings(&template, &script_bindings());
     let error = result.expect_err("PowerShell scripts must reject protected markers");
@@ -70,6 +73,9 @@ fn power_shell_scripts_reject_protected_markers(#[case] template: String) {
 #[case::comment_quote(format!("# '\nWrite-Output '{INS_TOKEN}'"))]
 #[case::comment_after_assignment_input(format!("$x=#'\nWrite-Output '{INS_TOKEN}'"))]
 #[case::comment_after_assignment_output(format!("$x=#'\nWrite-Output '{OUTS_TOKEN}'"))]
+#[case::comment_after_variable_input(format!("$value#'\nWrite-Output '{INS_TOKEN}'"))]
+#[case::comment_after_variable_output(format!("$value#'\nSet-Content output '{OUTS_TOKEN}'"))]
+#[case::comment_after_postfix_increment(format!("$i++#'\nWrite-Output '{OUTS_TOKEN}'"))]
 #[case::comment_after_assignment_stop_parsing_token(format!(
     "$x=# --% raw comment text\nWrite-Output {OUTS_TOKEN}"
 ))]
@@ -294,6 +300,18 @@ fn power_shell_scripts_preserve_hash_after_argument_asterisk() {
         actual,
         "Write-Output foo*#bar \"quoted\"; Write-Output 'output file.txt'"
     );
+}
+
+/// Preserve hashes after assignment and bracket text in argument tokens.
+#[rstest]
+#[case::assignment("a=#b")]
+#[case::closing_bracket("a]#b")]
+fn power_shell_scripts_preserve_expression_hashes_inside_argument_tokens(#[case] argument: &str) {
+    let template = format!("Write-Output {argument} {OUTS_TOKEN}");
+    let actual = interpolate_script_with_bindings(&template, &script_bindings())
+        .expect("hashes after assignment and bracket text remain argument content");
+
+    assert_eq!(actual, format!("Write-Output {argument} 'output file.txt'"));
 }
 
 /// Ignore block-comment delimiters that occur inside a single-line comment.

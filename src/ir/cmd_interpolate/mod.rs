@@ -357,3 +357,6 @@ mod power_shell_tests;
 
 #[cfg(test)]
 mod powershell_script_tests;
+
+#[cfg(test)]
+mod lexical_boundary_tests;

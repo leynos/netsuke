@@ -3046,8 +3046,8 @@ unquoted `--%` until a newline or pipeline; a semicolon does not end that
 region. Pipeline detection models ASCII double quotes only; a single quote,
 backtick, or typographic quote in the raw region makes later markers fail
 closed. The private `PowerShellLexicalState` in
-`src/ir/cmd_interpolate/substitution/powershell/lexical.rs` tracks here-string
-bodies and typographic-quote fail-closed state, while
+`src/ir/cmd_interpolate/substitution/powershell/lexical/mod.rs` tracks
+here-string bodies and typographic-quote fail-closed state, while
 `PowerShellStopParsingState` tracks raw native-command arguments. These helpers
 are not a general PowerShell parser or a shared shell API. Longer identifiers
 such as `$input` and non-placeholder text inside backticks remain unchanged. In

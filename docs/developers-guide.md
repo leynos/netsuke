@@ -5737,13 +5737,14 @@ heredoc delimiters are expanded. It queues declarations FIFO, including quoted
 delimiters and `<<-` tab-stripping delimiters, so their text cannot change the
 surrounding quote context. This is a command-interpolation helper, not a
 general shell parser, and is not intended for reuse outside that boundary. The
-`src/ir/cmd_interpolate/substitution/powershell/` module groups three focused
-PowerShell helpers: `lexical.rs` tracks quotes, here-strings, and fail-closed
-comment state; `stop_parsing.rs` tracks raw native-command arguments; and
-`tokens.rs` recognizes the token boundaries and syntax used by those scanners.
-They share a shell-specific boundary but keep distinct state responsibilities.
-`PowerShellSourceCharacter` groups an offset with its source character only
-within the PowerShell scanner; it is not a shared shell abstraction. The sibling
+`src/ir/cmd_interpolate/substitution/powershell/` module groups focused
+PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
+`lexical/comments.rs` tracks fail-closed comment state, `stop_parsing.rs`
+tracks raw native-command arguments, and `tokens.rs` recognizes the token
+boundaries and syntax used by those scanners. They share a shell-specific
+boundary but keep distinct state responsibilities. `PowerShellSourceCharacter`
+groups an offset with its source character only within the PowerShell scanner;
+it is not a shared shell abstraction. The sibling
 `src/ir/cmd_interpolate/command_substitution.rs` owns the local quote and
 parenthesis state needed to keep protected `$()` bodies isolated.
 

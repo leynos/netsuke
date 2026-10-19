@@ -1,11 +1,14 @@
 //! Track PowerShell lexical state that can make marker substitution unsafe.
 
+mod comments;
+
 use super::super::super::{IrGenError, QuoteContext, find_substitution, invalid_command_error};
 use super::super::{MarkerProtection, SubstitutionTraversal};
 use super::tokens::{
-    comment_character_changes_scanner_state, here_string_opener, is_power_shell_comment_boundary,
-    is_typographic_quote, starts_block_comment, starts_stop_parsing_token,
+    here_string_opener, is_power_shell_here_string_boundary, is_typographic_quote,
+    starts_stop_parsing_token,
 };
+use crate::shell_word::{is_power_shell_double_quote, is_power_shell_single_quote};
 
 /// Group a PowerShell source offset with the character being traversed.
 ///
@@ -19,6 +22,16 @@ pub(in crate::ir::cmd_interpolate::substitution) struct PowerShellSourceCharacte
     pub(in crate::ir::cmd_interpolate::substitution) value: char,
 }
 
+/// Track the comment mode that affects PowerShell marker scanning.
+enum PowerShellCommentState {
+    /// No line comment can change the scanner state.
+    None,
+    /// A comment began at a confirmed token boundary.
+    Unquoted,
+    /// A mid-token hash may be interpreted as a comment by PowerShell.
+    Ambiguous,
+}
+
 /// Track PowerShell quotes, here-strings, comments, and native-command regions.
 pub(in crate::ir::cmd_interpolate::substitution) struct PowerShellLexicalState {
     /// Retain the opener quote until its matching closing marker.
@@ -26,7 +39,7 @@ pub(in crate::ir::cmd_interpolate::substitution) struct PowerShellLexicalState {
     /// Fail closed after a typographic quote whose pairing is not modelled.
     has_typographic_quote: bool,
     /// Track comments so scanner-sensitive contents can fail closed.
-    in_unquoted_comment: bool,
+    comment_state: PowerShellCommentState,
     /// Fail closed after PowerShell syntax the partial scanner does not model.
     has_unmodelled_syntax: bool,
 }
@@ -49,7 +62,7 @@ impl PowerShellLexicalState {
         Self {
             here_string_quote: None,
             has_typographic_quote: false,
-            in_unquoted_comment: false,
+            comment_state: PowerShellCommentState::None,
             has_unmodelled_syntax: false,
         }
     }
@@ -64,33 +77,9 @@ impl PowerShellLexicalState {
         self.has_typographic_quote
     }
 
-    /// Begin tracking a line comment at a PowerShell comment boundary.
-    pub(in crate::ir::cmd_interpolate::substitution) const fn begin_unquoted_comment(&mut self) {
-        self.in_unquoted_comment = true;
-    }
-
     /// Fail closed after syntax the partial scanner cannot safely parse.
     pub(in crate::ir::cmd_interpolate::substitution) const fn note_unmodelled_syntax(&mut self) {
         self.has_unmodelled_syntax = true;
-    }
-
-    /// Report whether the current character belongs to an unquoted comment.
-    pub(in crate::ir::cmd_interpolate::substitution) const fn is_in_unquoted_comment(
-        &self,
-    ) -> bool {
-        self.in_unquoted_comment
-    }
-
-    /// Track syntax in a comment that could desynchronize the partial scanner.
-    pub(in crate::ir::cmd_interpolate::substitution) const fn note_unquoted_comment_character(
-        &mut self,
-        changes_scanner_state: bool,
-        is_line_break: bool,
-    ) {
-        self.has_unmodelled_syntax |= changes_scanner_state;
-        if is_line_break {
-            self.in_unquoted_comment = false;
-        }
     }
 
     /// Report whether unmodelled syntax requires conservative marker rejection.
@@ -111,6 +100,9 @@ impl PowerShellLexicalState {
         if is_here_string_terminator(chars, pos, quote) {
             self.here_string_quote = None;
             return HereStringCharacter::Closed(quote);
+        }
+        if is_typographic_here_string_terminator(chars, pos, quote) {
+            self.note_unmodelled_syntax();
         }
         if has_marker {
             return HereStringCharacter::Placeholder;
@@ -152,15 +144,20 @@ impl SubstitutionTraversal<'_, '_> {
         if self.power_shell_lexical.is_in_unquoted_comment() {
             return self.append_unquoted_comment_character(character);
         }
+        if self.power_shell_lexical.is_in_ambiguous_comment() {
+            self.note_ambiguous_comment_character(character);
+        }
         self.note_unparsed_block_comment_opener(character);
         if let Some(next) = self.open_here_string(character) {
             return Ok(next);
         }
         self.power_shell_lexical.note_character(ch);
-        // Preserve hashes inside argument tokens while recognizing comments
-        // at input start, after token separators, `=`, or `]`.
+        // Preserve hashes inside argument tokens while distinguishing
+        // confirmed comment boundaries from ambiguous expression syntax.
         if self.is_unquoted_comment_start(character) {
             self.power_shell_lexical.begin_unquoted_comment();
+        } else if self.is_ambiguous_unquoted_comment_start(character) {
+            self.power_shell_lexical.begin_ambiguous_comment();
         }
         if let Some(next) = self.append_power_shell_escaped_character(character)? {
             return Ok(next);
@@ -169,13 +166,6 @@ impl SubstitutionTraversal<'_, '_> {
             return Ok(pos + 2);
         }
         self.append_contextual_character(pos, ch, Self::power_shell_marker_protection)
-    }
-
-    /// Report whether an unquoted hash begins a PowerShell comment token.
-    fn is_unquoted_comment_start(&self, character: PowerShellSourceCharacter) -> bool {
-        character.value == '#'
-            && self.matches_unquoted_quote_context()
-            && is_power_shell_comment_boundary(self.chars, character.position)
     }
 
     /// Preserve or reject a character in an active PowerShell here-string.
@@ -205,37 +195,6 @@ impl SubstitutionTraversal<'_, '_> {
         }
     }
 
-    /// Track ambiguous syntax and preserve a PowerShell comment character.
-    fn append_unquoted_comment_character(
-        &mut self,
-        character: PowerShellSourceCharacter,
-    ) -> Result<usize, IrGenError> {
-        let changes_scanner_state = comment_character_changes_scanner_state(
-            self.chars,
-            character.position,
-            character.value,
-            self.is_in_command_substitution(),
-        );
-        self.power_shell_lexical.note_unquoted_comment_character(
-            changes_scanner_state,
-            matches!(character.value, '\r' | '\n'),
-        );
-        self.append_marker_for_context(
-            character.position,
-            character.value,
-            Self::power_shell_marker_protection(self),
-        )
-    }
-
-    /// Remember a block comment that the partial scanner cannot parse safely.
-    fn note_unparsed_block_comment_opener(&mut self, character: PowerShellSourceCharacter) {
-        if self.matches_unquoted_quote_context()
-            && starts_block_comment(self.chars, character.position)
-        {
-            self.power_shell_lexical.note_unmodelled_syntax();
-        }
-    }
-
     /// Open a here-string only at a safe unquoted PowerShell site.
     fn open_here_string(&mut self, character: PowerShellSourceCharacter) -> Option<usize> {
         self.note_unmodelled_power_shell_syntax(character);
@@ -252,6 +211,12 @@ impl SubstitutionTraversal<'_, '_> {
         Some(character.position + 2)
     }
 
+    /// Identify a here-string opener embedded in a PowerShell token.
+    fn is_mid_token_here_string_opener(&self, is_unquoted_site: bool, position: usize) -> bool {
+        is_unquoted_site
+            && here_string_opener(self.chars, position).is_some()
+            && !is_power_shell_here_string_boundary(self.chars, position)
+    }
     /// Fail closed when syntax can desynchronize the partial PowerShell scanner.
     fn note_unmodelled_power_shell_syntax(&mut self, character: PowerShellSourceCharacter) {
         let position = character.position;
@@ -327,4 +292,18 @@ impl SubstitutionTraversal<'_, '_> {
 fn is_here_string_terminator(chars: &[char], pos: usize, quote: char) -> bool {
     let is_line_start = pos == 0 || chars.get(pos - 1) == Some(&'\n');
     is_line_start && chars.get(pos) == Some(&quote) && chars.get(pos + 1) == Some(&'@')
+}
+
+/// Report whether a typographic quote from the opener's family may close the body.
+fn is_typographic_here_string_terminator(chars: &[char], pos: usize, quote: char) -> bool {
+    let is_line_start = pos == 0 || chars.get(pos - 1) == Some(&'\n');
+    let Some(&character) = chars.get(pos) else {
+        return false;
+    };
+    let is_same_quote_family = if quote == '\'' {
+        is_power_shell_single_quote(character)
+    } else {
+        is_power_shell_double_quote(character)
+    };
+    is_line_start && character != quote && is_same_quote_family && chars.get(pos + 1) == Some(&'@')
 }
