@@ -2170,6 +2170,25 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   invariant to a changing one and make a failure ambiguous between them.
   Date/Author: 2026-10-19, implementation agent.
 
+- Decision: name the packaging composite action `package-crate/`, matching its
+  job, and give `consumer-smoke` its own action under that name. Rationale:
+  Stage C's bullet list and its numbered job list disagree — the bullets name
+  `crate-package/` and `release-candidate/` against jobs called
+  `package-crate`, and no action is named at all for the fifth job — while §601
+  and the 2026-10-15 Decision entry both require every job's name to match the
+  action it calls and record a rename performed solely to restore that parity.
+  Two of those three statements agree, and the third is a list written before
+  the jobs were named; parity is therefore the settled reading.
+  `release-candidate/` survives as the name of the *script* seam
+  (`scripts/release_candidate_cli.py`), which is a different artefact with a
+  different naming convention, so nothing is lost by the action being called
+  `package-crate`. The graph contract derives the action path from the job name
+  rather than tabulating it, so the convention is enforced rather than
+  documented. `consumer-smoke` is not a separate action: its body is a
+  download-verify-extract-run sequence with no policy module to call, so it
+  lives in `.github/actions/consumer-smoke/`. Date/Author: 2026-10-19,
+  implementation agent.
+
 ## Outcomes & retrospective
 
 Not yet applicable. To be completed at EP-M6, at which point every discovery
