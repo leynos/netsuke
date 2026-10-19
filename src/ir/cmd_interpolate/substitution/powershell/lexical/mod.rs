@@ -159,6 +159,7 @@ impl SubstitutionTraversal<'_, '_> {
             self.note_ambiguous_comment_character(character);
         }
         self.note_unparsed_block_comment_opener(character);
+        self.note_unmodelled_power_shell_syntax(character);
         Ok(self.open_here_string(character))
     }
 
@@ -190,7 +191,6 @@ impl SubstitutionTraversal<'_, '_> {
 
     /// Open a here-string only at a safe unquoted PowerShell site.
     fn open_here_string(&mut self, character: PowerShellSourceCharacter<'_>) -> Option<usize> {
-        self.note_unmodelled_power_shell_syntax(character);
         let is_unquoted_site = self.matches_unquoted_quote_context()
             && !self.in_backticks
             && !self.is_in_command_substitution();

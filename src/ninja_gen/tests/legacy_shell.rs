@@ -285,7 +285,7 @@ fn power_shell_encoded_script_keeps_path_syntax_inside_one_literal() -> Result<(
         "the decoded EncodedCommand should keep the semicolon path in one quoted literal"
     );
     ensure!(
-        !rendered.contains("New-Item pwned"),
+        !rendered.contains("Copy-Item"),
         "Ninja must carry the script only in the encoded PowerShell payload"
     );
     Ok(())

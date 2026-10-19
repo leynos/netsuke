@@ -132,7 +132,10 @@ impl<'source> PowerShellSourceCharacter<'source> {
             && self.unescaped_variable_before().is_some()
     }
 
-    /// Report whether a hash follows a postfix increment or decrement.
+    /// Mark every hash after `++` or `--` as ambiguous.
+    ///
+    /// PowerShell postfix operands include indexed and member expressions, so
+    /// recognizing only bare variables would leave comment quotes untracked.
     fn hash_follows_postfix_operator(self) -> bool {
         let Some(second_operator_character) = self.previous() else {
             return false;
@@ -141,11 +144,7 @@ impl<'source> PowerShellSourceCharacter<'source> {
             return false;
         };
         let operator = first_operator_character.value();
-        matches!(operator, '+' | '-')
-            && second_operator_character.value() == operator
-            && first_operator_character
-                .unescaped_variable_before()
-                .is_some()
+        matches!(operator, '+' | '-') && second_operator_character.value() == operator
     }
 
     /// Find the unescaped variable whose name ends immediately before here.
@@ -289,6 +288,10 @@ mod tests {
     #[rstest]
     #[case::after_postfix_increment(TokenScenario { source: "$i++#", position: 4, expected: true })]
     #[case::after_postfix_decrement(TokenScenario { source: "$i--#", position: 4, expected: true })]
+    #[case::after_member_postfix_increment(TokenScenario { source: "$obj.Value++#", position: 12, expected: true })]
+    #[case::after_member_postfix_decrement(TokenScenario { source: "$obj.Value--#", position: 12, expected: true })]
+    #[case::after_indexed_postfix_increment(TokenScenario { source: "$arr[0]++#", position: 9, expected: true })]
+    #[case::after_indexed_postfix_decrement(TokenScenario { source: "$obj.Items[0]--#", position: 15, expected: true })]
     #[case::after_assignment(TokenScenario { source: "a=#", position: 2, expected: true })]
     #[case::after_bracket(TokenScenario { source: "a]#", position: 2, expected: true })]
     #[case::after_argument_asterisk(TokenScenario { source: "foo*#", position: 4, expected: false })]

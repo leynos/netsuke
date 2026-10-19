@@ -77,6 +77,12 @@ fn power_shell_rejects_markers_without_a_context_safe_encoder(#[case] template: 
 #[case::postfix_operator_comment(
     command_rejection_case!(format!("$i++#'\nWrite-Output '{OUTS_TOKEN}'"), PowerShellCommandPathBindings::OutputOnly)
 )]
+#[case::postfix_member_expression_comment(
+    command_rejection_case!(format!("$obj.Value++#'\nWrite-Output '{OUTS_TOKEN}'"), PowerShellCommandPathBindings::OutputOnly)
+)]
+#[case::postfix_indexed_expression_comment(
+    command_rejection_case!(format!("$arr[0]++#'\nWrite-Output '{OUTS_TOKEN}'"), PowerShellCommandPathBindings::OutputOnly)
+)]
 #[case::stop_parsing_token(
     command_rejection_case!(format!("cmd /c --% type {INS_TOKEN}"), PowerShellCommandPathBindings::HostileInputOnly)
 )]
@@ -117,11 +123,12 @@ fn power_shell_commands_preserve_hash_after_argument_asterisk() {
 #[rstest]
 #[case::assignment("a=#b")]
 #[case::closing_bracket("a]#b")]
+#[case::postfix_operator("prefix++#suffix")]
 fn power_shell_commands_preserve_hashes_inside_argument_tokens(#[case] argument: &str) {
     let template = format!("Write-Output {argument} {OUTS_TOKEN}");
     let bindings = CommandBindings::new(&[], &[Utf8PathBuf::from("out")], RecipeShell::PowerShell);
     let actual = interpolate_command_with_bindings(&template, &bindings)
-        .expect("hashes after assignment and bracket text remain argument content");
+        .expect("argument punctuation does not turn its hash into a comment");
 
     assert_eq!(actual, format!("Write-Output {argument} 'out'"));
 }

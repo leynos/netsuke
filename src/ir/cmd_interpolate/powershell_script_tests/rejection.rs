@@ -56,6 +56,18 @@ fn power_shell_scripts_reject_protected_markers(#[case] scenario: ScriptScenario
 #[case::comment_after_variable_input(power_shell_rejection_case!(format!("$value#'\nWrite-Output '{INS_TOKEN}'")))]
 #[case::comment_after_variable_output(power_shell_rejection_case!(format!("$value#'\nSet-Content output '{OUTS_TOKEN}'")))]
 #[case::comment_after_postfix_increment(power_shell_rejection_case!(format!("$i++#'\nWrite-Output '{OUTS_TOKEN}'")))]
+#[case::comment_after_member_postfix_increment(power_shell_rejection_case!(format!(
+    "$obj.Value++#'\nWrite-Output '{INS_TOKEN}'"
+)))]
+#[case::comment_after_member_postfix_decrement(power_shell_rejection_case!(format!(
+    "$obj.Value--#'\nWrite-Output '{OUTS_TOKEN}'"
+)))]
+#[case::comment_after_indexed_postfix_increment(power_shell_rejection_case!(format!(
+    "$arr[0]++#'\nWrite-Output '{INS_TOKEN}'"
+)))]
+#[case::comment_after_member_indexed_postfix_decrement(power_shell_rejection_case!(format!(
+    "$obj.Items[0]--#'\nWrite-Output '{OUTS_TOKEN}'"
+)))]
 #[case::comment_after_assignment_stop_parsing_token(power_shell_rejection_case!(format!(
     "$x=# --% raw comment text\nWrite-Output {OUTS_TOKEN}"
 )))]
