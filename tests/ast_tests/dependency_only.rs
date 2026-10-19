@@ -1,6 +1,7 @@
 //! Tests for manifests whose actions or targets only declare dependencies.
 
 use anyhow::{Context, Result, ensure};
+use netsuke::localization::{self, keys};
 use netsuke::{
     ast::{CommandIsolation, NetsukeManifest, Recipe, StringOrList},
     ir::BuildGraph,
@@ -92,8 +93,9 @@ fn command_isolation_without_a_recipe_is_rejected() -> Result<()> {
     "#;
     let error = parse_manifest(yaml).expect_err("mode-only entries are not dependency-only");
     let chain = display_error_chain(error.as_ref());
+    let expected = localization::message(keys::MANIFEST_COMMAND_ISOLATION_RECIPE).to_string();
     ensure!(
-        chain.contains("command_isolation") && chain.contains("command-list recipe"),
+        chain.contains(&expected),
         "unexpected mode-only diagnostic: {chain}"
     );
     Ok(())

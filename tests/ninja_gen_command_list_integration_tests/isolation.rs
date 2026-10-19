@@ -79,13 +79,22 @@ fn isolated_mode_keeps_other_command_list_rejections(
         matches!(
             (actual, &expected),
             (
-                NinjaGenError::UnsupportedCommandListExec { .. },
+                NinjaGenError::UnsupportedCommandListExec {
+                    action_index: 1,
+                    entry_index: 1,
+                },
                 NinjaGenError::UnsupportedCommandListExec { .. }
             ) | (
-                NinjaGenError::UnanalyzableCommandListEval { .. },
+                NinjaGenError::UnanalyzableCommandListEval {
+                    action_index: 1,
+                    entry_index: 1,
+                },
                 NinjaGenError::UnanalyzableCommandListEval { .. }
             ) | (
-                NinjaGenError::NinjaControlCharacter { .. },
+                NinjaGenError::NinjaControlCharacter {
+                    action_index: 1,
+                    entry_index: 1,
+                },
                 NinjaGenError::NinjaControlCharacter { .. }
             )
         ),
