@@ -143,8 +143,8 @@ and Bash scripts.
 
 **A conservative check, not promised.** A `command:` recipe whose substituted
 text contains an odd total number of backtick characters is *currently* rejected
-(`has_unmatched_backticks`, `src/ir/cmd_interpolate/mod.rs:172-174`, reached
-from `is_valid_command_for_shell` at `:226-231`). The check is a whole-string
+(`has_unmatched_backticks` in `src/ir/cmd_interpolate/mod.rs`, reached from
+`is_valid_command_for_shell` in the same module). The check is a whole-string
 parity count, not a quoting-aware model: a backtick inside single quotes counts
 toward the total, and two balanced but unrelated backticks do not. It may
 therefore reject valid shell text. A future release may accept more, and such
@@ -153,22 +153,21 @@ widening is **not** treated as a breaking change.
 **Not a guarantee at all.** Netsuke leaves author-written backticks untouched.
 On POSIX routes, active backticks can trigger command substitution; backticks
 inside single quotes remain literal. Path substitution separately protects
-Netsuke-owned values: `quote_double_quoted_path`
-(`src/ir/cmd_interpolate/mod.rs:154-163`) backslash-escapes a backtick that
-falls inside a *Netsuke-substituted path* landing in a double-quoted context.
+Netsuke-owned values: `quote_double_quoted_path` in
+`src/ir/cmd_interpolate/mod.rs` backslash-escapes a backtick that falls inside
+a *Netsuke-substituted path* landing in a double-quoted context.
 
 **Route and recipe-kind scope.** PowerShell sits outside the backtick half of
 the invariant, because a backtick is its escape character rather than a
 command-substitution delimiter, and outside the parity check entirely:
 `is_valid_command_for_shell` returns `true` unconditionally for
-`RecipeShell::PowerShell` (`src/ir/cmd_interpolate/mod.rs:227-228`). It is
-**inside** the `$( … )` half. The PowerShell traversal treats a marker inside a
-command substitution, or inside any quoted region, as protected and rejects it
-(`power_shell_marker_protection` in
+`RecipeShell::PowerShell`. It is **inside** the `$( … )` half. The PowerShell
+traversal treats a marker inside a command substitution, or inside any quoted
+region, as protected and rejects it (`power_shell_marker_protection` in
 `src/ir/cmd_interpolate/substitution/powershell/lexical/mod.rs`) — the same
 outcome as POSIX, by a different rule, pinned by
-`power_shell_rejects_markers_without_a_context_safe_encoder`
-(`src/ir/cmd_interpolate/power_shell_tests.rs:9-22`). The parity check is also
+`power_shell_rejects_markers_without_a_context_safe_encoder` in
+`src/ir/cmd_interpolate/power_shell_tests.rs`. The parity check is also
 `command:`-only: a `script:` recipe gets the marker invariant but no parity
 check, because scripts may legitimately contain heredocs and other text that
 `shlex` cannot model.
@@ -176,9 +175,9 @@ check, because scripts may legitimately contain heredocs and other text that
 ### The `shlex` guard is part of the acceptance contract, not a stability commitment
 
 `is_valid_command_for_shell` calls `shlex::split(command).is_some()` on the
-fully substituted text (`src/ir/cmd_interpolate/mod.rs:230`). Failure produces
-`IrGenError::InvalidCommand`, surfaced through the Fluent message
-`ir.invalid_command` (`locales/en-GB/messages.ftl:188`), rendered as
+fully substituted text. Failure produces `IrGenError::InvalidCommand`, surfaced
+through the Fluent message `ir.invalid_command`
+(`locales/en-GB/messages.ftl:188`), rendered as
 `Invalid command interpolation: { $snippet }.`.
 
 It **is** part of the observable acceptance contract: a `command:` recipe on
@@ -327,7 +326,7 @@ published interface.
   `shlex` guard are covered by Proptest properties, not by proof, and are
   described here as property-tested rather than proved.
 - **The domain boundary in this module is not clean.**
-  `invalid_command_error` (`src/ir/cmd_interpolate/mod.rs:215-222`) calls the
+  `invalid_command_error` in `src/ir/cmd_interpolate/mod.rs` calls the
   localization layer and stores a pre-rendered, locale-resolved human string
   inside the domain error. That is presentation resolved within domain policy
   against ambient state. It does not affect the contract above, but this module
@@ -350,13 +349,14 @@ that region's newline or pipeline terminator.
 The PowerShell quoted-context bindings are standalone single-quoted path
 literals. They are not context-safe encoders for insertion inside an existing
 PowerShell string. This is why those sites fail closed instead of receiving a
-context-specific encoding. A marker immediately beside an ASCII single quote on
-either side, or another marker, is also rejected: standalone single-quoted
-literals could merge with neighbouring strings or arguments. PowerShell scripts
-do not have inert comment regions: markers in ordinary line-comment text remain
-eligible for interpolation, while an apostrophe or other scanner-sensitive
-syntax in a comment can cause a later marker to be rejected because the partial
-scanner cannot safely determine the active context.
+context-specific encoding. A marker immediately beside a PowerShell
+single-quote character, including typographic forms, or another marker is also
+rejected: standalone single-quoted literals could merge with neighbouring
+strings or arguments. PowerShell scripts do not have inert comment regions:
+markers in ordinary line-comment text remain eligible for interpolation, while
+an apostrophe or other scanner-sensitive syntax in a comment can cause a later
+marker to be rejected because the partial scanner cannot safely determine the
+active context.
 
 The scanner also fails closed for later markers after a typographic PowerShell
 quote delimiter because it does not model delimiter pairing.

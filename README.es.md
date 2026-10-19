@@ -215,8 +215,9 @@ se reescribe en el texto activo de la receta; consulta la nota siguiente).
     los marcadores de los delimitadores de heredoc sí se expanden. Las recetas
     `command:` y `script:` de PowerShell rechazan marcadores entre comillas
     simples o dobles, en here-strings, en `$()` y justo después de un acento
-    grave. También se rechaza un marcador pegado a una comilla simple ASCII
-    por cualquiera de sus lados o a otro marcador: los literales independientes
+    grave. También se rechaza un marcador pegado a cualquier carácter de comilla
+    simple reconocido por PowerShell, incluidas las formas tipográficas, o a
+    otro marcador: los literales independientes
     entre comillas simples podrían fusionarse con una cadena o un argumento
     contiguos. Los scripts de PowerShell no tratan los comentarios como regiones
     inertes: el texto normal de un comentario permite interpolar marcadores sin

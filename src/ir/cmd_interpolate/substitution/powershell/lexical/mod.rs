@@ -282,8 +282,11 @@ impl SubstitutionTraversal<'_, '_> {
         let touches_single_quote = pos
             .checked_sub(1)
             .and_then(|previous| self.chars.get(previous))
-            == Some(&'\'')
-            || self.chars.get(marker_end) == Some(&'\'');
+            .is_some_and(|&character| is_power_shell_single_quote(character))
+            || self
+                .chars
+                .get(marker_end)
+                .is_some_and(|&character| is_power_shell_single_quote(character));
         touches_single_quote || self.marker_follows_another_marker(pos)
     }
 

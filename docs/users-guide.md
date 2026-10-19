@@ -422,12 +422,13 @@ expansion. Recipe text is protected from Ninja dollar expansion, so write
 ordinary PowerShell dollars rather than `$$`. The rendered `{{ ins }}` and
 `{{ outs }}` paths use literal, single-quoted PowerShell arguments; an
 apostrophe is doubled, so `O'Brien.txt` becomes `'O''Brien.txt'`. PowerShell
-also rejects a marker immediately beside an ASCII single quote on either side,
-or another marker: standalone single-quoted literals could merge with adjacent
-string or argument text. Build and default-target paths containing spaces are
-escaped for Ninja before recipe generation, so `{{ outs }}` can name a
-whitespace-containing output. Quote every other path and argument with
-PowerShell syntax; arbitrary rendered Jinja text is not shell-quoted.
+also rejects a marker immediately beside any PowerShell single-quote character,
+including typographic forms, or another marker: standalone single-quoted
+literals could merge with adjacent string or argument text. Build and
+default-target paths containing spaces are escaped for Ninja before recipe
+generation, so `{{ outs }}` can name a whitespace-containing output. Quote
+every other path and argument with PowerShell syntax; arbitrary rendered Jinja
+text is not shell-quoted.
 
 Recipes that fit within Windows' 32,766-character command-line safety limit use
 the encoded `powershell.exe` invocation described above. Larger scalar
@@ -2159,9 +2160,9 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   A braced variable such as `${env:NAME}` or a here-string opened inside `$()`
   also makes later markers fail closed. PowerShell path bindings use a
   single-quoted literal that is unsafe inside an existing string. Markers
-  touching an ASCII single quote on either side, or another marker, are also
-  rejected because the literals could merge with adjacent string or argument
-  text.
+  touching any PowerShell single-quote character, including typographic forms,
+  or another marker are also rejected because the literals could merge with
+  adjacent string or argument text.
 - Build and default-target paths escape a literal space as a `$` followed by a
   space, Ninja's own path escape. They reject `|` and control characters, which
   Ninja's path grammar cannot represent, and also reject `$` and colon, which

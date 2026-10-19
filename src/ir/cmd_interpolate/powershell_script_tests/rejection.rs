@@ -53,6 +53,7 @@ fn power_shell_scripts_reject_protected_markers(#[case] scenario: ScriptScenario
 #[case::after_single_quoted_input(format!("Write-Output 'prefix'{INS_TOKEN}"))]
 #[case::before_single_quoted_input(format!("Write-Output {INS_TOKEN}'suffix'"))]
 #[case::after_single_quoted_output(format!("Write-Output 'prefix'{OUTS_TOKEN}"))]
+#[case::trailing_typographic_single_quote(format!("Write-Output {INS_TOKEN}’suffix’"))]
 #[case::adjacent_input_then_output(format!("Write-Output {INS_TOKEN}{OUTS_TOKEN}"))]
 #[case::adjacent_output_then_input(format!("Write-Output {OUTS_TOKEN}{INS_TOKEN}"))]
 fn power_shell_scripts_reject_markers_at_literal_boundaries(#[case] template: String) {

@@ -231,8 +231,9 @@ active recipe text; see the note below).
     remain internal tokens instead of becoming paths; markers in heredoc
     delimiters are expanded. Both PowerShell `command:` and `script:` recipes
     reject markers in single-quoted strings, double-quoted strings, here-strings,
-    `$()` and immediately after a backtick. A marker touching an ASCII single
-    quote on either side, or another marker, is also rejected: standalone
+    `$()` and immediately after a backtick. A marker touching any PowerShell
+    single-quote character, including typographic forms, or another marker is
+    also rejected: standalone
     single-quoted literals could merge with adjacent string or argument text.
     PowerShell scripts have no inert comment region: plain line-comment text
     leaves later unquoted markers
