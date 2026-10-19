@@ -231,11 +231,16 @@ Clap-specific validation and help metadata remain an internal CLI concern.
 
 ## Opting into ordered command lists
 
-Existing scalar `command` recipes remain valid, so no migration is required. To
-run a short sequence of commands in declaration order, change a recipe to a
-non-empty YAML list. The entries run in one shell process and stop at the first
-non-zero exit. See [Rules and recipes](users-guide.md#rules-and-recipes) for
-the syntax, shell semantics, and examples.
+Existing scalar `command` recipes remain valid, and command lists remain
+opt-in, ordered and fail-fast. Their `command_isolation` mode defaults to
+`shared`, so entries share one shell and its state. Set
+`command_isolation: isolated` to start each entry from the action's initial
+working directory and environment. POSIX and Bash use a subshell per entry;
+Windows PowerShell uses a child process per entry. Isolated mode has a distinct
+action identity; existing manifests need no migration. See
+[Rules and recipes](users-guide.md#rules-and-recipes) and the
+[Windows legacy recipe contract](users-guide.md#windows-legacy-recipe-contract)
+for the syntax and shell-specific behaviour.
 
 ## Replace script `$in` and `$out` path substitution
 
