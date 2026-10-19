@@ -47,16 +47,28 @@ fn bash_command_value_uses_the_explicit_windows_compatibility_runtime() {
 /// Bind a selected Bash path and apply Windows quoting before Ninja escaping.
 #[test]
 fn bash_command_value_uses_the_preflighted_executable_path() -> anyhow::Result<()> {
-    let executable =
-        BashExecutable::from_absolute_path(Utf8PathBuf::from("/opt/Git Bash λ $/bin/bash.exe"))?;
+    let workspace = tempfile::tempdir()?;
+    let executable_path = Utf8PathBuf::from_path_buf(
+        workspace
+            .path()
+            .join("Git Bash λ $")
+            .join("bin")
+            .join("bash.exe"),
+    )
+    .map_err(|_| anyhow::anyhow!("fixture executable path should be UTF-8"))?;
+    let executable = BashExecutable::from_absolute_path(executable_path)?;
 
     let rendered = RecipeShell::Bash
         .command_value_with_bash(&ShellText::new("echo ready".into()), Some(&executable))?
         .command()
         .to_string();
 
+    let expected = format!(
+        "{} -e -c \"echo ready\"",
+        windows_argument(executable.as_path().as_str()).replace('$', "$$")
+    );
     anyhow::ensure!(
-        rendered == "\"/opt/Git Bash λ $$/bin/bash.exe\" -e -c \"echo ready\"",
+        rendered == expected,
         "unexpected preflighted Bash command: {rendered}"
     );
     Ok(())

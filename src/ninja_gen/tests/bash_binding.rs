@@ -17,16 +17,26 @@ fn generated_bundle_binds_the_preflighted_bash_executable() -> Result<()> {
         "run".into(),
         command_action(StringOrList::String("echo ready".into())),
     );
-    let executable =
-        BashExecutable::from_absolute_path(Utf8PathBuf::from("/opt/Git Bash λ $/bin/bash.exe"))?;
+    let workspace = tempfile::tempdir()?;
+    let executable_path = Utf8PathBuf::from_path_buf(
+        workspace
+            .path()
+            .join("Git Bash λ $")
+            .join("bin")
+            .join("bash.exe"),
+    )
+    .map_err(|_| anyhow::anyhow!("fixture executable path should be UTF-8"))?;
+    let executable = BashExecutable::from_absolute_path(executable_path)?;
 
     let bundle =
         dyndep::generate_bundle_for_shell_with_bash(&graph, RecipeShell::Bash, Some(&executable))?;
 
+    let expected_command = format!(
+        "command = \"{}\" -e -c \"echo ready\"",
+        executable.as_path().as_str().replace('$', "$$")
+    );
     ensure!(
-        bundle
-            .build_file()
-            .contains("command = \"/opt/Git Bash λ $$/bin/bash.exe\" -e -c \"echo ready\""),
+        bundle.build_file().contains(&expected_command),
         "generated command should use the selected Bash executable"
     );
     Ok(())
@@ -54,14 +64,25 @@ fn every_bash_recipe_form_uses_the_preflighted_executable() -> Result<()> {
         script: "echo script".into(),
     };
     graph.actions.insert("script".into(), script);
-    let executable =
-        BashExecutable::from_absolute_path(Utf8PathBuf::from("/opt/Git Bash λ $/bin/bash.exe"))?;
+    let workspace = tempfile::tempdir()?;
+    let executable_path = Utf8PathBuf::from_path_buf(
+        workspace
+            .path()
+            .join("Git Bash λ $")
+            .join("bin")
+            .join("bash.exe"),
+    )
+    .map_err(|_| anyhow::anyhow!("fixture executable path should be UTF-8"))?;
+    let executable = BashExecutable::from_absolute_path(executable_path)?;
 
     let bundle =
         dyndep::generate_bundle_for_shell_with_bash(&graph, RecipeShell::Bash, Some(&executable))?;
-    let binding = "command = \"/opt/Git Bash λ $$/bin/bash.exe\" -e -c ";
+    let binding = format!(
+        "command = \"{}\" -e -c ",
+        executable.as_path().as_str().replace('$', "$$")
+    );
 
-    let binding_count = bundle.build_file().matches(binding).count();
+    let binding_count = bundle.build_file().matches(&binding).count();
     ensure!(
         binding_count == 4,
         "expected four Bash bindings, found {binding_count}"
