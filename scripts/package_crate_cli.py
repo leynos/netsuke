@@ -1,0 +1,235 @@
+"""Package the release crate and record the identity of the bytes produced.
+
+Every later stage compares against this record: the registry exchange refuses
+to publish bytes whose digest disagrees, the inventory verifier checks the
+published ``.crate`` against it, and the consumer smoke re-downloads the same
+archive and expects the same value. Recording the digest here — once, at the
+moment the archive is created — is what makes those three the *same* claim
+rather than three independent recomputations that could drift.
+
+The module stays a thin seam. Packaging is a subprocess, and subprocesses are
+what a workflow step may do; the policy that decides whether an identity is
+publishable lives in :mod:`release_candidate`, and the digest arithmetic lives
+in :mod:`release_digest`. Nothing here reaches the network, so the packaging
+job runs to completion during a dry run.
+"""
+
+import argparse
+import dataclasses
+import json
+import pathlib
+import subprocess  # ruff: ignore[suspicious-subprocess-import] - packaging boundary.
+import sys
+
+import release_candidate
+import release_digest
+
+EXIT_OK = 0
+EXIT_PACKAGING_FAILED = 1
+EXIT_IDENTITY_REJECTED = 2
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class CratePackage:
+    """Record the archive one packaging run produced.
+
+    Parameters
+    ----------
+    identity
+        The candidate the archive was built from.
+    crate
+        Path to the ``.crate`` file.
+    sha256
+        Lowercase hexadecimal digest of the crate's bytes.
+    """
+
+    identity: release_candidate.ReleaseIdentity
+    crate: pathlib.Path
+    sha256: str
+
+    def as_record(self) -> dict[str, object]:
+        """Return the package as a JSON-serializable mapping with sorted keys.
+
+        Returns
+        -------
+        dict
+            The identity record nested under ``identity``, beside the crate's
+            name and digest.
+
+        Examples
+        --------
+        >>> identity = release_candidate.ReleaseIdentity(
+        ...     "v1.2.3", "0" * 40, "p", "1.2.3", "b", False
+        ... )
+        >>> package = CratePackage(identity, pathlib.Path("p.crate"), "ab")
+        >>> sorted(package.as_record())
+        ['crate', 'identity', 'sha256']
+        """
+        return {
+            "crate": self.crate.name,
+            "identity": self.identity.as_record(),
+            "sha256": self.sha256,
+        }
+
+
+def package_crate(manifest: pathlib.Path, destination: pathlib.Path) -> pathlib.Path:
+    """Build the ``.crate`` for the package the manifest declares.
+
+    Parameters
+    ----------
+    manifest
+        Path to the Cargo manifest naming the package.
+    destination
+        Directory ``cargo package`` writes into.
+
+    Returns
+    -------
+    pathlib.Path
+        The single ``.crate`` file the command produced.
+
+    Raises
+    ------
+    RuntimeError
+        If ``cargo package`` exits non-zero, or if the directory does not hold
+        exactly one crate afterwards.
+
+    Notes
+    -----
+    ``--no-verify`` is deliberately not passed. The command's own verification
+    compiles the packaged sources, which is the check that the archive is
+    buildable from exactly the files it carries rather than from the working
+    tree. Skipping it would make "the crate is complete" an assumption.
+
+    Exactly one crate is required rather than "take the first". A stale file
+    left in the destination from an earlier run would otherwise be published
+    under this run's identity, which is the failure the digest record exists
+    to prevent.
+    """
+    # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
+    # ruff: ignore[start-process-with-partial-path] - cargo is on the workflow PATH.
+    completed = subprocess.run(
+        [
+            "cargo",
+            "package",
+            "--manifest-path",
+            str(manifest),
+            "--target-dir",
+            str(destination),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        msg = (
+            f"cargo package failed with exit {completed.returncode}:\n"
+            f"{completed.stderr}"
+        )
+        raise RuntimeError(msg)
+    produced = sorted(destination.glob("*.crate"))
+    if len(produced) != 1:
+        msg = (
+            f"expected exactly one .crate in {destination}, found "
+            f"{[path.name for path in produced]}"
+        )
+        raise RuntimeError(msg)
+    return produced[0]
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the parser for the crate-packaging CLI.
+
+    Returns
+    -------
+    argparse.ArgumentParser
+        A parser requiring the identity facts, the manifest, and a destination.
+    """
+    parser = argparse.ArgumentParser(
+        prog="package_crate_cli",
+        description="Package the release crate and record its identity.",
+    )
+    parser.add_argument("--tag", required=True, help="the release tag, e.g. v1.2.3")
+    parser.add_argument("--commit", required=True, help="the full commit SHA")
+    parser.add_argument("--package-name", required=True, help="the Cargo package name")
+    parser.add_argument("--version", required=True, help="the manifest version")
+    parser.add_argument("--bin-name", required=True, help="the installed binary name")
+    parser.add_argument(
+        "--manifest", required=True, type=pathlib.Path, help="the Cargo manifest"
+    )
+    parser.add_argument(
+        "--target-dir",
+        required=True,
+        type=pathlib.Path,
+        help="the directory cargo package writes into",
+    )
+    parser.add_argument(
+        "--output",
+        required=True,
+        type=pathlib.Path,
+        help="where to write the package record",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Package the crate and write the record describing it.
+
+    Parameters
+    ----------
+    argv
+        Command-line arguments. Defaults to ``sys.argv[1:]``.
+
+    Returns
+    -------
+    int
+        ``EXIT_OK`` when the archive and its record exist,
+        ``EXIT_IDENTITY_REJECTED`` when the identity facts disagree, or
+        ``EXIT_PACKAGING_FAILED`` when ``cargo package`` refuses.
+
+    Notes
+    -----
+    The identity is resolved before cargo runs, so a tag that disagrees with
+    the manifest spends no build time and leaves no half-written record.
+
+    Examples
+    --------
+    A tag that does not spell the manifest version is refused before cargo is
+    invoked, so the run exits with the identity code rather than with whatever
+    ``cargo package`` would have reported. The diagnosis goes to standard
+    error, which a doctest does not compare:
+
+    >>> main(["--tag", "v2.0.0", "--commit", "0" * 40, "--package-name", "p",
+    ...       "--version", "1.2.3", "--bin-name", "b",
+    ...       "--manifest", "/nonexistent/Cargo.toml",
+    ...       "--target-dir", "/nonexistent/target",
+    ...       "--output", "/nonexistent/package.json"])
+    2
+    """
+    arguments = build_parser().parse_args(argv)
+    facts = release_candidate.CandidateFacts(
+        tag=arguments.tag,
+        commit=arguments.commit,
+        package_name=arguments.package_name,
+        version=arguments.version,
+        bin_name=arguments.bin_name,
+    )
+    try:
+        identity = release_candidate.resolve_identity(facts)
+    except release_candidate.IdentityError as error:
+        print(f"release identity rejected: {error}", file=sys.stderr)
+        return EXIT_IDENTITY_REJECTED
+    try:
+        crate = package_crate(arguments.manifest, arguments.target_dir)
+    except RuntimeError as error:
+        print(f"packaging failed: {error}", file=sys.stderr)
+        return EXIT_PACKAGING_FAILED
+    package = CratePackage(identity, crate, release_digest.digest_of_file(crate))
+    arguments.output.write_text(
+        json.dumps(package.as_record(), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return EXIT_OK
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
