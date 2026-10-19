@@ -6,10 +6,11 @@
 //! artefact directory, so the search paths come from Cargo's JSON messages
 //! rather than an assumed shared `target/<profile>/deps`.
 //!
-//! Cargo check supplies the metadata artefact using the test gate's workspace,
-//! target, and feature selection, but it does not preserve the test build mode
-//! or cache identity. It avoids linking integration executables while the
-//! test suite is running; only the UI fixtures are compiled directly.
+//! Cargo check prepares only the `test_support` library with all its features,
+//! rather than checking unrelated workspace test targets. It does not preserve
+//! the test build mode or cache identity, and it avoids linking integration
+//! executables while the test suite is running; only the UI fixtures are
+//! compiled directly.
 //!
 //! Reuse policy: include this module from `tests/*.rs` direct-rustc UI
 //! harnesses that compile fixtures against `test_support`. Harnesses compiling
@@ -39,7 +40,7 @@ pub struct TestSupportRlib {
 }
 
 impl TestSupportRlib {
-    /// Check gate-selected targets and locate the `test_support` metadata artefact.
+    /// Check `test_support` and locate its metadata artefact.
     pub fn build() -> io::Result<Self> {
         let mut command = Command::new(cargo());
         command
@@ -47,7 +48,8 @@ impl TestSupportRlib {
             .arg("--manifest-path")
             .arg(manifest_dir().join("Cargo.toml"))
             .arg("--message-format=json-render-diagnostics")
-            .args(cargo_features::GATE_BUILD_ARGUMENTS);
+            .args(["--package", "test_support"])
+            .args(cargo_features::LIBRARY_BUILD_ARGUMENTS);
         let started_at = Instant::now();
         let output = command.output()?;
         tracing::info!(
