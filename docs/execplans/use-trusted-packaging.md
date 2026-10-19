@@ -1495,6 +1495,42 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   assertions). The final state exits 0 through all five stages at 10.00/10
   Pylint and 100.0% interrogate. `local_reference_coverage_test.py` also
   passes, which it would not have if the CLI were unreferenced.
+- [x] (2026-10-19) Completed the four remaining CLI siblings and committed the
+  milestone at `177c5f7d`: `package_crate_cli`, `publish_crates_io_cli`,
+  `verify_release_inventory_cli`, and `finalize_github_release_cli`, each with
+  its suite registered in `release_publication_test.py`. The batch of six gates
+  ran against the staged tree at `bb9829de` and reported five verdicts:
+  `check-fmt` exit 0 (275 Ruff files, 184 mdtablefix files), `lint` exit 0 in
+  60 minutes, `test-workflow-contracts` exit 0 (`1314 passed, 3 skipped`;
+  `27 passed`), and `test-release-publication` was not reached because the
+  scrutineer died on a provider 503. `typecheck` exited 2 with four `ty`
+  diagnostics, and `test` exited 2 on one timeout; both are treated below.
+
+  The four `ty` diagnostics were real narrowing gaps in the new suites, not
+  typos, and were repaired at source rather than suppressed. Three were in
+  `test_finalize_github_release_cli.py`, where `_plan` declared
+  `dict[str, object]` and so made `plan["actions"]` and `plan["conflicts"]`
+  opaque `object` values that could not be iterated or sorted. The helper now
+  returns a `_PlanRecord` TypedDict naming both fields, which is the document's
+  actual shape and removes the casts a narrower fix would have needed at three
+  call sites. The fourth was in `test_package_crate_cli.py`, where the
+  prerelease assertion subscripted the identity mapping without the
+  `isinstance(identity, dict)` guard its sibling already carried; the guard is
+  now there too. Measured after the repair: `ty check` on both files reports
+  `All checks passed!`, the two suites report **21 passed**, Ruff format and
+  check are clean, Pylint is 10.00/10 and the df12 house lints are 10.00/10.
+
+  `make test`'s failure was **not** a defect in this change. It was
+  `build_module_slice_ui_tests::production_build_module_slice_has_expected_boundary`
+  hitting its 300 s allowance at position 3960 of 3976, with 3959 passed and 6
+  skipped — the third reproduction of the documented host-capacity timeout, on
+  a test whose own file is absent from the branch diff. The host at the time
+  held 196 Cargo processes with `capacity 4, held 4` and waiters from another
+  worktree. The verdict recorded is therefore **timeout, environmental**, and
+  this half of `make test` still has no green run at this head. The doctest
+  half is unaffected by any change in this milestone: the diff is Python and
+  Markdown only. Widening the budget stays excluded for the reason recorded on
+  2026-10-17.
 
 ## Surprises & discoveries
 
@@ -2188,6 +2224,24 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   download-verify-extract-run sequence with no policy module to call, so it
   lives in `.github/actions/consumer-smoke/`. Date/Author: 2026-10-19,
   implementation agent.
+
+- Decision: `ReleaseIdentity` keeps its six fields and the digest record
+  travels **beside** it, rather than gaining the `assets` and `digests` fields
+  the `Interfaces and dependencies` sketch shows. Rationale: the sketch is not
+  describing one record but two. The identity is what the packaging job is
+  authorized to publish — tag, commit, package name, version, binary name,
+  prerelease flag — and it is settled before any artefact exists, which is why
+  it can refuse a disagreeing tag *before* spending build time. The digests
+  cannot exist until the crate and the release assets have been produced, so
+  putting them in the same record would either delay the identity past the
+  point it is useful or make the dataclass's own validity conditional on a
+  later stage. The implemented flow is therefore `package_crate_cli --output`
+  writing the identity and the crate digest,
+  `verify_release_inventory_cli --output` writing `{"assets": {...}}`, and
+  `finalize_github_release_cli._expected()` reading that second record. Adding
+  the fields later is a schema change to a record the plan's own criterion
+  compares by exact set equality, so the separation is recorded now rather than
+  left as an apparent gap. Date/Author: 2026-10-19, implementation agent.
 
 ## Outcomes & retrospective
 
