@@ -244,51 +244,56 @@ fn non_bash_selection_skips_path_lookup_and_probe() {
 /// Include the selected path, probe arguments, status, and bounded output on failure.
 #[test]
 fn failed_probe_reports_selected_executable_and_sanitized_output() -> anyhow::Result<()> {
-    let workspace = tempfile::tempdir()?;
-    let executable = crate::recipe_shell::BashExecutable::from_absolute_path(
-        Utf8PathBuf::from_path_buf(workspace.path().join("Git Bash/bin/bash.exe"))
-            .map_err(|_| anyhow::anyhow!("fixture executable path should be UTF-8"))?,
-    )?;
-
-    let error = validate_bash_probe(
-        &executable,
+    assert_failed_probe_diagnostic(
         Ok(BashProbeStatus::Failed {
             status: "exit status: 7".into(),
             output: describe_probe_output(b"version\n", b"bad\x1b[31m runtime"),
         }),
+        &[
+            "Git Bash/bin/bash.exe",
+            "--version",
+            "exit status: 7",
+            "bad [31m runtime",
+        ],
     )
-    .expect_err("the failed version probe must be actionable");
-
-    let rendered = format!("{error:#}");
-    anyhow::ensure!(rendered.contains("Git Bash/bin/bash.exe"));
-    anyhow::ensure!(rendered.contains("--version"));
-    anyhow::ensure!(rendered.contains("exit status: 7"));
-    anyhow::ensure!(rendered.contains("bad [31m runtime"));
-    Ok(())
 }
 
 /// Preserve the selected path and OS source when starting the probe fails.
 #[test]
 fn failed_probe_launch_reports_selected_path_and_source() -> anyhow::Result<()> {
+    assert_failed_probe_diagnostic(
+        Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "cannot launch fixture",
+        )),
+        &[
+            "Git Bash/bin/bash.exe",
+            "--version",
+            "cannot launch fixture",
+        ],
+    )
+}
+
+/// Check diagnostic fragments shared by failed Bash probe outcomes.
+fn assert_failed_probe_diagnostic(
+    probe_result: Result<BashProbeStatus, std::io::Error>,
+    expected_fragments: &[&str],
+) -> anyhow::Result<()> {
     let workspace = tempfile::tempdir()?;
     let executable = crate::recipe_shell::BashExecutable::from_absolute_path(
         Utf8PathBuf::from_path_buf(workspace.path().join("Git Bash/bin/bash.exe"))
             .map_err(|_| anyhow::anyhow!("fixture executable path should be UTF-8"))?,
     )?;
-
-    let error = validate_bash_probe(
-        &executable,
-        Err(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "cannot launch fixture",
-        )),
-    )
-    .expect_err("launch failure should be actionable");
-
+    let error = validate_bash_probe(&executable, probe_result)
+        .expect_err("a failed version probe should be actionable");
     let rendered = format!("{error:#}");
-    anyhow::ensure!(rendered.contains("Git Bash/bin/bash.exe"));
-    anyhow::ensure!(rendered.contains("--version"));
-    anyhow::ensure!(rendered.contains("cannot launch fixture"));
+
+    for expected_fragment in expected_fragments {
+        anyhow::ensure!(
+            rendered.contains(expected_fragment),
+            "missing diagnostic fragment {expected_fragment:?} in {rendered:?}"
+        );
+    }
     Ok(())
 }
 

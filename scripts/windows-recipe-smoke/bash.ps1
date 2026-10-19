@@ -55,6 +55,54 @@ function Test-ExplicitBashIsolation {
     }
 }
 
+function Assert-BashTargetDiscoveryWithoutRuntime {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Netsuke
+    )
+
+    $targets = & $Netsuke help targets 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Target discovery should not require Bash on PATH: $targets"
+    }
+    if (-not ($targets -match 'bash-isolated-state')) {
+        throw "Target discovery omitted the Bash fixture target: $targets"
+    }
+}
+
+function Assert-BashGenerationDefersRuntimeResolution {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Netsuke
+    )
+
+    $generated = & $Netsuke generate 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Generate should not require Bash on PATH: $generated"
+    }
+    if (-not ($generated -match 'bash\.exe')) {
+        throw "Generate did not leave Bash executable binding to PATH: $generated"
+    }
+}
+
+function Assert-MissingBashRuntimeDiagnostic {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Netsuke
+    )
+
+    $bashFailure = & $Netsuke build scalar 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        throw 'Selecting Bash without bash.exe unexpectedly succeeded.'
+    }
+    if (-not ($bashFailure -match 'PATH contains no bash\.exe')) {
+        throw "Bash resolution diagnostics did not distinguish a missing runtime: $bashFailure"
+    }
+    if ($bashFailure -match 'exited with') {
+        throw "A missing-runtime diagnostic must not report a failed executable probe: $bashFailure"
+    }
+}
+
 function Test-MissingBashRuntimeDiagnostic {
     param(
         [Parameter(Mandatory)]
@@ -73,32 +121,9 @@ function Test-MissingBashRuntimeDiagnostic {
         $env:NETSUKE_NINJA = (Get-Command ninja -CommandType Application).Path
         $env:NETSUKE_WINDOWS_SHELL = 'bash'
         $env:PATH = $Workspace
-        $targets = & $Netsuke help targets 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "Target discovery should not require Bash on PATH: $targets"
-        }
-        if (-not ($targets -match 'bash-isolated-state')) {
-            throw "Target discovery omitted the Bash fixture target: $targets"
-        }
-
-        $generated = & $Netsuke generate 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "Generate should not require Bash on PATH: $generated"
-        }
-        if (-not ($generated -match 'bash\.exe')) {
-            throw "Generate did not leave Bash executable binding to PATH: $generated"
-        }
-
-        $bashFailure = & $Netsuke build scalar 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            throw 'Selecting Bash without bash.exe unexpectedly succeeded.'
-        }
-        if (-not ($bashFailure -match 'PATH contains no bash\.exe')) {
-            throw "Bash resolution diagnostics did not distinguish a missing runtime: $bashFailure"
-        }
-        if ($bashFailure -match 'exited with') {
-            throw "A missing-runtime diagnostic must not report a failed executable probe: $bashFailure"
-        }
+        Assert-BashTargetDiscoveryWithoutRuntime -Netsuke $Netsuke
+        Assert-BashGenerationDefersRuntimeResolution -Netsuke $Netsuke
+        Assert-MissingBashRuntimeDiagnostic -Netsuke $Netsuke
     }
     finally {
         foreach ($state in $environmentState) {
