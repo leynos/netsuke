@@ -4818,11 +4818,13 @@ governs the non-doctest pass only, and deliberately stays small:
   isolated `split_build_fixture_compiles_through_the_direct_rustc_harness` test
   receives fifteen warning periods (900s) after reaching its 720s cap while
   compiler admission was saturated.
-  `production_build_module_slice_has_expected_boundary` also runs a nested
-  `cargo build --lib` before its direct-rustc checks; it reached the default
-  300s cap in a full gate with compiler admission saturated, so it gets the
-  same targeted 720s allowance. These targeted allowances remain below the 960s
-  CI whole-run cap; none adds retries or widens timeouts for unrelated tests.
+  `production_build_module_slice_has_expected_boundary` prepares the production
+  library and its build-script dependencies with
+  `cargo check --package netsuke-build --lib --all-features` before its
+  direct-rustc checks. It reached the default 300s cap in a full gate with
+  compiler admission saturated, so it gets the same targeted 720s allowance.
+  These targeted allowances remain below the 960s CI whole-run cap; none adds
+  retries or widens timeouts for unrelated tests.
 - **One serialized child-Cargo group.** Tests that spawn their own Cargo build
   join `nested-cargo-builds`, whose `max-threads = 1` stops four Nextest
   workers from each starting a four-job build on four vCPUs. Membership is
