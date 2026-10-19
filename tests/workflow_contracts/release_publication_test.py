@@ -45,6 +45,7 @@ CI_STEP_NAME = "Release publication tests"
 #: not a smaller test run that still reports success.
 SECTION_MODULES = (
     "scripts/tests/test_release_candidate.py",
+    "scripts/tests/test_release_candidate_cli.py",
     "scripts/tests/test_release_inventory.py",
     "scripts/tests/test_release_semver.py",
     "scripts/tests/test_release_digest.py",
@@ -60,6 +61,7 @@ SECTION_MODULES = (
 #: success from the outside.
 SOURCE_MODULES = (
     "scripts/release_candidate.py",
+    "scripts/release_candidate_cli.py",
     "scripts/release_inventory.py",
     "scripts/release_semver.py",
     "scripts/release_digest.py",
@@ -213,7 +215,7 @@ def _opens_a_socket(module: str) -> bool:
 
 @pytest.mark.parametrize("module", SOURCE_MODULES)
 def test_policy_modules_import_no_network_client(module: str) -> None:
-    """Require every policy module to be testable with no network at all.
+    """Require every source module to be testable with no network at all.
 
     EP-M2 states the policy modules perform no network I/O and each is runnable
     locally without one. The statement is only worth making if something
@@ -221,6 +223,13 @@ def test_policy_modules_import_no_network_client(module: str) -> None:
     while the suite silently needed a socket. The verifier is the module most
     at risk — its name says "download" — so it takes a local path and returns
     a digest, and the workflow step that writes that file is what downloads.
+
+    The CLI seams are held to the same rule deliberately, even though they do
+    perform I/O. A CLI writes the record its job needs, but the *network* half
+    of that job belongs to the workflow step, which is where GitHub's own
+    credentials and OIDC exchange live. Keeping the seam socket-free is what
+    makes the boundary legible: anything that reaches the network is a step,
+    never a Python module.
     """
     source = (REPO_ROOT / module).read_text(encoding="utf-8")
     offenders = sorted(
