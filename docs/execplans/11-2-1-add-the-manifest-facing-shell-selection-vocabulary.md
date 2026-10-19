@@ -326,8 +326,10 @@ remains `1747496f`, and the original combined candidate is preserved under
   docs gates passed on the correction. The exact-head reassessment confirmed
   that finding is resolved and identified one additional arithmetic edge in the
   near-miss name generator. That repair passed all eight sequential gates; the
-  exact-head reassessment remains pending.
-- [ ] EP-M1: host family, built-in registry, and `ShellName` landed with
+- [x] (2026-10-19) Exact-head M1 reassessment on `1b741b82` against
+  `051358ee` covered all 13 changed paths and returned zero findings; neither
+  earlier review concern recurred. EP-M1 is complete.
+- [x] EP-M1: host family, built-in registry, and `ShellName` landed with
   tests.
 - [ ] EP-M2: `ShellSelection` codec, parity tests, properties, and behavioural
   scenarios landed.
@@ -728,9 +730,10 @@ that landing without conflicts. All eight candidate gates passed sequentially on
 skipped), 151 doctests passed (32 ignored), workflow contracts passed 1,324
 cases (three skipped) plus 27 script tests, documentation coverage was 98.90%,
 and format, type, lint, Markdown, and Mermaid checks passed. The candidate
-still needs its exact-head local review and the EP-M2 codec and EP-M3
-documentation milestones. The eight passing gates establish the rebased M1
-candidate's quality, but do not close the plan or mark roadmap 11.2.1 complete.
+still needed its exact-head local review and the EP-M2 codec and EP-M3
+documentation milestones. The eight passing gates established the rebased M1
+candidate's quality; the subsequent repair and clean exact-head assessment
+close EP-M1 without marking roadmap 11.2.1 complete.
 
 The committed M1 review follow-up confirmed both overlapping `tee` findings
 were fixed. It also found that the near-miss generator hard-coded 64 when
@@ -745,7 +748,11 @@ passed 39 (six ignored); workflow contracts passed 1,324 (three skipped) plus
 zero issues. Logs use the
 `/tmp/*-f900fc37-c6fe-4ed1-8700-ec572d9952c3-11-2-1-add-the-manifest-facing-shell-selection-vocabulary-review-followups.out`
 suffix. Compilation proceeded uncached because managed sccache was
-unavailable; admission remained healthy. Exact-head reassessment remains open.
+unavailable; admission remained healthy. CodeRabbit CLI v0.9.0 then assessed
+all 13 paths on `1b741b828a390bfab9891e1c896b417a7c8239fe` against
+`051358ee360a97fcbebe2a836e25e106917ed845` and returned zero findings. The two
+earlier `tee` findings and the arithmetic finding did not recur. EP-M1 is
+closed; EP-M2 and EP-M3 remain open.
 
 The original untouched-tree run is retained as historical evidence. Its clean
 Git environment run passed `make check-fmt`, `make typecheck`, `make lint`, and
