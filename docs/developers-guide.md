@@ -4771,7 +4771,7 @@ Linux runner. Both platforms still assert the packaged file list. See
 [adr-028-trim]: adr-028-defer-split-build-dir-harness-trim.md
 [adr-033-split-build]: adr-033-record-split-build-cargo-messages.md
 [cargo-package-verify]:
-  https://github.com/rust-lang/cargo/blob/e8cb624d5701824f46a2ec5873cfd59ee3d2f66c/src/cargo/ops/cargo_package/verify.rs
+  https://github.com/rust-lang/cargo/blob/e8cb624d5701824f46a2ec5873cfd59ee3d2f66c/src/ops/cargo_package/verify.rs
 
 `tests/workflow_contracts/test_execution_coverage_test.py` holds all of this:
 the coverage inputs, the denied warnings, the doctest pass and its position,
@@ -9647,7 +9647,7 @@ reading as the worked example of it. The gate passed twice at 257.7 s and 261.5
 s and then failed at 300.008 s on a head whose only diff was eight lines of
 Markdown. The code was not slow; the cap was too near the cost, and a margin of
 38 s is the difference between one runner and another rather than a budget. The
-The packaging smoke test also exceeded its budget. `cargo publish --dry-run`
+packaging smoke test also exceeded its budget. `cargo publish --dry-run`
 verifies extracted package sources while using the invoking workspace's build
 directory for matching dependency artefacts. The harness previously assigned a
 fresh private `CARGO_TARGET_DIR`, preventing that reuse; it now inherits
