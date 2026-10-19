@@ -1319,8 +1319,10 @@ cycle, interior multiset, stable start node — is 4.2.2's, proved by Kani over
     the range Kani cannot reach and the entire point of the obligation; acyclic
     with and without missing dependencies. If the long-cycle count is zero the
     obligation is not discharged.
-  - *Mutation.* `MUT-CYCLEDEPTH` caps traversal depth at 4; the long-cycle
-    class must fail while short cycles still pass.
+  - *Mutation.* `MUT-CYCLEDEPTH` caps traversal depth at 6; the long-cycle
+    class must fail while short cycles still pass. The cap sits between the
+    short-chain class (at most three nodes) and `LONG_CYCLE_MIN` (8), so it
+    suppresses exactly the class this obligation exists to reach.
 
 ______________________________________________________________________
 
@@ -1896,7 +1898,7 @@ with `__` for the module separator:
 | `MUT-DEFPOS`     | `OBL-DEFAULT`, `OBL-NINJA` | Emit `default` before edge rendering.                      |
 | `MUT-HASHMETA`   | `OBL-ACTION`               | Make the hasher skip `pool`.                               |
 | `MUT-DUPWITHIN`  | `OBL-DUP`                  | Disable the within-one-target half of `find_duplicates`.   |
-| `MUT-CYCLEDEPTH` | `OBL-CYCLE`                | Cap cycle traversal depth at 4.                            |
+| `MUT-CYCLEDEPTH` | `OBL-CYCLE`                | Cap cycle traversal depth at 6.                            |
 
 Nine, not the first draft's eleven. Two were cut from that draft: the nightly
 `cargo-mutants` job (`.github/workflows/mutation-testing.yml`, 03:05 UTC over
@@ -1971,7 +1973,7 @@ make proptest 2>&1 | tee /tmp/proptest-netsuke-$B.out
 Iterate on one property, or widen the search without recompiling:
 
 ```bash
-cargo nextest run --all-features -E 'test(emission_is_insertion_order_invariant)'
+cargo nextest run --all-features -E 'test(one_graph_emits_one_bundle_under_two_insertion_orders)'
 PROPTEST_CASES=4096 cargo nextest run --all-features -E 'test(determinism)'
 ```
 
@@ -2112,11 +2114,11 @@ independently drawn insertion orders of the same key set frequently produce the
 *same* iteration order, and at small sizes no other order is reachable at all.
 The `OBL-ORDER` section above records the measurements and the replacement
 design: the graph value is held fixed, the guaranteed perturbation moves to the
-collector-level arm over an explicitly shuffled `Vec`, and the end-to-end arm
-is counted and graded inconclusive when no case's iteration orders diverged.
-`EP-M1`'s review round later found that the first replacement — a
-well-separated pair of *key sets* — was itself unsound, and corrected it; see
-`ADR-030` amendment 4 and the fourth revision note.
+collector-level arm over a `Vec` presented in two constructed, distinct orders,
+and the end-to-end arm is counted and graded inconclusive when no case's
+iteration orders diverged. `EP-M1`'s review round later found that the first
+replacement — a well-separated pair of *key sets* — was itself unsound, and
+corrected it; see `ADR-030` amendment 4 and the fourth revision note.
 
 **Question 2 — `OBL-E2E` holds today.** Twenty-four declaration permutations of
 a four-target manifest (including reversals and rotations), lowered and
@@ -2232,6 +2234,61 @@ above; the placeholder survives only so that trace links written before
 allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
+
+- [x] (2026-10-19) **The `EP-M7` milestone CodeRabbit review completed and all
+      six distinct findings were valid; every one is repaired.** Scope was
+      `--committed --base origin/main --fresh --agent` over
+      `cc94287d..de7a4b9f`; the CLI reviewed 59 files, which is exactly the
+      diff of the branch range, and exited 0 with `"Review completed"`. Seven
+      finding records, six distinct sites — one site was reported twice.
+      `--fresh` discarded the stored checkpoints, so the reviewed range is the
+      whole branch diff rather than a delta from a prior review.
+
+  - *`MUT-CYCLEDEPTH` depth.* The `OBL-CYCLE` acceptance and the mutation table
+    both said "at 4"; the shipped patch sets
+    `CYCLE_SEARCH_DEPTH_LIMIT: usize = 6`. The acceptance argument depends on
+    the value, because the cap must sit between the short-chain class (at most
+    three nodes) and `LONG_CYCLE_MIN = 8`; it is now stated as 6, with that
+    rationale recorded in the acceptance text.
+  - *`module_max_lines` rationale.* The `OBL-ACTION` module doc claimed the
+    400-line ceiling "applies to this directory module as a whole", which is
+    false and would have made the split look pointless — `mod.rs` plus
+    `generator.rs` are 301 and 228 lines. The lint measures each out-of-line
+    module's own file, which is why the split works; the text now says that.
+  - *Iteration command.* The documented `cargo nextest run -E
+    'test(emission_is_insertion_order_invariant)'` named a test that does not
+    exist — `EP-M5` had renamed it. With nextest 0.9.133 exiting 4 on no
+    match, the recipe failed for every reader; it now names
+    `one_graph_emits_one_bundle_under_two_insertion_orders`.
+  - *`OBL-PATHKEY` non-emptiness witness.*
+    `the_non_emptiness_precondition_is_load_bearing`
+    used `assert_eq!`, which fails the moment an encoding distinguishes `[]`
+    from `[""]` — the strict improvement the plan says must not be blocked.
+    `EP-M4`'s acceptance requires a disjunction, and the NUL witness beside it
+    already has that shape. The test now asserts
+    `emptiness_conflates || !nul_collides`, so it fails only if the encoding
+    has become injective in *both* respects, which is the condition that should
+    send a reader back to the precondition.
+  - *ADR-030 mechanism.* Two passages described the collector-level arm as
+    "an explicitly shuffled `Vec`". The implementation uses
+    `rotated(&edges, 3)` and `rotated(&actions, 3)`, and the ADR's own
+    line 176 calls those two *constructed* orders. Since the ADR is the
+    authority for the obligations, it may not contradict itself about the
+    mechanism that guarantees perturbation; both passages now say "two
+    constructed, distinct orders". The same stale phrase appeared twice in this
+    plan (`## Artefacts and notes` and `## Decision log`) and is corrected
+    there too.
+  - *`prop_assert` in property bodies.* `Constraint 9` requires
+    `prop_assert*` inside `proptest!` bodies. Two `expect_err` calls —
+    `duplicates.rs` and `cycles.rs` — panicked instead, losing the mode or
+    shape the suites carry in every other failure. Both now use
+    `let Err(error) = result else { prop_assert!(false, …); return Ok(()); }`.
+    The other `expect_err` sites are directed `#[test]` functions, where
+    `Constraint 9` does not apply and `expect` is the documented style.
+
+  Repairs touch six files; the two behavioural changes are assertion *form*
+  only, so the properties must still pass and the existing mutation evidence
+  still applies.
 
 - [x] (2026-10-19) **The `EP-M7` candidate failed `make lint` on three Whitaker
       findings, and all three were real.** The gate log is
@@ -6285,9 +6342,9 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   graphs with different key sets is a pair of different graphs, so any bundle
   difference is legitimate and any agreement is uninformative — the arm could
   not have established `I-1` in either outcome. The weaker arm is the sound
-  one; the collector-level arm over an explicitly shuffled `Vec` supplies the
-  guaranteed perturbation the end-to-end arm cannot. Date/Author: 2026-10-10 /
-  implementation agent.
+  one; the collector-level arm over a `Vec` in two constructed, distinct orders
+  supplies the guaranteed perturbation the end-to-end arm cannot. Date/Author:
+  2026-10-10 / implementation agent.
 - Decision: validate `OBL-PROCESS` with `MUT-ACTIONSORT`, not `MUT-DEFSORT`,
   and remove `OBL-PROCESS` from `MUT-DEFSORT`'s coverage. Rationale:
   `MUT-DEFSORT` deletes a sort whose input order is fixed for a fixed manifest,

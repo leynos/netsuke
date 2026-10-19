@@ -314,6 +314,11 @@ fn the_nul_separator_is_load_bearing() {
 /// path passes `unsupported_character` because it contains no rejected
 /// character, so non-emptiness is not implied by path validation — it is a
 /// separate precondition, and this records why it is stated separately.
+///
+/// Like the NUL witness, the assertion is a disjunction: if a future encoding
+/// separates the empty list from the one-element empty path, the obligation's
+/// precondition is no longer load-bearing and this test should fail so that
+/// the precondition is revisited, not so that the test is relaxed.
 #[test]
 fn the_non_emptiness_precondition_is_load_bearing() {
     let empty_list: [Utf8PathBuf; 0] = [];
@@ -323,12 +328,16 @@ fn the_non_emptiness_precondition_is_load_bearing() {
         one_empty.len(),
         "a zero-element list is not a one-element list, however they key",
     );
-    assert_eq!(
-        path_key(&empty_list),
-        path_key(&one_empty),
-        "the collision this documents has disappeared; if the encoding now \
-         distinguishes an absent path from an empty one, OBL-PATHKEY's \
-         precondition should be revisited",
+    let separated = [Utf8PathBuf::from("a"), Utf8PathBuf::from("b")];
+    let embedded = [Utf8PathBuf::from("a\0b")];
+    let emptiness_conflates = path_key(&empty_list) == path_key(&one_empty);
+    let nul_collides = path_key(&separated) == path_key(&embedded);
+    assert!(
+        emptiness_conflates || !nul_collides,
+        "either the non-emptiness precondition is load-bearing, or the \
+         encoding has become injective without it — in which case \
+         OBL-PATHKEY's keyable-path precondition should be revisited rather \
+         than this test relaxed",
     );
 }
 

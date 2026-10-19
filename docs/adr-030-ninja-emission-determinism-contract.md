@@ -337,10 +337,10 @@ scanning for a literal hash map while ignoring the sort would miss the hazard.
   The whole-bundle arm holds the graph value fixed, so it has no perturbation
   guarantee: two materializations of one `GraphSpec` may iterate identically by
   chance, and a case where they do tests nothing. This is why the
-  collector-level property over an explicitly shuffled `Vec` is the primary
-  evidence and the bundle comparison is secondary, and why the arm grades
-  itself _inconclusive_ — counted and reported, not silently passed — whenever
-  no case's iteration orders actually diverged.
+  collector-level property over a `Vec` presented in two constructed, distinct
+  orders is the primary evidence and the bundle comparison is secondary, and
+  why the arm grades itself _inconclusive_ — counted and reported, not silently
+  passed — whenever no case's iteration orders actually diverged.
 - **Shrinking does not converge on this domain.** `EP-M0` measured a
   fifty-edge counter-example failing to minimize in thirty seconds, with four
   runs of one seed producing 39, 90, 43, and 73 edges. The mitigation is a
@@ -442,8 +442,8 @@ twice, both `BuildGraph` values have identical key sets and identical values,
 and the property asserts the two emissions agree. This arm has no perturbation
 guarantee of its own — two materializations may iterate identically by chance —
 so it reports _inconclusive_ when no case's iteration orders diverged and the
-guaranteed perturbation lives in the collector-level arm over an explicitly
-shuffled `Vec`. `EP-M5` carries the corrected formulation.
+guaranteed perturbation lives in the collector-level arm over a `Vec` presented
+in two constructed, distinct orders. `EP-M5` carries the corrected formulation.
 
 ## Architectural Rationale
 
