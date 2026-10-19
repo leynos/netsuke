@@ -66,6 +66,21 @@ fn power_shell_rejects_markers_without_a_context_safe_encoder(#[case] template: 
     );
 }
 
+/// Reject PowerShell markers whose literal encoding would merge with a string.
+#[rstest]
+#[case::after_single_quoted_input(format!("Write-Output 'prefix'{INS_TOKEN}"))]
+#[case::before_single_quoted_input(format!("Write-Output {INS_TOKEN}'suffix'"))]
+#[case::after_single_quoted_output(format!("Write-Output 'prefix'{OUTS_TOKEN}"))]
+#[case::adjacent_input_then_output(format!("Write-Output {INS_TOKEN}{OUTS_TOKEN}"))]
+#[case::adjacent_output_then_input(format!("Write-Output {OUTS_TOKEN}{INS_TOKEN}"))]
+fn power_shell_commands_reject_markers_at_literal_boundaries(#[case] template: String) {
+    command_rejection_case!(
+        template,
+        PowerShellCommandPathBindings::HostileInputAndOutput
+    )
+    .verify();
+}
+
 /// Reject markers after comment and stop-parsing syntax that the scanner cannot model.
 #[rstest]
 #[case::ambiguous_comment_input(

@@ -46,6 +46,9 @@ security fix for issue #846.
 Amended on 2026-10-18 after review of PowerShell comment and stop-parsing
 edges.
 
+Amended on 2026-10-19 for issue #846. The PowerShell script insertion-site
+contract and scanner review corrections are recorded in the addenda below.
+
 ## Date
 
 2026-09-19
@@ -96,47 +99,32 @@ behaviour are promises. This record settles both.
 `{{ ins }}` and `{{ outs }}` are the only Netsuke markers, and both recipe
 kinds recognize that same set in active recipe text. On POSIX and Bash routes,
 markers in comments and heredoc bodies are copied as internal tokens instead of
-being expanded; markers in heredoc delimiters are expanded. PowerShell
-`command:` and `script:` recipes use the same PowerShell-aware traversal and
-reject markers in single-quoted strings, double-quoted strings, here-strings,
-`$( … )`, immediately after a backtick, and within the raw native-command
-region after an unquoted `--%` token. PowerShell passes the rest of that line
-after `--%` to a native command as literal text, so Netsuke's standalone quoted
-path encoding is not protective there. The scanner rejects markers in that
-region and resumes after its newline or pipeline terminator; a semicolon does
-not end it. See Microsoft's documentation of the
-[stop-parsing token](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_parsing?view=powershell-7.6#the-stop-parsing-token).
-Keep markers out of POSIX and Bash comments and heredoc bodies because their
-internal tokens can remain in the generated recipe. PowerShell scripts have no
-inert comment regions: markers in plain line-comment text remain eligible for
-interpolation, while a block-comment opener or scanner-sensitive quote,
-backtick, or substitution syntax in a line-comment makes later markers fail
-closed. In particular, an apostrophe in a comment can make a later marker fail
-closed. Every dollar-prefixed form — `$in`, `$out`, `$ins`, `$outs`, `$input`,
-`$output`, `$PATH` — is a shell variable that Netsuke leaves for the selected
-shell to interpret, in both recipe kinds. The Ninja backend doubles the dollar
-so the shell receives the text unchanged.
-
-The traversal also fails closed for later markers after encountering a
-typographic PowerShell quote delimiter because it does not model delimiter
-pairing.
+being expanded; markers in heredoc delimiters are expanded. `script:` recipes
+use the POSIX-aware scanner on POSIX and Bash routes. PowerShell `command:` and
+`script:` recipes use the PowerShell-aware traversal; its unquoted insertion
+contract and conservative rejection boundaries are recorded in the 2026-10-19
+addendum below. Keep markers out of POSIX and Bash comments and heredoc bodies
+because their internal tokens can remain in the generated recipe. Every
+dollar-prefixed form — `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output`,
+`$PATH` — is a shell variable that Netsuke leaves for the selected shell to
+interpret, in both recipe kinds. The Ninja backend doubles the dollar so the
+shell receives the text unchanged.
 
 Three terms are kept distinct throughout, following
 [ADR-0034](adr-0034-preserve-script-in-and-out-as-shell-variables.md):
 
 - a **marker** is the Netsuke-owned `{{ ins }}` or `{{ outs }}` placeholder;
 - an **internal token** is the `INS_TOKEN` or `OUTS_TOKEN` sentinel created by
-  manifest rendering and normally consumed during interpolation; POSIX and Bash
-  comments and heredoc bodies can carry it into the generated recipe;
+  manifest rendering and normally consumed during interpolation; inert comments
+  and heredoc bodies can carry it into the generated recipe;
 - a **shell variable** is handwritten text such as `$PATH` or `$in` that
   Netsuke does not rewrite.
 
 The recognizer is `find_substitution`, which matches the two internal tokens
 and nothing else. `find_script_substitution` delegates to it, so both recipe
-kinds recognize the same set. POSIX-aware scanning leaves tokens in POSIX and
-Bash comments and heredoc bodies unchanged, while heredoc delimiters remain
-eligible for substitution. PowerShell scripts use `SubstitutionTraversal`, like
-PowerShell commands, so the PowerShell quote and escape rules apply to both.
+kinds recognize the same set. POSIX-aware scanning leaves tokens in comments
+and heredoc bodies unchanged, while heredoc delimiters remain eligible for
+substitution.
 
 Netsuke does not expose Ninja's own `$in` and `$out` rule variables. Resolved
 paths are baked into each content-hashed rule, so Ninja never substitutes a
@@ -147,51 +135,48 @@ path into a recipe.
 The mechanisms are not the same kind of thing and are not promised equally.
 
 **An invariant, promised.** A Netsuke placeholder is never substituted inside a
-POSIX or Bash backtick region or any shell's `$( … )` command substitution;
-such a recipe is rejected. PowerShell also rejects a marker immediately after a
-backtick because it escapes the following character. Substituting into a region
-the shell will re-evaluate cannot be made safe, so the rejection is policy. It
-is implemented by `SubstitutionTraversal::append_protected_character`
-(`src/ir/cmd_interpolate/substitution/mod.rs`) and the POSIX/Bash script
-traversal (`append_substitution_or_character` in
-`src/ir/cmd_interpolate/script_substitution.rs`).
+backtick region or a `$( … )` command substitution; such a recipe is rejected.
+Substituting into a region the shell will re-evaluate cannot be made safe, so
+the rejection is policy. It is implemented by `SubstitutionTraversal` for
+commands and PowerShell scripts, and by `ScriptSubstitutionTraversal` for POSIX
+and Bash scripts.
 
 **A conservative check, not promised.** A `command:` recipe whose substituted
 text contains an odd total number of backtick characters is *currently* rejected
-(`has_unmatched_backticks` in `src/ir/cmd_interpolate/mod.rs`, reached from
-`is_valid_command_for_shell`). The check is a whole-string parity count, not a
-quoting-aware model: a backtick inside single quotes counts toward the total,
-and two balanced but unrelated backticks do not. It may therefore reject valid
-shell text. A future release may accept more, and such widening is **not**
-treated as a breaking change.
+(`has_unmatched_backticks`, `src/ir/cmd_interpolate/mod.rs:172-174`, reached
+from `is_valid_command_for_shell` at `:226-231`). The check is a whole-string
+parity count, not a quoting-aware model: a backtick inside single quotes counts
+toward the total, and two balanced but unrelated backticks do not. It may
+therefore reject valid shell text. A future release may accept more, and such
+widening is **not** treated as a breaking change.
 
 **Not a guarantee at all.** Netsuke leaves author-written backticks untouched.
 On POSIX routes, active backticks can trigger command substitution; backticks
 inside single quotes remain literal. Path substitution separately protects
 Netsuke-owned values: `quote_double_quoted_path`
-(`src/ir/cmd_interpolate/mod.rs`) backslash-escapes a backtick that falls
-inside a *Netsuke-substituted path* landing in a double-quoted context.
+(`src/ir/cmd_interpolate/mod.rs:154-163`) backslash-escapes a backtick that
+falls inside a *Netsuke-substituted path* landing in a double-quoted context.
 
-**Route and recipe-kind scope.** PowerShell sits outside the POSIX backtick
-command-substitution and parity checks because a PowerShell backtick escapes
-the following character. A marker immediately following a backtick is still
-rejected, as are markers in single-quoted or double-quoted strings,
-here-strings, and `$( … )`. The PowerShell-aware traversal applies these rules
-to both `command:` and `script:` recipes; the standalone path literal is not a
-context-safe encoder inside an existing PowerShell string. PowerShell scripts
-do not have inert comment regions in this scanner: plain line-comment text
-leaves later markers eligible for interpolation, while a block-comment opener
-or scanner-sensitive syntax such as an apostrophe can make later markers fail
-closed. The raw native-command region after `--%` models only ASCII double
-quotes for pipeline detection; a single quote, backtick, or typographic quote
-there makes later markers fail closed. The `shlex` guard remains
-`command:`-only: a `script:` recipe bypasses it because scripts may contain
-heredocs and other text that `shlex` cannot model.
+**Route and recipe-kind scope.** PowerShell sits outside the backtick half of
+the invariant, because a backtick is its escape character rather than a
+command-substitution delimiter, and outside the parity check entirely:
+`is_valid_command_for_shell` returns `true` unconditionally for
+`RecipeShell::PowerShell` (`src/ir/cmd_interpolate/mod.rs:227-228`). It is
+**inside** the `$( … )` half. The PowerShell traversal treats a marker inside a
+command substitution, or inside any quoted region, as protected and rejects it
+(`power_shell_marker_protection` in
+`src/ir/cmd_interpolate/substitution/powershell/lexical/mod.rs`) — the same
+outcome as POSIX, by a different rule, pinned by
+`power_shell_rejects_markers_without_a_context_safe_encoder`
+(`src/ir/cmd_interpolate/power_shell_tests.rs:9-22`). The parity check is also
+`command:`-only: a `script:` recipe gets the marker invariant but no parity
+check, because scripts may legitimately contain heredocs and other text that
+`shlex` cannot model.
 
 ### The `shlex` guard is part of the acceptance contract, not a stability commitment
 
 `is_valid_command_for_shell` calls `shlex::split(command).is_some()` on the
-fully substituted text (`src/ir/cmd_interpolate/mod.rs`). Failure produces
+fully substituted text (`src/ir/cmd_interpolate/mod.rs:230`). Failure produces
 `IrGenError::InvalidCommand`, surfaced through the Fluent message
 `ir.invalid_command` (`locales/en-GB/messages.ftl:188`), rendered as
 `Invalid command interpolation: { $snippet }.`.
@@ -216,8 +201,8 @@ The two drift directions are named separately because they are not symmetric:
 The guard does not apply to `script:` recipes, and Netsuke never executes the
 token vector `shlex::split` returns; it only asks whether a split was possible.
 A second, `debug_assert!`-only use exists in `assert_shell_command`
-(`src/ninja_gen/mod.rs`), reached only for `Recipe::Command` because
-`script_shell_text` is explicitly exempt.
+(`src/ninja_gen/mod.rs:283-290`), reached only for `Recipe::Command` because
+`script_shell_text` (`src/ninja_gen/mod.rs:343-356`) is explicitly exempt.
 
 ## Options considered
 
@@ -342,10 +327,64 @@ published interface.
   `shlex` guard are covered by Proptest properties, not by proof, and are
   described here as property-tested rather than proved.
 - **The domain boundary in this module is not clean.**
-  `invalid_command_error` (`src/ir/cmd_interpolate/mod.rs`) calls the
+  `invalid_command_error` (`src/ir/cmd_interpolate/mod.rs:215-222`) calls the
   localization layer and stores a pre-rendered, locale-resolved human string
   inside the domain error. That is presentation resolved within domain policy
   against ambient state. It does not affect the contract above, but this module
   is not an exemplar of a pure domain boundary and should not be cited as one.
 - **The `shlex` guard is not an injection defence.** It is an approximation of
   word splitting, and a command that splits cleanly is not thereby safe.
+
+## Addendum — 2026-10-19: PowerShell script placeholder security (#846)
+
+An earlier version of the accepted decision claimed that `script:` recipes use
+the POSIX-aware scanner, including on PowerShell. This addendum corrects that
+claim for PowerShell only. PowerShell `command:` and `script:` recipes both use
+PowerShell-aware marker scanning. In both recipe kinds, markers are valid only
+at unquoted insertion sites. Markers in single- or double-quoted
+strings, single- or double-quoted here-strings, `$()` command substitutions, or
+immediately after a backtick are rejected. Markers in the raw native-command
+region entered by an unquoted `--%` are also rejected; scanning resumes after
+that region's newline or pipeline terminator.
+
+The PowerShell quoted-context bindings are standalone single-quoted path
+literals. They are not context-safe encoders for insertion inside an existing
+PowerShell string. This is why those sites fail closed instead of receiving a
+context-specific encoding. A marker immediately beside an ASCII single quote on
+either side, or another marker, is also rejected: standalone single-quoted
+literals could merge with neighbouring strings or arguments. PowerShell scripts
+do not have inert comment regions: markers in ordinary line-comment text remain
+eligible for interpolation, while an apostrophe or other scanner-sensitive
+syntax in a comment can cause a later marker to be rejected because the partial
+scanner cannot safely determine the active context.
+
+The scanner also fails closed for later markers after a typographic PowerShell
+quote delimiter because it does not model delimiter pairing.
+
+This addendum changes the PowerShell script-scanner claim and its
+insertion-site contract above. ADR-034's separate contract that `$in` and
+`$out` remain shell variables is unchanged.
+
+The shell dispatch lives in `substitute_script` in
+`src/ir/cmd_interpolate/mod.rs`. `SubstitutionTraversal` and its
+`quote_context` are defined in `src/ir/cmd_interpolate/substitution/mod.rs`.
+`PowerShellLexicalState` in
+`src/ir/cmd_interpolate/substitution/powershell/lexical/mod.rs` owns
+here-string, comment, and unmodelled-syntax state. Stop-parsing state is in
+`src/ir/cmd_interpolate/substitution/powershell/stop_parsing.rs`. The
+PowerShell script rejection cases are in
+`src/ir/cmd_interpolate/powershell_script_tests/`.
+
+## Addendum — 2026-10-19: PowerShell scanner review corrections
+
+Follow-up review tightened comment-boundary handling: a hash following a postfix
+`++` or `--` is treated as an ambiguous expression/comment boundary, and
+scanner-sensitive text in that region is tracked so later marker sites fail
+closed when necessary. The scanner also records unmodelled syntax before
+opening a here-string and rejects markers within the raw region after `--%`,
+while recognizing the region's newline and pipeline termination. These are
+conservative scanner rules; they do not change the unquoted-only placeholder
+contract above. The postfix token boundary check is
+`hash_follows_postfix_operator` in
+`src/ir/cmd_interpolate/substitution/powershell/tokens.rs`; related regressions
+live in the command and script PowerShell test modules.

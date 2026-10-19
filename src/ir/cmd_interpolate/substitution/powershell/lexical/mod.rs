@@ -2,7 +2,9 @@
 
 mod comments;
 
-use super::super::super::{IrGenError, QuoteContext, find_substitution, invalid_command_error};
+use super::super::super::{
+    INS_TOKEN, IrGenError, OUTS_TOKEN, QuoteContext, find_substitution, invalid_command_error,
+};
 use super::super::{MarkerProtection, SubstitutionTraversal};
 use super::tokens::PowerShellSourceCharacter;
 use crate::shell_word::{is_power_shell_double_quote, is_power_shell_single_quote};
@@ -261,13 +263,40 @@ impl SubstitutionTraversal<'_, '_> {
     }
 
     /// Classify PowerShell quotes and command substitutions as protected regions.
-    fn power_shell_marker_protection(&self) -> MarkerProtection {
+    fn power_shell_marker_protection(&self, pos: usize) -> MarkerProtection {
         MarkerProtection::from_protected_region(
             !matches!(self.active_quote_context(), QuoteContext::Unquoted)
                 || self.power_shell_lexical.has_typographic_quote()
                 || self.power_shell_lexical.has_unmodelled_syntax()
-                || self.is_in_command_substitution(),
+                || self.is_in_command_substitution()
+                || self.marker_has_ambiguous_adjacency(pos),
         )
+    }
+
+    /// Reject a path literal that would merge with a quoted part or another marker.
+    fn marker_has_ambiguous_adjacency(&self, pos: usize) -> bool {
+        let Some((_, marker_length)) = find_substitution(self.chars, pos) else {
+            return false;
+        };
+        let marker_end = pos + marker_length;
+        let touches_single_quote = pos
+            .checked_sub(1)
+            .and_then(|previous| self.chars.get(previous))
+            == Some(&'\'')
+            || self.chars.get(marker_end) == Some(&'\'');
+        touches_single_quote || self.marker_follows_another_marker(pos)
+    }
+
+    /// Detect a marker that starts immediately after another PowerShell marker.
+    fn marker_follows_another_marker(&self, pos: usize) -> bool {
+        [INS_TOKEN.len(), OUTS_TOKEN.len()]
+            .into_iter()
+            .any(|length| {
+                pos.checked_sub(length).is_some_and(|previous_start| {
+                    find_substitution(self.chars, previous_start)
+                        .is_some_and(|(_, previous_length)| previous_start + previous_length == pos)
+                })
+            })
     }
 
     /// Preserve a PowerShell backtick escape unless it would hide a recipe marker.

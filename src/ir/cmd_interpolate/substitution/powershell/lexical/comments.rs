@@ -79,7 +79,7 @@ impl SubstitutionTraversal<'_, '_> {
         self.append_marker_for_context(
             character.position(),
             character.value(),
-            Self::power_shell_marker_protection(self),
+            Self::power_shell_marker_protection(self, character.position()),
         )
     }
 

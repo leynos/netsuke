@@ -210,7 +210,11 @@ bedeutet: wird im aktiven Rezepttext umgeschrieben; siehe Hinweis unten).
     Heredoc-Begrenzern werden expandiert. PowerShell-`command:`- und
     `script:`-Rezepte weisen Marker in einfachen und doppelten
     Anführungszeichen, Here-Strings, `$()` sowie direkt nach einem Backtick
-    zurück. PowerShell-Skripte behandeln Kommentare nicht als inerte Bereiche:
+    zurück. Ein Marker direkt neben einem ASCII-Apostroph (auf einer der
+    beiden Seiten) oder einem weiteren Marker wird ebenfalls zurückgewiesen:
+    eigenständige einfach zitierte Literale könnten mit angrenzendem String- oder
+    Argumenttext verschmelzen. PowerShell-Skripte behandeln Kommentare nicht als
+    inerte Bereiche:
     gewöhnlicher Kommentartext lässt spätere ungequotete Marker zur
     Interpolation zu, aber ein Blockkommentar-Anfang oder Anführungszeichen
     (einschließlich Apostrophen), Backticks oder Substitutionssyntax in einem

@@ -207,7 +207,10 @@ que a forma é reescrita no texto ativo da receita; consulte a nota abaixo).
     no corpo de heredocs como tokens internos, sem expandi-los; marcadores nos
     delimitadores de heredoc são expandidos. Receitas `command:` e `script:` do
     PowerShell rejeitam marcadores entre aspas simples ou duplas, em here-strings,
-    em `$()` e logo após uma crase. Scripts PowerShell não tratam comentários
+    em `$()` e logo após uma crase. Um marcador também é rejeitado quando está
+    diretamente junto a uma aspa simples ASCII, de qualquer lado, ou a outro
+    marcador: literais independentes entre aspas simples podem se unir ao texto
+    de uma string ou argumento vizinho. Scripts PowerShell não tratam comentários
     como regiões inertes: texto comum de comentário permite interpolar marcadores
     posteriores sem aspas, mas o início de um comentário em bloco, aspas,
     crases ou sintaxe de substituição em um comentário de linha podem levar à

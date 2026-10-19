@@ -157,16 +157,16 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         &mut self,
         pos: usize,
         ch: char,
-        marker_protection: fn(&Self) -> MarkerProtection,
+        marker_protection: fn(&Self, usize) -> MarkerProtection,
     ) -> Result<usize, IrGenError> {
         if let Some(next) = self.append_command_substitution_delimiter(pos, ch) {
             return Ok(next);
         }
         self.update_quote_context(ch);
-        self.append_marker_for_context(pos, ch, marker_protection(self))
+        self.append_marker_for_context(pos, ch, marker_protection(self, pos))
     }
     /// Classify POSIX backticks and command substitutions as protected regions.
-    const fn posix_marker_protection(&self) -> MarkerProtection {
+    const fn posix_marker_protection(&self, _pos: usize) -> MarkerProtection {
         MarkerProtection::from_protected_region(
             self.in_backticks || self.is_in_command_substitution(),
         )

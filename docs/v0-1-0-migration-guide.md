@@ -331,21 +331,36 @@ between entries in this mode. With `command_isolation: isolated`, each ordered
 entry runs in a child process starting from the action's initial working
 directory and environment. Netsuke checks each child's exit status before
 starting the next entry, preserving fail-fast behaviour. Each scalar, script,
-action, and target has a fresh shell process. In PowerShell, `{{ ins }}` and
-`{{ outs }}` remain path-quoted. Build and default-target paths containing
-spaces are escaped for Ninja, so whitespace-containing outputs remain valid;
-quote any other path or argument with the selected shell's syntax. Encoded
-PowerShell commands are retained while they fit the Windows command-line limit.
-Larger recipes up to 1 MiB use Ninja's `rspfile` and `rspfile_content`
-bindings, with a unique `$out`-derived `.ps1` name per edge, created in that
-edge's working directory, containing an ASCII PowerShell bootstrap and the
-Base64 UTF-16LE recipe payload. Recipes above that limit are rejected before
-Netsuke allocates their encoded payload. The command invokes it with
-`powershell.exe -File "$rspfile"`. The bootstrap removes its own
-`$PSCommandPath` in a `finally` block after the recipe succeeds or fails.
-Queries do not create response files. On POSIX and Bash routes, `$$` means the
-process identifier; in PowerShell, `$$` is the automatic variable containing
-the last token received by the session.
+action, and target has a fresh shell process.
+
+In both PowerShell `command:` and `script:` recipes, `{{ ins }}` and `{{ outs }}`
+are valid only at unquoted insertion sites. If a marker is inside an existing
+quoted string, remove the surrounding quotes and move the marker to an unquoted
+site; Netsuke supplies its own standalone single-quoted path literal. A marker
+immediately beside an ASCII single quote on either side, or another marker, is
+also rejected because standalone single-quoted literals could merge with
+adjacent string or argument text. Markers in single- or double-quoted strings,
+here-strings, `$()` command substitutions, immediately after a backtick, or in
+the raw native command region after `--%` are rejected. The script scanner has
+no inert PowerShell comment regions: markers in ordinary line-comment text
+remain eligible for interpolation, and an apostrophe or other
+scanner-sensitive syntax in a comment can make a later marker fail closed. The
+`$in` and `$out` names remain PowerShell shell variables, not Netsuke path
+markers.
+
+Build and default-target paths containing spaces are escaped for Ninja, so
+whitespace-containing outputs remain valid; quote any other path or argument
+with the selected shell's syntax. Encoded PowerShell commands are retained
+while they fit the Windows command-line limit. Larger recipes up to 1 MiB use
+Ninja's `rspfile` and `rspfile_content` bindings, with a unique `$out`-derived
+`.ps1` name per edge, created in that edge's working directory, containing an
+ASCII PowerShell bootstrap and the Base64 UTF-16LE recipe payload. Recipes
+above that limit are rejected before Netsuke allocates their encoded payload.
+The command invokes it with `powershell.exe -File "$rspfile"`. The bootstrap
+removes its own `$PSCommandPath` in a `finally` block after the recipe succeeds
+or fails. Queries do not create response files. On POSIX and Bash routes, `$$`
+means the process identifier; in PowerShell, `$$` is the automatic variable
+containing the last token received by the session.
 
 For reproducible Windows CI, use a `pwsh` step and let Netsuke select
 PowerShell; do not use a workflow-level `shell: bash` setting as evidence of
