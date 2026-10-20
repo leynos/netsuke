@@ -78,10 +78,9 @@ fn shell_selection_is_named(world: &TestWorld, name: String) -> Result<()> {
 /// Verify that an invalid selector is rejected by the decoder.
 #[then("decoding the shell selector fails")]
 fn shell_selection_is_rejected(world: &TestWorld) -> Result<()> {
-    let outcome = world
-        .shell_selection_outcome
-        .get()
-        .ok_or_else(|| anyhow::anyhow!("shell selector has not been decoded"))?;
-    ensure!(outcome.is_err(), "expected rejection, got {outcome:?}");
-    Ok(())
+    match world.shell_selection_outcome.get() {
+        Some(Err(_)) => Ok(()),
+        Some(Ok(selection)) => Err(anyhow::anyhow!("expected rejection, got Ok({selection:?})")),
+        None => Err(anyhow::anyhow!("shell selector has not been decoded")),
+    }
 }
