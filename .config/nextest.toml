@@ -21,9 +21,8 @@
 #
 # This is the profile's own allowance, and it governs every test no override
 # matches. The mutation compile gate widens it to ten periods; the production
-# module-slice check gets twelve; and the stub-environment, split-build,
-# and cold package-publish checks get fifteen. The largest
-# allowance is 900 s.
+# module-slice check, stub-environment, split-build, and cold package-publish
+# checks get fifteen. The largest allowance is 900 s.
 slow-timeout = { period = "60s", terminate-after = 5 }
 
 [test-groups.nested-cargo-builds]
@@ -79,12 +78,14 @@ success-output = "immediate"
 
 [[profile.default.overrides]]
 # This direct-rustc fixture needs the production library and build-script
-# dependencies, not every workspace test target. Its old all-target check hit
-# the 720 s cap while the follow-up Cargo metadata query waited on the shared
-# package-cache lock. Keep the scoped allowance while narrowing that work.
+# dependencies, not every workspace test target. The package-scoped check
+# still exceeded 720 s in the rebased full suite while nested rustc requests
+# waited for healthy shared compiler admission. Give this one test fifteen
+# periods (900 s), matching the other cold builds without widening unrelated
+# test timeouts; this remains below the 960 s coverage-run cap.
 filter = 'test(/^production_build_module_slice_has_expected_boundary($|::)/)'
 success-output = "immediate"
-slow-timeout = { period = "60s", terminate-after = 12 }
+slow-timeout = { period = "60s", terminate-after = 15 }
 
 [[profile.default.overrides]]
 # This isolated fixture builds dependencies into a fresh target before its

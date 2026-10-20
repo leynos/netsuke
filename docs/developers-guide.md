@@ -9632,8 +9632,9 @@ There are four such figures and the largest governs. `[profile.default]`'s own
 which is almost all of them. The mutation compile gate gets ten periods, 600 s;
 it compiles all 18 patched trees through the Kani frontend into a target
 directory no cache restores.
-`production_build_module_slice_has_expected_boundary` gets twelve periods, 720
-s. `stub_env_default_does_not_compile`,
+`production_build_module_slice_has_expected_boundary` gets fifteen periods, 900
+s, after its package-scoped Cargo check remained queued through the former 720
+s allowance. `stub_env_default_does_not_compile`,
 `split_build_fixture_compiles_through_the_direct_rustc_harness`, and the
 packaging smoke test each get fifteen periods, 900 s. The split-build fixture
 uses a private fixture workspace. Packaging verifies fresh extracted crate
@@ -9659,8 +9660,10 @@ shared package-cache lock; its allowance is now 900 s, matching the
 stub-environment and packaging checks. The production build-module fixture's
 old all-target check reached 720 s in a full gate while its follow-up metadata
 query waited on the shared cache lock. Its preparation now checks only the
-production library and build-script dependencies, while retaining the 720 s
-allowance for validation.
+production library and build-script dependencies. A post-rebase full suite
+still reached the 720 s cap while the scoped Cargo check remained active and
+rustc requests waited in healthy shared admission, so this test now gets the
+same targeted 900 s allowance as the other cold nested builds.
 
 `stub_env_default_does_not_compile` uses `TestSupportRlib` to prepare the
 `test_support` library metadata with package-scoped `cargo check` before
