@@ -415,6 +415,11 @@ remains `1747496f`, and the original combined candidate is preserved under
   all passed sequentially. The change-scope audit still shows only the
   feature's 23 paths; final commit, remote publication, exact-head review, and
   hosted checks remain outstanding.
+- [x] (2026-10-20) Simplified the BDD shell-rejection assertion to remove
+  duplicated outcome-check scaffolding while retaining both failure
+  diagnostics. The full candidate gates passed on that source, and local
+  CodeScene reports a 10.00 code-health score. Commit `94b12d8e` records the
+  change; publication and hosted review remain outstanding.
 - [ ] EP-M3: documentation, roadmap entry marked done, plan `COMPLETE`.
 
 ## Surprises & discoveries
@@ -918,7 +923,9 @@ audit confirmed the lower timeout changes remain in the base while the feature
 diff retains its 23 paths. The restacked feature candidate then passed its
 local gates, including the full 4,300-test suite, typecheck, lint, doc
 coverage, workflow contracts, Markdown, and Mermaid checks. After validating
-this final plan update, commit and push the candidate, then complete exact-head
+the focused BDD assertion cleanup, local CodeScene reports a 10.00 code-health
+score; the full candidate gates pass with its diagnostics preserved. After
+validating this plan update, push the candidate, then complete exact-head
 review, hosted checks, and merge.
 
 ## Context and orientation
@@ -2069,6 +2076,6 @@ executable path belongs to 11.2.3, and the IR's `ResolvedShell` belongs to
 - 2026-10-20: replaced the active 720-second blocker with the measured cause
   and validated, scoped 900-second remedy in lower PR 934. Recorded the lower
   candidate's sequential gate results, the conflict-free replay of all 16
-  feature commits, and the upper candidate's passing sequential gates. The
-  upper commit, publication, review, hosted equilibrium, and merge remain
-  outstanding.
+  feature commits, the upper candidate's passing sequential gates, and the
+  focused BDD assertion cleanup with a local CodeScene score of 10.00. The
+  upper publication, review, hosted equilibrium, and merge remain outstanding.
