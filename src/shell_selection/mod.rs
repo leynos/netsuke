@@ -5,6 +5,8 @@
 
 mod built_in;
 mod name;
+mod selection;
 
 pub use built_in::{BuiltInExecutable, BuiltInShell, HostFamily};
 pub use name::{ShellName, ShellNameError};
+pub use selection::ShellSelection;

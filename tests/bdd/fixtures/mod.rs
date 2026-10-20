@@ -14,6 +14,7 @@ use netsuke::manifest::EnvAccessPolicy;
 use netsuke::output_mode::OutputMode;
 use netsuke::output_prefs::OutputPrefs;
 use netsuke::runner::CommandEnv;
+use netsuke::shell_selection::ShellSelection;
 use netsuke::stdlib::{
     CanonicalKey, ClockProvider, NetworkPolicy, StdlibState as NetsukeStdlibState,
 };
@@ -43,6 +44,10 @@ pub struct TestWorld {
     pub manifest: RefCell<Option<netsuke::ast::NetsukeManifest>>,
     /// Error text captured when manifest loading fails.
     pub manifest_error: Slot<String>,
+    /// YAML scalar supplied to the shell-selection behaviour.
+    pub shell_selector_yaml: Slot<String>,
+    /// Result of decoding the current shell-selection behaviour input.
+    pub shell_selection_outcome: Slot<Result<ShellSelection, String>>,
     /// Resource ceilings injected for manifest parsing scenarios.
     pub manifest_budget_limits: Slot<netsuke::manifest::ManifestBudgetLimits>,
     /// Environment access policy applied while parsing the current manifest.
