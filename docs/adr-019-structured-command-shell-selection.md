@@ -121,8 +121,7 @@ args = ["-c"]
 
 Each `ShellDefinition` contains exactly `name`, `executable`, and `args`:
 
-- `name` must match `[a-z][a-z0-9_-]{0,62}` and must not be a reserved YAML
-  Boolean spelling (see the 2026-09-24 addendum);
+- `name` must match `[a-z][a-z0-9_-]{0,62}`;
 - `name` must not equal a built-in name, and merged names must be unique;
 - `executable` must be non-empty, valid UTF-8, and contain no NUL;
 - `executable` must be either a bare executable name or an absolute path;
