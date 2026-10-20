@@ -9,21 +9,26 @@ Status: IN PROGRESS
 
 The user approved this plan on 2026-10-13 and resumed implementation on
 2026-10-17 after the rebase. The original CLI-fixture timeout repair in
-[PR 913][cli-timeout-pr] merged into `main` as `077cf366`; the separate
-module-slice timeout repair in [PR 930][timeout-pr] merged on 2026-10-19 as
-`051358ee360a97fcbebe2a836e25e106917ed845`. The post-rebase `make test` on
-2026-10-20 timed out the module-slice fixture at its 720-second limit while its
-package-scoped Cargo check remained active and nested rustc requests waited for
-healthy compiler admission. This was a queue-budget failure, not a reported
-source error. The scoped allowance now gives this test 900 seconds. Lower
-candidate `24aeeecf` passed all local gates; the formerly failing test
-completed in 105.913 seconds during its full suite. The fix is draft
-[PR 934][module-slice-timeout-fix-pr] targeting `main`. The feature branch has
-been replayed onto that lower branch. Its sequential local gates now pass, but
-PR #778 remains at its earlier remote head until the candidate is committed and
-published; exact-head review, hosted checks, and merge are still pending. The
-26-file tolerance applies to this feature diff and excludes the separate
-timeout repairs.
+[PR 913][cli-timeout-pr] merged into `main` as `077cf366`; package-verification
+repair [PR 930][timeout-pr] merged on 2026-10-19 as
+`051358ee360a97fcbebe2a836e25e106917ed845`. A later full run timed out the
+module-slice fixture at its 720-second limit while its package-scoped Cargo
+check remained active and nested rustc requests waited in healthy compiler
+admission. Lower [PR 934][module-slice-timeout-fix-pr] raises only this test's
+allowance to 900 seconds. Its final head, `0a6143c3`, passed all focused
+documentation checks, CodeScene, the required CI jobs, Netsukefile Build Test,
+and Release Dry Run. The final allocated-token reconciliation found no further
+scoped documentation correction. The ready-state CodeRabbit review approved
+that exact head without actionable comments. Its ready-state Release Dry Run
+also completed successfully; only the PR-conditional publish job was skipped.
+PR 934 targets `main`, and #778 targets that branch. The 19-commit feature
+series has been rebased onto `0a6143c3` without conflicts; `range-diff` matches
+every commit. The target-only timeout-table change is separate from the
+feature's shell-selection section. All eight local gates passed sequentially on
+upper head `b107341f`; the final ExecPlan status update still needs its
+documentation-only checks and commit. The 26-file tolerance applies to this
+feature diff and excludes the separate timeout repairs. The plan remains in
+progress until the stacked PRs merge and post-merge state is verified.
 
 [cli-timeout-pr]: https://github.com/leynos/netsuke/pull/913
 [timeout-pr]: https://github.com/leynos/netsuke/pull/930
@@ -420,10 +425,93 @@ remains `1747496f`, and the original combined candidate is preserved under
   diagnostics. The full candidate gates passed on that source, and local
   CodeScene reports a 10.00 code-health score. Commit `94b12d8e` records the
   change; publication and hosted review remain outstanding.
-- [ ] EP-M3: documentation, roadmap entry marked done, plan `COMPLETE`.
+- [x] (2026-10-20) Addressed the stale timeout-policy comments identified in
+  [CodeRabbit's assessment](https://github.com/leynos/netsuke/pull/934#issuecomment-6283731132)
+  with lower-PR commit `3d24441f`. The scoped allowance remains 900 seconds;
+  the historical 720-second observation and 600-second mutation budget remain
+  correctly described. All local gates passed, including 4,128 Nextest tests
+  (six skipped), 39 doctests (six ignored), 98.90% doc coverage, and 1,321
+  workflow-contract tests (three skipped) plus 27 script tests. The
+  module-slice test passed in 130.729 seconds; hosted checks and the assessment
+  follow-up are pending.
+- [x] (2026-10-20) Corrected two further timeout-policy inaccuracies found
+  during CodeRabbit's follow-up: only the compile-fail stub test has a 900-
+  second override, and the guide has three distinct per-test allowances.
+  Lower-PR commit `18ab026a` passes all eight local gates, including 4,128
+  Nextest tests (six skipped), 39 doctests (six ignored), 98.90% doc coverage,
+  and 1,321 workflow-contract tests (three skipped) plus 27 script tests. The
+  module-slice test passed in 109.49 seconds. Hosted checks, CodeScene, and a
+  focused assessment response remain pending.
+- [x] (2026-10-20) Rebased the 19-commit feature series onto PR 934 head
+  `3d24441f`, using `24aeeecf` as the recorded old base. There were no
+  conflicts; `range-diff` matches all 19 commits, the 23-path feature diff is
+  unchanged, and the lower PR's nextest policy remains in the base. The new
+  feature head is `390d5f0e` before the pending M3 documentation commit.
+- [x] (2026-10-20) Rebased again after lower PR 934 advanced to `18ab026a`,
+  the remote head of the branch targeted by #778. The plan compared the
+  target-only changes and predicted no overlap; Git confirmed a conflict-free
+  replay, and `range-diff` matches all 19 commits. Recovery refs and the
+  pre-rebase M3 patch were retained, and the patch checksum matches after
+  restoration. The new feature head is `9bfb3646`; only the plan and roadmap
+  remain uncommitted while final candidate gates run.
+- [x] (2026-10-20) Corrected the last timeout-table ambiguity identified in
+  CodeRabbit's reply on `18ab026a`: the 900-second list now names the
+  stub-environment compile-fail check. Lower commit `0a6143c3` passes
+  `make fmt`, `make check-fmt`, `make markdownlint`, `make nixie`, and
+  `git diff --check`. CodeScene, all five CI jobs, Netsukefile Build Test, and
+  the initial Release Dry Run passed on that exact head. The final allocated-
+  token reconciliation confirmed the compile-fail qualifier resolves the
+  finding and found no further scoped correction. After #934 became ready,
+  CodeRabbit approved exact head `0a6143c3` with no actionable comments and
+  passed all 15 pre-merge checks. Its ready-state Release Dry Run passed every
+  completed successfully; only the PR-conditional publish-release job was
+  skipped.
+- [x] (2026-10-20) Compared the lower-only change from `18ab026a` to `0a6143c3`
+  with the upper feature diff. It touches the timeout table near line 9609,
+  while the feature's shell-selection section is near line 737. The
+  `git merge-tree` result is clean; no lockfile changes are involved.
+- [x] (2026-10-20) Replayed the 19 feature commits onto the live remote PR 934
+  head `0a6143c3`, after verifying the tracking ref and `ls-remote` agreed. Git
+  reported no conflicts. `range-diff` matches all 19 commits, and the feature
+  diff retains its 23 paths with the lower timeout policy in the base. Recovery
+  refs preserve the old head, old base, and target. The M3 patch was restored
+  from stash and its SHA256 matches the saved binary diff. The new feature head
+  is `b107341f`; all 19 feature commits remain unchanged.
+- [x] (2026-10-20) Ran the full candidate gates sequentially on
+  `b107341fd5244c03e7afe18fd3b440e175857b09`: `make check-fmt`, `make test`
+  (4,300 passed, six skipped; 153 doctests passed, 45 ignored across both
+  crates), `make typecheck`, `make lint`, `make doc-coverage` (98.92%, with 65
+  validator tests passing), `make test-workflow-contracts` (1,324 passed, three
+  skipped, plus 27 script tests), `make markdownlint` (187 files, zero issues),
+  and `make nixie` all passed. The final ExecPlan status update is a
+  documentation-only change; run `make fmt`, `make check-fmt`,
+  `make markdownlint`, `make nixie`, and `git diff --check` sequentially before
+  committing. Full gate logs are under `/tmp` with the candidate-specific `-7`,
+  `-5`, `-5`, `-6`, `-5`, `-3`, `-6`, and `-6` suffixes, respectively.
+- [ ] (2026-10-20) EP-M3 documentation closure is in the worktree: mark roadmap
+  task 11.2.1 done and record the timeout and feature hand-offs. The full
+  candidate gates passed before this final plan-status edit; the focused
+  documentation gates and commit remain. Publish the upper PR, complete its
+  exact-head assessment and hosted review, merge the stack, then set this plan
+  to `COMPLETE` after post-merge verification.
+- [ ] EP-M3: documentation, roadmap entry marked done, plan `COMPLETE` after
+  the stacked PRs merge and post-merge state is verified.
 
 ## Surprises & discoveries
 
+- Observation (2026-10-20): CodeRabbit's first completeness assessment found
+  current-policy comments in `.config/nextest.toml` and
+  `docs/developers-guide.md` that still described the former 720-second
+  allowance. The runtime policy was already 900 seconds; the mismatch was
+  documentation-only and is corrected by lower-PR commit `3d24441f`. The
+  [follow-up assessment request](https://github.com/leynos/netsuke/pull/934#issuecomment-6284152518)
+  led to two further corrections in `18ab026a`; the candidate-bound reply
+  confirmed those passages and identified the same ambiguity in the timeout
+  summary table. Commit `0a6143c3` fixes that final occurrence; focused
+  documentation gates and hosted CI pass. The final focused reconciliation
+  resolved the finding, and the ready-state formal review approved the exact
+  head with no actionable comments. Its ready-state Release Dry Run completed
+  successfully, with only the PR-conditional publish-release job skipped.
 - Observation (2026-10-19): the first committed M1 local review found that
   validation examples piped through `tee` did not preserve gate failures.
   Bash's default pipeline status is the final command's status, and separate
@@ -910,23 +998,35 @@ hand-offs:
 - to 12.1.1: decide whether the manifest front-end should adopt strict Boolean
   parsing, given the pinned YAML 1.1 mapping.
 
-The 2026-10-20 timeout follow-up was delivered separately as draft PR 934,
-targeting `main`. Its 900-second scoped allowance addresses the observed wait
-in shared compiler admission without changing production source or other test
-budgets. All local gates passed on its head, `24aeeecf`: 4,128 Nextest tests
-passed (six skipped), 39 doctests passed (six ignored), documentation coverage
-was 98.90%, and the workflow-contract, format, type, lint, Markdown, and
-Mermaid gates passed. The formerly failing module-slice fixture completed in
-105.913 seconds on that full run. The 16 feature commits then replayed cleanly
-onto the lower branch; `range-diff` matched all commits, and the target-to-head
-audit confirmed the lower timeout changes remain in the base while the feature
-diff retains its 23 paths. The restacked feature candidate then passed its
-local gates, including the full 4,300-test suite, typecheck, lint, doc
-coverage, workflow contracts, Markdown, and Mermaid checks. After validating
-the focused BDD assertion cleanup, local CodeScene reports a 10.00 code-health
-score; the full candidate gates pass with its diagnostics preserved. After
-validating this plan update, push the candidate, then complete exact-head
-review, hosted checks, and merge.
+The 2026-10-20 timeout follow-up was delivered separately as PR 934, targeting
+`main`. Its original head, `24aeeecf`, raised the production module-slice
+allowance from 720 to 900 seconds and passed local and hosted gates; the test
+completed in 105.913 seconds in that run. CodeRabbit's completeness assessment
+found stale current-policy comments, corrected in `3d24441f`, then identified
+two more documentation inaccuracies corrected in `18ab026a`. All eight local
+gates pass on `18ab026a`: 4,128 Nextest tests (six skipped), 39 doctests (six
+ignored), 98.90% doc coverage, and 1,321 workflow-contract tests (three
+skipped) plus 27 script tests. The module-slice test completed in 109.49
+seconds. On docs-only head `0a6143c3`, focused documentation gates passed,
+CodeScene and CI passed, the final CodeRabbit reconciliation found no further
+scoped correction, and the formal review approved the exact head. Its
+ready-state Release Dry Run completed successfully on 2026-10-20, with only the
+PR-conditional publish-release job skipped.
+
+The 19-commit feature series has been rebased onto lower head `0a6143c3`, using
+`18ab026a` as the immediate old base. No conflicts occurred; `range-diff`
+matches every commit, the lower timeout changes remain in the base, and the
+feature diff retains its 23 paths. The rebased head `b107341f` passed all eight
+local gates sequentially: 4,300 Nextest tests (six skipped), 153 doctests (45
+ignored across both crates), 98.92% documentation coverage, 1,324 workflow
+contracts (three skipped) plus 27 script tests, zero Markdown issues, and all
+diagrams valid, along with typecheck and lint. Only the final ExecPlan and
+roadmap status edits remain uncommitted; their documentation-only gates are
+being completed before publication. The earlier 4,300-test candidate and local
+CodeScene score of 10.00 remain historical evidence for their own heads.
+Publish the validated upper branch, complete exact-head assessment and hosted
+review, merge the stack, and verify post-merge state before marking this plan
+complete.
 
 ## Context and orientation
 
@@ -2074,8 +2174,10 @@ executable path belongs to 11.2.3, and the IR's `ResolvedShell` belongs to
   exact-head local assessment remains outstanding; EP-M2 and EP-M3 are not yet
   complete.
 - 2026-10-20: replaced the active 720-second blocker with the measured cause
-  and validated, scoped 900-second remedy in lower PR 934. Recorded the lower
-  candidate's sequential gate results, the conflict-free replay of all 16
-  feature commits, the upper candidate's passing sequential gates, and the
-  focused BDD assertion cleanup with a local CodeScene score of 10.00. The
-  upper publication, review, hosted equilibrium, and merge remain outstanding.
+  and validated, scoped 900-second remedy in lower PR 934. Recorded three
+  rounds of lower-PR assessment corrections and their gate results. Commit
+  `0a6143c3` fixes the final reported documentation ambiguity; all required
+  checks pass, with Windows lint and reconciliation still pending. The 19
+  feature commits were replayed onto `0a6143c3` without conflicts; `range-diff`
+  matches all 19 and the M3 patch checksum is unchanged. The rebased upper head
+  is `b107341f`; full candidate gates and publication remain outstanding.

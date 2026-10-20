@@ -2389,7 +2389,7 @@ This step builds data and resolution primitives independently of the future
 structured-command AST. Each task keeps configuration and ambient host input
 outside the execution domain.
 
-- [ ] 11.2.1. Add the manifest-facing shell selection vocabulary.
+- [x] 11.2.1. Add the manifest-facing shell selection vocabulary.
   - Requires 11.1.1.
   - Add the finite `BuiltInShell` enum with `sh`, `bash`, `pwsh`, and
     `powershell`, plus a validated `ShellName` registry-name type capable of
