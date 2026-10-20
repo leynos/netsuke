@@ -14,6 +14,7 @@ Examples
 1
 """
 
+import dataclasses as dc
 import re
 
 from ci_test_evidence_types import NextestEvidence, TestEvidence, empty_evidence
@@ -63,22 +64,47 @@ def parse_nextest_records(
     >>> parse_nextest_records(lines)["executed_identity_inventory_complete"]
     True
     """
-    result = empty_evidence()["nextest"]
-    attempts: dict[str, TestEvidence] = {}
-    summarised = False
+    accumulator = _NextestAccumulator()
     for timestamp, body in lines:
+        accumulator.consume(timestamp, body)
+    return accumulator.finish()
+
+
+@dc.dataclass(slots=True)
+class _NextestAccumulator:
+    """Keep the active run's summary and identities together while parsing."""
+
+    result: NextestEvidence = dc.field(
+        default_factory=lambda: empty_evidence()["nextest"]
+    )
+    attempts: dict[str, TestEvidence] = dc.field(default_factory=dict)
+    summarised: bool = False
+
+    def consume(self, timestamp: str | None, body: str) -> None:
+        """Apply one native line and retain the latest run's state."""
         start = STARTING.fullmatch(body)
         if start:
-            attempts.clear()
-            summarised = False
-            _record_start(result, start)
-        if not summarised:
-            _record_test(result, attempts, timestamp, body)
+            self.attempts.clear()
+            self.summarised = False
+            _record_start(self.result, start)
+        if not self.summarised:
+            _record_test(self.result, self.attempts, timestamp, body)
         summary = SUMMARY.fullmatch(body)
         if summary:
-            summarised = True
-            _record_summary(result, summary)
-    result["tests"] = list(attempts.values())
+            _record_summary(self.result, summary)
+            self.summarised = True
+
+    def finish(self) -> NextestEvidence:
+        """Return the final run with its identity completeness flags."""
+        self.result["tests"] = list(self.attempts.values())
+        _record_identity_completeness(self.result, self.attempts)
+        return self.result
+
+
+def _record_identity_completeness(
+    result: NextestEvidence, attempts: dict[str, TestEvidence]
+) -> None:
+    """Compare recorded test identities with the final run summary."""
     executed_attempts = [
         test for test in attempts.values() if test["outcome"] != "skip"
     ]
@@ -91,7 +117,6 @@ def parse_nextest_records(
         and result["skipped_count"] == 0
         and result["selected_count"] == result["executed_count"]
     )
-    return result
 
 
 def nextest_phase_marker(body: str) -> str | None:

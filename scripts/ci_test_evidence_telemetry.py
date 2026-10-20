@@ -70,7 +70,9 @@ def load_inventory(path: Path, identity: tuple[int, int, int]) -> dict:
     return validate_inventory(inventory, identity)
 
 
-def validate_inventory(inventory: object, identity: tuple[int, int, int]) -> dict:
+def validate_inventory(
+    inventory: object, identity: tuple[int, int, int]
+) -> dict[str, object]:
     """Validate an inventory object against its run, attempt, and job.
 
     Parameters
@@ -81,6 +83,9 @@ def validate_inventory(inventory: object, identity: tuple[int, int, int]) -> dic
         Expected ``(run_id, run_attempt, job_id)`` triple, such as
         ``(123, 2, 456)``.
 
+    Reject non-object data, invalid identities, unsupported schemas, and an
+    inventory belonging to another run attempt or job.
+
     Returns
     -------
     dict
@@ -89,27 +94,52 @@ def validate_inventory(inventory: object, identity: tuple[int, int, int]) -> dic
     Raises
     ------
     TypeError
-        If the envelope is not an object or the identity is not three positive
-        integer values.
+        If ``inventory`` is not a JSON object, or ``identity`` does not
+        contain three positive integers.
     ValueError
-        If the schema is unknown or the inventory belongs to another attempt.
+        If the schema is unsupported, or the inventory belongs to another
+        run attempt or job.
+
     """
-    if not isinstance(inventory, dict):
+    if not _is_inventory_object(inventory):
         message = "inventory must be a JSON object"
         raise TypeError(message)
-    if len(identity) != len(INVENTORY_IDENTITY_FIELDS) or any(
-        type(value) is not int or value <= 0 for value in identity
-    ):
-        message = "inventory identity must contain three positive integers"
-        raise TypeError(message)
-    if type(inventory.get("schema")) is not int or inventory["schema"] != 1:
+    _require_valid_identity(identity)
+    if not _has_supported_schema(inventory):
         message = "invalid inventory schema"
         raise ValueError(message)
-    observed = tuple(inventory.get(key) for key in INVENTORY_IDENTITY_FIELDS)
-    if not all(type(value) is int for value in observed) or observed != identity:
+    if not _matches_attempt(inventory, identity):
         message = "inventory attempt mismatch"
         raise ValueError(message)
     return inventory
+
+
+def _is_inventory_object(value: object) -> typ.TypeGuard[dict[str, object]]:
+    """Narrow decoded inventory to an object with JSON string keys."""
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _require_valid_identity(identity: tuple[int, int, int]) -> None:
+    """Require positive integer run, attempt, and job identifiers."""
+    valid = len(identity) == len(INVENTORY_IDENTITY_FIELDS) and all(
+        type(value) is int and value > 0 for value in identity
+    )
+    if not valid:
+        message = "inventory identity must contain three positive integers"
+        raise TypeError(message)
+
+
+def _has_supported_schema(inventory: dict[str, object]) -> bool:
+    """Check that the inventory uses the collector's current schema."""
+    return type(inventory.get("schema")) is int and inventory["schema"] == 1
+
+
+def _matches_attempt(
+    inventory: dict[str, object], identity: tuple[int, int, int]
+) -> bool:
+    """Check that metadata belongs to the current run attempt and job."""
+    observed = tuple(inventory.get(key) for key in INVENTORY_IDENTITY_FIELDS)
+    return all(type(value) is int for value in observed) and observed == identity
 
 
 def _is_measurement(value: object) -> typ.TypeGuard[int | float]:

@@ -240,19 +240,15 @@ API harness. Call inventory with `always()` after coverage and before cleanup
 in PR and main coverage lanes. Preserve timeouts, groups, selection, coverage
 inputs, RUSTFLAGS, watchdog, and job ceiling. Do not split phases by rerunning
 tests or changing cleanup, objects, or failure behaviour. Source inspection of
-cargo-llvm-cov 0.9.0 shows that it loads Cargo configuration and uses the
-`CARGO_TERM_VERBOSE` setting for report merge/export `Running` lines; it does
-not expose a dedicated `CARGO_LLVM_COV_VERBOSE` switch.[^llvm-cov-verbose] The
-v0.9.0 manifest requires `cargo-config2` `^0.1.41`, but the tag has no
-committed lockfile, so the binary's resolved transitive version is unverified.
-This is static source evidence, not confirmation of the CI binary's runtime
-behaviour or its effective environment. Before relying on the indirect switch,
-check locally whether its environment propagation affects child Cargo and fits
-the telemetry budget. Until the native boundaries are validated, record merge
-and export together. The source's default merge command is
+the pinned cargo-llvm-cov 0.9.0 CLI and shared action found no verified
+environment switch for exposing separate report merge/export
+timings.[^llvm-cov-verbose] The indirect `CARGO_TERM_VERBOSE` configuration
+path is not enough to establish that the pinned action exposes those
+boundaries. Keep merge and export combined unless a local check against the
+pinned tool proves otherwise. The source's default merge command is
 `llvm-profdata merge -sparse -f <list> -o <profdata>`; externally supplied
-`LLVM_PROFDATA_FLAGS` may alter it, and the actual CI invocation has not been
-verified from source alone.
+`LLVM_PROFDATA_FLAGS` may alter it, and the actual CI invocation remains to be
+captured.
 
 Account for telemetry's broad cache-key rotation and warm-up; do not purge
 caches or deliberately cold-start production. Measure execution, upload bytes
@@ -545,21 +541,28 @@ occurred for the offline collector milestone.
 
 ## Revision note
 
-Revised 2026-10-20 while preparing to replay the issue commits onto the latest
-`origin/main` target, `f16c31760aff94a1d91bbbbfac4d024873942ce5`. The earlier
-local gate sequence and review evidence cover the previous base at
-`051358ee360a97fcbebe2a836e25e106917ed845`; they do not validate the new
-target. A fresh CodeRabbit review also identified that a Nextest `SKIP` record
-has no duration and is excluded from the summary's executed count. The parser
-now retains that identity and compares only non-skip outcomes with the executed
+Revised 2026-10-20 against the current PR target `origin/main` at
+`360d475b44df45fb08106c6f01da5242a04e38aa`. The earlier local gate sequence and
+review evidence cover the previous base at
+`051358ee360a97fcbebe2a836e25e106917ed845`; they do not validate this target. A
+fresh CodeRabbit review also identified that a Nextest `SKIP` record has no
+duration and is excluded from the summary's executed count. The parser now
+retains that identity and compares only non-skip outcomes with the executed
 count. The review also identified partial `finished/selected` summary counts;
 the parser now retains those counts and refuses to call a fail-fast run's
 selected identity inventory complete. The latest review also caught the
 private-module list, missing CLI usage, and dropped non-default Ubicloud
 shapes; the guide, collector entrypoint, and runner-provenance contract now
-cover those cases. Earlier hosted validation, H4 monitoring, and local
-supervisor evidence remain dated history. The controlled baseline, bounded
-telemetry, fresh review, and candidate decisions remain outstanding.
+cover those cases. The 20 October hosted PR run passed its Linux coverage,
+Windows, and release checks, but the CodeScene check failed on collector
+complexity. CodeScene CLI 1.0.52 reproduced those findings against the current
+base; the collector has since been decomposed by parsing and validation
+responsibility, with no rule suppressions. Its current local delta reports no
+new findings, and the four added helper modules each score 10.0. Local gates,
+fresh review, and hosted confirmation of that repair remain pending. Earlier
+hosted validation, H4 monitoring, and local supervisor evidence remain dated
+history. The controlled baseline, bounded telemetry, and candidate decisions
+remain outstanding.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
@@ -568,7 +571,7 @@ telemetry, fresh review, and candidate decisions remain outstanding.
 
 [^llvm-cov-verbose]: Static source references:
   [cargo-llvm-cov 0.9.0 CLI][llvm-cov-cli], [context][llvm-cov-context],
-  [report][llvm-cov-report], [manifest][llvm-cov-manifest] and
+  [report][llvm-cov-report], [manifest][llvm-cov-manifest], and the
   [cargo-config2 environment mapping][cargo-config-env].
 
 [llvm-cov-cli]: https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.0/src/cli.rs
