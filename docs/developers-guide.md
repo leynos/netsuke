@@ -4495,11 +4495,11 @@ and the failure then names nextest's cap rather than the patch that was slow.
 The widened allowance is bounded from above by the whole-run budget: the
 ordering requires `global-timeout` strictly above the largest per-test
 allowance. The mutation gate keeps its 600 s allowance. The production-module
-check, stub-environment checks, split-build, and packaging smoke tests each get
-900 s, leaving 60 s below the 960 s whole-run budget. At 60 s periods, 960 s
-would permit at most fifteen periods (900 s) while remaining strictly below the
-whole-run budget. An allowance of 960 s would equal that budget, and the run
-could end before the test used its allowance.
+check, the stub-environment compile-fail check, split-build, and packaging
+smoke tests each get 900 s, leaving 60 s below the 960 s whole-run budget. At
+60 s periods, 960 s would permit at most fifteen periods (900 s) while
+remaining strictly below the whole-run budget. An allowance of 960 s would
+equal that budget, and the run could end before the test used its allowance.
 
 That widening was inert when it first landed, which is why the override is
 worth reading as a worked example of the trap above. Its filter named the bare
@@ -9627,11 +9627,11 @@ alone would report a 60 s allowance where the real maximum is 900 s. Any
 comparison against the tiers above rests on that reading, and the contract
 asserts it explicitly rather than leaving it implied.
 
-There are four such figures and the largest governs. `[profile.default]`'s own
-`slow-timeout` gives five periods — 300 s — to every test no override matches,
-which is almost all of them. The mutation compile gate gets ten periods, 600 s;
-it compiles all 18 patched trees through the Kani frontend into a target
-directory no cache restores.
+There are three distinct per-test allowances and the largest governs.
+`[profile.default]`'s own `slow-timeout` gives five periods — 300 s — to every
+test no override matches, which is almost all of them. The mutation compile
+gate gets ten periods, 600 s; it compiles all 18 patched trees through the Kani
+frontend into a target directory no cache restores.
 `production_build_module_slice_has_expected_boundary` gets fifteen periods, 900
 s, after its package-scoped Cargo check remained queued through the former 720
 s allowance. `stub_env_default_does_not_compile`,
