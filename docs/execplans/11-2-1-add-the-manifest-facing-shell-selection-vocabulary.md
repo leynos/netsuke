@@ -14,21 +14,22 @@ repair [PR 930][timeout-pr] merged on 2026-10-19 as
 `051358ee360a97fcbebe2a836e25e106917ed845`. A later full run timed out the
 module-slice fixture at its 720-second limit while its package-scoped Cargo
 check remained active and nested rustc requests waited in healthy compiler
-admission. Lower [PR 934][module-slice-timeout-fix-pr] raises only this test's
-allowance to 900 seconds. Its final head, `0a6143c3`, passed all focused
-documentation checks, CodeScene, the required CI jobs, Netsukefile Build Test,
-and Release Dry Run. The final allocated-token reconciliation found no further
-scoped documentation correction. The ready-state CodeRabbit review approved
-that exact head without actionable comments. Its ready-state Release Dry Run
-also completed successfully; only the PR-conditional publish job was skipped.
-PR 934 targets `main`, and #778 targets that branch. The 19-commit feature
-series has been rebased onto `0a6143c3` without conflicts; `range-diff` matches
-every commit. The target-only timeout-table change is separate from the
-feature's shell-selection section. All eight local gates passed sequentially on
-upper head `b107341f`; the final ExecPlan status update still needs its
-documentation-only checks and commit. The 26-file tolerance applies to this
-feature diff and excludes the separate timeout repairs. The plan remains in
-progress until the stacked PRs merge and post-merge state is verified.
+admission. Lower [PR 934][module-slice-timeout-fix-pr] raised only this test's
+allowance to 900 seconds and merged into `main` as `360d475b`. Its final head,
+`0a6143c3`, passed focused documentation checks, CodeScene, required CI,
+Netsukefile Build Test, and Release Dry Run. The ready-state CodeRabbit review
+approved that exact head without actionable comments. GitHub then restacked PR
+778 directly onto `main`. The local 20-commit feature series has also been
+rebased onto `origin/main` at `360d475b` without conflicts. `range-diff`
+matches the 19 published feature patches; the additional local commit records
+the M3 roadmap and ExecPlan closure. The old lower-branch tree is identical to
+the new main tree. All eight local gates passed sequentially on the rebased
+candidate `ecb574dd`: 4,300 tests passed (six skipped), doctests passed, and
+the workflow-contract and documentation gates passed. Focused documentation
+gates for this final plan update passed: formatting, Markdown and spelling,
+diagram, and whitespace checks. The 26-file tolerance applies to this feature
+diff and excludes the separate timeout repairs. The plan remains in progress
+until PR 778 is reviewed, merged, and its post-merge state is verified.
 
 [cli-timeout-pr]: https://github.com/leynos/netsuke/pull/913
 [timeout-pr]: https://github.com/leynos/netsuke/pull/930
@@ -488,14 +489,28 @@ remains `1747496f`, and the original combined candidate is preserved under
   `make markdownlint`, `make nixie`, and `git diff --check` sequentially before
   committing. Full gate logs are under `/tmp` with the candidate-specific `-7`,
   `-5`, `-5`, `-6`, `-5`, `-3`, `-6`, and `-6` suffixes, respectively.
-- [ ] (2026-10-20) EP-M3 documentation closure is in the worktree: mark roadmap
+- [x] (2026-10-20) EP-M3 documentation closure is complete: mark roadmap
   task 11.2.1 done and record the timeout and feature hand-offs. The full
-  candidate gates passed before this final plan-status edit; the focused
-  documentation gates and commit remain. Publish the upper PR, complete its
-  exact-head assessment and hosted review, merge the stack, then set this plan
-  to `COMPLETE` after post-merge verification.
+  candidate gates passed before this final plan-status edit; focused
+  documentation gates passed and the closure commit was created. PR 934 has
+  since merged, and the local series was rebased onto its new target, `main`.
 - [ ] EP-M3: documentation, roadmap entry marked done, plan `COMPLETE` after
   the stacked PRs merge and post-merge state is verified.
+
+- [x] (2026-10-20) Merged prerequisite PR 934 into `main` as `360d475b`.
+  GitHub automatically moved PR 778's base to `main` and replayed its 19
+  published feature commits; `range-diff` matched all 19 patches. The old
+  lower-branch tree equals the new main tree. Replayed the local 20-commit
+  series from old base `0a6143c3` onto `origin/main` at `360d475b` without
+  conflicts. The local M3 closure commit is preserved as the twentieth commit.
+  All eight gates passed sequentially on the rebased candidate `ecb574dd`:
+  4,300 tests passed (six skipped), doctests passed, typecheck and lint passed,
+  documentation coverage was 98.92%, workflow contracts passed (1,324 passed,
+  three skipped, plus 27 script tests), Markdown lint reported zero issues, and
+  all diagrams validated. Only this final plan update remains uncommitted;
+  `make fmt`, `make check-fmt`, `make markdownlint`, `make nixie`, and
+  `git diff --check` passed on the final plan text before commit. Logs are in
+  `/tmp` with the candidate-specific suffix and gate name.
 
 ## Surprises & discoveries
 
@@ -1013,20 +1028,25 @@ scoped correction, and the formal review approved the exact head. Its
 ready-state Release Dry Run completed successfully on 2026-10-20, with only the
 PR-conditional publish-release job skipped.
 
-The 19-commit feature series has been rebased onto lower head `0a6143c3`, using
-`18ab026a` as the immediate old base. No conflicts occurred; `range-diff`
-matches every commit, the lower timeout changes remain in the base, and the
-feature diff retains its 23 paths. The rebased head `b107341f` passed all eight
-local gates sequentially: 4,300 Nextest tests (six skipped), 153 doctests (45
-ignored across both crates), 98.92% documentation coverage, 1,324 workflow
-contracts (three skipped) plus 27 script tests, zero Markdown issues, and all
-diagrams valid, along with typecheck and lint. Only the final ExecPlan and
-roadmap status edits remain uncommitted; their documentation-only gates are
-being completed before publication. The earlier 4,300-test candidate and local
-CodeScene score of 10.00 remain historical evidence for their own heads.
-Publish the validated upper branch, complete exact-head assessment and hosted
-review, merge the stack, and verify post-merge state before marking this plan
-complete.
+The 19-commit feature series was first rebased onto lower head `0a6143c3`, and
+all eight local gates passed sequentially on `b107341f`: 4,300 Nextest tests
+(six skipped), 153 doctests (45 ignored across both crates), 98.92%
+documentation coverage, 1,324 workflow contracts (three skipped) plus 27 script
+tests, zero Markdown issues, valid diagrams, typecheck, and lint. The final
+ExecPlan and roadmap closure was committed after focused documentation gates.
+PR 934 then merged as `360d475b`; GitHub restacked PR 778 onto `main`, and the
+local series was independently rebased there without conflicts. `range-diff`
+matches all 19 published feature patches and preserves the local closure
+commit. The old lower-branch tree equals the new main tree. The earlier
+full-gate receipts and local CodeScene score of 10.00 remain evidence for their
+own candidate. The rebased candidate `ecb574dd` passed all eight gates
+sequentially: 4,300 Nextest tests (six skipped), 39 doctests passed in each of
+the two crates (six ignored in each), 98.92% documentation coverage, 1,324
+workflow contracts (three skipped) plus 27 script tests, zero Markdown issues,
+valid diagrams, typecheck, and lint. Focused documentation gates for this final
+plan update passed before commit. Publish the validated candidate, complete
+exact-head assessment and hosted review, merge PR 778, and verify post-merge
+state before marking this plan complete.
 
 ## Context and orientation
 
@@ -1108,8 +1128,9 @@ execution, so the three-way selector is Netsuke-specific.
 ## Conformance basis
 
 The original design basis was `dcac7634`. Implementation began against the
-frozen remote target `077cf366` after rebase to `5b32a37f`; the local branch
-has since been rebased onto current `origin/main` `7d1e4c12` as `1619d474`.
+frozen remote target `077cf366` after rebase to `5b32a37f`. The lower timeout
+repair then merged into `main` as `360d475b`; the local branch was rebased onto
+that remote target from old lower head `0a6143c3` without conflicts.
 Current-main orientation changes are mechanical: `HostPattern` is in
 `src/host/pattern.rs` and re-exported as `crate::host_pattern`; the new public
 module precedes private `shell_word` in `src/lib.rs`. Owned tests now use plain
