@@ -38,7 +38,13 @@ repair candidate passed all eight local gates sequentially: 4,300 tests passed
 typecheck and lint passed, documentation coverage was 98.92%, workflow
 contracts passed (1,324 passed, three skipped, plus 27 script tests), Markdown
 lint reported zero issues, and all diagrams validated. Candidate-bound
-assessment confirmation and hosted checks remain pending.
+assessment confirmation and hosted checks passed on published head `bd7fcb5d`.
+CodeRabbit confirmed both findings resolved with no further in-scope omissions
+in
+[comment 6286339453](https://github.com/leynos/netsuke/pull/778#issuecomment-6286339453).
+CI run `39390134461`, Netsukefile Build Test `39390134438`, Release Dry Run
+`39390134467`, CodeScene result `8031878`, and Gecko Security all passed.
+Formal review, merge, and post-merge verification remain pending.
 
 [cli-timeout-pr]: https://github.com/leynos/netsuke/pull/913
 [timeout-pr]: https://github.com/leynos/netsuke/pull/930
@@ -534,8 +540,14 @@ remains `1747496f`, and the original combined candidate is preserved under
   `make test-workflow-contracts` (1,324 passed, three skipped, plus 27 script
   tests), `make markdownlint` (187 files, zero issues), and `make nixie` (all
   diagrams valid). Results apply to the local source diff on published head
-  `b0cda33b`; the repair is not yet published and follow-up assessment
-  confirmation and hosted checks remain pending.
+  `b0cda33b`; the repair is published as `bd7fcb5d`. Final ExecPlan formatting
+  checks passed after recording the gate results. CodeRabbit confirmed both
+  findings resolved and found no additional in-scope defect on that exact
+  base/head; see
+  [comment 6286339453](https://github.com/leynos/netsuke/pull/778#issuecomment-6286339453).
+  CI, Netsukefile Build Test, Release Dry Run, CodeScene, and Gecko checks all
+  passed on that head. The PR remains in progress pending formal review, merge,
+  and post-merge verification.
 
 ## Surprises & discoveries
 
@@ -1073,10 +1085,10 @@ plan update passed before commit. Publish the validated candidate, complete
 exact-head assessment and hosted review, merge PR 778, and verify post-merge
 state before marking this plan complete. The first candidate-bound completeness
 assessment found only the planned `Hash` implementation and public doctest
-missing; both have been added to the new worktree candidate and all eight
-sequential local gates pass. Publish it, obtain follow-up assessment and hosted
-review, merge PR 778, and verify post-merge state before marking this plan
-complete.
+missing; both have been added, all eight local gates passed, and the follow-up
+assessment plus hosted checks passed on published head `bd7fcb5d`. Complete
+formal review, merge PR 778, and verify post-merge state before marking this
+plan complete.
 
 ## Context and orientation
 
