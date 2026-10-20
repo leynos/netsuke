@@ -1,0 +1,23 @@
+---
+source: tests/manifest_load_options/wrapper_equivalence.rs
+expression: document
+---
+=== pure ===
+observer: ManifestIngestion, InitialYamlParsing
+invalid operation: Manifest resource budget exhausted during ⁨source⁩ after reaching ⁨8⁩.: manifest resource budget exhausted at Source (limit 8)
+
+=== reads_env ===
+observer: ManifestIngestion, InitialYamlParsing
+invalid operation: Manifest resource budget exhausted during ⁨source⁩ after reaching ⁨8⁩.: manifest resource budget exhausted at Source (limit 8)
+
+=== malformed_yaml ===
+observer: ManifestIngestion, InitialYamlParsing
+invalid operation: Manifest resource budget exhausted during ⁨source⁩ after reaching ⁨8⁩.: manifest resource budget exhausted at Source (limit 8)
+
+=== boolean_interpolation ===
+observer: ManifestIngestion, InitialYamlParsing
+invalid operation: Manifest resource budget exhausted during ⁨source⁩ after reaching ⁨8⁩.: manifest resource budget exhausted at Source (limit 8)
+
+=== glob_corpus ===
+observer: ManifestIngestion, InitialYamlParsing
+invalid operation: Manifest resource budget exhausted during ⁨source⁩ after reaching ⁨8⁩.: manifest resource budget exhausted at Source (limit 8)
