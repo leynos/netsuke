@@ -168,7 +168,7 @@ ancestor of the current head nor its tree.
 `shell_variable_prefix_does_not_match`, `marker_token_match_is_exact`,
 `scanner_agrees_with_independent_specification`,
 `substituted_odd_backticks_are_rejected`, and
-`guard_uses_the_substituted_command`. `ADR-004` and
+`guard_uses_the_substituted_command`. `ADR-0047` and
 `docs/formal-verification-methods-in-netsuke.md` both exist and state the
 achieved bounds and the Proptest hand-off.
 
@@ -338,7 +338,7 @@ you must follow:
 - **Per-harness attributes.** Existing harnesses use `#[kani::solver(kissat)]`
   and `#[kani::unwind(N)]`. Add both to every new harness; kissat is
   substantially faster than the default solver on this workload.
-- **Harnesses drive production code.** ADR-004 forbids re-implementing the
+- **Harnesses drive production code.** ADR-0047 forbids re-implementing the
   logic under proof inside a harness. A harness-local *oracle* for a
   side-condition is a different thing and is permitted where this plan says so
   explicitly; see `Decision log`.
@@ -413,7 +413,7 @@ Read these before starting. They are not optional background.
 Repository documents:
 
 - `AGENTS.md` — mandatory gates, file-size cap, commit style, spelling policy.
-- `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` — the governing decision
+- `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md` — the governing decision
   on Kani bounds and production-owned kernels.
 - `docs/developers-guide.md`, sections "Command and recipe lowering" and
   "Formal-verification tooling".
@@ -447,7 +447,7 @@ There is no Terms of Reference document in this repository. Upstream artefacts:
   `RM-4.2.3.a` through `RM-4.2.3.d`.
 - `docs/formal-verification-methods-in-netsuke.md`, section "Kani for command
   interpolation" — the design basis, `FV-CMD`.
-- `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` — `ADR-004`.
+- `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md` — `ADR-0047`.
 
 Trace links:
 
@@ -457,7 +457,7 @@ RM-4.2.3.a -> FV-CMD -> EP-M2 -> ir::cmd_interpolate::verification::marker_token
 RM-4.2.3.b -> FV-CMD -> EP-M5 -> ir::cmd_interpolate::property_tests::scanner_agrees_with_independent_specification
 RM-4.2.3.c -> FV-CMD -> EP-M5 -> ir::cmd_interpolate::property_tests::substituted_odd_backticks_are_rejected
 RM-4.2.3.d -> FV-CMD -> EP-M5 -> ir::cmd_interpolate::property_tests::guard_uses_the_substituted_command
-ADR-004    ->           EP-M0 -> docs/adr-004-bound-kani-ir-harnesses-to-small-n.md (4.2.3 extension)
+ADR-0047    ->           EP-M0 -> docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md (4.2.3 extension)
 ```
 
 Roadmap item 4.4.1 declares `Requires 4.2.3`. This plan must therefore leave
@@ -471,8 +471,8 @@ writing the user-facing README section is 4.4.1's job.
    same strings. No pre-existing test may be edited to accommodate the change.
    If one needs editing, that is evidence of a behaviour change: stop.
 2. **No public API widening.** `netsuke::ir`'s public surface must not grow.
-   `ADR-004` Option D rejected verification ports on that surface. New items are
-   `pub(super)` at widest.
+   `ADR-0047` Option D rejected verification ports on that surface. New items
+   are `pub(super)` at widest.
 3. **No new dependencies.** `Cargo.toml` must not gain an entry.
 4. **No capacity limits in production.** Do not introduce a fixed-capacity
    buffer, a maximum placeholder count, or any other new bound into the
@@ -559,7 +559,7 @@ Stop and escalate. Do not work around these.
   Severity: high. Likelihood: high. `interpolate_command_with_bindings` calls
   it unconditionally, so no alphabet restriction avoids it — restriction makes
   `shlex` *total*, not absent, and CBMC still executes its state machine and
-  builds a symbolic `Vec<String>`. `ADR-004` records a `Utf8PathBuf` proof
+  builds a symbolic `Vec<String>`. `ADR-0047` records a `Utf8PathBuf` proof
   hitting the 8 GiB cap at N=3. Mitigation: only two harnesses touch
   `interpolate_command_with_bindings`, and both target a window of 6 to 8
   characters — enough to exhibit the specific fault each is designed to catch
@@ -572,7 +572,7 @@ Stop and escalate. Do not work around these.
   proof needs only an eight-character window with a symbolic position, while
   the marker proof uses a 32-character window containing the real constants.
   The full scanner and guard retain the genuine resource bound, so EP-M5 hands
-  their residual range to Proptest, exactly as `ADR-004` did for roadmap
+  their residual range to Proptest, exactly as `ADR-0047` did for roadmap
   4.2.1's unreachable 10-node bound.
 
 - **Marker-form placeholders fall outside every plausible small alphabet.**
@@ -607,8 +607,8 @@ Stop and escalate. Do not work around these.
   `$out`, `$ins`, and `$outs`. Changing this behaviour is a behaviour change
   and out of scope here (Constraint 1).
 
-- **`ADR-004` numbering collision.** Severity: low. Likelihood: certain.
-  Three files already share the `adr-004` prefix; this is a known accepted
+- **`ADR-0047` numbering collision.** Severity: low. Likelihood: certain.
+  Three files already share the `ADR-0047` prefix; this is a known accepted
   collision. Extend the existing Kani ADR rather than minting a number.
 
 ## Verification plan
@@ -920,7 +920,7 @@ patch or an explicitly justified exemption.
   the adapter harness should gain a patch is a question for the maintainer;
   raise it, do not silently fix roadmap 4.2.2's work here.
 
-### Residual gaps (to be recorded in `ADR-004` and the retrospective)
+### Residual gaps (to be recorded in `ADR-0047` and the retrospective)
 
 - Strings longer than the EP-M0 bound are covered by Proptest, not proof, for
   `OBL-SPEC`, `OBL-ODD`, and `OBL-GUARD`. `OBL-SHELL` has no such gap for its
@@ -935,7 +935,7 @@ patch or an explicitly justified exemption.
   non-matching `char` identically, so the space representative covers it by
   argument rather than by proof.
 - The path from `BuildGraph::from_manifest` down to this code is covered by
-  existing unit and behavioural tests, consistent with `ADR-004`'s existing
+  existing unit and behavioural tests, consistent with `ADR-0047`'s existing
   limitation for `find_duplicates`.
 
 ## Plan of work
@@ -944,7 +944,7 @@ patch or an explicitly justified exemption.
 
 Read `src/ir/cmd_interpolate/mod.rs`, `substitution.rs`, and `verification.rs`
 end to end, then `src/ir/cycle_verification.rs` and `src/ir/cycle_support.rs`
-for the shape you are copying, then `ADR-004`, then the two Decision log
+for the shape you are copying, then `ADR-0047`, then the two Decision log
 entries in the 4.2.2 execplan covering the resource cap and `LD_LIBRARY_PATH`.
 
 Run EP-M0. Write no harness until you have its measurement table.
@@ -1017,7 +1017,7 @@ the next stage on a failing gate.
   reach, and it is not covered by the maintainer's pre-acceptance. A shortfall
   in the *string-level* bound is different: the maintainer accepted it in
   advance on 2026-08-24, so record the achieved bound and the residual gap in
-  `Decision log`, draft the `ADR-004` extension, and continue to EP-M1 without
+  `Decision log`, draft the `ADR-0047` extension, and continue to EP-M1 without
   setting the plan to `BLOCKED`.
 - **Recovery:** delete the scratch branch.
 - **Compatibility decision:** none; no interface exists yet.
@@ -1066,7 +1066,7 @@ the next stage on a failing gate.
 - **Acceptance evidence:** the scanner and odd-backtick property mutations
   produce named counterexamples; `make test` passes after restoration.
 - **Conformance check:** the independent scanner oracle is structurally
-  different from production scanning and is documented in `ADR-004`.
+  different from production scanning and is documented in `ADR-0047`.
 
 ### EP-M4 — guard placement hand-off
 
@@ -1116,7 +1116,7 @@ the next stage on a failing gate.
     the aspirational 256/8, and name the Proptest hand-off; update the harness
     count in the continuous-integration paragraph that currently says
     "13 harnesses".
-  - `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`: extend Status, Date,
+  - `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md`: extend Status, Date,
     Decision outcome, and Known risks with the 4.2.3 bound decision, the
     window-completeness argument, the harness-local oracle policy, and the
     residual gaps. Add this execplan to Related documents.
@@ -1130,7 +1130,7 @@ the next stage on a failing gate.
   `coderabbit review --agent` reports no outstanding concerns; the measured CI
   `Run Kani harnesses` step is within the 12-minute tolerance.
 - **Conformance check:** every trace link resolves to a named, passing artefact;
-  every residual gap is in `ADR-004`; set status to `COMPLETE` only after that
+  every residual gap is in `ADR-0047`; set status to `COMPLETE` only after that
   reconciliation.
 - **Remaining gaps:** roadmap 4.4.1 remains open by design.
 
@@ -1176,7 +1176,7 @@ pure scanning — which is why `OBL-SPEC` proves the scanner and `OBL-ODD` and
 
 Do not introduce traits, ports, adapters, or dependency injection here. The
 `hexagonal-architecture` guidance applies where infrastructure is likely to
-change and multiple delivery mechanisms exist; neither is true. `ADR-004`
+change and multiple delivery mechanisms exist; neither is true. `ADR-0047`
 Option D already rejected verification ports on this surface.
 
 ## Concrete steps
@@ -1468,7 +1468,7 @@ outside this local completion boundary and must be reported separately by CI.
 ## Progress
 
 - [x] (2026-08-24) Reconnaissance: `src/ir/cmd_interpolate.rs`,
-  `src/ir/cycle_verification.rs`, `src/ir/cycle_support.rs`, `ADR-004`, the
+  `src/ir/cycle_verification.rs`, `src/ir/cycle_support.rs`, `ADR-0047`, the
   developers' guide formal-verification sections, the roadmap, the CI workflow,
   and the 4.2.2 execplan's operational lessons.
 - [x] (2026-08-24) Confirmed Kani 0.67.0 pin; `bounded_any` and stubbing are
@@ -1644,7 +1644,7 @@ and are now marked **accepted**. No decision in this log is outstanding.
 
 - **Decision:** Permit harness-local oracles for side conditions, and a
   harness-local declarative specification for `OBL-SPEC`. **Accepted by the
-  maintainer, 2026-08-24.** **Rationale:** `ADR-004` Option C forbids a
+  maintainer, 2026-08-24.** **Rationale:** `ADR-0047` Option C forbids a
   harness-side model *replacing* a production path, and Option D rejects public
   verification ports. Neither forbids an independently written oracle used as
   the right-hand side of an assertion, which is the standard
@@ -1664,7 +1664,7 @@ and are now marked **accepted**. No decision in this log is outstanding.
   the residual gap, and the Proptest hand-off, and continues. The mechanical
   stop in `Tolerances` still applies if the sigil shape cannot reach a window
   of 8 characters, because that would undermine the plan's premise rather than
-  merely narrow its reach. **Rationale:** `ADR-004` records the identical
+  merely narrow its reach. **Rationale:** `ADR-0047` records the identical
   collision for roadmap 4.2.1, where a stated 10-node bound proved unreachable
   and was resolved by small bounds plus a Proptest hand-off. For the sigil
   contract the bound largely dissolves under AXIOM-WINDOW; for the string-level
@@ -1730,11 +1730,11 @@ and are now marked **accepted**. No decision in this log is outstanding.
   because two consecutive rebases have now moved them and the numbers cannot be
   kept true. **Date/Author:** 2026-08-24, planning agent.
 
-- **Decision:** Extend `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`
+- **Decision:** Extend `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md`
   rather than minting a new ADR number. **Rationale:** the same decision — how
   far to bound Kani harnesses and where to hand off — applied to a third
   subject. Roadmap 4.2.2 set the precedent, and three files already share the
-  `adr-004` prefix. **Date/Author:** 2026-08-24, planning agent.
+  `ADR-0047` prefix. **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Continue after the EP-M0 string-level shortfall with only the
   small, allocation-free sigil and marker proofs; discharge scanner, backtick,
@@ -1839,7 +1839,7 @@ superseded by the target branch's marker-only lowering; the post-rebase
 shell-variable and marker proofs establish the active boundary-independent
 matching decisions. The full scanner and guard could not meet the cap even at
 six characters, so the independent Proptest properties cover the 256/8 residual
-range instead. `ADR-004` records that boundary, the local-oracle policy, and
+range instead. `ADR-0047` records that boundary, the local-oracle policy, and
 its limits.
 
 The developers' guide now records the established `$$in` and marker-asymmetry
@@ -2104,7 +2104,7 @@ fresh verdict, so the plan remains `IN PROGRESS`.
 **Revision 2.23 (2026-09-03).** Review repair removes the vacuous command-
 interpolation cfg(kani) wiring test and its copied UI fixtures. The real
 production verification module remains covered by `make kani-ir` in the
-`kani-smoke` workflow. ADR-004 restores its historical 2026-06-23 content and
+`kani-smoke` workflow. ADR-0047 restores its historical 2026-06-23 content and
 records the command-interpolation verification boundary in a dated addendum;
 roadmap item `4.2.3` remains completion evidence. The requested test, format,
 lint, Markdown, documentation-coverage, full-suite, and Kani validations are

@@ -44,7 +44,7 @@ Terms used throughout, defined here so no prior reading is required.
 - **Seam.** A place where behaviour that would otherwise read the ambient
   process environment (variables, clock, filesystem, network) is instead
   supplied by the caller as a value or closure. Netsuke's seam vocabulary is
-  fixed by `docs/adr-008-environment-seam-taxonomy.md`.
+  fixed by `docs/adrs/adr-0008-environment-seam-taxonomy.md`.
 - **Clock provider.** The seam introduced here: a shared, thread-safe closure
   returning a `time::OffsetDateTime` representing "now".
 - **Ambient / ambient fallback.** Reading the real host clock, which is what
@@ -111,7 +111,7 @@ other stdlib submodule already receives some:
 `which::register(env, which_config)`,
 `network::register_functions(env, impure, network_config)`, and
 `command::register(env, impure, command_config)`. The time module is the
-outlier, which is precisely the ADR-008 gap this work closes.
+outlier, which is precisely the ADR-0008 gap this work closes.
 
 ### How registration is wired
 
@@ -239,7 +239,7 @@ doctests. The clock seam mirrors this shape, naming, and documentation density.
 | `tests/std_filter_tests.rs`                       | Wires the new integration module (see the wiring contract below).                                                |
 | `tests/features/stdlib_time.feature`              | New deterministic scenarios.                                                                                     |
 | `tests/bdd/steps/stdlib/rendering.rs`             | New `Given` step; `RenderConfig` gains a clock.                                                                  |
-| `docs/adr-008-environment-seam-taxonomy.md`       | Addendum recording the seam classification.                                                                      |
+| `docs/adrs/adr-0008-environment-seam-taxonomy.md` | Addendum recording the seam classification.                                                                      |
 | `docs/developers-guide.md`                        | Seam ownership rules and module boundary entry.                                                                  |
 | `docs/netsuke-test-framework-technical-design.md` | §5.2 updated to record implemented state.                                                                        |
 | `docs/roadmap.md`                                 | Mark 7.1.1 done, at the very end.                                                                                |
@@ -275,7 +275,7 @@ target-discovery half of the contract is unaffected.
 
 Read these before starting; each is cited where it bears on a specific step.
 
-- `docs/adr-008-environment-seam-taxonomy.md` — the three sanctioned seam
+- `docs/adrs/adr-0008-environment-seam-taxonomy.md` — the three sanctioned seam
   shapes and the rule for choosing between them. Mandatory.
 - `docs/netsuke-test-framework-technical-design.md` §5.2 — the specification
   this plan implements, including the exact `ClockProvider` type. Mandatory.
@@ -330,7 +330,7 @@ Hard invariants. Violating any of these requires escalation, not a workaround.
    `WallClock::default()` before `StdlibConfig` is involved. What the compiler
    does enforce is the crate boundary — no external caller can construct a
    `WallClock` at all.
-7. **C7 — no ambient-state mutation in tests.** Per ADR-008's 2026-09-01
+7. **C7 — no ambient-state mutation in tests.** Per ADR-0008's 2026-09-01
    addendum, `EnvLock`, `CwdGuard`, and `EnvVarGuard` are retired and no
    sanctioned test mutates the harness process. Determinism comes from
    injection; no new test may use `#[serial]` or mutate process globals.
@@ -442,16 +442,16 @@ Stop and escalate — do not improvise — when any threshold is reached.
 Upstream artefacts governing this work, at the revisions present in the working
 tree at branch point `924cb215`:
 
-- `docs/rfcs/0006-ansible-inspired-template-standard-library.md` §3.3 —
-  records the original gap: "**`now` has no injected clock seam.** It calls
-  `OffsetDateTime::now_utc()` directly. The time helpers proposed here are pure
-  and do not need the seam, but the gap is recorded because it bounds how far
-  time behaviour can be tested deterministically."
-- `docs/rfcs/0006-ansible-inspired-template-standard-library.md` §16 open
-  question 7 — "**Does `now` need an injected clock seam?** … a future slice
-  that wants deterministic time tests will have to answer it." This plan is
-  that slice, and closing it answers the question affirmatively.
-- `docs/rfcs/0007-netsukefile-testing-framework.md` — records the gap:
+- `docs/rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md`
+  §3.3 — records the original gap: "**`now` has no injected clock seam.** It
+  calls `OffsetDateTime::now_utc()` directly. The time helpers proposed here
+  are pure and do not need the seam, but the gap is recorded because it bounds
+  how far time behaviour can be tested deterministically."
+- `docs/rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md`
+  §16 open question 7 — "**Does `now` need an injected clock seam?** … a future
+  slice that wants deterministic time tests will have to answer it." This plan
+  is that slice, and closing it answers the question affirmatively.
+- `docs/rfcs/rfc-0007-netsukefile-testing-framework.md` — records the gap:
   "a clock seam for `now()` (it calls the system clock directly)".
 - `docs/netsuke-test-framework-technical-design.md` §5.2 "Clock (new seam)" —
   the normative specification, including the exact port type and the statement
@@ -464,7 +464,7 @@ tree at branch point `924cb215`:
   work in the first phase, alongside the overlay spike and the loader refactor.
 - `docs/netsuke-test-framework-technical-design.md` §15 — requires this design
   document to be updated in step when its decisions are implemented.
-- `docs/adr-008-environment-seam-taxonomy.md` — the seam taxonomy and the
+- `docs/adrs/adr-0008-environment-seam-taxonomy.md` — the seam taxonomy and the
   requirement to record a new seam's classification.
 - `docs/roadmap.md` item 7.1.1 — the four acceptance bullets.
 - `docs/users-guide.md:1178` — the user-facing statement that manifest queries
@@ -480,7 +480,7 @@ RFC0006-3.3-GAP-clock -> RFC0006-Q7 -> TDD-5.2-ClockSeam -> EP-M4 -> docs/rfcs/0
 RFC0007-GAP-clock -> TDD-5.2-ClockSeam -> ROADMAP-7.1.1 -> EP-M1 -> OBL-1, OBL-2, OBL-3, OBL-4
 RFC0007-GAP-clock -> TDD-5.2-ClockSeam -> ROADMAP-7.1.1 -> EP-M2 -> OBL-6, OBL-7
 TDD-5.2-ClockSeam(single owner) -> ROADMAP-7.1.1(bullet 1) -> EP-M2 -> tests::std_filter_tests::time_functions
-ADR008-TAXONOMY -> ROADMAP-7.1.1(bullet 4) -> EP-M4 -> docs/adr-008 addendum
+ADR-0008-TAXONOMY -> ROADMAP-7.1.1(bullet 4) -> EP-M4 -> docs/adrs/adr-0008-environment-seam-taxonomy.md addendum
 USERGUIDE-1178(query refuses now) -> C2 -> EP-M2 -> OBL-5
 ROADMAP-7.1.1(bullet 2, preserve behaviour) -> C1 -> EP-M1 -> OBL-4
 ```
@@ -490,7 +490,7 @@ an injected `ClockProvider` held in `StdlibConfig`) is discharged by EP-M1 and
 EP-M2. Bullet 2 (preserve behaviour with no provider) is OBL-4. Bullet 3 (test
 injected value, repeated calls, and ambient fallback, all registered through
 `StdlibConfig`) is OBL-1, OBL-2, and OBL-4, exercised through `StdlibConfig` in
-EP-M2. Bullet 4 (record the classification per ADR-008) is EP-M4.
+EP-M2. Bullet 4 (record the classification per ADR-0008) is EP-M4.
 
 ## Verification plan
 
@@ -512,7 +512,7 @@ tests for them.
   This is the documented contract of the `time` crate.
 - **AXIOM-3.** MiniJinja's `Environment::add_function` requires its closure to
   be `Send + Sync + 'static` and may invoke it from any thread. This is what
-  forces the `Arc` shape (ADR-008 states the same for `EnvReader`).
+  forces the `Arc` shape (ADR-0008 states the same for `EnvReader`).
 - **AXIOM-4.** `Arc<dyn Fn() -> T + Send + Sync>` is `Clone` and `Send + Sync`,
   and cloning shares one underlying closure rather than duplicating it.
 - **AXIOM-5.** `minijinja::Environment::compile_expression(..).eval(..)` invokes
@@ -839,16 +839,16 @@ failure; that would weaken the Red evidence.
 
 ### EP-M4 — Documentation and seam classification
 
-- Outcome: the seam is recorded where ADR-008 and the technical design require.
+- Outcome: the seam is recorded where ADR-0008 and the technical design require.
 - Requirements: discharges ROADMAP-7.1.1 bullet 4.
-- Acceptance evidence: `docs/adr-008-environment-seam-taxonomy.md` has a dated
-  addendum classifying the clock seam and an `Implementation references` entry
-  for `src/stdlib/time/clock.rs`; `docs/developers-guide.md` documents
+- Acceptance evidence: `docs/adrs/adr-0008-environment-seam-taxonomy.md` has a
+  dated addendum classifying the clock seam and an `Implementation references`
+  entry for `src/stdlib/time/clock.rs`; `docs/developers-guide.md` documents
   ownership and the module boundary; technical design §5.2 records the
   implemented state; RFC 0006 §16 open question 7 is marked resolved with a
-  pointer to the ADR-008 addendum; `make check-fmt` passes over the Markdown.
+  pointer to the ADR-0008 addendum; `make check-fmt` passes over the Markdown.
 - Conformance check: technical design §15's synchronization requirement is
-  satisfied; ADR-008's `Consequences` section — which requires the ADR and the
+  satisfied; ADR-0008's `Consequences` section — which requires the ADR and the
   developers' guide sections to stay consistent — is honoured by editing both
   in one commit; `docs/contents.md` needs no new entry because no new document
   file is created; `docs/users-guide.md` is deliberately unchanged (D4). RFC
@@ -892,7 +892,7 @@ pub use time::OffsetDateTime as ClockInstant;
 /// The provider is an `Arc` rather than a `Box` for two reasons, both
 /// binding: `minijinja` requires registered functions to be `Send + Sync`,
 /// and `StdlibConfig` derives `Clone`, which `Box<dyn Fn>` cannot satisfy.
-/// ADR-008 records the same shape for the manifest environment reader.
+/// ADR-0008 records the same shape for the manifest environment reader.
 pub type ClockProvider = Arc<dyn Fn() -> OffsetDateTime + Send + Sync>;
 
 /// Construct the host-backed clock provider used by production renders.
@@ -1072,7 +1072,7 @@ No `Cargo.toml` change is permitted (C5).
 
 ### Stage A — orientation (no code changes)
 
-Read, in order: technical design §5.2; ADR-008 in full, including its addendum
+Read, in order: technical design §5.2; ADR-0008 in full, including its addendum
 sections; `src/stdlib/time/mod.rs`; `src/manifest/env_reader.rs`;
 `src/stdlib/config/mod.rs` lines 1–120; `src/stdlib/register.rs` lines 55–145;
 `src/stdlib/time/tests.rs`; `src/runner/process/command_env.rs` lines 55–85 for
@@ -1245,7 +1245,7 @@ Validation after each of EP-M1 and EP-M2: `make test`, teeing to
 Run the full gate sequence (EP-M3), then write the documentation (EP-M4), then
 mark the roadmap (EP-M5).
 
-For EP-M4, the ADR-008 addendum entry should read along these lines, matching
+For EP-M4, the ADR-0008 addendum entry should read along these lines, matching
 the file's existing dated-addendum format and its plain, decision-first prose:
 
 > ### 2026-09-08: Stdlib clock seam
@@ -1444,7 +1444,7 @@ above, which are disposable.
 - [x] EP-M2 — integration and BDD coverage over the real registration path.
 - [x] EP-M3 — All four gates green, plus the repository's Markdown and diagram
   gates and the first CodeRabbit pass (zero findings).
-- [x] EP-M4 — ADR-008 addendum plus `Implementation references` entry,
+- [x] EP-M4 — ADR-0008 addendum plus `Implementation references` entry,
   developers' guide "Environment and template ports", technical design §5.2,
   RFC 0006 §3.3 and §16 question 7; `make check-fmt` green.
 - [x] EP-M5 — Roadmap 7.1.1 and its four sub-bullets marked done, each mapped
@@ -1490,7 +1490,7 @@ above, which are disposable.
   mirrors the doctest" tests in `tests/documentation_examples_tests.rs` — and
   was repaired by extracting `assert_snippet_names`, which keeps every needle
   assertion and only removes the repetition; all 32 tests in that target still
-  pass. The ADR-008 link naming `src/stdlib/config/mod.rs` as the `with_clock`
+  pass. The ADR-0008 link naming `src/stdlib/config/mod.rs` as the `with_clock`
   injection point was genuinely stale, a consequence of this branch's own split
   of the seam into `config/clock.rs`. A third set of edits corrected the plan
   itself: duplicated import lines in the implementation sketch, D4's rationale
@@ -1529,7 +1529,7 @@ above, which are disposable.
   that both guides wrongly say the provider is read "rather than captured at
   registration" — is **valid**: `register_functions` moves a `WallClock` into
   the registered closure, so the clock *is* captured while the *instant* is not.
-  `src/stdlib/time/mod.rs:44-48`, `clock.rs:84`, ADR-008 and the technical
+  `src/stdlib/time/mod.rs:44-48`, `clock.rs:84`, ADR-0008 and the technical
   design all state this correctly, leaving the two guides as the outliers; both
   now say registration captures the adapter and each call invokes it afresh.
   The Observability pre-merge warning — a new one, absent from the first pass,
@@ -1765,14 +1765,15 @@ Recorded during planning; extend during implementation.
 - Observation: RFC 0006 already recorded this exact gap and left it as a
   numbered open question, which no roadmap item or design document
   cross-references. Evidence:
-  `docs/rfcs/0006-ansible-inspired-template-standard-library.md` §3.3 records
-  "`now` has no injected clock seam", and §16 question 7 asks "Does `now` need
-  an injected clock seam? … a future slice that wants deterministic time tests
-  will have to answer it." Impact: RFC 0006 joins the conformance basis, and
-  closing its open question becomes an EP-M4 deliverable. Without this, the
-  work would ship leaving a stale open question in an upstream artefact.
+  `docs/rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md`
+  §3.3 records "`now` has no injected clock seam", and §16 question 7 asks "Does
+  `now` need an injected clock seam? … a future slice that wants deterministic
+  time tests will have to answer it." Impact: RFC 0006 joins the conformance
+  basis, and closing its open question becomes an EP-M4 deliverable. Without
+  this, the work would ship leaving a stale open question in an upstream
+  artefact.
 
-- Observation: ADR-008's jurisdiction is narrower than its title implies — it
+- Observation: ADR-0008's jurisdiction is narrower than its title implies — it
   is scoped to environment *variables*, and no lint forbids reading the clock.
   Evidence: the ADR's context section is written entirely about `clippy.toml`'s
   ban on `std::env::var` and friends; `clippy.toml`'s `disallowed-methods` list
@@ -1936,7 +1937,7 @@ Recorded during planning; extend during implementation.
   leaving a known-false claim beside the edit would have been worse; no runtime
   behaviour changes.
 
-- Observation: the ADR-008 addendum heading date is 2026-09-11, not the
+- Observation: the ADR-0008 addendum heading date is 2026-09-11, not the
   `2026-09-08` written in Stage D. Evidence: the plan's text prescribed the
   heading "along these lines" and the file's convention is that each addendum
   is dated when it is written (`2026-08-30`, `2026-09-01`, `2026-08-25` are all
@@ -2011,17 +2012,17 @@ Recorded during planning; extend during implementation.
 - **D1 — Port shape follows the `EnvReader` precedent verbatim.**
   Decided: `ClockProvider = Arc<dyn Fn() -> OffsetDateTime + Send + Sync>`.
   Rationale: fixed by technical design §5.2, and independently correct under
-  ADR-008's taxonomy. The taxonomy offers three shapes — a narrow closure
+  ADR-0008's taxonomy. The taxonomy offers three shapes — a narrow closure
   parameter, the `mockable::Env` trait, or an `Arc` closure — chosen by
   call-site count and by whether the registration point requires `Send + Sync`.
-  MiniJinja's `add_function` requires `Send + Sync`, which ADR-008 itself calls
-  "a real constraint, not a preference". That argument is necessary but **not
-  sufficient**, and this plan should not rest on it alone:
+  MiniJinja's `add_function` requires `Send + Sync`, which ADR-0008 itself
+  calls "a real constraint, not a preference". That argument is necessary but
+  **not sufficient**, and this plan should not rest on it alone:
   `Box<dyn Fn() -> OffsetDateTime + Send + Sync>` satisfies MiniJinja's bound
   too. The decisive constraint is `Clone`. `StdlibConfig` derives it
   (`src/stdlib/config/mod.rs:20`), a `Box` cannot provide it, and C4 forbids
   dropping the derive — so `Arc` is forced by two independent constraints
-  rather than the one ADR-008 names. A narrow closure parameter cannot be
+  rather than the one ADR-0008 names. A narrow closure parameter cannot be
   captured by a registered function at all; a trait object would add
   indirection with no extra test-surface benefit for a single-call-site
   boundary. Date/Author: 2026-09-08, planning; strengthened after design review.
@@ -2133,7 +2134,7 @@ Recorded during planning; extend during implementation.
 - **D10 — Rejected: a resolved-value enum in the `HomeDirectory` shape.**
   Considered: `enum WallClock { Ambient, Fixed(OffsetDateTime) }`, mirroring
   `HomeDirectory` (`src/stdlib/config_types.rs:24`), the sibling seam in this
-  very module, which ADR-008 describes as the pattern that "injects a resolved
+  very module, which ADR-0008 describes as the pattern that "injects a resolved
   *value* rather than a closure". It would derive `Debug` and `Clone` for free,
   removing D2's handwritten impl entirely. This is the strongest alternative
   and a reviewer should expect it to have been weighed. Decided: rejected, in
@@ -2164,11 +2165,11 @@ Recorded during planning; extend during implementation.
   before EP-M1, not during it. Date/Author: 2026-09-08, planning; rationale
   repaired after design review.
 
-- **D11 — Extending ADR-008's jurisdiction from environment variables to the
+- **D11 — Extending ADR-0008's jurisdiction from environment variables to the
   clock is itself a decision, and is recorded as one.** Decided: classify the
-  clock seam under ADR-008 via a dated addendum, rather than writing a separate
-  ADR. Rationale: ADR-008's stated problem is narrower than its title suggests.
-  Its context section is written entirely about `clippy.toml`'s ban on
+  clock seam under ADR-0008 via a dated addendum, rather than writing a
+  separate ADR. Rationale: ADR-0008's stated problem is narrower than its title
+  suggests. Its context section is written entirely about `clippy.toml`'s ban on
   `std::env::var` and friends, and no lint currently forbids
   `OffsetDateTime::now_utc()`. The taxonomy therefore does not automatically
   claim jurisdiction over clocks, and this plan must not silently assume it
@@ -2178,7 +2179,7 @@ Recorded during planning; extend during implementation.
   dated addenda for exactly this kind of extension — see its 2026-08-30
   "Manifest glob base seam" entry, which likewise covers a
   non-environment-variable boundary. Roadmap 7.1.1 bullet 4 also directs the
-  classification to ADR-008 by name. A separate ADR would fragment one rubric
+  classification to ADR-0008 by name. A separate ADR would fragment one rubric
   across two documents. The addendum must therefore say explicitly that the
   taxonomy is being applied to a non-environment-variable ambient input, so a
   later reader is not misled about the original scope. Whether `clippy.toml`
@@ -2204,13 +2205,13 @@ Recorded during planning; extend during implementation.
   surface — `grep -rn "pub .*OffsetDateTime" src/` currently returns nothing —
   and it is a deliberate departure from the `EnvReader` precedent D1 otherwise
   follows. `EnvReader` owns `EnvReadError` precisely so it does not expose the
-  adapter's `VarError`, a property ADR-008 calls out. The clock cannot do the
+  adapter's `VarError`, a property ADR-0008 calls out. The clock cannot do the
   same: its whole purpose is to yield a calendar instant, and inventing a
   netsuke-owned timestamp type to wrap one would be ceremony with no
   beneficiary. The consequence must be stated rather than inherited silently: a
   `time` 0.4 bump becomes a breaking change to netsuke's library API. That is
   acceptable — the crate is pre-1.0, ships as a binary, and its only library
-  consumers are its own tests — but it belongs in the ADR-008 addendum so a
+  consumers are its own tests — but it belongs in the ADR-0008 addendum so a
   later reader is not surprised. Date/Author: 2026-09-08, planning; added after
   design review.
 
@@ -2360,7 +2361,7 @@ Reconciliation against the conformance basis:
 - Technical design §5.2 now records the implemented state, including the
   `WallClock` container (D2) the design did not name; §15's synchronization
   requirement is satisfied in the same change set as the governing ADR.
-- ADR-008's addendum records the classification, states that the taxonomy is
+- ADR-0008's addendum records the classification, states that the taxonomy is
   applied to a non-environment-variable ambient input (D11), and its
   `Implementation references` list names `src/stdlib/time/clock.rs` along with
   the config and registration call sites.
@@ -2369,13 +2370,13 @@ Reconciliation against the conformance basis:
   question anticipated, so leaving it open would have been a stale upstream
   artefact.
 - `docs/developers-guide.md`'s "Environment and template ports" section and
-  ADR-008 were edited in one commit, as ADR-008's `Consequences` requires.
+  ADR-0008 were edited in one commit, as ADR-0008's `Consequences` requires.
 - Every roadmap 7.1.1 bullet maps to a named artefact: registration through
   `StdlibConfig` to `config/mod.rs` and `register.rs`; ambient preservation to
   `WallClock::default` plus the integration and BDD ambient coverage; the
   injected-value, repeated-call, and ambient-fallback tests to `clock_tests.rs`,
   `tests/std_filter_tests/time_functions.rs`, and `stdlib_time.feature`; the
-  classification to the ADR-008 addendum.
+  classification to the ADR-0008 addendum.
 - No discovery falsified an assumption in the technical design or RFC 0007, so
   neither needed a correction beyond §5.2's proposal-to-implemented rewrite.
 
@@ -2394,7 +2395,7 @@ Upstream changes and deviations, all recorded above or in
   attribution and assessment are in D14. This delivery is therefore **not fully
   conformant to this plan**: every other tolerance held, but this one did not,
   and it is recorded as an accepted deviation rather than a waiver.
-- The ADR-008 addendum is dated 2026-09-11 rather than the plan's
+- The ADR-0008 addendum is dated 2026-09-11 rather than the plan's
   `2026-09-08`, matching the file's convention of dating each entry when it is
   written.
 - RFC 0006 §3.3's first gap and §14.1's slice-0 deliverable were corrected:
@@ -2559,16 +2560,16 @@ To be populated during implementation. Required entries:
    mutation-derived seed the same way. It passes against the unmutated code.
 
 7. The EP-M4 documentation edit, one commit over four files, plus a follow-up
-   commit for RFC 0007 and the spelling gate. ADR-008 gains the dated addendum
+   commit for RFC 0007 and the spelling gate. ADR-0008 gains the dated addendum
    `### 2026-09-11: Stdlib clock seam` and an `Implementation references` entry
    for `src/stdlib/time/clock.rs`; `docs/developers-guide.md` gains the clock
-   paragraph in "Environment and template ports" (same commit, because ADR-008's
-   `Consequences` requires the two to stay consistent); technical design §5.2
-   moves from proposal to implemented state and names `WallClock`; RFC 0006
-   §3.3 records the `now` gap as closed and §16 question 7 as resolved, both
-   pointing at the addendum. `make check-fmt` was red on the first pass,
-   `make fmt` was run and touched only those four files, and the re-run was
-   green.
+   paragraph in "Environment and template ports" (same commit, because
+   ADR-0008's `Consequences` requires the two to stay consistent); technical
+   design §5.2 moves from proposal to implemented state and names `WallClock`;
+   RFC 0006 §3.3 records the `now` gap as closed and §16 question 7 as
+   resolved, both pointing at the addendum. `make check-fmt` was red on the
+   first pass, `make fmt` was run and touched only those four files, and the
+   re-run was green.
 
    The follow-up commit corrects RFC 0007's gap list and its "two seams are
    added" sentence, and applies the spelling gate's two findings:

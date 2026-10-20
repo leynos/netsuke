@@ -128,7 +128,7 @@ pub(super) fn parse(repo: &Repo, file: &str) -> Result<Registry> {
     let text = repo.read(file)?;
     let document = Section::whole(&text);
     let number = rfc_number(file).with_context(|| {
-        format!("{file} is not named as an RFC; expected a leading four-digit number")
+        format!("{file} is not named as an RFC; expected rfc-nnnn-title-slug.md")
     })?;
     ensure!(
         number.as_str() >= "0013",
@@ -246,11 +246,16 @@ fn check_manifest_query(file: &str, row: &RawRow, name: &str, purity: Purity) ->
     Ok(())
 }
 
-/// The RFC number a child RFC's filename reserves.
+/// Return the RFC number reserved by a canonical child RFC filename.
 pub(super) fn rfc_number(file: &str) -> Option<String> {
     let name = file.rsplit('/').next()?;
-    let digits: String = name.chars().take_while(char::is_ascii_digit).collect();
-    (digits.len() == 4).then_some(digits)
+    let markdown_name = name.strip_suffix(".md")?;
+    let suffix = markdown_name.strip_prefix("rfc-")?;
+    let (number, title) = suffix.split_once('-')?;
+    (number.len() == 4
+        && number.chars().all(|character| character.is_ascii_digit())
+        && !title.is_empty())
+    .then(|| number.to_owned())
 }
 
 /// Every child RFC the coverage map reserves, sorted by number.

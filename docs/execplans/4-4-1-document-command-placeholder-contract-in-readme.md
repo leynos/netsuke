@@ -12,7 +12,7 @@ Revision 3. See `Revision note` at the foot of this document. The plan was
 approved and implementation began on 2026-09-19; the branch was first rebased
 onto `origin/main` at `0ba6672f`, which moved the ADR ceiling from 020 to 026
 and renumbered this plan's ADR to **027** (PR 621 holds an unmerged, stale
-`adr-021` filename). Several line citations in revision 2 are stale after that
+`adr-0021` filename). Several line citations in revision 2 are stale after that
 rebase; every one this plan depends on has been re-verified and re-cited in
 `Progress`.
 
@@ -45,10 +45,11 @@ After this change:
   repository's documented-example harness, so the README cannot silently drift
   away from the implementation.
 - A new Architectural Decision Record,
-  `docs/adr-027-command-placeholder-contract.md`, records the three settled
-  contract decisions and their rationale, and the design document points at it.
-- The internal documents agree with ADR-034's uniform placeholder set and
-  ADR-027's backtick and guard boundaries. EP-M2's original script-only
+  `docs/adrs/adr-0027-command-placeholder-contract.md`, records the three
+  settled contract decisions and their rationale, and the design document
+  points at it.
+- The internal documents agree with ADR-0034's uniform placeholder set and
+  ADR-0027's backtick and guard boundaries. EP-M2's original script-only
   corrections were superseded upstream before README implementation.
 
 The change is observable by running `NETSUKE_REQUIRE_NINJA=1 make test` and
@@ -113,13 +114,13 @@ dollar-prefixed form — `$in`, `$out`, `$ins`, `$outs`, `$input`, `$output`,
 and the Ninja backend doubles its dollar so the shell receives it unchanged.
 
 **This fact was reversed upstream during implementation.** Until
-[ADR-034](../adr-034-preserve-script-in-out-as-shell-variables.md) landed on
-`main` on 2026-09-20, `script:` recipes lowered bare `$in` and `$out` to paths
-via a `try_match_dollar_placeholder` helper, and revisions 1 and 2 of this plan
-were built around that asymmetry. ADR-034 removed the helper. The asymmetry,
-the shadowing hazard it created, and the "retained legacy" framing this plan
-proposed for it are all gone. See `Surprises & discoveries` for the discovery
-and `D1-RESOLVED` in `Decision log` for what replaced `D1-LEGACY`.
+[ADR-0034](../adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md)
+landed on `main` on 2026-09-20, `script:` recipes lowered bare `$in` and `$out`
+to paths via a `try_match_dollar_placeholder` helper, and revisions 1 and 2 of
+this plan were built around that asymmetry. ADR-0034 removed the helper. The
+asymmetry, the shadowing hazard it created, and the "retained legacy" framing
+this plan proposed for it are all gone. See `Surprises & discoveries` for the
+discovery and `D1-RESOLVED` in `Decision log` for what replaced `D1-LEGACY`.
 
 **Fact B — backtick handling is two narrow checks, not a shell model.**
 
@@ -191,17 +192,18 @@ same Netsuke source can therefore get different acceptance sets. This matters to
   `src/ir/cmd_interpolate.rs`, a path that no longer exists; the module was
   split into `src/ir/cmd_interpolate/`.
 - `docs/developers-guide.md`, section **Command interpolation contract**.
-  Corrected by this branch to state the uniform set and cite ADR-034.
+  Corrected by this branch to state the uniform set and cite ADR-0034.
 - `docs/users-guide.md`, section **Review the safety boundary**. `main` rewrote
-  this when ADR-034 landed, and it now carries the three-term glossary —
+  this when ADR-0034 landed, and it now carries the three-term glossary —
   marker, internal token, shell variable — that this plan had asked for. The
   README links to it rather than restating it.
 - `docs/netsuke-design.md:290-298` and `docs/netsuke-design.md:2616-2644`, the
   canonical design text.
-- `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md:167-177`, which records
+- `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md:167-177`, which records
   that the Kani proofs cover only the marker recognizer, and that the backtick
   state machine and `shlex` guard are covered by Proptest rather than proof.
-- `docs/adr-014-backend-text-escaping-seam.md:42-45`, the escaping seam.
+- `docs/adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md:42-45`, the
+  escaping seam.
 
 ### The README and its translations
 
@@ -272,8 +274,8 @@ Read before starting:
   the ADR may not. Note line 108: the contents file must be updated whenever a
   document is added.
 - `docs/contents.md` — the documentation index; the ADR is added under
-  `## Decision records` (line 84), newest first, matching the ADR-020 and
-  ADR-019 entries at lines 146-150.
+  `## Decision records` (line 84), newest first, matching the ADR-0020 and
+  ADR-0019 entries at lines 146-150.
 - `docs/users-guide.md` section *Review the safety boundary* (line 1649).
 - `docs/developers-guide.md` section *Command interpolation contract*
   (line 3186).
@@ -318,14 +320,14 @@ at commit `c31057c1` after the 2026-09-23 rebase:
 - `docs/roadmap.md` item **4.2.3** (lines 490-504), the stated prerequisite.
   All six sub-items are checked. See `Risks` for the status discrepancy with
   its execplan and how it is resolved.
-- [ADR-034](../adr-034-preserve-script-in-out-as-shell-variables.md), accepted
-  on `main` 2026-09-20 — owns the placeholder-set decision this plan's `D1`
-  reports. It postdates revisions 1 and 2 and reverses the asymmetry they
-  described; `D1` and ADR-027 were revised to agree with it.
-- `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` — constrains what may
+- [ADR-0034](../adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md),
+  accepted on `main` 2026-09-20 — owns the placeholder-set decision this plan's
+  `D1` reports. It postdates revisions 1 and 2 and reverses the asymmetry they
+  described; `D1` and ADR-0027 were revised to agree with it.
+- `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md` — constrains what may
   be claimed as *proved* versus *property-tested*.
-- `docs/adr-014-backend-text-escaping-seam.md` — the escaping seam this
-  contract sits above.
+- `docs/adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md` — the escaping
+  seam this contract sits above.
 - No Terms of Reference document exists for this repository. Do not invent
   one; `docs/roadmap.md` and `docs/formal-verification-methods-in-netsuke.md`
   are the upstream artefacts.
@@ -334,10 +336,10 @@ Trace links:
 
 ```plaintext
 RM-4.4.1.a -> EP-M3 -> README.md "Security and command interpolation"
-RM-4.4.1.b / FV-CPC-Q1 -> D1 -> EP-M1 (ADR-027 §Placeholders) -> EP-M3 -> tests::readme_security::documented_safe_placeholder_manifest_builds
-RM-4.4.1.c / FV-CPC-Q2 -> D2 -> EP-M1 (ADR-027 §Backticks)   -> EP-M3 -> tests::readme_security::documented_backtick_manifest_is_rejected
-RM-4.4.1.d / FV-CPC-Q3 -> D3 -> EP-M1 (ADR-027 §shlex guard) -> EP-M3 -> tests::readme_security::documented_backtick_manifest_is_rejected
-ADR-034 (upstream) -> D1 -> ADR-027 §Placeholders -> EP-M2 (doc reconciliation)
+RM-4.4.1.b / FV-CPC-Q1 -> D1 -> EP-M1 (ADR-0027 §Placeholders) -> EP-M3 -> tests::readme_security::documented_safe_placeholder_manifest_builds
+RM-4.4.1.c / FV-CPC-Q2 -> D2 -> EP-M1 (ADR-0027 §Backticks)   -> EP-M3 -> tests::readme_security::documented_backtick_manifest_is_rejected
+RM-4.4.1.d / FV-CPC-Q3 -> D3 -> EP-M1 (ADR-0027 §shlex guard) -> EP-M3 -> tests::readme_security::documented_backtick_manifest_is_rejected
+ADR-0034 (upstream) -> D1 -> ADR-0027 §Placeholders -> EP-M2 (doc reconciliation)
 RM-4.4.1.b / Fact A    -> OBL-UNIFORM-SET -> tests::readme_security::dollar_forms_are_shell_variables_in_both_recipe_kinds
 Fact A     -> EP-M2 -> docs/developers-guide.md "Command interpolation contract"
 Fact A     -> EP-M2 -> docs/formal-verification-methods-in-netsuke.md FV-CPC
@@ -384,7 +386,7 @@ workaround.
    identifier whose spelling would otherwise trip the `typos` gate.
 6. **No new dependency.** Nothing is added to `Cargo.toml`.
 7. **No claim of proof beyond what exists.** Per
-   `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md:167-177`, Kani proves
+   `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md:167-177`, Kani proves
    the marker recognizer only. The README and ADR must not describe the
    backtick guard or the `shlex` guard as *proved*; they are property-tested.
 8. **`docs/users-guide.md` remains the detailed reference.** The README owns
@@ -394,9 +396,9 @@ workaround.
    README to contradict it would be. Do not delete guidance, and do not soften
    a warning.
 9. **Do not edit historical documents.** No file under `docs/archive/`, no
-   `docs/adr-0*.md` other than the new ADR-027, and no completed execplan. A
-   merged execplan records the repository at its own moment; the stale
-   `IN PROGRESS` header on the 4.2.3 plan is flagged, not fixed.
+   `docs/adrs/adr-0*.md` other than the new ADR-0027, and no completed
+   execplan. A merged execplan records the repository at its own moment; the
+   stale `IN PROGRESS` header on the 4.2.3 plan is flagged, not fixed.
 
 ## Tolerances (exception triggers)
 
@@ -411,7 +413,7 @@ Stop and escalate when any threshold is reached. Do not work around them.
   unrelated work. Against merge base `c31057c1`, the final implementation
   changes eighteen paths and adds 1774 net lines, excluding this plan. The
   named paths are `README.md` and its six translations;
-  `docs/adr-027-command-placeholder-contract.md`, `docs/contents.md`,
+  `docs/adrs/adr-0027-command-placeholder-contract.md`, `docs/contents.md`,
   `docs/developers-guide.md`, `docs/formal-verification-methods-in-netsuke.md`,
   `docs/netsuke-design.md`, `docs/repository-layout.md`, and `docs/roadmap.md`;
   `scripts/check-readme-parity.sh`; and `tests/documentation_examples_tests.rs`,
@@ -435,7 +437,7 @@ Stop and escalate when any threshold is reached. Do not work around them.
   wrong translation of a safety boundary is worse than an absent one.
 - **Ambiguity.** Any point where `FV-CPC-Q1`, `FV-CPC-Q2`, or `FV-CPC-Q3`
   could reasonably be settled the other way and the choice changes what the
-  README promises. `D1` carried a live instance of this until ADR-034 settled
+  README promises. `D1` carried a live instance of this until ADR-0034 settled
   it upstream; see `D1-RESOLVED` in `Decision log`.
 
 ## Risks
@@ -491,7 +493,7 @@ Stop and escalate when any threshold is reached. Do not work around them.
   the evidence rather than reporting a clean gate.
 
 - **Resolved risk: the ADR number collided before implementation.** The
-  record was allocated as ADR-027 during EP-M1, and the index and references
+  record was allocated as ADR-0027 during EP-M1, and the index and references
   use that number. No further record is allocated by the remaining milestones.
 
 ## Verification plan
@@ -594,7 +596,7 @@ Assumptions relied upon, not verified here:
 - Method: parameterized `rstest` over the (form, recipe kind) matrix,
   asserting on generated Ninja text.
 - Rationale: this obligation replaces `OBL-RECIPE-KIND`, which asserted the
-  opposite. ADR-034 made the set uniform, and the README's central table now
+  opposite. ADR-0034 made the set uniform, and the README's central table now
   claims that uniformity. A uniform rule is *easier* to state and *easier* to
   regress silently: reinstating a special case for one form in one recipe kind
   would pass every existing README example. The matrix is what makes the
@@ -612,7 +614,7 @@ Assumptions relied upon, not verified here:
   stopped resolving the markers too. As a seeded fault, restore a
   dollar-placeholder match inside `find_script_substitution`
   (`src/ir/cmd_interpolate/mod.rs`) so `$in` resolves in a script again; the
-  `script:` shell-variable rows must fail. This is the pre-ADR-034 behaviour,
+  `script:` shell-variable rows must fail. This is the pre-ADR-0034 behaviour,
   so the control also demonstrates that the suite would have caught the
   reversal. Revert immediately.
 
@@ -680,7 +682,7 @@ boundary.**
 - Method: parameterized integration test over both recipe kinds with the same
   offending text.
 - Rationale: this asymmetry is `RM-4.4.1.d`'s substance. Note that it survives
-  ADR-034 untouched: the *placeholder set* became uniform, but the `shlex` and
+  ADR-0034 untouched: the *placeholder set* became uniform, but the `shlex` and
   backtick-parity *guards* remain `command:`-only, so this is now the only
   recipe-kind asymmetry the README must describe. A single example per branch
   is decisive because the two entry points are distinct functions with no
@@ -730,8 +732,8 @@ new evidence.
 
 ### EP-M1 — settled contract, recorded
 
-- Outcome: `docs/adr-027-command-placeholder-contract.md` exists and records
-  decisions `D1`, `D2`, and `D3`. `docs/contents.md` lists it under
+- Outcome: `docs/adrs/adr-0027-command-placeholder-contract.md` exists and
+  records decisions `D1`, `D2`, and `D3`. `docs/contents.md` lists it under
   `## Decision records`. `docs/netsuke-design.md` references it from the
   command-lowering discussion near line 2616. No other file changes.
 - Requirements advanced: `FV-CPC-Q1`, `FV-CPC-Q2`, `FV-CPC-Q3`; prerequisites
@@ -750,19 +752,19 @@ new evidence.
 ### EP-M2 — internal documents corrected
 
 This milestone preceded the README so linked documents would agree. Its
-original script-only corrections are historical: ADR-034 removed that behaviour
-before EP-M3. The authoritative post-rebase outcome is recorded in `Progress`:
-the developers' guide, formal-verification document, and design agree with the
-uniform set; the users' guide and production module match main.
+original script-only corrections are historical: ADR-0034 removed that
+behaviour before EP-M3. The authoritative post-rebase outcome is recorded in
+`Progress`: the developers' guide, formal-verification document, and design
+agree with the uniform set; the users' guide and production module match main.
 
 - Outcome: internal documentation states that only `{{ ins }}` and
   `{{ outs }}` are markers in both recipe kinds. It distinguishes the shared
   marker protection from the command-only parity and `shlex` checks. The
   formal-verification document answers `FV-CPC-Q1` through `FV-CPC-Q3`, cites
-  ADR-027, and corrects the `[^8]` module path.
+  ADR-0027, and corrects the `[^8]` module path.
 - Requirements advanced: Fact A consistency across the documentation set;
   prerequisite for `RM-4.4.1.a`, because the README will link to
-  `docs/users-guide.md#review-the-safety-boundary`. After ADR-034 this
+  `docs/users-guide.md#review-the-safety-boundary`. After ADR-0034 this
   milestone also reconciles the branch's own earlier corrections, which had
   documented the now-removed asymmetry.
 - Acceptance evidence: the scoped grep in `Concrete steps` step 5 returns no
@@ -771,9 +773,9 @@ uniform set; the users' guide and production module match main.
   because a doc-comment edit recompiles.
 - Conformance check: no behaviour changed; `git diff --stat src/` shows only
   comment lines; the corrected statements agree with each other, with
-  `docs/users-guide.md` as `main` now writes it, and with ADR-034; no
-  historical document (`docs/archive/`, any `docs/adr-0*.md` other than the
-  branch's own ADR-027, any completed execplan) was edited.
+  `docs/users-guide.md` as `main` now writes it, and with ADR-0034; no
+  historical document (`docs/archive/`, any `docs/adrs/adr-0*.md` other than
+  the branch's own ADR-0027, any completed execplan) was edited.
 - Recovery: revert the commit. The edits are independent of every later
   milestone.
 - Remaining gaps: the README still says nothing; six translations lack the
@@ -804,7 +806,7 @@ uniform set; the users' guide and production module match main.
 - Conformance check: every claim traces to a cited line or a new test; the
   live hazard appears before the placeholder table, not after it; the sentence
   "a backtick pair you wrote is executed by the shell" appears above the first
-  fence; `D1`-`D3` in ADR-027 and the README prose agree word-for-word on the
+  fence; `D1`-`D3` in ADR-0027 and the README prose agree word-for-word on the
   three contested points; the section carries a pre-1.0 stability caveat
   because it sits above the release-status hedge.
 - Recovery: revert the commit. `README.md` and the two test files are the only
@@ -836,7 +838,7 @@ uniform set; the users' guide and production module match main.
 
 - Outcome: `docs/roadmap.md` item 4.4.1 and its four sub-items are marked
   `[x]`, with a short completion note in the repository's established style
-  recording that the contract was settled in ADR-027 and that translations
+  recording that the contract was settled in ADR-0027 and that translations
   landed. All gates pass on the full branch.
 - Requirements discharged: `RM-4.4.1`.
 - Acceptance evidence: the full gate sequence in `Concrete steps` step 10,
@@ -859,7 +861,7 @@ wrong, stop — a `Constraints` item 2 conflict.
 
 Then settle the three questions. These answers were revised at the
 `logisphere-design-review` checkpoint; the wording below is what the README and
-ADR-027 must say.
+ADR-0027 must say.
 
 - **`D1` (answers `FV-CPC-Q1`).** `{{ ins }}` and `{{ outs }}` are the only
   Netsuke markers, and they behave identically in `command:` and `script:`
@@ -873,10 +875,10 @@ ADR-027 must say.
   Revisions 1 and 2 answered this question differently, describing a
   `script:`-only rewriting of `$in` and `$out` as retained legacy behaviour.
   That asymmetry existed when those revisions were written and was removed
-  upstream by ADR-034 before this plan reached implementation. `D1` now simply
+  upstream by ADR-0034 before this plan reached implementation. `D1` now simply
   states the uniform rule; the shadowing hazard and the migration steer the
-  earlier wording carried are no longer applicable. ADR-034 owns the decision
-  and ADR-027 states the resulting contract.
+  earlier wording carried are no longer applicable. ADR-0034 owns the decision
+  and ADR-0027 states the resulting contract.
 
 - **`D2` (answers `FV-CPC-Q2`).** Two separate mechanisms, promised at two
   different strengths. Revision 1 promised both as guarantees; the review
@@ -1000,7 +1002,7 @@ come first.
 7. **Stability and further reading.** A pre-1.0 caveat, because this section
    sits *above* `## Release and development status` and would otherwise make
    promises before the reader meets the hedge at `README.md:179-186`. Then
-   pointers to `docs/users-guide.md#review-the-safety-boundary` and ADR-027.
+   pointers to `docs/users-guide.md#review-the-safety-boundary` and ADR-0027.
 
 Keep the split with the users' guide deliberate. The README owns the
 placeholder contract and the non-guarantees; the users' guide keeps shell-route
@@ -1049,27 +1051,28 @@ Run everything from the repository root,
    dollar-form matching of its own, and the Fluent line
    `ir.invalid_command = Invalid command interpolation: { $snippet }.`
 
-   The third expectation changed after ADR-034. If
+   The third expectation changed after ADR-0034. If
    `try_match_dollar_placeholder` reappears, the upstream decision has been
    reversed again: stop and escalate rather than editing this plan around it.
 
 3. Confirm the next free ADR number.
 
    ```sh
-   ls docs/adr-*.md | sed 's/.*adr-0*\([0-9]*\).*/\1/' | sort -n | tail -1
+   ls docs/adrs/adr-*.md | sed 's/.*adr-0*\([0-9]*\).*/\1/' | sort -n | tail -1
    ```
 
    This was `20` in revision 2. On the rebased tree it is `26`; PR 621, an
    unmerged and stale branch, also holds a file named
-   `docs/adr-021-manifest-linting-under-netsuke-check.md`, so 021 would collide
-   on merge even though main has nothing at that number. The ADR is therefore
-   **027**, and every reference in this plan was updated. Step 4 is complete;
-   re-running this step now would find `27` and must not mint a second record.
+   `docs/adrs/adr-0021-manifest-linting-under-netsuke-check.md`, so 021 would
+   collide on merge even though main has nothing at that number. The ADR is
+   therefore **027**, and every reference in this plan was updated. Step 4 is
+   complete; re-running this step now would find `27` and must not mint a
+   second record.
 
-4. Write `docs/adr-027-command-placeholder-contract.md`, add its entry to
-   `docs/contents.md` under `## Decision records` immediately below the ADR-026
-   entry, and add the design-document reference. Commit as EP-M1. **Done** as
-   `3594b568`.
+4. Write `docs/adrs/adr-0027-command-placeholder-contract.md`, add its entry to
+   `docs/contents.md` under `## Decision records` immediately below the
+   ADR-0026 entry, and add the design-document reference. Commit as EP-M1.
+   **Done** as `3594b568`.
 
    ```bash
    set -euo pipefail
@@ -1099,9 +1102,9 @@ Run everything from the repository root,
    top-level documents, and the trailing filter drops the decision records,
    archived plans, and execplans, none of which this plan may edit. The only
    expected survivors are statements about `$ins` and `$outs`, which really are
-   literal shell variables in both recipe kinds. After ADR-034 the same is true
-   of `$in` and `$out`, so a hit stating that any dollar-prefixed form is a
-   shell variable in both recipe kinds is correct and needs no change. A hit
+   literal shell variables in both recipe kinds. After ADR-0034 the same is
+   true of `$in` and `$out`, so a hit stating that any dollar-prefixed form is
+   a shell variable in both recipe kinds is correct and needs no change. A hit
    that still qualifies `$in` or `$out` by recipe kind is stale and must be
    corrected.
 
@@ -1113,7 +1116,7 @@ Run everything from the repository root,
    far too broad, matching unrelated prose about schema and snapshot stability
    in `docs/roadmap.md` and `docs/developers-guide.md`. And revision 1's
    narrower variant (`'literal .\$in\|\$in. and .\$out. remain'`) hit
-   `docs/adr-004-…:165`, which must not be edited.
+   `docs/ADR-0047-…:165`, which must not be edited.
 
 6. Add `tests/readme_security_tests.rs` and the three identifiers to
    `EXPECTED_EXAMPLE_IDS`. Observe red.
@@ -1165,7 +1168,7 @@ Run everything from the repository root,
    cp /tmp/readme-control.md README.md
 
    # Control 2 (OBL-UNIFORM-SET): make find_script_substitution resolve a bare
-   # $in again, reinstating the pre-ADR-034 behaviour; the script rows must
+   # $in again, reinstating the pre-ADR-0034 behaviour; the script rows must
    # fail.  This also shows the suite would have caught that reversal.
    cp src/ir/cmd_interpolate/mod.rs /tmp/cmd-interpolate-control.rs
    # ...edit, then:
@@ -1344,7 +1347,7 @@ Also add one bullet to `docs/repository-layout.md` near lines 60-65 recording
 that a change to any README section must be mirrored in the six translations.
 Nothing records this obligation today.
 
-New document `docs/adr-027-command-placeholder-contract.md`. Its required
+New document `docs/adrs/adr-0027-command-placeholder-contract.md`. Its required
 sections, in the order `docs/documentation-style-guide.md:374-384` mandates,
 are **Status**, **Date**, and **Context and Problem Statement**. Add the
 conditional sections **Decision Drivers**, **Options Considered**, and
@@ -1364,7 +1367,7 @@ The user authorized EP-M3 through EP-M5. The checkout is clean at `24dfc3fe`,
 with no active rebase. PR 699 already has the requested title without `Plan:`;
 `lody session rename --title` successfully reapplied that title.
 
-The implementation sweep re-read ADR-027, ADR-034, the prescribed skills,
+The implementation sweep re-read ADR-0027, ADR-0034, the prescribed skills,
 project style, fixture guidance, and the documented-example harness. Leta
 confirmed `find_script_substitution` delegates to the common recognizer and
 `is_valid_command_for_shell` exempts PowerShell. The inherited introductory
@@ -1402,7 +1405,7 @@ file copies, with clean `git status --porcelain` between mutations:
 - Control 1: appended a harmless shell `$in` reference to the accepted example
   and asserted `$$in` in generated Ninja. The filtered build test passed.
 - Control 2: restored exact bare `$in` recognition in scripts. Only the script
-  `$in` matrix cell failed (24 passed, 1 failed), detecting the ADR-034
+  `$in` matrix cell failed (24 passed, 1 failed), detecting the ADR-0034
   reversal.
 - Control 3: applied the stored parity mutation. The odd-backtick case failed
   because the malformed command was accepted; ordinary command cases also
@@ -1511,17 +1514,17 @@ concerns are fixed or dispositioned above.
 
 ### EP-M5 — complete (2026-09-23)
 
-Roadmap item 4.4.1 and its four children are checked, with an ADR-027 and
+Roadmap item 4.4.1 and its four children are checked, with an ADR-0027 and
 translation completion note. `mapsplice replace` was attempted in preview mode
 first, but rejected unrelated pre-existing structure in step 3.14: "task list
 for step `3.14` cannot appear after trailing step content". No roadmap write
 occurred. After inspecting that failure, a bounded replacement of only the
-4.4.1 block preserves all other roadmap content and dependencies. ADR-027 and
+4.4.1 block preserves all other roadmap content and dependencies. ADR-0027 and
 the formal-verification guide now describe the README section as present rather
 than future work.
 
 Every discovery was reconciled with the implementation and current documents:
-ADR-034's uniform marker set governs all editions and tests; the backtick
+ADR-0034's uniform marker set governs all editions and tests; the backtick
 parity and command-only `shlex` limits are explicit; JSON diagnostic mode and
 partial path quoting are reflected in the executable examples; the obsolete
 module-file footnote is corrected; marker registration and mutation controls
@@ -1529,10 +1532,10 @@ are recorded; the ADR numbering and rebase observations are historical. The
 4.2.3 status discrepancy and absent `SECURITY.md` remain explicitly outside
 this task. The historical private Rustdoc link observation also remains unfixed
 upstream: `src/ir/cmd_interpolate/mod.rs` still links to `interpolate_command`.
-The earlier branch correction was reverted with the ADR-034 reconciliation, and
-no production-module change is made here. This pre-existing issue is distinct
-from the public Rustdoc and coverage gates, which pass; it is not claimed as an
-EP-M2 deliverable.
+The earlier branch correction was reverted with the ADR-0034 reconciliation,
+and no production-module change is made here. This pre-existing issue is
+distinct from the public Rustdoc and coverage gates, which pass; it is not
+claimed as an EP-M2 deliverable.
 
 The final full gate sequence passed on `636bf523`: formatting, typechecking,
 lint, documentation coverage (98.81%), all 3338 Nextest cases (five skipped),
@@ -1578,7 +1581,7 @@ lines, excluding this living plan, within the agreed 18-file/1600-line limits.
 Post-commit inspection found no further refactor needed: the security-test
 helpers remain local to their test module and the parity script has one manual
 reviewer responsibility. No production code, dependency, public interface, or
-historical ADR other than the task's ADR-027 changed.
+historical ADR other than the task's ADR-0027 changed.
 
 ### Review follow-up — 2026-09-24
 
@@ -1590,7 +1593,7 @@ tokens can remain in generated recipe text. Heredoc delimiters are scanned as
 active text. PowerShell `command:` interpolation is separate; PowerShell
 `script:` recipes use the same POSIX-aware script scanner. The README table and
 all six translations now qualify `yes` as active-text expansion, warn against
-markers in inert regions, and state this route distinction. ADR-027 and the
+markers in inert regions, and state this route distinction. ADR-0027 and the
 developers' guide now record the same boundary.
 
 The README security tests now check active expansion against comment and
@@ -1650,7 +1653,7 @@ the record:
   :207, `invalid_command_error` :215, `is_valid_command_for_shell` :226-231
   (PowerShell early-return at :227, `shlex::split` at :230),
   `find_substitution` :261, `find_script_substitution` :269.
-  `try_match_dollar_placeholder` was cited here at :278 in revision 2; ADR-034
+  `try_match_dollar_placeholder` was cited here at :278 in revision 2; ADR-0034
   deleted it.
 - `src/ir/cmd_interpolate/substitution.rs`: `append_protected_character` :364.
 - `src/ir/cmd_interpolate/script_substitution.rs`:
@@ -1666,21 +1669,21 @@ the record:
 - `docs/developers-guide.md`: §Command interpolation contract at :3362.
 - `docs/users-guide.md`: §Review the safety boundary at :1901.
 - `docs/netsuke-design.md`: the Fact A sentence at :290-291, §6.3 at :2800.
-- `docs/contents.md`: `## Decision records` at :88, ADR-026 entry at :170.
+- `docs/contents.md`: `## Decision records` at :88, ADR-0026 entry at :170.
 - `tests/documentation_examples_tests.rs`: `EXPECTED_EXAMPLE_IDS` `readme-`
   block at :54-58, registry test at :143.
 
 ### EP-M2 — complete, then partly superseded on rebase
 
 **Read this section as two layers.** EP-M2 was completed on 2026-09-22 against
-the pre-ADR-034 tree, and most of what it wrote was undone a day later when the
-branch was rebased and reconciled. The original record is kept because the
+the pre-ADR-0034 tree, and most of what it wrote was undone a day later when
+the branch was rebased and reconciled. The original record is kept because the
 milestone genuinely ran and its gate evidence is real; the superseding note
 says what now stands.
 
 Originally: four documents corrected, one doc comment fixed, no code touched.
 `docs/developers-guide.md` gained the per-recipe-kind placeholder set and an
-ADR-027 link in §*Command interpolation contract*, plus a corrected
+ADR-0027 link in §*Command interpolation contract*, plus a corrected
 lowering-stages bullet. `docs/users-guide.md` split the "Write shell dollar
 expressions normally" bullet into three and reworded the migration bullet.
 `docs/formal-verification-methods-in-netsuke.md` corrected both the Kani
@@ -1690,22 +1693,22 @@ comment on `src/ir/cmd_interpolate/mod.rs` named `$in`/`$out` as script-only.
 `docs/netsuke-design.md` was deliberately not edited, as the canonical wording
 the others converged on.
 
-**What stands after the 2026-09-23 rebase and ADR-034 reconciliation:**
+**What stands after the 2026-09-23 rebase and ADR-0034 reconciliation:**
 
 - `docs/users-guide.md` — **no branch change at all.** `main` rewrote this
-  section when ADR-034 landed, and its wording is better than the branch's: it
+  section when ADR-0034 landed, and its wording is better than the branch's: it
   carries the three-term marker / internal-token / shell-variable glossary this
   plan had asked for. The file is byte-identical to `origin/main`.
 - `src/ir/cmd_interpolate/mod.rs` — **no branch change at all**, byte-identical
   to `origin/main`. The doc comment EP-M2 wrote described the removed asymmetry.
 - `docs/developers-guide.md` — the asymmetry wording is gone; what survives is
   the still-correct clarification that the backtick-parity and `shlex` guards
-  are `command:`-only, which ADR-034 did not touch, plus an ADR-034 citation.
+  are `command:`-only, which ADR-0034 did not touch, plus an ADR-0034 citation.
 - `docs/formal-verification-methods-in-netsuke.md` — the **Settled** paragraph
   and the `[^8]` path fix survive; the first `FV-CPC-Q1` bullet now states the
-  uniform set and credits ADR-034.
+  uniform set and credits ADR-0034.
 - `docs/netsuke-design.md` — now *is* edited, minimally, to state the uniform
-  rule and cite ADR-034.
+  rule and cite ADR-0034.
 
 So EP-M2's requirement — that no document contradict another about the
 placeholder contract — holds, but it is satisfied largely by `main`'s work
@@ -1728,13 +1731,13 @@ rewrapper has damaged emphasis, which is why each file is read back after an
 automated rewrap rather than trusting exit 0.
 
 The step-5 verification grep is recorded in `Concrete steps`; its expected
-survivors changed with ADR-034, because a statement that a dollar form is a
+survivors changed with ADR-0034, because a statement that a dollar form is a
 shell variable in *both* recipe kinds is now correct and needs no edit.
 
-- [x] EP-M1 — ADR-027 written, indexed, and referenced from the design
+- [x] EP-M1 — ADR-0027 written, indexed, and referenced from the design
       document; historical milestone evidence is recorded above. Final review
       covers the full branch.
-- [x] EP-M2 — internal documentation reconciled with ADR-034. The surviving
+- [x] EP-M2 — internal documentation reconciled with ADR-0034. The surviving
       branch edits and upstream-provided corrections are distinguished above;
       the old pre-rebase gate evidence is superseded by the current full gates.
 
@@ -1763,14 +1766,14 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
   dollar-prefixed form is now a shell variable in both recipe kinds. Evidence:
   commit `382395bc` ("Preserve script shell variables (#737) (#753)", merged
   2026-09-20) and
-  [ADR-034](../adr-034-preserve-script-in-out-as-shell-variables.md). It deleted
-  `try_match_dollar_placeholder` and reduced `find_script_substitution` to a
-  delegation to `find_substitution`. Verified on the rebased tree, not inferred
-  from the commit message.
+  [ADR-0034](../adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md).
+  It deleted `try_match_dollar_placeholder` and reduced
+  `find_script_substitution` to a delegation to `find_substitution`. Verified
+  on the rebased tree, not inferred from the commit message.
 
   Impact: substantial, and mostly subtractive. Fact A inverts; `D1` becomes a
   uniform rule; `D1-LEGACY` is closed as `D1-RESOLVED`; `OBL-RECIPE-KIND`
-  becomes `OBL-UNIFORM-SET`; ADR-027 is revised rather than shipped
+  becomes `OBL-UNIFORM-SET`; ADR-0027 is revised rather than shipped
   born-superseded; and the branch's own EP-M2 corrections to
   `docs/developers-guide.md` and
   `docs/formal-verification-methods-in-netsuke.md` had to be partly reverted,
@@ -1788,7 +1791,7 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
   `OBL-BACKTICK-REJECT`, and `OBL-SHLEX-SCOPE` were untouched, and
   `OBL-SHLEX-SCOPE` is now the only recipe-kind asymmetry left to document.
 
-- Observation (**superseded on 2026-09-23 by ADR-034; recorded as found**):
+- Observation (**superseded on 2026-09-23 by ADR-0034; recorded as found**):
   `$in` and `$out` **were** substituted in `script:` recipes, contradicting a
   plain reading of both `docs/developers-guide.md:3186-3190` and
   `docs/formal-verification-methods-in-netsuke.md:265-266`. Evidence:
@@ -1845,7 +1848,7 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
   and could have triggered the contract-disagreement tolerance spuriously.
 
 - Observation (**superseded on 2026-09-23; `main` rewrote this section when
-  ADR-034 landed, and its wording is now correct**):
+  ADR-0034 landed, and its wording is now correct**):
   `docs/users-guide.md:1697-1698` and `:1713-1715` also contradicted Fact A,
   and revision 1 neither listed them for correction nor could detect them.
   Evidence: line 1697 reads "`{{ ins }}` and `{{ outs }}` are the only Netsuke
@@ -1882,13 +1885,14 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
   implementation began, and the plan's ADR ceiling had moved. Evidence:
   `git rev-list --left-right --count origin/main...HEAD` reported `29 3`; the
   highest existing ADR on main is 026
-  (`docs/adr-026-manifest-environment-access-policy.md`), not 020. Impact:
-  `Concrete steps` step 3 correctly anticipated this and told the implementer
-  to use the next free number, so the plan's ADR became **027**. A rebase onto
-  `origin/main` at `0ba6672f` was performed before any file this plan touches
-  was written, which also moved most line citations; all are re-recorded in
-  `Progress`. PR 621, an unmerged and conflicted branch, still holds a file
-  named `docs/adr-021-manifest-linting-under-netsuke-check.md`; taking 021
+  (`docs/adrs/adr-0026-keep-project-environment-policy-below-the-operator-ceiling.md`),
+  not 020. Impact: `Concrete steps` step 3 correctly anticipated this and told
+  the implementer to use the next free number, so the plan's ADR became
+  **027**. A rebase onto `origin/main` at `0ba6672f` was performed before any
+  file this plan touches was written, which also moved most line citations; all
+  are re-recorded in `Progress`. PR 621, an unmerged and conflicted branch,
+  still holds a file named
+  `docs/adrs/adr-0021-manifest-linting-under-netsuke-check.md`; taking 021
   would collide on merge, which is a second reason to skip it.
 
 - Observation: `tests/execplan_status_contract_tests.rs`, cited in a prior
@@ -1924,7 +1928,7 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
   Date: 2026-09-23.
 
 - Decision `D-RESUME-20260923`: continue the explicitly authorized remaining
-  milestones against ADR-034. The user supplied the existing oversized plan
+  milestones against ADR-0034. The user supplied the existing oversized plan
   diff when requesting continuation, so its known size is accepted; the revised
   scope allowance excludes the living plan and includes the already-required
   parity script. No new product scope is added. The module-doc requirement in
@@ -1938,7 +1942,7 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
   existing prose implies — would be documenting a contract Netsuke does not
   honour, which is worse than documenting an irregular one. Answers
   `FV-CPC-Q1`. Date/Author: 2026-09-09, planning agent. Approved for
-  implementation; subsequently superseded by ADR-034.
+  implementation; subsequently superseded by ADR-0034.
 
 - Decision `D2`: the backtick handling is a deliberate, narrow structural
   guard over Netsuke-owned lowering, not a temporary subset of a
@@ -2010,9 +2014,9 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
   (`src/ir/cmd_interpolate/mod.rs:214-222`) calls `localization::message(...)`
   and stores a pre-rendered, locale-resolved human string inside the domain
   error. That is presentation resolved within domain policy against ambient
-  state. It does not justify a port here, but ADR-027 must not cite this module
-  as an exemplar of a clean domain boundary. Date/Author: 2026-09-09, planning
-  agent; caveat added at design review.
+  state. It does not justify a port here, but ADR-0027 must not cite this
+  module as an exemplar of a clean domain boundary. Date/Author: 2026-09-09,
+  planning agent; caveat added at design review.
 
 - Decision `D-NO-PARITY-GATE`: structural parity of the README family is
   checked by `scripts/check-readme-parity.sh`, committed but wired into **no**
@@ -2057,9 +2061,9 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
   vestigial — was settled upstream, against the reading this plan had hedged
   towards. `D1-LEGACY` proposed documenting them as retained legacy with a
   shadowing warning and a migration steer, and flagged that it needed the
-  owner's confirmation. ADR-034 answered it on `main` on 2026-09-20 by removing
-  the lowering outright, so the forms are now ordinary shell variables in both
-  recipe kinds and there is nothing left to hedge.
+  owner's confirmation. ADR-0034 answered it on `main` on 2026-09-20 by
+  removing the lowering outright, so the forms are now ordinary shell variables
+  in both recipe kinds and there is nothing left to hedge.
 
   Rationale for closing rather than revising: the decision was never this
   plan's to make. `D1-LEGACY` said so explicitly — "that would be a code change
@@ -2073,7 +2077,7 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
   answer arrived.
 
   Consequence for this plan: `D1` states a uniform rule, `OBL-RECIPE-KIND` is
-  replaced by `OBL-UNIFORM-SET`, and ADR-027 is revised to agree with ADR-034
+  replaced by `OBL-UNIFORM-SET`, and ADR-0027 is revised to agree with ADR-0034
   rather than shipping born-superseded. Date/Author: 2026-09-23, on rebase.
 
 - Decision `D-REBASE-FIRST`: the branch was rebased onto `origin/main` at
@@ -2162,7 +2166,7 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
     document-claims-something-untrue window instead. Fixed by moving the claim
     to future tense: "Roadmap item 4.4.1 will document this contract for users
     in the README under *Security and command interpolation*, and it is decided
-    in ADR-027." The same review finding was raised against ADR-027's `Status`
+    in ADR-0027." The same review finding was raised against ADR-0027's `Status`
     line, where `5f13b35c` had already reworded it once; that wording was still
     ambiguous, so it now reads "will carry them to users … that section is
     planned work, not yet published, and this record is authoritative until it
@@ -2204,7 +2208,7 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
   one finding. It is **new** — not a re-raise — and it is correct, so it is
   recorded as `D-CODERABBIT-EP-M2-RECHECK`:
 
-  - Finding: `docs/adr-027-command-placeholder-contract.md` §*Route and
+  - Finding: `docs/adrs/adr-0027-command-placeholder-contract.md` §*Route and
     recipe-kind scope* said "PowerShell is outside both mechanisms", which
     conflates the two halves of the promised invariant. The invariant is
     "never substituted inside a backtick region **or** a `$( … )` command
@@ -2251,7 +2255,7 @@ fixtures. Direct-address translation suggestions were checked against the
 actual README style exception rather than applied mechanically.
 
 The requested inert-region finding was verified against the scanner and
-corrected in the English and translated READMEs, ADR-027, and the developers'
+corrected in the English and translated READMEs, ADR-0027, and the developers'
 guide. The checker-test finding is addressed with fixtures that execute the
 actual script. Historical CodeRabbit and Codex review outcomes above remain
 historical; thread confirmations for the current follow-up, current-head CI,
@@ -2319,29 +2323,29 @@ Reference material gathered during planning, for the writer's use:
   `quote` family cannot portably escape control characters, and versions before
   1.3.0 failed to quote `{` and `\xa0`. Netsuke quotes with `shell-quote`, not
   `shlex`, so the advisory does not apply to Netsuke's quoting path — but it is
-  worth citing in ADR-027 as evidence for why `D3` declines to make the
+  worth citing in ADR-0027 as evidence for why `D3` declines to make the
   accepted set a stability commitment.
 
 ## Revision note
 
 Revision 3 (2026-09-23). Rebased onto `origin/main` at `c31057c1` and
 reconciled with
-[ADR-034](../adr-034-preserve-script-in-out-as-shell-variables.md), which
-landed upstream on 2026-09-20 and reversed this plan's Fact A: `script:`
+[ADR-0034](../adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md),
+which landed upstream on 2026-09-20 and reversed this plan's Fact A: `script:`
 recipes no longer lower bare `$in` and `$out`, so the placeholder set is now
 uniform across recipe kinds.
 
 What changed: Fact A inverted and annotated with its own reversal; `D1`
 rewritten as a uniform rule; `D1-LEGACY` closed as `D1-RESOLVED`;
 `OBL-RECIPE-KIND` replaced by `OBL-UNIFORM-SET`, which pins the uniformity the
-README now claims and whose seeded fault is the pre-ADR-034 behaviour;
+README now claims and whose seeded fault is the pre-ADR-0034 behaviour;
 `OBL-PLACEHOLDERS`' discriminating control and `Concrete steps` 2, 5, and 8
 updated; the README table specification in Stage C simplified to one inert
 dollar-form row with an instruction to state the uniformity in prose as well,
-since an all-"no" row invites a reader to assume a column was dropped. ADR-027
-was revised rather than left to ship born-superseded: it now cites ADR-034 for
+since an all-"no" row invites a reader to assume a column was dropped. ADR-0027
+was revised rather than left to ship born-superseded: it now cites ADR-0034 for
 the set, retains the superseded reasoning under *Options considered* with a
-fourth option recording what ADR-034 actually did, and keeps its backtick and
+fourth option recording what ADR-0034 actually did, and keeps its backtick and
 `shlex` decisions, which were re-verified unchanged against the rebased tree.
 
 What did not change: `D2`, `D3`, `OBL-QUOTING`, `OBL-BACKTICK-REJECT`, and
@@ -2353,7 +2357,7 @@ README must describe.
 
 Rebase record: `OLD_BASE` `0ba6672f`, `OLD_HEAD` `cb177308`, `TARGET`
 `c31057c1`, ten commits replayed, two conflicts. `docs/contents.md` was
-resolved by keeping both sides with ADR-027 in numeric position.
+resolved by keeping both sides with ADR-0027 in numeric position.
 `docs/users-guide.md` and `src/ir/cmd_interpolate/mod.rs` were resolved to
 `main`'s version in full, because every branch change to them documented the
 removed asymmetry; both are now byte-identical to `origin/main`.
@@ -2361,13 +2365,14 @@ removed asymmetry; both are now byte-identical to `origin/main`.
 Revision 3 (2026-09-19). Implementation begin. The plan was approved and work
 started under `Status: IN PROGRESS`. Before any implementation the branch was
 rebased onto `origin/main` at `0ba6672f`; because that moved the ADR ceiling
-from 020 to 026, `docs/adr-021-command-placeholder-contract.md` became
-`docs/adr-027-command-placeholder-contract.md` and every reference in this plan
-was updated. Stage A re-verified Facts A, B, and C against the rebased tree and
-confirmed all three; the citations revision 2 carried were refreshed for the
-new line numbers and are recorded in `Progress`. No decision, obligation,
-milestone, or tolerance changed. `Surprises & discoveries` gained the rebase
-and ADR-collision observations, and `Decision log` gained `D-REBASE-FIRST`.
+from 020 to 026, `docs/adrs/adr-0027-command-placeholder-contract.md` became
+`docs/adrs/adr-0027-command-placeholder-contract.md` and every reference in
+this plan was updated. Stage A re-verified Facts A, B, and C against the
+rebased tree and confirmed all three; the citations revision 2 carried were
+refreshed for the new line numbers and are recorded in `Progress`. No decision,
+obligation, milestone, or tolerance changed. `Surprises & discoveries` gained
+the rebase and ADR-collision observations, and `Decision log` gained
+`D-REBASE-FIRST`.
 
 Revision 2 (2026-09-09). Incorporates a six-lens `logisphere-design-review`
 pass. Blocking changes: EP-M2 (document corrections) now precedes the README
@@ -2401,4 +2406,4 @@ work to five milestones.
 
 Historical remaining work at resumption: EP-M3 through EP-M5. The user
 explicitly authorized continued implementation on 2026-09-23. `D1-LEGACY` is
-closed by ADR-034 and `D1-RESOLVED`.
+closed by ADR-0034 and `D1-RESOLVED`.

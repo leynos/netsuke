@@ -11,10 +11,10 @@
 - **Companion documents:** `docs/netsuke-design.md` (architecture),
   `docs/netsuke-cli-design-document.md` (command-line interface),
   `docs/roadmap.md` and `docs/roadmap-composition.md` (sequencing),
-  `docs/adr-003-agent-consistent-human-first-cli.md`,
-  `docs/adr-021-trust-aware-fetch-policy-merge.md`,
-  `docs/adr-026-manifest-environment-access-policy.md`, and the RFCs under
-  `docs/rfcs/`. There is no `docs/context.md` yet; see
+  `docs/ADR-0046-agent-consistent-human-first-cli.md`,
+  `docs/adrs/adr-0021-keep-project-fetch-policy-below-the-operator-ceiling.md`,
+  `docs/adrs/adr-0026-keep-project-environment-policy-below-the-operator-ceiling.md`,
+  and the RFCs under `docs/rfcs/`. There is no `docs/context.md` yet; see
   [appendix B](#appendix-b-glossary).
 - **Last revised:** 2026-09-25.
 
@@ -82,7 +82,7 @@ Three conditions make a general-purpose generator worth building now:
 2. **Automated agents now author and run build logic.** A build description
    that resolves to a static, inspectable plan before any command runs is far
    easier for an agent to author, check, and explain than an imperative script.
-   ADR-003 made agent-consistent structure a product requirement `(A7)`.
+   ADR-0046 made agent-consistent structure a product requirement `(A7)`.
 3. **The implementation substrate is mature.** A Jinja implementation in Rust
    (`minijinja`), a YAML 1.2 parser with source-aware diagnostics
    (`serde-saphyr`), and a stable Ninja make a compiler of this shape tractable
@@ -134,8 +134,8 @@ Two domain facts shape what a build tool can promise:
   sandbox, and the README says so.
 - **The checkout is less trusted than the operator.** A project's manifest is
   authored by whoever controls the repository, while credentials, tokens, and
-  network access belong to the person or CI job running the build. ADR-021 and
-  ADR-026 established that project configuration must not grant itself
+  network access belong to the person or CI job running the build. ADR-0021 and
+  ADR-0026 established that project configuration must not grant itself
   authority the operator has not granted.
 
 Anything that consults the network, the clock, the environment, or a subprocess
@@ -219,10 +219,10 @@ accidental build-system authors are probably the largest group in the long run
 
 | User                            | Interaction                                                                                          |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Automated agents and CI systems | Author, validate, and run manifests; consume `--json` output. ADR-003 makes them a design audience.  |
+| Automated agents and CI systems | Author, validate, and run manifests; consume `--json` output. ADR-0046 makes them a design audience. |
 | Reviewers                       | Read manifest changes and generated plans in pull requests, without necessarily running them.        |
 | Operators of a checkout         | Run someone else's manifest and decide what network, environment, and filesystem authority to grant. |
-| Netsukefile test authors        | Write manifest-time tests (`docs/rfcs/0007-netsukefile-testing-framework.md`).                       |
+| Netsukefile test authors        | Write manifest-time tests (`docs/rfcs/rfc-0007-netsukefile-testing-framework.md`).                   |
 
 ### 4.3 Stakeholders
 
@@ -423,8 +423,9 @@ Each goal is phrased so that an observer can check it.
   migrations, publishing the Make Diehards guide, and reaching the adoption
   signals are not 1.0 gates.
 - By 1.0, the semantics of the Netsukefile testing framework
-  (`docs/rfcs/0007-netsukefile-testing-framework.md`) and of the Netsukefile
-  linter (issue #592) should also be stable. This is an aim, not a gate.
+  (`docs/rfcs/rfc-0007-netsukefile-testing-framework.md`) and of the
+  Netsukefile linter (issue #592) should also be stable. This is an aim, not a
+  gate.
 - The progressive-enhancement features proposed in PR #741 are delivered
   without changing the shallow-end fixture.
 - A reference repository demonstrates Netsuke in a real multi-language
@@ -441,15 +442,15 @@ Each goal is phrased so that an observer can check it.
 - **Manifests execute arbitrary commands.** No design may claim sandboxing it
   does not provide.
 - **Project configuration cannot grant itself operator authority**
-  (ADR-021, ADR-026).
+  (ADR-0021, ADR-0026).
 - **Licensing and openness.** Netsuke is ISC-licensed and developed in public.
 - **Pre-1.0 status.** Interfaces may change before 1.0; after 1.0, the manifest
   schema version (`netsuke_version`) governs compatibility.
-- **Source builds need the pinned nightly Rust toolchain** (ADR-006). Prebuilt
+- **Source builds need the pinned nightly Rust toolchain** (ADR-0006). Prebuilt
   binaries and installers avoid this for users, but not for contributors or
   registry installs. The constraint is accepted for now; Netsuke intends to
-  move to stable Rust once Polonius stabilizes, as ADR-006's stabilization path
-  anticipates.
+  move to stable Rust once Polonius stabilizes, as ADR-0006's stabilization
+  path anticipates.
 
 ### 8.2 Assumptions
 
@@ -461,7 +462,7 @@ Each goal is phrased so that an observer can check it.
 | A4  | Users can install Ninja, or accept an installer that depends on it.                                                                     | Onboarding fails at the first step on platforms without packaged Ninja; bundling or fetching Ninja becomes necessary.    |
 | A5  | Modification-time freshness is sufficient for local files.                                                                              | Users hit spurious or missed rebuilds; content-hash invalidation moves into scope `(Q5)`.                                |
 | A6  | Shell-string recipes remain acceptable while structured commands mature.                                                                | Quoting failures on Windows or with unusual filenames erode trust before the safer form ships.                           |
-| A7  | Agents benefit materially from a static, structured plan compared with an imperative script.                                            | ADR-003's investment in agent-consistent output delivers less value than expected.                                       |
+| A7  | Agents benefit materially from a static, structured plan compared with an imperative script.                                            | ADR-0046's investment in agent-consistent output delivers less value than expected.                                      |
 | A8  | Serving reluctant Make users first does not preclude serving the other two groups later.                                                | A feature the later groups need is blocked by an early decision; migrating them requires breaking changes.               |
 
 ### 8.3 Dependencies
@@ -546,7 +547,7 @@ Each goal is phrased so that an observer can check it.
 - `docs/quickstart.md`.
 - `README.md`, "Security and command interpolation" and "Release and
   development status".
-- ADR-003, ADR-006, ADR-021, and ADR-026 under `docs/`.
+- ADR-0046, ADR-0006, ADR-0021, and ADR-0026 under `docs/`.
 - `docs/release-admission-canaries.md` on the branch for pull request #780.
 - Issues #590 (URL dependency providers), #592 (Netsukefile linter), and #781
   to #785 (the open questions in section 9).

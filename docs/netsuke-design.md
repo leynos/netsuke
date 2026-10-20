@@ -107,9 +107,10 @@ before execution, a critical requirement for compatibility with Ninja.
    the intended lowering contract rather than the current implementation.
    Lowering can still place an unresolved `Recipe::Rule` in
    `ir::Action.recipe`, and only the Ninja backend rejects it.
-   [ADR-035](adr-035-semantic-compiler-boundaries.md) owns this resolution
-   boundary: its requirement that successful compilation exclude unresolved
-   executable states is the gap that backend-only enforcement leaves open.
+   [ADR-0035](adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md)
+   owns this resolution boundary: its requirement that successful compilation
+   exclude unresolved executable states is the gap that backend-only
+   enforcement leaves open.
 
 - Stage 6: Ninja Synthesis & Execution
 
@@ -619,7 +620,7 @@ Its `shared` default preserves legacy execution, while `isolated` gives each
 entry the action's working-directory and environment baseline on every route.
 The field does not make shell text portable: POSIX `${VAR:-default}` expansion
 is unavailable on the default Windows PowerShell route. See
-[ADR-045](adr-045-isolate-command-list-entries.md) for the decision and
+[ADR-0045](adrs/adr-0045-isolate-command-list-entries.md) for the decision and
 compatibility constraints.
 
 Netsuke should add four complementary capabilities.
@@ -650,7 +651,7 @@ adopted that part of the grammar.
 Metadata follows the same emission-boundary rule. A `description`, `depfile`,
 `deps`, or `pool` keeps its backend-neutral IR text, and the Ninja writer
 escapes only the emitted binding, doubling a literal dollar and rejecting
-newline, carriage-return, and NUL. ADR 014 records the boundary and its
+newline, carriage-return, and NUL. ADR 0049 records the boundary and its
 migration consequences.
 
 #### Structured environment mapping
@@ -1187,10 +1188,11 @@ fixtures are loaded by the tests to ensure real-world YAML files behave as
 expected. This suite guards against regressions as the schema evolves.
 
 Environment-dependent tests follow the seam taxonomy in
-[ADR-008](adr-008-environment-seam-taxonomy.md): tests inject a boundary-owned
-reader or value, while an end-to-end test configures only its spawned child
-process. This keeps environment lookup outside the domain behaviour under test
-and avoids process-global mutation or synchronization locks.
+[ADR-0008](adrs/adr-0008-environment-seam-taxonomy.md): tests inject a
+boundary-owned reader or value, while an end-to-end test configures only its
+spawned child process. This keeps environment lookup outside the domain
+behaviour under test and avoids process-global mutation or synchronization
+locks.
 
 ## Section 4: Dynamic Builds with the Jinja Templating Engine
 
@@ -1299,8 +1301,8 @@ support, while allowing later macros to override earlier ones.
 Template rendering and macro invocation are each wrapped in a bounded, redacted
 telemetry boundary, kept separate from evaluation so manifest content never
 reaches a span or a metric label.
-[ADR-009](adr-009-bounded-redacted-manifest-telemetry.md) records this
-decision; see the
+[ADR-0009](adrs/adr-0009-bounded-redacted-telemetry-for-manifest-evaluation.md)
+records this decision; see the
 [developer's guide](developers-guide.md#manifest-telemetry-template-render-and-macro-invocation)
 for the metric names, bounded label vocabulary, and redaction rules.
 
@@ -1322,21 +1324,22 @@ providing a secure bridge to the underlying system.
   influenced by the external environment (e.g., `PATH`, `CC`). It returns an
   error if the variable is undefined and no `default` is provided, or if the
   variable contains invalid UTF-8.
-  [ADR-026](adr-026-manifest-environment-access-policy.md) bounds this port with
-  `manifest::EnvAccessPolicy`, an exact-name allow and block policy the
-  operator configures through `env_allow_var` and `env_block_var`; the policy
-  is evaluated at the `env()` registration boundary before the reader runs, so
-  a denied name never obtains a process value. Automatic project discovery
-  quarantines allow entries throughout the selected `.netsuke.toml` `extends`
-  chain, while each shared file occurrence retains the authority of the root
-  that reached it. Each lookup, including a refusal, is counted once on the
-  bounded `netsuke_manifest_env_lookups_total` series. The counter is recorded
-  by [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md), which carries
-  only the `outcome` label and never the name or its value. A `default=`
-  keyword argument supplies the value to use when the variable is absent, which
-  keeps `PATH`-style optional configuration out of the manifest's control flow;
-  it is accepted only as a string, and a non-string default raises the
-  `manifest.env.default_not_string` detail under the
+  [ADR-0026](adrs/adr-0026-keep-project-environment-policy-below-the-operator-ceiling.md)
+  bounds this port with `manifest::EnvAccessPolicy`, an exact-name allow and
+  block policy the operator configures through `env_allow_var` and
+  `env_block_var`; the policy is evaluated at the `env()` registration boundary
+  before the reader runs, so a denied name never obtains a process value.
+  Automatic project discovery quarantines allow entries throughout the selected
+  `.netsuke.toml` `extends` chain, while each shared file occurrence retains
+  the authority of the root that reached it. Each lookup, including a refusal,
+  is counted once on the bounded `netsuke_manifest_env_lookups_total` series.
+  The counter is recorded by
+  [ADR-0009](adrs/adr-0009-bounded-redacted-telemetry-for-manifest-evaluation.md),
+  which carries only the `outcome` label and never the name or its value. A
+  `default=` keyword argument supplies the value to use when the variable is
+  absent, which keeps `PATH`-style optional configuration out of the manifest's
+  control flow; it is accepted only as a string, and a non-string default
+  raises the `manifest.env.default_not_string` detail under the
   `[netsuke::jinja::env::args]` code rather than stringifying the value. The
   default is consulted for a *missing* variable only. An undecodable value is
   still an error, because substituting there would hide a host fault the author
@@ -1388,9 +1391,10 @@ providing a secure bridge to the underlying system.
   capability opened at the pattern's literal directory prefix (`src/` for
   `src/**/*.c`) rather than at an ambient root; the match walk itself remains
   the `glob` crate's own, which traverses the filesystem ambiently.
-  [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) records this
-  decision; see the [developer's guide](developers-guide.md#capability-scope)
-  for the prefix computation and symlink-handling rules.
+  [ADR-0010](adrs/adr-0010-scope-the-glob-metadata-capability-to-the-literal-prefix.md)
+  records this decision; see the
+  [developer's guide](developers-guide.md#capability-scope) for the prefix
+  computation and symlink-handling rules.
 - `python_version(requirement: &str) -> Result<bool, Error>`: An example of a
   domain-specific helper function that demonstrates the extensibility of this
   architecture. This function would execute `python --version` or
@@ -1414,13 +1418,13 @@ for transforming data within templates.
   and both the IR lowering path and this filter delegate there.[^22] The
   dialect is named by a `dialect` keyword argument taking `sh` or `powershell`,
   defaulting to the dialect implied by the active recipe shell;
-  [ADR-041](adr-041-canonical-recipe-shell-quoting-surface.md) records why the
-  argument exists, why `bash` is refused, and why the default is the surface's
-  one unstable axis. The filter is *not* a licence to stop preferring structured
-  `exec` recipes, which need no quoting at all: it serves the manifests that
-  still need shell syntax. Its output is correct only in unquoted argv
-  position, and it does not detect an author interpolating it inside a shell's
-  own double quotes, where the quoter's quotes become data.
+  [ADR-0041](adrs/adr-0041-canonical-recipe-shell-quoting-surface.md) records
+  why the argument exists, why `bash` is refused, and why the default is the
+  surface's one unstable axis. The filter is *not* a licence to stop preferring
+  structured `exec` recipes, which need no quoting at all: it serves the
+  manifests that still need shell syntax. Its output is correct only in
+  unquoted argv position, and it does not detect an author interpolating it
+  inside a shell's own double quotes, where the quoter's quotes become data.
 
 - `| shell_join`: A filter that accepts a list of arguments and returns one
   shell-safe command fragment, joining each encoded element with exactly one
@@ -1592,7 +1596,8 @@ Implementation notes:
   `FILE_ATTRIBUTE_REPARSE_POINT`; that refuses symlinks, junctions, volume
   mount points, and every other tag alike, because the test is on the attribute
   bit rather than on the tag value. The judgement and the read share one
-  handle. See [ADR-032](adr-032-windows-reparse-point-same-handle-open.md).
+  handle. See
+  [ADR-0032](adrs/adr-0032-validate-the-windows-final-component-through-a-same-handle-reparse-point-open.md).
 - An over-budget read fails with `stdlib.path.contents.file_too_large`, which
   quotes the path and the byte limit. An opened object that is not a regular
   file (a FIFO, a device, or a Windows reparse point refused on the opened
@@ -1755,7 +1760,7 @@ described below, after its flat `PATH` pass misses. If that search cannot find
 a match, the predicate returns `false`; the analogous `which` call raises
 `netsuke::jinja::which::not_found`. The no-place-to-search case is
 intentionally treated as absence for the predicate, matching the `-NOTFOUND`/
-`.found()` contracts used by comparable build systems. ADR-005 records this
+`.found()` contracts used by comparable build systems. ADR-0005 records this
 typed-result boundary and absence policy.
 
 Unit tests cover POSIX and Windows specifics, canonical deduplication, cache
@@ -2076,7 +2081,7 @@ Implementation details:
   that fails policy is therefore rejected only after the initial hop has been
   dispatched, which already marks the template impure. The decision, including
   bounded redirect handling and cache identity, is recorded in
-  [ADR-023](adr-023-revalidate-fetch-redirects.md).
+  [ADR-0023](adrs/adr-0023-revalidate-every-fetch-redirect.md).
 
 For screen readers: `fetch` dispatches the current hop until it receives a
 non-redirect response. For a redirect, the adapter resolves the `Location`
@@ -2086,8 +2091,9 @@ cross-origin credential removal, the loop check, and policy evaluation. A
 target that fails any check is rejected; only one that passes all four becomes
 the next current hop. The header parse is the adapter's, not the chain's: a
 `Location` header is an HTTP response fact, so the chain receives only an
-already-resolved target. [ADR-023](adr-023-revalidate-fetch-redirects.md)
-records the boundary and its addendum.
+already-resolved target.
+[ADR-0023](adrs/adr-0023-revalidate-every-fetch-redirect.md) records the
+boundary and its addendum.
 
 ```mermaid
 stateDiagram-v2
@@ -2769,7 +2775,7 @@ materialization; `clean` prunes only after successful `ninja -t clean` and not
 on failure. Sidecars remain immutable and content-addressed. Consequently, an
 older arbitrary `generate --output` manifest may lose its sidecars after a
 later command and must be regenerated. See
-[ADR-012](adr-012-bound-dyndep-sidecar-retention.md) for this policy.
+[ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md) for this policy.
 
 4\. **Write Defaults:** Finally, write the `default` statement, listing all
 paths from `graph.default_targets`.
@@ -2809,7 +2815,7 @@ to keep the representation portable.
   execute the Ninja binary to validate structure and no-op behaviour.
   Serial-ordering tests additionally use real Ninja to prove declaration order,
   failure short-circuiting, shared-work reuse, and unrelated-branch concurrency.
-  [ADR-011](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md)
+  [ADR-0011](adrs/adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md)
   records why staged dyndep is used instead of order-only gates, pools, or
   recursive Ninja invocations.
 - Backend integration tests can opt into `NETSUKE_REQUIRE_NINJA=1`; in that
@@ -2896,7 +2902,7 @@ The command construction follows this pattern:
    results in an argument sequence ending
    `-f <generated-build-file> -- my_target`. The terminator keeps configured
    and explicit target names from being parsed as Ninja options; see
-   [ADR-018](adr-018-terminate-ninja-options-before-build-target-operands.md).
+   [ADR-0018](adrs/adr-0018-terminate-ninja-options-before-build-targets.md).
    When no targets are selected, the command ends with the generated build file
    and omits the terminator. Flags like `-j` for parallelism are Netsuke-owned
    options.[^8]
@@ -3033,13 +3039,13 @@ are outside that check. Ninja generation then receives fully expanded command
 text and is responsible only for preserving the scalar form or constructing the
 list-entry shell boundaries.
 
-[ADR-027](adr-027-command-placeholder-contract.md) settles which parts of this
-behaviour are promises: the marker invariant is contractual, the odd-backtick
-parity check is a conservative check that may widen without that being a
-breaking change, and the `shlex` accepted set is not a stability commitment.
-`{{ ins }}` and `{{ outs }}` are the only markers, identically in both recipe
-kinds, following
-[ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md).
+[ADR-0027](adrs/adr-0027-command-placeholder-contract.md) settles which parts
+of this behaviour are promises: the marker invariant is contractual, the
+odd-backtick parity check is a conservative check that may widen without that
+being a breaking change, and the `shlex` accepted set is not a stability
+commitment. `{{ ins }}` and `{{ outs }}` are the only markers, identically in
+both recipe kinds, following
+[ADR-0034](adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md).
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 
@@ -3473,7 +3479,7 @@ depends on how much a run emits.
 
 Configuration-load observability belongs to the application composition root;
 this decision is recorded in
-[ADR-013](adr-013-application-owned-configuration-observability.md).
+[ADR-0013](adrs/adr-0013-application-owned-configuration-observability.md).
 `config_load::resolve_configuration` owns the startup-attempt measurement: it
 resolves diagnostic mode with `cli::resolve_json_and_layers_outcome_with_env`,
 then replays the outcome's deferred diagnostics and passes the cached layers to
@@ -3886,7 +3892,7 @@ manual flag repetition.
   process working directory independently of `-C/--directory`. Absolute
   selectors retain their original spelling. `-C` continues to anchor project
   discovery and manifest lookup. Pass an absolute path when the selector must
-  not depend on the invoking directory (see ADR-004).
+  not depend on the invoking directory (see ADR-0048).
 
 ### 8.5 Manual Pages
 
@@ -3908,10 +3914,10 @@ existing CLI Fluent keys onto published configuration fields, omits the
 structural `cmds` container, and adds both selectors as help-only metadata with
 no environment or file source. It must not add selector precedence,
 configuration loading, or discovery policy to OrthoConfig. Those
-responsibilities remain in `src/cli/discovery/mod.rs`: [ADR 004] governs
-`--config` precedence and fail-closed selected-file loading, while [ADR 014]
+responsibilities remain in `src/cli/discovery/mod.rs`: [ADR 0048] governs
+`--config` precedence and fail-closed selected-file loading, while [ADR 0049]
 governs `-C/--directory` project-discovery rooting and manifest lookup. This
-boundary avoids a duplicate CLI model and is recorded in [ADR 016].
+boundary avoids a duplicate CLI model and is recorded in [ADR-0016].
 
 Manual pages are generated under
 `target/orthohelp/<target>/release/man/man1/netsuke.1`. Windows targets also
@@ -3923,9 +3929,9 @@ dates, emitting a warning and falling back to `1970-01-01` when the environment
 value is invalid. Release artefacts include these generated help files; the
 published crate remains code-only.
 
-[ADR 004]: adr-004-explicit-config-selection-outside-orthoconfig.md
-[ADR 014]: adr-014-base-directory-seam-and-dir-anchoring.md
-[ADR 016]: adr-016-public-cli-metadata-source-of-truth.md
+[ADR 0048]: adrs/adr-0048-explicit-config-selection-outside-orthoconfig.md
+[ADR 0049]: adrs/adr-0049-base-directory-seam-and-c-anchoring.md
+[ADR-0016]: adrs/adr-0016-public-cli-metadata-source-of-truth.md
 
 ### 8.6 Release Automation
 
@@ -4061,8 +4067,9 @@ artefacts and attaches the assets to the draft, prefixing names with their
 staging directories to avoid collisions. Dry-run staging writes its operation
 summary but does not upload diagnostic artefacts; publication telemetry and the
 full observability policy are documented in
-[ADR-020](adr-020-release-admission-observability.md). This automated pipeline
-guarantees parity across Windows, Linux, and macOS through the shared actions.
+[ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md). This
+automated pipeline guarantees parity across Windows, Linux, and macOS through
+the shared actions.
 
 ### 8.7 Release Notes
 
@@ -4171,14 +4178,14 @@ selected for this project and the rationale for their inclusion.
 
 Netsuke compiles with the Polonius alpha borrow-checking analysis, which the
 dated nightly toolchain pinned in `rust-toolchain.toml` enables by default
-([ADR-006](adr-006-adopt-polonius-nightly-toolchain.md)). Internal APIs follow
-a borrow-centric design contract: lookups and registries return references
-(`&mut V` accessors with clone-on-miss keys), mutation happens in place, and
-error context is built lazily on the failure path. Owned-value style is
-reserved for genuine constraints — aliasing, suspension points, thread and
-process boundaries, and persistent identity — and each such refusal is recorded
-in the [polonius migration notes](polonius.md) alongside the sites that depend
-on the analysis.
+([ADR-0006](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)).
+Internal APIs follow a borrow-centric design contract: lookups and registries
+return references (`&mut V` accessors with clone-on-miss keys), mutation
+happens in place, and error context is built lazily on the failure path.
+Owned-value style is reserved for genuine constraints — aliasing, suspension
+points, thread and process boundaries, and persistent identity — and each such
+refusal is recorded in the [polonius migration notes](polonius.md) alongside
+the sites that depend on the analysis.
 
 ### 9.3 Future Enhancements
 

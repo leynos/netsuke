@@ -1096,14 +1096,14 @@ Netsuke is a Rust build-system front-end that compiles a YAML manifest (a
 Netsukefile) into a Ninja build file. The crate is both a library
 (`src/lib.rs`) and a binary. Relevant files:
 
-- `docs/adr-019-structured-command-shell-selection.md` is the governing
-  decision. Table 1 lists the built-ins; the addendum separates `BuiltInShell`
-  from `ShellName` and gives resolution precedence to built-ins.
-- `docs/rfcs/0011-allow-listed-structured-command-shells.md` sections 4, 5.1,
-  6.1, and 11 give the schema, the registry, the AST sketch, and the test
+- `docs/adrs/adr-0019-select-allow-listed-structured-command-shells.md` is the
+  governing decision. Table 1 lists the built-ins; the addendum separates
+  `BuiltInShell` from `ShellName` and gives resolution precedence to built-ins.
+- `docs/rfcs/rfc-0011-allow-listed-structured-command-shells.md` sections 4,
+  5.1, 6.1, and 11 give the schema, the registry, the AST sketch, and the test
   strategy.
-- `docs/rfcs/0001-structured-command-blocks.md` section 10.1 amends the
-  `shell` field to `Boolean | ShellName`; section 17.1 sketches
+- `docs/rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md` section
+  10.1 amends the `shell` field to `Boolean | ShellName`; section 17.1 sketches
   `ShellSelection` and `BuiltInShell`.
 - `src/recipe_shell.rs` holds `RecipeShell`, the legacy recipe-wide
   interpreter: a data-only leaf module with a `host_default` constructor. It is
@@ -1151,11 +1151,12 @@ Skills and documents to consult while implementing:
   `docs/rust-doctest-dry-guide.md`,
   `docs/reliable-testing-in-rust-via-dependency-injection.md` (why the host
   family is injected), `docs/snapshot-testing-in-netsuke-using-insta.md`,
-  `docs/adr-005-typed-which-resolve-error.md`,
-  `docs/adr-008-environment-seam-taxonomy.md`, `docs/whitaker-users-guide.md`,
-  `docs/documentation-style-guide.md`, and `docs/ortho-config-users-guide.md`.
-  OrthoConfig is not used by this task: configuration-layer shell definitions
-  are 11.2.2's scope, and nothing here is layered configuration.
+  `docs/adrs/adr-0005-use-a-typed-which-resolver-error.md`,
+  `docs/adrs/adr-0008-environment-seam-taxonomy.md`,
+  `docs/whitaker-users-guide.md`, `docs/documentation-style-guide.md`, and
+  `docs/ortho-config-users-guide.md`. OrthoConfig is not used by this task:
+  configuration-layer shell definitions are 11.2.2's scope, and nothing here is
+  layered configuration.
 
 Prior art confirms the shape of the registry. GitHub Actions' `shell` keyword
 offers a finite built-in set (`bash`, `sh`, `pwsh`, `powershell`, `cmd`,

@@ -2,9 +2,9 @@
 
 Netsuke compiles with the Polonius alpha borrow-checking analysis, which the
 dated nightly pinned in `rust-toolchain.toml` enables by default.
-[ADR-006](adr-006-adopt-polonius-nightly-toolchain.md) records the toolchain
-policy; this document records the audit that motivated it, the API evolutions
-it enabled, and the refusals that bound it. Issue
+[ADR-0006](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)
+records the toolchain policy; this document records the audit that motivated
+it, the API evolutions it enabled, and the refusals that bound it. Issue
 [#465](https://github.com/leynos/netsuke/issues/465) tracked the migration.
 
 The migration originally ran against an opt-in `-Zpolonius=next` directive.

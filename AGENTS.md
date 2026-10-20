@@ -143,10 +143,10 @@ project:
 
 Netsuke compiles with the Polonius alpha analysis, which the dated nightly
 pinned in `rust-toolchain.toml` enables by default (see
-`docs/adr-006-adopt-polonius-nightly-toolchain.md` and `docs/polonius.md`). No
-`-Z` directive is needed, or wanted: do not add one. Internal APIs are
-borrow-centric: lookups and get-or-create accessors return references, clone
-keys only on insertion, and build error context lazily.
+`docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md`
+and `docs/polonius.md`). No `-Z` directive is needed, or wanted: do not add
+one. Internal APIs are borrow-centric: lookups and get-or-create accessors
+return references, clone keys only on insertion, and build error context lazily.
 
 - **Never** rewrite a site tagged `POLONIUS(...)` into a double lookup
   (`contains_key` + `get_mut`), an `entry(key.clone())` call, or an id/index
@@ -425,7 +425,7 @@ as `--toolchain`.
 - **`EnvLock`, `CwdGuard`, and `EnvVarGuard` are retired.** They do not relax
   the rule against process-wide locks. Do not restore or replace them; follow
   the injected seam decision in
-  [ADR-008](docs/adr-008-environment-seam-taxonomy.md).
+  [ADR-0008](docs/adrs/adr-0008-environment-seam-taxonomy.md).
 - **Subprocess isolation is the sole exemption.** End-to-end behavioural tests
   invoking `netsuke` through `assert_cmd` may configure the environment via
   `Command::env`/`Command::env_clear`, because the mutation is confined to the

@@ -41,10 +41,11 @@ lint, and Mermaid validation targets.[^2]
 The `CI` workflow does define a separate proof job. `kani-smoke` is a dedicated
 required job covering every harness on pushes to `main`, nightly schedules, and
 manual dispatches, and on pull requests it runs only when a proof input changes
-(see [ADR-039](adr-039-change-scoped-kani-gate.md)).[^3] The 15 harnesses live
-in three verification modules: `src/ir/cycle/verification.rs` (9),
-`src/ir/from_manifest/verification.rs` (4), and
-`src/ir/cmd_interpolate/verification.rs` (2). `src/ir/graph/kani_map.rs` is
+(see
+[ADR-0039](adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)).[^3]
+The 15 harnesses live in three verification modules:
+`src/ir/cycle/verification.rs` (9), `src/ir/from_manifest/verification.rs` (4),
+and `src/ir/cmd_interpolate/verification.rs` (2). `src/ir/graph/kani_map.rs` is
 `cfg(kani)` support code those harnesses use, not a harness location.
 
 That earlier absence still shapes the design. Netsuke did not need a new
@@ -296,8 +297,9 @@ coverage, and those checks should remain intact.[^3]
 The `kani-smoke` job is a dedicated, required job that runs on every trigger.
 It verifies every harness on each push to `main`, nightly, and on a manual
 dispatch; on a pull request it runs them only when the pull request changes a
-proof input (see [ADR-039](adr-039-change-scoped-kani-gate.md)). When the
-proofs run, it:
+proof input (see
+[ADR-0039](adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)).
+When the proofs run, it:
 
 - installs the pinned Kani front-end and release bundle from checksummed
   archives, then checks the reported version against `tools/kani/VERSION`,
@@ -325,7 +327,8 @@ Three contracts should be documented before proofs become gating checks.
 The interpolation layer recognizes only the internal `INS_TOKEN` and
 `OUTS_TOKEN` tokens emitted by manifest rendering, identically in both recipe
 kinds. `$in`, `$out`, `$ins`, and `$outs` are all literal shell variables,
-following [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md). On
+following
+[ADR-0034](adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md). On
 POSIX-compatible routes, markers inside backticks are rejected in both recipe
 kinds. The two further checks — unmatched backticks and a substituted result
 that fails the current `shlex` guard — run only on `command:` text; scripts may
@@ -335,14 +338,15 @@ PowerShell treats a backtick as an escape.
 **Settled.** Roadmap item 4.4.1 documents this contract for users in the
 [README](../README.md#security-and-command-interpolation) and all six
 translated editions under *Security and command interpolation*. The decisions
-are recorded in [ADR-027](adr-027-command-placeholder-contract.md). The three
-questions this section raised are now answered:
+are recorded in [ADR-0027](adrs/adr-0027-command-placeholder-contract.md). The
+three questions this section raised are now answered:
 
 - The supported placeholder set is `{{ ins }}` and `{{ outs }}`, and nothing
   else, identically in both recipe kinds. Every dollar-prefixed form is a shell
-  variable. [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md)
+  variable.
+  [ADR-0034](adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md)
   settled this by removing the former `script:`-only lowering of `$in` and
-  `$out`; ADR-027 states the resulting contract.
+  `$out`; ADR-0027 states the resulting contract.
 - Backtick handling is two mechanisms at two strengths. Rejecting a marker
   inside a backtick or `$( … )` region is a promised invariant. Rejecting a
   `command:` whose substituted text contains an odd backtick count is a

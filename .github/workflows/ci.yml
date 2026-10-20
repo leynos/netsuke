@@ -9,8 +9,9 @@ on:
   push:
     branches: [main]
   # Nightly at 04:41 UTC, clear of the 03:05 mutation-testing run, so every
-  # Kani harness is verified even on a day with no push to `main`. Only
-  # `kani-smoke` runs on it; see docs/adr-039-change-scoped-kani-gate.md.
+  # Kani harness is verified even on a day with no push to `main`. The
+  # `kani-smoke` job is the only one it runs. See
+  # docs/adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md.
   schedule:
     - cron: '41 4 * * *'
   workflow_dispatch:
@@ -91,7 +92,8 @@ jobs:
       # sccache is setup-rust's: it names the wrapper, starts and zeroes the
       # server, and picks the backend from the runner (shared-actions ADR
       # 0005). See "Compiler cache" in docs/developers-guide.md.
-      # Polonius is nightly-only (docs/adr-006-adopt-polonius-nightly-toolchain.md),
+      # Polonius is nightly-only (see
+      # docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md),
       # so CI builds with the dated nightly pinned in rust-toolchain.toml.
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
       YAMLLINT_VERSION: '1.38.0'
@@ -384,8 +386,9 @@ jobs:
     # change to `tools/kani/`, which is an entry) every later step skips and
     # the job ends green, saying why in its summary. A push to `main`, the
     # nightly schedule and a dispatch always run every harness. See
-    # docs/adr-039-change-scoped-kani-gate.md. A dispatch cannot publish a
-    # generation, since the save gates on a push to `main`, so all it can do
+    # docs/adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md.
+    # A dispatch cannot publish a generation, since the save gates on a push
+    # to `main`, so all it can do
     # here is measure a warm restore, which is the one the exit gate needs.
     # A pull request from a fork cannot obtain a Ubicloud runner, so the
     # fork arm falls back to a GitHub-hosted one. On a push the pull

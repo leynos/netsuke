@@ -81,7 +81,7 @@ jobs:
       SCCACHE_DIR: ${{ github.workspace }}/.sccache
       SCCACHE_CACHE_SIZE: 4G
       # The tree requires the Polonius borrow checker, which nightly enables by
-      # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
+      # default (see docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md), so CI
       # builds with the dated nightly pinned in rust-toolchain.toml.
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
     defaults:
@@ -246,7 +246,7 @@ jobs:
       SCCACHE_DIR: ${{ github.workspace }}/.sccache
       SCCACHE_CACHE_SIZE: 4G
       # The tree requires the Polonius borrow checker, which nightly enables by
-      # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
+      # default (see docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md), so CI
       # builds with the dated nightly pinned in rust-toolchain.toml.
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
     defaults:

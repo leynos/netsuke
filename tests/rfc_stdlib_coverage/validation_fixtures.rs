@@ -54,7 +54,7 @@ pub(super) fn survey() -> survey::Survey {
 /// Construct one new pure registry row.
 pub(super) fn registry() -> registries::Registry {
     registries::Registry {
-        file: "docs/rfcs/0013-child.md".into(),
+        file: "docs/rfcs/rfc-0013-child.md".into(),
         number: "0013".into(),
         rows: vec![registries::RegistryRow {
             helper: helper("helper"),

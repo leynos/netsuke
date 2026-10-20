@@ -30,7 +30,7 @@
 //! Matching itself belongs to the `glob` crate, which traverses the filesystem
 //! ambiently; only the metadata check is capability-scoped. `walk`'s module
 //! documentation and
-//! [ADR-010](https://github.com/leynos/netsuke/blob/main/docs/adr-010-scope-glob-capability-to-literal-prefix.md)
+//! [ADR-0010](https://github.com/leynos/netsuke/blob/main/docs/adrs/adr-0010-scope-the-glob-metadata-capability-to-the-literal-prefix.md)
 //! describe that boundary and why it remains.
 use minijinja::Error;
 

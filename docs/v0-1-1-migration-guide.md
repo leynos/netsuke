@@ -47,5 +47,5 @@ the hyphen, while the label value is the underscore spelling
 
 See the [users' guide](users-guide.md#which-resolver-observability) for the
 counter and label reference and
-[ADR-024](adr-024-require-explicit-recursive-workspace-which-search.md) for the
+[ADR-0024](adrs/adr-0024-require-explicit-recursive-which-search.md) for the
 decision that added the label.

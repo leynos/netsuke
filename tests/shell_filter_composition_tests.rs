@@ -46,7 +46,7 @@ use composition_support::{
 ///
 /// It carries all three of the interactions this file exists to check: a space
 /// (which forces the quoter to emit quotes at all), a single quote (which the
-/// quoter escapes *into* the quoted form), and a dollar sign (which ADR-014
+/// quoter escapes *into* the quoted form), and a dollar sign (which ADR-0014
 /// requires Ninja to see doubled).
 const COMPOSED_VALUE: &str = "arg with 'quote' and $HOME";
 
@@ -191,7 +191,7 @@ fn scalar_recipes_execute_to_the_intended_argument(#[case] shell: RecipeShell) -
     Ok(())
 }
 
-/// ADR-014's `$`-doubling is what preserves the value through Ninja.
+/// ADR-0014's `$`-doubling is what preserves the value through Ninja.
 ///
 /// The negative control for the case above. Ninja collapses `$$` to `$` before
 /// the shell runs; text that carried the value's `$HOME` without doubling would

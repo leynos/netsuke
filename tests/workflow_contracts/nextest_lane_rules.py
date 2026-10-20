@@ -239,7 +239,7 @@ def _guard_is_shared(steps: Steps, install: int, goals: frozenset[str]) -> bool:
 
     An unguarded install always does. A guarded one does only when every
     suite step carries the identical guard, as in `kani-smoke`, where one
-    decision step gates every later step alike (ADR-039).
+    decision step gates every later step alike (ADR-0039).
 
     Guards are compared as written, so the same condition spelled with and
     without `${{ }}` counts as different and is refused: the rule fails loud

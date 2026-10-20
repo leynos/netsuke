@@ -153,7 +153,7 @@ fn parse_row(row: &RawRow, sections: &BTreeMap<String, Vec<String>>) -> Result<M
     let is_written = parse_status(row, &number, written.is_some())?;
     // A written row links to a file, and the file's name carries the RFC
     // number the row reserves. The two are written by hand and nothing else
-    // compares them: without this, row `0013` could link to `0014-….md`, and
+    // compares them: without this, row `0013` could link to `rfc-0014-….md`, and
     // every check downstream would resolve the link, find the file, and pass
     // — while `registries::parse_all` would file that document's helpers
     // under RFC 0013's name. The link is the only place the mismatch is

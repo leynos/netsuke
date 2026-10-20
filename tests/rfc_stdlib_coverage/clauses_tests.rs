@@ -3,7 +3,7 @@
 use super::*;
 use rstest::rstest;
 
-const FILE: &str = "docs/rfcs/0013-child.md";
+const FILE: &str = "docs/rfcs/rfc-0013-child.md";
 
 /// Write an isolated parent or child contract document.
 fn fixture(file: &str, text: &str) -> Result<(tempfile::TempDir, Repo)> {

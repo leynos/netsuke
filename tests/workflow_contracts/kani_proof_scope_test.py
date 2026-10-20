@@ -28,7 +28,7 @@ if typ.TYPE_CHECKING:
 SCOPE_FILE = REPO_ROOT / "tools" / "kani" / "proof-scope.toml"
 CRATE_ROOT = REPO_ROOT / "src" / "lib.rs"
 #: What builds and runs the proofs, which no source closure can find: each is
-#: an input `cargo kani` or the `kani-smoke` job reads. ADR-039 records why.
+#: an input `cargo kani` or the `kani-smoke` job reads. ADR-0039 records why.
 REQUIRED_INFRASTRUCTURE = (
     ".cargo/",  # Cargo configuration read by every cargo invocation
     ".github/actions/kani-cache/",  # the cached verifier payloads

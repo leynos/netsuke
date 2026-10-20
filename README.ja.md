@@ -50,7 +50,7 @@ Netsukeは現在、以下を必要とします:
   nightlyツールチェインが必要です(チェックアウト内では
   `rustup`が自動的にインストールします
   )。NetsukeはPoloniusボローチェッカーを使ってビルドされます。これはnightlyでデフォルトで有効になっており、安定版になるまではnightly限定です。詳細は
-  [ADR-006](docs/adr-006-adopt-polonius-nightly-toolchain.md)
+  [ADR-0006](docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)
   を参照してください。
 
 ### インストール
@@ -264,7 +264,7 @@ defaults: [output.txt]
 今後も変わる可能性があります。上記の限定的な保証で任意のレシピが
 安全になるわけではありません。シェル経路の仕組みは
 [ユーザーズガイドの安全境界](docs/users-guide.md#review-the-safety-boundary)、
-判断の詳細は[ADR-027](docs/adr-027-command-placeholder-contract.md)を
+判断の詳細は[ADR-0027](docs/adrs/adr-0027-command-placeholder-contract.md)を
 参照してください。
 
 ______________________________________________________________________

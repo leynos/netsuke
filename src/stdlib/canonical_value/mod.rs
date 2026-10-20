@@ -51,7 +51,7 @@
 //! canonical_key(&first).expect("the map is admitted");
 //! ```
 //!
-//! [RFC 0006 §6.7]: ../../../docs/rfcs/0006-ansible-inspired-template-standard-library.md
+//! [RFC 0006 §6.7]: ../../../docs/rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md
 
 mod admission;
 mod error;

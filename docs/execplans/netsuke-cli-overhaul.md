@@ -268,7 +268,7 @@ Observable success means:
   documents unrelated to this plan. Evidence: `make fmt` reached
   `markdownlint --fix` and reported many MD013 line-length violations plus
   existing table issues in files such as
-  `docs/adr-002-replace-cucumber-with-rstest-bdd.md`,
+  `docs/adrs/adr-0002-replace-cucumber-rs-with-rstest-bdd-for-behavioural-tests.md`,
   `docs/behavioural-testing-in-rust-with-cucumber.md`,
   `docs/developers-guide.md`, and `docs/netsuke-design.md`. Impact: this draft
   can be checked with targeted Markdown lint and `make nixie`, but a full gated
@@ -539,7 +539,7 @@ overflow logs under the run directory, for example
 
 ### Stage A: create the governing design record
 
-Add `docs/adr-003-agent-consistent-human-first-cli.md`. The ADR should follow
+Add `docs/ADR-0046-agent-consistent-human-first-cli.md`. The ADR should follow
 the required sections in `docs/documentation-style-guide.md`: status, date,
 context, decision drivers, options considered, outcome, risks, and related
 documents. It should record that:
@@ -565,7 +565,7 @@ documents. It should record that:
 - Existing Netsuke roadmap tasks are preserved unless a relevance audit shows
   that the redesigned UI makes them obsolete.
 
-Then update `docs/contents.md` to list the ADR after `adr-002`.
+Then update `docs/contents.md` to list the ADR after `adr-0002`.
 
 Stage A validation is `make fmt`, `make markdownlint`, and `make nixie`.
 
@@ -844,7 +844,7 @@ a file-based commit message, not `git commit -m`.
 
 The documentation overhaul is accepted when:
 
-- `docs/adr-003-agent-consistent-human-first-cli.md` exists and records the
+- `docs/ADR-0046-agent-consistent-human-first-cli.md` exists and records the
   pre-0.1.0 no-compatibility decision.
 - `docs/netsuke-design.md` and `docs/netsuke-cli-design-document.md` use the
   same canonical command names, flags, stream contract, and JSON doctrine.

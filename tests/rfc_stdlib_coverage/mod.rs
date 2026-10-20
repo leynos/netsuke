@@ -72,7 +72,8 @@ use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
 /// Repository-relative path of RFC 0006, the survey RFC.
-pub(super) const RFC_0006: &str = "docs/rfcs/0006-ansible-inspired-template-standard-library.md";
+pub(super) const RFC_0006: &str =
+    "docs/rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md";
 
 /// Repository-relative path of the delivery roadmap.
 pub(super) const ROADMAP: &str = "docs/roadmap.md";

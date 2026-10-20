@@ -181,8 +181,8 @@ fn check_status(repo: &Repo, world: &World) -> Result<()> {
     // The base is the map's *own* file rather than its directory: a relative
     // link is relative to the document containing it, and `resolve` derives the
     // directory by popping the last segment. Passing `RFC_DIR` would pop into
-    // `docs/`, so every correct `0013-….md` link would resolve to
-    // `docs/0013-….md` and be reported missing.
+    // `docs/`, so every correct `rfc-0013-….md` link would resolve to
+    // `docs/rfc-0013-….md` and be reported missing.
     for row in &world.map.rows {
         if let Some(target) = &world.child_paths.get(&row.number) {
             let path = links::resolve(super::RFC_0006, target).with_context(|| {

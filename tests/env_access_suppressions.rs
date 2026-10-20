@@ -22,7 +22,7 @@
 //! and [`policy`] decides which names they may carry; [`roots`] decides which
 //! sources are read at all, and this crate holds the assertions over both.
 //!
-//! See `docs/adr-008-environment-seam-taxonomy.md` for the taxonomy, and the
+//! See `docs/adrs/adr-0008-environment-seam-taxonomy.md` for the taxonomy, and the
 //! developers' guide for the sanctioned forms and the scoped exemption.
 
 use anyhow::{Context, Result, ensure};

@@ -29,7 +29,7 @@ const TARGET: &str = "junction_target";
 // Compile-time half of the policy contract.
 //
 // The runtime tests in this file only run on a Windows host, and the Windows
-// test lane has been known to stop short of `stdlib::path` (see ADR-032). A
+// test lane has been known to stop short of `stdlib::path` (see ADR-0032). A
 // `const` assertion has no such dependency: rustc evaluates it whenever this
 // module is compiled, and `Windows / lint-windows` compiles it on every push
 // through `cargo clippy --all-targets`. A regression in either policy branch

@@ -59,14 +59,14 @@ _If you are upgrading: see the
   `TYPE_CHECKING`-only import; the claim held under 3.12, and under the 3.14
   baseline PEP 649 defers evaluation, so only resolving the annotation catches
   it
-  ([#730](https://github.com/leynos/netsuke/issues/730), [ADR-038](docs/adr-038-runtime-annotation-introspection-in-workflow-contracts.md))
+  ([#730](https://github.com/leynos/netsuke/issues/730), [ADR-0038](docs/adrs/adr-0038-runtime-annotation-introspection-in-workflow-contracts.md))
 - Add the `shell_quote` and `shell_join` recipe-text filters, and the `compact`
   collection filter. `shell_quote` encodes one string as one shell word and
   `shell_join` encodes a sequence as a command line, each for a `dialect` of
   `sh` or `powershell` that defaults to the dialect implied by the active
   recipe shell. The documented `shell_escape` name is superseded rather than
   implemented, because it would quote for the wrong interpreter on Windows
-  ([#593](https://github.com/leynos/netsuke/issues/593), [ADR-041](docs/adr-041-canonical-recipe-shell-quoting-surface.md))
+  ([#593](https://github.com/leynos/netsuke/issues/593), [ADR-0041](docs/adrs/adr-0041-canonical-recipe-shell-quoting-surface.md))
 - Add the `default=` keyword argument to the `env()` template function, leaving
   the existing missing-variable and invalid-UTF-8 diagnostics unchanged
   ([#593](https://github.com/leynos/netsuke/issues/593))
@@ -74,7 +74,7 @@ _If you are upgrading: see the
   `netsuke_manifest_shell_quote_dialect_total` counter, labelled by `dialect`
   and by whether the call site named the dialect or accepted the default, so
   the manifests whose generated text is not pinned to an encoding are measurable
-  ([ADR-041](docs/adr-041-canonical-recipe-shell-quoting-surface.md))
+  ([ADR-0041](docs/adrs/adr-0041-canonical-recipe-shell-quoting-surface.md))
 
 ### Added
 

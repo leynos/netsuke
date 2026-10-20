@@ -57,7 +57,8 @@ Netsuke actualmente requiere lo siguiente:
   la instala automáticamente en un checkout). Netsuke se compila con el
   verificador de préstamos Polonius, que nightly habilita de forma
   predeterminada y que permanece exclusivo de nightly hasta que se estabilice;
-  véase [ADR-006](docs/adr-006-adopt-polonius-nightly-toolchain.md).
+  véase
+  [ADR-0006](docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md).
 
 ### Instalación
 
@@ -292,7 +293,8 @@ defecto que debe anotarse en el registro de cambios, no un cambio de política.
 interfaces pueden cambiar. Estas garantías acotadas no hacen seguras las
 recetas arbitrarias. Consulte los mecanismos de las rutas de shell en el
 [límite de seguridad de la guía del usuario](docs/users-guide.md#review-the-safety-boundary)
-y las decisiones en [ADR-027](docs/adr-027-command-placeholder-contract.md).
+y las decisiones en
+[ADR-0027](docs/adrs/adr-0027-command-placeholder-contract.md).
 
 ______________________________________________________________________
 

@@ -6,7 +6,7 @@
 //! closed lists below; no series carries a URL, host, location, or userinfo.
 //!
 //! The library only emits these series; the application boundary installs the
-//! recorder, as ADR-013 requires.
+//! recorder, as ADR-0013 requires.
 
 use std::{sync::Once, time::Duration};
 

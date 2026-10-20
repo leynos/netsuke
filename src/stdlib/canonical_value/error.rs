@@ -12,7 +12,7 @@
 //! value rather than as prose, so a caller can branch on the refusal without
 //! parsing a string.
 //!
-//! [RFC 0006 §6.7]: ../../../docs/rfcs/0006-ansible-inspired-template-standard-library.md
+//! [RFC 0006 §6.7]: ../../../docs/rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md
 
 use std::fmt;
 

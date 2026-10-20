@@ -28,12 +28,12 @@ fn evidence() -> String {
 #[case::unknown(
     "Maybe",
     "§8.1",
-    "unknown disposition \"Maybe\" at docs/rfcs/0006-ansible-inspired-template-standard-library.md:4"
+    "unknown disposition \"Maybe\" at docs/rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md:4"
 )]
 #[case::absent_citation(
     "Accept",
     "none",
-    "accept row at docs/rfcs/0006-ansible-inspired-template-standard-library.md:4 cites no section 8 subsection"
+    "accept row at docs/rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md:4 cites no section 8 subsection"
 )]
 #[case::empty_citation("Accept", "§.", "cites no section 8 subsection")]
 fn disposition_errors_report_source(
