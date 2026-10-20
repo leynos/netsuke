@@ -1,0 +1,10 @@
+---
+source: src/shell_selection/selection/tests.rs
+expression: rendered
+---
+Empty: a shell name must not be empty
+TooLong { length: 64 }: a shell name must be at most 63 bytes, but has 64
+InvalidFirstCharacter { character: 'B' }: a shell name must start with a lower-case ASCII letter, not 'B'
+InvalidCharacter { character: '/', char_index: 2 }: invalid shell name character '/' at character 2
+ReservedWord { word: "true" }: shell name "true" is a reserved YAML Boolean; use an unquoted Boolean instead
+number: invalid type: integer `1`, expected a Boolean or a shell name

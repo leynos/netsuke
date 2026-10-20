@@ -736,6 +736,30 @@ clones the complete recipe. The mode is available to static readers before any
 recipe is executed; see
 [What a static reader may rely on](users-guide.md#what-a-static-reader-may-rely-on).
 
+### Structured-command shell-selection vocabulary
+
+`src/shell_selection/` owns the public, data-only vocabulary shared by the
+future configuration, trusted resolver, and structured-command lowering steps.
+`ShellName` validates a name but never resolves it. `BuiltInShell` describes
+the finite built-in table, and `ShellSelection` preserves direct,
+platform-default, or named intent. These types do not inspect the environment
+or execute a shell, and this module is not wired into the AST, IR, or Ninja
+generation yet.
+
+Keep dependency direction narrow: `src/cli/` may use `src/shell_selection/`,
+but the vocabulary must not depend on CLI configuration. The future 11.2.3
+resolver belongs in a sibling module and accepts definitions rather than
+`CliConfig`. Within the vocabulary, `built_in/mod.rs` may depend on
+`name/mod.rs`; the name module must not depend on the built-in registry. That
+keeps `name/mod.rs` standalone for the future build-script slice, where its
+production imports remain limited to `std`, `serde`, and `thiserror`.
+
+`HostFamily` makes host-dependent table queries explicit and has one
+compile-time `cfg!(windows)` source in `HostFamily::current()`. The resolver
+and 11.3.1 manifest lowering may consume it. Do not extend it to legacy
+`RecipeShell`, MiniJinja helpers, or the `which` subsystem without a separate
+design decision; those are distinct policies with existing contracts.
+
 ### Dependency-only actions and targets
 
 The manifest's internal dependency-only marker represents an action or target
