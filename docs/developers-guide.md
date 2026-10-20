@@ -4494,10 +4494,10 @@ Markdown. A 38 s margin is not a budget but the difference between two runners,
 and the failure then names nextest's cap rather than the patch that was slow.
 The widened allowance is bounded from above by the whole-run budget: the
 ordering requires `global-timeout` strictly above the largest per-test
-allowance. The mutation gate keeps its 600 s allowance, the production-module
-check gets 720 s, and the split-build and packaging smoke tests get 900 s,
-leaving 60 s below the 960 s whole-run budget. At 60 s periods, 960 s would
-permit at most fifteen periods (900 s) while remaining strictly below the
+allowance. The mutation gate keeps its 600 s allowance. The production-module
+check, stub-environment checks, split-build, and packaging smoke tests each get
+900 s, leaving 60 s below the 960 s whole-run budget. At 60 s periods, 960 s
+would permit at most fifteen periods (900 s) while remaining strictly below the
 whole-run budget. An allowance of 960 s would equal that budget, and the run
 could end before the test used its allowance.
 
@@ -4852,7 +4852,7 @@ governs the non-doctest pass only, and deliberately stays small:
   library and its build-script dependencies with
   `cargo check --package netsuke-build --lib --all-features` before its
   direct-rustc checks. It reached the default 300s cap in a full gate with
-  compiler admission saturated, so it gets the same targeted 720s allowance.
+  compiler admission saturated, so it gets the same targeted 900s allowance.
   These targeted allowances remain below the 960s CI whole-run cap; none adds
   retries or widens timeouts for unrelated tests.
 - **One serialized child-Cargo group.** Tests that spawn their own Cargo build
@@ -9604,12 +9604,12 @@ fed back upstream.
 
 All four tiers are set here.
 
-| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                                                                |
-| ------------------------ | ---------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation; 720 s production-module check; 900 s stub-environment, split-build, and packaging smoke tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally                                                                                            |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step                                                                                |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                                                                                                        |
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                                                    |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation; 900 s production-module, stub-environment, split-build, and packaging smoke tests |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally                                                                                |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step                                                                    |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                                                                                            |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
@@ -9692,14 +9692,13 @@ full-suite runs passed at 208.921 s and reached the 300.017 s cap during
 concurrent Cargo work, confirming that its timing varies with host load. The
 latest cold-target run reached 600 s while compiler admission was saturated.
 The candidate gives this test fifteen warning periods, 900 s, which remains
-strictly below the 960 s whole-run budget. The production-module check retains
-its twelve-period, 720 s allowance; the stub-environment compile-fail fixture,
-split-build fixture, and packaging smoke test share the 900 s tier. The CLI
-fixture uses the 300 s default after reusing the gate-built workspace graph.
-Each override binds only because its filter carries the test's module path;
-earlier passing runs did not prove the wider allowance was in force because the
-test completed inside the 300 s default. See "nextest configuration" for the
-rule.
+strictly below the 960 s whole-run budget. The production-module check now uses
+the same fifteen-period, 900 s allowance as the stub-environment compile-fail
+fixture, split-build fixture, and packaging smoke test. The CLI fixture uses
+the 300 s default after reusing the gate-built workspace graph. Each override
+binds only because its filter carries the test's module path; earlier passing
+runs did not prove the wider allowance was in force because the test completed
+inside the 300 s default. See "nextest configuration" for the rule.
 
 ### The whole-run budget, and how 16 minutes was arrived at
 

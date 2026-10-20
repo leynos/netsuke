@@ -175,19 +175,17 @@ success-output = "immediate"
 # this file bounds it and its own cargo watchdog does.
 #
 # The 16-minute global timeout is above the 900s largest per-test allowance.
-# The mutation compile gate keeps its 600s budget, the production module-slice
-# check keeps 720s, and the stub-environment compile-fail,
-# split-build, and cold package-publish checks get 900s. Both comparisons hold:
+# The mutation compile gate keeps its 600s budget. The production module-slice
+# check, stub-environment compile-fail, split-build, and cold package-publish
+# checks each get 900s. Both comparisons hold:
 #
 #   global-timeout > largest per-test allowance
 #   960 s          > 900 s
 #
 # The margin is 60s rather than 480s, and it is not slack to be spent: a
 # per-test allowance at or above the whole-run budget would make the run end
-# before the test it contains could use its budget, so the ordering caps the
-# package gate's allowance at 900s -- fifteen 60s periods, strictly below
-# 960s. The other targeted build checks retain their measured 600s and 720s
-# budgets.
+# before the test it contains could use its budget, so the largest targeted
+# allowance stays at 900s -- fifteen 60s periods, strictly below 960s.
 #
 # The 1,980s cargo watchdog covers the full nextest termination, cold-build,
 # and report window with 50s to spare: 960s + 70s + 600s + 300s is 1,930s.
