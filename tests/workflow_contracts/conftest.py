@@ -1,4 +1,4 @@
-"""Shared fixtures and helpers for the cargo-binstall hoist test modules.
+"""Share fixtures and helpers across workflow-contract test modules.
 
 ``scripts/hoist_binstall_archives.py`` moves the staged
 ``{package}-{version}-{target}.tar.gz`` archives (and their ``.sha256``
@@ -6,7 +6,8 @@ sidecars) from the downloaded workflow-artefact layout to the ``dist/`` root,
 where ``upload-release-assets`` publishes them under the plain names the
 binstall metadata in ``Cargo.toml`` resolves. The example-based, rollback,
 and generated-layout suites all stage workspaces through the fixture and
-helpers here, so the staging shape and the invocation seam live in one place.
+helpers here, so the staging shape and invocation seam live in one place. CI
+evidence tests use a shared attempt fixture for consistent API responses.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -48,6 +49,37 @@ EXPECTED_NAMES = [
     "netsuke-build-9.9.9-aarch64-apple-darwin.tar.gz",
     "netsuke-build-9.9.9-x86_64-unknown-linux-gnu.tar.gz",
 ]
+
+
+@pytest.fixture
+def attempt() -> tuple[dict, dict]:
+    """Supply a complete CI attempt boundary with one Linux job."""
+    return {
+        "id": 123,
+        "run_attempt": 2,
+        "event": "pull_request",
+        "head_branch": "main",
+        "path": ".github/workflows/ci.yml",
+        "run_started_at": "2026-10-12T00:00:00Z",
+        "head_sha": "a" * 40,
+        "created_at": "2026-10-12T00:00:00Z",
+        "html_url": "https://github.com/leynos/netsuke/actions/runs/123",
+    }, {
+        "total_count": 1,
+        "jobs": [
+            {
+                "id": 456,
+                "run_id": 123,
+                "run_attempt": 2,
+                "name": "build-test",
+                "labels": ["ubicloud-standard-4-ubuntu-2404"],
+                "conclusion": "success",
+                "started_at": "2026-10-12T00:00:05Z",
+                "completed_at": "2026-10-12T00:00:15Z",
+                "steps": [],
+            }
+        ],
+    }
 
 
 @pytest.fixture

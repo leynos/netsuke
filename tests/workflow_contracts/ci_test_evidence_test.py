@@ -41,37 +41,6 @@ def test_observed_duration_respects_ordering(start: int, elapsed: int) -> None:
     ), "Elapsed time must preserve ordering across date boundaries"
 
 
-@pytest.fixture
-def attempt() -> tuple[dict, dict]:
-    """Supply a complete attempt boundary with one Linux job."""
-    return {
-        "id": 123,
-        "run_attempt": 2,
-        "event": "pull_request",
-        "head_branch": "main",
-        "path": ".github/workflows/ci.yml",
-        "run_started_at": "2026-10-12T00:00:00Z",
-        "head_sha": "a" * 40,
-        "created_at": "2026-10-12T00:00:00Z",
-        "html_url": "https://github.com/leynos/netsuke/actions/runs/123",
-    }, {
-        "total_count": 1,
-        "jobs": [
-            {
-                "id": 456,
-                "run_id": 123,
-                "run_attempt": 2,
-                "name": "build-test",
-                "labels": ["ubicloud-standard-4-ubuntu-2404"],
-                "conclusion": "success",
-                "started_at": "2026-10-12T00:00:05Z",
-                "completed_at": "2026-10-12T00:00:15Z",
-                "steps": [],
-            }
-        ],
-    }
-
-
 @pytest.mark.parametrize(
     ("number", "expected"),
     [(0, 0), (3, 3), (-1, None), (True, None), ("3", None), (1.5, None), (None, None)],
