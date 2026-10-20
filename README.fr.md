@@ -222,10 +222,11 @@ ci-dessous).
     autonomes entre apostrophes pourraient fusionner avec une chaîne ou un
     argument voisin. Les scripts PowerShell ne traitent pas les commentaires
     comme des zones inertes : le texte ordinaire d'un commentaire laisse les
-    marqueurs non cités suivants être interpolés, mais l'ouverture d'un
-    commentaire de bloc, des guillemets, des accents graves ou une syntaxe de
-    substitution dans un commentaire sur une ligne peuvent faire rejeter les
-    marqueurs suivants. Une apostrophe dans un commentaire
+    marqueurs non cités suivants être interpolés, mais une syntaxe sensible à
+    l'analyseur après une limite de commentaire ou tout `#` dans un jeton peut
+    faire rejeter les marqueurs suivants. Cela inclut l'ouverture d'un
+    commentaire de bloc, les guillemets, les accents graves et la syntaxe de
+    substitution. Une apostrophe dans un commentaire
     peut aussi faire rejeter un marqueur ultérieur. Les guillemets typographiques PowerShell entraînent
     aussi le rejet prudent des marqueurs suivants. Dans la région brute de
     commande native après `--%`, les marqueurs sont rejetés jusqu'au prochain

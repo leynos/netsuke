@@ -46,8 +46,8 @@ fn power_shell_scripts_interpolate_markers_after_plain_comments() {
 #[test]
 fn power_shell_scripts_preserve_hashes_inside_argument_tokens() {
     power_shell_output_case!(
-        format!("Write-Output file#tag; Write-Output \"ok\"; Write-Output {INS_TOKEN}"),
-        "Write-Output file#tag; Write-Output \"ok\"; Write-Output '; New-Item pwned; Write-Output x'"
+        format!("Write-Output file#tag; Write-Output ok; Write-Output {INS_TOKEN}"),
+        "Write-Output file#tag; Write-Output ok; Write-Output '; New-Item pwned; Write-Output x'"
     )
     .verify();
 }
@@ -56,8 +56,8 @@ fn power_shell_scripts_preserve_hashes_inside_argument_tokens() {
 #[test]
 fn power_shell_scripts_preserve_hash_after_argument_asterisk() {
     power_shell_output_case!(
-        format!("Write-Output foo*#bar \"quoted\"; Write-Output {OUTS_TOKEN}"),
-        "Write-Output foo*#bar \"quoted\"; Write-Output 'output file.txt'"
+        format!("Write-Output foo*#bar; Write-Output {OUTS_TOKEN}"),
+        "Write-Output foo*#bar; Write-Output 'output file.txt'"
     )
     .verify();
 }

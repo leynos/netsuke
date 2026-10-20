@@ -5740,7 +5740,7 @@ general shell parser, and is not intended for reuse outside that boundary. The
 `src/ir/cmd_interpolate/substitution/powershell/` module groups focused
 PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
 `lexical/comments.rs` tracks fail-closed comment state, `stop_parsing.rs`
-tracks raw native-command arguments, and `tokens.rs` recognizes the token
+tracks raw native-command arguments, and `tokens/mod.rs` recognizes the token
 boundaries and syntax used by those scanners. They share a shell-specific
 boundary but keep distinct state responsibilities. `PowerShellSourceCharacter`
 binds a Unicode-scalar index to the borrowed source buffer and provides checked
@@ -5784,12 +5784,13 @@ character; a semicolon does not end it, and scanning resumes after the
 boundary. The path text otherwise reaches the native command literally instead
 of being interpreted as Netsuke's quoted path literal. PowerShell scripts have
 no inert comment regions: plain line-comment text leaves later markers eligible
-for interpolation, while a block-comment opener or quotes, backticks, or
-substitution syntax in a line comment make later markers fail closed. In
-particular, an apostrophe in a comment can make a later marker fail closed. For
-POSIX and Bash `command:` recipes, the scanner then validates the substituted
-text: odd backticks reject the command, and the `shlex` guard also evaluates
-that substituted text. `script:` recipes skip both checks, because a script may
+for interpolation, while scanner-sensitive syntax after a comment boundary or
+any mid-token `#` can make later markers fail closed. This includes a
+block-comment opener, quotes, backticks, or substitution syntax. In particular,
+an apostrophe in a comment can make a later marker fail closed. For POSIX and
+Bash `command:` recipes, the scanner then validates the substituted text: odd
+backticks reject the command, and the `shlex` guard also evaluates that
+substituted text. `script:` recipes skip both checks, because a script may
 legitimately contain heredocs and other syntax `shlex` cannot model. The
 odd-backtick and guard properties are complementary: one proves rejection of
 odd substituted backtick counts, while the other proves that the guard's

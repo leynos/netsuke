@@ -2,6 +2,8 @@
 
 use crate::shell_word::{is_power_shell_double_quote, is_power_shell_single_quote};
 
+mod numeric_literals;
+
 /// Bind a character index to the source slice used for PowerShell lookaround.
 ///
 /// Keeping the source and index together prevents token checks from receiving
@@ -114,7 +116,7 @@ impl<'source> PowerShellSourceCharacter<'source> {
                 .is_some_and(|previous| matches!(previous.value(), '=' | ']'))
     }
 
-    /// Report whether a hash may start a comment after an expression boundary.
+    /// Report whether a mid-token hash follows syntax that can begin a comment.
     pub(super) fn hash_follows_ambiguous_expression_boundary(self) -> bool {
         if self.value() != '#' || self.is_token_boundary() {
             return false;
@@ -122,20 +124,102 @@ impl<'source> PowerShellSourceCharacter<'source> {
         self.previous()
             .is_some_and(|previous| matches!(previous.value(), '=' | ']'))
             || self.hash_follows_unbraced_variable()
+            || self.hash_follows_variable_member_access()
             || self.hash_follows_postfix_operator()
+            || self.hash_follows_expression_operator()
+            || numeric_literals::hash_follows_numeric_literal(self)
     }
 
     /// Report whether a hash follows an unescaped unbraced variable.
     fn hash_follows_unbraced_variable(self) -> bool {
-        self.value() == '#'
-            && !self.is_token_boundary()
-            && self.unescaped_variable_before().is_some()
+        self.unescaped_variable_before().is_some()
     }
 
-    /// Mark every hash after `++` or `--` as ambiguous.
-    ///
-    /// PowerShell postfix operands include indexed and member expressions, so
-    /// recognizing only bare variables would leave comment quotes untracked.
+    /// Report whether a hash follows a property on a variable expression.
+    fn hash_follows_variable_member_access(self) -> bool {
+        let Some(mut member_character) = self.previous() else {
+            return false;
+        };
+        if !member_character.is_variable_name_character() {
+            return false;
+        }
+        while let Some(previous) = member_character.previous() {
+            if !previous.is_variable_name_character() {
+                break;
+            }
+            member_character = previous;
+        }
+        let Some(member_separator) = member_character.previous() else {
+            return false;
+        };
+        if member_separator.value() != '.' {
+            return false;
+        }
+        member_separator
+            .previous()
+            .is_some_and(Self::ends_with_unescaped_variable_expression)
+    }
+
+    /// Recognize a variable expression followed by member and index accessors.
+    fn ends_with_unescaped_variable_expression(self) -> bool {
+        let mut expression_end = self;
+        let mut index_depth = 0usize;
+        loop {
+            if expression_end.value() == ']' {
+                index_depth += 1;
+            } else if expression_end.value() == '[' && index_depth > 0 {
+                index_depth -= 1;
+            } else if index_depth > 0 && expression_end.value() == '$' {
+                return !expression_end.is_escaped_by_backtick();
+            } else if index_depth == 0 && expression_end.is_variable_name_character() {
+                return expression_end.has_unescaped_variable_root_in_member_chain();
+            } else if index_depth == 0 {
+                return false;
+            }
+            let Some(previous) = expression_end.previous() else {
+                return false;
+            };
+            expression_end = previous;
+        }
+    }
+
+    /// Find an unescaped variable root through a chain of member accessors.
+    fn has_unescaped_variable_root_in_member_chain(self) -> bool {
+        self.is_unescaped_variable_name_start()
+            || self
+                .previous_member_expression()
+                .is_some_and(Self::ends_with_unescaped_variable_expression)
+    }
+
+    /// Find the first character of the variable name ending at this position.
+    fn variable_name_start(self) -> Self {
+        let mut name_start = self;
+        while let Some(previous) = name_start.previous() {
+            if !previous.is_variable_name_character() {
+                break;
+            }
+            name_start = previous;
+        }
+        name_start
+    }
+
+    /// Report whether this variable name immediately follows an unescaped `$`.
+    fn is_unescaped_variable_name_start(self) -> bool {
+        self.variable_name_start()
+            .previous()
+            .is_some_and(|dollar| dollar.value() == '$' && !dollar.is_escaped_by_backtick())
+    }
+
+    /// Find the expression character before the member accessor preceding this name.
+    fn previous_member_expression(self) -> Option<Self> {
+        let separator = self.variable_name_start().previous()?;
+        if separator.value() != '.' {
+            return None;
+        }
+        separator.previous()
+    }
+
+    /// Mark postfix operators on simple, member, and indexed expressions.
     fn hash_follows_postfix_operator(self) -> bool {
         let Some(second_operator_character) = self.previous() else {
             return false;
@@ -145,6 +229,56 @@ impl<'source> PowerShellSourceCharacter<'source> {
         };
         let operator = first_operator_character.value();
         matches!(operator, '+' | '-') && second_operator_character.value() == operator
+    }
+
+    /// Catch redirection and assignment-expression operators before a hash.
+    fn hash_follows_expression_operator(self) -> bool {
+        let Some(operator) = self.previous() else {
+            return false;
+        };
+        match operator.value() {
+            '>' => true,
+            '+' | '*' | '/' | '%' | '-' => Self::has_variable_assignment_before(operator),
+            _ => false,
+        }
+    }
+
+    /// Find a variable assignment before an arithmetic operator in this statement.
+    fn has_variable_assignment_before(operator: Self) -> bool {
+        let mut cursor = operator;
+        while let Some(previous) = cursor.previous() {
+            if matches!(previous.value(), ';' | '\n' | '\r' | '|' | '\'' | '"') {
+                return false;
+            }
+            if previous.value() == '=' {
+                return previous.assignment_targets_variable();
+            }
+            cursor = previous;
+        }
+        false
+    }
+
+    /// Report whether the left-hand side before `=` is a PowerShell variable.
+    fn assignment_targets_variable(self) -> bool {
+        let mut cursor = self.previous();
+        while cursor.is_some_and(Self::is_power_shell_whitespace) {
+            cursor = cursor.and_then(Self::previous);
+        }
+        let Some(mut name_character) = cursor else {
+            return false;
+        };
+        if !name_character.is_variable_name_character() {
+            return false;
+        }
+        while let Some(previous) = name_character.previous() {
+            if !previous.is_variable_name_character() {
+                break;
+            }
+            name_character = previous;
+        }
+        name_character
+            .previous()
+            .is_some_and(|dollar| dollar.value() == '$' && !dollar.is_escaped_by_backtick())
     }
 
     /// Find the unescaped variable whose name ends immediately before here.
@@ -238,102 +372,4 @@ pub(super) fn comment_character_changes_scanner_state(
 }
 
 #[cfg(test)]
-mod tests {
-    //! Verify PowerShell token recognition uses source-relative character positions.
-
-    use super::PowerShellSourceCharacter;
-    use rstest::rstest;
-
-    struct TokenScenario {
-        source: &'static str,
-        position: usize,
-        expected: bool,
-    }
-
-    #[rstest]
-    #[case::after_space(TokenScenario { source: " #", position: 1, expected: true })]
-    #[case::after_nonbreaking_space(TokenScenario { source: "\u{00a0}#", position: 1, expected: true })]
-    #[case::after_ideographic_space(TokenScenario { source: "\u{3000}#", position: 1, expected: true })]
-    #[case::after_line_separator(TokenScenario { source: "\u{2028}#", position: 1, expected: true })]
-    #[case::after_next_line_control(TokenScenario { source: "\u{0085}#", position: 1, expected: false })]
-    #[case::after_assignment(TokenScenario { source: "=#", position: 1, expected: false })]
-    #[case::after_closing_bracket(TokenScenario { source: "]#", position: 1, expected: false })]
-    #[case::after_asterisk(TokenScenario { source: "*#", position: 1, expected: false })]
-    #[case::after_plus(TokenScenario { source: "+#", position: 1, expected: false })]
-    #[case::after_redirection(TokenScenario { source: ">#", position: 1, expected: false })]
-    fn classify_comment_boundaries(#[case] scenario: TokenScenario) {
-        let characters = scenario.source.chars().collect::<Vec<_>>();
-        let position = PowerShellSourceCharacter::new(&characters, scenario.position)
-            .expect("the scenario position identifies a source character");
-
-        assert_eq!(position.is_token_boundary(), scenario.expected);
-        let first =
-            PowerShellSourceCharacter::new(&['#'], 0).expect("the first source character exists");
-        assert!(first.is_token_boundary());
-    }
-
-    #[rstest]
-    #[case::after_assignment(TokenScenario { source: "=@'", position: 1, expected: true })]
-    #[case::after_closing_bracket(TokenScenario { source: "]@'", position: 1, expected: true })]
-    #[case::after_space(TokenScenario { source: " @'", position: 1, expected: true })]
-    #[case::after_asterisk(TokenScenario { source: "*@'", position: 1, expected: false })]
-    fn classify_here_string_boundaries(#[case] scenario: TokenScenario) {
-        let characters = scenario.source.chars().collect::<Vec<_>>();
-        let position = PowerShellSourceCharacter::new(&characters, scenario.position)
-            .expect("the scenario position identifies a source character");
-
-        assert_eq!(position.is_here_string_boundary(), scenario.expected);
-    }
-
-    #[rstest]
-    #[case::after_postfix_increment(TokenScenario { source: "$i++#", position: 4, expected: true })]
-    #[case::after_postfix_decrement(TokenScenario { source: "$i--#", position: 4, expected: true })]
-    #[case::after_member_postfix_increment(TokenScenario { source: "$obj.Value++#", position: 12, expected: true })]
-    #[case::after_member_postfix_decrement(TokenScenario { source: "$obj.Value--#", position: 12, expected: true })]
-    #[case::after_indexed_postfix_increment(TokenScenario { source: "$arr[0]++#", position: 9, expected: true })]
-    #[case::after_indexed_postfix_decrement(TokenScenario { source: "$obj.Items[0]--#", position: 15, expected: true })]
-    #[case::after_assignment(TokenScenario { source: "a=#", position: 2, expected: true })]
-    #[case::after_bracket(TokenScenario { source: "a]#", position: 2, expected: true })]
-    #[case::after_argument_asterisk(TokenScenario { source: "foo*#", position: 4, expected: false })]
-    fn classify_ambiguous_expression_hashes(#[case] scenario: TokenScenario) {
-        let characters = scenario.source.chars().collect::<Vec<_>>();
-        let position = PowerShellSourceCharacter::new(&characters, scenario.position)
-            .expect("the scenario position identifies a source character");
-
-        assert_eq!(
-            position.hash_follows_ambiguous_expression_boundary(),
-            scenario.expected
-        );
-    }
-
-    #[test]
-    fn recognize_stop_parsing_token_after_unicode_whitespace() {
-        let characters = "\u{00a0}--%\u{3000}".chars().collect::<Vec<_>>();
-        let position = PowerShellSourceCharacter::new(&characters, 1)
-            .expect("the token begins at the expected character index");
-
-        assert!(position.starts_stop_parsing_token());
-    }
-
-    #[test]
-    fn source_positions_keep_unicode_character_indices_and_source_edges() {
-        let characters = "é --%".chars().collect::<Vec<_>>();
-        let delimiter = PowerShellSourceCharacter::new(&characters, 1)
-            .expect("space follows the non-ASCII character");
-        let token = delimiter.next().expect("the token follows the space");
-        let final_character = PowerShellSourceCharacter::new(&characters, 4)
-            .expect("the source has a final character");
-
-        assert_eq!(token.value(), '-');
-        assert_eq!(token.position(), 2);
-        assert!(token.starts_stop_parsing_token());
-        assert!(PowerShellSourceCharacter::new(&characters, 5).is_none());
-        assert!(
-            PowerShellSourceCharacter::new(&characters, 0)
-                .expect("the source starts with a character")
-                .previous()
-                .is_none()
-        );
-        assert!(final_character.next().is_none());
-    }
-}
+mod tests;

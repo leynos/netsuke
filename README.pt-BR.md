@@ -213,9 +213,10 @@ que a forma é reescrita no texto ativo da receita; consulte a nota abaixo).
     independentes entre aspas simples podem se unir ao texto
     de uma string ou argumento vizinho. Scripts PowerShell não tratam comentários
     como regiões inertes: texto comum de comentário permite interpolar marcadores
-    posteriores sem aspas, mas o início de um comentário em bloco, aspas,
-    crases ou sintaxe de substituição em um comentário de linha podem levar à
-    rejeição de marcadores posteriores. Um apóstrofo em
+    posteriores sem aspas, mas sintaxe sensível ao analisador após um limite de
+    comentário ou qualquer `#` dentro de um token pode levar à rejeição de
+    marcadores posteriores. Isso inclui o início de um comentário em bloco,
+    aspas, crases e sintaxe de substituição. Um apóstrofo em
     um comentário também pode levar à rejeição de um marcador posterior. Aspas tipográficas do PowerShell também levam à rejeição
     conservadora de marcadores posteriores. Na região literal do comando nativo
     após `--%`, os marcadores são rejeitados até a próxima quebra de linha ou

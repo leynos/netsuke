@@ -221,7 +221,11 @@ fn readme_documents_power_shell_script_marker_restrictions() {
         readme,
         contains_substring("plain line-comment text leaves later unquoted markers")
     );
-    assert_that!(readme, contains_substring("a block-comment opener"));
+    assert_that!(readme, contains_substring("includes block-comment openers"));
+    assert_that!(
+        readme,
+        contains_substring("any mid-token `#` can make later markers fail closed")
+    );
 }
 
 #[rstest]

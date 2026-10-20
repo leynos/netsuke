@@ -3034,11 +3034,12 @@ substitutions. PowerShell command and script lowering share the
 `SubstitutionTraversal`, which permits markers only at unquoted sites and
 rejects markers in quoted strings, here-strings, `$()`, or immediately after a
 backtick. PowerShell scripts do not treat comments as inert regions: plain
-line-comment text leaves later markers eligible for interpolation, while a
-block-comment opener or quotes, backticks, or substitution syntax in a line
-comment make later markers fail closed. In particular, an apostrophe in a
-comment may make a later marker fail closed. POSIX and Bash script lowering
-retains comments and multiline shell syntax and uses the script-only
+line-comment text leaves later markers eligible for interpolation, while
+scanner-sensitive syntax after a comment boundary or any mid-token `#` can make
+later markers fail closed. This includes a block-comment opener, quotes,
+backticks, or substitution syntax. In particular, an apostrophe in a comment
+may make a later marker fail closed. POSIX and Bash script lowering retains
+comments and multiline shell syntax and uses the script-only
 `ScriptSubstitutionTraversal`; it encodes markers for unquoted, single-quoted,
 and double-quoted sites while rejecting protected command substitutions.
 PowerShell also rejects markers in raw native-command arguments after an

@@ -237,8 +237,9 @@ active recipe text; see the note below).
     single-quoted literals could merge with adjacent string or argument text.
     PowerShell scripts have no inert comment region: plain line-comment text
     leaves later unquoted markers
-    eligible for interpolation, but a block-comment opener or quotes, backticks
-    or substitution syntax in a line comment can make later markers fail closed.
+    eligible for interpolation, but scanner-sensitive syntax after a comment
+    boundary or any mid-token `#` can make later markers fail closed. This
+    includes block-comment openers, quotes, backticks and substitution syntax.
     An apostrophe in a comment can make a later marker fail closed too. Typographic
     PowerShell quote characters also make later markers fail closed. An unquoted
     `--%` stop-parsing token rejects markers in its raw native-command region

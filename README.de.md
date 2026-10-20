@@ -217,9 +217,10 @@ bedeutet: wird im aktiven Rezepttext umgeschrieben; siehe Hinweis unten).
     Argumenttext verschmelzen. PowerShell-Skripte behandeln Kommentare nicht als
     inerte Bereiche:
     gewöhnlicher Kommentartext lässt spätere ungequotete Marker zur
-    Interpolation zu, aber ein Blockkommentar-Anfang oder Anführungszeichen
-    (einschließlich Apostrophen), Backticks oder Substitutionssyntax in einem
-    einzeiligen Kommentar können spätere Marker vorsichtshalber zurückweisen.
+    Interpolation zu, aber scannerempfindliche Syntax nach einer Kommentargrenze
+    oder einem `#` innerhalb eines Tokens kann spätere Marker vorsichtshalber
+    zurückweisen. Dazu zählen Blockkommentar-Anfänge, Anführungszeichen,
+    Backticks und Substitutionssyntax.
     Typografische PowerShell-Anführungszeichen führen ebenfalls dazu, dass
     spätere Marker vorsichtshalber scheitern. Im rohen nativen Befehlsbereich
     nach dem Stop-Parsing-Token `--%` werden Marker bis zum nächsten

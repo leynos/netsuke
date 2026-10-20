@@ -419,6 +419,7 @@ function Invoke-WindowsRecipeSmoke {
 
             $payloadName = '; New-Item pwned; Write-Output x'
             $payloadSource = Join-Path $workspace $payloadName
+            # New-Item's -Path parameter treats this semicolon as literal data.
             New-Item -ItemType File -Path $payloadSource | Out-Null
             Set-Content -NoNewline -LiteralPath $payloadSource -Value 'path-derived-content'
 

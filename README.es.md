@@ -221,9 +221,10 @@ se reescribe en el texto activo de la receta; consulta la nota siguiente).
     entre comillas simples podrían fusionarse con una cadena o un argumento
     contiguos. Los scripts de PowerShell no tratan los comentarios como regiones
     inertes: el texto normal de un comentario permite interpolar marcadores sin
-    comillas posteriores, pero el inicio de un comentario en bloque, las
-    comillas, los acentos graves o la sintaxis de sustitución en un
-    comentario de una línea pueden hacer que se rechacen marcadores posteriores.
+    comillas posteriores, pero la sintaxis sensible al analizador tras un límite
+    de comentario o cualquier `#` dentro de un token puede hacer que se rechacen
+    marcadores posteriores. Esto incluye el inicio de un comentario en bloque,
+    comillas, acentos graves y sintaxis de sustitución.
     Un apóstrofo en un comentario también puede rechazarlos.
     Las comillas tipográficas de PowerShell también hacen que los marcadores
     posteriores se rechacen de forma conservadora. En la región literal del

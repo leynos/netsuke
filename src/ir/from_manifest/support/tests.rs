@@ -43,7 +43,11 @@ fn power_shell_manifest_rejects_quoted_input_marker(#[case] recipe_kind: &str) {
     let source = format!(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: output\n    sources: \"; New-Item pwned; Write-Output x\"\n    {recipe_kind}: \"Write-Output '{{{{ ins }}}}' > {{{{ outs }}}}\"\n"
     );
-    let manifest = manifest::from_str(&source).expect("the manifest should parse");
+    let manifest = manifest::render_manifest(
+        manifest::from_str(&source).expect("the manifest should parse"),
+        &minijinja::Environment::new(),
+    )
+    .expect("the manifest template should render");
     let error = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)
         .expect_err("quoted PowerShell recipe markers must fail during IR lowering");
 

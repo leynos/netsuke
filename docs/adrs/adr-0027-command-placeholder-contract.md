@@ -166,7 +166,8 @@ traversal treats a marker inside a command substitution, or inside any quoted
 region, as protected and rejects it (`power_shell_marker_protection` in
 `src/ir/cmd_interpolate/substitution/powershell/lexical/mod.rs`) — the same
 outcome as POSIX, by a different rule, pinned by
-`power_shell_rejects_markers_without_a_context_safe_encoder` in
+`power_shell_commands_and_scripts_reject_shared_literal_boundaries` and
+`power_shell_commands_and_scripts_reject_shared_ambiguous_syntax` in
 `src/ir/cmd_interpolate/power_shell_tests.rs`. The parity check is also
 `command:`-only: a `script:` recipe gets the marker invariant but no parity
 check, because scripts may legitimately contain heredocs and other text that
@@ -336,15 +337,14 @@ published interface.
 
 ## Addendum — 2026-10-19: PowerShell script placeholder security (#846)
 
-An earlier version of the accepted decision claimed that `script:` recipes use
-the POSIX-aware scanner, including on PowerShell. This addendum corrects that
-claim for PowerShell only. PowerShell `command:` and `script:` recipes both use
-PowerShell-aware marker scanning. In both recipe kinds, markers are valid only
-at unquoted insertion sites. Markers in single- or double-quoted
-strings, single- or double-quoted here-strings, `$()` command substitutions, or
-immediately after a backtick are rejected. Markers in the raw native-command
-region entered by an unquoted `--%` are also rejected; scanning resumes after
-that region's newline or pipeline terminator.
+The Decision section was amended on 2026-10-19 to supersede an earlier claim
+that `script:` recipes used POSIX-aware scanning on PowerShell. PowerShell
+`command:` and `script:` recipes both use PowerShell-aware marker scanning. In
+both recipe kinds, markers are valid only at unquoted insertion sites. Markers
+in single- or double-quoted strings, single- or double-quoted here-strings,
+`$()` command substitutions, or immediately after a backtick are rejected.
+Markers in the raw native-command region entered by an unquoted `--%` are also
+rejected; scanning resumes after that region's newline or pipeline terminator.
 
 The PowerShell quoted-context bindings are standalone single-quoted path
 literals. They are not context-safe encoders for insertion inside an existing
@@ -377,14 +377,37 @@ PowerShell script rejection cases are in
 
 ## Addendum — 2026-10-19: PowerShell scanner review corrections
 
-Follow-up review tightened comment-boundary handling: a hash following a postfix
-`++` or `--` is treated as an ambiguous expression/comment boundary, and
-scanner-sensitive text in that region is tracked so later marker sites fail
+Follow-up review tightened comment-boundary handling for postfix `++` and `--`
+hashes, and tracked scanner-sensitive text so later marker sites could fail
 closed when necessary. The scanner also records unmodelled syntax before
 opening a here-string and rejects markers within the raw region after `--%`,
-while recognizing the region's newline and pipeline termination. These are
-conservative scanner rules; they do not change the unquoted-only placeholder
-contract above. The postfix token boundary check is
-`hash_follows_postfix_operator` in
-`src/ir/cmd_interpolate/substitution/powershell/tokens.rs`; related regressions
-live in the command and script PowerShell test modules.
+while recognizing the region's newline and pipeline termination. The later
+2026-10-20 amendment below broadens mid-token hash tracking; it supersedes the
+earlier narrow hash classification. These conservative scanner rules do not
+change the unquoted-only placeholder contract above.
+
+## Amendment — 2026-10-20: Track ambiguous mid-token hashes
+
+Review found that compact expressions such as `$x=1+#`, `$n=$s.Length#`, and
+`$x=5#` could place a comment marker after an attached operator, member
+expression, or numeric literal. The classifier in
+`hash_follows_ambiguous_expression_boundary` recognizes hashes after assignment
+and closing-bracket characters, unbraced variables, member access, postfix
+`++`/`--`, redirection, arithmetic operators following a variable assignment,
+and numeric literals at token or assignment boundaries. A later marker fails
+closed if the comment text contains quotes, backticks, `$()`, a here-string
+opener, a stop-parsing token, or a block-comment opener. Generic argument
+hashes such as `foo*#` remain ordinary token text, so a later balanced quoted
+argument does not trigger rejection. This keeps the partial scanner fail-closed
+where PowerShell comment syntax can desynchronize it without rejecting
+unrelated argument text.
+
+The change fixes issue #846's PowerShell script placeholder injection finding:
+the quoted-context path bindings are standalone literals, so any scanner
+uncertainty must reject a later marker instead of changing its insertion-site
+context. ADR-034's contract that `$in` and `$out` remain shell variables is
+unchanged. The implementation is `hash_follows_ambiguous_expression_boundary` in
+`src/ir/cmd_interpolate/substitution/powershell/tokens/mod.rs`; shared command
+and script regressions are in `src/ir/cmd_interpolate/power_shell_tests.rs`,
+with scanner-level token cases in
+`src/ir/cmd_interpolate/substitution/powershell/tokens/tests.rs`.

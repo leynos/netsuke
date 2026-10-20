@@ -130,8 +130,7 @@ impl SubstitutionTraversal<'_, '_> {
             return Ok(next);
         }
         self.power_shell_lexical.note_character(character);
-        // Preserve hashes inside argument tokens while distinguishing
-        // confirmed comment boundaries from ambiguous expression syntax.
+        // Track ambiguous expression hashes because their suffix may be a comment.
         if self.is_unquoted_comment_start(character) {
             self.power_shell_lexical.begin_unquoted_comment();
         } else if self.is_ambiguous_unquoted_comment_start(character) {

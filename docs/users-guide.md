@@ -421,8 +421,8 @@ variable name in `${VAR:-default}`, but does not perform POSIX default-value
 expansion. Recipe text is protected from Ninja dollar expansion, so write
 ordinary PowerShell dollars rather than `$$`. The rendered `{{ ins }}` and
 `{{ outs }}` paths use literal, single-quoted PowerShell arguments; an
-apostrophe is doubled, so `O'Brien.txt` becomes `'O''Brien.txt'`. PowerShell
-also rejects a marker immediately beside any PowerShell single-quote character,
+apostrophe is doubled, so `O'Brien.txt` becomes `'O''Brien.txt'`. Netsuke also
+rejects a marker immediately beside any PowerShell single-quote character,
 including typographic forms, or another marker: standalone single-quoted
 literals could merge with adjacent string or argument text. Build and
 default-target paths containing spaces are escaped for Ninja before recipe
@@ -2153,8 +2153,9 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   otherwise reaches the native command literally instead of being interpreted
   as Netsuke's quoted path literal. PowerShell scripts have no inert comment
   regions: plain line-comment text leaves later markers eligible for
-  interpolation, while a block-comment opener or quotes, backticks, or
-  substitution syntax in a line comment make later markers fail closed. In
+  interpolation, while scanner-sensitive syntax after a comment boundary or any
+  mid-token `#` can make later markers fail closed. This includes a
+  block-comment opener, quotes, backticks, or substitution syntax. In
   particular, an apostrophe in a comment can make a later marker fail closed.
   Typographic PowerShell quote characters also make later markers fail closed.
   A braced variable such as `${env:NAME}` or a here-string opened inside `$()`

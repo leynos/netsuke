@@ -52,7 +52,7 @@ impl SubstitutionTraversal<'_, '_> {
             && character.is_token_boundary()
     }
 
-    /// Identify a mid-token hash whose tokenizer boundary may be ambiguous.
+    /// Identify a mid-token hash after expression syntax that may start a comment.
     pub(super) fn is_ambiguous_unquoted_comment_start(
         &self,
         character: PowerShellSourceCharacter<'_>,
