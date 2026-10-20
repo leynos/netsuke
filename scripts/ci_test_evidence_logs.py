@@ -4,10 +4,13 @@ This offline adapter belongs only to the CI investigation collector. Unknown
 formats stay missing; command echoes are not evidence of completed execution.
 """
 
+import dataclasses as dc
 import json
 import re
 import typing as typ
 
+from ci_test_evidence_logs_cache import cache_records, sccache_records
+from ci_test_evidence_logs_doctests import doctest_records
 from ci_test_evidence_nextest import nextest_phase_marker, parse_nextest_records
 from ci_test_evidence_types import empty_evidence
 
@@ -15,21 +18,12 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
     from ci_test_evidence_types import (
-        CacheEvidence,
-        DoctestEvidence,
-        DoctestSection,
         LogEvidence,
     )
 
 MAX_PERCENT = 100
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 TIMESTAMP = re.compile(r"(?P<time>\d{4}-\d{2}-\d{2}T[\d:.]+Z) (?P<body>.*)$")
-CACHE = re.compile(
-    r"- (registry|tools|whitaker) key: `(netsuke-[A-Za-z0-9_.-]+)` hit: `(true|false)`$"
-)
-RESULT = re.compile(
-    r"test result: (?:ok|FAILED)\. (\d+) passed; (\d+) failed; (\d+) ignored;"
-)
 ENVIRONMENT = frozenset({
     "RUSTFLAGS",
     "RUSTDOCFLAGS",
@@ -58,170 +52,80 @@ def _lines(log: str) -> cabc.Iterator[tuple[str | None, str]]:
         yield (match["time"], match["body"]) if match else (None, clean)
 
 
-def _cache_records(lines: list[tuple[str | None, str]]) -> dict[str, CacheEvidence]:
-    """Read restores; an old restored key for a new key means fallback."""
-    caches = empty_evidence()["caches"]
-    matched = {}
-    missed = set()
-    archive_sizes = {}
-    size = None
-    for _, body in lines:
-        if body.startswith("##[start-action"):
-            size = None
-        size_line = re.fullmatch(r"Cache Size: ~[\d.]+ [A-Za-z]+ \((\d+) B\)", body)
-        if size_line:
-            size = int(size_line[1])
-        restore = re.fullmatch(
-            r"Cache restored from key: (netsuke-[A-Za-z0-9_.-]+)", body
-        )
-        miss = re.fullmatch(
-            r"Cache not found for input keys: (netsuke-[A-Za-z0-9_.-]+)"
-            r"(?:, netsuke-[A-Za-z0-9_.-]+)*",
-            body,
-        )
-        if restore:
-            matched[restore[1].split("-")[1]] = restore[1]
-            archive_sizes[restore[1]] = size
-            size = None
-        if miss:
-            missed.add(miss[1])
-        observation = CACHE.fullmatch(body)
-        if observation:
-            _cache_observation(observation, caches, matched, missed)
-    for cache in caches.values():
-        cache["archive_bytes"] = archive_sizes.get(cache["matched_key"])
-    return caches
-
-
-def _cache_observation(
-    observation: re.Match,
-    caches: dict[str, CacheEvidence],
-    matched: dict[str, str],
-    missed: set[str],
-) -> None:
-    """Resolve hits; a restored ``old`` key for ``new`` gives fallback."""
-    name, key, hit = observation.groups()
-    match_key = matched.get("cargo" if name == "registry" else name)
-    state = "exact" if hit == "true" else "non_exact_unknown"
-    if match_key is not None:
-        state = "exact" if key == match_key else "fallback"
-    elif key in missed:
-        state = "miss"
-    caches[name].update(requested_key=key, matched_key=match_key, state=state)
-
-
-def _closes_doctest_scope(body: str, target: str | None, completed: str | None) -> bool:
-    """Close a command or completed target, retaining a newly announced target.
-
-    Returns
-    -------
-    bool
-        For example, ``_closes_doctest_scope("$ cargo test", None, None)`` is true.
-    """
-    boundary = body.startswith(("##[endgroup]", "$ ", "[command]"))
-    finished_target = body.startswith("all doctests ran in ") and target == completed
-    return boundary or finished_target
-
-
-def _doctest_records(lines: list[tuple[str | None, str]]) -> DoctestEvidence:
-    """Count Doc-tests; unmarked ``test result: ok`` remains unknown."""
-    sections: list[DoctestSection] = []
-    current: DoctestSection | None = None
-    target: str | None = None
-    completed_target: str | None = None
-    for timestamp, body in lines:
-        if _closes_doctest_scope(body, target, completed_target):
-            target, current, completed_target = None, None, None
-        marker = re.fullmatch(r"\s*Doc-tests ([A-Za-z0-9_-]+)", body)
-        if marker:
-            # Cargo can announce the next target before the active batch ends.
-            target = marker[1]
-        batch = re.fullmatch(r"running \d+ tests?", body)
-        starts_batch = marker is not None or batch is not None
-        # Rustdoc emits compile-fail cases as another batch for the same target.
-        needs_batch = current is None and starts_batch
-        if target is not None and needs_batch:
-            current = {
-                "target": target,
-                "started_at": timestamp,
-                "ended_at": None,
-                "counts": {},
-            }
-        result = RESULT.match(body)
-        if result and current is not None:
-            current.update(
-                ended_at=timestamp,
-                counts=dict(
-                    zip(
-                        ("passed", "failed", "ignored"),
-                        map(int, result.groups()),
-                        strict=True,
-                    )
-                ),
-            )
-            sections.append(current)
-            completed_target = current["target"]
-            current = None
-    counts = (
-        {
-            key: sum(section["counts"][key] for section in sections)
-            for key in ("passed", "failed", "ignored")
-        }
-        if sections
-        else None
-    )
-    return {"counts": counts, "sections": sections}
-
-
-def _sccache_records(lines: list[tuple[str | None, str]]) -> dict[str, int | None]:
-    """Copy counters; ``Cache hits 2`` yields ``hits=2``."""
-    result = empty_evidence()["sccache"]
-    for _, body in lines:
-        value = re.fullmatch(r"Cache (hits|misses)\s+(\d+)", body)
-        if value:
-            result[value[1]] = int(value[2])
-        if body.startswith('{"stats":'):
-            try:
-                stats = json.loads(body).get("stats", {})
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(stats, dict):
-                continue
-            for key in result:
-                scalar = stats.get(key)
-                if type(scalar) is int and scalar >= 0:
-                    result[key] = scalar
-    return result
-
-
 def _native_records(lines: list[tuple[str | None, str]], evidence: LogEvidence) -> None:
     """Read provenance; ``rustc 1.2.3`` records the observed version."""
-    groups: list[str] = []
-    step_environment: dict[str, str] = {}
-    for index, (timestamp, body) in enumerate(lines):
+    context = _NativeLogContext(lines=lines, evidence=evidence)
+    for index in range(len(lines)):
+        context.consume(index)
+
+
+@dc.dataclass(slots=True)
+class _NativeLogContext:
+    """Carry log parsing state without widening line-handler arguments."""
+
+    lines: list[tuple[str | None, str]]
+    evidence: LogEvidence
+    groups: list[str] = dc.field(default_factory=list)
+    step_environment: dict[str, str] = dc.field(default_factory=dict)
+    in_runner_image: bool = False
+
+    def consume(self, index: int) -> None:
+        """Record the evidence fields carried by one native log line."""
+        timestamp, body = self.lines[index]
         if body.startswith("##[group]Run "):
-            step_environment = {}
-        in_runner_image = _inside_runner_image_group(body, groups)
-        if "[command]/usr/bin/git log -1 --format=%H" in body and index + 1 < len(
-            lines
-        ):
-            sha = lines[index + 1][1]
-            if re.fullmatch(r"[a-f0-9]{40}", sha):
-                evidence["tested_merge_sha"] = sha
-        for action, sha in ACTION.findall(body):
-            evidence["action_pins"][action] = sha
-        environment = re.fullmatch(r"\s+([A-Z_]+): ([A-Za-z0-9_./% =:+,;\x1f-]+)", body)
-        if environment and environment[1] in ENVIRONMENT:
-            evidence["environment"][environment[1]] = environment[2]
-            step_environment[environment[1]] = environment[2]
-        _version_record(body, evidence)
-        _selection_record(body, evidence, step_environment)
-        _build_duration_record(timestamp, body, evidence)
-        _coverage_record(body, evidence)
-        _resource_record(body, evidence, in_runner_image=in_runner_image)
-        phase = _phase_marker(body)
-        if phase:
-            evidence["native_phases"].append({"phase": phase, "timestamp": timestamp})
+            self.step_environment.clear()
+        self.in_runner_image = _inside_runner_image_group(body, self.groups)
+        _tested_sha_record(self.lines, index, body, self.evidence)
+        _action_pin_records(body, self.evidence)
+        _environment_record(body, self.step_environment, self.evidence)
+        _native_measurements(timestamp, body, self)
+
+
+def _tested_sha_record(
+    lines: list[tuple[str | None, str]],
+    index: int,
+    body: str,
+    evidence: LogEvidence,
+) -> None:
+    """Capture the checkout SHA printed immediately after the git command."""
+    if "[command]/usr/bin/git log -1 --format=%H" not in body:
+        return
+    if index + 1 < len(lines) and re.fullmatch(r"[a-f0-9]{40}", lines[index + 1][1]):
+        evidence["tested_merge_sha"] = lines[index + 1][1]
+
+
+def _action_pin_records(body: str, evidence: LogEvidence) -> None:
+    """Record immutable action references present in a runner log line."""
+    for action, sha in ACTION.findall(body):
+        evidence["action_pins"][action] = sha
+
+
+def _environment_record(
+    body: str, step_environment: dict[str, str], evidence: LogEvidence
+) -> None:
+    """Record only allow-listed environment values without exposing secrets."""
+    environment = re.fullmatch(r"\s+([A-Z_]+): ([A-Za-z0-9_./% =:+,;\x1f-]+)", body)
+    if environment and environment[1] in ENVIRONMENT:
+        evidence["environment"][environment[1]] = environment[2]
+        step_environment[environment[1]] = environment[2]
+
+
+def _native_measurements(
+    timestamp: str | None,
+    body: str,
+    context: _NativeLogContext,
+) -> None:
+    """Apply independent version, coverage, resource, and phase parsers."""
+    _version_record(body, context.evidence)
+    _selection_record(body, context.evidence, context.step_environment)
+    _build_duration_record(timestamp, body, context.evidence)
+    _coverage_record(body, context.evidence)
+    _resource_record(body, context.evidence, in_runner_image=context.in_runner_image)
+    if phase := _phase_marker(body):
+        context.evidence["native_phases"].append({
+            "phase": phase,
+            "timestamp": timestamp,
+        })
 
 
 def _inside_runner_image_group(body: str, groups: list[str]) -> bool:
@@ -248,10 +152,29 @@ def _version_record(body: str, evidence: LogEvidence) -> None:
     llvm = re.fullmatch(r"LLVM version: ([0-9.]+)", body)
     if llvm:
         evidence["versions"]["llvm"] = llvm[1]
-    if body.startswith('{"stats":'):
-        sccache = re.search(r'"version":"([0-9.]+)"', body)
-        if sccache:
-            evidence["versions"]["sccache"] = sccache[1]
+    sccache_version = _sccache_version(body)
+    if sccache_version:
+        evidence["versions"]["sccache"] = sccache_version
+
+
+def _sccache_version(body: str) -> str | None:
+    """Extract a version only from the structured sccache stats line."""
+    if not body.startswith('{"stats":'):
+        return None
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    version = payload.get("version")
+    if version is None and isinstance(payload.get("stats"), dict):
+        version = payload["stats"].get("version")
+    return (
+        version
+        if isinstance(version, str) and re.fullmatch(r"[0-9.]+", version)
+        else None
+    )
 
 
 def _selection_record(
@@ -348,10 +271,10 @@ def parse_log(log: str) -> LogEvidence:
     lines = list(_lines(log))
     evidence = empty_evidence()
     evidence.update(
-        caches=_cache_records(lines),
+        caches=cache_records(lines),
         nextest=parse_nextest_records(lines),
-        doctests=_doctest_records(lines),
-        sccache=_sccache_records(lines),
+        doctests=doctest_records(lines),
+        sccache=sccache_records(lines),
     )
     _native_records(lines, evidence)
     return evidence

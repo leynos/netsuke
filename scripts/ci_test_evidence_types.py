@@ -188,24 +188,19 @@ class JobRecord(AttemptCost):
     telemetry_available: bool
 
 
+class CollectorInputs(typ.TypedDict, total=False):
+    """Describe optional per-job evidence maps and a fixed experiment label."""
+
+    logs: dict[str, str]
+    inventories: dict[str, object]
+    variant: str
+
+
 def empty_evidence() -> LogEvidence:
     """Create unknown fields; for example, ``tested_merge_sha`` is ``None``."""
     return {
-        "versions": dict.fromkeys((
-            "rustc",
-            "cargo",
-            "llvm",
-            "nextest",
-            "cargo_llvm_cov",
-            "sccache",
-        )),
-        "runner": dict.fromkeys((
-            "image",
-            "image_version",
-            "architecture",
-            "cpu_model",
-            "memory_capacity_mib",
-        )),
+        "versions": _empty_versions(),
+        "runner": _empty_runner(),
         "environment": {},
         "coverage_environment": {},
         "coverage_selection": dict.fromkeys((
@@ -216,62 +211,15 @@ def empty_evidence() -> LogEvidence:
         )),
         "action_pins": {},
         "tested_merge_sha": None,
-        "caches": {
-            key: {
-                "requested_key": None,
-                "matched_key": None,
-                "state": "unknown",
-                "archive_bytes": None,
-            }
-            for key in ("registry", "tools", "whitaker")
-        },
-        "sccache": dict.fromkeys((
-            "hits",
-            "misses",
-            "compile_requests",
-            "compilations",
-            "compile_fails",
-            "requests_not_cacheable",
-        )),
-        "nextest": {
-            "seconds": None,
-            "selected_count": None,
-            "discovered_count": None,
-            "executed_count": None,
-            "skipped_count": None,
-            "outcomes": None,
-            "tests": [],
-            "identity_inventory_complete": False,
-            "executed_identity_inventory_complete": False,
-            "retries": None,
-        },
+        "caches": _empty_caches(),
+        "sccache": _empty_sccache(),
+        "nextest": _empty_nextest(),
         "doctests": {"counts": None, "sections": []},
-        "resources": dict.fromkeys((
-            "system_used_peak_mib",
-            "vcpus",
-            "disk_used_peak_mib",
-            "disk_least_free_mib",
-            "peak_rss_mib",
-            "cpu_seconds",
-            "io_bytes",
-        )),
+        "resources": _empty_resources(),
         "native_phases": [],
         "build_profile_durations": [],
-        "nested_cargo": {
-            "invocations": None,
-            "fresh_artifacts": None,
-            "rebuilt_artifacts": None,
-            "lock_wait_seconds": None,
-            "exclusive_tail_seconds": None,
-        },
-        "profiles": dict.fromkeys((
-            "raw_count",
-            "raw_bytes",
-            "profdata_bytes",
-            "object_count",
-            "merge_seconds",
-            "export_seconds",
-        )),
+        "nested_cargo": _empty_nested_cargo(),
+        "profiles": _empty_profiles(),
         "coverage": dict.fromkeys((
             "current_percent",
             "baseline_percent",
@@ -280,3 +228,108 @@ def empty_evidence() -> LogEvidence:
             "detailed_report_sha256",
         )),
     }
+
+
+def _empty_versions() -> dict[str, str | None]:
+    """Create unknown tool versions for one log observation."""
+    return _unknown_fields((
+        "rustc",
+        "cargo",
+        "llvm",
+        "nextest",
+        "cargo_llvm_cov",
+        "sccache",
+    ))
+
+
+def _empty_runner() -> dict[str, str | int | None]:
+    """Create unknown runner image and capacity fields."""
+    return _unknown_fields((
+        "image",
+        "image_version",
+        "architecture",
+        "cpu_model",
+        "memory_capacity_mib",
+    ))
+
+
+def _empty_caches() -> dict[str, CacheEvidence]:
+    """Create cache records whose restore state has not been observed."""
+    return {
+        key: {
+            "requested_key": None,
+            "matched_key": None,
+            "state": "unknown",
+            "archive_bytes": None,
+        }
+        for key in ("registry", "tools", "whitaker")
+    }
+
+
+def _empty_sccache() -> dict[str, int | None]:
+    """Create unknown compiler-cache counters."""
+    return _unknown_fields((
+        "hits",
+        "misses",
+        "compile_requests",
+        "compilations",
+        "compile_fails",
+        "requests_not_cacheable",
+    ))
+
+
+def _empty_nextest() -> NextestEvidence:
+    """Create a Nextest record before its log markers are available."""
+    return {
+        "seconds": None,
+        "selected_count": None,
+        "discovered_count": None,
+        "executed_count": None,
+        "skipped_count": None,
+        "outcomes": None,
+        "tests": [],
+        "identity_inventory_complete": False,
+        "executed_identity_inventory_complete": False,
+        "retries": None,
+    }
+
+
+def _empty_resources() -> dict[str, int | float | None]:
+    """Create unknown host-resource measurements."""
+    return _unknown_fields((
+        "system_used_peak_mib",
+        "vcpus",
+        "disk_used_peak_mib",
+        "disk_least_free_mib",
+        "peak_rss_mib",
+        "cpu_seconds",
+        "io_bytes",
+    ))
+
+
+def _empty_nested_cargo() -> dict[str, int | float | None]:
+    """Create unknown nested-Cargo measurements."""
+    return _unknown_fields((
+        "invocations",
+        "fresh_artifacts",
+        "rebuilt_artifacts",
+        "lock_wait_seconds",
+        "exclusive_tail_seconds",
+    ))
+
+
+def _empty_profiles() -> dict[str, int | float | None]:
+    """Create unknown coverage-profile measurements."""
+    return _unknown_fields((
+        "raw_count",
+        "raw_bytes",
+        "profdata_bytes",
+        "object_count",
+        "merge_seconds",
+        "export_seconds",
+    ))
+
+
+def _unknown_fields[T](fields: tuple[str, ...]) -> dict[str, T | None]:
+    """Create named measurements with no observed values yet."""
+    return typ.cast("dict[str, T | None]", dict.fromkeys(fields))
