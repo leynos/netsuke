@@ -108,8 +108,8 @@ and fourth select named shells. An absent `shell` field is equivalent to
 Boolean spellings: `true`, `false`, `yes`, `no`, `y`, `n`, `on`, or `off`. The
 manifest front-end already reads those words as Booleans when unquoted, so
 reserving them stops a quoted spelling from naming a shell that the unquoted
-spelling would not select (
-[ADR-019 addendum of 2026-09-24][adr-019-reserved-names]). Manifest
+spelling would not select
+([ADR-019 addendum of 2026-09-24][adr-019-reserved-names]). Manifest
 deserialization must distinguish Boolean values from strings and must reject
 every other YAML type. A string is validated syntactically while loading the
 manifest and resolved against the trusted registry during compilation.

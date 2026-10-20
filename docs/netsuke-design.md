@@ -2559,10 +2559,12 @@ form, and fixed arguments without looking up or running those programs.
 checked independently of the build host.
 
 `ShellSelection` preserves exactly three intents: `false` is `Direct`, `true` is
-`PlatformDefault`, and a valid string is `Named`. Missing mapping keys default
-to `Direct`; explicit null, numbers, sequences, mappings, and invalid names
-fail. Serialization writes the matching Boolean or name, so a named value
-round-trips through JSON and YAML.
+`PlatformDefault`, and a valid string is `Named`. `ShellSelection::default()`
+is `Direct`, so a containing field marked `#[serde(default)]` decodes a missing
+mapping key as `Direct`. Manifest and AST lowering for roadmap task 11.3.1 must
+preserve that field annotation. Explicit null, numbers, sequences, mappings,
+and invalid names fail. Serialization writes the matching Boolean or name, so a
+named value round-trips through JSON and YAML.
 
 The manifest frontend first parses YAML 1.1 scalars into `serde_json::Value`.
 The Boolean coercion is part of the existing manifest-wide compatibility

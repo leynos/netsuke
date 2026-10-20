@@ -129,6 +129,10 @@ output and some leaf files so the long-lived structure remains visible.
   orchestration, capability-injected dyndep publication, and bounded generation
   and publication telemetry, including `graph/generation_telemetry.rs`,
   `dyndep/generation_telemetry.rs`, and `process/dyndep/telemetry.rs`.
+- `src/shell_selection/`: Public data-only shell-selection vocabulary,
+  including validated `ShellName`, `ShellSelection`, and the finite built-in
+  shell registry. It records intent without resolving or executing shells; see
+  the [detailed ownership section](#srcshell_selection).
 - `src/snapshots/`: Checked-in `insta` snapshots for source-level snapshot
   tests.
 - `src/shell_word.rs`: The single encoding of one string as a recipe shell
@@ -405,10 +409,11 @@ the 400-line cap; production code must not depend on this test module.
 ### `src/shell_selection/`
 
 This public data-only module owns structured-command shell intent, validated
-registry names, and the fixed built-in table. It is independent of the private
-POSIX word-tokenization module `src/shell_word.rs`: neither is a child of the
-other. The layout contract records only this exact pair as a disparate-prefix
-exception; adding or removing a member invalidates the exception.
+registry names, and the fixed built-in table. The related `src/shell_word.rs`
+module encodes one string as a recipe shell word for a named dialect; neither
+module is a child of the other. The layout contract records only this exact
+pair as a disparate-prefix exception; adding or removing a member invalidates
+the exception.
 
 Production `name/mod.rs` remains standalone for the future build-script slice.
 Its unit and property tests are plain child modules under `name/`;

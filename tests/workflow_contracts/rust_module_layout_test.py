@@ -22,8 +22,8 @@ DISPARATE_PREFIX_EXCEPTIONS: dict[tuple[str, str], tuple[frozenset[str], str]] =
         frozenset({"shell_selection/", "shell_word.rs"}),
         (
             "Public data-only shell selection and registry vocabulary is independent "
-            "of private POSIX word tokenization; neither concern is a child "
-            "of the other."
+            "of recipe shell-word encoding for named dialects; neither concern "
+            "is a child of the other."
         ),
     ),
 }
