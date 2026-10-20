@@ -1,4 +1,18 @@
-"""Parse Nextest-specific records for the offline CI evidence collector."""
+"""Parse Nextest start, test-result, and summary records from saved CI logs.
+
+The offline CI evidence collector uses this adapter for selected and executed
+counts, observed retries, final per-test outcomes, and native durations. A new
+``Starting`` line begins a run; records after a matching ``Summary`` are ignored
+until another run begins.
+
+Examples
+--------
+>>> lines = [(None, "Starting 1 test across 1 binary"),
+...          (None, "PASS [ 0.1s] fixture::unit works"),
+...          (None, "Summary [ 0.1s] 1 test run: 1 passed")]
+>>> parse_nextest_records(lines)["executed_count"]
+1
+"""
 
 import re
 
