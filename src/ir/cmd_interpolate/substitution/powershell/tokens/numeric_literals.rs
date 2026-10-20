@@ -2,6 +2,33 @@
 
 use super::PowerShellSourceCharacter;
 
+/// Pair a PowerShell integer radix prefix with its valid digit base.
+#[derive(Clone, Copy)]
+enum PowerShellIntegerRadix {
+    /// Select the `0b` prefix and binary digits.
+    Binary,
+    /// Select the `0x` prefix and hexadecimal digits.
+    Hexadecimal,
+}
+
+impl PowerShellIntegerRadix {
+    /// Return the prefix spelling used for this radix.
+    const fn prefix(self) -> &'static str {
+        match self {
+            Self::Binary => "0b",
+            Self::Hexadecimal => "0x",
+        }
+    }
+
+    /// Return the digit base used for this radix.
+    const fn base(self) -> u32 {
+        match self {
+            Self::Binary => 2,
+            Self::Hexadecimal => 16,
+        }
+    }
+}
+
 /// Report whether a hash follows a numeric literal at an expression boundary.
 pub(super) fn hash_follows_numeric_literal(hash: PowerShellSourceCharacter<'_>) -> bool {
     let Some(mut literal_start) = hash.previous() else {
@@ -18,10 +45,51 @@ pub(super) fn hash_follows_numeric_literal(hash: PowerShellSourceCharacter<'_>) 
         return false;
     };
     let literal = literal_characters.iter().collect::<String>();
+    is_power_shell_numeric_literal(&literal) && has_numeric_expression_boundary(literal_start)
+}
+
+/// Report whether a binary operator follows a numeric expression operand.
+pub(super) fn operator_follows_numeric_literal(operator: PowerShellSourceCharacter<'_>) -> bool {
+    let Some(mut literal_end) = operator.previous() else {
+        return false;
+    };
+    while literal_end.is_power_shell_whitespace() {
+        let Some(previous) = literal_end.previous() else {
+            return false;
+        };
+        literal_end = previous;
+    }
+    let mut literal_start = literal_end;
+    while let Some(previous) = literal_start
+        .previous()
+        .filter(|character| is_numeric_literal_character(*character))
+    {
+        literal_start = previous;
+    }
+    let Some(literal_characters) = operator
+        .characters
+        .get(literal_start.position..literal_end.position.saturating_add(1))
+    else {
+        return false;
+    };
+    let literal = literal_characters.iter().collect::<String>();
     is_power_shell_numeric_literal(&literal)
-        && literal_start
-            .previous()
-            .is_none_or(|previous| previous.is_token_separator() || previous.value() == '=')
+}
+
+/// Recognize a number at statement boundaries, assignments or unary signs.
+fn has_numeric_expression_boundary(literal_start: PowerShellSourceCharacter<'_>) -> bool {
+    let Some(previous) = literal_start.previous() else {
+        return true;
+    };
+    if previous.is_token_separator() || previous.value() == '=' {
+        return true;
+    }
+    if !matches!(previous.value(), '+' | '-') {
+        return false;
+    }
+    previous.previous().is_none_or(|before_sign| {
+        before_sign.is_token_separator() || matches!(before_sign.value(), '=' | '(')
+    })
 }
 
 /// Include exponent signs only when they belong to the numeric token.
@@ -51,12 +119,24 @@ fn is_exponent_sign(character: PowerShellSourceCharacter<'_>) -> bool {
 fn is_power_shell_numeric_literal(literal: &str) -> bool {
     let normalized = literal.replace('_', "");
     let unsigned = normalized.trim_start_matches(['+', '-']);
-    let number = strip_numeric_suffix(unsigned);
-    is_radix_integer(number, "0x", 16) || is_radix_integer(number, "0b", 2) || is_decimal(number)
+    let without_suffix = strip_numeric_suffix(unsigned);
+    is_radix_integer(unsigned, PowerShellIntegerRadix::Hexadecimal)
+        || is_radix_integer(unsigned, PowerShellIntegerRadix::Binary)
+        || is_radix_integer(without_suffix, PowerShellIntegerRadix::Hexadecimal)
+        || is_radix_integer(without_suffix, PowerShellIntegerRadix::Binary)
+        || is_decimal(without_suffix)
 }
 
-/// Remove a suffix supported by PowerShell numeric literals.
-fn strip_numeric_suffix(literal: &str) -> &str {
+/// Remove all type and multiplier suffixes supported by PowerShell literals.
+fn strip_numeric_suffix(mut literal: &str) -> &str {
+    while let Some(without_suffix) = strip_one_numeric_suffix(literal) {
+        literal = without_suffix;
+    }
+    literal
+}
+
+/// Remove one type or multiplier suffix supported by PowerShell literals.
+fn strip_one_numeric_suffix(literal: &str) -> Option<&str> {
     ["kb", "mb", "gb", "tb", "pb", "ul", "lu", "u", "l", "d", "f"]
         .into_iter()
         .find_map(|suffix| {
@@ -68,16 +148,16 @@ fn strip_numeric_suffix(literal: &str) -> &str {
                         .is_some_and(|tail| tail.eq_ignore_ascii_case(suffix))
                 })
         })
-        .unwrap_or(literal)
 }
 
 /// Validate a radix-prefixed integer with at least one digit.
-fn is_radix_integer(literal: &str, prefix: &str, radix: u32) -> bool {
+fn is_radix_integer(literal: &str, radix: PowerShellIntegerRadix) -> bool {
+    let prefix = radix.prefix();
     literal
         .get(..prefix.len())
         .is_some_and(|candidate| candidate.eq_ignore_ascii_case(prefix))
         && literal.get(prefix.len()..).is_some_and(|digits| {
-            !digits.is_empty() && digits.chars().all(|digit| digit.is_digit(radix))
+            !digits.is_empty() && digits.chars().all(|digit| digit.is_digit(radix.base()))
         })
 }
 

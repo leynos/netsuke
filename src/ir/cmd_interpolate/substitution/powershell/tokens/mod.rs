@@ -2,7 +2,11 @@
 
 use crate::shell_word::{is_power_shell_double_quote, is_power_shell_single_quote};
 
+mod comments;
+mod index_expressions;
 mod numeric_literals;
+pub(super) use comments::comment_character_changes_scanner_state;
+use index_expressions::PowerShellExpressionEnd;
 
 /// Bind a character index to the source slice used for PowerShell lookaround.
 ///
@@ -160,35 +164,36 @@ impl<'source> PowerShellSourceCharacter<'source> {
             .is_some_and(Self::ends_with_unescaped_variable_expression)
     }
 
-    /// Recognize a variable expression followed by member and index accessors.
+    /// Recognize an unescaped variable through chained member and index accessors.
     fn ends_with_unescaped_variable_expression(self) -> bool {
         let mut expression_end = self;
-        let mut index_depth = 0usize;
         loop {
-            if expression_end.value() == ']' {
-                index_depth += 1;
-            } else if expression_end.value() == '[' && index_depth > 0 {
-                index_depth -= 1;
-            } else if index_depth > 0 && expression_end.value() == '$' {
-                return !expression_end.is_escaped_by_backtick();
-            } else if index_depth == 0 && expression_end.is_variable_name_character() {
-                return expression_end.has_unescaped_variable_root_in_member_chain();
-            } else if index_depth == 0 {
-                return false;
-            }
-            let Some(previous) = expression_end.previous() else {
+            let Some(name_end_position) = expression_end.expression_end_before_member_name() else {
                 return false;
             };
-            expression_end = previous;
-        }
-    }
+            let name_end = match name_end_position {
+                PowerShellExpressionEnd::Character(character) => character,
+                PowerShellExpressionEnd::VariableInIndex => return true,
+            };
+            if !name_end.is_variable_name_character() {
+                return false;
+            }
 
-    /// Find an unescaped variable root through a chain of member accessors.
-    fn has_unescaped_variable_root_in_member_chain(self) -> bool {
-        self.is_unescaped_variable_name_start()
-            || self
-                .previous_member_expression()
-                .is_some_and(Self::ends_with_unescaped_variable_expression)
+            let name_start = name_end.variable_name_start();
+            if name_start.is_unescaped_variable_name_start() {
+                return true;
+            }
+            let Some(member_separator) = name_start
+                .previous()
+                .filter(|previous| previous.value() == '.')
+            else {
+                return false;
+            };
+            let Some(previous_expression_end) = member_separator.previous() else {
+                return false;
+            };
+            expression_end = previous_expression_end;
+        }
     }
 
     /// Find the first character of the variable name ending at this position.
@@ -210,15 +215,6 @@ impl<'source> PowerShellSourceCharacter<'source> {
             .is_some_and(|dollar| dollar.value() == '$' && !dollar.is_escaped_by_backtick())
     }
 
-    /// Find the expression character before the member accessor preceding this name.
-    fn previous_member_expression(self) -> Option<Self> {
-        let separator = self.variable_name_start().previous()?;
-        if separator.value() != '.' {
-            return None;
-        }
-        separator.previous()
-    }
-
     /// Mark postfix operators on simple, member, and indexed expressions.
     fn hash_follows_postfix_operator(self) -> bool {
         let Some(second_operator_character) = self.previous() else {
@@ -238,7 +234,10 @@ impl<'source> PowerShellSourceCharacter<'source> {
         };
         match operator.value() {
             '>' => true,
-            '+' | '*' | '/' | '%' | '-' => Self::has_variable_assignment_before(operator),
+            '+' | '*' | '/' | '%' | '-' => {
+                Self::has_variable_assignment_before(operator)
+                    || numeric_literals::operator_follows_numeric_literal(operator)
+            }
             _ => false,
         }
     }
@@ -353,22 +352,6 @@ impl<'source> PowerShellSourceCharacter<'source> {
                     ..='\u{200a}' | '\u{2028}' | '\u{2029}' | '\u{202f}' | '\u{205f}' | '\u{3000}'
             )
     }
-}
-
-/// Report whether comment text can alter the partial lexical scanner.
-pub(super) fn comment_character_changes_scanner_state(
-    character: PowerShellSourceCharacter<'_>,
-    context: PowerShellCommandSubstitutionContext,
-) -> bool {
-    matches!(character.value(), '\'' | '"' | '`')
-        || character.is_typographic_quote()
-        || (character.value() == '$'
-            && character.next().is_some_and(|next| next.value() == '('))
-        || (matches!(context, PowerShellCommandSubstitutionContext::Inside)
-            && matches!(character.value(), '(' | ')'))
-        // Deliberately over-reject here-string-looking text inside comments.
-        || character.here_string_opener().is_some()
-        || character.starts_stop_parsing_token()
 }
 
 #[cfg(test)]

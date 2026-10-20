@@ -55,10 +55,16 @@ fn classify_here_string_boundaries(#[case] scenario: TokenScenario) {
 #[case::after_bracket(TokenScenario { source: "a]#", position: 2, expected: true })]
 #[case::compact_addition_expression(TokenScenario { source: "$x=1+#", position: 5, expected: true })]
 #[case::compact_multiplication_expression(TokenScenario { source: "$x=2*#", position: 5, expected: true })]
+#[case::unassigned_addition_expression(TokenScenario { source: "1 +#", position: 3, expected: true })]
 #[case::compact_member_expression(TokenScenario { source: "$n=$s.Length#", position: 12, expected: true })]
 #[case::indexed_member_expression(TokenScenario { source: "$n=$s[0].Length#", position: 15, expected: true })]
 #[case::decimal_literal(TokenScenario { source: "$x=5#", position: 4, expected: true })]
+#[case::signed_decimal_literal(TokenScenario { source: "$x=-5#", position: 5, expected: true })]
 #[case::hexadecimal_literal(TokenScenario { source: "$x=0x10#", position: 7, expected: true })]
+#[case::hexadecimal_digit_d(TokenScenario { source: "$x=0xd#", position: 6, expected: true })]
+#[case::suffixed_hexadecimal_literal(TokenScenario { source: "$x=0x12Lpb#", position: 10, expected: true })]
+#[case::binary_literal(TokenScenario { source: "$x=0b101#", position: 8, expected: true })]
+#[case::invalid_binary_literal(TokenScenario { source: "$x=0b102#", position: 8, expected: false })]
 #[case::size_suffixed_literal(TokenScenario { source: "$x=1kb#", position: 6, expected: true })]
 #[case::spaced_numeric_literal(TokenScenario { source: "Write-Output 5#", position: 14, expected: true })]
 #[case::redirection_operator(TokenScenario { source: "Write-Output value >#", position: 20, expected: true })]
@@ -108,4 +114,24 @@ fn source_positions_keep_unicode_character_indices_and_source_edges() {
             .is_none()
     );
     assert!(final_character.next().is_none());
+}
+
+#[test]
+fn classify_long_member_chain_without_recursion() {
+    let source = format!("$item{}#", ".Value".repeat(10_000));
+    let characters = source.chars().collect::<Vec<_>>();
+    let hash = PowerShellSourceCharacter::new(&characters, characters.len() - 1)
+        .expect("the source ends with the comment marker");
+
+    assert!(hash.hash_follows_ambiguous_expression_boundary());
+}
+
+#[test]
+fn classify_long_arithmetic_expression_without_recursion() {
+    let source = format!("$result={}#", "1+".repeat(10_000));
+    let characters = source.chars().collect::<Vec<_>>();
+    let hash = PowerShellSourceCharacter::new(&characters, characters.len() - 1)
+        .expect("the source ends with the comment marker");
+
+    assert!(hash.hash_follows_ambiguous_expression_boundary());
 }
