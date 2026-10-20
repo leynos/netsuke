@@ -12,36 +12,6 @@ if typ.TYPE_CHECKING:
     from pathlib import Path
 
 
-def _attempt_responses() -> tuple[dict, dict]:
-    """Build one complete run and job API response for inventory tests."""
-    return {
-        "id": 123,
-        "run_attempt": 2,
-        "event": "pull_request",
-        "head_branch": "main",
-        "path": ".github/workflows/ci.yml",
-        "run_started_at": "2026-10-12T00:00:00Z",
-        "head_sha": "a" * 40,
-        "created_at": "2026-10-12T00:00:00Z",
-        "html_url": "https://github.com/leynos/netsuke/actions/runs/123",
-    }, {
-        "total_count": 1,
-        "jobs": [
-            {
-                "id": 456,
-                "run_id": 123,
-                "run_attempt": 2,
-                "name": "build-test",
-                "labels": ["ubicloud-standard-4-ubuntu-2404"],
-                "conclusion": "success",
-                "started_at": "2026-10-12T00:00:05Z",
-                "completed_at": "2026-10-12T00:00:15Z",
-                "steps": [],
-            }
-        ],
-    }
-
-
 def _write_inventory(tmp_path: Path, attempt_number: int) -> Path:
     """Write a minimal inventory bound to run 123 and job 456."""
     path = tmp_path / "inventory.json"
@@ -72,9 +42,11 @@ def test_inventory_accepts_matching_attempt(tmp_path: Path) -> None:
     )
 
 
-def test_collect_attempt_rejects_inventory_from_another_attempt() -> None:
+def test_collect_attempt_rejects_inventory_from_another_attempt(
+    attempt: tuple[dict, dict],
+) -> None:
     """Refuse preloaded telemetry from a different attempt of the same run."""
-    run, jobs = _attempt_responses()
+    run, jobs = attempt
     inventory = {
         "schema": 1,
         "run_id": 123,
@@ -87,9 +59,11 @@ def test_collect_attempt_rejects_inventory_from_another_attempt() -> None:
         collect_attempt(run, jobs, {"inventories": {"456": inventory}})
 
 
-def test_collect_attempt_applies_matching_inventory() -> None:
+def test_collect_attempt_applies_matching_inventory(
+    attempt: tuple[dict, dict],
+) -> None:
     """Copy measurements after in-memory inventory matches the current attempt."""
-    run, jobs = _attempt_responses()
+    run, jobs = attempt
     inventory = {
         "schema": 1,
         "run_id": 123,
@@ -111,10 +85,11 @@ def test_collect_attempt_applies_matching_inventory() -> None:
     ids=["inventory-map-is-not-a-mapping", "entry-is-not-an-object"],
 )
 def test_collect_attempt_rejects_malformed_inventory_input(
+    attempt: tuple[dict, dict],
     inventories: object,
 ) -> None:
     """Reject malformed telemetry maps instead of omitting their evidence."""
-    run, jobs = _attempt_responses()
+    run, jobs = attempt
 
     with pytest.raises(TypeError, match=r"inventories must be|inventory must be"):
         collect_attempt(
