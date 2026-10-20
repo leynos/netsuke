@@ -11,23 +11,23 @@ The user approved this plan on 2026-10-13 and resumed implementation on
 2026-10-17 after the rebase. The original CLI-fixture timeout repair in
 [PR 913][cli-timeout-pr] merged into `main` as `077cf366`; the separate
 module-slice timeout repair in [PR 930][timeout-pr] merged on 2026-10-19 as
-`051358ee360a97fcbebe2a836e25e106917ed845`. Those repairs are merged, but the
-post-rebase `make test` on 2026-10-20 timed out again in the module-slice
-fixture at its 720-second limit while its nested Cargo check waited for healthy
-compiler admission. This is an active validation blocker for PR 778. The
-feature branch was rebased onto `origin/main` at
-`f16c31760aff94a1d91bbbbfac4d024873942ce5`; the range-diff preserves the 14
-earlier feature commits, including the upstream `CommandIsolation` note at the
-merged documentation insertion point. Formatting, typechecking, and Mermaid
-validation passed on the rebased candidate. The full test gate failed, and
-resource exhaustion prevented completion of lint, workflow-contract, doc
-coverage, and Markdown validation. PR 778 remains a draft at its old remote
-head and needs a validated update, exact-head review, hosted checks, and merge.
-The 26-file tolerance applies to this feature diff and excludes the separate
+`051358ee360a97fcbebe2a836e25e106917ed845`. The post-rebase `make test` on
+2026-10-20 timed out the module-slice fixture at its 720-second limit while its
+package-scoped Cargo check remained active and nested rustc requests waited for
+healthy compiler admission. This was a queue-budget failure, not a reported
+source error. The scoped allowance now gives this test 900 seconds. Lower
+candidate `24aeeecf` passed all local gates; the formerly failing test
+completed in 105.913 seconds during its full suite. The fix is draft
+[PR 934][module-slice-timeout-fix-pr] targeting `main`. The feature branch has
+been replayed onto that lower branch. Its sequential local gates now pass, but
+PR #778 remains at its earlier remote head until the candidate is committed and
+published; exact-head review, hosted checks, and merge are still pending. The
+26-file tolerance applies to this feature diff and excludes the separate
 timeout repairs.
 
 [cli-timeout-pr]: https://github.com/leynos/netsuke/pull/913
 [timeout-pr]: https://github.com/leynos/netsuke/pull/930
+[module-slice-timeout-fix-pr]: https://github.com/leynos/netsuke/pull/934
 
 ## Purpose / big picture
 
@@ -178,6 +178,13 @@ remains `1747496f`, and the original combined candidate is preserved under
 - Risk: the new module drifts from ADR-019 Table 1. Severity: high (the table
   is an authority boundary). Likelihood: low. Mitigation: an exact per-shell
   `rstest` table plus an `insta` snapshot rendering the table from code.
+- Risk: shared compiler admission can leave a nested Cargo check active beyond
+  a narrow per-test timeout. Evidence: the rebased module-slice test reached
+  720 seconds with rustc requests queued and no compiler diagnostics. Severity:
+  medium. Likelihood: observed under contention. Mitigation: allow this test
+  900 seconds, matching other cold nested builds and remaining below the
+  960-second coverage-run cap; keep the override scoped and do not add blanket
+  retries or alter compiler admission.
 - Risk: a future fifth built-in is added to the enum but not to `ALL`.
   Severity: medium. Likelihood: low. Mitigation: a test compares `ALL` with a
   handwritten list and calls a helper whose exhaustive `match` fails to compile
@@ -360,10 +367,9 @@ remains `1747496f`, and the original combined candidate is preserved under
   value stage. Log:
   `/tmp/focused-netsuke-11-2-1-add-the-manifest-facing-shell-selection-vocabulary-m2-green.out`.
   Full gates are still required before closing EP-M2.
-- [ ] EP-M2: `ShellSelection` codec, parity tests, properties, and behavioural
-  scenarios landed. All local gates passed on the pre-rebase candidate; repeat
-  them after rebasing onto the updated `origin/main` before closing this
-  milestone.
+- [x] EP-M2: `ShellSelection` codec, parity tests, properties, and behavioural
+  scenarios landed. All local gates passed again after restacking onto lower PR
+  934; see the 2026-10-20 validation entry below.
 - [x] (2026-10-20) Rebased onto `origin/main` at `f16c3176` with `zdiff3`. The
   three-way conflict at the shared insertion point in
   `docs/developers-guide.md` was resolved by preserving the upstream
@@ -384,8 +390,31 @@ remains `1747496f`, and the original combined candidate is preserved under
   `/tmp/test-f900fc37-c6fe-4ed1-8700-ec572d9952c3-11-2-1-add-the-manifest-facing-shell-selection-vocabulary-2.out`,
   `/tmp/lint-f900fc37-c6fe-4ed1-8700-ec572d9952c3-11-2-1-add-the-manifest-facing-shell-selection-vocabulary-5.out`,
   and the corresponding `check-fmt`, `typecheck`, `test-workflow-contracts`,
-  `doc-coverage`, `markdownlint`, and `nixie` logs in `/tmp`. No timeout-policy
-  change has been made; determine and validate the remedy before closing EP-M2.
+  `doc-coverage`, `markdownlint`, and `nixie` logs in `/tmp`. At that point no
+  timeout-policy change had yet been made; the follow-up below records the
+  remedy and its validation.
+- [x] (2026-10-20) Traced the 720-second failure to nested rustc requests
+  waiting in healthy shared compiler admission while the package-scoped check
+  remained active. Increased only this test's allowance from twelve to fifteen
+  60-second periods, matching other cold nested builds and staying below the
+  960-second coverage cap. Lower candidate `24aeeecf` passed all sequential
+  local gates: format checks; 4,128 Nextest tests (six skipped) and 39 doctests
+  (six ignored); typecheck; lint; 98.90% documentation coverage; 1,321 workflow
+  contract tests (three skipped) plus 27 script tests; Markdown lint; and
+  Mermaid validation. The module-slice test passed in 105.913 seconds; a
+  separate nested Cargo metadata case passed in 503.359 seconds. Draft PR 934
+  targets `main`. The 16 feature commits were replayed onto its head without
+  conflicts; `range-diff` preserves every commit, and the local feature head is
+  `9a57834d` before the plan update. The feature's post-rebase local gates now
+  pass; its commit and remote update remain pending.
+- [x] (2026-10-20) Revalidated the restacked feature candidate after updating
+  this plan. `make fmt`, `make check-fmt`, `make test` (4,300 Nextest passes,
+  six skipped; 39 doctest passes, six ignored), `make typecheck`, `make lint`,
+  `make doc-coverage` (98.92%), `make test-workflow-contracts` (1,324 passes,
+  three skipped, plus 27 script tests), `make markdownlint`, and `make nixie`
+  all passed sequentially. The change-scope audit still shows only the
+  feature's 23 paths; final commit, remote publication, exact-head review, and
+  hosted checks remain outstanding.
 - [ ] EP-M3: documentation, roadmap entry marked done, plan `COMPLETE`.
 
 ## Surprises & discoveries
@@ -417,9 +446,10 @@ remains `1747496f`, and the original combined candidate is preserved under
   allowance. The compiler supervisor was healthy with all four slots held and a
   large queue, and the child rustc wrappers were waiting for admission without
   compiler diagnostics. This identifies queue wait as the cause of this
-  occurrence; it does not show a source failure. Related cold-build fixtures
-  have 900-second allowances below the 960-second CI run cap. Whether to extend
-  this fixture to the same allowance remains to be implemented and validated.
+  occurrence; it does not show a source failure. The follow-up raises only this
+  fixture's allowance to 900 seconds, matching related cold builds below the
+  960-second CI run cap. The lower candidate's full suite and all local gates
+  pass; the fix is isolated in draft PR 934 while #778 is restacked above it.
 - Observation (2026-10-17): O4's prose miscounted the unchanged support matrix;
   six of eight cells are true, two false. D6's old `Named("n")` example was
   obsolete after D8 reserved `n`; `Named("null")` is the valid scalar-like
@@ -731,6 +761,15 @@ remains `1747496f`, and the original combined candidate is preserved under
   series preserved exactly. PR #913 remains the earlier, separate CLI-fixture
   repair and is not evidence for this distinct timeout.
 
+  Follow-up (2026-10-20): the post-rebase full suite again reached the
+  module-slice fixture's 720-second cap while its scoped Cargo check remained
+  active and rustc requests waited for healthy admission. Keep the existing
+  source and package scope; raise only this test's allowance to 900 seconds,
+  matching other cold nested builds below the 960-second coverage-run cap. The
+  lower candidate passed all local gates and is draft
+  [PR 934][module-slice-timeout-fix-pr] against `main`; #778 is being restacked
+  on its branch.
+
 - Decision D12 (2026-10-17): place production modules in `name/mod.rs` and
   `built_in/mod.rs`, with tests in their plain child-module directories. The
   rebased-main workflow contract rejects repeated first prefixes even when a
@@ -781,8 +820,8 @@ the module-slice fixture timed out at 720.037 seconds while the healthy
 compiler-admission pool was busy, and the later lint and documentation gates
 were affected by filesystem exhaustion. Formatting, typechecking, and Mermaid
 validation passed, but the remaining candidate gates and exact-head hosted
-review are outstanding. The remote PR has not been updated, and no merge claim
-is made from the previous-head checks.
+review were outstanding at that point. The remote PR had not yet been updated;
+the later restack and validation are recorded below.
 
 The earlier combined candidate passed 3,370 Nextest tests and 39 doctests;
 these are historical results, distinct from the prerequisite's fresh run. That
@@ -865,6 +904,22 @@ hand-offs:
   identically across hosts that resolve it differently;
 - to 12.1.1: decide whether the manifest front-end should adopt strict Boolean
   parsing, given the pinned YAML 1.1 mapping.
+
+The 2026-10-20 timeout follow-up was delivered separately as draft PR 934,
+targeting `main`. Its 900-second scoped allowance addresses the observed wait
+in shared compiler admission without changing production source or other test
+budgets. All local gates passed on its head, `24aeeecf`: 4,128 Nextest tests
+passed (six skipped), 39 doctests passed (six ignored), documentation coverage
+was 98.90%, and the workflow-contract, format, type, lint, Markdown, and
+Mermaid gates passed. The formerly failing module-slice fixture completed in
+105.913 seconds on that full run. The 16 feature commits then replayed cleanly
+onto the lower branch; `range-diff` matched all commits, and the target-to-head
+audit confirmed the lower timeout changes remain in the base while the feature
+diff retains its 23 paths. The restacked feature candidate then passed its
+local gates, including the full 4,300-test suite, typecheck, lint, doc
+coverage, workflow contracts, Markdown, and Mermaid checks. After validating
+this final plan update, commit and push the candidate, then complete exact-head
+review, hosted checks, and merge.
 
 ## Context and orientation
 
@@ -2011,3 +2066,9 @@ executable path belongs to 11.2.3, and the IR's `ResolvedShell` belongs to
   rebase, and eight sequential gates on the rebased M1 candidate. The
   exact-head local assessment remains outstanding; EP-M2 and EP-M3 are not yet
   complete.
+- 2026-10-20: replaced the active 720-second blocker with the measured cause
+  and validated, scoped 900-second remedy in lower PR 934. Recorded the lower
+  candidate's sequential gate results, the conflict-free replay of all 16
+  feature commits, and the upper candidate's passing sequential gates. The
+  upper commit, publication, review, hosted equilibrium, and merge remain
+  outstanding.
