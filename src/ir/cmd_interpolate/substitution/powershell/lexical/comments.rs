@@ -37,6 +37,7 @@ impl PowerShellLexicalState {
         self.has_unmodelled_syntax |= comment_character_changes_scanner_state(character, context);
         if character.is_line_break() {
             self.comment_state = PowerShellCommentState::None;
+            self.reset_variable_assignment_context();
         }
     }
 }
@@ -59,7 +60,10 @@ impl SubstitutionTraversal<'_, '_> {
     ) -> bool {
         character.value() == '#'
             && self.matches_unquoted_quote_context()
-            && character.hash_follows_ambiguous_expression_boundary()
+            && character.hash_follows_ambiguous_expression_boundary(
+                self.power_shell_lexical
+                    .has_variable_assignment_since_boundary(),
+            )
     }
 
     /// Track scanner-sensitive syntax while a mid-token hash may be a comment.

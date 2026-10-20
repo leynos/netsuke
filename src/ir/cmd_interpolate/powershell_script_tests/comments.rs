@@ -76,6 +76,26 @@ fn power_shell_scripts_preserve_expression_hashes_inside_argument_tokens(
     .verify();
 }
 
+/// Keep repeated unassigned operator hashes linear during script interpolation.
+#[test]
+fn power_shell_scripts_handle_repeated_operator_hashes_without_prefix_rescans() {
+    let template = "a+#".repeat(20_000);
+    let interpolated = interpolate_script_with_bindings(&template, &script_bindings())
+        .expect("unassigned operator hashes remain ordinary script text");
+
+    assert_eq!(interpolated, template);
+}
+
+/// Reset assignment lookbehind at a statement delimiter before classifying a hash.
+#[test]
+fn power_shell_scripts_reset_assignment_context_after_statement_delimiter() {
+    power_shell_output_case!(
+        format!("$value=1; Write-Output foo+#bar; Write-Output {OUTS_TOKEN}"),
+        "$value=1; Write-Output foo+#bar; Write-Output 'output file.txt'"
+    )
+    .verify();
+}
+
 /// Ignore block-comment delimiters that occur inside a single-line comment.
 #[test]
 fn power_shell_scripts_ignore_block_opener_inside_line_comment() {

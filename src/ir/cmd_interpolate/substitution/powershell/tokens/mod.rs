@@ -121,7 +121,10 @@ impl<'source> PowerShellSourceCharacter<'source> {
     }
 
     /// Report whether a mid-token hash follows syntax that can begin a comment.
-    pub(super) fn hash_follows_ambiguous_expression_boundary(self) -> bool {
+    pub(super) fn hash_follows_ambiguous_expression_boundary(
+        self,
+        has_variable_assignment_before_operator: bool,
+    ) -> bool {
         if self.value() != '#' || self.is_token_boundary() {
             return false;
         }
@@ -130,7 +133,7 @@ impl<'source> PowerShellSourceCharacter<'source> {
             || self.hash_follows_unbraced_variable()
             || self.hash_follows_variable_member_access()
             || self.hash_follows_postfix_operator()
-            || self.hash_follows_expression_operator()
+            || self.hash_follows_expression_operator(has_variable_assignment_before_operator)
             || numeric_literals::hash_follows_numeric_literal(self)
     }
 
@@ -228,37 +231,25 @@ impl<'source> PowerShellSourceCharacter<'source> {
     }
 
     /// Catch redirection and assignment-expression operators before a hash.
-    fn hash_follows_expression_operator(self) -> bool {
+    fn hash_follows_expression_operator(
+        self,
+        has_variable_assignment_before_operator: bool,
+    ) -> bool {
         let Some(operator) = self.previous() else {
             return false;
         };
         match operator.value() {
             '>' => true,
             '+' | '*' | '/' | '%' | '-' => {
-                Self::has_variable_assignment_before(operator)
+                has_variable_assignment_before_operator
                     || numeric_literals::operator_follows_numeric_literal(operator)
             }
             _ => false,
         }
     }
 
-    /// Find a variable assignment before an arithmetic operator in this statement.
-    fn has_variable_assignment_before(operator: Self) -> bool {
-        let mut cursor = operator;
-        while let Some(previous) = cursor.previous() {
-            if matches!(previous.value(), ';' | '\n' | '\r' | '|' | '\'' | '"') {
-                return false;
-            }
-            if previous.value() == '=' {
-                return previous.assignment_targets_variable();
-            }
-            cursor = previous;
-        }
-        false
-    }
-
     /// Report whether the left-hand side before `=` is a PowerShell variable.
-    fn assignment_targets_variable(self) -> bool {
+    pub(super) fn assignment_targets_variable(self) -> bool {
         let mut cursor = self.previous();
         while cursor.is_some_and(Self::is_power_shell_whitespace) {
             cursor = cursor.and_then(Self::previous);

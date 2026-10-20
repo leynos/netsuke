@@ -1,5 +1,6 @@
 //! Track PowerShell lexical state that can make marker substitution unsafe.
 
+mod assignments;
 mod comments;
 
 use super::super::super::{
@@ -29,6 +30,8 @@ pub(in crate::ir::cmd_interpolate::substitution) struct PowerShellLexicalState {
     comment_state: PowerShellCommentState,
     /// Fail closed after PowerShell syntax the partial scanner does not model.
     has_unmodelled_syntax: bool,
+    /// Cache whether the nearest assignment since a lexical boundary targets a variable.
+    has_variable_assignment_since_boundary: bool,
 }
 
 /// Classify the current character while a here-string may be active.
@@ -51,15 +54,8 @@ impl PowerShellLexicalState {
             has_typographic_quote: false,
             comment_state: PowerShellCommentState::None,
             has_unmodelled_syntax: false,
+            has_variable_assignment_since_boundary: false,
         }
-    }
-
-    /// Remember typographic quote characters so later markers fail closed.
-    pub(in crate::ir::cmd_interpolate::substitution) const fn note_character(
-        &mut self,
-        character: PowerShellSourceCharacter<'_>,
-    ) {
-        self.has_typographic_quote |= character.is_typographic_quote();
     }
 
     /// Report whether a typographic quote requires conservative marker rejection.
@@ -88,6 +84,7 @@ impl PowerShellLexicalState {
         };
         if is_here_string_terminator(character, quote) {
             self.here_string_quote = None;
+            self.reset_variable_assignment_context();
             return HereStringCharacter::Closed(quote);
         }
         if is_typographic_here_string_terminator(character, quote) {

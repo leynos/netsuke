@@ -53,8 +53,6 @@ fn classify_here_string_boundaries(#[case] scenario: TokenScenario) {
 #[case::after_indexed_postfix_decrement(TokenScenario { source: "$obj.Items[0]--#", position: 15, expected: true })]
 #[case::after_assignment(TokenScenario { source: "a=#", position: 2, expected: true })]
 #[case::after_bracket(TokenScenario { source: "a]#", position: 2, expected: true })]
-#[case::compact_addition_expression(TokenScenario { source: "$x=1+#", position: 5, expected: true })]
-#[case::compact_multiplication_expression(TokenScenario { source: "$x=2*#", position: 5, expected: true })]
 #[case::unassigned_addition_expression(TokenScenario { source: "1 +#", position: 3, expected: true })]
 #[case::compact_member_expression(TokenScenario { source: "$n=$s.Length#", position: 12, expected: true })]
 #[case::indexed_member_expression(TokenScenario { source: "$n=$s[0].Length#", position: 15, expected: true })]
@@ -80,9 +78,28 @@ fn classify_ambiguous_expression_hashes(#[case] scenario: TokenScenario) {
         .expect("the scenario position identifies a source character");
 
     assert_eq!(
-        position.hash_follows_ambiguous_expression_boundary(),
+        position.hash_follows_ambiguous_expression_boundary(false),
         scenario.expected
     );
+}
+
+#[test]
+fn classify_assignment_expression_hash_from_forward_lexical_state() {
+    let source = "$x=1+#";
+    let characters = source.chars().collect::<Vec<_>>();
+    let hash_position = characters.len() - 1;
+    let mut lexical_state = super::super::lexical::PowerShellLexicalState::new();
+    for position in 0..hash_position {
+        let character = PowerShellSourceCharacter::new(&characters, position)
+            .expect("the source position identifies an existing character");
+        lexical_state.note_character(character);
+    }
+    let hash = PowerShellSourceCharacter::new(&characters, hash_position)
+        .expect("the source ends with the hash marker");
+
+    assert!(hash.hash_follows_ambiguous_expression_boundary(
+        lexical_state.has_variable_assignment_since_boundary()
+    ));
 }
 
 #[test]
@@ -123,7 +140,7 @@ fn classify_long_member_chain_without_recursion() {
     let hash = PowerShellSourceCharacter::new(&characters, characters.len() - 1)
         .expect("the source ends with the comment marker");
 
-    assert!(hash.hash_follows_ambiguous_expression_boundary());
+    assert!(hash.hash_follows_ambiguous_expression_boundary(false));
 }
 
 #[test]
@@ -133,5 +150,5 @@ fn classify_long_arithmetic_expression_without_recursion() {
     let hash = PowerShellSourceCharacter::new(&characters, characters.len() - 1)
         .expect("the source ends with the comment marker");
 
-    assert!(hash.hash_follows_ambiguous_expression_boundary());
+    assert!(hash.hash_follows_ambiguous_expression_boundary(false));
 }
