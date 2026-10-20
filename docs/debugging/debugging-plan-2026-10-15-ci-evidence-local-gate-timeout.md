@@ -8,9 +8,9 @@ document; the named sub-agent executes the experiment.
 
 The unchanged `production_build_module_slice_has_expected_boundary` test timed
 out at 300.009 seconds during local `make test`. Nextest passed 3,895 tests,
-timed out one and left 16 unrun through fail-fast. Six tests were skipped by
-the existing selection. Compilation succeeded; doctests did not run. No
-workflow, Rust, dependency, timeout or worker configuration was edited.
+timed out one, and left 16 unrun through fail-fast. The existing selection
+skipped six tests. Compilation succeeded; doctests did not run. No workflow,
+Rust, dependency, timeout, or worker configuration was edited.
 
 | Context              | Value                                                        |
 | -------------------- | ------------------------------------------------------------ |
@@ -93,7 +93,7 @@ adoption. Raw evidence remains under `/tmp/netsuke-894-h1-*`.
 During the unchanged full-gate retry, the boundary fixture passed in 102.301
 seconds. Its original timeout remains unexplained; the complete gate result
 then failed on the real Cargo-consumer fixture at 300.008 seconds: 3,896
-passed, one timed out, six skipped and 15 unrun. Further full-gate retries are
+passed, one timed out, six skipped, and 15 unrun. Further full-gate retries are
 paused for diagnosis. No fixture, assertion or timeout was changed.
 
 ## H2: The active real-consumer fixture is waiting on a cache lock
@@ -153,7 +153,7 @@ one consumer preparation:
    after completion. Keep the shared Cargo cache and existing build output.
 
 No full gate or test runs in this experiment. Preserve wrappers and resource
-limits, wait naturally for admission, and change no tracked file, timeout or
+limits, wait naturally for admission, and change no tracked file, timeout, or
 assertion. This diagnostic may exceed Nextest's test duration because it is not
 a gate result; the final gate must still run with its original limits.
 
@@ -205,7 +205,7 @@ slot, `alchemist` may perform one minimal experiment:
 2. Use a temporary Makefile fragment including the repository Makefile and
    depending on `check-build-tools`. Run exactly one Nextest invocation with
    the existing workspace/all-target/all-feature selections, Makefile flags,
-   wrappers and worker limits. Add only the anchored test filter
+   wrappers, and worker limits. Add only the anchored test filter
    `test(/^packaged_manifest_retains_build_script_sources$/)`. Keep the default
    profile and its 300-second limit; assert that one test is selected.
 3. Capture output and elapsed time under `/tmp`, then take a final supervisor
@@ -257,6 +257,6 @@ no diff from the PR head across Cargo inputs, Rust source, build scripts,
 locales or Cargo-included documentation/assets. Its full diff still differs in
 CI/Kani tooling and `tests/workflow_ci.rs`; the native record reports packaging
 at 169.864 seconds. This narrows package-input differences in that comparison,
-but does not establish matching compiler, cache or runner conditions or explain
-the local timeout. The native journal window from 11 to 13 October contains no
-cache-service entries, so the service stop reason remains unknown.
+but does not establish matching compiler, cache, or runner conditions or
+explain the local timeout. The native journal window from 11 to 13 October
+contains no cache-service entries, so the service stop reason remains unknown.

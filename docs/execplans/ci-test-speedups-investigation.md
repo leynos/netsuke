@@ -2,8 +2,12 @@
 
 Status: IN PROGRESS
 
-The investigation is under way. The implementation base is
-`c65ad9709d1d7cc46c094d88b2eecd1deea8f4c8`; the 10 October 2026 reference
+The investigation is under way. The implementation snapshot exercised by the
+earlier local gates was based on `origin/main` at
+`051358ee360a97fcbebe2a836e25e106917ed845`. The branch still needs replay onto
+the latest target observed on 20 October,
+`f16c31760aff94a1d91bbbbfac4d024873942ce5`. The earlier investigation base was
+`c65ad9709d1d7cc46c094d88b2eecd1deea8f4c8`. The 10 October 2026 reference
 snapshot is `24293a1b3616872100d379e277540bb1df89203c`. These states remain
 distinct. No current performance baseline or candidate result is claimed.
 
@@ -97,13 +101,14 @@ installer resolution remain unverified; source pins alone do not establish that
 every installation input is immutable.
 
 The original offline evidence set contains 81 job records from 21 distinct
-run-attempt pairs: six trunk coverage jobs, six trunk cache-writer jobs, nine
-same-repository PR Linux gate jobs and 60 jobs from other cohorts. Source
-revisions vary; paired trunk workflows share a SHA but remain distinct cohorts.
-All records are observational, not controlled baseline/candidate comparisons.
-The attempt summaries and eligible PR job times are in
-`docs/ci-performance/README.md`. Deduplicate by `(run_id, run_attempt)` before
-summing attempt-level runner-second totals, which repeat on each job record.
+run-attempt pairs: six main-branch coverage jobs, six main-branch cache-writer
+jobs, nine same-repository PR Linux gate jobs, and 60 jobs from other cohorts.
+Source revisions vary; paired main-branch workflows use the same SHA but remain
+distinct cohorts. All records are observational, not controlled
+baseline/candidate comparisons. The attempt summaries and eligible PR job times
+are in `docs/ci-performance/README.md`. Deduplicate by `(run_id, run_attempt)`
+before summing attempt-level runner-second totals, which repeat on each job
+record.
 
 A dated supplement retains five jobs from ordinary attempt `38750711833`,
 completed on 15 October: 86 records across 22 attempts in total. Its Linux job
@@ -173,19 +178,19 @@ interval assumes an additive location-shift model as well as exchangeability;
 if distribution shapes differ materially, report that limitation and withhold
 adoption rather than interpreting it as a general median-difference interval.
 
-Keep PR coverage, trunk coverage, trusted trunk cache-writer jobs and
-GitHub-hosted fork jobs in separate cohorts. Separate warm, cold/miss and
+Keep PR coverage, main-branch coverage, trusted main-branch cache-writer jobs,
+and GitHub-hosted fork jobs in separate cohorts. Separate warm, cold/miss, and
 fallback cache observations. Preserve run attempt, event, source SHA, tested
 merge SHA, variant SHA, runner image/architecture/capacity, tool versions,
-action pins, features/targets, compiler flags, profile and concurrency limits.
-Failed, cancelled, timed-out, retried and superseded attempts stay in cost and
+action pins, features/targets, compiler flags, profile, and concurrency limits.
+Failed, cancelled, timed-out, retried, and superseded attempts stay in cost and
 reliability accounting; omit cancelled and superseded attempts only from
 successful-run timing comparisons. Label unmatched source, tests, toolchain,
-runner or cache as observational and name the confound.
+runner, or cache as observational and name the confounding factor.
 
 Adoption requires the one-sided 95% upper uncertainty bound for
 candidate-minus-control consumption to be at most zero. No positive cost
-increase is tolerated. Include migration, telemetry, storage and transfer
+increase is tolerated. Include migration, telemetry, storage, and transfer
 costs. Do not claim paid savings from queue time or runner-seconds alone.
 
 ## Milestones
@@ -199,14 +204,14 @@ commands and phase boundaries. Record missing evidence as missing; do not infer
 matched cache keys, test identities, per-test durations, memory or profile
 counts from aggregate timings.
 
-For each observation retain run/job URL or ID, attempt, event, source/tested
-merge SHAs, variant, relevant diff, runner and capacity, versions, flags,
-features, targets, profile and concurrency. Separate queue/provisioning;
-setup/cache/install; compilation and nested Cargo; Nextest selection, execution
-and tail; profile merge/export/report/ratchet; doctests; upload, cleanup and
-post-job work; and whole-job duration. Capture sccache statistics, cache result
-by family, compiler freshness, test identity/outcome sets, profile inventory,
-resource samples and I/O where available.
+For each observation, retain run/job URL or ID, attempt, event, source and
+tested merge SHAs, variant, relevant diff, runner and capacity, versions,
+flags, features, targets, profile, and concurrency. Separate
+queue/provisioning; setup/cache/install; compilation and nested Cargo; Nextest
+selection, execution, and tail; profile merge/export/report/ratchet; doctests;
+upload, cleanup, and post-job work; and whole-job duration. Capture sccache
+statistics, cache result by family, compiler freshness, test identity/outcome
+sets, profile inventory, resource samples and I/O where available.
 
 The offline collector in `scripts/ci_test_evidence.py` parses saved attempt/job
 API JSON and logs without network access. The telemetry reader accepts an
@@ -233,8 +238,8 @@ log; epoch timestamps in resource samples; Cargo download matched-key
 reporting; and fixed-format per-Cargo elapsed/freshness/lock-wait lines in the
 API harness. Call inventory with `always()` after coverage and before cleanup
 in PR and main coverage lanes. Preserve timeouts, groups, selection, coverage
-inputs, RUSTFLAGS, watchdog and job ceiling. Do not split phases by rerunning
-tests or changing cleanup, objects or failure behaviour. Source inspection of
+inputs, RUSTFLAGS, watchdog, and job ceiling. Do not split phases by rerunning
+tests or changing cleanup, objects, or failure behaviour. Source inspection of
 cargo-llvm-cov 0.9.0 shows that it loads Cargo configuration and uses the
 `CARGO_TERM_VERBOSE` setting for report merge/export `Running` lines; it does
 not expose a dedicated `CARGO_LLVM_COV_VERBOSE` switch.[^llvm-cov-verbose] The
@@ -252,8 +257,8 @@ verified from source alone.
 Account for telemetry's broad cache-key rotation and warm-up; do not purge
 caches or deliberately cold-start production. Measure execution, upload bytes
 and time, and post-job cost. Acceptance: contracts cover ordering, `always()`,
-missing-file tolerance, timestamps, matched keys, inventory, JUnit and watchdog
-exclusion; overhead remains within budget.
+missing-file tolerance, timestamps, matched keys, inventory, JUnit, and
+watchdog exclusion; overhead remains within budget.
 
 ### EP-3A: Evaluate candidate A, installation-input fingerprints
 
@@ -272,7 +277,7 @@ and Makefile pins. Retain main-only writing and per-save hit gating.
 
 Classify counterfactual v2 hits from earlier successful trusted-main writer
 keys within retention. Estimate setup and whole-job effects separately for
-source-only warm paths and naturally occurring CI-edit PRs. Include trunk
+source-only warm paths and naturally occurring CI-edit PRs. Include main-branch
 population and intervening PR misses in migration cost. If feasible, combine
 with telemetry to cause one key rotation. Adopt only with whole-job benefit
 past threshold, bounded cost non-increase and unchanged checks; otherwise
@@ -298,14 +303,15 @@ Keep existing nested-Cargo group membership in this first variant. Reject
 Nextest setup scripts for this variant because they need experimental opt-in.
 
 Test sharing, no consumers, failures, malformed/mismatched manifests, changed
-digests, missing dependencies, split layout, fallback and long response files
+digests, missing dependencies, split layout, fallback, and long response files
 using `tests/ui/split_build_dir_cargo_messages.jsonl`. Contract-test anchored
 selectors and group assignment. Enable only for same-repository PR coverage via
-`ci-experiment:public-api-prep`; forbid it on fork, trunk and main coverage.
-Measure prep count/freshness/rebuilds, prep plus fixture time, serialized tail,
-whole-job time and peak memory. Reject shifted cost outside Nextest or extra
-build configurations. Validate affected existing Windows/macOS lanes before
-adoption. Roll back by removing the label and environment assignment.
+`ci-experiment:public-api-prep`; forbid it on fork, main-branch, and main
+coverage. Measure prep count/freshness/rebuilds, prep plus fixture time,
+serialized tail, whole-job time and peak memory. Reject shifted cost outside
+Nextest or extra build configurations. Validate affected existing Windows/macOS
+lanes before adoption. Roll back by removing the label and environment
+assignment.
 
 ### EP-3C: Evaluate candidate C only after a material baseline tail
 
@@ -318,7 +324,7 @@ the pinned LLVM. Inspect the complete pattern because `%p` can defeat
 cross-process pooling. Before CI, compare exact counters from concurrent
 repeated processes in a deterministic instrumented program using
 `llvm-profdata show`. Check `%m` collision avoidance, collection paths,
-subprocess contribution, locking and crashes. Do not rely on `%b`, change
+subprocess contribution, locking, and crashes. Do not rely on `%b`, change
 linker settings or override `llvm-profdata` thread selection.
 
 Add a tested LCOV comparator for normalized `SF`, `FN`, `FNDA`, `DA` and
@@ -333,10 +339,10 @@ gain.
 
 ### EP-4: Publish decisions and follow-through
 
-For A, B and C separately, publish hypothesis/variant and SHAs, cohort run/job
+For A, B, and C separately, publish hypothesis/variant and SHAs, cohort run/job
 links and attempts, cache states, effect and uncertainty, total cost proxy
 including failures/migration, fidelity comparisons, resources/reliability,
-confounders, decision and rollback. Keep inconclusive candidates disabled.
+confounders, decision, and rollback. Keep inconclusive candidates disabled.
 Adoption requires repeatable useful improvement beyond noise, no end-to-end
 regression, no increased consumption, and no loss of fidelity. Test any
 accepted combination through ordinary CI before enabling it. Shared actions
@@ -352,7 +358,7 @@ benefit regression. Close #894 only after follow-through is published.
 ## Verification plan
 
 Invariants: test and doctest identity sets equal control; instrumentation,
-normalized detailed coverage records, denominator and ratchet unchanged; only
+normalized detailed coverage records, denominator, and ratchet unchanged; only
 one variant runs per existing job; candidate data belongs to the current
 invocation and trusted cohort; and cost includes work moved between phases. The
 parser preserves attempt identity and represents absent/invalid measurements as
@@ -361,7 +367,7 @@ manifest matches the producing build before consumption. Candidate C's
 deterministic control preserves counter accumulation.
 
 Use parser and workflow-contract tests for telemetry; key mutation tests for A;
-injected-builder and workflow tests for B; exact-counter and LCOV tests plus
+injected-builder and workflow tests for B; exact-counter and LCOV tests, plus
 ordinary CI evidence for C. Run affected existing Windows/macOS lanes when a
 shared harness changes. Run applicable deterministic gates before requesting
 CodeRabbit review. Elapsed time alone is not correctness evidence. Missing
@@ -369,7 +375,7 @@ fidelity comparisons block adoption.
 
 ## Progress
 
-- [x] Record scope, current base, constraints and analysis protocol before
+- [x] Record scope, current base, constraints, and analysis protocol before
   candidate evaluation.
 - [x] Revalidate current runner, cache, Nextest and API-harness state against
   the reference SHA and record the differences above.
@@ -377,12 +383,13 @@ fidelity comparisons block adoption.
   in `docs/ci-performance/observations.jsonl`, plus the dated five-job
   supplement.
 - [ ] Establish a comparable controlled baseline and fill phase/inventory gaps.
-- [x] Validate the collector in the complete workflow-contract suite: 1,311
-  passed, three skipped, with 27 follow-on script tests passing. Dispatch no CI
-  for this evidence milestone.
-- [ ] Complete full local Rust validation and code review before committing the
-  collector; keep the already-published documentation checkpoint distinct from
-  the still-unpublished code and retain failed attempts and diagnostic overhead.
+- [x] Validate the collector with the full local gates on the candidate based
+  on `051358ee360a97fcbebe2a836e25e106917ed845`; retain earlier failures as
+  dated history rather than current gate status.
+- [ ] Replay onto the latest `origin/main` target, resolve any conflicts, and
+  rerun the full local gates on the exact rebased candidate.
+- [x] Keep default CI execution unchanged and defer in-watchdog telemetry to the
+  separately reviewed EP-2 milestone.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
       rejected/deferred.
@@ -441,9 +448,10 @@ or adopted. Update progress and decisions as evidence lands.
   Python lint gate required structural matching in two type checks and
   explanatory assertion messages. Split native-log contracts into a separate
   test module to retain the 400-line ceiling while adding those diagnostics.
-- 2026-10-15: Retain six existing trunk cache-writer attempts as a separate
-  cohort, bringing the dataset to 21 attempts and 81 job records. Report the
-  two-vCPU and four-vCPU cost proxies separately. No CI was triggered.
+- 2026-10-15: Retain six existing main-branch cache-writer attempts as a
+  separate cohort, bringing the dataset to 21 attempts and 81 job records.
+  Report the two-vCPU and four-vCPU cost proxies separately. No CI was
+  triggered.
 - 2026-10-15: Resume from the unchanged implementation base. Formatting passed
   on 12 October; the full lint gate stopped after successful Rustdoc because
   the OS could not launch the compiler wrapper (error 11, process resource
@@ -458,12 +466,12 @@ or adopted. Update progress and decisions as evidence lands.
   `486b876c7244c81b4fa9787a990448beebafea26` and has 78 paths changed relative
   to this PR head, including Rust, tests and Nextest configuration. That run
   reports 3,928 Nextest passes, six skips, 129 doctest passes and 32 ignored
-  doctests. It is hosted validation of that tested merge, not source/config-
-  equivalent proof for the local commit gate: local selection has 3,912 tests
-  and the unchanged full local gate still timed out the packaging test at
-  300.028 seconds, while the hosted package allowance is 600 seconds and that
-  test passed in 161.125 seconds. Do not treat hosted success as waiving the
-  local gate or as causal timing evidence.
+  doctests. It is hosted validation of that tested merge, not
+  source/config-equivalent proof for the local commit gate: local selection has
+  3,912 tests and the unchanged full local gate still timed out the packaging
+  test at 300.028 seconds, while the hosted package allowance is 600 seconds
+  and that test passed in 161.125 seconds. Do not treat hosted success as
+  waiving the local gate or as causal timing evidence.
 - 2026-10-16: The H4 quiet-queue monitor ended without a qualifying pair: 424
   initial observations plus 76 continuation observations, ending at 16:57:23
   UTC on 15 October. It launched no diagnostic. A separate 16 October read-only
@@ -471,7 +479,7 @@ or adopted. Update progress and decisions as evidence lands.
   unreachable. `buildlimits-sccache.service` is enabled but inactive/dead;
   systemd reports it inactive since 12 October, `Result=success`,
   `ExecMainStatus=15` and zero restarts. These observations do not establish a
-  cause for the local timeout. No service, configuration or limit change has
+  cause for the local timeout. No service, configuration, or limit change has
   been made; explicit user approval is pending before the proposed
   `systemctl --user start buildlimits-sccache.service` recovery command. Keep
   this local environment evidence out of the CI baseline dataset.
@@ -498,58 +506,70 @@ or adopted. Update progress and decisions as evidence lands.
 
 ## Outcomes & retrospective
 
-The offline collector, original observation set and dated supplement are
-recorded. The documentation checkpoint and evidence summaries are published
-through draft PR #918 and issue #894. The collector code remains staged and
-unpublished pending its local Rust gate and code review. A controlled baseline,
+The offline collector, observation set and dated supplement form the current
+code milestone in draft PR #918. The earlier implementation snapshot was based
+on `origin/main` at `051358ee360a97fcbebe2a836e25e106917ed845`; it has not yet
+been validated on the latest target. The collector does not change default CI
+execution or add telemetry inside the Cargo watchdog. It emits schema 2 with
+attempt-scoped start latency, while the published observations remain their
+original schema 1 records. Nextest parsing accepts singular and plural start
+and summary forms, including a start line without a skipped-count suffix.
+
+The previous local validation passed formatting, Markdown, diagram, lint,
+typecheck, documentation coverage, the full Rust suite, and workflow contracts
+on base `051358ee360a97fcbebe2a836e25e106917ed845`. It passed 4,082 selected
+tests with six skips and 136 doctests with 32 ignored; documentation coverage
+was 98.89%. Workflow contracts passed 1,380 tests with three skips, followed by
+27 passing script tests. The test run compiled without the managed sccache
+service and still passed; that is local correctness evidence, not a CI timing
+observation or candidate saving. These results do not validate the latest
+`origin/main` target or the review corrections below.
+
+The retained observations remain observational, not a controlled baseline. No
+paid CI run was dispatched for this code milestone. A comparable baseline,
 distinct coverage merge/export timings, bounded CI telemetry, candidate
-evaluations and adoption follow-through remain outstanding.
+evaluations and adoption follow-through remain outstanding. Candidate adoption
+still requires ordinary-run evidence under the predeclared cost and fidelity
+gates.
 
-Local lint, formatting, Markdown/spelling, diagram validation and Python
-typechecking passed. Documentation coverage is 98.87%. Workflow contracts
-passed 1,311 cases with three skips, followed by 27 passing script tests. The
-separate doctest pass succeeded: its three native summaries report 129 passes,
-32 ignored cases and no failures. Collector regressions preserve merged and
-compile-fail result batches and keep absent archive sizes unknown.
-
-Full local Rust validation remains blocked: the third attempt passed 3,911
-tests but timed out the isolated packaging verification at 300.028 seconds. The
-consumer and split-layout checks passed at 198.270 and 255.989 seconds. The
-faithful consumer diagnostic took 691.538 seconds; it is local preparation, not
-CI evidence or a passing gate. The H4 monitor observed 500 statuses without the
-predeclared quiet-queue pair and launched no packaging diagnostic. The separate
-16 October supervisor snapshot and inactive sccache service are recorded as
-local environment evidence; no cause is established and a proposed service
-start awaits explicit user approval. No fourth full attempt or collector code
-review has begun. The collector and tests remain staged pending the required
-gate result. Candidate adoption still requires controlled CI evidence beyond
-this offline milestone.
-
-The documentation checkpoint is pushed in draft PR #918. Applicable formatting,
-Markdown, spelling and Mermaid checks passed before the documentation-only
-commits. Four scoped documentation reviews found two minor grammar issues, both
-corrected. The latest review at `55a66ca9` reported zero findings and listed
-all five files in its incremental review. Each of the first three reviews
-reported one unnamed unreviewed file, so the latest result does not establish
-full coverage of the original documentation diff. The collector and its
-contracts have not received CodeRabbit code review. The six collector files
-remain staged and unpublished; no CI dispatch occurred.
+The documentation checkpoint and evidence summaries are published through draft
+PR #918 and issue #894. A focused review found parser documentation and Nextest
+start-line coverage gaps. The collector now recognizes the documented
+skipped-binary and filter-source suffixes, preserves unknown skipped-test
+counts when only binary counts are available, and resets test identities at
+each new run. Regression tests cover those forms and multiple runs in one log.
+A fresh review found additional runner-provenance, crashed-test, and
+test-clarity cases. The current candidate includes corrections and regression
+tests for them; fresh review confirmation remains pending. No CI dispatch
+occurred for the offline collector milestone.
 
 ## Revision note
 
-Revised 2026-10-16 to record hosted validation, the H4 monitoring outcome,
-local supervisor evidence and cargo-llvm-cov source findings. The controlled
-baseline, bounded telemetry and candidate decisions remain outstanding.
+Revised 2026-10-20 while preparing to replay the issue commits onto the latest
+`origin/main` target, `f16c31760aff94a1d91bbbbfac4d024873942ce5`. The earlier
+local gate sequence and review evidence cover the previous base at
+`051358ee360a97fcbebe2a836e25e106917ed845`; they do not validate the new
+target. A fresh CodeRabbit review also identified that a Nextest `SKIP` record
+has no duration and is excluded from the summary's executed count. The parser
+now retains that identity and compares only non-skip outcomes with the executed
+count. The review also identified partial `finished/selected` summary counts;
+the parser now retains those counts and refuses to call a fail-fast run's
+selected identity inventory complete. The latest review also caught the
+private-module list, missing CLI usage, and dropped non-default Ubicloud
+shapes; the guide, collector entrypoint, and runner-provenance contract now
+cover those cases. Earlier hosted validation, H4 monitoring, and local
+supervisor evidence remain dated history. The controlled baseline, bounded
+telemetry, fresh review, and candidate decisions remain outstanding.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
 [issue-checkpoint-one]: https://github.com/leynos/netsuke/issues/894#issuecomment-6196022869
 [issue-checkpoint-two]: https://github.com/leynos/netsuke/issues/894#issuecomment-6196835735
 
-[^llvm-cov-verbose]: Static source references: [cargo-llvm-cov 0.9.0 CLI]
-  [llvm-cov-cli], [context][llvm-cov-context], [report][llvm-cov-report],
-  [manifest][llvm-cov-manifest] and [cargo-config2 environment mapping]
-  [cargo-config-env].
+[^llvm-cov-verbose]: Static source references:
+  [cargo-llvm-cov 0.9.0 CLI][llvm-cov-cli], [context][llvm-cov-context],
+  [report][llvm-cov-report], [manifest][llvm-cov-manifest] and
+  [cargo-config2 environment mapping][cargo-config-env].
 
 [llvm-cov-cli]: https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.0/src/cli.rs
 [llvm-cov-context]: https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.0/src/context.rs
