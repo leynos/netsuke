@@ -21,9 +21,8 @@
 #
 # This is the profile's own allowance, and it governs every test no override
 # matches. The mutation compile gate widens it to ten periods; the production
-# module-slice check gets twelve; and the stub-environment, split-build,
-# and cold package-publish checks get fifteen. The largest
-# allowance is 900 s.
+# module-slice check, stub-environment, split-build, and cold package-publish
+# checks get fifteen. The largest allowance is 900 s.
 slow-timeout = { period = "60s", terminate-after = 5 }
 
 [test-groups.nested-cargo-builds]
@@ -79,12 +78,14 @@ success-output = "immediate"
 
 [[profile.default.overrides]]
 # This direct-rustc fixture needs the production library and build-script
-# dependencies, not every workspace test target. Its old all-target check hit
-# the 720 s cap while the follow-up Cargo metadata query waited on the shared
-# package-cache lock. Keep the scoped allowance while narrowing that work.
+# dependencies, not every workspace test target. The package-scoped check
+# still exceeded 720 s in the rebased full suite while nested rustc requests
+# waited for healthy shared compiler admission. Give this one test fifteen
+# periods (900 s), matching the other cold builds without widening unrelated
+# test timeouts; this remains below the 960 s coverage-run cap.
 filter = 'test(/^production_build_module_slice_has_expected_boundary($|::)/)'
 success-output = "immediate"
-slow-timeout = { period = "60s", terminate-after = 12 }
+slow-timeout = { period = "60s", terminate-after = 15 }
 
 [[profile.default.overrides]]
 # This isolated fixture builds dependencies into a fresh target before its
@@ -174,19 +175,17 @@ success-output = "immediate"
 # this file bounds it and its own cargo watchdog does.
 #
 # The 16-minute global timeout is above the 900s largest per-test allowance.
-# The mutation compile gate keeps its 600s budget, the production module-slice
-# check keeps 720s, and the stub-environment compile-fail,
-# split-build, and cold package-publish checks get 900s. Both comparisons hold:
+# The mutation compile gate keeps its 600s budget. The production module-slice
+# check, stub-environment compile-fail, split-build, and cold package-publish
+# checks each get 900s. Both comparisons hold:
 #
 #   global-timeout > largest per-test allowance
 #   960 s          > 900 s
 #
 # The margin is 60s rather than 480s, and it is not slack to be spent: a
 # per-test allowance at or above the whole-run budget would make the run end
-# before the test it contains could use its budget, so the ordering caps the
-# package gate's allowance at 900s -- fifteen 60s periods, strictly below
-# 960s. The other targeted build checks retain their measured 600s and 720s
-# budgets.
+# before the test it contains could use its budget, so the largest targeted
+# allowance stays at 900s -- fifteen 60s periods, strictly below 960s.
 #
 # The 1,980s cargo watchdog covers the full nextest termination, cold-build,
 # and report window with 50s to spare: 960s + 70s + 600s + 300s is 1,930s.

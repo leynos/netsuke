@@ -306,7 +306,7 @@ def test_cold_packaging_verification_has_a_scoped_budget() -> None:
     expected.update({
         f"test(/^{name}($|::)/)": {"period": "60s", "terminate-after": periods}
         for name, periods in (
-            ("production_build_module_slice_has_expected_boundary", 12),
+            ("production_build_module_slice_has_expected_boundary", 15),
             ("split_build_fixture_compiles_through_the_direct_rustc_harness", 15),
             ("stub_env_default_does_not_compile", 15),
         )
