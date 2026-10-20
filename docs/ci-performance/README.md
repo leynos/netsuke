@@ -7,14 +7,19 @@ one job attempt. The original harvest is `observations.jsonl`; dated
 supplements remain separate. Keep raw CI logs outside the repository, such as
 under `/tmp`.
 
+Here, the fixed `trunk` cohort label names push-triggered runs on the
+repository's `main` branch. The collector retains `trunk_coverage` and
+`trunk_cache_writer` as fixed cohort labels.
+
 The retained observation set is published in `observations.jsonl`: 81 job
-records across 21 distinct run attempts. It contains six trunk coverage jobs,
-six trunk cache-writer jobs, nine same-repository PR Linux gate jobs and 60
-jobs from other cohorts. These are observational records across different
-source commits, not a controlled baseline or candidate comparison. Do not fill
-missing fields from historical September timings or infer them from aggregate
-durations. The [15 October supplement](#15-october-supplement) adds one
-ordinary attempt and five job records with different source and test conditions.
+records across 21 distinct run attempts. It contains six main-branch coverage
+jobs, six main-branch cache-writer jobs, nine same-repository PR Linux gate
+jobs, and 60 jobs from other cohorts. These are observational records across
+different source commits, not a controlled baseline or candidate comparison. Do
+not fill missing fields from historical September timings or infer them from
+aggregate durations. The [15 October supplement](#15-october-supplement) adds
+one ordinary attempt and five job records with different source and test
+conditions.
 
 ## Collection
 
@@ -32,13 +37,15 @@ It emits one JSON object per job attempt to standard output. Review the output
 before appending it to the dataset. Exclude credentials, raw errors and raw
 logs. Use fixed labels for cohorts and cache results.
 
-The collector emits schema `1`. This abbreviated example shows top-level
+The collector emits schema `2`. The retained observation files preserve their
+original schema `1` records. This abbreviated example shows current top-level
 fields, not an observation. Each record also contains `steps` and a nested
 `evidence` object with versions, runner facts, cache states, sccache
 statistics, Nextest/doctest outcomes, resources, phases and profile inventory:
 
 ```json
 {
+  "schema": 2,
   "run_id": null,
   "job_id": null,
   "run_attempt": null,
@@ -57,7 +64,7 @@ statistics, Nextest/doctest outcomes, resources, phases and profile inventory:
   "started_at": null,
   "completed_at": null,
   "whole_job_seconds": null,
-  "created_to_job_start_seconds": null,
+  "attempt_start_to_job_start_seconds": null,
   "queue_and_provisioning_seconds": null,
   "steps": [],
   "evidence": {},
@@ -66,6 +73,7 @@ statistics, Nextest/doctest outcomes, resources, phases and profile inventory:
   "attempt_runner_seconds": null,
   "attempt_observed_runner_seconds": null,
   "attempt_ubicloud_runner_seconds": null,
+  "attempt_ubicloud_seconds_by_shape": {},
   "attempt_unknown_duration_jobs": null,
   "cost_basis": "runner_seconds_proxy",
   "billing_consumption": null,
@@ -82,18 +90,18 @@ summing them.
 
 ## Cohorts and comparison
 
-Keep PR coverage, trunk coverage, trusted trunk cache-writer jobs and
-GitHub-hosted fork jobs separate. Record exact hits, prefix restores and misses
-separately for Cargo downloads, installed tools, Whitaker and sccache. Separate
-warm and cold/miss observations. Record queue and provisioning apart from paid
-execution.
+Keep PR coverage, main-branch coverage, trusted main-branch cache-writer jobs,
+and GitHub-hosted fork jobs separate. Record exact hits, prefix restores, and
+misses separately for Cargo downloads, installed tools, Whitaker, and sccache.
+Separate warm and cold/miss observations. Record queue and provisioning apart
+from paid execution.
 
 Compare successful, comparable attempts for timing. Exclude cancelled and
 superseded attempts from successful-run timing summaries, but retain every
 attempt in cost and reliability accounting. Label comparisons with a different
-source/test set, toolchain, runner or unmatched cache as observational and
-explain the confound. Per-test durations can overlap; do not sum them as
-wall-clock savings.
+source/test set, toolchain, runner, or unmatched cache as observational and
+explain the confounding factor. Per-test durations can overlap; do not sum them
+as wall-clock savings.
 
 The predeclared primary outcomes are whole-job elapsed time, including setup,
 telemetry, uploads, cleanup and post-job cache work, and summed runner-seconds
@@ -168,29 +176,29 @@ only when that job and its complete attempt both succeeded. A dash means no
 eligible PR gate timing for that attempt; keep it in cost and reliability
 accounting.
 
-| Run attempt                                                                  | Source SHA | Cohort(s)                 | Attempt outcome | Runner seconds | Ubicloud runner seconds | Successful PR gate seconds |
-| ---------------------------------------------------------------------------- | ---------- | ------------------------- | --------------- | -------------: | ----------------------: | -------------------------: |
-| [38103238271](https://github.com/leynos/netsuke/actions/runs/38103238271), 1 | `3029d496` | trunk coverage            | success         | 330            | 330                     | —                          |
-| [38123563613](https://github.com/leynos/netsuke/actions/runs/38123563613), 1 | `a75420e6` | trunk coverage            | success         | 337            | 337                     | —                          |
-| [38125672660](https://github.com/leynos/netsuke/actions/runs/38125672660), 1 | `b73f8d62` | trunk coverage            | success         | 399            | 399                     | —                          |
-| [38132248056](https://github.com/leynos/netsuke/actions/runs/38132248056), 1 | `7539e32e` | trunk coverage            | success         | 416            | 416                     | —                          |
-| [38147234655](https://github.com/leynos/netsuke/actions/runs/38147234655), 1 | `557966c8` | trunk coverage            | success         | 372            | 372                     | —                          |
-| [38165545414](https://github.com/leynos/netsuke/actions/runs/38165545414), 1 | `9e1bf27e` | trunk coverage            | success         | 388            | 388                     | —                          |
-| [38174992874](https://github.com/leynos/netsuke/actions/runs/38174992874), 1 | `dc07efdd` | other, PR coverage        | cancelled       | 3,750          | 1,885                   | —                          |
-| [38176320016](https://github.com/leynos/netsuke/actions/runs/38176320016), 1 | `c43bb6fc` | other, PR coverage        | cancelled       | 2,967          | 1,503                   | —                          |
-| [38177218518](https://github.com/leynos/netsuke/actions/runs/38177218518), 1 | `f88b12ef` | other, PR coverage        | cancelled       | 1,530          | 708                     | —                          |
-| [38177653022](https://github.com/leynos/netsuke/actions/runs/38177653022), 1 | `7faf1f1d` | other, PR coverage        | cancelled       | 4,093          | 1,965                   | —                          |
-| [38178639487](https://github.com/leynos/netsuke/actions/runs/38178639487), 1 | `70b8b0b7` | other, PR coverage        | success         | 4,365          | 2,294                   | 1,438                      |
-| [38179177460](https://github.com/leynos/netsuke/actions/runs/38179177460), 1 | `c89535d0` | other, PR coverage        | success         | 4,097          | 2,024                   | 1,213                      |
-| [38194233518](https://github.com/leynos/netsuke/actions/runs/38194233518), 1 | `3317c8ce` | other, PR coverage        | success         | 4,338          | 2,181                   | 1,341                      |
-| [38194408698](https://github.com/leynos/netsuke/actions/runs/38194408698), 1 | `5ec58f1a` | other, PR coverage        | failure         | 2,357          | 1,917                   | —                          |
-| [38276341866](https://github.com/leynos/netsuke/actions/runs/38276341866), 1 | `ec0afc1c` | other, PR coverage        | success         | 4,338          | 2,108                   | 1,062                      |
-| [38103238466](https://github.com/leynos/netsuke/actions/runs/38103238466), 1 | `3029d496` | other, trunk cache writer | success         | 3,567          | 1,292                   | —                          |
-| [38123563894](https://github.com/leynos/netsuke/actions/runs/38123563894), 1 | `a75420e6` | other, trunk cache writer | success         | 3,307          | 1,345                   | —                          |
-| [38125672832](https://github.com/leynos/netsuke/actions/runs/38125672832), 1 | `b73f8d62` | other, trunk cache writer | success         | 3,585          | 1,308                   | —                          |
-| [38132247949](https://github.com/leynos/netsuke/actions/runs/38132247949), 1 | `7539e32e` | other, trunk cache writer | success         | 3,529          | 1,256                   | —                          |
-| [38147234790](https://github.com/leynos/netsuke/actions/runs/38147234790), 1 | `557966c8` | other, trunk cache writer | success         | 3,628          | 1,557                   | —                          |
-| [38165545712](https://github.com/leynos/netsuke/actions/runs/38165545712), 1 | `9e1bf27e` | other, trunk cache writer | success         | 3,913          | 1,914                   | —                          |
+| Run attempt                                                                  | Source SHA | Cohort(s)                       | Attempt outcome | Runner seconds | Ubicloud runner seconds | Successful PR gate seconds |
+| ---------------------------------------------------------------------------- | ---------- | ------------------------------- | --------------- | -------------: | ----------------------: | -------------------------: |
+| [38103238271](https://github.com/leynos/netsuke/actions/runs/38103238271), 1 | `3029d496` | main-branch coverage            | success         | 330            | 330                     | —                          |
+| [38123563613](https://github.com/leynos/netsuke/actions/runs/38123563613), 1 | `a75420e6` | main-branch coverage            | success         | 337            | 337                     | —                          |
+| [38125672660](https://github.com/leynos/netsuke/actions/runs/38125672660), 1 | `b73f8d62` | main-branch coverage            | success         | 399            | 399                     | —                          |
+| [38132248056](https://github.com/leynos/netsuke/actions/runs/38132248056), 1 | `7539e32e` | main-branch coverage            | success         | 416            | 416                     | —                          |
+| [38147234655](https://github.com/leynos/netsuke/actions/runs/38147234655), 1 | `557966c8` | main-branch coverage            | success         | 372            | 372                     | —                          |
+| [38165545414](https://github.com/leynos/netsuke/actions/runs/38165545414), 1 | `9e1bf27e` | main-branch coverage            | success         | 388            | 388                     | —                          |
+| [38174992874](https://github.com/leynos/netsuke/actions/runs/38174992874), 1 | `dc07efdd` | other, PR coverage              | cancelled       | 3,750          | 1,885                   | —                          |
+| [38176320016](https://github.com/leynos/netsuke/actions/runs/38176320016), 1 | `c43bb6fc` | other, PR coverage              | cancelled       | 2,967          | 1,503                   | —                          |
+| [38177218518](https://github.com/leynos/netsuke/actions/runs/38177218518), 1 | `f88b12ef` | other, PR coverage              | cancelled       | 1,530          | 708                     | —                          |
+| [38177653022](https://github.com/leynos/netsuke/actions/runs/38177653022), 1 | `7faf1f1d` | other, PR coverage              | cancelled       | 4,093          | 1,965                   | —                          |
+| [38178639487](https://github.com/leynos/netsuke/actions/runs/38178639487), 1 | `70b8b0b7` | other, PR coverage              | success         | 4,365          | 2,294                   | 1,438                      |
+| [38179177460](https://github.com/leynos/netsuke/actions/runs/38179177460), 1 | `c89535d0` | other, PR coverage              | success         | 4,097          | 2,024                   | 1,213                      |
+| [38194233518](https://github.com/leynos/netsuke/actions/runs/38194233518), 1 | `3317c8ce` | other, PR coverage              | success         | 4,338          | 2,181                   | 1,341                      |
+| [38194408698](https://github.com/leynos/netsuke/actions/runs/38194408698), 1 | `5ec58f1a` | other, PR coverage              | failure         | 2,357          | 1,917                   | —                          |
+| [38276341866](https://github.com/leynos/netsuke/actions/runs/38276341866), 1 | `ec0afc1c` | other, PR coverage              | success         | 4,338          | 2,108                   | 1,062                      |
+| [38103238466](https://github.com/leynos/netsuke/actions/runs/38103238466), 1 | `3029d496` | other, main-branch cache writer | success         | 3,567          | 1,292                   | —                          |
+| [38123563894](https://github.com/leynos/netsuke/actions/runs/38123563894), 1 | `a75420e6` | other, main-branch cache writer | success         | 3,307          | 1,345                   | —                          |
+| [38125672832](https://github.com/leynos/netsuke/actions/runs/38125672832), 1 | `b73f8d62` | other, main-branch cache writer | success         | 3,585          | 1,308                   | —                          |
+| [38132247949](https://github.com/leynos/netsuke/actions/runs/38132247949), 1 | `7539e32e` | other, main-branch cache writer | success         | 3,529          | 1,256                   | —                          |
+| [38147234790](https://github.com/leynos/netsuke/actions/runs/38147234790), 1 | `557966c8` | other, main-branch cache writer | success         | 3,628          | 1,557                   | —                          |
+| [38165545712](https://github.com/leynos/netsuke/actions/runs/38165545712), 1 | `9e1bf27e` | other, main-branch cache writer | success         | 3,913          | 1,914                   | —                          |
 
 Across these attempts, deduplicated totals are 55,606 runner-seconds, of which
 27,499 are labelled Ubicloud runner-seconds. Keep cache conditions separate
@@ -199,12 +207,12 @@ even for descriptive summaries:
 - PR tools/Whitaker exact, Cargo exact: n=1, median/range 1,213 seconds.
 - PR tools/Whitaker miss, Cargo exact: n=3, median 1,341 seconds,
   range 1,062–1,438 seconds.
-- Trunk Cargo exact: n=5, median 372 seconds, range 330–416 seconds.
-- Trunk Cargo miss: n=1, median/range 388 seconds.
+- Main-branch Cargo exact: n=5, median 372 seconds, range 330–416 seconds.
+- Main-branch Cargo miss: n=1, median/range 388 seconds.
 
-Source revisions vary; paired trunk workflows share a SHA but belong to
-different cohorts. Sccache hit/miss ratios also vary within these groups. These
-summaries are observational and do not establish a controlled baseline,
+Source revisions vary; paired main-branch workflows use the same SHA but belong
+to different cohorts. Sccache hit/miss ratios also vary within these groups.
+These summaries are observational and do not establish a controlled baseline,
 setup-time savings or a causal comparison. No candidate observations exist. The
 paid proxy separates 12,567 runner-seconds on the two-vCPU shape and 14,932 on
 the four-vCPU shape; these are not interchangeable billing units. The control
