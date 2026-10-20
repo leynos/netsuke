@@ -29,7 +29,16 @@ the workflow-contract and documentation gates passed. Focused documentation
 gates for this final plan update passed: formatting, Markdown and spelling,
 diagram, and whitespace checks. The 26-file tolerance applies to this feature
 diff and excludes the separate timeout repairs. The plan remains in progress
-until PR 778 is reviewed, merged, and its post-merge state is verified.
+until PR 778 is reviewed, merged, and its post-merge state is verified. The
+first completeness assessment on published head `b0cda33b` found no runtime
+correctness or security defect, but identified the omitted `Hash` trait and
+public doctest for `ShellSelection`. Both are now added in the worktree. The
+repair candidate passed all eight local gates sequentially: 4,300 tests passed
+(six skipped), 39 doctests passed in each crate (six ignored in each),
+typecheck and lint passed, documentation coverage was 98.92%, workflow
+contracts passed (1,324 passed, three skipped, plus 27 script tests), Markdown
+lint reported zero issues, and all diagrams validated. Candidate-bound
+assessment confirmation and hosted checks remain pending.
 
 [cli-timeout-pr]: https://github.com/leynos/netsuke/pull/913
 [timeout-pr]: https://github.com/leynos/netsuke/pull/930
@@ -511,6 +520,22 @@ remains `1747496f`, and the original combined candidate is preserved under
   `make fmt`, `make check-fmt`, `make markdownlint`, `make nixie`, and
   `git diff --check` passed on the final plan text before commit. Logs are in
   `/tmp` with the candidate-specific suffix and gate name.
+
+- [x] (2026-10-20) CodeRabbit's completeness assessment on published head
+  `b0cda33b` found no in-scope runtime or security defect, but found two
+  ExecPlan conformance omissions: `ShellSelection` lacked the planned `Hash`
+  implementation and its public API lacked a doctest. Added `Hash` and a
+  doctest covering Boolean and named decoding, serialization, and use in a
+  `HashSet`. The original assessment is
+  [comment 6285932233](https://github.com/leynos/netsuke/pull/778#issuecomment-6285932233).
+  The repair candidate passed all eight gates sequentially: `make check-fmt`,
+  `make test` (4,300 passed, six skipped; 39 doctests passed in each crate, six
+  ignored in each), `make typecheck`, `make lint`, `make doc-coverage` (98.92%),
+  `make test-workflow-contracts` (1,324 passed, three skipped, plus 27 script
+  tests), `make markdownlint` (187 files, zero issues), and `make nixie` (all
+  diagrams valid). Results apply to the local source diff on published head
+  `b0cda33b`; the repair is not yet published and follow-up assessment
+  confirmation and hosted checks remain pending.
 
 ## Surprises & discoveries
 
@@ -1046,7 +1071,12 @@ workflow contracts (three skipped) plus 27 script tests, zero Markdown issues,
 valid diagrams, typecheck, and lint. Focused documentation gates for this final
 plan update passed before commit. Publish the validated candidate, complete
 exact-head assessment and hosted review, merge PR 778, and verify post-merge
-state before marking this plan complete.
+state before marking this plan complete. The first candidate-bound completeness
+assessment found only the planned `Hash` implementation and public doctest
+missing; both have been added to the new worktree candidate and all eight
+sequential local gates pass. Publish it, obtain follow-up assessment and hosted
+review, merge PR 778, and verify post-merge state before marking this plan
+complete.
 
 ## Context and orientation
 

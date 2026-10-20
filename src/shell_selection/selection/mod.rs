@@ -10,7 +10,27 @@ mod property_tests;
 mod tests;
 
 /// Represent direct execution, a host default, or a validated shell name.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+///
+/// # Examples
+///
+/// ```
+/// use std::collections::HashSet;
+///
+/// use netsuke::shell_selection::{ShellName, ShellSelection};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let platform_default: ShellSelection = serde_json::from_str("true")?;
+/// let named: ShellSelection = serde_json::from_str(r#""bash""#)?;
+/// assert_eq!(platform_default, ShellSelection::PlatformDefault);
+/// assert_eq!(named, ShellSelection::Named(ShellName::parse("bash")?));
+/// assert_eq!(serde_json::to_string(&named)?, r#""bash""#);
+///
+/// let selections = HashSet::from([platform_default, named]);
+/// assert_eq!(selections.len(), 2);
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ShellSelection {
     /// Run the command directly without selecting a shell.
     #[default]
