@@ -8,18 +8,17 @@ be kept up to date as work proceeds.
 Status: IN PROGRESS
 
 The user approved this plan on 2026-10-13 and resumed implementation on
-2026-10-17 after the rebase. Historical prerequisite [PR 913][cli-timeout-pr]
-merged into `main` as `077cf366`. The separate module-slice timeout repair in
-[PR 930][timeout-pr] merged into `main` on 2026-10-19 as
-`051358ee360a97fcbebe2a836e25e106917ed845`. The feature branch was rebased onto
-that landing without conflicts; its range-diff preserves the feature patches.
-The rebased candidate `56757f4417b9b0ed79d16d69d82e0d3f9bba3e15` passed all
-eight local gates sequentially: 4,173 Nextest tests (six skipped), 151 doctests
-(32 ignored), 98.90% documentation coverage, formatting, typecheck, lint,
-workflow contracts, Markdown, and Mermaid validation. PR 778 still needs the
-codec and documentation milestones, publication of the rebased head, and hosted
-review. EP-M1's exact-candidate local assessment remains open. The 26-file
-tolerance applies to this feature diff and excludes the separate timeout repair.
+2026-10-17 after the rebase. The original CLI-fixture timeout repair in
+[PR 913][cli-timeout-pr] merged into `main` as `077cf366`; the separate
+module-slice timeout repair in [PR 930][timeout-pr] merged on 2026-10-19 as
+`051358ee360a97fcbebe2a836e25e106917ed845`. Neither timeout is an active
+blocker. The latest local pre-rebase candidate passes the codec and
+documentation milestones and all local gates recorded under `Progress`. However,
+`origin/main` has since advanced to `f16c3176`; rebasing the completed feature
+work onto that target and rerunning the final gates remain in progress. PR 778
+is still a draft and needs the updated head, exact-head review, hosted checks,
+and merge. The 26-file tolerance applies to this feature diff and excludes the
+separate timeout repairs.
 
 [cli-timeout-pr]: https://github.com/leynos/netsuke/pull/913
 [timeout-pr]: https://github.com/leynos/netsuke/pull/930
@@ -331,8 +330,34 @@ remains `1747496f`, and the original combined candidate is preserved under
   earlier review concern recurred. EP-M1 is complete.
 - [x] EP-M1: host family, built-in registry, and `ShellName` landed with
   tests.
+- [x] (2026-10-19) EP-M2's first one-row Scenario Outline binding spike passed
+  its focused generated-scenario check as
+  `features_scenarios::shell_selection_vocabulary_a_boolean_shell_selector_binds_to_its_intent::case_1`.
+- [x] (2026-10-19) EP-M2 focused Red completed after correcting the
+  `!!bool true` direct-decoder expectation from observed serde-saphyr
+  behaviour. The reject-all pass ran 172 focused tests: 132 passed and 40
+  failed on supported values, round trips, snapshots, and acceptance scenarios.
+  The accept-all pass ran 172: 117 passed and 55 failed on unsupported values
+  and rejection scenarios. Logs:
+  `/tmp/focused-netsuke-11-2-1-add-the-manifest-facing-shell-selection-vocabulary-m2-red1-corrected.out`
+  and
+  `/tmp/focused-netsuke-11-2-1-add-the-manifest-facing-shell-selection-vocabulary-m2-red2.out`.
+  Parser-only tagged-scalar cases passed their pinned stage-one expectations.
+  Red stubs were transient; Green reviewed and accepted the selector error-text
+  snapshot.
+- [x] (2026-10-19) EP-M2 focused Green passes all 172 selected tests, including
+  JSON/YAML round trips, the 1,000-sample kind and variant checks, both BDD
+  outlines, and the full frontend parity table. Reviewed and accepted the
+  selector error-text snapshot. Parser observations are pinned: `!custom yes`
+  becomes the platform default; `!!bool true` fails both the generic-value
+  stage and direct tagged-scalar deserialization; `.inf` fails the generic
+  value stage. Log:
+  `/tmp/focused-netsuke-11-2-1-add-the-manifest-facing-shell-selection-vocabulary-m2-green.out`.
+  Full gates are still required before closing EP-M2.
 - [ ] EP-M2: `ShellSelection` codec, parity tests, properties, and behavioural
-  scenarios landed.
+  scenarios landed. All local gates passed on the pre-rebase candidate; repeat
+  them after rebasing onto the updated `origin/main` before closing this
+  milestone.
 - [ ] EP-M3: documentation, roadmap entry marked done, plan `COMPLETE`.
 
 ## Surprises & discoveries
@@ -388,8 +413,10 @@ remains `1747496f`, and the original combined candidate is preserved under
   queued requests. This supports, but does not prove, shared compile contention
   as the cause. The log is
   `/tmp/test-f900fc37-c6fe-4ed1-8700-ec572d9952c3-11-2-1-add-the-manifest-facing-shell-selection-vocabulary-4.out`.
-  Historical impact: Stage A required stopping after the failed baseline, so
-  no product implementation has started.
+  At that point Stage A stopped before feature implementation. The timeout
+  blocker was subsequently repaired in [PR 913][cli-timeout-pr], and
+  implementation resumed; this observation records the failed historical
+  baseline rather than current status.
 - Observation: the CLI fixture's isolated Cargo project duplicates work
   that the existing public API harness can reuse. Evidence: the standalone
   manifest selects `target/cli-configuration-ui`, whereas `NetsukeRlib` builds
@@ -657,15 +684,15 @@ remains `1747496f`, and the original combined candidate is preserved under
   The combined 34-file ceiling proposal is withdrawn. Date/Author: 2026-10-14,
   implementation supervisor; user-authorized stack separation.
 
-  Follow-up (2026-10-19): after rebasing to current `origin/main`, a distinct
-  720-second timeout appeared in the build-module slice fixture. Per the user's
-  renewed direction to isolate the cause and keep the fix below #778, the
-  repair is published as [PR 930][timeout-pr], targeting `main`; its local
-  gates pass and hosted Actions remain in progress. The seven feature commits
-  are replayed locally on its head without conflicts, with the published patch
-  series preserved exactly. PR #778 still needs top-layer validation and
-  retargeting. PR #913 remains the historical repair for the earlier CLI
-  fixture and is not evidence for this distinct failure.
+  Follow-up (2026-10-19): after rebasing to then-current `origin/main`, a
+  distinct 720-second timeout appeared in the build-module slice fixture. Per
+  the user's renewed direction to isolate the cause and keep the fix below
+  #778, the repair was published as [PR 930][timeout-pr] against `main`. Its
+  local gates and CodeScene passed; hosted Actions were still running at the
+  time of publication. PR 930 merged on 2026-10-19. The seven feature commits
+  were replayed onto its head without conflicts, with the published patch
+  series preserved exactly. PR #913 remains the earlier, separate CLI-fixture
+  repair and is not evidence for this distinct timeout.
 
 - Decision D12 (2026-10-17): place production modules in `name/mod.rs` and
   `built_in/mod.rs`, with tests in their plain child-module directories. The
@@ -703,13 +730,13 @@ tests (six skipped), doctests passed, typecheck and lint passed, doc coverage
 was 98.89%, workflow contracts passed 1,321 tests (three skipped) plus 27
 script tests, Markdown lint reported zero issues, and Mermaid validation
 passed. The module-slice fixture took 33.70 seconds and package verification
-10.90 seconds. Draft PR 930 targets `main`; its CodeScene check passed and
-hosted Actions remain active. The feature commits were replayed onto its head
-without conflicts, but #778's new head still needs its own gates and hosted
-review. The earlier combined candidate's 3,370-test result and EP-M1's
-FULL5/FULL6 results remain historical evidence. The feature's exclusive diff
-retains its approved file and line limits, and the timeout repair stays in its
-separate lower PR.
+10.90 seconds. At publication, draft PR 930 targeted `main`, its CodeScene
+check had passed, and hosted Actions were still active; PR 930 then merged on
+2026-10-19. The feature commits were replayed onto its head without conflicts,
+but #778's updated head still needs its own gates and hosted review. The
+earlier combined candidate's 3,370-test result and EP-M1's FULL5/FULL6 results
+remain historical evidence. The feature's exclusive diff retains its approved
+file and line limits, and the timeout repair stays in its separate lower PR.
 
 The earlier combined candidate passed 3,370 Nextest tests and 39 doctests;
 these are historical results, distinct from the prerequisite's fresh run. That

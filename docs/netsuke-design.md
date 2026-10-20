@@ -2540,6 +2540,49 @@ This transformation involves several steps:
    traversal are logged, collected, and returned alongside any cycle to aid
    diagnostics.
 
+#### Structured-command shell selection vocabulary
+
+`shell_selection` is a public, data-only vocabulary for the shell intent that
+RFC 0011 adds to structured commands. It sits outside the manifest AST and
+execution IR so configuration, resolution, and later manifest lowering can
+share the types without depending on one another. This milestone does not
+resolve an executable, inspect `PATH`, or launch a shell.
+
+`ShellName` retains a validated spelling matching `[a-z][a-z0-9_-]{0,62}`.
+Parsing is exact: it neither trims nor changes case. The eight lower-case YAML
+Boolean words are reserved even when quoted: `true`, `false`, `yes`, `no`, `y`,
+`n`, `on`, and `off`. Other YAML-like names, including `null`, remain valid
+when they satisfy the name grammar. A finite `BuiltInShell` table describes
+`sh`, `bash`, `pwsh`, and `powershell`; it records host support, executable
+form, and fixed arguments without looking up or running those programs.
+`HostFamily` makes the Unix-like/Windows choice explicit so the table can be
+checked independently of the build host.
+
+`ShellSelection` preserves exactly three intents: `false` is `Direct`, `true` is
+`PlatformDefault`, and a valid string is `Named`. Missing mapping keys default
+to `Direct`; explicit null, numbers, sequences, mappings, and invalid names
+fail. Serialization writes the matching Boolean or name, so a named value
+round-trips through JSON and YAML.
+
+The manifest frontend first parses YAML 1.1 scalars into `serde_json::Value`.
+The Boolean coercion is part of the existing manifest-wide compatibility
+contract, so this vocabulary records it rather than changing parser options.
+The spelling groups below summarize the pinned selector cases; the tests also
+cover mixed and upper-case examples.
+
+| Unquoted spelling         | Parsed selector   |
+| ------------------------- | ----------------- |
+| `false`, `no`, `n`, `off` | `Direct`          |
+| `true`, `yes`, `y`, `on`  | `PlatformDefault` |
+
+Quoted Boolean words are strings and still fail the reserved-name rule. The
+compatibility tests separately pin YAML tags: `!!str bash` selects `bash`,
+`!!str true` is rejected, and `!custom yes` follows the parser's Boolean
+interpretation. `!!bool true` cannot be deserialized by the current direct
+tagged-scalar path, while `.inf` fails the initial generic-value parse; neither
+path accepts either value as a shell selection. These parser-specific outcomes
+are evidence for the later YAML contract review, not new coercion rules.
+
 #### Legacy recipe shell selection
 
 `RecipeShell` is the backend boundary for completed legacy recipe text. The
