@@ -11,14 +11,20 @@ The user approved this plan on 2026-10-13 and resumed implementation on
 2026-10-17 after the rebase. The original CLI-fixture timeout repair in
 [PR 913][cli-timeout-pr] merged into `main` as `077cf366`; the separate
 module-slice timeout repair in [PR 930][timeout-pr] merged on 2026-10-19 as
-`051358ee360a97fcbebe2a836e25e106917ed845`. Neither timeout is an active
-blocker. The latest local pre-rebase candidate passes the codec and
-documentation milestones and all local gates recorded under `Progress`. However,
-`origin/main` has since advanced to `f16c3176`; rebasing the completed feature
-work onto that target and rerunning the final gates remain in progress. PR 778
-is still a draft and needs the updated head, exact-head review, hosted checks,
-and merge. The 26-file tolerance applies to this feature diff and excludes the
-separate timeout repairs.
+`051358ee360a97fcbebe2a836e25e106917ed845`. Those repairs are merged, but the
+post-rebase `make test` on 2026-10-20 timed out again in the module-slice
+fixture at its 720-second limit while its nested Cargo check waited for healthy
+compiler admission. This is an active validation blocker for PR 778. The
+feature branch was rebased onto `origin/main` at
+`f16c31760aff94a1d91bbbbfac4d024873942ce5`; the range-diff preserves the 14
+earlier feature commits, including the upstream `CommandIsolation` note at the
+merged documentation insertion point. Formatting, typechecking, and Mermaid
+validation passed on the rebased candidate. The full test gate failed, and
+resource exhaustion prevented completion of lint, workflow-contract, doc
+coverage, and Markdown validation. PR 778 remains a draft at its old remote
+head and needs a validated update, exact-head review, hosted checks, and merge.
+The 26-file tolerance applies to this feature diff and excludes the separate
+timeout repairs.
 
 [cli-timeout-pr]: https://github.com/leynos/netsuke/pull/913
 [timeout-pr]: https://github.com/leynos/netsuke/pull/930
@@ -358,6 +364,28 @@ remains `1747496f`, and the original combined candidate is preserved under
   scenarios landed. All local gates passed on the pre-rebase candidate; repeat
   them after rebasing onto the updated `origin/main` before closing this
   milestone.
+- [x] (2026-10-20) Rebased onto `origin/main` at `f16c3176` with `zdiff3`. The
+  three-way conflict at the shared insertion point in
+  `docs/developers-guide.md` was resolved by preserving the upstream
+  `CommandIsolation` paragraph and retaining the shell-selection subsection
+  immediately after it. The design guide auto-merged. `range-diff` confirms the
+  earlier feature commits are preserved; final updated-base gates remain
+  pending.
+- [x] (2026-10-20) Ran the post-rebase gates sequentially on local head
+  `d4353301`. `make check-fmt`, `make typecheck`, and `make nixie` passed.
+  `make test` reported 4,275 passes, then timed out
+  `production_build_module_slice_has_expected_boundary` at 720.037 seconds; six
+  cases were skipped and 24 were not run after fail-fast. Its child
+  package-scoped Cargo check was still alive with compiler requests queued;
+  `build-limits-status` reported healthy admission. `make lint` passed Cargo
+  doc and Clippy, then Whitaker hit `No space left on device` while compiling
+  `unic-langid-impl`. The workflow-contract, doc-coverage, and Markdown gates
+  could not produce valid results under the exhausted filesystem. The logs are
+  `/tmp/test-f900fc37-c6fe-4ed1-8700-ec572d9952c3-11-2-1-add-the-manifest-facing-shell-selection-vocabulary-2.out`,
+  `/tmp/lint-f900fc37-c6fe-4ed1-8700-ec572d9952c3-11-2-1-add-the-manifest-facing-shell-selection-vocabulary-5.out`,
+  and the corresponding `check-fmt`, `typecheck`, `test-workflow-contracts`,
+  `doc-coverage`, `markdownlint`, and `nixie` logs in `/tmp`. No timeout-policy
+  change has been made; determine and validate the remedy before closing EP-M2.
 - [ ] EP-M3: documentation, roadmap entry marked done, plan `COMPLETE`.
 
 ## Surprises & discoveries
@@ -383,6 +411,15 @@ remains `1747496f`, and the original combined candidate is preserved under
   isolated compile/stub/package tests 900 seconds, and the CI whole run 960
   seconds. The default remains 300 seconds. The fresh 4,080-test baseline
   passed under that current policy; no historical budget is being restored.
+- Observation (2026-10-20): the scoped
+  `cargo check --package netsuke-build --lib --all-features` in the
+  module-slice fixture remained alive when Nextest terminated its 720-second
+  allowance. The compiler supervisor was healthy with all four slots held and a
+  large queue, and the child rustc wrappers were waiting for admission without
+  compiler diagnostics. This identifies queue wait as the cause of this
+  occurrence; it does not show a source failure. Related cold-build fixtures
+  have 900-second allowances below the 960-second CI run cap. Whether to extend
+  this fixture to the same allowance remains to be implemented and validated.
 - Observation (2026-10-17): O4's prose miscounted the unchanged support matrix;
   six of eight cells are true, two false. D6's old `Named("n")` example was
   obsolete after D8 reserved `n`; `Named("null")` is the valid scalar-like
@@ -737,6 +774,15 @@ but #778's updated head still needs its own gates and hosted review. The
 earlier combined candidate's 3,370-test result and EP-M1's FULL5/FULL6 results
 remain historical evidence. The feature's exclusive diff retains its approved
 file and line limits, and the timeout repair stays in its separate lower PR.
+
+The feature rebase onto `f16c3176` was conflict-reviewed and preserved the
+feature commit series. Its first final gate sequence did not reach equilibrium:
+the module-slice fixture timed out at 720.037 seconds while the healthy
+compiler-admission pool was busy, and the later lint and documentation gates
+were affected by filesystem exhaustion. Formatting, typechecking, and Mermaid
+validation passed, but the remaining candidate gates and exact-head hosted
+review are outstanding. The remote PR has not been updated, and no merge claim
+is made from the previous-head checks.
 
 The earlier combined candidate passed 3,370 Nextest tests and 39 doctests;
 these are historical results, distinct from the prerequisite's fresh run. That
