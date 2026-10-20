@@ -273,77 +273,132 @@ fn workflows_agree_with_the_pinned_toolchain(
         rustflags: expected_rustflags,
         pin,
     } = expectation;
-    let expected_action = &format!("{action}@{}", shared_actions_sha()?);
+    let named = JobRef { path, job };
     let workflow: YamlValue = serde_yaml::from_str(&read_repo_file(Utf8Path::new(path))?)
         .with_context(|| format!("parse {path}"))?;
     ensure!(
         yaml_str(&workflow, &["jobs", job, "env", "RUSTFLAGS"]).is_none(),
-        "{path} job {job} should pass RUSTFLAGS through the shared action input"
+        "{named} should pass RUSTFLAGS through the shared action input"
     );
     let steps = workflow
         .get("jobs")
         .and_then(|jobs| jobs.get(job))
         .and_then(|job_value| job_value.get("steps"))
         .and_then(YamlValue::as_sequence)
-        .with_context(|| format!("{path} job {job} should declare steps"))?;
-    let shared_action = steps
-        .iter()
-        .find(|step| yaml_str(step, &["uses"]) == Some(expected_action.as_str()))
-        .with_context(|| format!("{path} job {job} should use {expected_action}"))?;
+        .with_context(|| format!("{named} should declare steps"))?;
+    let expected_action = &format!("{action}@{}", shared_actions_sha()?);
+    let shared_action = find_shared_action(steps, named, expected_action)?;
     let rustflags = yaml_str(shared_action, &["with", "rustflags"]);
     ensure!(
         rustflags == expected_rustflags,
         "{path} {expected_action} passes {rustflags:?}, expected {expected_rustflags:?}"
     );
-    let toolchain_env = yaml_str(&workflow, &["jobs", job, "env", "NETSUKE_RUST_TOOLCHAIN"]);
-    let toolchain_input = yaml_str(shared_action, &["with", "toolchain"]);
+    ensure_toolchain_pin(
+        &ToolchainWiring {
+            named,
+            toolchain_env: yaml_str(&workflow, &["jobs", job, "env", "NETSUKE_RUST_TOOLCHAIN"]),
+            toolchain_input: yaml_str(shared_action, &["with", "toolchain"]),
+        },
+        pin,
+    )
+}
+
+/// Name one workflow job for diagnostics: its file path and job identifier.
+///
+/// The two strings always travel together and are only ever read to build a
+/// message, so grouping them keeps the helpers that describe a job from
+/// growing argument lists of interchangeable strings.
+#[derive(Clone, Copy)]
+struct JobRef<'a> {
+    /// The workflow file the job is declared in.
+    path: &'a str,
+    /// The job's identifier within that file.
+    job: &'a str,
+}
+
+impl std::fmt::Display for JobRef<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} job {}", self.path, self.job)
+    }
+}
+
+/// Find the step invoking the shared action named by `expected_action`.
+fn find_shared_action<'a>(
+    steps: &'a [YamlValue],
+    named: JobRef<'_>,
+    expected_action: &str,
+) -> Result<&'a YamlValue> {
+    steps
+        .iter()
+        .find(|step| yaml_str(step, &["uses"]) == Some(expected_action))
+        .with_context(|| format!("{named} should use {expected_action}"))
+}
+
+/// Where one job's toolchain plumbing reads from, as the workflow declares it.
+struct ToolchainWiring<'a> {
+    /// The job the assertions below describe.
+    named: JobRef<'a>,
+    /// The job's `NETSUKE_RUST_TOOLCHAIN` value, or `None` when it omits one.
+    toolchain_env: Option<&'a str>,
+    /// What the shared action receives as its `toolchain` input, or `None`.
+    toolchain_input: Option<&'a str>,
+}
+
+/// Assert the job obtains its channel the way `pin` describes.
+fn ensure_toolchain_pin(wiring: &ToolchainWiring<'_>, pin: ToolchainPin) -> Result<()> {
+    let ToolchainWiring {
+        named,
+        toolchain_env,
+        toolchain_input,
+    } = *wiring;
     match pin {
         ToolchainPin::JobEnv => {
             let expected = pinned_toolchain()?;
             let toolchain = toolchain_env
-                .with_context(|| format!("{path} job {job} should pin NETSUKE_RUST_TOOLCHAIN"))?;
+                .with_context(|| format!("{named} should pin NETSUKE_RUST_TOOLCHAIN"))?;
             ensure!(
                 toolchain == expected,
-                "{path} job {job} pins {toolchain:?}, but rust-toolchain.toml pins {expected:?}"
+                "{named} pins {toolchain:?}, but rust-toolchain.toml pins {expected:?}"
             );
-            // A pin nothing reads is not a pin. `env` resolves per job, so a
-            // step that names a variable only another job declared expands to
-            // the empty string rather than failing: the job pins the toolchain,
-            // the compiler resolves from ambient state, and the two disagree in
-            // silence.
-            ensure!(
-                toolchain_input == Some(ENV_TOOLCHAIN_INPUT),
-                "{path} job {job} pins NETSUKE_RUST_TOOLCHAIN but passes {toolchain_input:?} to \
-                 `Setup Rust`, expected {ENV_TOOLCHAIN_INPUT:?}: an empty input selects the \
-                 action's rust-toolchain-file arm, which resolves the compiler from ambient \
-                 state and ignores the pin"
-            );
+            // A pin nothing reads is not a pin: `env` resolves per job, so a
+            // step naming a variable only another job declared expands to the
+            // empty string rather than failing, and the two disagree in silence.
+            ensure_pin_is_read(named, toolchain_input)
         }
         ToolchainPin::CallerInput => {
             ensure!(
                 toolchain_env == Some(INPUT_TOOLCHAIN_ENV),
-                "{path} job {job} should read NETSUKE_RUST_TOOLCHAIN from the caller's \
+                "{named} should read NETSUKE_RUST_TOOLCHAIN from the caller's \
                  `rust-toolchain` input, found {toolchain_env:?}"
             );
-            ensure!(
-                toolchain_input == Some(ENV_TOOLCHAIN_INPUT),
-                "{path} job {job} reads the caller's toolchain but passes {toolchain_input:?} \
-                 to `Setup Rust`, expected {ENV_TOOLCHAIN_INPUT:?}"
-            );
+            ensure_pin_is_read(named, toolchain_input)
         }
         ToolchainPin::Absent => {
             ensure!(
                 toolchain_env.is_none(),
-                "{path} job {job} should not override NETSUKE_RUST_TOOLCHAIN, found \
-                 {toolchain_env:?}"
+                "{named} should not override NETSUKE_RUST_TOOLCHAIN, found {toolchain_env:?}"
             );
             ensure!(
                 toolchain_input != Some(ENV_TOOLCHAIN_INPUT),
-                "{path} job {job} reads {ENV_TOOLCHAIN_INPUT} without pinning \
-                 NETSUKE_RUST_TOOLCHAIN, so the expression resolves to the empty string"
+                "{named} reads {ENV_TOOLCHAIN_INPUT} without pinning NETSUKE_RUST_TOOLCHAIN, \
+                 so the expression resolves to the empty string"
             );
+            // This arm makes two assertions rather than returning a helper's
+            // result, so it supplies the arm's value itself; `ensure!` expands
+            // to an `if` without an `else` and is worth `()` on success.
+            Ok(())
         }
     }
+}
+
+/// Assert the shared action is told to use the pinned channel: an empty
+/// `toolchain` input selects the rust-toolchain-file arm and ignores the pin.
+fn ensure_pin_is_read(named: JobRef<'_>, toolchain_input: Option<&str>) -> Result<()> {
+    ensure!(
+        toolchain_input == Some(ENV_TOOLCHAIN_INPUT),
+        "{named} declares NETSUKE_RUST_TOOLCHAIN but passes {toolchain_input:?} to \
+         `Setup Rust`, expected {ENV_TOOLCHAIN_INPUT:?}"
+    );
     Ok(())
 }
 

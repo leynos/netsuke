@@ -27,6 +27,12 @@ fn duplicate_rule_recipe_reports_the_second_of_two_identical_rules() {
 
 /// Different recipes, and the same text under different recipe keys, are not
 /// duplicates.
+///
+/// The last case differs only in the isolation mode. The serialized recipe
+/// records `command_isolation` for an isolated entry, so the two entries lower
+/// to distinct actions with distinct identities: reporting them as duplicates
+/// would be a false positive, and would contradict the rule's own rationale
+/// that Netsuke already deduplicates the generated action.
 #[rstest]
 #[case(concat!(
     "netsuke_version: \"1.0.0\"\n",
@@ -53,6 +59,24 @@ fn duplicate_rule_recipe_reports_the_second_of_two_identical_rules() {
     "    rule: as_command\n",
     "  - name: b\n",
     "    rule: as_script\n",
+))]
+#[case(concat!(
+    "netsuke_version: \"1.0.0\"\n",
+    "rules:\n",
+    "  - name: shared_state\n",
+    "    command:\n",
+    "      - cd nested\n",
+    "      - pwd\n",
+    "  - name: isolated_state\n",
+    "    command_isolation: isolated\n",
+    "    command:\n",
+    "      - cd nested\n",
+    "      - pwd\n",
+    "targets:\n",
+    "  - name: a\n",
+    "    rule: shared_state\n",
+    "  - name: b\n",
+    "    rule: isolated_state\n",
 ))]
 fn duplicate_rule_recipe_leaves_distinct_rules_alone(#[case] yaml: &str) {
     crate::assert_lint_silent!(yaml, "duplicate-rule-recipe");

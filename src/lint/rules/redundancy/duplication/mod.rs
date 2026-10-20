@@ -66,10 +66,16 @@ impl ManifestRule for DuplicateRuleRecipe {
 /// Build a canonical key that two identical recipes share.
 ///
 /// The key names the recipe kind so that a `command` and a `script` holding
-/// the same text are not mistaken for duplicates.
+/// the same text are not mistaken for duplicates. The isolation mode joins the
+/// key because action identity is a hash of the serialized recipe, which
+/// records `command_isolation` only when an entry is isolated: two rules
+/// differing only in that field lower to two distinct actions, so reporting
+/// them as duplicates would be wrong.
 fn recipe_key(recipe: &Recipe) -> String {
     match recipe {
-        Recipe::Command { command } => format!("command:{:?}", command.to_string_vec()),
+        Recipe::Command { command, isolation } => {
+            format!("command:{:?}:{:?}", command.to_string_vec(), isolation)
+        }
         Recipe::Script { script } => format!("script:{script}"),
         Recipe::Rule { rule } => format!("rule:{:?}", rule.to_string_vec()),
     }

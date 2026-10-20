@@ -198,7 +198,7 @@ fn resolves_to_directory<'rules>(
     active: &mut BTreeSet<&'rules str>,
 ) -> bool {
     match recipe {
-        Recipe::Command { command } => {
+        Recipe::Command { command, .. } => {
             let commands = command.to_string_vec();
             !commands.is_empty() && commands.iter().all(|text| is_mkdir(text))
         }

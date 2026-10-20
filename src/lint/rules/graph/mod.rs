@@ -194,7 +194,7 @@ fn collect_recipe_texts<'manifest>(
     texts: &mut Vec<String>,
 ) {
     match recipe {
-        Recipe::Command { command } => texts.extend(command.to_string_vec()),
+        Recipe::Command { command, .. } => texts.extend(command.to_string_vec()),
         Recipe::Script { script } => texts.push(script.clone()),
         Recipe::Rule { rule } => {
             for name in rule.to_string_vec() {
