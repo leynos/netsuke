@@ -328,9 +328,9 @@ the conflict in `Decision log` before proceeding.
   twice, and none was predicted by `merge-tree`. Weave artefacts stripped;
   three files restored from `main` after proving the branch's net effect on
   each was zero. See the revision note for the full account.
-- [ ] (2026-10-21) Re-run the seven-gate set on the rebased revision. A rebase
+- [x] (2026-10-21) Re-run the seven-gate set on the rebased revision. A rebase
   carries no approval forward, and the rebase record is itself a Markdown edit
-  the sweep must follow.
+  the sweep must follow. All seven pass on `2fb11fbc1`; see the revision note.
 - [ ] (2026-10-21) Push the rebased branch under an explicit lease, observe
   hosted CI on the new head, and take the pull request through review to a
   merge.
@@ -2748,3 +2748,51 @@ to be re-run on the rebased tree, and this record is itself a Markdown edit
 that the sweep must follow. The order therefore inverts as it did for earlier
 revisions: this note is committed first, the gates run on the committed
 revision, and the tree is confirmed clean once they finish.
+
+2026-10-21 — the seven-gate sweep on the rebased revision, and a batch that was
+voided before it counted. The rebase record and the reopened `Status:` line
+were committed at 21:55 and 21:57; the first sweep started at 21:56, between
+the two commits, so it read a tree that no longer existed by the time it
+finished. Its `check-fmt` was red, and red for a real reason — four paragraphs
+in the new text were hand-wrapped and `mdtablefix` refilled them differently —
+but the run was already invalid as a batch, because an edit made under a live
+sweep voids that sweep whatever its verdicts. The `-rebase5` logs were kept
+rather than deleted, and are labelled invalid here so a later reader does not
+mistake them for evidence.
+
+The formatting defect was fixed by converging on `mdtablefix`'s fixpoint rather
+than by accepting one pass: two passes were run and compared byte-for-byte
+before the result was written back, because a single pass is not guaranteed to
+be terminal. The `-rebase6` sweep then ran on the committed revision
+`2fb11fbc1`, with the tree clean before and after.
+
+All seven targets pass, once each, sequentially, in the mandated order. Log
+mtimes are strictly increasing across the run, which is the cheap check that
+the ordering actually held:
+
+| Gate                           | Status | Duration | Log                                                                     |
+| ------------------------------ | ------ | -------- | ----------------------------------------------------------------------- |
+| `make check-fmt`               | pass   | 3s       | `/tmp/check-fmt-gate-rebase6-adopt-rstest-bdd-v0-6-0.out`               |
+| `make lint`                    | pass   | 613s     | `/tmp/lint-gate-rebase6-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make typecheck`               | pass   | 46s      | `/tmp/typecheck-gate-rebase6-adopt-rstest-bdd-v0-6-0.out`               |
+| `make markdownlint`            | pass   | 18s      | `/tmp/markdownlint-gate-rebase6-adopt-rstest-bdd-v0-6-0.out`            |
+| `make nixie`                   | pass   | 1s       | `/tmp/nixie-gate-rebase6-adopt-rstest-bdd-v0-6-0.out`                   |
+| `make test`                    | pass   | 247s     | `/tmp/test-gate-rebase6-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make test-workflow-contracts` | pass   | 105s     | `/tmp/test-workflow-contracts-gate-rebase6-adopt-rstest-bdd-v0-6-0.out` |
+
+`make test` reports 4311 tests run, 4311 passed, 6 skipped, plus 154 doctests
+across three targets (113 + 2 + 39). `make test-workflow-contracts` reports
+1324 passed, 3 skipped, and its companion script suite adds 27. `make lint`
+reaches every stage: Pylint 10.00/10 and the house-lint aggregate at 100.0%.
+
+The counts rose from the previous sweep's 3919 and 1107, and the rise is not
+this branch's: the rebase brought upstream commits in, and those carry their
+own tests. Recording the numbers without that explanation would read as
+tampering. `make lint` took 613s because it queued on the shared compiler
+admission pool and the sccache server was not serving compilations during the
+run — the log says `compiling without the cache` — so the duration measures
+contention, not this gate's cost.
+
+This entry is itself a Markdown edit, so the four gates that can see
+`docs/execplans/` — `check-fmt`, `markdownlint`, `nixie` and `spelling` — must
+be re-run on the commit that carries it.
