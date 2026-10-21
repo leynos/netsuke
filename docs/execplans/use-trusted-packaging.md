@@ -744,12 +744,14 @@ cap on workflow YAML — no such contract exists. `release.yml` is 685 lines on
   `bash -n`-based syntax check over each composite action's `run` blocks — and
   is wired into `lint` alongside `github-actions-lint`. It cannot be appended to
   `github-actions-lint` itself; see `Surprises & discoveries` for the
-  positional pin that forbids it. The target's first run is green only after
-  two pre-existing defects in the existing five manifests are repaired:
-  `windows-msi-upgrade-validation/action.yml` gains a `---` document start, and
-  `windows-gate-cache/action.yml` loses its trailing blank line. Both are
-  recorded in `Surprises & discoveries`; neither file is otherwise touched by
-  this branch, and neither repair adds an exemption.
+  positional pin that forbids it. The two pre-existing defects in the existing
+  five manifests — `windows-msi-upgrade-validation/action.yml` missing its
+  `---` document start, and `windows-gate-cache/action.yml` carrying a trailing
+  blank line — were repaired ahead of this target, in commit `b07de6038`, so
+  its first run is green on the threshold and any red it reports is
+  attributable to the manifests this branch adds. Both findings and both
+  repairs are recorded in `Surprises & discoveries`; neither file is otherwise
+  touched by this branch, and neither repair adds an exemption.
 - `.github/workflows/ci.yml`: run the new targets in `build-test`.
 - `docs/developers-guide.md`: the release runbook — job graph, package and
   asset identity contract, provenance verification, re-run procedure, and
@@ -1762,6 +1764,24 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   is a constraint to design around rather than one this branch may edit away.
   The stale local `main` is 107 commits behind `origin/main`; every provenance
   check must name `origin/main` and not the local ref.
+- [x] (2026-10-21) Settled the other Stage C unknown blocking the composite
+  actions: where `--commit` comes from. Every action and job that needs the
+  candidate commit reads `${{ github.sha }}` into an `env:` key and passes it
+  through a declared `commit` input, so the value crosses the action boundary
+  as an ordinary declared input rather than as a hidden ambient read. Rationale
+  and the rejected alternative (resolving the tag to a commit) are in the
+  Decision log. Gate batch over this plan-only delta: `check-fmt`, `lint`,
+  `typecheck`, `markdownlint`, `nixie`, and `test` all exited zero, covering
+  plan content hash `eff285ff`. Committed at `f07fcaa38`.
+- [x] (2026-10-21) Corrected a now-stale Stage D bullet. It read as a
+  prediction — the composite-action lint target "is green only after two
+  pre-existing defects … are repaired" — but both repairs landed in
+  `b07de6038`, so the target's first run is green on the threshold and this
+  branch's own manifests are what any red is attributable to. Re-read the
+  source rather than trusting the note: `head -1 | cat -A` on
+  `windows-msi-upgrade-validation/action.yml` shows `---$`, and
+  `tail -c 60 | cat -A` on `windows-gate-cache/action.yml` ends at the cache
+  key with no trailing newline beyond it.
 
 ## Surprises & discoveries
 
