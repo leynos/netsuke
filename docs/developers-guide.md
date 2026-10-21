@@ -6419,14 +6419,17 @@ target still runs across the workspace. Each of those asserts a true statement
 about a different thing, and none observes that a source has opted out.
 
 `tests/env_access_suppressions.rs` closes that gap. It reads the compiled
-sources — `src`, `build_l10n_audit`, `test_support/src`, `tests`, `benches`,
-`examples`, and `build.rs` — and fails when an `#[allow(...)]` or
-`#![allow(...)]` attribute names a lint that carries the policy. The roots are
-the ones the workspace lints rather than the ones a convention calls source.
-`tests`, `benches`, and `examples` are in scope because Cargo discovers targets
-in all three and `--all-targets` compiles and lints them, and the modules they
-wire in, exactly as it lints the library, so an inner attribute there silences
-the policy for a whole test, benchmark, or example binary just the same.
+sources — `src`, `build_l10n_audit`, `test_support/src`, `build_slice_fixture`,
+`tests`, `benches`, `examples`, and `build.rs` — and fails when an
+`#[allow(...)]` or `#![allow(...)]` attribute names a lint that carries the
+policy. The roots are the ones the workspace lints rather than the ones a
+convention calls source. `tests`, `benches`, and `examples` are in scope
+because Cargo discovers targets in all three and `--all-targets` compiles and
+lints them, and the modules they wire in, exactly as it lints the library, so
+an inner attribute there silences the policy for a whole test, benchmark, or
+example binary just the same. `build_slice_fixture` is in scope because it is a
+workspace member that `cargo clippy --workspace` lints, and it pulls in
+production sources through `#[path]`.
 
 Within a root the scan reads every file that is not dot-prefixed, rather than
 only the `*.rs` files, because a `.rs` name is not something the compiler
