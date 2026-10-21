@@ -744,7 +744,12 @@ cap on workflow YAML — no such contract exists. `release.yml` is 685 lines on
   `bash -n`-based syntax check over each composite action's `run` blocks — and
   is wired into `lint` alongside `github-actions-lint`. It cannot be appended to
   `github-actions-lint` itself; see `Surprises & discoveries` for the
-  positional pin that forbids it.
+  positional pin that forbids it. The target's first run is green only after
+  two pre-existing defects in the existing five manifests are repaired:
+  `windows-msi-upgrade-validation/action.yml` gains a `---` document start, and
+  `windows-gate-cache/action.yml` loses its trailing blank line. Both are
+  recorded in `Surprises & discoveries`; neither file is otherwise touched by
+  this branch, and neither repair adds an exemption.
 - `.github/workflows/ci.yml`: run the new targets in `build-test`.
 - `docs/developers-guide.md`: the release runbook — job graph, package and
   asset identity contract, provenance verification, re-run procedure, and
@@ -2320,6 +2325,42 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   existing action gains the marker; the marker is the smaller change and is
   done in this branch, because a target whose first act is an exemption is the
   shape the mission forbids. Date/Author: 2026-10-20, implementation agent.
+
+- Observation: **the same sweep has a second, separate blocker in
+  `windows-gate-cache/action.yml`.** Evidence: running the Stage D command
+  directly — `yamllint --config-file .yamllint.yml .github/actions` — exits `1`
+  today with two findings, not one:
+  `windows-gate-cache/action.yml:233 too many blank lines (1 > 0)` alongside the
+  `document-start` finding recorded above. The file ends at line 232 and
+  carries a trailing empty line; under `extends: default` the
+  `empty-lines: max-end: 0` rule rejects it. Both findings are pre-existing on
+  `main` — neither file is modified by this branch — so this is a latent defect
+  in the repository, not drift introduced here. Impact: repairing only the
+  missing marker would leave the new target red on its first run, and the
+  obvious next move from there is an exemption for the file that trips it,
+  which is exactly the weakening the mission forbids. Both fixes are therefore
+  in scope: add `---` to `windows-msi-upgrade-validation/action.yml`, and strip
+  the trailing blank line from `windows-gate-cache/action.yml`. Verified by
+  probe rather than assumed: applying both edits to a scratch copy of
+  `.github/actions` makes the sweep exit `0`. Date/Author: 2026-10-21,
+  implementation agent.
+
+- Observation: **this plan carries two different "a blanket sweep is green"
+  claims about two different invariants, and they must not be conflated.**
+  Evidence: the Stage C paragraph beginning "Earlier revisions of this plan
+  justified a path-scoped rule" concerns the **expression-site** rule — no
+  `${{ }}` inside a `run` block — and its claim is correct: re-measured after
+  the rebase, the five existing manifests hold **68** expression sites (7, 17,
+  0, 26, 18 for `kani-cache`, `linux-gate-cache`, `memory-sampler`,
+  `windows-gate-cache`, `windows-msi-upgrade-validation`), matching the plan's
+  per-file figures exactly, and **0** of them sit in a `run` block. The
+  **yamllint** sweep over the same directory is a separate invariant and is
+  **not** green — it exits `1` on the two defects above. Impact: a reader who
+  carries "green today" from the first claim to the second concludes the Stage
+  D target needs no repairs, implements it, watches it red, and reaches for an
+  exemption on its first run. The rule to apply is that each sweep's colour is
+  established by running that sweep. Date/Author: 2026-10-21, implementation
+  agent.
 - Observation: `runner_placement_invariants.REQUIRED_RUNNER_ASSIGNMENTS` is
   an explicit table of named jobs, so the five new jobs in `release.yml` are
   unconstrained by it and may declare `ubuntu-latest`; the same holds for
