@@ -1708,6 +1708,33 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `test-workflow-contracts` and `test-release-publication` all exit zero.
   Corrected four line-number citations this plan carried and recorded two
   measurements of `main`'s conventions that Stage C must now follow.
+- [x] (2026-10-21) Corrected two of those four citations in the pass that
+  followed, and left the other two alone after re-deriving them — the first is
+  rebase-induced (`docs/developers-guide.md:1361-1362` → `:1415-1416`) and the
+  second is a pre-existing inaccuracy in a branch-owned file
+  (`release_inventory.py:319` → `:318`), while `verify_crates_io_bytes` and
+  `nextest_durations` are correct as written. The DOC502 citation at
+  `release_reconcile_crates.py:161` was challenged and **survived**: probing
+  `ruff check --preview --select DOC502` against the named commit reports
+  `:161:5`, the docstring's opening line, so the number was right and the gap
+  was provenance — the rule is Ruff's own preview rule, not a df12 Pylint
+  plugin rule, which rates the same blob 10.00/10. Committed at `958fdf68c`,
+  force-pushed with the lease bound to `75fd9195f`.
+- [x] (2026-10-21) Repaired the two latent composite-action lint defects the
+  Stage D target would trip on, in `windows-msi-upgrade-validation/action.yml`
+  (added the `---` document start) and `windows-gate-cache/action.yml` (removed
+  the trailing blank line). Both pre-exist on `main` and are outside every
+  existing target's reach, which is why they were invisible. Measured both
+  directions rather than assumed: the pre-repair content still yields exactly
+  the two findings, the repaired content yields none, and all five manifests
+  still parse with their names and step counts. Committed at `b07de6038`, tree
+  `f8cf6c91`, after `check-fmt`, `markdownlint`, `lint`, `typecheck`, `test`,
+  and `test-workflow-contracts` all exited zero. Also recorded in this plan
+  that its two "a blanket sweep is green today" statements concern
+  **different** invariants — the expression-site rule (green: 68 sites, 0 in a
+  `run` block) and the yamllint sweep (red before this commit) — because
+  conflating them is how the Stage D target gets written with no repairs and
+  then acquires an exemption.
 
 ## Surprises & discoveries
 
