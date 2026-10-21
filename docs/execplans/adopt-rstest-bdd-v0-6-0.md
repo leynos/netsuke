@@ -16,6 +16,19 @@ in `Surprises & discoveries` and `Decision log`. The full gate set runs green
 at the delivered revision, with every stage of every gate reached; see
 `### Gate logs`.
 
+A later phase corrected the defect upstream rather than in this repository. The
+dependency-driven half of the same root cause — `rstest-bdd` enabling tracing's
+`log` feature unconditionally — was fixed on 2026-10-21 in `leynos/rstest-bdd`
+branch `fix/log-bridge-feature`, commit `a1bc187c`: the bridge is now the
+default-enabled `log-bridge` feature, so a consumer can decline it while the
+existing `env_logger` behaviour is unchanged. That upstream work is complete
+and its gates are green. It is **not** delivered into this repository, because
+no release containing it exists: crates.io still publishes `rstest-bdd` 0.6.0
+as its newest version, and the fix is in no tag. The residual gap is recorded
+under `Outcomes & retrospective` and is the reason the hoisting refactor
+remains in place. The four-part recurrence work (a Clippy correction for
+generated branching) has not started.
+
 Roadmap item: none. Origin: `leynos/rstest-bdd` v0.6.0 release and its
 `docs/v0-6-0-migration-guide.md`.
 
@@ -256,6 +269,30 @@ the conflict in `Decision log` before proceeding.
   sweep on one en-GB token, `reorganisation`, at line 233 of this plan, which
   `typos.toml` maps to `-z-`; both it and `markdownlint` (whose recipe is
   `markdownlint: spelling`) were failing on that word alone.
+- [x] (2026-10-21) Correct the defect upstream. Resolved
+  `leynos/rstest-bdd` at commit `b9fb7cb0` before changing it, then moved
+  tracing's `log` compatibility bridge out of the unconditional dependency
+  declaration and into an independently selectable, default-enabled
+  `log-bridge` feature, making the `log` crate optional. `ADR-024` in that
+  repository records the decision, and `ADR-020` gains an amendment. Committed
+  as `a1bc187c` on branch `fix/log-bridge-feature`.
+- [x] (2026-10-21) Add the upstream regression coverage the correction needs:
+  two generated-consumer test binaries, one asserting the resolved feature
+  graph through both a normal and a dev dependency path, the other reproducing
+  the downstream Clippy failure with the bridge on and off. Dependency-feature
+  checks and runtime-warning checks stay in separate binaries.
+- [x] (2026-10-21) Run the upstream gate set on the frozen content and record
+  each verdict. Nine targets pass, plus a re-run of the two that the last edit
+  to `crates/rstest-bdd/Cargo.toml` could have affected. See
+  `### Upstream correction gate logs`.
+- [ ] (blocked) Integrate the released correction into this repository. This
+  needs a published `rstest-bdd` release that contains `a1bc187c`; the newest
+  published version is still 0.6.0, so there is nothing to depend on. Recorded
+  under `Outcomes & retrospective`.
+- [ ] (not started) Prepare the recurrence correction: a Clippy
+  `cognitive_complexity` change that excludes generated branching without
+  excluding source-written branching. Not required for this repository's
+  current green state, which the hoisting refactor already secures.
 
 ## Surprises & discoveries
 
@@ -713,6 +750,40 @@ the conflict in `Decision log` before proceeding.
   prefixes, not suffixes — it would fire the moment a `command_logging.rs`
   appeared beside it.
 
+- Observation: the honest probe the plan calls "the honest probe" is not the
+  same as `make lint` when the question is whether a *nested* consumer sees the
+  diagnostic. The Clippy reproduction binary shells out to
+  `cargo clippy --all-targets` in a generated crate, and both `make lint` and
+  `make test` export `RUSTFLAGS=-D warnings` for the workspace. `rustc` applies
+  the **last** lint-level flag, so an inherited `-D warnings` lands after the
+  probe's own `-- -W clippy::cognitive_complexity` and turns the measurement
+  into an abort. The probe would then fail reporting a number it never
+  obtained. Both the probe's nested invocations therefore remove `RUSTFLAGS`
+  *and* `CARGO_ENCODED_RUSTFLAGS` — Cargo honours either, so stripping one
+  leaves the defect live whenever a gate changes which it sets. Recorded in
+  `crates/rstest-bdd/tests/feature_graph/support/mod.rs` beside the constant
+  that names them.
+- Observation: the watchdog defect the upstream correction exposes was already
+  latent, and the earlier record in `Surprises & discoveries` about the
+  corrected three-term rule had stopped being true. `126d89a1` set the watchdog
+  to 6,600 s from a premise that commit itself records as wrong
+  (`75 m + 20 m + 15 m`). `9f353388` corrected the premise to
+  `4,500 + 65 + 900 = 5,465 s`, but left the watchdog where it was, so the
+  inflated figure kept passing the contract by accident. Raising the
+  `global-timeout` to 95 m moves the requirement to
+  `5,700 + 65 + 900 = 6,665 s`, which 6,600 no longer covers. The lesson is the
+  plan's own recurring one about provenance: a value chosen from a wrong
+  premise keeps working until the premise changes underneath it, and a contract
+  that only ever sees one pair of numbers cannot tell a corrected rule from the
+  one it replaced.
+- Observation: the two new test binaries were invisible to `cargo clippy` and
+  to `make test`, and failed only under `make lint`. Whitaker's
+  `no_unwrap_or_else_panic` Dylint lint denied `unwrap_or_else` on a
+  `Result<&Path, StripPrefixError>` in a test-support helper, which is the
+  exact shape the lint exists to catch. Neither `cargo clippy` nor `make test`
+  runs Dylint, so a green focused run proved nothing about that stage. The
+  helper now uses `let … else { panic!(…) }`, and the comment records why.
+
 ## Imported-document provenance and link mapping
 
 Both files were copied with `cp` from the pinned checkout; no editing tool
@@ -935,6 +1006,67 @@ the link site.
   `src/runner/process/command_logging_emitters.rs`. All four emitter modules
   are new files, and every edited file is now within the cap.
 
+- Decision: **fix the dependency contract upstream rather than only working
+  around it here.** The hoisting refactor removes this repository's 39 errors,
+  but the cause is a dependency that offers its consumers no opt-out: any other
+  project depending on `rstest-bdd` 0.6.0 meets the same inflation, and
+  `default-features = false` cannot help because the feature was requested
+  inside `[dependencies.X]`. Netsuke's workaround is therefore a workaround for
+  a defect in somebody else's manifest, and the fix belongs there. Date/Author:
+  2026-10-21, implementing agent.
+
+  The alternative — filing a request and waiting — was rejected because the
+  correction is small, entirely within the upstream crate's declared feature
+  surface, and verifiable from the outside by the same generated-consumer
+  technique this repository already used to diagnose the problem. Requirement 3
+  is nonetheless still blocked on a published release, so nothing about this
+  repository's dependency line changes in this phase.
+
+- Decision: **keep `log-bridge` in the upstream crate's `default` feature
+  set.** ADR-020 promised that an `env_logger` consumer keeps receiving
+  step-context warnings. Disabling the bridge by default would break that
+  promise silently, in a way only a consumer with a `log` logger would notice.
+  The defect being fixed is the *absence of an opt-out*, not the bridge's
+  existence, so a default-enabled feature is the compatible fix and the
+  no-default-features path is the documented one for a consumer running a
+  `tracing` subscriber. Requirement 1 permits either policy provided the choice
+  is documented and unrelated runtime behaviour is untouched; ADR-024 records
+  this one and the reasoning.
+
+  Rejected: making the bridge opt-in. It would restore the pre-ADR-020
+  behaviour for every existing consumer, which is a larger and unrequested
+  change than the one the evidence supports.
+
+- Decision: **reproduce the Clippy failure in a generated consumer with a
+  threshold of zero, not Napkin's nine.** A separate test binary runs
+  `cargo clippy --all-targets` over a generated crate carrying a `clippy.toml`.
+  Clippy reports a measured value only when it exceeds the configured
+  threshold, so at nine a consumer that stays under the bar prints nothing —
+  and an unreported value is indistinguishable from a probe that never ran. The
+  real bar is asserted by the test on the number Clippy reports. The same
+  reasoning governs the diagnostic flags: the probe compiles under
+  `-W clippy::cognitive_complexity` rather than `-D`, because the lint is a
+  Clippy *nursery* lint allowed by default and a denied one would abort the
+  build instead of reporting. Date/Author: 2026-10-21, implementing agent.
+
+- Decision: **raise the upstream `global-timeout` from 75 m to 95 m and the
+  watchdog from 6,600 s to 6,665 s, rather than leaving the new binaries
+  outside the nextest budget.** The two new members are generated-consumer
+  compiler runs and belong in the serialized `cargo-spawning` group, which puts
+  them inside the run-level clock. Sizing the ceiling from the previous value
+  plus the wall clock each new member can consume is the rule the plan's own
+  timeout-arithmetic decisions state. The old claim that the global timeout was
+  the *sum* of the group's members is withdrawn, because a literal sum runs to
+  most of a day and was never the property the contract asserted; what it
+  asserts, and what is now documented, is that the global timeout exceeds every
+  individual member's `slow-timeout`. Date/Author: 2026-10-21, implementing
+  agent.
+
+  Rejected: keeping 75 m and shortening the new overrides. The measurement the
+  reproducers perform is a cold compile of the dependency graph twice over, and
+  a budget that small would turn a slow machine into a false failure — which is
+  the failure mode the four-tier doctrine exists to prevent.
+
 ## Outcomes & retrospective
 
 What was achieved. Netsuke's behavioural suite runs on the published
@@ -1023,6 +1155,46 @@ behaviour, which is the behaviour the repository now depends on.
 `make test-podman` was out of scope, as no path under `ansible/` appears in
 this change surface.
 
+The largest residual gap is the upstream correction itself, and it is a gap of
+*delivery*, not of work. The dependency defect — `rstest-bdd` 0.6.0 requesting
+`tracing/log` inside its own `[dependencies.tracing]` table, leaving every
+consumer no way to opt out — is fixed and committed on the branch
+`fix/log-bridge-feature` at `a1bc187c`, with ADR-024 recording the decision and
+the feature-graph and Clippy reproducers proving the fix from a generated
+downstream consumer. None of that reaches this repository while crates.io still
+publishes 0.6.0 as the newest `rstest-bdd`: `Cargo.toml` must name a published
+version, and a `path` dependency or a `[patch]` section would substitute local
+content for the release in a way no other consumer sees, so neither was used.
+The migration therefore stays on `rstest-bdd = "0.6.0"` and the hoisting
+refactor recorded in `Decision log` remains the operative mitigation here. The
+residual risk is exactly that mitigation's cost: 39 functions in source that is
+otherwise untouched were restructured to lower an expanded-AST metric, and that
+restructuring would be unnecessary once a release carrying ADR-024 is
+available. Reverting it is a separate decision with its own evidence
+requirement, not an automatic consequence of the upstream release.
+
+Two further residual gaps, recorded so they are not mistaken for passes.
+Requirement 4 — the Clippy `cognitive_complexity` change that would exclude
+generated branching while preserving traversal into source-written expressions
+passed to macros — has not been started; it is independent of the dependency
+fix and would need its own ExecPlan against a pinned nightly. And the native
+Windows lint job for PR #805 has not been validated: no CI run is reachable
+from this local checkout, so the job is an *unavailable* check rather than a
+passing one. The command it runs is unchanged by this work, which is what makes
+the gap tolerable rather than resolved.
+
+One planning error is worth recording separately from the gate results. The
+planner named up to thirteen upstream gate targets, of which `doc-coverage`,
+`test-coverage-artifact`, `test-documentation-contracts` and
+`check-build-tools` do not exist in the `rstest-bdd` Makefile. Invoking an
+undefined target is a `make` error, but the four were never invoked: the gate
+sweep ran the targets the upstream Makefile actually defines, and the
+nonexistent names are a defect in this plan, not in that repository. They are
+distinguished from the one real failure — the Whitaker
+`no_unwrap_or_else_panic` diagnostic in `tests/feature_graph/support/mod.rs`,
+which was fixed and re-run green — so that "did not exist" and "failed" are not
+collapsed into a single ambiguous "did not pass".
+
 ## Context and orientation
 
 Netsuke is a YAML-powered Ninja/Jinja build system written in Rust. Its
@@ -1079,6 +1251,17 @@ The governing upstream artefacts are:
 - `docs/v0-5-0-migration-guide.md` at tag `v0.5.0`
   (`sha256 508d5b55cb2025915ced366b917a2327e572a6aa920fd290684b858b7afa2abc`),
   consulted because the starting version predates 0.5.0's documented changes.
+- `leynos/rstest-bdd` commit `b9fb7cb0`, the upstream `main` revision the
+  checkout was resolved to *before* the manifest was touched. Recording it
+  separately from the correction matters: without a stated base, "the diff
+  changes only the feature declaration" is an unverifiable claim about a moving
+  branch.
+- `leynos/rstest-bdd` commit `a1bc187c` on branch `fix/log-bridge-feature`,
+  the correction itself, with
+  `docs/adr-024-gate-the-tracing-log-bridge-behind-a-feature.md` as its design
+  artefact and an amendment to `docs/adr-020-…md` recording the change to the
+  earlier contract. The commit is not on `main` and has no published release;
+  that is why this plan's integration milestone is blocked rather than done.
 
 Repository standards: `AGENTS.md` (code style, dependency management, testing,
 documentation maintenance) and `docs/documentation-style-guide.md`.
@@ -1095,6 +1278,15 @@ Trace links:
   `docs/contents.md` → acceptance: `make markdownlint` clean.
 - EP-M5 (validation) → `make test`, `make lint`, `make check-fmt`,
   `make doc-coverage`, `make typecheck` → acceptance: recorded log excerpts.
+- EP-M6 (upstream correction, out of tree) → upstream base `b9fb7cb0`,
+  correction `a1bc187c`, ADR-024 and ADR-020's amendment → acceptance:
+  `tests/feature_graph_contract` reports `tracing/log` absent from the resolved
+  graph of a `default-features = false` consumer and present for a default
+  consumer, and `tests/feature_graph_clippy_reproduction` reports the Clippy
+  complexity figure falling below the threshold once the bridge is switched
+  off. This link terminates outside this repository, which is why it has no
+  Netsuke acceptance item: the correction cannot be observed here until it is
+  released.
 
 ## Verification plan
 
@@ -1668,6 +1860,103 @@ again. The run therefore executes after the commit that adds this section, and
 its verdict is reported in the pull request rather than folded back into this
 plan — folding it back would reopen the same loop a third time.
 
+#### Upstream correction gate logs
+
+These logs belong to the other repository, so they carry no Netsuke branch
+suffix. Each is `/tmp/upstream-<target>-<epoch>.out`, where the suffix is the
+`date +%s` of the invocation; only `lint2` has an `.exit` sidecar, and every
+verdict below was read from the log body rather than from the file's existence.
+The content under test is commit `a1bc187c`, tree `9c658cd6`, in
+`/home/leynos/.lody/repos/github---leynos---rstest-bdd/worktrees/fix-log-bridge-feature`.
+
+| Gate                           | Status                                       | Log                                                    |
+| ------------------------------ | -------------------------------------------- | ------------------------------------------------------ |
+| `make check-fmt`               | pass — 84 Python, 124 Markdown unchanged     | `/tmp/upstream-check-fmt-1792581880.out`               |
+| `make lint`                    | **failed**, then pass — see below            | `/tmp/upstream-lint-1792581032.out`                    |
+| `make lint` (after the fix)    | pass — `[gate exit code] 0`, all stages      | `/tmp/upstream-lint2-1792581714.out`                   |
+| `make typecheck`               | pass — `All checks passed!`                  | `/tmp/upstream-typecheck-1792581893.out`               |
+| `make test`                    | pass — 2084/2084 and 743/743, 7 skipped each | `/tmp/upstream-test-1792582022.out`                    |
+| `make markdownlint`            | pass — 123 files, 0 errors                   | `/tmp/upstream-markdownlint-1792581512.out`            |
+| `make spelling`                | pass                                         | `/tmp/upstream-spelling-1792581556.out`                |
+| `make nixie`                   | pass — all diagrams validated                | `/tmp/upstream-nixie-1792581532.out`                   |
+| `make test-workflow-contracts` | pass — 354 passed in 8.20s                   | `/tmp/upstream-test-workflow-contracts-1792581538.out` |
+| `make check-fixture-lockfiles` | pass — 5 lockfiles up to date                | `/tmp/upstream-check-fixture-lockfiles-1792581571.out` |
+| `pytest scripts/tests`         | pass — 247 passed in 15.80s                  | `/tmp/upstream-scripts-pytest-1792581588.out`          |
+
+**The one real failure, and what it proves.** The first `make lint` aborted in
+`lint-whitaker` with a single diagnostic: `no_unwrap_or_else_panic` at
+`crates/rstest-bdd/tests/feature_graph/support/mod.rs:173`, pointing at
+`path.strip_prefix(base)` and advising "Propagate the error or use expect with
+a descriptive message instead of panicking". The helper was rewritten as a
+`let … else { panic!(…) }` block, which is the form the lint sanctions, and the
+whole of `make lint` was then re-run rather than only the failing stage: the
+second log carries `[start] … head=b9fb7cb0…`, reaches every stage —
+`cargo clippy`, `cargo doc`, Whitaker, `lint-python`, and the five Python check
+scripts — and ends `[gate exit code] 0` with a matching `.exit` sidecar reading
+`0`.
+
+That failure is worth recording for the reason it could not have been caught
+earlier: `cargo clippy` does not run Dylint lints, so an ordinary Clippy pass
+reports green while this diagnostic stands, and the upstream `make test` target
+does not include the Whitaker suite either. Only `make lint` sees it.
+
+**Four targets that do not exist, distinguished from a failure.** The planner
+named `doc-coverage`, `test-coverage-artifact`, `test-documentation-contracts`
+and `check-build-tools` as upstream gates. None is a target in the `rstest-bdd`
+Makefile, and their logs record
+`make: *** No rule to make target '<name>'. Stop.` with exit code 2. This is a
+defect in the plan that named them, not in the repository, and it is recorded
+as *absent* rather than *failed*: an invocation that `make` rejected before
+running anything says nothing about the tree. The targets the upstream Makefile
+actually defines were run instead, and they are the eleven rows above.
+
+**What the run measured, not just that it passed.** The `make test` log shows
+the two new binaries executing inside the full sweep rather than only under a
+filtered invocation: `rstest-bdd::feature_graph_contract` contributes four
+`#[rstest]` cases — normal dependency with and without the bridge, dev
+dependency with and without it — and
+`rstest-bdd::feature_graph_clippy_reproduction` contributes its controlled
+pair. All six appear as `PASS` in both the 2084-test all-features run and the
+743-test `--no-default-features` leg that the upstream `test` target runs
+second, so the bridge-disabled configuration is exercised inside the suite and
+not merely asserted by the manifest's intent. The `nextest_config` contract
+`feature_graph_targets_join_the_cargo_spawning_group` also passes, which is
+what keeps the two compiler-spawning binaries out of the parallel pool.
+
+**Staleness, bounded in two steps.** The amend is the easy half: the logs stamp
+a revision only where the gate echoes one, and the only gate that does is the
+passing `make lint`, whose `[start]` line names `b9fb7cb0` — the pre-commit
+working-tree revision. The amend that produced `a1bc187c` changed the message
+alone, which was checked rather than assumed: `git rev-parse a1bc187c^{tree}`
+and `git rev-parse f1dbff56^{tree}` both return
+`9c658cd61e4ad1d2f8ef152990d5bce5b6724384`.
+
+The harder half is that the sweep read a working tree that kept being edited
+while it ran. The timelines are recoverable from the log suffixes and the file
+modification times: `crates/rstest-bdd/Cargo.toml` was last written at
+13:42:59, after the 13:27:02 `make test` and before the 13:44:57 commit. The
+content of that particular edit is not recoverable from the working tree, so
+what is claimed here is bounded accordingly — the manifest changed after the
+test run, and the test verdict is transferred on the argument that the change
+was to the feature declaration, not on a measurement of the post-edit tree.
+Where the transfer is load-bearing, a gate was re-run instead: `check-fmt` at
+`/tmp/upstream-check-fmt-posttoml-1792583024.out` and `spelling` at
+`/tmp/upstream-spelling-postf1dbff5-1792583221.out` both pass, chosen because
+they read the manifest textually and `spelling` also regenerates `typos.toml`.
+The `check-fmt` re-run also restates the one measurement that does reach the
+manifest's compiled content: `cargo fmt --all -- --check` parses every crate in
+the workspace, so a manifest that had stopped being valid would have failed
+there rather than passing.
+
+**One log that is superseded rather than additional.** An earlier `make test` at
+`/tmp/upstream-test-1792581063.out` also ran 2084/2084 and 743/743 green. It
+predates the `support/mod.rs` rewrite at 13:20:52 that cleared the Whitaker
+diagnostic, so it is not cited as evidence for the delivered content; the
+`-1792582022` run is. The timing difference between the two runs' feature-graph
+rows — 1.1 s and 1.8 s early, 3.8 s and 23.1 s late — is consistent with the
+late run rebuilding what the rewrite changed, but the logs do not record cache
+state, so that is an observation offered as corroboration and not as proof.
+
 ### Session provenance
 
 The work session that produced this migration is recorded at
@@ -1698,6 +1987,17 @@ A later commit re-opens the complexity work, because the rebase brought in a
 site the hoist sweep had not seen. See the rebased sweep below.
 
 The pull request is a draft and has not been merged.
+
+The upstream correction described under `## Outcomes & retrospective` and
+`#### Upstream correction gate logs` lives in a second checkout, not this one:
+`/home/leynos/.lody/repos/github---leynos---rstest-bdd/worktrees/fix-log-bridge-feature`,
+on branch `fix/log-bridge-feature`, resolved from upstream `main` at
+`b9fb7cb0` and committed as `a1bc187c` (tree `9c658cd6`). It is **not** a
+commit on this branch, does not appear in this repository's history, and has
+not been pushed or released. Two consequences follow for anyone resuming:
+`git log` here proves nothing about it, and the branch in that worktree
+currently tracks `origin/main` while being ahead of it, so a naive `git push`
+from it would target the wrong base.
 
 ## Revision note
 
@@ -2011,3 +2311,43 @@ the rebase's `--autostash` was disabled and the tree was confirmed empty before
 and after. The lock file's consistency with the manifests was then checked
 rather than assumed, with `cargo metadata --locked --offline`, which fails if
 the two disagree; it exited 0.
+
+2026-10-21 — upstream correction and recurrence split. The migration's
+completion claim was correct but incomplete: it measured the repository and not
+the dependency contract underneath it. `rstest-bdd` 0.6.0 requests
+`tracing/log` inside its own `[dependencies.tracing]` table, so the bridge is
+unconditional for every consumer and `default-features = false` cannot remove
+it. This plan now records that mechanism, the upstream correction that makes
+the bridge an independently selectable `log-bridge` feature (ADR-024, with
+ADR-020 amended) — 28 added and 5 removed lines in
+`crates/rstest-bdd/Cargo.toml`, 26 and 3 in
+`crates/rstest-bdd/src/context/warnings.rs`, with the rest of the 1,414
+insertions being tests, fixtures and documentation — and the regression
+coverage that binds it — two generated-consumer binaries, one reading the
+resolved feature graph through normal and dev edges, the other reproducing the
+downstream Clippy inflation with the bridge on and off. Section
+`#### Upstream correction gate logs` records eleven upstream gate verdicts,
+including the one genuine failure (`no_unwrap_or_else_panic` under Whitaker,
+which neither `cargo clippy` nor `make test` can see) and four target names
+that the plan invented and the upstream Makefile does not define; the latter
+are recorded as *absent*, not as failures, because a `make` invocation rejected
+before it ran says nothing about the tree.
+
+The plan's `Status:` stays `COMPLETE` for this repository's migration, and the
+integration milestone is marked blocked rather than complete: crates.io still
+publishes 0.6.0 as the newest `rstest-bdd`, so there is no release carrying
+`a1bc187c` to depend on, and substituting a `path` dependency or a `[patch]`
+section would measure local content no other consumer receives. The recurrence
+workstream — a Clippy `cognitive_complexity` change that excludes generated
+branching while preserving traversal into source-written expressions passed to
+macros — is recorded as not started, with its evidence requirements stated, so
+that it is not mistaken for part of this delivery. No Netsuke source, manifest
+or lockfile changed in this revision; the hoisting refactor from `e65044bd`
+remains the operative mitigation here, and its cost is now stated explicitly as
+the price of waiting for the upstream release.
+
+The gate set for this revision is the Markdown-scoped one — `check-fmt`,
+`spelling`, `markdownlint`, `nixie` — because every edit is prose under
+`docs/`. That scoping was not assumed: this document is a gate input only
+through `tests/execplan_status_contract_tests.rs`, which parses the header
+above the first level-two heading, and the edits are far below it.
