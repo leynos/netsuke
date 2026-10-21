@@ -1063,10 +1063,12 @@ Run everything from the repository root,
 
    This was `20` in revision 2. On the rebased tree it is `26`; PR 621, an
    unmerged and stale branch, also holds a file named
-   `docs/adrs/adr-0021-manifest-linting-under-netsuke-check.md`, so 021 would
-   collide on merge even though main has nothing at that number. The ADR is
-   therefore **027**, and every reference in this plan was updated. Step 4 is
-   complete; re-running this step now would find `27` and must not mint a
+   `docs/adr-021-manifest-linting-under-netsuke-check.md` (that branch predates
+   the four-digit `docs/adrs/adr-nnnn-title-slug.md` layout, so its path is
+   quoted as it stands there, not as this repository now names files), so 021
+   would collide on merge even though main has nothing at that number. The ADR
+   is therefore **027**, and every reference in this plan was updated. Step 4
+   is complete; re-running this step now would find `27` and must not mint a
    second record.
 
 4. Write `docs/adrs/adr-0027-command-placeholder-contract.md`, add its entry to
@@ -1892,7 +1894,8 @@ shell variable in *both* recipe kinds is now correct and needs no edit.
   file this plan touches was written, which also moved most line citations; all
   are re-recorded in `Progress`. PR 621, an unmerged and conflicted branch,
   still holds a file named
-  `docs/adrs/adr-0021-manifest-linting-under-netsuke-check.md`; taking 021
+  `docs/adr-021-manifest-linting-under-netsuke-check.md`; that path is quoted
+  as PR 621 has it, since the branch predates the four-digit layout. Taking 021
   would collide on merge, which is a second reason to skip it.
 
 - Observation: `tests/execplan_status_contract_tests.rs`, cited in a prior
