@@ -629,7 +629,12 @@ and test workflow intact. See
   publishes the contract in
   [ADR-030](adr-030-ninja-emission-determinism-contract.md). The larger-N
   hand-off from 4.2.1 is discharged, and each ordering rule is demonstrated by
-  a committed mutation patch that a named property fails.
+  a committed mutation patch that a named property fails. The real-`ninja` arm,
+  `OBL-NINJA`, is implemented and gate-green but not yet green *in substance*:
+  its oracle reaches an open upstream iterator-invalidation defect,
+  [ninja-build/ninja#2662](https://github.com/ninja-build/ninja/issues/2662),
+  whose reproducing seed is deliberately withheld until the emission-shape
+  question is settled. See the ExecPlan's `Risks` entry.
 - [ ] 4.3.2. Add Proptest coverage for manifest expansion invariants. Requires
   4.1.1. See the
   [Proptest section](formal-verification-methods-in-netsuke.md#proptest-for-determinism-and-manifest-semantics).
