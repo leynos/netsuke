@@ -5,9 +5,12 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: COMPLETE
+Status: IN PROGRESS
 
-The migration work is complete and all its behavioural evidence is green. The 39
+The migration work is complete and all its behavioural evidence is green, but
+the plan is open again for delivery: a fourth rebase moved the branch onto a
+new target, which invalidates the previous sweep, and the rebased revision has
+not yet been pushed or gated. Those items are tracked in `Progress`. The 39
 `cognitive_complexity` errors the dependency bump introduces in the
 `make lint` gate were first resolved by hoisting the charged `tracing` macros
 into per-macro emitters across 40 files; the root cause, the cost model, and
