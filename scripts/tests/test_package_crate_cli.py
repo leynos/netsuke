@@ -20,6 +20,7 @@ from package_crate_cli import (
     EXIT_IDENTITY_REJECTED,
     EXIT_OK,
     EXIT_PACKAGING_FAILED,
+    PACKAGE_SUBDIR,
     CratePackage,
     build_parser,
     main,
@@ -83,8 +84,9 @@ def _stub_cargo(monkeypatch: pytest.MonkeyPatch, body: bytes) -> list[list[str]]
         """Record the invocation and stage the crate it would have produced."""
         calls.append(arguments)
         target_dir = pathlib.Path(arguments[arguments.index("--target-dir") + 1])
-        target_dir.mkdir(parents=True, exist_ok=True)
-        (target_dir / CRATE_NAME).write_bytes(body)
+        staging = target_dir / PACKAGE_SUBDIR
+        staging.mkdir(parents=True, exist_ok=True)
+        (staging / CRATE_NAME).write_bytes(body)
         return _Completed(0, "")
 
     monkeypatch.setattr("package_crate_cli.subprocess.run", _run)
@@ -207,12 +209,36 @@ def test_the_packager_refuses_a_destination_holding_a_stale_crate(
     """
     target_dir = tmp_path / "target"
     _ = _stub_cargo(monkeypatch, b"fresh")
-    stale = target_dir / "netsuke-build-0.0.1.crate"
-    target_dir.mkdir(parents=True, exist_ok=True)
+    stale = target_dir / PACKAGE_SUBDIR / "netsuke-build-0.0.1.crate"
+    stale.parent.mkdir(parents=True, exist_ok=True)
     _ = stale.write_bytes(b"stale")
 
     with pytest.raises(RuntimeError, match="exactly one"):
         _ = package_crate(pathlib.Path("Cargo.toml"), target_dir)
+
+
+def test_the_packager_reads_the_cargo_staging_subdirectory(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Read the crate from where ``cargo package`` actually writes it.
+
+    ``cargo package --target-dir`` nests its output: the archive lands in
+    ``<target-dir>/package/``, beside the ``tmp-crate/`` tree verification
+    unpacks into. A reader that globbed the target directory itself would find
+    nothing and report a successful run as a failure, which is the defect this
+    pins. The stub writes only to the nested path, so a reader that looked at
+    the root would raise instead of returning the crate.
+    """
+    target_dir = tmp_path / "target"
+    body = b"nested crate bytes"
+    _ = _stub_cargo(monkeypatch, body)
+
+    crate = package_crate(pathlib.Path("Cargo.toml"), target_dir)
+
+    assert crate == target_dir / PACKAGE_SUBDIR / CRATE_NAME, (
+        "the packager must read the crate from cargo's staging subdirectory"
+    )
+    assert crate.read_bytes() == body, "the packager must return the staged bytes"
 
 
 def test_the_packager_reports_cargo_stderr_on_failure(

@@ -28,6 +28,12 @@ EXIT_OK = 0
 EXIT_PACKAGING_FAILED = 1
 EXIT_IDENTITY_REJECTED = 2
 
+#: Subdirectory of ``cargo package --target-dir`` the finished archive lands
+#: in. Cargo writes the crate here and unpacks its verification copy into the
+#: sibling ``tmp-crate/`` tree, so this is the only place a caller may look for
+#: exactly one crate.
+PACKAGE_SUBDIR = "package"
+
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class CratePackage:
@@ -80,7 +86,7 @@ def package_crate(manifest: pathlib.Path, destination: pathlib.Path) -> pathlib.
     manifest
         Path to the Cargo manifest naming the package.
     destination
-        Directory ``cargo package`` writes into.
+        Target directory ``cargo package`` is given.
 
     Returns
     -------
@@ -100,10 +106,18 @@ def package_crate(manifest: pathlib.Path, destination: pathlib.Path) -> pathlib.
     buildable from exactly the files it carries rather than from the working
     tree. Skipping it would make "the crate is complete" an assumption.
 
+    The crate is read from ``destination``'s :data:`PACKAGE_SUBDIR`, not from
+    ``destination`` itself. ``cargo package --target-dir`` nests its output one
+    level down: the finished archive lands in ``<target-dir>/package/`` beside
+    the ``tmp-crate/`` scratch tree verification unpacks into. Measured on the
+    pinned toolchain at the 2026-10-20 probe — a bare ``glob("*.crate")`` over
+    the target directory returns nothing, so a caller that looked there would
+    report a successful packaging run as a failure.
+
     Exactly one crate is required rather than "take the first". A stale file
-    left in the destination from an earlier run would otherwise be published
-    under this run's identity, which is the failure the digest record exists
-    to prevent.
+    left in the staging directory from an earlier run would otherwise be
+    published under this run's identity, which is the failure the digest record
+    exists to prevent.
     """
     # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
     # ruff: ignore[start-process-with-partial-path] - cargo is on the workflow PATH.
@@ -126,10 +140,11 @@ def package_crate(manifest: pathlib.Path, destination: pathlib.Path) -> pathlib.
             f"{completed.stderr}"
         )
         raise RuntimeError(msg)
-    produced = sorted(destination.glob("*.crate"))
+    staging = destination / PACKAGE_SUBDIR
+    produced = sorted(staging.glob("*.crate"))
     if len(produced) != 1:
         msg = (
-            f"expected exactly one .crate in {destination}, found "
+            f"expected exactly one .crate in {staging}, found "
             f"{[path.name for path in produced]}"
         )
         raise RuntimeError(msg)
@@ -160,7 +175,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--target-dir",
         required=True,
         type=pathlib.Path,
-        help="the directory cargo package writes into",
+        help="the target directory cargo package writes beneath",
     )
     parser.add_argument(
         "--output",

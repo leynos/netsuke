@@ -382,6 +382,35 @@ Stop and escalate when any of these is breached.
   checklist records that the defect predates this branch and that the
   `release`/`publish-release` upload call sites are the ones to correct.
 
+- Risk: **`verify-release-inventory` cannot read the draft it must compare.**
+  Severity: high Likelihood: certain. GitHub's REST documentation states it
+  plainly for the release listing — "Information about published releases are
+  available to everyone", while "**Only users with push access will receive
+  listings for draft releases**" — and the Actions `GITHUB_TOKEN` is not
+  granted push access by `contents: read`. `cli/cli#3037` is the observed form:
+  a workflow holding `contents: read; actions: read; security-events: write`
+  receives HTTP **403 `Resource not accessible by integration`** when it reads
+  a draft. The report was closed in 2021-05 on the theory that a permission was
+  missing, reopened in 2021-09, closed again in 2024-06-11, and reported again
+  in 2025 by a user who had already set `contents: write`; the accepted answers
+  are `contents: write`, a personal access token, or a GitHub App token, and a
+  commenter argues `contents: read` is *intentionally* insufficient because
+  otherwise a fork could read a draft.
+
+  Mitigation: `verify-release-inventory` holds `contents: write`, which is what
+  makes the draft visible to it, and it exercises **only** reads — its whole
+  body is a listing, a download, and a local comparison. This is a deviation
+  from the 2026-10-15 decision that exactly two jobs hold `contents: write`,
+  and it amends that decision rather than contradicting it: what LEM-5 states,
+  and what its contract asserts, is the *disjointness* of `id-token: write` from
+  `contents: write` and the uniqueness of `environment: crates-io`, and
+  neither moves. The writer count was a design choice recorded inside a
+  decision entry, not part of the lemma text. The verifier is not a competing
+  writer in the sense that motivated the two-writer rule: it never calls a
+  mutating API, which the LEM-5 suite now asserts of its composite action, so
+  the upload/un-draft separation the count existed to protect is unchanged.
+  Date/Author: 2026-10-20, implementation agent.
+
 ## Verification plan
 
 The change introduces one central invariant and a small family of lemmas around
@@ -1640,8 +1669,62 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   doubled backslash, because an `r"""` prefix would have changed the example's
   own escapes. The df12 house lints required a failure message on the last bare
   `assert`, and `typing.Iterable` gave way to `collections.abc.Iterable`.
+- [x] (2026-10-20) Closed the two Stage C unknowns that could not be settled
+  from the plan: how `verify-release-inventory` reads a draft release at all,
+  and whether the Stage D composite-action lint target can reuse
+  `.yamllint.yml`. The first is a confirmed blocker with a recorded deviation
+  (`contents: write` on the verifier); the second is a config incompatibility
+  with a one-line repair. Both are recorded in `Risks`,
+  `Surprises & discoveries`, and `Decision log` before any code was written, so
+  the deviation is an obligation recorded in advance rather than a red gate
+  discovered afterwards.
+- [x] (2026-10-20) Re-measured the publication graph contract's Red state at
+  the current head, using the Makefile's own pinned module set, and got the
+  expected **18 failed, 3 passed**. The three that pass are the two
+  self-consistency readers (`test_the_workflow_path_is_the_release_workflow`,
+  `test_the_workflow_job_helper_returns_the_same_job`) and
+  `test_the_workflow_still_declares_no_job_without_permissions`, which is
+  already true of the seven existing jobs. This is the Red baseline Stage C
+  must turn Green; it is the plan's stated evidence line quoted from
+  `Plan of work`.
+- [x] (2026-10-20) Began Stage C by probing the packaging seam before authoring
+  the action that calls it, and found the seam could not have worked:
+  `cargo package --target-dir` writes to `<target-dir>/package/`, while
+  `package_crate` globbed the target directory itself. Repaired with a named
+  `PACKAGE_SUBDIR` constant, a `Notes` paragraph recording the layout and the
+  probe, and a new test that pins the nested read — the stub had been writing
+  to the target root, which made the suite green while the bug stood. Suite
+  re-measured at **11 passed**, up from 10. The finding is recorded under
+  `Surprises & discoveries` with the observed layout.
 
 ## Surprises & discoveries
+
+- Observation: **`cargo package --target-dir` nests its output one level down,
+  so the packager's directory assumption was wrong and every packaging run
+  would have failed.** `package_crate_cli.package_crate` globbed
+  `destination.glob("*.crate")` non-recursively and raised unless it found
+  exactly one, while cargo writes the finished archive to
+  `<target-dir>/package/<crate>.crate` beside the `tmp-crate/` scratch tree its
+  verification unpacks into. Evidence: probed twice on the pinned toolchain at
+  the current head, once with `--no-verify` and once with the default verifying
+  run. Both left exactly two hard links of the archive —
+
+  ```plaintext
+  <target-dir>/package/netsuke-build-0.1.0-beta4.crate       (inode 13632987)
+  <target-dir>/package/tmp-crate/netsuke-build-0.1.0-beta4.crate (inode 13631912)
+  ```
+
+  — and a bare `glob("*.crate")` over the target directory returned `[]` in
+  both cases. The two entries are separate inodes holding identical bytes, so
+  the hazard is not "the same file twice": each is size 1126402, so a recursive
+  search would find two and refuse. Impact: the fix is a named `PACKAGE_SUBDIR`
+  constant and a glob beneath it, and the verification pack now stages the
+  crate where cargo stages it — the stub previously wrote to the target root,
+  which made the bug unobservable from the suite, so the suite was green while
+  the seam could not work. This is the first Stage C defect found by execution
+  rather than by reading, and it was found before any action was written, which
+  is the point of probing a seam's assumptions instead of trusting a `--help`
+  synopsis.
 
 - Observation: **a linter can demand two mutually exclusive fixes, so the
   finding to act on is the one that names a real defect.** Ruff reported both
@@ -2164,6 +2247,22 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   lost, but this deliverable owns only its own new modules, and repairing
   modules it did not touch would enlarge the diff past its scope. Date/Author:
   2026-10-15, implementation agent.
+- Observation: **`.yamllint.yml` cannot be reused unchanged to lint
+  `.github/actions`.** Evidence: the config is `extends: default` with
+  `document-start: {level: error, present: true}`, and four of the five
+  existing manifests begin with `---` while
+  `windows-msi-upgrade-validation/action.yml` begins with `name:` and carries
+  no document start. `github-actions-lint` lints only `.github/workflows`, so
+  that action is currently unlinted and the omission is invisible. Impact: the
+  Stage D composite-action target either supplies its own policy or the
+  existing action gains the marker; the marker is the smaller change and is
+  done in this branch, because a target whose first act is an exemption is the
+  shape the mission forbids. Date/Author: 2026-10-20, implementation agent.
+- Observation: `runner_placement_invariants.REQUIRED_RUNNER_ASSIGNMENTS` is
+  an explicit table of named jobs, so the five new jobs in `release.yml` are
+  unconstrained by it and may declare `ubuntu-latest`; the same holds for
+  `cache_ownership_test.test_each_job_calls_only_its_own_lane_cache_action`,
+  which is table-driven. Date/Author: 2026-10-20, implementation agent.
 
 ## Decision log
 
@@ -2383,6 +2482,19 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   assertion that sounds stricter" is not evidence that it is correct, and a
   stricter-sounding claim needs the same check against the design as a weaker
   one. Date/Author: 2026-10-15, implementation agent.
+
+  **Amended 2026-10-20:** `verify-release-inventory` also holds
+  `contents: write`, so the writer set is three jobs rather than two. The
+  reason is in `Risks`: a draft release is invisible to `contents: read`, and
+  the verifier's entire purpose is to compare the *draft* against the
+  declaration before anything is un-drafted. The amended form is therefore "two
+  mutating writers plus one read-only holder that needs write scope to see a
+  draft", and the LEM-5 suite asserts the difference directly — the verifier
+  job's composite action is required to contain no `gh release` call at all, so
+  the extra scope cannot quietly become a second way to write to the release.
+  LEM-5's own text (disjointness, and `id-token`/`environment` uniqueness) is
+  unchanged and remains what the contract proves. Date/Author: 2026-10-20,
+  implementation agent.
 
 - Decision: resolve the verifier's network boundary as **orchestration
   downloads, the module decides**, and enforce EP-M2's no-network claim with a
