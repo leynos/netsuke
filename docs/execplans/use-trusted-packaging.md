@@ -2891,6 +2891,29 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   push, and `crate-name` is emitted in both. Date/Author: 2026-10-21,
   implementation agent.
 
+- Decision: every action and job that needs the candidate commit reads
+  **`${{ github.sha }}`** into an `env:` key named for its use, rather than
+  reading an output from a preceding step. Rationale: `github.sha` is the
+  revision the workflow run was triggered on, which on a `push` tag event is
+  the tag's own commit, and it needs no seam to carry it — the composite action
+  declares a `commit` input and the job supplies it from the context, so the
+  value crosses the boundary as an ordinary declared input like `package-name`
+  and `version`. The repository already reads the revision from the ambient
+  environment in both shapes this branch needs:
+  `REVISION_VARIABLE = "GITHUB_SHA"` in
+  `.github/scripts/_release_admission/configuration.py:46` resolves it through
+  `_required`, which refuses an unset or empty value rather than substituting
+  one, and `.github/actions/windows-gate-cache/action.yml:97` reads
+  `${GITHUB_SHA}` directly into its cache key. The alternative — resolving the
+  tag to a commit and publishing that — was rejected because
+  `ReleaseIdentity.commit` is a record of *which bytes were packaged*, and the
+  only commit those bytes can come from is the one the workflow checked out.
+  Recording a separately resolved SHA would make the identity a claim about a
+  revision the packaging job never saw. `https://github.com/actions/checkout`
+  defaults to `github.sha` when neither `ref` nor `sha` is given, and the
+  release path's checkouts set neither, so the two agree by construction rather
+  than by a later comparison. Date/Author: 2026-10-21, implementation agent.
+
 ## Outcomes & retrospective
 
 Not yet applicable. To be completed at EP-M6, at which point every discovery
