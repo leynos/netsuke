@@ -8,13 +8,13 @@ be kept up to date as work proceeds.
 Status: IN PROGRESS
 
 The migration work is complete and all its behavioural evidence is green, but
-the plan is open again for delivery: a fourth rebase moved the branch onto a
-new target, which invalidates the previous sweep, and the rebased revision has
-not yet been pushed or gated. Those items are tracked in `Progress`. The 39
-`cognitive_complexity` errors the dependency bump introduces in the `make lint`
-gate were first resolved by hoisting the charged `tracing` macros into
-per-macro emitters across 40 files; the root cause, the cost model, and the
-escalation that was raised and then superseded are recorded in
+the plan stays open for delivery: a fourth rebase moved the branch onto a new
+target, and although the rebased revision has since been gated and pushed, the
+pull request has not yet been merged. That remaining item is tracked in
+`Progress`. The 39 `cognitive_complexity` errors the dependency bump introduces
+in the `make lint` gate were first resolved by hoisting the charged `tracing`
+macros into per-macro emitters across 40 files; the root cause, the cost model,
+and the escalation that was raised and then superseded are recorded in
 `Surprises & discoveries` and `Decision log`. That hoist has since been
 **reverted**: the lints were being satisfied by moving macros out of the
 functions the metric reads, and the final disposition raises
@@ -331,9 +331,19 @@ the conflict in `Decision log` before proceeding.
 - [x] (2026-10-21) Re-run the seven-gate set on the rebased revision. A rebase
   carries no approval forward, and the rebase record is itself a Markdown edit
   the sweep must follow. All seven pass on `2fb11fbc1`; see the revision note.
-- [ ] (2026-10-21) Push the rebased branch under an explicit lease, observe
-  hosted CI on the new head, and take the pull request through review to a
-  merge.
+- [x] (2026-10-21) Push the rebased branch under an explicit lease and observe
+  hosted CI on the new head. Head `1e7e65dce`; all four workflow runs on it are
+  terminal and successful, and the 21 checks on the head SHA read 18 `success`
+  and 3 `skipped`, each skip by design (`publish-release` needs
+  `should_publish == 'true'`, `windows-native-recipe-smoke` is dry-run only, and
+  `automerge` needs a dependabot actor). `kani-smoke` is a scope-gated job,
+  and it did run its harnesses here rather than skip: `Cargo.toml` and
+  `Cargo.lock` both appear in `tools/kani/proof-scope.toml`, so the scope step
+  reported `run-proofs == 'true'`. Mutation testing is absent because its
+  workflow has no `pull_request` trigger.
+- [ ] (2026-10-21) Take the pull request through review to a merge. CodeRabbit
+  currently reports `Review skipped: draft pull request` on `1e7e65dce`, so
+  that head is unreviewed rather than reviewed-clean.
 
 ## Surprises & discoveries
 
