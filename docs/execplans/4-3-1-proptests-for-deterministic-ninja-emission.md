@@ -649,15 +649,27 @@ question.
   dependency has another consumer edge and both are requested:
   `ninja -n <dyndep-owner>` alone exits 0, `ninja -n <other-consumer>` alone
   exits 0, and the pair together segfaults — on a **real** build as well as
-  under `-n`. *Mitigation:* the diagnosis is complete and recorded in the
-  delivery ledger; the shape-level repair (a relay phony per sidecar-revealed
-  dependency) was verified against both binaries. Applying it is a production
-  change, which `Tolerances` makes an escalation rather than a drafting choice,
-  so it is escalated to the user with three options: repair the emitter,
-  document the limitation and narrow the generated domain so the property
-  cannot reach the crash, or report upstream and leave the gate red. No
-  mitigation is applied until that direction arrives; the property must not be
-  weakened quietly to make it pass.
+  under `-n`. It is now confirmed upstream:
+  [ninja-build/ninja#2662](https://github.com/ninja-build/ninja/issues/2662) is
+  open and reports the same allocation and the same read,
+  [PR #2840](https://github.com/ninja-build/ninja/pull/2840) holds an unmerged
+  index-access fix, and the maintainer has been unable to reproduce it — so
+  this plan's 13-line reproducer is evidence the issue lacks. *Mitigation:* the
+  diagnosis is complete and recorded in the delivery ledger; the shape-level
+  repair (a relay phony per sidecar-revealed dependency) was verified against
+  both binaries. Applying it is a production change, which `Tolerances` makes
+  an escalation rather than a drafting choice, so it is escalated to the user
+  with four options: (a) repair the emitter; (b) document the limitation and
+  narrow the generated domain so the property cannot reach the crash; (c)
+  report to #2662 with the reproducer and leave the gate red until upstream
+  lands #2840, keeping the seed uncommitted so the suite stays green in the
+  meantime; (d) run the oracle against a self-built `ninja` carrying #2840 in
+  its CI provisioning. Options (a) and (b) are the only ones that change this
+  repository; (c) and (d) leave the emitter alone. No mitigation is applied
+  until that direction arrives; the property must not be weakened quietly to
+  make it pass. One option is explicitly **rejected**: suppressing the signal
+  or treating a SIGSEGV as a skip would make the oracle blind to the crash it
+  was written to find.
 - **Real-Ninja oracle silently vanishes from a lane.** *Severity: moderate.
   Likelihood: moderate.* `ci-windows.yml` installs Ninja but does not set
   `NETSUKE_REQUIRE_NINJA`, so that lane skips silently today. *Mitigation:* use
@@ -5026,9 +5038,38 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   failure is *shape-dependent, not seed-dependent*: `ninja -n` on either target
   alone exits 0 and only the pair crashes, so the property's 64-case budget
   reached it once and would have been easy to dismiss as a flake. Third, it is
-  upstream — the same code is in master 1.14.0.git — so the repair is a choice
-  about our emission shape, and the plan's own escalation rule, not the agent's
-  judgement, decides who makes it.
+  upstream, and the tracker now says so with the same mechanism rather than
+  only the same symptom.
+
+- (2026-10-21) **The upstream tracker locates the crash exactly, and the fix
+  exists but is unmerged — which changes the escalation from "is this ours?" to
+  "which way do we route around it?".**
+  [ninja-build/ninja#2662](https://github.com/ninja-build/ninja/issues/2662)
+  ("segfault in `Plan::NodeFinished`", opened 2025-08-26, still open) carries a
+  valgrind report whose *invalid read* is at `build.cc:233` in `NodeFinished`
+  and whose *freed block* is attributed to
+  `std::vector<Edge*>::_M_realloc_insert` called from `graph.h:114` via
+  `dyndep.cc:118` inside `DyndepLoader::LoadDyndeps`. That is the same pair of
+  ends this plan's instrumented build measured from the other direction. Two
+  details make it more than a citation. The reporter's own follow-up rules out
+  the corruption explanations behind the older
+  [#1722](https://github.com/ninja-build/ninja/issues/1722) and
+  [#1978](https://github.com/ninja-build/ninja/issues/1978) — a fresh build
+  still crashed — so this is a live iterator-invalidation defect rather than a
+  stale `.ninja_deps` artefact, and #1978 is a *different* call path
+  (`ImplicitDepLoader::LoadDeps`) that must not be cited as the same bug. And
+  the maintainer cannot reproduce it, having asked for a retest against
+  [PR #2840](https://github.com/ninja-build/ninja/pull/2840) ("Invalidate
+  Iterator in `Plan::EdgeFinished`", open since 2026-09-26, unmerged), which
+  replaces the range-`for` over `out_edges()` with index access. *The
+  consequence for this plan:* we are not waiting on an unreported defect whose
+  shape is unknown. We hold a 13-line deterministic reproducer
+  (`/tmp/700-evidence/repro-build.ninja`) for a public issue whose fix is
+  already written and awaiting review, which makes reporting it useful rather
+  than merely polite — and it means a self-hosted patched `ninja` is a
+  legitimate option for the oracle rather than a fork of convenience. The
+  emitter repair remains a *choice*, not a correctness obligation, because the
+  defect is upstream; `Tolerances` still makes that choice the user's.
 
 - (2026-10-21) **Both `EP-M8` gate failures were produced by the same habit:
   a fence, and a nesting level, added without asking what enforces it.** The
@@ -7005,6 +7046,44 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   missing — measured: it exits 0 with the sidecar removed while `-n` exits
   1. Both invocations are therefore required, and the developers' guide states
   that as a rule so a later edit cannot quietly drop one.
+
+- Decision: **the `OBL-NINJA` crash is routed as an upstream defect, and the
+  emitter shape is not changed unilaterally.** Date/Author: 2026-10-21 /
+  implementation agent.
+
+  *What was decided, and what was not.* This entry decides only the routing
+  question — whose defect it is, and which remedies are admissible — because
+  the tracker settles that much. It does **not** decide whether to repair the
+  emitter, which is a production change that `Tolerances` reserves for the user.
+
+  *Evidence for the routing.* Ninja's own vector is freed in
+  `DyndepLoader::LoadDyndeps` (`dyndep.cc:118` → `graph.h:114`) and read in
+  `Plan::NodeFinished` (`build.cc:233`), reported under
+  [ninja-build/ninja#2662](https://github.com/ninja-build/ninja/issues/2662),
+  still open. Our instrumented build observed the reallocation from the
+  allocating end; the public report observes it from the freed-block end. Two
+  independent observations of one mechanism, plus a 13-line deterministic
+  reproducer the issue does not have.
+
+  *Options admitted.* (a) Emitter repair, a relay phony per sidecar-revealed
+  dependency, which was verified to clear the crash but is a production change.
+  (b) Narrow the generated domain so the oracle cannot reach a shape with two
+  consumers of one sidecar-revealed dependency — admissible but weak, because
+  it narrows exactly the intersection the obligation exists to cover and the
+  crash remains reachable in real builds. (c) Report to #2662 and leave the
+  gate red, seed uncommitted. (d) Provision a self-built `ninja` carrying #2840
+  for the oracle's CI lane.
+
+  *One option rejected outright.* Treating a signal-killed child as a skip, or
+  otherwise suppressing the SIGSEGV, is not a remedy. It would make the oracle
+  blind to the only defect it found, and `Tolerances`' *Mutation discipline*
+  forbids a property that passes for the wrong reason by the same argument.
+
+  *Why no option was taken unilaterally.* (a) and (d) change what this
+  repository ships or provisions; (b) weakens an obligation whose scope
+  `ADR-030` publishes; (c) leaves a required gate red at hand-off. Each crosses
+  a boundary the plan names, so the choice is recorded with its costs and put
+  to the user rather than resolved here.
 
 ## Design review findings
 
