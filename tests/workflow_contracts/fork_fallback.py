@@ -134,6 +134,11 @@ def _is_context_path(text: str) -> bool:
     )
 
 
+def _is_guard(text: str) -> bool:
+    """Report whether text is one field reference or the exact hosted guard."""
+    return _is_context_path(text) or text.strip() == HOSTED_GUARD
+
+
 def _split_operands(declaration: str) -> tuple[str, str, str] | None:
     """Split an expression into its guard and its two unread arms.
 
@@ -147,9 +152,7 @@ def _split_operands(declaration: str) -> tuple[str, str, str] | None:
     if body is None or "&&" not in body:
         return None
     guard, arms = body.split("&&", 1)
-    if "||" not in arms or not (
-        _is_context_path(guard) or guard.strip() == HOSTED_GUARD
-    ):
+    if "||" not in arms or not _is_guard(guard):
         return None
     fork_text, owned_text = arms.split("||", 1)
     return guard.strip(), fork_text, owned_text
