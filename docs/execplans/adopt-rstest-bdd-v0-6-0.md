@@ -341,6 +341,16 @@ the conflict in `Decision log` before proceeding.
   `Cargo.lock` both appear in `tools/kani/proof-scope.toml`, so the scope step
   reported `run-proofs == 'true'`. Mutation testing is absent because its
   workflow has no `pull_request` trigger.
+- [x] (2026-10-21) Obtain the ExecPlan completeness and correctness
+  assessment. Posted as a tagged issue comment under
+  `Assessment-ID: EP-805-64777a4d-fe351854`, assessed head
+  `64777a4dcf47913a92dfd8aecaffb0e14379c0d2` against base `c8e58a0a8`. The
+  substantive reply confirmed the implementation — imported-document digests,
+  the two manifest version strings, the byte-identical swept feature set, the
+  `INV-3` guard, and the threshold-32 disposition — and raised exactly two
+  in-scope evidence defects, both of which reproduced here and are now
+  corrected: the lockfile-scope overclaim and the stale completion record. The
+  proof-scrutiny assessment is recorded as `not applicable`, with evidence.
 - [ ] (2026-10-21) Take the pull request through review to a merge. CodeRabbit
   currently reports `Review skipped: draft pull request` on `1e7e65dce`, so
   that head is unreviewed rather than reviewed-clean.
@@ -688,14 +698,43 @@ the conflict in `Decision log` before proceeding.
   `tracing 0.1.44` gained the already-optional `log` feature dependency, and
   `hashbrown 0.16.1` dropped its optional `allocator-api2`/`equivalent` edges.
 
-  Impact: every macro-dependency diff in the lockfile is confined to the
-  `rstest-bdd` family closure and legal by declaration; no crate changed
-  version except family members and crates that only they or their former
-  versions used. The one effect worth watching is that Windows builds now
-  compile `windows-sys 0.52.0` where they previously used `0.59.0`/`0.60.2`;
-  this is API-compatible for the listed features but is only *executed* on
-  Windows CI, so the Windows job is the oracle. Verified statically here; see
-  the Risk entry on the Windows toolchain.
+  Impact: the resolver re-selection is **not** confined to the `rstest-bdd`
+  family closure. An earlier revision of this entry claimed it was; a
+  re-measurement against the current base (`c8e58a0a8`, re-derived because four
+  rebases had moved it) refutes that, and the correction is recorded here
+  rather than in a later note. Measured on `Cargo.lock` between `c8e58a0a8` and
+  the delivered head, classifying every difference by membership of the union
+  of the family closures before and after (157 and 176 packages):
+
+  | Class                             | Inside the union | Outside the union |
+  | --------------------------------- | ---------------- | ----------------- |
+  | removed package identities        | 15               | 10                |
+  | added package identities          | 18               | 0                 |
+  | retained, dependency text changed | 11               | 5                 |
+
+  The 10 removed identities outside both closures are `windows-sys 0.60.2`,
+  `windows-targets 0.53.5`, and its eight `windows_*_0.53.1` architecture
+  crates. The five retained outside-closure packages whose edges moved are
+  `serde-saphyr 1.2.0` (`base64 0.22.1` to `0.23.1`), `tempfile 3.27.0`
+  (`windows-sys 0.61.2` to `0.52.0`), and `clap-dispatch 0.1.1`,
+  `clap_derive 4.6.7` and `ortho_config_macros 0.9.0`, which each drop an
+  explicit `heck 0.5.0` edge once `heck 0.4.1` leaves the graph and the bare
+  name resolves unambiguously.
+
+  The mechanism is the one described above, not a second cause: the family
+  closure's `windows-sys 0.52.0` re-selection lowered the version Cargo unifies
+  across the whole `cfg(windows)` graph, so non-family consumers moved with it.
+  `winapi-util 0.1.11` is the exception worth naming, and the earlier revision
+  had it wrong: it moved from `windows-sys 0.61.2` to `0.48.0`, not to `0.52.0`.
+  `fs-set-times 0.20.3` was omitted from the earlier list entirely, and it
+  moved from `0.59.0` to `0.52.0`.
+
+  Every requirement involved still admits the new selection by declaration, and
+  the seven versions of `windows-sys` in the base graph collapse to three in
+  the head (`0.48.0`, `0.52.0`, `0.61.2`). `windows-sys 0.52.0` remains in the
+  family closure in its own right. Windows CI is the oracle for the compiled
+  consequence, and both Windows jobs pass on the delivered head; that is
+  compatibility evidence, not evidence of closure confinement.
 
 - Observation: the `cognitive_complexity` failures this migration caused are
   not a property of the files that carry them; they are a property of the
@@ -853,6 +892,50 @@ the conflict in `Decision log` before proceeding.
   context and keep walking: substituted tokens keep their call-site context, so
   source survives without a special case.
 
+- Observation: a lockfile-scope claim can rot silently when the base moves
+  under it, and this one did. The 2026-10-02 entry said "the lockfile delta is
+  22 packages, and every one of them lies inside the union of the family's
+  transitive closure". Both halves were true when measured. Four rebases later
+  the base was `c8e58a0a8`, the delta was 59 differing package records, and ten
+  of them sat outside both closures.
+
+  Evidence: re-measured on `Cargo.lock` between `c8e58a0a8` and the delivered
+  head. 25 removed identities, 18 added, 16 retained with changed dependency
+  text. Outside the union: 10 removed, 0 added, 5 retained-and-changed.
+
+  | Package                     | Base selection       | Head selection       | In closure union |
+  | --------------------------- | -------------------- | -------------------- | ---------------- |
+  | `windows-sys 0.60.2`        | present              | removed              | no               |
+  | `windows-targets 0.53.5`    | present              | replaced by `0.52.6` | no               |
+  | eight `windows_*_0.53.1`    | present              | replaced by `0.52.6` | no               |
+  | `tempfile 3.27.0`           | `windows-sys 0.61.2` | `windows-sys 0.52.0` | no               |
+  | `serde-saphyr 1.2.0`        | `base64 0.22.1`      | `base64 0.23.1`      | no               |
+  | `clap-dispatch 0.1.1`       | `heck 0.5.0`         | `heck`               | no               |
+  | `clap_derive 4.6.7`         | `heck 0.5.0`         | `heck`               | no               |
+  | `ortho_config_macros 0.9.0` | `heck 0.5.0`         | `heck`               | no               |
+  | `winapi-util 0.1.11`        | `windows-sys 0.61.2` | `windows-sys 0.48.0` | yes              |
+
+  Impact: two lessons, and the second is the reusable one. First, the
+  confinement claim was wrong and is now stated as measured. Second, a
+  "verified on `DATE`" annotation on a claim about *the diff against the base*
+  expires when the base moves; the correct response is to re-derive it against
+  the delivered base and supersede the old figure explicitly, not to leave a
+  date that reads as a current guarantee. `git merge-tree` and rebase notes
+  both track commits, not the derived measurements in prose.
+
+- Observation: the same staleness hit two current-state sentences, independently
+  of the lockfile. An `Outcomes & retrospective` passage still described the
+  macro-hoisting refactor as the resolution and four lint stages as
+  "unavailable checks", and a second passage said the native Windows lint job
+  "has not been validated … no CI run is reachable".
+
+  Impact: both were true when written and false at the delivered head. The
+  remedy is reverted, `make lint` reaches every stage, and
+  `Windows / lint-windows` reports `success` on `64777a4dc`. A superseded
+  remedy left described as the remedy is worse than a stale number, because a
+  reader following it would reproduce a refactor the plan elsewhere says was
+  reverted. Historical passages must name themselves as history.
+
 ## Imported-document provenance and link mapping
 
 Both files were copied with `cp` from the pinned checkout; no editing tool
@@ -924,18 +1007,40 @@ the link site.
   and prohibits unrelated churn. A `--precise 0.6.0` update for each family
   member confines the change. Date/Author: 2026-09-26, implementing agent.
 
-  Verified 2026-10-02, because "the rest of the graph" is easy to overclaim:
-  the lockfile delta is 22 packages, and every one of them lies inside the
-  union of the family's transitive closure before and after the bump (157
-  packages at 0.5.0, 176 at 0.6.0). The churn is real but entirely family-owned:
-  `rstest-bdd-macros` 0.6.0 moved from `proc-macro-error` 1.0.4 to
-  `proc-macro-error3` 3.1.1, taking `convert_case`, `heck` and `windows-sys`
-  with it; it also pulled in `cargo_metadata`, `link-section`,
-  `linktime-proc-macro`, `derive_more` and `syn` 3. No package outside the
-  closure changed version, and none was added or removed. Note that
-  `proc-macro-error`/`-attr` are *removals* and so are not in the post-bump
-  closure — they were in the pre-bump one, which is the relevant comparison.
-  Date/Author: 2026-10-02, implementing agent.
+  Verified 2026-10-02, and **re-verified and corrected on 2026-10-21** because
+  "the rest of the graph" is easy to overclaim. The 2026-10-02 figure of 22
+  packages, all inside the family closure, was measured against the then-base.
+  Four rebases have since moved the base to `c8e58a0a8`, so it no longer
+  describes the delivered diff and it is superseded rather than merely stale.
+
+  Re-measured against `c8e58a0a8`, classifying every difference by membership
+  of the union of the family closures before and after (157 and 176 packages):
+  15 removed identities inside the union and 10 outside it; 18 added inside and
+  0 outside; and 16 retained packages whose dependency text changed, of which
+  11 are inside the union and 5 outside. The changes **inside** the union are
+  the family-owned churn this decision anticipated: `rstest-bdd-macros` 0.6.0
+  moved from `proc-macro-error` 1.0.4 to `proc-macro-error3` 3.1.1, taking
+  `convert_case`, `heck` and `windows-sys` with it, and pulled in
+  `cargo_metadata`, `link-section`, `linktime-proc-macro`, `derive_more` and
+  `syn` 3. Note that `proc-macro-error`/`-attr` are *removals* and so are not
+  in the post-bump closure — they were in the pre-bump one, which is the
+  relevant comparison.
+
+  The changes **outside** the union are the part the 2026-10-02 entry denied.
+  They are resolver side effects of the same cause, not an independent edit:
+  the family closure's `windows-sys 0.52.0` re-selection lowered the version
+  Cargo unifies across the whole `cfg(windows)` graph, so `windows-sys 0.60.2`,
+  `windows-targets 0.53.5`, its eight architecture crates, `serde-saphyr`'s
+  `base64` selection, `tempfile`'s `windows-sys` selection and three `heck`
+  edges all moved with it. No outside-closure package was added, and every
+  requirement admits the new selection by declaration. See the
+  `Surprises & discoveries` entry for the per-package table.
+
+  So the narrow statement this decision can defend is: no package was added or
+  removed *by intent*, and every changed selection is a consequence of the
+  family bump — but the earlier "confined to the closure" phrasing was false as
+  measured and has been removed rather than left standing. Date/Author:
+  2026-10-02, implementing agent; corrected 2026-10-21.
 
 - Decision: treat upstream relative links from the imported guides as a
   documented link mapping rather than vendoring upstream design documents.
@@ -1250,16 +1355,20 @@ Residual gaps, stated rather than papered over. `make lint` did not complete on
 the revision that first raised the `cognitive_complexity` failure:
 `lint-clippy` aborted with 39 diagnostics across 31 files, and `lint-whitaker`,
 `lint-python` and `github-actions-lint` therefore never ran on that revision.
-That condition was **caused by this migration**, not pre-existing, and it has
-since been resolved by the macro-hoisting refactor recorded in `Decision log`;
-the full gate set is re-run on the committed tree and its result recorded under
-`### Gate logs`. The four suppression stages that never ran on the failing
-revision are therefore exercised for the first time here, and remain
-unavailable checks until that run reports them. The 0.5.0 false green itself
-was not reproduced on a 0.5.0 build; what is evidenced is 0.6.0's corrected
-behaviour, which is the behaviour the repository now depends on.
-`make test-podman` was out of scope, as no path under `ansible/` appears in
-this change surface.
+That condition was **caused by this migration**, not pre-existing. It has since
+been resolved, but **not** by the macro-hoisting refactor: that refactor was
+reverted in full, and the operative resolution is the raised
+`cognitive-complexity-threshold` recorded under
+`### Recurrence correction (Requirement 4)` and in `Decision log`. Read the
+hoisting entry as history, not as the current disposition. The full gate set
+has been re-run on the committed tree with its result recorded under
+`### Gate logs`, so the four suppression stages that never ran on the failing
+revision are exercised now rather than outstanding: `make lint` exits 0 with
+`lint-clippy`, `lint-whitaker`, `lint-python` and `github-actions-lint` all
+reached. The 0.5.0 false green itself was not reproduced on a 0.5.0 build; what
+is evidenced is 0.6.0's corrected behaviour, which is the behaviour the
+repository now depends on. `make test-podman` was out of scope, as no path under
+`ansible/` appears in this change surface.
 
 The largest residual gap is the upstream correction itself, and it is a gap of
 *delivery*, not of work. The dependency defect — `rstest-bdd` 0.6.0 requesting
@@ -1288,10 +1397,13 @@ generated branching while preserving traversal into source-written expressions
 passed to macros — is prepared and measured but not adopted; the correction and
 its evidence are recorded under `### Recurrence correction (Requirement 4)`.
 Adoption would need its own ADR because it replaces the Clippy that the pinned
-nightly ships. And the native Windows lint job for PR #805 has not been
-validated: no CI run is reachable from this local checkout, so the job is an
-*unavailable* check rather than a passing one. The command it runs is unchanged
-by this work, which is what makes the gap tolerable rather than resolved.
+nightly ships. And the native Windows lint job for PR #805 **has** since been
+validated on hosted CI, so this gap is closed rather than outstanding: on head
+`64777a4dc`, `Windows / lint-windows` and `Windows / build-test-windows` both
+conclude `success`, as do `release / build-windows` for both `x86_64` and
+`aarch64`. The earlier statement that no CI run was reachable described the
+local-checkout situation before the branch was pushed; it is retained in the
+revision notes as history and is not the current state.
 
 One planning error is worth recording separately from the gate results. The
 planner named up to thirteen upstream gate targets, of which `doc-coverage`,
