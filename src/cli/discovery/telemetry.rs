@@ -51,14 +51,6 @@ const fn error_category(error: &OrthoError) -> &'static str {
     }
 }
 
-/// Emit the bounded failure category for a configuration discovery attempt.
-fn debug_discovery_failed_from_fields(error_category: &'static str) {
-    tracing::debug!(
-        error_category = error_category,
-        "configuration discovery failed"
-    );
-}
-
 /// Record the discovery outcome series at the composition boundary.
 ///
 /// This is for boundaries that already timed the phase (for example the
@@ -82,7 +74,7 @@ pub fn record_discovery_outcome<C: MonotonicClock>(
         let category = error_category(error);
         span.record("outcome", "error");
         span.record("error_category", category);
-        debug_discovery_failed_from_fields(category);
+        tracing::debug!(error_category = category, "configuration discovery failed");
         counter!(DISCOVERY_TOTAL, "outcome" => "error").increment(1);
     } else {
         span.record("outcome", "success");

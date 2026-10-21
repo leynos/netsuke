@@ -9,10 +9,14 @@ Status: COMPLETE
 
 The migration work is complete and all its behavioural evidence is green. The 39
 `cognitive_complexity` errors the dependency bump introduces in the
-`make lint` gate have been resolved by hoisting the charged `tracing` macros
-into per-macro emitters across 40 files; the root cause, the cost model, the
-escalation that was raised and then superseded, and the resolution are recorded
-in `Surprises & discoveries` and `Decision log`. The full gate set runs green
+`make lint` gate were first resolved by hoisting the charged `tracing` macros
+into per-macro emitters across 40 files; the root cause, the cost model, and
+the escalation that was raised and then superseded are recorded in
+`Surprises & discoveries` and `Decision log`. That hoist has since been
+**reverted**: the lints were being satisfied by moving macros out of the
+functions the metric reads, and the final disposition raises
+`cognitive-complexity-threshold` to 32 instead, with the measurement recorded
+under `### Recurrence correction (Requirement 4)`. The full gate set runs green
 at the delivered revision, with every stage of every gate reached; see
 `### Gate logs`.
 
@@ -25,13 +29,19 @@ existing `env_logger` behaviour is unchanged. That upstream work is complete
 and its gates are green. It is **not** delivered into this repository, because
 no release containing it exists: crates.io still publishes `rstest-bdd` 0.6.0
 as its newest version, and the fix is in no tag. The residual gap is recorded
-under `Outcomes & retrospective` and is the reason the hoisting refactor
-remains in place. The fourth part of the task — a Clippy correction that stops
-`cognitive_complexity` charging branching a macro generated — has been prepared
-and measured against the pinned nightly in a scratch Clippy tree, and is
-recorded under `### Recurrence correction (Requirement 4)`. It is not adopted
-here: that needs an ADR, and this repository's toolchain is deliberately
-unchanged.
+under `Outcomes & retrospective`. The fourth part of the task — a Clippy
+correction that stops `cognitive_complexity` charging branching a macro
+generated — was prepared and measured against the pinned nightly in a scratch
+Clippy tree, and is recorded under `### Recurrence correction (Requirement 4)`.
+It is informational only: the correction is proposed upstream at
+<https://github.com/leynos/whitaker/issues/504> instead of being adopted here,
+and this repository's toolchain is deliberately unchanged.
+
+The hoisting refactor that had been carried to hold the metric down is reverted.
+`info!` and `tracing` calls are inline again, and
+`cognitive-complexity-threshold` is raised to 32 in both `clippy.toml` files
+with the measurement that justifies it. See the course change recorded in the
+same section.
 
 Roadmap item: none. Origin: `leynos/rstest-bdd` v0.6.0 release and its
 `docs/v0-6-0-migration-guide.md`.
@@ -300,6 +310,14 @@ the conflict in `Decision log` before proceeding.
   off, source-written branches, closures, and a function mixing macros with
   ordinary control flow. Not adopted by this repository; see
   `### Recurrence correction (Requirement 4)`.
+- [x] (2026-10-21) Resolve the recurrence without patching Clippy. Filed
+  <https://github.com/leynos/whitaker/issues/504> proposing the macro-aware
+  rule, reverted the four hoisting commits so `info!` and `tracing` calls are
+  inline again, and raised `cognitive-complexity-threshold` to 32 in both
+  `clippy.toml` files, with a comment citing the measurement and the issue.
+  Measured basis: with the threshold at 0, `src/` maxes at 8 with the `log`
+  bridge off and 31 with it on, across the same 2174 functions. `make lint`
+  exits 0.
 
 ## Surprises & discoveries
 
@@ -1108,6 +1126,27 @@ the link site.
   dependency that branches inside a macro. Date/Author: 2026-10-21,
   implementing agent.
 
+- Decision: **do not patch Clippy; raise the threshold and propose the rule
+  upstream.** Adopting the scratch correction would mean this repository
+  building its own lint driver against a patched Clippy, which needs an ADR, a
+  toolchain pin, a rebuild for every contributor, and a divergence from the
+  Clippy the pinned nightly ships. The correction is valuable, but its right
+  home is the lint suite that would otherwise keep getting it wrong. Filed as
+  <https://github.com/leynos/whitaker/issues/504>. Date/Author: 2026-10-21,
+  user direction.
+
+- Decision: **revert the hoisting refactor and size the threshold by
+  measurement.** Hoisting an `info!` into a helper does not remove the
+  generated branching; the macro still expands, just at a call depth the lint
+  no longer attributes to the caller. That trades a real signal for a
+  cosmetically green gate and restructures 39 unrelated functions to do it.
+  Reverted along with the three follow-on commits. The threshold is set to 32
+  because, with the bridge off, nothing in `src/` exceeds 8, and with it on the
+  maximum is 31; the exact pairing of both runs is recorded under
+  `### Recurrence correction (Requirement 4)`. Rejected alternative: leaving
+  the threshold at 9 and keeping the hoist, for the reason above. Date/Author:
+  2026-10-21, user direction.
+
 ## Outcomes & retrospective
 
 What was achieved. Netsuke's behavioural suite runs on the published
@@ -1206,13 +1245,16 @@ downstream consumer. None of that reaches this repository while crates.io still
 publishes 0.6.0 as the newest `rstest-bdd`: `Cargo.toml` must name a published
 version, and a `path` dependency or a `[patch]` section would substitute local
 content for the release in a way no other consumer sees, so neither was used.
-The migration therefore stays on `rstest-bdd = "0.6.0"` and the hoisting
-refactor recorded in `Decision log` remains the operative mitigation here. The
-residual risk is exactly that mitigation's cost: 39 functions in source that is
-otherwise untouched were restructured to lower an expanded-AST metric, and that
-restructuring would be unnecessary once a release carrying ADR-024 is
-available. Reverting it is a separate decision with its own evidence
-requirement, not an automatic consequence of the upstream release.
+The migration therefore stays on `rstest-bdd = "0.6.0"`. The hoisting refactor
+recorded in `Decision log` was superseded on 2026-10-21 and has been reverted:
+its cost — 39 functions in otherwise untouched source restructured to lower an
+expanded-AST metric — bought nothing, because a hoisted macro still expands,
+just somewhere the metric does not look. The operative mitigation is now the
+raised `cognitive-complexity-threshold` recorded under
+`### Recurrence correction (Requirement 4)`, which is honest about the cost
+model instead of moving the cost out of view. Both changes are reversible once
+a released `rstest-bdd` stops unifying `tracing/log`, or once a macro-aware
+rule from <https://github.com/leynos/whitaker/issues/504> is available.
 
 Two further residual gaps, recorded so they are not mistaken for passes.
 Requirement 4 — the Clippy `cognitive_complexity` change that would exclude
@@ -2085,6 +2127,58 @@ expectations are byte-identical; the `.stderr` diff adds five entries and
 removes none. The `issue14422` `for`-loop case is the standing guard against an
 over-broad exclusion.
 
+#### Course change: a raised threshold, not a patched Clippy
+
+The correction above is now **informational only**. It is not adopted, and the
+scratch tree is not built against. The decision taken on 2026-10-21 was to stop
+patching Clippy and instead do two things: propose the corrected rule upstream,
+and raise this repository's threshold so the metric stops firing.
+
+The proposal is filed as <https://github.com/leynos/whitaker/issues/504>. It
+carries the measurements from this section, the `ExpnKind` probe results that
+disqualify `span.from_expansion()` as a predicate, and the two properties the
+walk must preserve (`ExpnKind::Macro` keyed per node, and always descending).
+It also notes the two existing Whitaker lints that disagree with each other:
+`bumpy_road_function` prunes on `from_expansion()` and so loses source `for`
+loops, while `conditional_max_n_branches` has no expansion guard at all.
+
+**The hoisting refactor is reverted.** Four commits were undone: `021e05245`
+(relocate emitter modules), `17d4b5e8e` (child-shutdown emitters), `f2642d2ae`
+(Kani guard and tracing-capture emitters) and `d4d06c3b0` (hoist tracing
+macros). Every `info!` and `tracing` call is inline again. The revert also
+restored `tests/kani_mutation_evidence_tests/compile_guard.rs` to 393 lines: the
+`apply_patch` sibling module had existed only because hoisting pushed that
+file past the 400-line cap, so undoing the hoist made the split unnecessary.
+
+**The threshold is 32, and that number is measured.** With the hoist reverted
+and the threshold demoted to 0, linting the library with `--all-features`
+reports 2174 functions across `src/`. Bridging `tracing/log` on and off gives
+the same 2174 functions, and pairing them one-for-one isolates the inflation:
+
+| State                             | Max | Functions over 9 |
+| --------------------------------- | --- | ---------------- |
+| bridge off (`tracing/log` absent) | 8   | 0                |
+| bridge on (unified onto the lib)  | 31  | 39               |
+
+The 39 matches the count that first turned `make lint` red, which confirms the
+bridge is the sole cause. Exactly one function in `src/` measures above 7 with
+the bridge off, and none above 8. `fetch_inner` in `src/stdlib/network/mod.rs`
+is the extreme: 8 with the bridge off and 31 with it on, and it contains two
+source branches and four inline `debug!` calls, so the whole 23-unit gap is
+generated.
+
+An earlier sizing of 7 was wrong and is recorded here as a trap. It came from a
+run that reported a maximum of 6, but that run had aborted inside the
+`netsuke-build` build script, which reaches only `src/cli`, `src/locale`,
+`src/host` and `src/localization` through `#[path]` and never reaches
+`src/runner` or `src/stdlib` — and it never linted the library at all. When
+sizing a threshold, confirm which targets were actually linted, not just that
+the command ran.
+
+Both `clippy.toml` and `test_support/clippy.toml` carry the raised value.
+`make lint` exits 0 with the hoist reverted, and reports zero
+`cognitive_complexity` diagnostics at the new threshold.
+
 ### Session provenance
 
 The work session that produced this migration is recorded at
@@ -2518,3 +2612,42 @@ work "has not started", and the `## Outcomes & retrospective` paragraph that
 said the same, both now point at the evidence. The Markdown-scoped gates
 (`check-fmt`, `spelling`, `markdownlint`, `nixie`) are re-run on the commit
 carrying this text.
+
+2026-10-21 — course change, and the full set re-run on it. The hoisting
+refactor is reverted (four commits) and `cognitive-complexity-threshold` is
+raised to 32 in both `clippy.toml` files, so this revision changes source, not
+just prose. That makes it the first delta since the rebase to span `src/`,
+`tools/` and the lint configuration, so the whole seven-gate set applies rather
+than the Markdown-scoped subset, and all seven were run once each,
+sequentially. The logs carry a `-2` suffix because the unsuffixed paths still
+held the earlier sweep's evidence, which was preserved rather than overwritten:
+
+| Gate                           | Status                                            | Log                                                          |
+| ------------------------------ | ------------------------------------------------- | ------------------------------------------------------------ |
+| `make check-fmt`               | pass — 186 Python, 174 Markdown unchanged         | `/tmp/check-fmt-adopt-rstest-bdd-v0-6-0-2.out`               |
+| `make lint`                    | pass — every stage reached, no complexity reports | `/tmp/lint-adopt-rstest-bdd-v0-6-0-2.out`                    |
+| `make typecheck`               | pass — `cargo check` clean                        | `/tmp/typecheck-adopt-rstest-bdd-v0-6-0-2.out`               |
+| `make markdownlint`            | pass — 175 files, 0 issues                        | `/tmp/markdownlint-adopt-rstest-bdd-v0-6-0-2.out`            |
+| `make nixie`                   | pass — all diagrams validated                     | `/tmp/nixie-adopt-rstest-bdd-v0-6-0-2.out`                   |
+| `make test`                    | pass — 3919/3919, 6 skipped; 153 doctests green   | `/tmp/test-adopt-rstest-bdd-v0-6-0-2.out`                    |
+| `make test-workflow-contracts` | pass — 1107 passed, 3 skipped                     | `/tmp/test-workflow-contracts-adopt-rstest-bdd-v0-6-0-2.out` |
+
+`make lint` passing at the reverted revision is the row that discharges the
+course change: it runs Clippy with `--all-targets --all-features`, which is the
+configuration that unified `tracing/log` onto the library and produced the 39
+errors, and it reports none. The raised threshold is therefore sufficient on
+its own, with no hoisting left in place.
+
+The tree that was gated is identified by its content hash rather than by a
+commit, because the delta was uncommitted when the gates ran: `git write-tree`
+returned `f425a27e0fe7a03d308c2f4dfb0f2ce287aeff5b` before the sweep, and the
+same tree hash afterwards. This record is the only change made after the sweep,
+so it needs the Markdown-scoped gates re-run on the commit that carries it,
+with the same `-2` paths reused.
+
+`make test-coverage-artifact` and `make test-documentation-contracts` were not
+run, and their absence is a scope decision rather than a gap: no path under
+`scripts/` is modified, and none of `README.md`, `docs/users-guide.md` or
+`docs/stdlib-yaml-and-jinja-guide.md` is touched, so neither target's input
+changed. `make test-podman` likewise does not apply: no path under `ansible/`
+appears in the delta.

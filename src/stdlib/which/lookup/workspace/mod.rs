@@ -80,26 +80,6 @@ impl Default for WorkspaceSkipList {
 ///
 /// # Errors
 ///
-/// Note that the workspace `which` fallback was disabled by an env override.
-fn debug_workspace_fallback_disabled_from_fields() {
-    tracing::debug!(
-        env = crate::stdlib::which::workspace_switch::WORKSPACE_FALLBACK_ENV,
-        "workspace which fallback disabled via env override",
-    );
-}
-
-/// Note the depth and skip list the workspace `which` fallback will use.
-///
-/// Only the skip list's contents are emitted; it is manifest configuration, not
-/// user input, and it is what determines how much of the tree is walked.
-fn debug_workspace_fallback_used_from_fields(skip_dirs: &WorkspaceSkipList) {
-    tracing::debug!(
-        max_depth = WORKSPACE_MAX_DEPTH,
-        skip = ?skip_dirs,
-        "using workspace which fallback",
-    );
-}
-
 /// Returns a [`ResolveError`] when traversal fails, a workspace path is not
 /// valid UTF-8, or an executable probe fails.
 pub(super) fn search_workspace(
@@ -109,11 +89,18 @@ pub(super) fn search_workspace(
     skip_dirs: &WorkspaceSkipList,
 ) -> Result<Vec<Utf8PathBuf>, ResolveError> {
     if !env.workspace_fallback_enabled() {
-        debug_workspace_fallback_disabled_from_fields();
+        tracing::debug!(
+            env = crate::stdlib::which::workspace_switch::WORKSPACE_FALLBACK_ENV,
+            "workspace which fallback disabled via env override",
+        );
         return Ok(Vec::new());
     }
 
-    debug_workspace_fallback_used_from_fields(skip_dirs);
+    tracing::debug!(
+        max_depth = WORKSPACE_MAX_DEPTH,
+        skip = ?skip_dirs,
+        "using workspace which fallback",
+    );
 
     platform_search_workspace(env, command, collect_all, skip_dirs)
 }

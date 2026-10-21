@@ -16,23 +16,6 @@ use super::{
     streaming::ForwardStats,
 };
 
-/// Keep the bounded child-shutdown emitters below the module line cap.
-///
-/// The `#[path]` attribute is required rather than incidental: a plain
-/// `mod emitters;` would need `child_exit/mod.rs`, which denies
-/// `clippy::self_named_module_files` beside this non-`mod.rs` parent, while
-/// naming the file `child_exit_emitters.rs` beside this one forms a shared
-/// `child_` prefix that the module-layout contract rejects. Pointing `#[path]`
-/// into a same-stem directory satisfies both, and leaves the module's path —
-/// and so every `super::` reference — unchanged.
-#[path = "child_exit/emitters.rs"]
-mod emitters;
-
-use emitters::{
-    debug_child_kill_failed, debug_child_reap_failed, debug_forwarding_stream_truncated,
-    warn_forwarding_thread_panicked,
-};
-
 /// Context retained until the child process has completed.
 #[derive(Clone, Copy)]
 pub(super) struct ExitFailureContext<'failure, 'clock, Clock> {
@@ -80,10 +63,10 @@ pub(super) fn check_exit_status_with_context<Clock: MonotonicClock>(
 /// Terminate a partially configured child and reap it before returning an error.
 pub(super) fn terminate_child(child: &mut Child, context: &str) {
     if let Err(error) = child.kill() {
-        debug_child_kill_failed(context, &error);
+        tracing::debug!("failed to kill child after {context}: {error}");
     }
     if let Err(error) = child.wait() {
-        debug_child_reap_failed(context, &error);
+        tracing::debug!("failed to reap child after {context}: {error}");
     }
 }
 
@@ -112,7 +95,7 @@ pub(super) fn finalize_streaming(
             context
         }
         Err(error) => {
-            warn_forwarding_thread_panicked(&error);
+            tracing::warn!("stderr forwarding thread panicked: {error:?}");
             None
         }
     };
@@ -122,6 +105,6 @@ pub(super) fn finalize_streaming(
 /// Log a truncation debug event when a forwarding stream hit a closed pipe.
 fn handle_forwarding_stats(stats: ForwardStats, stream_name: &str) {
     if stats.write_failed {
-        debug_forwarding_stream_truncated(stream_name);
+        tracing::debug!("{stream_name} forwarding encountered closed pipe; output truncated");
     }
 }

@@ -39,14 +39,6 @@ impl From<Result<String, std::env::VarError>> for WorkspaceSwitch {
     }
 }
 
-/// Emit the bounded warning for a mis-encoded workspace-fallback variable.
-fn warn_workspace_switch_not_unicode_from_fields() {
-    tracing::warn!(
-        env = WORKSPACE_FALLBACK_ENV,
-        "workspace fallback disabled because env var is not valid UTF-8",
-    );
-}
-
 /// Read and translate the workspace switch, warning about a mis-encoded value.
 ///
 /// Both capture variants funnel through here so the diagnostic fires exactly
@@ -58,7 +50,10 @@ fn warn_workspace_switch_not_unicode_from_fields() {
 fn capture_workspace_switch(env: &impl Env) -> WorkspaceSwitch {
     let switch = WorkspaceSwitch::from(env.raw(WORKSPACE_FALLBACK_ENV));
     if matches!(switch, WorkspaceSwitch::NotUnicode) {
-        warn_workspace_switch_not_unicode_from_fields();
+        tracing::warn!(
+            env = WORKSPACE_FALLBACK_ENV,
+            "workspace fallback disabled because env var is not valid UTF-8",
+        );
     }
     switch
 }

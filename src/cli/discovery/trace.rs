@@ -182,17 +182,12 @@ impl FileLayerTrace {
                 debug_config_path_from_fields("using explicit config path", path);
             }
             Self::Automatic { project_scope } => {
-                emit_automatic_layer_branch(project_scope.as_ref());
+                debug!("using config discovery");
+                if let Some(trace) = project_scope {
+                    trace.emit();
+                }
             }
         }
-    }
-}
-
-/// Emit the selector-free layer branch and any project-scope second pass.
-fn emit_automatic_layer_branch(project_scope: Option<&ProjectScopeTrace>) {
-    debug!("using config discovery");
-    if let Some(trace) = project_scope {
-        trace.emit();
     }
 }
 

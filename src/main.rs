@@ -331,15 +331,6 @@ fn configure_runtime(
     localization::set_localizer(Arc::clone(&runtime_localizer));
 }
 
-/// Emit the opaque runner failure that the human-readable path also renders.
-///
-/// The error text is written to stderr beside this event, so the event exists
-/// for correlation rather than disclosure; it carries the rendering rather
-/// than a second copy of the diagnostic.
-fn error_runner_failed_from_fields(error: &anyhow::Error) {
-    tracing::error!(error = %error, "runner failed");
-}
-
 /// Render a runner failure according to the selected human or JSON mode.
 ///
 /// JSON output uses the stable diagnostic serializer and fallback payload to
@@ -360,7 +351,7 @@ fn handle_runner_error(
             drop(writeln!(io::stderr(), "{prefix} {report:?}"));
         }
         Err(other_err) => {
-            error_runner_failed_from_fields(&other_err);
+            tracing::error!(error = %other_err, "runner failed");
             drop(writeln!(io::stderr(), "{prefix} {other_err}"));
         }
     }
