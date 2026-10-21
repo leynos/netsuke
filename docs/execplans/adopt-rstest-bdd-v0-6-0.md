@@ -26,8 +26,12 @@ and its gates are green. It is **not** delivered into this repository, because
 no release containing it exists: crates.io still publishes `rstest-bdd` 0.6.0
 as its newest version, and the fix is in no tag. The residual gap is recorded
 under `Outcomes & retrospective` and is the reason the hoisting refactor
-remains in place. The four-part recurrence work (a Clippy correction for
-generated branching) has not started.
+remains in place. The fourth part of the task — a Clippy correction that stops
+`cognitive_complexity` charging branching a macro generated — has been prepared
+and measured against the pinned nightly in a scratch Clippy tree, and is
+recorded under `### Recurrence correction (Requirement 4)`. It is not adopted
+here: that needs an ADR, and this repository's toolchain is deliberately
+unchanged.
 
 Roadmap item: none. Origin: `leynos/rstest-bdd` v0.6.0 release and its
 `docs/v0-6-0-migration-guide.md`.
@@ -289,10 +293,13 @@ the conflict in `Decision log` before proceeding.
   needs a published `rstest-bdd` release that contains `a1bc187c`; the newest
   published version is still 0.6.0, so there is nothing to depend on. Recorded
   under `Outcomes & retrospective`.
-- [ ] (not started) Prepare the recurrence correction: a Clippy
+- [x] (2026-10-21) Prepare the recurrence correction: a Clippy
   `cognitive_complexity` change that excludes generated branching without
-  excluding source-written branching. Not required for this repository's
-  current green state, which the hoisting refactor already secures.
+  excluding source-written branching. Prepared and measured in a scratch Clippy
+  tree at the pinned nightly, with UI cases for nested macros, tracing on and
+  off, source-written branches, closures, and a function mixing macros with
+  ordinary control flow. Not adopted by this repository; see
+  `### Recurrence correction (Requirement 4)`.
 
 ## Surprises & discoveries
 
@@ -783,6 +790,24 @@ the conflict in `Decision log` before proceeding.
   exact shape the lint exists to catch. Neither `cargo clippy` nor `make test`
   runs Dylint, so a green focused run proved nothing about that stage. The
   helper now uses `let … else { panic!(…) }`, and the comment records why.
+- Observation: `Descend::No` in a `for_each_expr_without_closures` callback
+  does not stop the node it is returned for from being processed. The visitor
+  runs the closure over the node first and consults the returned directive only
+  to decide whether to walk that node's children; `Continue(())` and
+  `Continue(Descend::Yes)` are equivalent. A correction that wants a node to
+  cost nothing must skip the charge inside the callback, not rely on the
+  descent decision. This cost a full wrong iteration of the Requirement 4 work
+  and was caught only because the UI cases asserted a value of 1 for a
+  `matches!`-only function; a suite that checked merely "no worse than before"
+  would have accepted it.
+- Observation: excluding a node whose span is from an expansion, or pruning a
+  generated subtree, both remove source-written branching that a macro *wraps*.
+  The macros people actually write wrap their arguments in generated control
+  flow — `assert!` is a generated `if`, `println!` is a generated `match` over
+  its format string — so a source `if` passed to either arrives inside a
+  generated node. The rule that works is to charge each node by its own syntax
+  context and keep walking: substituted tokens keep their call-site context, so
+  source survives without a special case.
 
 ## Imported-document provenance and link mapping
 
@@ -1067,6 +1092,22 @@ the link site.
   a budget that small would turn a slow machine into a false failure — which is
   the failure mode the four-tier doctrine exists to prevent.
 
+- Decision: **key the `cognitive_complexity` exclusion on `ExpnKind::Macro`,
+  and charge before deciding whether to descend, rather than pruning generated
+  subtrees.** Two alternatives were rejected on evidence. Pruning with
+  `Descend::No` failed both ways: the visitor charges a node before it consults
+  the descent decision, so a generated `if`/`match` still paid for itself and a
+  `matches!`-only function measured 2; and a pruned generated subtree took
+  source expressions with it, so an `if` written inside an `assert!` argument
+  stopped counting. `span.from_expansion()` was rejected earlier for the same
+  second reason and because it cannot distinguish a macro body from a
+  desugaring, which would have stopped charging `for` loops and `?`.
+
+  Rejected: a name-based allow-list of known macro names. It is the global
+  macro exclusion the task forbids, and it does not generalize to the next
+  dependency that branches inside a macro. Date/Author: 2026-10-21,
+  implementing agent.
+
 ## Outcomes & retrospective
 
 What was achieved. Netsuke's behavioural suite runs on the published
@@ -1176,12 +1217,13 @@ requirement, not an automatic consequence of the upstream release.
 Two further residual gaps, recorded so they are not mistaken for passes.
 Requirement 4 — the Clippy `cognitive_complexity` change that would exclude
 generated branching while preserving traversal into source-written expressions
-passed to macros — has not been started; it is independent of the dependency
-fix and would need its own ExecPlan against a pinned nightly. And the native
-Windows lint job for PR #805 has not been validated: no CI run is reachable
-from this local checkout, so the job is an *unavailable* check rather than a
-passing one. The command it runs is unchanged by this work, which is what makes
-the gap tolerable rather than resolved.
+passed to macros — is prepared and measured but not adopted; the correction and
+its evidence are recorded under `### Recurrence correction (Requirement 4)`.
+Adoption would need its own ADR because it replaces the Clippy that the pinned
+nightly ships. And the native Windows lint job for PR #805 has not been
+validated: no CI run is reachable from this local checkout, so the job is an
+*unavailable* check rather than a passing one. The command it runs is unchanged
+by this work, which is what makes the gap tolerable rather than resolved.
 
 One planning error is worth recording separately from the gate results. The
 planner named up to thirteen upstream gate targets, of which `doc-coverage`,
@@ -1957,6 +1999,92 @@ rows — 1.1 s and 1.8 s early, 3.8 s and 23.1 s late — is consistent with the
 late run rebuilding what the rewrite changed, but the logs do not record cache
 state, so that is an observation offered as corroboration and not as proof.
 
+### Recurrence correction (Requirement 4)
+
+The fourth part of the task asked for a Clippy `cognitive_complexity`
+correction that excludes generated branching without excluding source-written
+branching, prepared and compared against the pinned nightly rather than adopted
+by this repository. It has been prepared in a separate scratch tree and
+measured. Nothing in this repository — source, manifest, toolchain, or lint
+configuration — is changed by it, and
+`docs/adr-006-adopt-polonius-nightly-toolchain.md` is untouched. Adopting a
+patched Clippy would be its own ADR.
+
+The tree is `/home/leynos/scratch/clippy-rec`, a git repository whose history
+is the three commits `2e2abdc`, `e711d52`, and `53358b4`. The first is a
+pristine import of rustc `c54751567b19c4ceb08b0412d83529c2568cba8b`'s
+`src/tools/clippy` (tree `25cb83b6b567cdd1514759346eb1728bf599d850`), which is
+the Clippy the pinned `nightly-2026-08-23` ships. That tree SHA matches Clippy
+commit `62fa8974265296c42e516eb1c3e56353f4fc1bd9`, so the import is
+reproducible rather than hand-assembled.
+
+**The correction.** The lint walked the post-expansion HIR and charged every
+`if`, every `match` with more than one arm, and every arm guard. It now charges
+a node only when the node's syntax context is not a macro body:
+
+```rust
+fn is_generated(ctxt: SyntaxContext) -> bool {
+    ctxt != SyntaxContext::root() && matches!(ctxt.outer_expn_data().kind, ExpnKind::Macro(..))
+}
+```
+
+Two details carry the contract. The predicate keys on `ExpnKind::Macro`, not on
+`span.from_expansion()`, because `for`, `?`, `async` and `format_args!` are
+`ExpnKind::Desugaring` and their branching is the author's: a `for` loop
+written in source must keep costing a unit even though the compiler lowers it
+to a `match`. And the walk always descends; it does not prune generated
+subtrees, because generated control flow can *wrap* a source expression. An
+`if` written as an `assert!` argument arrives inside a generated `if`, and
+pruning would lose it. Tokens substituted for macro metavariables keep their
+call-site context, so source arguments are still charged without any special
+case.
+
+An earlier attempt returned `Descend::No` instead. That was wrong in both
+directions, and the UI cases caught it: `for_each_expr_without_closures`
+charges a node *before* consulting the descent decision, so every directly
+generated `if`/`match` still paid for itself, and pruning the generated subtree
+dropped source branches the macro wrapped. The measured symptom was a
+`matches!`-only function reporting 2 and a source `if` inside an `assert!`
+reporting 1.
+
+**Measured values.** The probe consumer at
+`/home/leynos/scratch/clippy-rec/consumer` sets
+`cognitive-complexity-threshold = 0` so every function reports, and has a
+`trace-log` feature that enables `tracing/log` — the same feature unification
+that turned 39 Netsuke functions over the line. Values are `(reported/0)`:
+
+| Probe function                   | stock, bridge off | stock, bridge on | patched, both states |
+| -------------------------------- | ----------------- | ---------------- | -------------------- |
+| `no_branch`                      | 1                 | 1                | 1                    |
+| `four_tracing_calls`             | 1                 | **29**           | **1**                |
+| `source_branch`                  | 2                 | 2                | 2                    |
+| `source_branch_inside_macro_arg` | 2                 | 2                | 2                    |
+| `generated_branch` (`matches!`)  | 2                 | 2                | **1**                |
+| `closure_in_macro_arg`           | 3                 | 3                | **1**                |
+| `nested_macros`                  | 2                 | 2                | 2                    |
+| closure body                     | 2                 | 2                | 2                    |
+
+`closure_in_macro_arg` falling to 1 is the pre-existing contract, not a
+regression: the source `if` is inside the closure,
+`for_each_expr_without_closures` does not descend into closures, and the
+closure body is measured once on its own at 2.
+
+**Negative control.** Forcing the predicate to `false` and rebuilding restores
+`four_tracing_calls` to 29, `source_branch_inside_macro_arg` to 9 and
+`nested_macros` to 3. The matrix can therefore fail, and it fails for the
+intended reason.
+
+**Upstream suite.**
+`TESTNAME=cognitive_complexity cargo +nightly-2026-08-23 uitest` in the
+imported tree passes both `cognitive_complexity.rs` and
+`cognitive_complexity_attr_used.rs`. Seven cases were added: a bare `matches!`,
+a source branch in a macro argument, a source branch wrapping a generated one,
+nested macros, a closure in a macro argument, `for` and `?` desugarings, and a
+function mixing macros with ordinary control flow. All 24 pre-existing
+expectations are byte-identical; the `.stderr` diff adds five entries and
+removes none. The `issue14422` `for`-loop case is the standing guard against an
+over-broad exclusion.
+
 ### Session provenance
 
 The work session that produced this migration is recorded at
@@ -2378,3 +2506,15 @@ four gates above gated `95eec9f0`, whose only subsequent change is this
 paragraph, and the same four targets are re-run on the resulting commit with
 `/tmp/<target>-upstream-confirm-adopt-rstest-bdd-v0-6-0.out` paths; that
 verdict is reported in the pull request rather than folded back here.
+
+2026-10-21 — Requirement 4 recorded. The recurrence correction is prepared and
+measured in the scratch Clippy tree `/home/leynos/scratch/clippy-rec` and
+documented under `### Recurrence correction (Requirement 4)`; no file in this
+repository changes as a result except this plan. `Status:` stays `COMPLETE`,
+because the plan's own deliverable is the migration, and the correction's
+adoption is explicitly out of scope and would need an ADR. Two corrections to
+earlier text follow from it: the summary paragraph that said the recurrence
+work "has not started", and the `## Outcomes & retrospective` paragraph that
+said the same, both now point at the evidence. The Markdown-scoped gates
+(`check-fmt`, `spelling`, `markdownlint`, `nixie`) are re-run on the commit
+carrying this text.
