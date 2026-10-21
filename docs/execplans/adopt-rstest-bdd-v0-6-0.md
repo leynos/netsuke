@@ -1452,11 +1452,19 @@ revision notes as history and is not the current state.
 One planning error is worth recording separately from the gate results. The
 planner named up to thirteen upstream gate targets, of which `doc-coverage`,
 `test-coverage-artifact`, `test-documentation-contracts` and
-`check-build-tools` do not exist in the `rstest-bdd` Makefile. Invoking an
-undefined target is a `make` error, but the four were never invoked: the gate
-sweep ran the targets the upstream Makefile actually defines, and the
-nonexistent names are a defect in this plan, not in that repository. They are
-distinguished from the one real failure — the Whitaker
+`check-build-tools` do not exist in the `rstest-bdd` Makefile. The four
+**were** invoked, and `make` rejected each one before any recipe ran: every log
+records `make: *** No rule to make target '<name>'.  Stop.` with
+`make exit code: 2`. An earlier revision of this paragraph said they were
+"never invoked"; that was wrong about what the sweep did, and the logs under
+`/tmp/upstream-<target>-<epoch>.out` are the authority. The distinction that
+matters is therefore not invoked-and-passed versus never-invoked: it is a
+target that does not exist versus one that exists and failed. Both are recorded
+as *absent*, not as *passed*, because a `make` invocation that reaches no
+recipe says nothing about the tree. The gate sweep also ran the targets the
+upstream Makefile actually defines, and those are the eleven rows in the gate
+table above. The four nonexistent names are a defect in this plan, not in that
+repository, and they are distinguished from the one real failure — the Whitaker
 `no_unwrap_or_else_panic` diagnostic in `tests/feature_graph/support/mod.rs`,
 which was fixed and re-run green — so that "did not exist" and "failed" are not
 collapsed into a single ambiguous "did not pass".
