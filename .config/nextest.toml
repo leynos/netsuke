@@ -20,8 +20,8 @@
 # after 60s; terminate a test that has run for five warning periods (300s).
 #
 # This is the profile's own allowance, and it governs every test no override
-# matches. The mutation compile gate widens it to ten periods; the production
-# module-slice check, stub-environment, split-build, and cold package-publish
+# matches. The mutation compile gate widens it to ten periods; the
+# stub-environment, split-build, and cold package-publish
 # checks get fifteen. The largest allowance is 900 s.
 slow-timeout = { period = "60s", terminate-after = 5 }
 
@@ -72,20 +72,9 @@ test-group = "nested-cargo-builds"
 success-output = "immediate"
 
 [[profile.default.overrides]]
-filter = 'test(/^production_build_module_slice_has_expected_boundary($|::)/) | test(/^stub_env_default_does_not_compile($|::)/) | test(/^stub_env_builders_compile_under_the_same_harness($|::)/) | test(/^split_build_fixture_compiles_through_the_direct_rustc_harness($|::)/) | test(/^text_domains_cannot_be_swapped($|::)/) | test(/^document_and_needle_compile_together($|::)/)'
+filter = 'test(/^stub_env_default_does_not_compile($|::)/) | test(/^stub_env_builders_compile_under_the_same_harness($|::)/) | test(/^split_build_fixture_compiles_through_the_direct_rustc_harness($|::)/) | test(/^text_domains_cannot_be_swapped($|::)/) | test(/^document_and_needle_compile_together($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
-
-[[profile.default.overrides]]
-# This direct-rustc fixture needs the production library and build-script
-# dependencies, not every workspace test target. The package-scoped check
-# still exceeded 720 s in the rebased full suite while nested rustc requests
-# waited for healthy shared compiler admission. Give this one test fifteen
-# periods (900 s), matching the other cold builds without widening unrelated
-# test timeouts; this remains below the 960 s coverage-run cap.
-filter = 'test(/^production_build_module_slice_has_expected_boundary($|::)/)'
-success-output = "immediate"
-slow-timeout = { period = "60s", terminate-after = 15 }
 
 [[profile.default.overrides]]
 # This isolated fixture builds dependencies into a fresh target before its
@@ -175,8 +164,8 @@ success-output = "immediate"
 # this file bounds it and its own cargo watchdog does.
 #
 # The 16-minute global timeout is above the 900s largest per-test allowance.
-# The mutation compile gate keeps its 600s budget. The production module-slice
-# check, stub-environment compile-fail, split-build, and cold package-publish
+# The mutation compile gate keeps its 600s budget. The stub-environment
+# compile-fail, split-build, and cold package-publish
 # checks each get 900s. Both comparisons hold:
 #
 #   global-timeout > largest per-test allowance

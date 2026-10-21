@@ -52,7 +52,6 @@ TEST_SUPPORT_MANIFEST: Path = REPO_ROOT / "test_support" / "Cargo.toml"
 AMBIENT_TARGET_NESTED_BUILD_PACKAGES: tuple[tuple[str, Path], ...] = (
     ("test_support", REPO_ROOT / "tests" / "support" / "test_support_rlib.rs"),
     ("netsuke-build", REPO_ROOT / "tests" / "command_env_ui_tests.rs"),
-    ("netsuke-build", REPO_ROOT / "tests" / "build_module_slice_ui_tests.rs"),
 )
 AMBIENT_TARGET_NESTED_BUILD_SOURCES: tuple[Path, ...] = tuple(
     source for _, source in AMBIENT_TARGET_NESTED_BUILD_PACKAGES
@@ -284,8 +283,8 @@ def test_cold_packaging_verification_has_a_scoped_budget() -> None:
     timed_overrides = [
         override for override in profile["overrides"] if "slow-timeout" in override
     ]
-    assert len(timed_overrides) == 5, (
-        "preserve current-main cold-build budgets without a cached CLI override"
+    assert len(timed_overrides) == 4, (
+        "only remaining nested builds may need extended test budgets"
     )
     configured = {
         override["filter"]: override["slow-timeout"] for override in timed_overrides
@@ -306,7 +305,6 @@ def test_cold_packaging_verification_has_a_scoped_budget() -> None:
     expected.update({
         f"test(/^{name}($|::)/)": {"period": "60s", "terminate-after": periods}
         for name, periods in (
-            ("production_build_module_slice_has_expected_boundary", 15),
             ("split_build_fixture_compiles_through_the_direct_rustc_harness", 15),
             ("stub_env_default_does_not_compile", 15),
         )

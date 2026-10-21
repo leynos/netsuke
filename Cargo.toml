@@ -193,7 +193,7 @@ syn = { version = "2", features = ["full", "visit"] }
 fluent-bundle = "0.16.0"
 
 [workspace]
-members = ["test_support"]
+members = ["test_support", "build_slice_fixture"]
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

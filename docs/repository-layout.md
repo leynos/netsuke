@@ -16,6 +16,7 @@ output and some leaf files so the long-lived structure remains visible.
 ├── .github/
 │   ├── actions/
 │   └── workflows/
+├── build_slice_fixture/
 ├── cyclopts/
 ├── docs/
 │   ├── archive/
@@ -84,6 +85,10 @@ output and some leaf files so the long-lived structure remains visible.
   repository automation workflows.
 - `cyclopts/`: Local Python typing support for release and packaging helper
   scripts.
+- `build_slice_fixture/`: Non-published workspace library that compiles the
+  production build-script module slice before test execution. Its dependency
+  subset is checked against the root build dependencies by a workflow contract;
+  its doctests exercise the supported CLI boundary using the compiled library.
 - `docs/`: Long-lived project documentation, guides, design documents, decision
   records, and planning material.
 - `docs/archive/`: Historical planning documents retained for traceability
