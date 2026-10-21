@@ -8,11 +8,14 @@ be kept up to date as work proceeds.
 Status: IN PROGRESS
 
 The migration work is complete and all its behavioural evidence is green, but
-the plan stays open for delivery: a fourth rebase moved the branch onto a new
-target, and although the rebased revision has since been gated and pushed, the
-pull request has not yet been merged. That remaining item is tracked in
-`Progress`. The 39 `cognitive_complexity` errors the dependency bump introduces
-in the `make lint` gate were first resolved by hoisting the charged `tracing`
+the plan stays open for two tracked reasons, both recorded as unchecked items in
+`Progress`. The first is delivery: a fourth rebase moved the branch onto a new
+target, and although the rebased revision has since been gated, pushed and
+assessed, the pull request has not yet passed formal review or been merged. The
+second is the upstream integration, which is `blocked` rather than outstanding
+work, because it needs a published `rstest-bdd` release that does not yet
+exist. The 39 `cognitive_complexity` errors the dependency bump introduces in
+the `make lint` gate were first resolved by hoisting the charged `tracing`
 macros into per-macro emitters across 40 files; the root cause, the cost model,
 and the escalation that was raised and then superseded are recorded in
 `Surprises & discoveries` and `Decision log`. That hoist has since been
@@ -351,9 +354,25 @@ the conflict in `Decision log` before proceeding.
   in-scope evidence defects, both of which reproduced here and are now
   corrected: the lockfile-scope overclaim and the stale completion record. The
   proof-scrutiny assessment is recorded as `not applicable`, with evidence.
+- [x] (2026-10-21) Discharge the assessment's follow-up round. The second reply
+  accepted the corrected classification table as independently reproduced, and
+  left both findings open only for four remaining numeric/consistency defects
+  in this plan. All four reproduced against `Cargo.lock` and are corrected:
+  `winapi-util 0.1.11` removed from the `windows-sys 0.52.0` movers (it went to
+  `0.48.0`), the base `windows-sys` version count corrected from seven to five,
+  the outside-union total corrected from ten to fifteen (ten removed plus five
+  retained-with-changed-text), and the `Progress`/header completion record
+  reconciled so the open review-to-merge item is not reported as closed.
+  Awaiting confirmation that the follow-up round is discharged.
 - [ ] (2026-10-21) Take the pull request through review to a merge. CodeRabbit
   currently reports `Review skipped: draft pull request` on `1e7e65dce`, so
-  that head is unreviewed rather than reviewed-clean.
+  that head is unreviewed rather than reviewed-clean. **This item stays open
+  until the merge lands.** A follow-up comment posted on 2026-10-21 described
+  it as "closed as delivered"; that description was wrong and is corrected
+  here. Closing the `[x] (2026-10-21)` assessment item above records that the
+  two assessment findings were repaired, which is a different obligation from
+  the formal review and the merge. Keeping the two distinct is the whole point
+  of this item.
 
 ## Surprises & discoveries
 
@@ -685,18 +704,24 @@ the conflict in `Decision log` before proceeding.
   lockfile diff is wider than the four family crates.
 
   Evidence: within the lockfile, `cap-primitives 3.4.6` and `winx 0.36.4` moved
-  from `windows-sys 0.59.0` to `0.52.0`, and `rustix 1.1.4`, `tempfile 3.27.0`,
-  `errno 0.3.14` and `winapi-util 0.1.11` likewise re-selected `0.52.0`. Cargo
-  unifies a `cfg(windows)`-gated requirement across the whole graph, so
+  from `windows-sys 0.59.0` to `0.52.0`, and `rustix 1.1.4`, `tempfile 3.27.0`
+  and `errno 0.3.14` likewise re-selected `0.52.0`. `winapi-util 0.1.11` did
+  **not** join them: it moved from `0.61.2` to `0.48.0`, because its own
+  declared range admits the lower line and that line was already in the graph.
+  Cargo unifies a `cfg(windows)`-gated requirement across the whole graph, so
   removing the entry that previously forced the higher version lowers every
-  consumer. Each requirement was read from the registry manifest and admits the
-  new selection: `cap-primitives` and `winx` declare `>=0.52, <=0.59`,
-  `io-extras 0.18.4` declares `>=0.52, <=0.59`, `rustix`, `tempfile` and
-  `errno` declare `>=0.52, <0.62`. All nine consumers' requested `windows-sys`
-  features exist in 0.52.0's 233-feature set. On the non-Windows optional side,
-  `serde-saphyr 1.2.0` re-selected `base64 0.23.1` (declared `>=0.21, <0.24`),
-  `tracing 0.1.44` gained the already-optional `log` feature dependency, and
-  `hashbrown 0.16.1` dropped its optional `allocator-api2`/`equivalent` edges.
+  consumer whose range permits it. Each requirement was read from the registry
+  manifest and admits the new selection: `cap-primitives` and `winx` declare
+  `>=0.52, <=0.59`, `io-extras 0.18.4` declares `>=0.52, <=0.59`, `rustix`,
+  `tempfile` and `errno` declare `>=0.52, <0.62`. All nine consumers of
+  `windows-sys 0.52.0` at the head — `cap-primitives`, `errno`, `fs-set-times`,
+  `io-extras` at both 0.18.4 and 0.19.0, `ring`, `rustix`, `tempfile` and
+  `winx` — request features that exist in 0.52.0's 233-feature set. The base
+  had only `ring` on 0.52.0, so the unification is what moved the other eight.
+  On the non-Windows optional side, `serde-saphyr 1.2.0` re-selected
+  `base64 0.23.1` (declared `>=0.21, <0.24`), `tracing 0.1.44` gained the
+  already-optional `log` feature dependency, and `hashbrown 0.16.1` dropped its
+  optional `allocator-api2`/`equivalent` edges.
 
   Impact: the resolver re-selection is **not** confined to the `rstest-bdd`
   family closure. An earlier revision of this entry claimed it was; a
@@ -730,11 +755,12 @@ the conflict in `Decision log` before proceeding.
   moved from `0.59.0` to `0.52.0`.
 
   Every requirement involved still admits the new selection by declaration, and
-  the seven versions of `windows-sys` in the base graph collapse to three in
-  the head (`0.48.0`, `0.52.0`, `0.61.2`). `windows-sys 0.52.0` remains in the
-  family closure in its own right. Windows CI is the oracle for the compiled
-  consequence, and both Windows jobs pass on the delivered head; that is
-  compatibility evidence, not evidence of closure confinement.
+  the five versions of `windows-sys` in the base graph (`0.48.0`, `0.52.0`,
+  `0.59.0`, `0.60.2`, `0.61.2`) collapse to three in the head (`0.48.0`,
+  `0.52.0`, `0.61.2`). `windows-sys 0.52.0` remains in the family closure in
+  its own right. Windows CI is the oracle for the compiled consequence, and
+  both Windows jobs pass on the delivered head; that is compatibility evidence,
+  not evidence of closure confinement.
 
 - Observation: the `cognitive_complexity` failures this migration caused are
   not a property of the files that carry them; they are a property of the
@@ -896,8 +922,9 @@ the conflict in `Decision log` before proceeding.
   under it, and this one did. The 2026-10-02 entry said "the lockfile delta is
   22 packages, and every one of them lies inside the union of the family's
   transitive closure". Both halves were true when measured. Four rebases later
-  the base was `c8e58a0a8`, the delta was 59 differing package records, and ten
-  of them sat outside both closures.
+  the base was `c8e58a0a8`, the delta was 59 differing package records, and 15
+  of them sat outside both closures: ten removed identities and five retained
+  packages whose dependency text changed.
 
   Evidence: re-measured on `Cargo.lock` between `c8e58a0a8` and the delivered
   head. 25 removed identities, 18 added, 16 retained with changed dependency
@@ -935,6 +962,23 @@ the conflict in `Decision log` before proceeding.
   remedy left described as the remedy is worse than a stale number, because a
   reader following it would reproduce a refactor the plan elsewhere says was
   reverted. Historical passages must name themselves as history.
+
+- Observation: correcting a plan and correcting the *report of* correcting the
+  plan are two obligations, and the first does not discharge the second. The
+  first follow-up to the assessment restated the plan's own state from memory
+  and got it wrong: it said `Progress` carried one open item and described the
+  review-to-merge item as "closed as delivered", when the committed file had
+  correctly kept it open. The reviewer caught the discrepancy by reading the
+  committed plan rather than the summary.
+
+  Impact: a progress claim in a comment is an assertion about a file, and the
+  file is the authority. Re-read the committed document immediately before
+  describing its state, and prefer quoting the item over paraphrasing it. The
+  three numeric defects from the same round had the same shape — an earlier
+  figure surviving beside a corrected one — which is why they were invisible to
+  a reader checking only the corrected passage. A plan that states a
+  measurement in two places must have both places re-derived, or the second
+  becomes a contradiction the first cannot outvote.
 
 ## Imported-document provenance and link mapping
 
