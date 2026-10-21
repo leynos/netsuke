@@ -56,7 +56,7 @@ Netsuke currently requires:
   automatically in a checkout). Netsuke builds with the Polonius borrow
   checker, which nightly enables by default and which stays nightly-only until
   it stabilizes; see
-  [ADR-006](docs/adr-006-adopt-polonius-nightly-toolchain.md).
+  [ADR-0006](docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md).
 
 ### Installation
 
@@ -304,7 +304,8 @@ the changelog, not a policy change.
 change. The scoped guarantees above do not make arbitrary recipes safe. See the
 [users' guide safety boundary](docs/users-guide.md#review-the-safety-boundary)
 for shell-route mechanics and
-[ADR-027](docs/adr-027-command-placeholder-contract.md) for these decisions.
+[ADR-0027](docs/adrs/adr-0027-command-placeholder-contract.md) for these
+decisions.
 
 ______________________________________________________________________
 

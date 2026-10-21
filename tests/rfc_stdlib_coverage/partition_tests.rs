@@ -99,7 +99,7 @@ fn rejects_unaccepted_rows_before_namespace_comparison() {
     assert!(
         error
             .to_string()
-            .contains("docs/rfcs/0013-child.md registers unknown")
+            .contains("docs/rfcs/rfc-0013-child.md registers unknown")
     );
 }
 
@@ -132,7 +132,7 @@ fn rejects_denied_registrations_with_the_child_filename() {
     assert!(
         error
             .to_string()
-            .contains("docs/rfcs/0013-child.md registers is_file")
+            .contains("docs/rfcs/rfc-0013-child.md registers is_file")
     );
     assert!(error.to_string().contains("section 7 or section 9 forbids"));
 }

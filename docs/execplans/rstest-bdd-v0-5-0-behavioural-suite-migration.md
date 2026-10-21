@@ -157,7 +157,7 @@ the conflict in `Decision Log` before proceeding.
 
 - Decision: standardize migration-related documentation links on
   `docs/rstest-bdd-v0-5-0-migration-guide.md` and reference the existing ADR as
-  "Architecture Decision Record 002 (ADR-002)". Rationale: this avoids broken
+  "Architecture Decision Record 002 (ADR-0002)". Rationale: this avoids broken
   links, expands acronyms on first use, and keeps citations aligned with files
   that actually exist in `docs/`. Date/Author: 2026-02-08 (Codex)
 

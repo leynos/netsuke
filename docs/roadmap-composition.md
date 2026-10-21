@@ -19,11 +19,12 @@ Hypothesis: an author can split a monolithic Netsukefile into local fragments
 without changing its graph, executing recipes during discovery, or making
 composition depend on filesystem iteration order.
 
-This phase implements [RFC 0002](rfcs/0002-repository-relative-includes.md). It
-shares provenance concepts with RFC 0001, not an action-runner dependency;
-legacy recipes can validate this entire slice. Versioned instantiation belongs
-in phase 17, and networking belongs only in phase 18. Phase numbers identify
-work, not a requirement to finish every preceding phase.
+This phase implements
+[RFC 0002](rfcs/rfc-0002-repository-relative-manifest-includes.md). It shares
+provenance concepts with RFC 0001, not an action-runner dependency; legacy
+recipes can validate this entire slice. Versioned instantiation belongs in
+phase 17, and networking belongs only in phase 18. Phase numbers identify work,
+not a requirement to finish every preceding phase.
 
 ### 16.1. Load each local composition unit once through a capability
 
@@ -39,7 +40,8 @@ the traversal and provenance contract used by later bundle instances.
   - [ ] Record the additive schema gate, bounded composition limits, and
     reuse boundaries in the design and any required ADR. Coordinate version
     allocation with 12.1.1 without coupling their implementation schedules.
-  - See [RFC 0002 §§5-10 and 16](rfcs/0002-repository-relative-includes.md).
+  - See
+    [RFC 0002 §§5-10 and 16](rfcs/rfc-0002-repository-relative-manifest-includes.md).
   - Success: one documented schema and provenance contract resolves every
     initial-scope decision without enabling dynamic paths or silent overrides.
 - [ ] 16.1.2. Parse literal includes and open confined source units.
@@ -50,7 +52,8 @@ the traversal and provenance contract used by later bundle instances.
   - [ ] Retain original bytes, spans, and canonical identities; reject
     absolute, lexical and symlink escapes, non-files, unreadable inputs, and
     unsupported non-UTF-8 paths or content with distinct bounded diagnostics.
-  - See [RFC 0002 §§5, 6, and 9](rfcs/0002-repository-relative-includes.md).
+  - See
+    [RFC 0002 §§5, 6, and 9](rfcs/rfc-0002-repository-relative-manifest-includes.md).
   - Success: nested-directory and Windows path fixtures resolve the intended
     files, while generated escape cases cannot open content outside the root.
 - [ ] 16.1.3. Compose includes in deterministic depth-first post-order.
@@ -61,7 +64,8 @@ the traversal and provenance contract used by later bundle instances.
   - [ ] Distinguish a cycle from a repeated load, including diamonds and
     alternate path or symlink spellings; report the closing site and both
     first and attempted include chains without losing source spans.
-  - See [RFC 0002 §§6 and 14](rfcs/0002-repository-relative-includes.md).
+  - See
+    [RFC 0002 §§6 and 14](rfcs/rfc-0002-repository-relative-manifest-includes.md).
   - Success: the `C, A, B, R` example and bounded graph properties preserve
     order and unique emission; tractable Kani traversal checks cover the
     production state machine rather than a disconnected model.
@@ -80,7 +84,8 @@ extracting a fragment preserves both references and rebuild behaviour.
   - [ ] Reject duplicate qualified declarations and variable keys, including
     nested mapping replacement, with both source sites and remediation.
     Reject fragment-owned root settings rather than ignoring them.
-  - See [RFC 0002 §§5.1 and 7](rfcs/0002-repository-relative-includes.md).
+  - See
+    [RFC 0002 §§5.1 and 7](rfcs/rfc-0002-repository-relative-manifest-includes.md).
   - Success: namespace and collision fixtures demonstrate no implicit deep
     merge, last-writer-wins replacement, or unresolved reference rewriting.
 - [ ] 16.2.2. Feed composed units through the existing manifest compiler.
@@ -90,7 +95,8 @@ extracting a fragment preserves both references and rebuild behaviour.
     IR, and Ninja generation instead of reparsing synthetic merged YAML.
   - [ ] Prevent templates from synthesizing new structural includes, preserve
     existing control-key scopes, and keep no-include manifests unchanged.
-  - See [RFC 0002 §§8, 10, and 12](rfcs/0002-repository-relative-includes.md).
+  - See
+    [RFC 0002 §§8, 10, and 12](rfcs/rfc-0002-repository-relative-manifest-includes.md).
   - Success: differential compiler fixtures preserve the legacy graph and
     report expansion and recipe errors at their original fragment spans.
 - [ ] 16.2.3. Bind compilation fingerprints to the entire source composition.
@@ -100,7 +106,7 @@ extracting a fragment preserves both references and rebuild behaviour.
     source unit in generated-state invalidation without inspecting timestamps.
   - [ ] Preserve fragment provenance in generated-state diagnostics and keep
     absolute host paths out of public identities.
-  - See [RFC 0002 §10](rfcs/0002-repository-relative-includes.md).
+  - See [RFC 0002 §10](rfcs/rfc-0002-repository-relative-manifest-includes.md).
   - Success: any included-byte or namespace change invalidates the fingerprint,
     while metadata-only touches and hash-map allocation history do not.
 
@@ -117,7 +123,8 @@ foundation, not the unrelated structured-command release.
     includes but never render or execute recipe fields for discovery.
   - [ ] Report malformed, missing, cyclic, and duplicate source graphs with
     bounded relative origins and namespaces; do not add network capability.
-  - See [RFC 0002 §§8 and 11](rfcs/0002-repository-relative-includes.md).
+  - See
+    [RFC 0002 §§8 and 11](rfcs/rfc-0002-repository-relative-manifest-includes.md).
   - Success: instrumented queries expose included targets while command,
     recipe-only helper, and network probes record zero invocations.
 - [ ] 16.3.2. Add the cross-platform include and extraction interaction suite.
@@ -128,7 +135,8 @@ foundation, not the unrelated structured-command release.
   - [ ] Extract a representative monolithic canary into local fragments;
     compare logical graphs, ordered recipe semantics, and target discovery,
     accounting only for intentional provenance and fingerprint changes.
-  - See [RFC 0002 §§12-14](rfcs/0002-repository-relative-includes.md).
+  - See
+    [RFC 0002 §§12-14](rfcs/rfc-0002-repository-relative-manifest-includes.md).
   - Success: Unix-like and Windows runs preserve outputs and failures, and
     recipe-observation sentinels remain untouched during metadata discovery.
 - [ ] 16.3.3. Document and release the local include contract.
@@ -139,7 +147,8 @@ foundation, not the unrelated structured-command release.
   - [ ] Record schema compatibility and the include portion of issue `#598`
     with the canonical quality-gate evidence, without claiming bundle or
     structured-command completion.
-  - See [RFC 0002 §§12-14 and 17](rfcs/0002-repository-relative-includes.md).
+  - See
+    [RFC 0002 §§12-14 and 17](rfcs/rfc-0002-repository-relative-manifest-includes.md).
   - Success: documented examples reproduce the canary, old manifests retain
     their behaviour, and older parsers reject the new syntax clearly.
 
@@ -149,11 +158,11 @@ Hypothesis: explicit parameters, private exports, deterministic version
 selection, and reviewed content locks let repositories share quality-gate
 bundles without copying monolithic manifests or depending on ambient Git state.
 
-This phase implements [RFC 0003](rfcs/0003-versioned-local-bundles.md) over
-phase 16. Local composition must remain independently usable and offline;
-17.4.4 separately validates its interaction with the structured execution
-track. No local bundle operation gains external acquisition authority from
-phase 18.
+This phase implements
+[RFC 0003](rfcs/rfc-0003-versioned-local-manifest-bundles.md) over phase 16.
+Local composition must remain independently usable and offline; 17.4.4
+separately validates its interaction with the structured execution track. No
+local bundle operation gains external acquisition authority from phase 18.
 
 ### 17.1. Fix bundle identity and parameter meaning before instantiation
 
@@ -173,7 +182,7 @@ contracts that catalogue selection, hashing, and locking must share.
     canonical `get` vocabulary; reserve RFC 0004's `bundle fetch` and
     `--update-lock`, then update the public vocabulary before CLI work.
   - See [RFC 0003 §§5, 8, 11, 12, 15, and
-    20](rfcs/0003-versioned-local-bundles.md).
+    20](rfcs/rfc-0003-versioned-local-manifest-bundles.md).
   - Success: accepted decisions and matching examples define source anchors,
     version vectors, lock mutation, and byte encodings without ambient choices.
 - [ ] 17.1.2. Parse strict bundle descriptors and local imports.
@@ -184,7 +193,8 @@ contracts that catalogue selection, hashing, and locking must share.
   - [ ] Reject unknown keys, dynamic descriptor fields, invalid direct exact
     assertions, duplicate resource paths, missing executable Booleans, and
     malformed metadata before evaluating entry-manifest expressions.
-  - See [RFC 0003 §§4, 5, 9, and 16](rfcs/0003-versioned-local-bundles.md).
+  - See
+    [RFC 0003 §§4, 5, 9, and 16](rfcs/rfc-0003-versioned-local-manifest-bundles.md).
   - Success: schema and version-gate fixtures cover every descriptor/import
     field and reject incompatible bundles before entry-manifest evaluation.
 - [ ] 17.1.3. Normalize typed parameters in an isolated pure context.
@@ -195,7 +205,8 @@ contracts that catalogue selection, hashing, and locking must share.
   - [ ] Permit only pure importer expressions; deny subprocess, network,
     clock, environment enumeration, and unrestricted filesystem access.
     Redact values unless explicitly annotated `expose: non-secret`.
-  - See [RFC 0003 §§6, 13, and 14](rfcs/0003-versioned-local-bundles.md).
+  - See
+    [RFC 0003 §§6, 13, and 14](rfcs/rfc-0003-versioned-local-manifest-bundles.md).
   - Success: generated typed maps normalize deterministically, effectful
     expressions fail without invoking adapters, and metadata remains redacted
     except for the exact supported exposure annotation.
@@ -215,7 +226,8 @@ the selected, isolated content that the digest verifier receives.
   - [ ] Reject sibling discovery, lexical and symlink escapes, root-only
     settings, and compatibility failures; do not search nearby versions or
     invoke Git because a local directory contains `.git` metadata.
-  - See [RFC 0003 §§5.1, 8-10, and 14](rfcs/0003-versioned-local-bundles.md).
+  - See
+    [RFC 0003 §§5.1, 8-10, and 14](rfcs/rfc-0003-versioned-local-manifest-bundles.md).
   - Success: direct imports select exactly the asserted bundle and identical
     bytes behave identically with absent, dirty, or detached Git metadata.
 - [ ] 17.2.2. Enforce private exports and distinct bundle instances.
@@ -226,7 +238,8 @@ the selected, isolated content that the digest verifier receives.
   - [ ] Identify instances by requested source, identity, declared version,
     namespace, and normalized parameters; permit distinct instances without
     weakening repeated-plain-include rejection within their own compositions.
-  - See [RFC 0003 §§1, 5.4, 7, and 8](rfcs/0003-versioned-local-bundles.md).
+  - See
+    [RFC 0003 §§1, 5.4, 7, and 8](rfcs/rfc-0003-versioned-local-manifest-bundles.md).
   - Success: two differently parameterized namespaces remain isolated, private
     cross-bundle references fail, and valid exported dependencies still build.
 - [ ] 17.2.3. Compose nested local imports with bounded instance-cycle checks.
@@ -236,7 +249,8 @@ the selected, isolated content that the digest verifier receives.
     re-exports and cycles using canonical instance identity.
   - [ ] Bound recursion and instance expansion so changing parameters cannot
     bypass termination; preserve the include loader's per-instance ownership.
-  - See [RFC 0003 §§8, 13, and 18](rfcs/0003-versioned-local-bundles.md).
+  - See
+    [RFC 0003 §§8, 13, and 18](rfcs/rfc-0003-versioned-local-manifest-bundles.md).
   - Success: bounded generated import graphs distinguish legitimate repeated
     instances from cycles and fail expansion limits before unbounded work.
 - [ ] 17.2.4. Select catalogue versions deterministically and fail closed.
@@ -249,7 +263,7 @@ the selected, isolated content that the digest verifier receives.
     rules, ignoring build metadata for precedence. Reject all tied highest
     candidates with sorted paths and versions, even when their digests match.
   - See [RFC 0003 §§5.2, 5.3, 9, and
-    18](rfcs/0003-versioned-local-bundles.md).
+    18](rfcs/rfc-0003-versioned-local-manifest-bundles.md).
   - Success: every normative vector and generated catalogue is independent
     of enumeration order, and neither malformed metadata nor a digest tie
     silently selects an older or arbitrary candidate.
@@ -269,7 +283,8 @@ later Git-tree adapter, without making Git identity the bundle definition.
   - [ ] Open resources through the selected capability; reject missing,
     escaping, non-regular, and undeclared bundle-relative runtime references.
     Exclude Git data, timestamps, owners, generated state, and unrelated files.
-  - See [RFC 0003 §§4, 11, 14, and 18](rfcs/0003-versioned-local-bundles.md).
+  - See
+    [RFC 0003 §§4, 11, 14, and 18](rfcs/rfc-0003-versioned-local-manifest-bundles.md).
   - Success: cross-platform golden streams preserve digests under relocation
     and metadata changes, change for reachable bytes/paths or declared modes,
     and reject every invalid runtime-resource class before execution.
@@ -281,7 +296,8 @@ later Git-tree adapter, without making Git identity the bundle definition.
   - [ ] Keep normal CI/release operation locked and read-only. Make any
     ratified unlocked local mode explicit in human and JSON results; neither
     that mode nor manifest `lock: update` alone grants write authority.
-  - See [RFC 0003 §§5.4, 11-13, and 16](rfcs/0003-versioned-local-bundles.md).
+  - See
+    [RFC 0003 §§5.4, 11-13, and 16](rfcs/rfc-0003-versioned-local-manifest-bundles.md).
   - Success: unchanged-version content edits fail lock verification, ordinary
     builds preserve lock bytes, and records contain no absolute host paths.
 - [ ] 17.3.3. Implement explicit, atomic local lock updates.
@@ -291,7 +307,8 @@ later Git-tree adapter, without making Git identity the bundle definition.
     writers. Preserve the previous usable lock on failure or cancellation.
   - [ ] Show bounded old/new identity, version, parameter-digest, and content-
     digest changes without disclosing parameter values; keep all work local.
-  - See [RFC 0003 §§12, 15, 18, and 20](rfcs/0003-versioned-local-bundles.md).
+  - See
+    [RFC 0003 §§12, 15, 18, and 20](rfcs/rfc-0003-versioned-local-manifest-bundles.md).
   - Success: fault-injection and concurrency fixtures never publish partial
     selections, and only explicit update authority can change the lock.
 
@@ -308,7 +325,7 @@ task joins the execution track so local-only delivery does not wait for it.
     lock status, and nested provenance. Never execute recipes for discovery.
   - [ ] Apply exact exposure annotations consistently to human, JSON, and
     debug output; do not serialize secret values or absolute host paths.
-  - See [RFC 0003 §§13-15](rfcs/0003-versioned-local-bundles.md).
+  - See [RFC 0003 §§13-15](rfcs/rfc-0003-versioned-local-manifest-bundles.md).
   - Success: snapshots expose the public interface and actionable failures,
     while private declarations, default-redacted values, and recipe sentinels
     remain inaccessible through every metadata surface.
@@ -321,7 +338,7 @@ task joins the execution track so local-only delivery does not wait for it.
   - [ ] Cross direct/catalogue sources, nested imports, exports, parameter
     errors, version ties, resource mutations, and lock modes on Unix-like and
     Windows hosts. Use legacy-compatible recipes for independent delivery.
-  - See [RFC 0003 §§16-18](rfcs/0003-versioned-local-bundles.md).
+  - See [RFC 0003 §§16-18](rfcs/rfc-0003-versioned-local-manifest-bundles.md).
   - Success: recorded canaries eliminate copied declarations and reproduce
     offline; invalid selections fail before recipes run, without ambient Git.
 - [ ] 17.4.3. Document and release the verified local bundle contract.
@@ -332,7 +349,8 @@ task joins the execution track so local-only delivery does not wait for it.
   - [ ] Record the additive version gate and canonical quality-gate evidence
     for the local-bundle part of issues `#593` and `#598`, preserving old
     manifests and rejecting unsupported schemas rather than ignoring fields.
-  - See [RFC 0003 §§15-18 and 21](rfcs/0003-versioned-local-bundles.md).
+  - See
+    [RFC 0003 §§15-18 and 21](rfcs/rfc-0003-versioned-local-manifest-bundles.md).
   - Success: examples match the canaries, every initial contract has acceptance
     evidence, and local use never depends on external bundle acquisition.
 - [ ] 17.4.4. Validate composed recipes across execution and shell boundaries.
@@ -346,10 +364,11 @@ task joins the execution track so local-only delivery does not wait for it.
     verification, and the ratified stream base; bundle content must not add
     shell definitions or replace a resolved shell through `PATH`, bindings,
     or placement.
-  - See [RFC 0009 §§11-16](rfcs/0009-structured-command-working-directories.md),
+  - See
+    [RFC 0009 §§11-16](rfcs/rfc-0009-structured-command-working-directories.md),
     [RFC 0010 §§5, 9, 12, and
-    17](rfcs/0010-runtime-bindings-and-secure-tempdirs.md),
-    and [RFC 0011 §§5-8](rfcs/0011-allow-listed-structured-command-shells.md).
+    17](rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md),
+    and [RFC 0011 §§5-8](rfcs/rfc-0011-allow-listed-structured-command-shells.md).
   - Success: the combined canaries for issue `#598` preserve outputs and
     failure provenance without widening authority, leaking bindings, or
     rebuilding a second shell resolver for composed recipes.
@@ -360,7 +379,8 @@ Hypothesis: explicit, bounded Git acquisition and verified cached content let
 repositories consume tagged bundles reproducibly while ordinary builds and
 metadata queries remain network-free and unable to change reviewed locks.
 
-This phase implements [RFC 0004](rfcs/0004-digest-pinned-external-bundles.md)
+This phase implements
+[RFC 0004](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md)
 only after 16.3.3 and 17.4.3 establish the local semantics. Its acceptance may
 precede implementation, but external acquisition is not a prerequisite for the
 local slices or for structured-command release. A remote tag is a discovery
@@ -383,7 +403,7 @@ what the object resolver and CLI may request.
     publication to `bundle fetch`. Keep signatures optional and resolve the
     RFC's optional-signature implementation note through phase 19.
   - See [RFC 0004 §§6, 10-14, 18, and
-    21](rfcs/0004-digest-pinned-external-bundles.md).
+    21](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md).
   - Success: one accepted policy records enforceable bounds and command
     authority without enabling network in local loaders or metadata queries.
 - [ ] 18.1.2. Parse exact, digest-qualified Git bundle sources.
@@ -395,7 +415,7 @@ what the object resolver and CLI may request.
     `HEAD`, revision expressions, abbreviated object IDs, dynamic values,
     malformed digests, embedded URL credentials, and escaping subdirectories.
   - See [RFC 0004 §§5-7, 12, and
-    17](rfcs/0004-digest-pinned-external-bundles.md).
+    17](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md).
   - Success: bounded properties and both Git object-format fixtures preserve
     exact identities and fail invalid source shapes before any transport call.
 - [ ] 18.1.3. Implement the policy-controlled Git transport adapter.
@@ -407,7 +427,7 @@ what the object resolver and CLI may request.
     acquisition, and unauthorized credential helpers or ambient configuration.
     Keep this port distinct from phase 6's local Git changeset operations.
   - See [RFC 0004 §§6.2, 10, 12, and
-    13](rfcs/0004-digest-pinned-external-bundles.md).
+    13](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md).
   - Success: controlled-server and injected-failure cases enforce every bound,
     record no forbidden helper execution, and redact credentials in all sinks.
 
@@ -425,7 +445,7 @@ dependent definition of the canonical digest.
   - [ ] Verify repository object format and commit object type; report
     unadvertised-object refusal explicitly instead of broadening authority.
   - See [RFC 0004 §§6.1, 6.2, 7, and
-    19](rfcs/0004-digest-pinned-external-bundles.md).
+    19](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md).
   - Success: protocol traces contain only allowed exact requests and fixtures
     reject short IDs, wrong types, missing refs, and object-format mismatches.
 - [ ] 18.2.2. Retain bounded annotated-tag and lightweight-tag provenance.
@@ -436,7 +456,7 @@ dependent definition of the canonical digest.
   - [ ] Verify optional manifest object assertions and preserve the requested
     and normalized tag, peel chain, final commit, and source identity.
   - See [RFC 0004 §§6.3-6.5, 9, and
-    19](rfcs/0004-digest-pinned-external-bundles.md).
+    19](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md).
   - Success: generated and fixed chains terminate deterministically, reject
     cycles and excess depth, and never imply that annotation means signature.
 - [ ] 18.2.3. Verify selected Git-tree bundles through the canonical verifier.
@@ -448,8 +468,9 @@ dependent definition of the canonical digest.
   - [ ] Compare the canonical digest with the reviewed manifest and lock;
     preserve declared resource modes and reject unsupported LFS materialization
     rather than fetching it. Unrelated upstream files remain outside the hash.
-  - See [RFC 0004 §§8, 13, and 14](rfcs/0004-digest-pinned-external-bundles.md)
-    and [RFC 0003 §§4 and 11](rfcs/0003-versioned-local-bundles.md).
+  - See
+    [RFC 0004 §§8, 13, and 14](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md)
+    and [RFC 0003 §§4 and 11](rfcs/rfc-0003-versioned-local-manifest-bundles.md).
   - Success: equivalent local and selected-tree bundles produce identical
     canonical streams after relocation, while reachable-byte or resource-mode
     changes and every directory/symlink/Gitlink escape fail verification.
@@ -470,7 +491,7 @@ command's publication and explicit lock-update capabilities.
     match; retain old/new provenance for explicit updates. Cache-only builds
     verify recorded identities, not an unobserved current remote tag value.
   - See [RFC 0004 §§6.5, 9, 14, and
-    15](rfcs/0004-digest-pinned-external-bundles.md).
+    15](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md).
   - Success: drift fixtures fail for same-digest and changed-digest retagging,
     while locks expose neither credentials nor absolute cache paths.
 - [ ] 18.3.2. Publish owner-protected verified caches with bounded leases.
@@ -482,7 +503,8 @@ command's publication and explicit lock-update capabilities.
   - [ ] Revalidate descriptor, versions, digest, and lock on every hit;
     reject corruption and clean abandoned temporary entries through bounded
     scans without trusting partial files or removing active leased entries.
-  - See [RFC 0004 §§10 and 11](rfcs/0004-digest-pinned-external-bundles.md).
+  - See
+    [RFC 0004 §§10 and 11](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md).
   - Success: interruption and concurrency cases expose only complete verified
     entries, retain valid prior state, and never turn a hit into a bypass.
 - [ ] 18.3.3. Integrate cache-only bundles into builds and metadata discovery.
@@ -495,7 +517,7 @@ command's publication and explicit lock-update capabilities.
     update-like manifest settings from acquiring write access or network
     access.
   - See [RFC 0004 §§4.2, 9-11, 14, and
-    19](rfcs/0004-digest-pinned-external-bundles.md).
+    19](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md).
   - Success: instrumented cache hits, misses, corruption, and lock failures
     record zero network, cache-publication, lock-write, or recipe calls from
     metadata queries; ordinary builds likewise retain the cache-only boundary.
@@ -515,7 +537,7 @@ content pinning from mutable tag discovery and optional publisher trust.
     atomic publication preparation. Show bounded old/new tag, commit, version,
     and digest changes; retain typed failures and low-cardinality telemetry.
   - See [RFC 0004 §§9, 10, 15, and
-    16](rfcs/0004-digest-pinned-external-bundles.md).
+    16](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md).
   - Success: the command/mode/flag matrix proves offline makes no request,
     ordinary fetch preserves lock bytes, and failed authorized updates leave
     the previous valid selection usable without leaking credentials.
@@ -527,7 +549,8 @@ content pinning from mutable tag discovery and optional publisher trust.
   - [ ] Cross cache hit/miss/corruption, concurrent publication, stale cleanup,
     every network mode, lock flags, and metadata discovery; migrate an unchanged
     vendored bundle and compare logical graphs after external verification.
-  - See [RFC 0004 §§17-19](rfcs/0004-digest-pinned-external-bundles.md).
+  - See
+    [RFC 0004 §§17-19](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md).
   - Success: deterministic offline reruns need no public internet, every
     negative fixture fails at its named boundary, and provenance changes
     remain visible even when the canonical bundle content does not change.
@@ -539,7 +562,8 @@ content pinning from mutable tag discovery and optional publisher trust.
   - [ ] Record one downstream tagged-bundle canary and offline graph evidence;
     align CLI/schema versions, security, design, user, developer, and layout
     guidance, and run canonical quality gates without widening local authority.
-  - See [RFC 0004 §§14-19 and 22](rfcs/0004-digest-pinned-external-bundles.md).
+  - See
+    [RFC 0004 §§14-19 and 22](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md).
   - Success: the documented canary builds from a verified cache with network
     disabled, unsupported schemas fail clearly, and no ordinary build or
     discovery command can mutate its reviewed external lock.
@@ -566,8 +590,9 @@ or retains the current boundary explicitly.
     fragment-scoped settings, richer parameter constraints, and nested-bundle
     re-exports; specify namespace, compatibility, and capability effects before
     authorizing any extension.
-  - See [RFC 0002 §16](rfcs/0002-repository-relative-includes.md) and
-    [RFC 0003 §§6, 8, and 20](rfcs/0003-versioned-local-bundles.md).
+  - See [RFC 0002 §16](rfcs/rfc-0002-repository-relative-manifest-includes.md)
+    and
+    [RFC 0003 §§6, 8, and 20](rfcs/rfc-0003-versioned-local-manifest-bundles.md).
   - Success: each candidate has a named consumer and separate accepted design,
     or an explicit defer/reject outcome without changing initial semantics.
 - [ ] 19.1.2. Decide optional publisher-identity policy without replacing
@@ -578,7 +603,7 @@ or retains the current boundary explicitly.
     keys, identities, attestations, and transparency only through explicit
     operator configuration and a separate security-reviewed contract.
   - See [RFC 0004 §§4.2, 14, 18, and
-    21](rfcs/0004-digest-pinned-external-bundles.md).
+    21](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md).
   - Success: any accepted policy remains additive to mandatory digest and lock
     verification, with no claim that an unsigned or annotated tag proves trust.
 - [ ] 19.1.3. Decide additional source forms without implicit acquisition.
@@ -588,6 +613,6 @@ or retains the current boundary explicitly.
     justify them; reject proposals that weaken exact identity, reviewed
     content, bounded transport, or cache-only build and query semantics.
   - See [RFC 0004 §§12, 13, 20, and
-    21](rfcs/0004-digest-pinned-external-bundles.md).
+    21](rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md).
   - Success: every accepted source extension has a separate canonicalization,
     provenance, authority, and migration contract before implementation.

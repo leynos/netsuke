@@ -1280,7 +1280,7 @@ limits are enforced before the buffer Netsuke controls accepts output, but
 `MiniJinja` materializes a macro result before its size can be checked, so a
 macro can allocate above the per-value ceiling before the limit is reported.
 That residual gap and its deferral are recorded in
-[ADR-018](adr-018-bound-manifest-template-evaluation.md).
+[ADR-0050](adrs/adr-0050-bound-manifest-template-evaluation.md).
 
 MiniJinja 2.24.0 also rejects one repeated string above 100 MB with the
 `repeated string is too large` template error. This rejection happens before

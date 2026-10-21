@@ -29,7 +29,7 @@ pub use time::OffsetDateTime as ClockInstant;
 /// The provider is an `Arc` rather than a `Box` for two reasons, both binding:
 /// `minijinja` requires registered functions to be `Send + Sync`, and
 /// `StdlibConfig` derives `Clone`, which `Box<dyn Fn>` cannot satisfy.
-/// ADR-008 records the same shape for the manifest environment reader.
+/// ADR-0008 records the same shape for the manifest environment reader.
 ///
 /// # Examples
 ///

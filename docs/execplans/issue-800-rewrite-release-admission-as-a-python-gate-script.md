@@ -137,7 +137,7 @@ once the shell scripts are deleted.
 - [x] Switch `release.yml` to the Python entry point and delete the shell. The
       admission step now runs `uv run --script .github/scripts/release_admission.py`;
       the three shell scripts are deleted; `release-dry-run.yml` is unchanged.
-- [x] Update the workflow contract, ADR-020, and the developers' guide. The
+- [x] Update the workflow contract, ADR-0020, and the developers' guide. The
       contract asserts the Python invocation, the `astral-sh/setup-uv`
       provisioning, observation mode, publication independence, and the
       absence of any `*release-admission*.sh` reference. The developers' guide
@@ -316,7 +316,7 @@ once the shell scripts are deleted.
   the df12 house lints reject it (`C9112`). PEP 649 defers annotation
   evaluation, so a `TYPE_CHECKING`-only `Path` in a dataclass annotation is
   safe without it; the repository does not support runtime annotation
-  introspection on these modules (ADR-038).
+  introspection on these modules (ADR-0038).
 
 ## Deferred
 
@@ -776,7 +776,7 @@ change admission semantics beyond the scope of a form change.
   trace assertion rather than masked by the metric one. Two corrections to the
   assessment's own text were verified and accepted: the expected-label helpers
   build their dicts from arguments rather than from production enum members
-  (which strengthens the oracle), and the direct requirement is ADR 020's
+  (which strengthens the oracle), and the direct requirement is ADR-0020's
   prohibition on identifier-derived labels.
 - 2026-10-11 — The repairs above took `release_admission_test_records.py` to
   **412 lines**, over the 400-line ceiling, which `make lint-python` reports as
@@ -1104,7 +1104,7 @@ change admission semantics beyond the scope of a form change.
      their plain strings, and a probe through both classifiers returns the same
      `success`/`stale_evidence`/`missing_evidence`/`unknown` answers the
      literals produced, including for the empty string.
-  3. The ADR-020 addendum claimed "no process the command started is left
+  3. The ADR-0020 addendum claimed "no process the command started is left
      running" with `setsid()` as the only named escape. `bounding._terminate_group`
      arms `SIGKILL` only while the direct child is unreaped, and the
      developers' guide already records the survivor, so the contract was

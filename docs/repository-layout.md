@@ -19,6 +19,7 @@ output and some leaf files so the long-lived structure remains visible.
 ├── cyclopts/
 ├── docs/
 │   ├── archive/
+│   ├── adrs/
 │   ├── execplans/
 │   └── rfcs/
 ├── examples/
@@ -93,9 +94,14 @@ output and some leaf files so the long-lived structure remains visible.
   `Progress` and `Outcomes & retrospective` sections, and its roadmap checkbox,
   are authoritative over that line. The status vocabulary is defined under
   *ExecPlan* in the [documentation style guide](documentation-style-guide.md).
+- `docs/adrs/`: Accepted architectural decisions, named
+  `adr-nnnn-title-slug.md`. ADR numbers are unique within the repository,
+  allocated independently of RFC numbers, and never reused or renumbered after
+  publication.
 - `docs/rfcs/`: Requests for Comments proposing changes that need technical
-  review before they become binding, named `NNNN-short-topic.md` and numbered
-  in allocation order. Numbers are never reused, and are never renumbered after
+  review before they become binding, named `rfc-nnnn-title-slug.md`. RFC
+  numbers are unique within the repository and allocated independently of ADR
+  numbers. Numbers are never reused, and are never renumbered after
   publication. Gaps are therefore expected rather than erroneous: a number may
   be reserved, drafted on another branch, or deliberately skipped, so an unused
   number is not free for reallocation. Check every remote branch for
@@ -162,7 +168,7 @@ output and some leaf files so the long-lived structure remains visible.
 - `tools/kani/`: Kani formal-verification harness configuration and related
   local tooling, including `proof-scope.toml`, the paths whose change runs the
   Kani proofs on a pull request (see
-  [ADR-039](adr-039-change-scoped-kani-gate.md)).
+  [ADR-0039](adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)).
 - `tools/mold/`: Pinned `mold` linker release version and the SHA-256 checksums
   used to verify the downloaded release artefacts.
 
@@ -482,9 +488,10 @@ The crates.io package is named `netsuke-build`, while its library and binary
 targets remain named `netsuke`. Keep command-line help, manual pages, release
 artefacts, and operating-system packages aligned with the `netsuke` target name
 rather than the Cargo package name.
-[ADR-007](adr-007-publish-as-netsuke-build.md) records the decision, and the
-[developer guide](developers-guide.md) describes how the build script, release
-packaging, and `cargo binstall` metadata honour it.
+[ADR-0007](adrs/adr-0007-publish-the-crates-io-package-as-netsuke-build.md)
+records the decision, and the [developer guide](developers-guide.md) describes
+how the build script, release packaging, and `cargo binstall` metadata honour
+it.
 
 Place feature files in `tests/features/` unless the behaviour depends on
 Unix-specific platform contracts, in which case use `tests/features_unix/`.
@@ -500,4 +507,5 @@ the current bundle, at most 32 obsolete `.dd` files, and 1 MiB of obsolete
 `.dd` bytes. They remove stale `.tmp` files while holding the exclusive
 directory lease; `clean` prunes only after successful `ninja -t clean`. An
 older arbitrary `generate --output` manifest may therefore need regeneration
-after a later command. See [ADR-012](adr-012-bound-dyndep-sidecar-retention.md).
+after a later command. See
+[ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md).

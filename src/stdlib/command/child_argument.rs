@@ -94,7 +94,7 @@ pub(super) fn quote_child_argument(arg: &str) -> Result<String, QuoteError> {
 /// only `\n` and `\r` — not NUL, which `is_recipe_admissible` also rejects —
 /// because a child argument reaches `Command::arg`, which tolerates a NUL-free
 /// argument of any shape, while recipe text must survive a Ninja binding. See
-/// ADR-014 for the Ninja side of that split.
+/// ADR-0014 for the Ninja side of that split.
 ///
 /// # Errors
 ///

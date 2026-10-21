@@ -844,7 +844,8 @@ everything below is the record of what that approval was spent on.
   cannot be scoped by asking which files were edited. The check that caught
   this was CI, one full revision after a locally green gate set; the local
   gates could only have caught it if the workflow-contract target had been in
-  the set. See `docs/adr-039-change-scoped-kani-gate.md`.
+  the set. See
+  `docs/adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md`.
 - Surprise (measured 2026-10-13, EP-M2): a property test can be **latently
   non-deterministic** and pass a whole green gate set before anyone sees it
   fail. `TestRunner::new` seeds from the OS, so an assertion about the

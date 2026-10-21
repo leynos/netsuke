@@ -5,7 +5,7 @@ environment can race another test, leak a value after a failure, or make a
 passing result depend on test order. Netsuke therefore injects environment
 input; it never changes the harness process to arrange a test. The policy and
 its three seam shapes are recorded in
-[ADR-008](adr-008-environment-seam-taxonomy.md).
+[ADR-0008](adrs/adr-0008-environment-seam-taxonomy.md).
 
 ## Use `mockable::Env` at an environment boundary
 
@@ -55,7 +55,7 @@ This pattern makes the lookup count and variable name part of the test
 contract. A missing, empty, or non-UTF-8 value is another mock response, not a
 reason to modify the process environment. Use a narrow closure instead when a
 single caller reads one variable, and use the `EnvReader` `Arc` closure where a
-registered `Send + Sync` callback requires it; ADR-008 defines those choices.
+registered `Send + Sync` callback requires it; ADR-0008 defines those choices.
 
 ## Configure child processes explicitly
 

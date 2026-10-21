@@ -58,7 +58,7 @@ Netsuke nécessite actuellement :
   (`rustup` l'installe automatiquement dans un clone du dépôt). Netsuke se
   compile avec le vérificateur d'emprunts Polonius, que nightly active par
   défaut et qui reste réservé à nightly jusqu'à sa stabilisation ; voir
-  [ADR-006](docs/adr-006-adopt-polonius-nightly-toolchain.md).
+  [ADR-0006](docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md).
 
 ### Installation
 
@@ -296,7 +296,8 @@ pas un changement de politique.
 interfaces peuvent encore changer. Ces garanties limitées ne rendent pas sûres
 les recettes arbitraires. Consultez les mécanismes des voies shell dans la
 [limite de sécurité du guide de l'utilisateur](docs/users-guide.md#review-the-safety-boundary)
-et les décisions dans [ADR-027](docs/adr-027-command-placeholder-contract.md).
+et les décisions dans
+[ADR-0027](docs/adrs/adr-0027-command-placeholder-contract.md).
 
 ______________________________________________________________________
 

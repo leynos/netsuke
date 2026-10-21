@@ -26,7 +26,7 @@ previous merge, while CodeScene receives coverage only after changes reach
 - Do not expose `CS_ACCESS_TOKEN` to pull-request-controlled code or artefacts.
 - Do not change Rust application behaviour, public APIs, dependencies, coverage
   test selection, or coverage thresholds.
-- Record the reversal of ADR-022 through the repository's ADR process and keep
+- Record the reversal of ADR-0022 through the repository's ADR process and keep
   `docs/contents.md` and `docs/developers-guide.md` accurate.
 - Keep all documentation in en-GB Oxford English and conform to
   `docs/documentation-style-guide.md`.
@@ -134,7 +134,7 @@ modules, and their owned contracts have been removed. The main coverage
 workflow remains the only CodeScene uploader and the only ratchet-baseline
 writer.
 
-ADR-025 records the replacement architecture and supersedes ADR-022. The
+ADR-0025 records the replacement architecture and supersedes ADR-0022. The
 developer guide now separates repository behaviour from CodeScene's external
 analysis schedule and unavailable-data policy. The active ruleset did not
 require the retired custom check, so no GitHub configuration change was
@@ -148,7 +148,7 @@ follow-up that strengthened the pull-request boundary contract after the first
 push, and they are recorded in the revision note below rather than folded
 silently into the original count.
 
-The superseding record it introduced is ADR-025, not ADR-024. ADR-024 was
+The superseding record it introduced is ADR-0025, not ADR-0024. ADR-0024 was
 claimed by main's recursive-workspace-search decision before this branch
 rebased, and this branch renumbered rather than colliding.
 
@@ -157,7 +157,7 @@ artefact-publication opt-out to `generate-coverage` and re-pin the callers
 landed in a different repository whose own tests assert the archive step's
 behaviour. That work has since been completed: the opt-out was added to the
 shared action, both callers were re-pinned to the merged revision, and the
-workflow contract now asserts it in both directions, so ADR-025 records an
+workflow contract now asserts it in both directions, so ADR-0025 records an
 enforced boundary rather than a residual artefact. The request to index this
 plan in `docs/contents.md` was declined because that file indexes the
 `execplans/` directory and links no individual plan, so adding one would break
@@ -175,7 +175,7 @@ uploaded that file as the `pr-coverage-lcov` artefact; that step was removed,
 and the pull-request job now adds no publication step of its own. The
 pull-request call passes the action's `publish-artefact: 'false'` input, which
 suppresses the action's own `Archive coverage` step, so the job archives
-nothing. ADR-025 records that boundary and the contract that holds it.
+nothing. ADR-0025 records that boundary and the contract that holds it.
 
 `.github/workflows/coverage-pr-submit.yml` was a privileged `workflow_run`
 consumer. It downloaded and validated the untrusted artefact, ran
@@ -188,12 +188,12 @@ pull-request context. The workflow and its modules were deleted.
 the same coverage shape, advances the shared ratchet baseline, and uploads the
 report to CodeScene. This is the topology to retain, and it is unchanged.
 
-`docs/adr-022-pr-coverage-trust-boundary.md` records the boundary that was
-retired; it now carries a status of superseded and a dated addendum recording
-the supersession. `docs/developers-guide.md` describes the replacement
-operation. Tests under `tests/workflow_contracts/` load the workflows, enforce
-the publication boundary, and assign jobs to runner classes; those owned
-surfaces were updated together, as this plan required.
+`docs/adrs/adr-0022-isolate-pr-coverage-submission.md` records the boundary
+that was retired; it now carries a status of superseded and a dated addendum
+recording the supersession. `docs/developers-guide.md` describes the
+replacement operation. Tests under `tests/workflow_contracts/` load the
+workflows, enforce the publication boundary, and assign jobs to runner classes;
+those owned surfaces were updated together, as this plan required.
 
 ## Conformance basis
 
@@ -201,7 +201,7 @@ surfaces were updated together, as this plan required.
 - Documentation rules: `docs/documentation-style-guide.md`, revision in the
   current branch.
 - Existing decision being superseded:
-  `docs/adr-022-pr-coverage-trust-boundary.md`.
+  `docs/adrs/adr-0022-isolate-pr-coverage-submission.md`.
 - Existing coverage contracts: `docs/developers-guide.md`, especially the
   coverage action pin, ratchet publication, and PR trust-boundary sections.
 - No Terms of Reference or product-facing technical design governs this CI
@@ -424,9 +424,9 @@ marked complete.
 
 2026-09-17: Completed the review follow-up. Rebased onto `origin/main`
 (`6c2b2c4b` to `c32efb8d`), which advanced underneath the branch and landed
-main's own ADR-024. The only conflict was a two-sided append in
+main's own ADR-0024. The only conflict was a two-sided append in
 `docs/contents.md`; both entries were kept, and the superseding record was
-renumbered to ADR-025 in a dedicated commit rather than resolved silently
+renumbered to ADR-0025 in a dedicated commit rather than resolved silently
 inside the conflicted one.
 
 The pull-request coverage contract was strengthened to match the boundary by
@@ -440,8 +440,8 @@ credential reference inside an existing `pull_request_target` workflow. The
 prong reads both pull-request triggers, because `pull_request_target` runs in
 the base repository's context and can read its secrets.
 
-ADR-022 gained a dated addendum recording the supersession and its rationale;
-ADR-025's decision, consequences, and verification text were corrected, since
+ADR-0022 gained a dated addendum recording the supersession and its rationale;
+ADR-0025's decision, consequences, and verification text were corrected, since
 its original claim that pull-request CI uploads no artefact was false for the
 pinned shared action; and this plan's context, conformance, and verification
 text were brought in line with the repository as it stands.
@@ -459,5 +459,5 @@ revision. The pull-request lane passes `publish-artefact: 'false'`, so nothing
 is archived on a pull request; the trunk lane leaves the input unset, so its
 archive and the upload CodeScene reads continue. The workflow-contract tests
 were extended to assert both directions, and the earlier text in this plan and
-in ADR-025, which stated that the archive was unconditional and unobservable by
-any repository contract, was corrected.
+in ADR-0025, which stated that the archive was unconditional and unobservable
+by any repository contract, was corrected.

@@ -641,7 +641,7 @@ failure mode cannot recur silently.
   ```
 
   The arithmetic is entirely positional. The merge base carried 395 lines;
-  `main` added 395→399, a four-line ADR-038 paragraph; this branch added
+  `main` added 395→399, a four-line ADR-0038 paragraph; this branch added
   399→400, its 600-second docstring correction. The two edits are in different
   regions, so Git merges them cleanly, and pylint then refuses the *result*.
   Nothing local could have caught it: the branch head is exactly 400 and passes

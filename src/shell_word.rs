@@ -64,7 +64,7 @@ impl ShellDialect {
 ///
 /// Newline, carriage return, and NUL cannot: a Ninja binding is single-line by
 /// construction. This is the same rule the Ninja writer enforces at its own
-/// boundary; see ADR-014. It is promoted here so one predicate has one
+/// boundary; see ADR-0014. It is promoted here so one predicate has one
 /// definition rather than a copy at each enforcement point.
 pub(crate) fn is_recipe_admissible(value: &str) -> bool {
     !value.contains(['\n', '\r', '\0'])

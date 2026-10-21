@@ -4,13 +4,13 @@ This guide describes the day-to-day engineering workflow for Netsuke, with a
 focus on writing and maintaining tests. It is the source of truth for how the
 test suite is expected to be used by contributors. The normative architecture
 reference for bounded release-admission observability is
-[ADR-020](adr-020-release-admission-observability.md). It also records the
-release-operation observability decision.
+[ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md). It also
+records the release-operation observability decision.
 
 ## Command-line interface architecture
 
-The governing command-line interface (CLI) architecture record is ADR-003,
-[`Agent-consistent human-first CLI`][adr-003-cli]. It defines the pre-0.1.0
+The governing command-line interface (CLI) architecture record is ADR-0046,
+[`Agent-consistent human-first CLI`][ADR-0046-cli]. It defines the pre-0.1.0
 contract: keep the terminal experience human-first, make names and outputs
 consistent enough for agents and automation, remove legacy aliases instead of
 preserving inconsistent vocabulary, use `--json` as the only structured result
@@ -24,10 +24,10 @@ localization, accessibility behaviour, configuration precedence, or planned
 product surfaces such as `context`, `skill-path`, `runs`, `profile`, delivery,
 and feedback commands. The overhaul execution plan in
 [`docs/execplans/netsuke-cli-overhaul.md`](execplans/netsuke-cli-overhaul.md)
-tracks sequencing only; it must not replace ADR-003 or the CLI design document
+tracks sequencing only; it must not replace ADR-0046 or the CLI design document
 as the durable architecture record.
 
-[adr-003-cli]: adr-003-agent-consistent-human-first-cli.md
+[ADR-0046-cli]: adrs/adr-0046-agent-consistent-human-first-cli.md
 [reconciliation-module]: ../src/stdlib/network/policy/reconciliation/mod.rs
 
 ### CLI parsing and command-composition boundary
@@ -938,8 +938,10 @@ rather than reusing command escaping.
 
 The crates.io package is `netsuke-build`; the library target, the binary
 target, and the command are all `netsuke`. The names diverge because `netsuke`
-is taken on crates.io. [ADR-007](adr-007-publish-as-netsuke-build.md) records
-the decision and [repository layout](repository-layout.md) states the rule.
+is taken on crates.io.
+[ADR-0007](adrs/adr-0007-publish-the-crates-io-package-as-netsuke-build.md)
+records the decision and [repository layout](repository-layout.md) states the
+rule.
 
 The practical consequence is that **no user-facing name may be derived from
 Cargo package metadata**. Derive from the command-line interface (CLI) name, or
@@ -1025,13 +1027,14 @@ wrapper), so those flags survive rather than being silently discarded.
 `tests/makefile_test_target/rustflags.rs` holds all four to that composition
 and to their individual policies.
 
-[ADR-006](adr-006-adopt-polonius-nightly-toolchain.md) records the policy
-decision, and the [polonius migration notes](polonius.md) track every site
-whose design depends on the analysis. Sites tagged `POLONIUS(...)` fail to
-compile under plain non-lexical lifetimes (NLL); do not rewrite them into
-double lookups, unconditional key clones, or id indirection, and do not pad new
-code with defensive clones that only NLL required. When a borrow-centric form
-fails to compile, consult the migration notes before restructuring.
+[ADR-0006](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)
+records the policy decision, and the [polonius migration notes](polonius.md)
+track every site whose design depends on the analysis. Sites tagged
+`POLONIUS(...)` fail to compile under plain non-lexical lifetimes (NLL); do not
+rewrite them into double lookups, unconditional key clones, or id indirection,
+and do not pad new code with defensive clones that only NLL required. When a
+borrow-centric form fails to compile, consult the migration notes before
+restructuring.
 
 ### Polonius CI shared-action contract
 
@@ -1823,7 +1826,7 @@ The disjunct can only make the job run more often.
 condition is compared whole, so a tagged release still runs the job. `release`
 still needs it. The pull-request gate runs the same smoke, with the same
 invocation token for token. `ci.yml` calls the Windows gate on every event but
-the nightly Kani schedule (ADR-039), so the contract admits exactly
+the nightly Kani schedule (ADR-0039), so the contract admits exactly
 `if: github.event_name != 'schedule'` on that call, which is true on every pull
 request, and refuses any other condition. And the dry run's event types outside
 `ci.yml`'s set are exactly the ones the condition exempts.
@@ -2065,7 +2068,8 @@ artefact-retention period. These exports are intentionally not a Prometheus,
 OpenTelemetry Protocol (OTLP), or statsd endpoint; no scrape or push service is
 implied. Metric or label renames are breaking contract changes and require an
 ADR and updated workflow-contract tests. See
-[ADR-020](adr-020-release-admission-observability.md) for the durable decision.
+[ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md) for the
+durable decision.
 
 ## GitHub Actions runner placement
 
@@ -2384,9 +2388,9 @@ with a documented reason; exemptions for covered or removed paths are rejected.
 ### Coverage ratchet and CodeScene publication
 
 The accepted architecture is recorded in
-[ADR-025](adr-025-main-owned-coverage-publication.md), which supersedes the
+[ADR-0025](adrs/adr-0025-keep-pr-coverage-local.md), which supersedes the
 trusted pull-request submission design in
-[ADR-022](adr-022-pr-coverage-trust-boundary.md).
+[ADR-0022](adrs/adr-0022-isolate-pr-coverage-submission.md).
 
 Pull-request CI generates `lcov.info` and runs the shared coverage action with
 ratchet mode enabled. The ratchet compares changed-line coverage with the
@@ -2495,7 +2499,7 @@ a rule reaches this repository as a pin bump. `.github/cv005.toml` holds the
 repository's parameters and the pull-request lane's pairing with the publisher,
 including the three environment keys the two legs legitimately differ on.
 `tests/workflow_contracts/cv005_wiring_test.py` holds the local wiring, and
-[ADR-042](adr-042-run-the-shared-cv005-contract-checker.md) records the
+[ADR-0042](adrs/adr-0042-run-the-shared-cv-005-contract-checker.md) records the
 decision.
 
 Workflow contract tests keep the boundary explicit: the pull-request coverage
@@ -2672,7 +2676,7 @@ capability-backed fixture helpers and remains linted by Whitaker under its own
 narrow policy.
 
 The root Whitaker invocation selects only the `netsuke-build` package (the
-Cargo package name behind the `netsuke` targets; see ADR-007) and disables
+Cargo package name behind the `netsuke` targets; see ADR-0007) and disables
 Dylint dependency checks. It supplies the root `dylint.toml` contents
 explicitly through `DYLINT_TOML`, so every invocation receives the same
 capability-boundary policy regardless of how Dylint resolves the current crate.
@@ -2952,7 +2956,7 @@ Because PEP 649 defers annotation evaluation, the contract modules under
 `NameError`. The repository does not support runtime annotation introspection
 on those modules; `ty` reads them statically and pytest executes them, and
 neither resolves annotations. See
-[ADR-038](adr-038-runtime-annotation-introspection-in-workflow-contracts.md)
+[ADR-0038](adrs/adr-0038-runtime-annotation-introspection-in-workflow-contracts.md)
 for the decision, the measured scope, and the gate that reopens it.
 
 The Makefile's `PYTHON_SOURCES` includes `.github/scripts`, so the normal
@@ -3361,9 +3365,9 @@ configuration fields; `Cli::command()` supplies parser-only flags such as
 configuration fields and adds parser-only help metadata without adding an
 environment or file source. It omits the structural `cmds` container. Keep
 `--config` selector precedence and fail-closed loading in
-`src/cli/discovery/mod.rs`, as required by [ADR 004]. Keep `-C/--directory`
+`src/cli/discovery/mod.rs`, as required by [ADR 0048]. Keep `-C/--directory`
 project-discovery rooting and manifest lookup in that discovery boundary, as
-required by [ADR 014]. During ordinary Cargo builds, `build.rs` generates the
+required by [ADR 0049]. During ordinary Cargo builds, `build.rs` generates the
 local manual page and shell completions, and audits the localization keys.
 Release automation delegates installation to
 [`install_orthohelp.py`](../scripts/install_orthohelp.py), with the pinned
@@ -3437,8 +3441,8 @@ metadata model. Declare its Fluent key with `define_keys!` in
 `src/localization/keys.rs`, then add in-process, snapshot, and release-help
 artefact coverage for the composed surface.
 
-[ADR 004]: adr-004-explicit-config-selection-outside-orthoconfig.md
-[ADR 014]: adr-014-base-directory-seam-and-dir-anchoring.md
+[ADR 0048]: adrs/adr-0048-explicit-config-selection-outside-orthoconfig.md
+[ADR 0049]: adrs/adr-0049-base-directory-seam-and-c-anchoring.md
 
 Use `googletest` matchers for structural or diagnostic assertions and
 `pretty_assertions` for ordered collection equality where its diff is useful.
@@ -3529,9 +3533,9 @@ for the evidence.
 
 The decision, the exclusions it carries, and the evidence behind the Cranelift
 refusal are recorded in
-[ADR-029](adr-029-mold-and-parallel-frontend-as-build-defaults.md). This
-section is the working reference; that record is why the standard takes this
-shape.
+[ADR-0029](adrs/adr-0029-make-mold-and-the-parallel-frontend-the-default-build.md).
+This section is the working reference; that record is why the standard takes
+this shape.
 
 [`mold`]: https://github.com/rui314/mold
 
@@ -3727,7 +3731,7 @@ whose recipe reaches it, runs `make install-build-tools` in a step of its own
 before the suite. That step carries no `if:` unless every suite step in the job
 carries the identical one, so the install runs whenever the suite does.
 `kani-smoke` is the case this admits: its proof-scope decision gates every
-later step alike (ADR-039). `tests/workflow_contracts/nextest_lane_rules.py`
+later step alike (ADR-0039). `tests/workflow_contracts/nextest_lane_rules.py`
 derives those jobs from the workflows and the Makefile rather than listing
 them, and `tests/workflow_contracts/nextest_lane_mold_test.py` proves each
 clause by mutation.
@@ -3983,7 +3987,7 @@ them.
   language server picks up `.cargo/config.toml` like any other Cargo caller and
   takes the standard. Give it a separate target directory to avoid thrashing
   the cache shared with `make test`.
-- **Polonius.** The analysis comes from the pinned nightly (ADR-006), so the
+- **Polonius.** The analysis comes from the pinned nightly (ADR-0006), so the
   configuration needs no Polonius-specific cooperation and must not add a
   `-Zpolonius` directive; `tests/polonius_toolchain_contract.rs` reads
   `.cargo/config.toml` to keep it out.
@@ -4271,7 +4275,8 @@ pinned SHA-256 values, and caches their installation directories. The CI job
 therefore never compiles the verifier from source. Kani manages its own
 supporting Rust nightly toolchain during setup; CI gives that toolchain a
 separate cached `RUSTUP_HOME`. It must not replace the repository's pinned
-nightly workflow (see [ADR-006](adr-006-adopt-polonius-nightly-toolchain.md)).
+nightly workflow (see
+[ADR-0006](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)).
 Kani 0.67.0's supporting nightly is `nightly-2025-11-21`, which predates the
 Polonius default, so Kani borrow-checks under NLL. That is currently harmless —
 the tree has no `POLONIUS(...)`-tagged sites — but a future tagged site could
@@ -4594,8 +4599,9 @@ measure a warm restore of those homes.
 
 `kani-smoke` is a required check, so it runs and reports on every trigger, but
 on a pull request it runs the harnesses only when the pull request changes a
-proof input. [ADR-039](adr-039-change-scoped-kani-gate.md) records the
-decision; this section is the working reference.
+proof input.
+[ADR-0039](adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)
+records the decision; this section is the working reference.
 
 - **The decision.** The job's third step, `Decide Kani proof scope`, runs
   `uv run --script scripts/kani_proof_scope.py` and writes `run-proofs` to its
@@ -4822,8 +4828,8 @@ Linux runner. Both platforms still assert the packaged file list. See
 
 [windows-test-budget]: #historical-windows-budget-for-the-isolated-cargo-build-tests
 [fixture-constraints]: #historical-fixture-crate-replacement-constraints
-[adr-028-trim]: adr-028-defer-split-build-dir-harness-trim.md
-[adr-033-split-build]: adr-033-record-split-build-cargo-messages.md
+[adr-0028-trim]: adrs/adr-0028-defer-replacing-the-split-build-dir-harness-test.md
+[adr-0033-split-build]: adrs/adr-0033-record-split-build-cargo-messages.md
 [cargo-package-verify]:
   https://github.com/rust-lang/cargo/blob/e8cb624d5701824f46a2ec5873cfd59ee3d2f66c/src/ops/cargo_package/verify.rs
 
@@ -5008,7 +5014,7 @@ platform-specific timeout budget. The companion
 end-to-end boundary with a small temporary two-crate workspace: it runs Cargo
 under private split roots, collects the reported artefacts, and compiles a
 fixture through the direct-`rustc` response-file harness.
-[ADR-033][adr-033-split-build] records the replacement decision and these two
+[ADR-0033][adr-0033-split-build] records the replacement decision and these two
 complementary coverage boundaries.
 
 Removing the second Cargo build sped this one up as well. The two used to run
@@ -5029,7 +5035,7 @@ The historical 420s budget was therefore sized against the older, contended
 distribution and was deliberately conservative while the previous shape had
 three samples. Issue 732 removed that platform-specific budget when it replaced
 the live build; the current test uses the five-period, 300s default described
-above. [ADR-028][adr-028-trim] remains the historical record of that former
+above. [ADR-0028][adr-0028-trim] remains the historical record of that former
 budget and its revisit gate.
 
 Those three samples predate the serialization group described below, which
@@ -5066,13 +5072,14 @@ contrast, is one-directional: the coverage a fixture crate would drop is
 exactly the coverage that fails only on Windows, where it is least likely to be
 noticed.
 
-[ADR-028][adr-028-trim] holds the historical decision: the measurements, the
+[ADR-0028][adr-0028-trim] holds the historical decision: the measurements, the
 rule that a trim can never return more than the test's own duration, the
 alternatives already measured and rejected (`cargo check` for `cargo build`,
 warming the compiler cache, and sharing a target directory), and the ten-run
-revisit gate. [ADR-033][adr-033-split-build] records the replacement decision:
-the live build was removed in favour of recorded Cargo JSON, while the parser
-boundary remains covered. Any future replacement inherits the constraints in
+revisit gate. [ADR-0033][adr-0033-split-build] records the replacement
+decision: the live build was removed in favour of recorded Cargo JSON, while
+the parser boundary remains covered. Any future replacement inherits the
+constraints in
 [what a fixture-crate replacement would have to preserve][fixture-constraints]
 below.
 
@@ -5238,8 +5245,8 @@ pipe-delimited table rows, and fenced blocks with up to three leading spaces.
 It does not parse full CommonMark or recognize fences nested in list items.
 Relative links are extracted from inline Markdown link syntax and checked for
 target-file existence; fragment anchors are not validated. See
-[ADR-040](adr-040-focused-child-rfcs-for-survey-rfcs.md) for the split and its
-coverage contract rationale.
+[ADR-0040](adrs/adr-0040-focused-child-rfcs-for-survey-rfcs.md) for the split
+and its coverage contract rationale.
 
 ### Configuration-precedence regression tests
 
@@ -5473,7 +5480,8 @@ and 1 MiB. The current bundle is always retained. `build` and `generate` prune
 after materialization; `clean` prunes only after successful `ninja -t clean`,
 never after a failed clean. Do not introduce age-based cleanup or mutate an
 existing content-addressed sidecar. See
-[ADR-012](adr-012-bound-dyndep-sidecar-retention.md) for the durable policy.
+[ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md) for the durable
+policy.
 
 `src/runner/graph/generation/telemetry.rs` owns runner-boundary manifest-to-IR
 graph-generation telemetry, while `src/runner/dyndep/generation_telemetry.rs`
@@ -5511,8 +5519,8 @@ The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that
 other path. Do not broaden the implementation with a global lock, pool, or new
 scheduler without an approved design change. See
-[ADR-011](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md) for the
-durable decision and its alternatives.
+[ADR-0011](adrs/adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md)
+for the durable decision and its alternatives.
 
 ### Recipe placeholder ownership
 
@@ -5550,9 +5558,10 @@ The scanner recognizes only the internal `INS_TOKEN` and `OUTS_TOKEN` tokens
 emitted by manifest rendering, identically in `command:` and `script:` recipes.
 Literal shell variables such as `$in`, `$out`, `$ins`, and `$outs` remain
 unchanged for the selected backend to interpret, in both recipe kinds; see
-[ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md), which removed
-the former `script:`-only lowering of `$in` and `$out`, and
-[ADR-027](adr-027-command-placeholder-contract.md) for the resulting contract.
+[ADR-0034](adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md),
+which removed the former `script:`-only lowering of `$in` and `$out`, and
+[ADR-0027](adrs/adr-0027-command-placeholder-contract.md) for the resulting
+contract.
 
 `INS_TOKEN` and `OUTS_TOKEN` are machine-generated markers. They match exact
 text, so an adjacent identifier character does not suppress a marker
@@ -5849,8 +5858,9 @@ metadata lookups remain the responsibility of that root.
   capability-scoped, so narrowing the capability's opening point narrows what
   the metadata check can resolve, not what the walk itself can see on disk.
 
-[ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) records the
-decision to scope the capability this way and the alternatives it rejected.
+[ADR-0010](adrs/adr-0010-scope-the-glob-metadata-capability-to-the-literal-prefix.md)
+records the decision to scope the capability this way and the alternatives it
+rejected.
 
 ### Glob expansion observability
 
@@ -6304,8 +6314,8 @@ The seams described in this section follow one of three sanctioned shapes —
 narrow closures, `mockable::Env`, or `EnvReader` — chosen by call-site count,
 expected growth, and `Send + Sync` registration requirements: use
 `mockable::Env` when a boundary is expected to acquire more inputs, even before
-its call-site count grows. See [ADR-008](adr-008-environment-seam-taxonomy.md)
-for the taxonomy.
+its call-site count grows. See
+[ADR-0008](adrs/adr-0008-environment-seam-taxonomy.md) for the taxonomy.
 
 `manifest::EnvReader` owns environment lookup for the manifest `env()` helper.
 Production constructs the process-backed adapter at the manifest loading
@@ -6337,8 +6347,8 @@ deterministic instant to tests. Keep the seam confined to the `stdlib::time`
 registration path: manifest-query registration installs the clock-independent
 helpers only and keeps refusing `now`, and the provider is not a general time
 service for the crate. The clock is not an environment variable and no lint
-polices it, so [ADR-008](adr-008-environment-seam-taxonomy.md) supplies the
-shape rubric here but not its original scope.
+polices it, so [ADR-0008](adrs/adr-0008-environment-seam-taxonomy.md) supplies
+the shape rubric here but not its original scope.
 
 `CommandConfigInit` is the internal hand-off from `StdlibConfig` to command
 helpers. It carries the capability-scoped workspace root, output limits, and an
@@ -7045,7 +7055,8 @@ process. For a boundary exercised across several tests, use `mockable::Env`:
 production supplies `mockable::DefaultEnv` at the composition boundary, and
 tests supply `mockable::MockEnv`. The other sanctioned shapes — a narrow
 closure for one small lookup and an `EnvReader` for registered `Send + Sync`
-callbacks — are defined in [ADR-008](adr-008-environment-seam-taxonomy.md).
+callbacks — are defined in
+[ADR-0008](adrs/adr-0008-environment-seam-taxonomy.md).
 
 `EnvLock`, `CwdGuard`, and `EnvVarGuard` were retired from `test_support`. They
 must not be restored, extended, or used as a migration path. A process-wide
@@ -7581,7 +7592,7 @@ which the platform error becomes a domain state, and emits the non-UTF-8
 warning once per capture immediately after the read. Only the variable's name
 is logged, never its value. The leaf module therefore names neither `VarError`
 nor `tracing`, and consulting the switch afterwards is silent. See
-[ADR-008](adr-008-environment-seam-taxonomy.md) for the seam taxonomy.
+[ADR-0008](adrs/adr-0008-environment-seam-taxonomy.md) for the seam taxonomy.
 
 #### Ninja program resolver seam
 
@@ -7642,7 +7653,7 @@ requires the explicit `workspace-recursive` value and remains subject to the
 mode and captured switch state in its cache identity, so entries from search
 domains with different trust boundaries cannot collide. The complete contract
 is recorded in
-[ADR-024](adr-024-require-explicit-recursive-workspace-which-search.md) and the
+[ADR-0024](adrs/adr-0024-require-explicit-recursive-which-search.md) and the
 [executable-discovery design](netsuke-design.md#executable-discovery-filter-which).
 
 `src/stdlib/which/telemetry/mod.rs` is the single owner of both counter names
@@ -7955,7 +7966,7 @@ debug build panics on a label outside the declared sets, so a widened
 vocabulary is a programming error rather than a new series.
 
 The library only emits these series. Installing the recorder and deciding
-retention remain the application's decision under ADR-013, so no stdlib fetch
+retention remain the application's decision under ADR-0013, so no stdlib fetch
 series is added to the in-process recorder allowlist.
 
 The tests in `src/stdlib/network/telemetry_tests.rs` capture samples through a
@@ -8024,7 +8035,7 @@ I/O terminal is classified by `io::ErrorKind`: `ConnectionRefused`,
 Every refused redirect is logged, not only a policy rejection, because the
 counter alone cannot show which hop of which fetch was refused. Each event
 carries `operation`, an outcome, a closed reason, and `hop`, and never a
-location, URL, host, or userinfo. Those four fields are the bound that ADR-023
+location, URL, host, or userinfo. Those four fields are the bound that ADR-0023
 sets for redirect decisions. Policy refusals emit `policy_outcome="rejected"`
 with a `policy_reason` from `scheme_not_allowed`, `missing_host`,
 `host_not_allowlisted`, and `host_blocked`. Every other refusal — a chain
@@ -8034,8 +8045,8 @@ with a `redirect_failure` drawn from `location_missing`, `location_invalid`,
 share one logging helper, so they are the same shape and differ only by that
 closed reason.
 
-[ADR-023](adr-023-revalidate-fetch-redirects.md) records the rationale for
-revalidating every redirect against the policy.
+[ADR-0023](adrs/adr-0023-revalidate-every-fetch-redirect.md) records the
+rationale for revalidating every redirect against the policy.
 
 ### Configuration discovery module layout
 
@@ -8365,7 +8376,7 @@ rejects every reparse point, including tags `std` does not report as symlinks:
 or cloud placeholder would slip past a symlink-shaped check and be followed.
 Because the judgement and the read share one handle, there is no
 check-then-open window between them; see
-[ADR-032](adr-032-windows-reparse-point-same-handle-open.md).
+[ADR-0032](adrs/adr-0032-validate-the-windows-final-component-through-a-same-handle-reparse-point-open.md).
 
 Two diagnostics come out of the boundary. `bounded_read/mod.rs` raises
 `file_too_large_error`, which quotes the path and the limit that was exceeded;
@@ -8496,7 +8507,7 @@ no rendered value.
 The `source` label is the reason the series exists. A call that omits `dialect`
 receives a host- and configuration-dependent default, so the rendered text of
 such a manifest can change between hosts or releases with no manifest edit —
-ADR-041 records this as the accepted cost of the two-dialect surface. Nothing
+ADR-0041 records this as the accepted cost of the two-dialect surface. Nothing
 else aggregates that population: the affected manifests are otherwise
 indistinguishable from those that pin the dialect, and the difference is
 invisible in the generated Ninja. Counting it makes the exposed set measurable,
@@ -8561,7 +8572,7 @@ values, so ordered-set helpers share a deterministic answer instead of each
 deriving their own. Two values are equal exactly when their RFC 8785
 canonical-JSON keys are byte-identical; `stable_deduplicate` retains the first
 representative of each key in input order.
-[RFC 0006 §6.7](rfcs/0006-ansible-inspired-template-standard-library.md#67-canonical-value-equality)
+[RFC 0006 §6.7](rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md#67-canonical-value-equality)
 specifies the relation and this module supplies it as a foundation. The public
 surface is five names re-exported from `src/stdlib`: `CanonicalKey`,
 `CanonicalValueError`, `canonical_key`, `canonical_eq`, and
@@ -8836,7 +8847,8 @@ closed-vocabulary kind, stage, and numeric limit. The Jinja adapter maps that
 result to a localized error; the normal full-load boundary records the bounded
 exhaustion metric, while manifest-query loading suppresses this
 budget-exhaustion metric. Other instrumentation remains owned by the boundaries
-that invoke it. See [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md)
+that invoke it. See
+[ADR-0009](adrs/adr-0009-bounded-redacted-telemetry-for-manifest-evaluation.md)
 for the decision to separate observability from evaluation this way, and for
 the alternatives it rejected.
 
@@ -9097,8 +9109,9 @@ The drained-snapshot boundary is `ConfigMetricsRecorder` in
 labelled variant. An inline `#[cfg(test)] mod tests` asserts the emission site
 records one unlabelled series and the event carries the six known counts with
 no fixture sentinel text. The governing decision record is
-`docs/adr-009-bounded-redacted-manifest-telemetry.md`, which forbids unbounded
-or caller-controlled values in metric labels and trace fields.
+`docs/adrs/adr-0009-bounded-redacted-telemetry-for-manifest-evaluation.md`,
+which forbids unbounded or caller-controlled values in metric labels and trace
+fields.
 
 ### Module: `runner::recipe_shell::telemetry`
 

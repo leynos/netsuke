@@ -1,4 +1,4 @@
-"""Hold `kani-smoke` to the change-scoped shape ADR-039 records.
+"""Hold `kani-smoke` to the change-scoped shape ADR-0039 records.
 
 `kani-smoke` is a required check on the ruleset, so a pull request cannot
 merge until it reports. Skipping the job itself, with a trigger `paths`

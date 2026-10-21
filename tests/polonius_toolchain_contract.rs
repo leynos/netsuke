@@ -1,6 +1,6 @@
 //! Contract tests pinning the Polonius toolchain plumbing.
 //!
-//! The tree only borrow-checks under the Polonius alpha analysis (see ADR-006
+//! The tree only borrow-checks under the Polonius alpha analysis (see ADR-0006
 //! and docs/polonius.md). Nightly toolchains dated 2026-08-04 and later enable
 //! Polonius by default, so the requirement is carried entirely by the dated
 //! pin in `rust-toolchain.toml`: no build configuration passes a `-Zpolonius`

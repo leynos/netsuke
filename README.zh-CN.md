@@ -47,7 +47,7 @@ Netsuke目前需要：
 - 若从源码安装，则需要[`rust-toolchain.toml`](rust-toolchain.toml)
   中锁定的带日期Rust nightly工具链（在检出的仓库中`rustup`会自动安装它
   ）；Netsuke使用Polonius借用检查器构建，该检查器在nightly中默认启用，并在稳定之前将持续保持nightly专属，参见
-  [ADR-006](docs/adr-006-adopt-polonius-nightly-toolchain.md)。
+  [ADR-0006](docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)。
 
 ### 安装
 
@@ -242,7 +242,7 @@ defaults: [output.txt]
 **稳定性与延伸阅读。** Netsuke尚未达到1.0；接口仍可能变化。上述有限
 保证并不意味着任意配方都是安全的。shell路径的具体机制见
 [用户指南中的安全边界](docs/users-guide.md#review-the-safety-boundary)，
-相关决策见[ADR-027](docs/adr-027-command-placeholder-contract.md)。
+相关决策见[ADR-0027](docs/adrs/adr-0027-command-placeholder-contract.md)。
 
 ______________________________________________________________________
 
