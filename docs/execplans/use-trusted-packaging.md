@@ -2732,9 +2732,12 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   different naming convention, so nothing is lost by the action being called
   `package-crate`. The graph contract derives the action path from the job name
   rather than tabulating it, so the convention is enforced rather than
-  documented. `consumer-smoke` is not a separate action: its body is a
-  download-verify-extract-run sequence with no policy module to call, so it
-  lives in `.github/actions/consumer-smoke/`. Date/Author: 2026-10-19,
+  documented. `consumer-smoke` is the one job whose body calls no policy
+  module: it is a download-verify-extract-run sequence, so there is no
+  `scripts/consumer_smoke.py` for it to invoke and no Python seam to test. It
+  is still a composite action under its own name —
+  `.github/actions/consumer-smoke/` — because the job/action name parity above
+  applies to all five jobs without exception. Date/Author: 2026-10-19,
   implementation agent.
 
 - Decision: `ReleaseIdentity` keeps its six fields and the digest record
@@ -2933,6 +2936,66 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   defaults to `github.sha` when neither `ref` nor `sha` is given, and the
   release path's checkouts set neither, so the two agree by construction rather
   than by a later comparison. Date/Author: 2026-10-21, implementation agent.
+
+- Decision: the declared-name producer runs inside **`publish-release`**,
+  inserted after the hoist step and before the upload step, and the declaration
+  it writes travels to the verifier through a new `publish-release` job output.
+  Rationale: `release_declaration_cli` requires a `--dist-dir` holding the
+  **staged** tree, and `publish-release` is the only job that has one —
+  `package-crate` never sees `dist/`, `publish-crates-io` is skipped on a dry
+  run, and placing the step there would leave the declaration unproduced
+  exactly when the verifier needs it. The insertion is legal because
+  `release_publish_path_publication._check_publication_step_order` pins only
+  the *relative* order of its four anchor steps
+  (`Ensure release exists (draft)`, `actions/download-artifact@`,
+  `hoist_binstall_archives.py`, `id: upload_assets`), not adjacency, so a new
+  step may be placed among them without editing that contract. The declaration
+  is produced *after* the hoist because the hoist is what puts the archives
+  under their published spelling, and it is produced *before* the upload
+  because the upload is what consumes the names. Date/Author: 2026-10-21,
+  implementation agent.
+
+- Decision: **no new module reads GitHub's asset listing.** The
+  `finalize-github-release` action reshapes `gh release view --json assets`
+  into its own `--assets` input with `--jq`:
+  `[.assets[] | {key: .name, value: .digest}] | from_entries`. Rationale: a
+  first draft of this branch added `scripts/github_release_assets.py` to parse
+  the listing into a record, and that draft was **deleted rather than
+  repaired**, for three independent reasons. First, it produced the wrong shape
+  twice over: it stripped the `sha256:` prefix, while
+  `release_reconcile_github.normalise_digest` returns `None` for anything
+  without that prefix — so every asset the release already held would have been
+  planned as a `CONFLICT`, and `finalize_github_release_cli` would have refused
+  a correct release — and it nested the mapping under `"assets"`, which is the
+  *identity* record's shape, whereas `--assets` reads a top-level mapping. It
+  therefore matched neither consumer. Second, its private `_bare_digest`
+  re-implemented the already-exported `normalise_digest`, and its "an absent
+  digest is refused rather than treated as unverified" policy is already
+  `plan_asset_actions`' behaviour, so the module owed the
+  abstraction/port/helper policy a justification for a second helper whose only
+  caller was itself. Third, the plan's `Interfaces and dependencies` section
+  names no listing reader, so the module was implementing a seam the approved
+  plan does not describe — the correct response to which is to surface the
+  divergence, not to add a consumer for it. The `--jq` reshape was probed
+  against the live `v0.1.0-beta4` release and returns the expected 29-entry
+  mapping with prefixed digests intact, which is exactly what
+  `finalize_github_release_cli --assets` consumes.
+
+  The listing is taken **in the finalizer, not in the verifier and not in
+  `publish-release`**. Three constraints decide it. The listing must be read
+  after the upload, which rules out `publish-release`: its own listing would
+  predate the very upload the verifier is checking. It must not be read by
+  `verify-release-inventory`, because the LEM-5 amendment above requires that
+  job's composite action to contain **no `gh release` call at all** — that is
+  what stops its extra `contents: write` scope from becoming a second way to
+  write to the release, and `gh api` without a method flag is a GET, so the
+  verifier downloads through `gh api` and the rule holds mechanically. And it
+  need not be plumbed from either job as an artefact: the finalizer runs
+  immediately after the verifier with no writer in between, so re-reading the
+  release cannot see a set the verifier did not. The finalizer is also the only
+  one of the three that already holds `contents: write` and is permitted
+  `gh release` calls, so the reshape introduces no new credential surface.
+  Date/Author: 2026-10-21, implementation agent.
 
 ## Outcomes & retrospective
 
