@@ -1735,6 +1735,33 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `run` block) and the yamllint sweep (red before this commit) — because
   conflating them is how the Stage D target gets written with no repairs and
   then acquires an exemption.
+- [x] (2026-10-21) Settled the last Stage C unknown that blocked authoring the
+  composite actions: where `--package-name` comes from. The answer is
+  `steps.ensure_version.outputs['crate-name']`, read from a new `package_name`
+  output on the `metadata` job. The reasoning is in the Decision log; the short
+  form is that `ensure-cargo-version` at the pin `release.yml` already carries
+  resolves `[package].name` and writes `crate-name` unconditionally, so the
+  true registry identity is already in the job that runs first, and the two
+  alternatives each cost a contract-test edit for no behavioural gain. Probed
+  rather than assumed: the pinned `export-cargo-metadata@a5765019` does declare
+  a `name` output and does accept `name` in `_SUPPORTED_FIELDS` (so the
+  alternative was *viable*, just worse), `tests/workflow_release.rs:35` does pin
+  `fields: bin-name` by exact substring, and no test pins `metadata.outputs`
+  by exact set equality — the three facts that decide between the candidates.
+  Recorded before any action was written, so the wiring follows the decision
+  rather than the decision being reconstructed from it.
+- [x] (2026-10-21) Corrected a working assumption that had been carried since
+  the last compaction and would have misdirected the whole of Stage C. Against
+  `main` — the stale local ref — six files appeared modified, which made their
+  contract pins look overridable. Against the branch's **actual** base,
+  `37fc364a`, which is also `origin/main`, the branch touches none of
+  `.github/workflows/release.yml`, `tests/workflow_release.rs`,
+  `scripts/cargo_package_metadata.py`, or
+  `tests/workflow_contracts/linux_package_metadata_test.py`. Their pins
+  therefore bind from `main` unmodified, and the `fields: bin-name` substring
+  is a constraint to design around rather than one this branch may edit away.
+  The stale local `main` is 107 commits behind `origin/main`; every provenance
+  check must name `origin/main` and not the local ref.
 
 ## Surprises & discoveries
 
@@ -2832,6 +2859,37 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   rule and not a df12 Pylint plugin rule, which rates the same blob 10.00/10 —
   was the actual gap. That provenance is now recorded in the observation
   instead of a renumbering. Date/Author: 2026-10-21, implementation agent.
+
+- Decision: the five Stage C composite actions take the Cargo **package name**
+  as an ordinary declared `input`, and the `metadata` job supplies it from
+  `steps.ensure_version.outputs['crate-name']`. The job therefore gains one
+  more output, `package_name`. Rationale: the value has to come from the
+  manifest rather than from a workflow literal, because `Cargo.toml` declares
+  `package.name = "netsuke-build"` while `[lib]`/`[[bin]]` are both `netsuke`
+  (the divergence `docs/adr-007-publish-as-netsuke-build.md` records), and this
+  job's only manifest-derived name today is the *binary* name — passing that as
+  `--package-name` would make the packaging seam reject the candidate, and
+  `publish-crates-io`'s authenticated exchange request the wrong crate.
+  `ensure-cargo-version` at the pin `release.yml` already carries
+  (`ff1dd759dfffc0db3459e30e833f52437ee62b57`) declares a `crate-name` output
+  and writes it unconditionally from `manifest_versions[0].name`, independent of
+  `check-tag`, so the name is already resolved in this job and needs no new
+  action, no `cargo install`, and no new cache. Two alternatives were rejected
+  on evidence rather than preference. Widening the existing
+  `export-cargo-metadata` step to `fields: name,bin-name` would work — the pin
+  `a5765019912a8ab6882b12db049c7cde635f3a85` declares a `name` output and its
+  `_SUPPORTED_FIELDS` accepts `name` — but `tests/workflow_release.rs:35` pins
+  the exact substring `fields: bin-name`, so it buys nothing `crate-name` does
+  not already provide while forcing an edit to a Rust contract test. Reading
+  `[package].name` through `scripts/cargo_package_metadata.py` would grow a
+  four-field reader whose output block
+  `scripts/tests/test_cargo_package_metadata.py` pins by exact equality, and
+  whose readers (`validate_linux_package_metadata.py`) index
+  `cargo_meta.PackageMetadata` by key, so the new key would owe a
+  `PackageMetadata` TypedDict entry and an edit to the equality-pinned
+  expectation for no gain. The lane this runs in is a dry run as well as a tag
+  push, and `crate-name` is emitted in both. Date/Author: 2026-10-21,
+  implementation agent.
 
 ## Outcomes & retrospective
 
