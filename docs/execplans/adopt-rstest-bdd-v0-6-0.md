@@ -374,6 +374,16 @@ the conflict in `Decision log` before proceeding.
   the formal review and the merge. Keeping the two distinct is the whole point
   of this item.
 
+  2026-10-22 update. The pull request was marked ready and CodeRabbit returned
+  a formal review of `CHANGES_REQUESTED` on `6c7567950`, with two inline
+  findings about broken links in the imported guides. Both were valid and are
+  repaired in `c72d61892`; the audit that repair prompted found nine further
+  broken links of the same class, and the mapping is now recorded in
+  `docs/rstest-bdd-link-compatibility.md`. Both findings carry a posted reply
+  and the new head is under hosted CI. This item still stays open: a formal
+  review that requested changes is not an approval, so the merge obligation is
+  unchanged until the next review clears and the merge lands.
+
 ## Surprises & discoveries
 
 - Observation: a byte-for-byte import makes every relative link in the source
