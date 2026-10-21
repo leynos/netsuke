@@ -729,7 +729,7 @@ exists to prevent.
 
 Each new job's body is a single `uses: ./.github/actions/...` step. The
 justification for extracting them is that the composite-action convention is
-the repository's own documented practice (`docs/developers-guide.md:1361-1362`
+the repository's own documented practice (`docs/developers-guide.md:1415-1416`
 records it for the cache steps), **not** that a contract enforces a 400-line
 cap on workflow YAML — no such contract exists. `release.yml` is 685 lines on
 `main` and is not failing anything.
@@ -790,7 +790,7 @@ cap on workflow YAML — no such contract exists. `release.yml` is 685 lines on
   extracted to a composite action so the job graph stays readable at a glance.
   (Not "under 400 lines": no contract caps workflow YAML, and `release.yml` is
   already 685 lines on `main`. The extraction follows the repository's
-  documented composite-action convention, `docs/developers-guide.md:1361-1362`.)
+  documented composite-action convention, `docs/developers-guide.md:1415-1416`.)
 - Requirements: INV-1, LEM-5, LEM-6 discharged.
 - Acceptance evidence: `make test-workflow-contracts` passes, including the
   new permission and mode-matrix tests.
@@ -1696,6 +1696,13 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   to the target root, which made the suite green while the bug stood. Suite
   re-measured at **11 passed**, up from 10. The finding is recorded under
   `Surprises & discoveries` with the observed layout.
+- [x] (2026-10-21) Rebased onto `main` at `37fc364a` from the exclusive replay
+  boundary `fa5a4ffa` (27 commits replayed, zero conflicts, `range-diff` fully
+  `=`). Re-validated the post-rebase candidate at HEAD `b74f6571`, tree
+  `a0c32ca3`: `check-fmt`, `typecheck`, `test`, `lint`,
+  `test-workflow-contracts` and `test-release-publication` all exit zero.
+  Corrected four line-number citations this plan carried and recorded two
+  measurements of `main`'s conventions that Stage C must now follow.
 
 ## Surprises & discoveries
 
@@ -1763,16 +1770,30 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   it, which was correct to a human reader and wrong to the linter. Evidence:
   two probes. A synthetic module at `/tmp/doc502probe/probe.py` reproduced the
   finding, and the real tree reports `docstring-extraneous-exception` at
-  `release_reconcile_crates.py:161`. The `release_inventory.py` precedent
-  settles the convention: `Raises` names what the function's own body raises —
-  `validate_inventory` lists only `EscapingAssetNameError` and
-  `MalformedAssetNameError` for that reason — and helper-raised exceptions are
-  named in `Notes`. Impact: the four exceptions `validate_inventory` inherits
-  from `_require_usable_entries` and `_require_declared_agreement` are
-  documented in its `Notes` prose, not in its `Raises` section.
+  `release_reconcile_crates.py:161` in the revision the finding was measured on,
+  `f6ba95f1b` — the docstring's opening quote line, which is where Ruff
+  anchors the report: the rule fires on the docstring, not on the `Raises`
+  block, whose heading is at `:177`. Re-verified 2026-10-21 at the rebased head
+  by running `ruff check --preview --select DOC502` against that revision's
+  blob from Ruff `0.16.4`, which prints `release_reconcile_crates.py:161:5` and
+  the message
+  `Raised exception is not explicitly raised: RegistryResponseError`. The line
+  is deliberately *not* renumbered to the rebased file: the fix this
+  observation describes deleted that `Raises` block, so no post-rebase head
+  carries the finding, and the revision named is the only head on which it
+  existed. Note that the rule is Ruff's, not a df12 Pylint plugin rule — the
+  plugin returns a clean 10.00/10 on the same blob — so a reader re-deriving
+  this must use `ruff check --preview`, not `pylint`. The
+  `release_inventory.py` precedent settles the convention: `Raises` names what
+  the function's own body raises — `validate_inventory` lists only
+  `EscapingAssetNameError` and `MalformedAssetNameError` for that reason — and
+  helper-raised exceptions are named in `Notes`. Impact: the four exceptions
+  `validate_inventory` inherits from `_require_usable_entries` and
+  `_require_declared_agreement` are documented in its `Notes` prose, not in its
+  `Raises` section.
 - Observation: **the backslash line-continuation form in a doctest does not
   work in a raw docstring**, so it is unavailable wherever the docstring
-  discusses backslashes. `release_inventory.py:319` and
+  discusses backslashes. `release_inventory.py:318` and
   `verify_crates_io_bytes.py:279` use `\` at column 0 to fit a long expected
   exception line under Ruff's 88-column limit, which `make lint` enforces and
   `ruff format` does not. Python splices the physical lines into one logical
@@ -1827,6 +1848,47 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   Evidence: the only `gh release` invocations in the repository are
   `gh release view` and `gh release create --draft`. Impact: "publish GitHub
   Release" is new behaviour, not a preserved one, and the runbook must say so.
+
+- Observation: **the repository root holds a tracked `cyclopts/__init__.pyi`
+  stub, and a namespace-package `cyclopts/` directory with no `__init__.py` wins
+  `import cyclopts` over no package at all but loses to an installed one** —
+  so a source module that uses Cyclopts at import time fails to import under the
+  `test-release-publication` recipe but succeeds under
+  `test-workflow-contracts`'s. Evidence: four probes at the rebased head.
+  `cyclopts.__file__` is `None` and `hasattr(cyclopts, "App")` is `False` under
+  `uv run --no-project --python 3.14` (no Cyclopts installed), and a probe
+  module doing `from cyclopts import App` at module scope fails collection with
+  `ImportError: cannot import name 'App' from 'cyclopts' (unknown location)`
+  under the recipe's exact flags. Adding `--with 'cyclopts>=4.25.3,<5'` — which
+  `test-workflow-contracts` already carries — makes the same probe pass, and
+  `cyclopts.__file__` then resolves to the installed package. The stub is
+  tracked since `d91ebb49c` (#848) and is an ancestor of the rebase boundary,
+  so this predates the branch. Impact: **Stage C's composite actions must not
+  add a Cyclopts module-scope `App` to any `SOURCE_MODULES` entry**, because
+  `test-release-publication` pins its `--with` list exactly and does not
+  install Cyclopts. The two viable shapes are a stdlib-only `argparse` CLI (the
+  convention the six sibling `*_cli.py` modules already follow) or adding
+  Cyclopts to the recipe's `--with` list *and* to `REQUIRED_RECIPE_FRAGMENTS` in
+  `release_publication_test.py`, which is a deliberate contract change rather
+  than a free choice. The `--no-project` flag is what makes this reachable:
+  `uv run --script` on a PEP 723 file runs with the *script's* directory first
+  and installs the declared dependencies, so a script invoked that way resolves
+  the real Cyclopts either way.
+
+- Observation: **a PEP 723 inline-metadata block still applies under
+  `uv run --no-project`, so the two invocation shapes are not distinguished by
+  the absence of a project.** Evidence: a probe script carrying
+  `#!/usr/bin/env -S uv run --script` plus a `# /// script` block and importing
+  Cyclopts ran green — `Installed 8 packages in 8ms`, then the expected output
+  — under `uv run --no-project --python 3.14 probe.py`, and exited `0`. The
+  same file with the block stripped (`sed '1,6d'`) failed with
+  `ModuleNotFoundError: No module named 'cyclopts'` under the identical
+  command, so the block, not the project state, is what supplied the
+  dependency. Impact: Stage C may invoke a stdlib-only CLI under
+  `uv run --no-project --python 3.14`, matching `release.yml`'s existing hoist
+  steps and the six sibling CLI modules, and that form is unaffected by the
+  preceding observation; the PEP 723 form is the alternative and needs the
+  contract change described above if the module is ever doctested.
 
 - Observation: PR #780 is open, draft, and `CHANGES_REQUESTED`, and it adds
   jobs named `release-candidate`, `downstream-canaries`, and
@@ -2273,7 +2335,7 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 
 - Decision: extract every new step body into a composite action rather than
   growing `release.yml` inline. Rationale: the repository's own convention,
-  stated in `docs/developers-guide.md:1361-1362` for the lane cache steps, and
+  stated in `docs/developers-guide.md:1415-1416` for the lane cache steps, and
   the only way to keep the job graph readable while making the sequence
   explicit. **Not** a 400-line cap: no contract enforces one on workflow YAML,
   and `release.yml` is 685 lines on `main`. A local `action.yml` resolves from
@@ -2659,6 +2721,50 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   layout the users' guide does not document. Date/Author: 2026-10-19,
   implementation agent.
 
+- Decision: Stage C's workflow-facing CLIs keep **stdlib-only `argparse`**,
+  matching the six sibling `*_cli.py` modules, rather than adopting the
+  Cyclopts style `main` has been using for its standalone scripts. Rationale:
+  both styles are live on the rebased tree and neither is deprecated — main's
+  `uv run --script` + PEP 723 +
+  `App(config=cyclopts.config.Env("INPUT_", command=False))` shape appears in
+  six scripts, and the six sibling CLIs this branch already wrote use
+  `argparse` with no third-party import at all. The discriminating constraint
+  is not style but the gate that reads these modules:
+  `test-release-publication` names every `SOURCE_MODULES` entry on a
+  `uv run --no-project` command line whose `--with` list is pinned by
+  `REQUIRED_RECIPE_FRAGMENTS` and installs only pytest and hypothesis, while
+  the repository root's tracked `cyclopts/__init__.pyi` makes `import cyclopts`
+  resolve to a namespace package with no `App` unless Cyclopts is installed —
+  so a module-scope `App` would make six of the fourteen `SOURCE_MODULES`
+  entries unimportable and red the target. Adopting Cyclopts would therefore
+  require editing the recipe's `--with` list and `REQUIRED_RECIPE_FRAGMENTS`,
+  coupling a registry-publication change to a test-framework contract for no
+  behavioural gain. Recorded because this is the kind of rebase-induced
+  convention divergence that otherwise gets re-litigated at every new CLI; the
+  two observations under `Surprises & discoveries` carry the probe evidence.
+  Date/Author: 2026-10-21, implementation agent.
+
+- Decision: correct two line-number citations this plan carried; leave three
+  others alone after re-deriving them. Rationale: only the first is
+  rebase-induced, and separating the two cases matters because an over-eager
+  "refresh every citation" sweep is how a correct citation gets broken.
+  `docs/developers-guide.md:1361-1362` — cited three times, for the
+  composite-action convention — moved to `:1415-1416`, because `main` grew that
+  file by 317 lines and the sentence it names is unchanged.
+  `release_inventory.py:319` → `:318` is **not** rebase-induced: the file is
+  the branch's own, byte-identical at `OLD_HEAD` and at the rebased head, and
+  `:318` is the `\`-continuation line the sentence describes while `:319` is
+  that continuation's second physical line. The two `verify_crates_io_bytes` and
+  `nextest_durations` citations, at `:279` and `:243`, are correct as written
+  and were not touched. The DOC502 citation `release_reconcile_crates.py:161`
+  was also challenged and **survived**: probing
+  `ruff check --preview --select DOC502` against the commit it names reports
+  `:161:5`, the docstring's opening line, so the observation's original number
+  was right and its missing provenance — that the rule is Ruff's `--preview`
+  rule and not a df12 Pylint plugin rule, which rates the same blob 10.00/10 —
+  was the actual gap. That provenance is now recorded in the observation
+  instead of a renumbering. Date/Author: 2026-10-21, implementation agent.
+
 ## Outcomes & retrospective
 
 Not yet applicable. To be completed at EP-M6, at which point every discovery
@@ -2680,3 +2786,16 @@ release" claim is corrected in `Conformance basis`. #834 landed a
 staging/publication split and much of the contract scaffolding, recorded as a
 discovery and as a decision to build within it. Still `DRAFT`, still not
 approved, and still not implemented: EP-M1 through EP-M6 remain open.
+
+Draft 3, 2026-10-21: rebased onto `main` at `37fc364a` from the exclusive
+replay boundary `fa5a4ffa` (27 commits, zero conflicts, `range-diff` fully
+`=`), and re-validated at HEAD `b74f6571` against all six gates. Unlike Draft
+2, this rebase introduced no new external requirement into the plan's scope:
+`main`'s delta touches no `scripts/` file this branch owns, no `Makefile`
+target, and no `.github/actions/` manifest, so the branch's file set is
+unchanged by the replay. It did surface one convention question — Cyclopts
+versus `argparse` for the workflow-facing CLIs — which the Decision log settles
+in favour of the branch's existing `argparse` shape on the strength of three
+probes rather than on style, and it moved three citations that `main`'s growth
+had displaced. Both are recorded above. EP-M1 through EP-M6 remain open; Stage
+C is under way, with the packaging seam repaired and the identity CLI landed.
