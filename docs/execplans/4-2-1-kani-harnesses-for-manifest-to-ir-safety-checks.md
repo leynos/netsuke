@@ -79,7 +79,7 @@ requires explicit user approval before implementation begins.
   `docs/formal-verification-methods-in-netsuke.md` only to add a footnote
   explaining the Proptest hand-off; do not rewrite its recommendation.
 - Add an Architecture Decision Record (ADR) using the existing
-  `docs/adrs/adr-NNN-<slug>.md` convention and the template in
+  `docs/adrs/adr-nnnn-title-slug.md` convention and the template in
   [`docs/documentation-style-guide.md`](../documentation-style-guide.md). The
   next free number is `004`. The ADR title is "Bound Kani IR harnesses to small
   N with Proptest hand-off at larger N".
@@ -103,9 +103,10 @@ requires explicit user approval before implementation begins.
   `Cargo.toml`, `Makefile` (to add the tiered `kani-ir` alias), `src/ir/mod.rs`,
   `src/ir/from_manifest.rs`, `src/ir/cycle.rs`, `docs/developers-guide.md`,
   `docs/formal-verification-methods-in-netsuke.md`,
-  `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md`, `docs/contents.md` (to
-  index the new ADR), `docs/roadmap.md`, the per-harness mutation patch files
-  under `docs/verification/mutations/`, and this ExecPlan.
+  `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`,
+  `docs/contents.md` (to index the new ADR), `docs/roadmap.md`, the
+  per-harness mutation patch files under `docs/verification/mutations/`, and
+  this ExecPlan.
 - Interface: if any change to the public API of `netsuke::ir` (or any
   other crate-public symbol) becomes necessary to make the harnesses compile,
   stop and present options. `pub(crate)` and `#[cfg(kani)] pub(crate)` are the
@@ -357,8 +358,8 @@ requires explicit user approval before implementation begins.
       add the harness inventory to `docs/developers-guide.md`, add the
       Proptest hand-off footnote to
       `docs/formal-verification-methods-in-netsuke.md`, and add
-      `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md`. Update
-      `docs/contents.md` to index the new ADR.
+      `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`.
+      Update `docs/contents.md` to index the new ADR.
 - [x] Stage E (validate and review): run mutation discipline per
       harness, run `make check-fmt`, `make lint`, `make test`,
       `make markdownlint`, `make nixie`, and `make kani-full`. Run
@@ -597,11 +598,11 @@ requires explicit user approval before implementation begins.
   duplicate-output rejection is delegated to the Proptest coverage scheduled
   under roadmap item `4.3.1`. The closing-the-risk relationship is documented
   in three places to avoid silent rot: in
-  `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md` (a Known Risk with a
-  re-evaluation trigger), in the developers' guide harness inventory, and as a
-  sub-bullet under roadmap `4.2.1` that states "Kani at N=1-3; Proptest at
-  `4.3.1` closes the larger-N coverage". Date/Author: 2026-06-07 / planning
-  agent. **Awaits user approval at Stage A.**
+  `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+  (a Known Risk with a re-evaluation trigger), in the developers' guide
+  harness inventory, and as a sub-bullet under roadmap `4.2.1` that states
+  "Kani at N=1-3; Proptest at `4.3.1` closes the larger-N coverage".
+  Date/Author: 2026-06-07 / planning agent. **Awaits user approval at Stage A.**
 
 - Decision: harnesses prefer `Recipe::Rule` manifests so that only one
   `Action` is hashed per run, deferring `Recipe::Command`/ interpolation
@@ -1053,7 +1054,8 @@ output to a separate `/tmp` log per the `tee` template. Run
    §Kani for the IR core noting that "up to 10 nodes" is delivered by Proptest
    in future roadmap item `4.3.x`, and that Kani covers the same properties
    exhaustively at 1-3 nodes.
-4. Create `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md`
+4. Create
+   `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
    using the ADR template in
    [`docs/documentation-style-guide.md`](../documentation-style-guide.md).
    Capture the bound reconciliation, the accepted private `IrHashMap`
@@ -1223,9 +1225,9 @@ The implementation is accepted only when all of these behaviours are true:
   the new `cfg(kani)` lint convention.
 - `docs/formal-verification-methods-in-netsuke.md` references
   ADR-0047 and the Proptest hand-off.
-- `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md` exists,
-  follows the ADR template in the documentation style guide, and is indexed from
-  `docs/contents.md`.
+- `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+  exists, follows the ADR template in the documentation style guide, and is
+  indexed from `docs/contents.md`.
 - `docs/roadmap.md` marks `4.2.1` and its four sub-items as done.
 - The branch tracks
   `origin/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks`.

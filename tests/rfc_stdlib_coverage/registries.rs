@@ -247,15 +247,39 @@ fn check_manifest_query(file: &str, row: &RawRow, name: &str, purity: Purity) ->
 }
 
 /// Return the RFC number reserved by a canonical child RFC filename.
+///
+/// The documentation style guide fixes the shape as
+/// `rfcs/rfc-nnnn-title-slug.md`: four ASCII digits, then a kebab-case ASCII
+/// title with no leading or trailing hyphen and no doubled hyphen. A lenient
+/// check would let a near-miss such as `rfc-0013--.md` or `rfc-0013-a b.md`
+/// satisfy the reserved-number lookup, and `parse_all` would then treat that
+/// file as the child RFC for a map row even though it breaks the naming
+/// contract the coverage suite exists to enforce.
 pub(super) fn rfc_number(file: &str) -> Option<String> {
     let name = file.rsplit('/').next()?;
     let markdown_name = name.strip_suffix(".md")?;
     let suffix = markdown_name.strip_prefix("rfc-")?;
     let (number, title) = suffix.split_once('-')?;
-    (number.len() == 4
-        && number.chars().all(|character| character.is_ascii_digit())
-        && !title.is_empty())
-    .then(|| number.to_owned())
+    (is_four_ascii_digits(number) && is_title_slug(title)).then(|| number.to_owned())
+}
+
+/// Return whether `number` is exactly four ASCII digits.
+fn is_four_ascii_digits(number: &str) -> bool {
+    number.len() == 4 && number.chars().all(|character| character.is_ascii_digit())
+}
+
+/// Return whether `title` is a kebab-case ASCII slug.
+///
+/// A slug is non-empty and made of lowercase ASCII letters, digits, and
+/// hyphens, with no leading, trailing, or doubled hyphen.
+fn is_title_slug(title: &str) -> bool {
+    !title.is_empty()
+        && !title.starts_with('-')
+        && !title.ends_with('-')
+        && !title.contains("--")
+        && title.chars().all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-'
+        })
 }
 
 /// Every child RFC the coverage map reserves, sorted by number.

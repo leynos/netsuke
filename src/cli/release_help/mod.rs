@@ -80,7 +80,7 @@ fn localized_config_help(fields: Vec<FieldMetadata>) -> Result<Vec<FieldMetadata
 /// Build release-help metadata for every parser-only top-level selector.
 ///
 /// The selectors have no configuration, environment, or file source. Discovery
-/// retains their policy in `discovery.rs` under ADR-0004.
+/// retains their policy in `discovery.rs` under ADR-0048.
 ///
 /// # Errors
 ///

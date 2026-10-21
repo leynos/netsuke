@@ -52,9 +52,10 @@ implement it until the user explicitly approves the draft.
   `--config`, `NETSUKE_CONFIG`, `-C/--directory`, `NETSUKE_*` value merging,
   default-command resolution, and the documented precedence order.
 - Preserve the accepted decision in
-  `docs/ADR-0048-explicit-config-selection-outside-orthoconfig.md`: Netsuke's
-  CLI adapter, not OrthoConfig attributes, owns explicit selector precedence,
-  early diagnostic selection, and fail-closed selected-file handling.
+  `docs/adrs/adr-0048-explicit-config-selection-outside-orthoconfig.md`:
+  Netsuke's CLI adapter, not OrthoConfig attributes, owns explicit selector
+  precedence, early diagnostic selection, and fail-closed selected-file
+  handling.
 - Keep `CliConfig` in `src/cli/config.rs` as the configuration policy model.
   It may derive OrthoConfig traits, but it must not acquire filesystem,
   process-environment, tracing-subscriber, or command-execution concerns.
@@ -340,8 +341,9 @@ implement it until the user explicitly approves the draft.
 - Observation: the accepted explicit-selection ADR still describes
   `env_config_path` as reading `std::env::var_os`, although the current code
   has already replaced that ambient read with `ConfigEnvProvider` injection.
-  Evidence: `docs/ADR-0048-explicit-config-selection-outside-orthoconfig.md`
-  names the old implementation, while `src/cli/discovery.rs` takes
+  Evidence:
+  `docs/adrs/adr-0048-explicit-config-selection-outside-orthoconfig.md` names
+  the old implementation, while `src/cli/discovery.rs` takes
   `&impl EnvProvider`. Impact: update the existing ADR's implementation
   consequences during the documentation milestone; do not create a competing
   ADR for the v0.9.0 adapter refinement.
@@ -779,7 +781,7 @@ Before editing, read and use these repository sources:
   version work;
 - `docs/ortho-config-users-guide.md` for v0.9.0 APIs and precedence;
 - `docs/netsuke-design.md`, especially section 8.4 and configuration discovery;
-- `docs/ADR-0048-explicit-config-selection-outside-orthoconfig.md` for the
+- `docs/adrs/adr-0048-explicit-config-selection-outside-orthoconfig.md` for the
   accepted ownership of explicit selector policy;
 - `docs/developers-guide.md`, especially quality gates, test suite map,
   environment seams, configuration merge architecture, and release help;
@@ -1072,10 +1074,10 @@ Update documentation only after behaviour and generated artefacts are known:
   explain the absent-versus-failed discovery contract, preserve the manual
   two-pass design, and state why discovery attributes and subcommand docs were
   not transplanted.
-- In `docs/ADR-0048-explicit-config-selection-outside-orthoconfig.md`, preserve
-  the accepted selector-ownership decision while replacing the stale direct
-  `std::env::var_os` description with the current injected `ConfigEnvProvider`
-  port and the v0.9.0 automatic-discovery adapter boundary.
+- In `docs/adrs/adr-0048-explicit-config-selection-outside-orthoconfig.md`,
+  preserve the accepted selector-ownership decision while replacing the stale
+  direct `std::env::var_os` description with the current injected
+  `ConfigEnvProvider` port and the v0.9.0 automatic-discovery adapter boundary.
 - In `docs/developers-guide.md`, update the `cargo-orthohelp` install command,
   document the `ProcessEnv`/`MapEnv` composition roots, the fixed-key
   projection helper's ownership and permitted callers, and the narrow roles of

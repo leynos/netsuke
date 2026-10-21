@@ -413,8 +413,8 @@ Read these before starting. They are not optional background.
 Repository documents:
 
 - `AGENTS.md` — mandatory gates, file-size cap, commit style, spelling policy.
-- `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md` — the governing decision
-  on Kani bounds and production-owned kernels.
+- `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+  — the governing decision on Kani bounds and production-owned kernels.
 - `docs/developers-guide.md`, sections "Command and recipe lowering" and
   "Formal-verification tooling".
 - `docs/formal-verification-methods-in-netsuke.md` — the design rationale.
@@ -447,7 +447,8 @@ There is no Terms of Reference document in this repository. Upstream artefacts:
   `RM-4.2.3.a` through `RM-4.2.3.d`.
 - `docs/formal-verification-methods-in-netsuke.md`, section "Kani for command
   interpolation" — the design basis, `FV-CMD`.
-- `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md` — `ADR-0047`.
+- `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+  — `ADR-0047`.
 
 Trace links:
 
@@ -457,7 +458,8 @@ RM-4.2.3.a -> FV-CMD -> EP-M2 -> ir::cmd_interpolate::verification::marker_token
 RM-4.2.3.b -> FV-CMD -> EP-M5 -> ir::cmd_interpolate::property_tests::scanner_agrees_with_independent_specification
 RM-4.2.3.c -> FV-CMD -> EP-M5 -> ir::cmd_interpolate::property_tests::substituted_odd_backticks_are_rejected
 RM-4.2.3.d -> FV-CMD -> EP-M5 -> ir::cmd_interpolate::property_tests::guard_uses_the_substituted_command
-ADR-0047    ->           EP-M0 -> docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md (4.2.3 extension)
+ADR-0047    ->           EP-M0 -> docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md
+    (4.2.3 extension)
 ```
 
 Roadmap item 4.4.1 declares `Requires 4.2.3`. This plan must therefore leave
@@ -1116,7 +1118,8 @@ the next stage on a failing gate.
     the aspirational 256/8, and name the Proptest hand-off; update the harness
     count in the continuous-integration paragraph that currently says
     "13 harnesses".
-  - `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md`: extend Status, Date,
+  - `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`:
+    extend Status, Date,
     Decision outcome, and Known risks with the 4.2.3 bound decision, the
     window-completeness argument, the harness-local oracle policy, and the
     residual gaps. Add this execplan to Related documents.
@@ -1730,7 +1733,8 @@ and are now marked **accepted**. No decision in this log is outstanding.
   because two consecutive rebases have now moved them and the numbers cannot be
   kept true. **Date/Author:** 2026-08-24, planning agent.
 
-- **Decision:** Extend `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md`
+- **Decision:** Extend
+  `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
   rather than minting a new ADR number. **Rationale:** the same decision — how
   far to bound Kani harnesses and where to hand off — applied to a third
   subject. Roadmap 4.2.2 set the precedent, and three files already share the

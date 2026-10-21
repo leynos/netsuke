@@ -2,7 +2,7 @@
 //!
 //! These tests run `netsuke` in a child process with a closed environment and
 //! an explicit invocation directory, proving the explicit-selector contract of
-//! ADR-0014: a relative `--config <PATH>` resolves against the process working
+//! ADR-0049: a relative `--config <PATH>` resolves against the process working
 //! directory even when `-C/--directory` is supplied; an absolute selector is
 //! unchanged. The
 //! parent process environment and working directory are never mutated; all
@@ -236,7 +236,7 @@ fn cli_explicit_relative_config_without_directory_uses_working_directory() -> Re
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(32))]
 
-    /// Generated selector paths preserve the ADR-0014 independence contract.
+    /// Generated selector paths preserve the ADR-0049 independence contract.
     #[test]
     fn explicit_config_selection_ignores_directory_anchor(
         selector in prop_oneof![

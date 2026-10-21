@@ -113,7 +113,7 @@ of decisions that need the user's confirmation.
   only if a footnote is needed to record the bound; do not rewrite its
   recommendation.
 - Extend the existing
-  [`docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md`](../adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md)
+  [`docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`](../adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md)
   rather than adding a new ADR. `4.2.2` applies the same small-bounded-N
   decision along a different bounding axis (cycle length rather than map size)
   and records the private production-kernel proof boundary as an extension of
@@ -330,9 +330,10 @@ of decisions that need the user's confirmation.
 - Risk: ADR numbering collision. The repository already contains several files
   numbered `ADR-0047-*` (a known artefact of parallel branches). Severity: low.
   Likelihood: low. Mitigation: this plan inherits the existing
-  `ADR-0047-bound-kani-ir-harnesses-to-small-n.md` rather than minting a new
-  number; if Stage A elects a new ADR, the next genuinely free number must be
-  confirmed against `docs/contents.md` before writing it.
+  `adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+  rather than minting a new number; if Stage A elects a new ADR, the next
+  genuinely free number must be confirmed against `docs/contents.md` before
+  writing it.
 
 ## Progress
 
@@ -965,7 +966,7 @@ The relevant supporting files are:
   `make kani-cycle-canon` may be added if Stage A elects a per-feature target.
 - [`docs/developers-guide.md`](../developers-guide.md): the "Kani harness
   inventory" table (rows around lines 186-196) that this plan extends.
-- [`docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md`](../adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md):
+- [`docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`](../adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md):
   the decision this plan inherits.
 - [`docs/verification/mutations/`](../verification/mutations/): the directory of
   literal mutation patches, one per harness.
@@ -1014,7 +1015,7 @@ Primary local references:
 - [`docs/execplans/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md`](4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md):
   the predecessor whose structure, conventions, and lessons this plan mirrors.
 - [`docs/developers-guide.md`](../developers-guide.md) §Kani harness inventory.
-- [`docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md`](../adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md).
+- [`docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`](../adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md).
 - [`docs/documentation-style-guide.md`](../documentation-style-guide.md)
   §Architecture Decision Records.
 
@@ -1382,8 +1383,8 @@ No new external dependency is introduced.
 2. Node-count ceiling: N in {2, 3, 4} interior nodes for the `u8` kernel; the
    Proptest suite covers the larger path-bearing tail.
 3. ADR: extend
-   `ADR-0047-bound-kani-ir-harnesses-to-small-n.md` rather than minting a new
-   ADR.
+   `adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+   rather than minting a new ADR.
 4. Make target: defer a filtered `make kani-cycle-canon` target unless
    `make kani-ir` or `make kani-full` runtime approaches the tolerance.
 5. Tractability boundary: direct `Utf8PathBuf` N=2..4 property proofs are out of

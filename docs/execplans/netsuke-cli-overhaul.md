@@ -539,10 +539,10 @@ overflow logs under the run directory, for example
 
 ### Stage A: create the governing design record
 
-Add `docs/ADR-0046-agent-consistent-human-first-cli.md`. The ADR should follow
-the required sections in `docs/documentation-style-guide.md`: status, date,
-context, decision drivers, options considered, outcome, risks, and related
-documents. It should record that:
+Add `docs/adrs/adr-0046-agent-consistent-human-first-cli.md`. The ADR should
+follow the required sections in `docs/documentation-style-guide.md`: status,
+date, context, decision drivers, options considered, outcome, risks, and
+related documents. It should record that:
 
 - Netsuke is pre-0.1.0 and will remove inconsistent legacy spellings rather
   than support aliases.
@@ -844,8 +844,8 @@ a file-based commit message, not `git commit -m`.
 
 The documentation overhaul is accepted when:
 
-- `docs/ADR-0046-agent-consistent-human-first-cli.md` exists and records the
-  pre-0.1.0 no-compatibility decision.
+- `docs/adrs/adr-0046-agent-consistent-human-first-cli.md` exists and records
+  the pre-0.1.0 no-compatibility decision.
 - `docs/netsuke-design.md` and `docs/netsuke-cli-design-document.md` use the
   same canonical command names, flags, stream contract, and JSON doctrine.
 - `docs/roadmap.md` adds `3.15` for table-stakes foundations and Phase 5 for

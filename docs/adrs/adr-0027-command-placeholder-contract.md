@@ -291,10 +291,10 @@ published interface.
 ## Known risks and limitations
 
 - **Proof coverage is narrower than the contract.** Per
-  `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md`, Kani proves the marker
-  recognizer only. The backtick state machine and the `shlex` guard are covered
-  by Proptest properties, not by proof, and are described here as
-  property-tested rather than proved.
+  `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`,
+  Kani proves the marker recognizer only. The backtick state machine and the
+  `shlex` guard are covered by Proptest properties, not by proof, and are
+  described here as property-tested rather than proved.
 - **The domain boundary in this module is not clean.**
   `invalid_command_error` (`src/ir/cmd_interpolate/mod.rs:215-222`) calls the
   localization layer and stores a pre-rendered, locale-resolved human string

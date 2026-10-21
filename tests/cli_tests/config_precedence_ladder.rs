@@ -19,7 +19,7 @@
 //! [`NETSUKE_CONFIG_PATH`][2] is never set as a selector here; a guard test
 //! confirms it has no effect on selection.
 //!
-//! [2]: https://github.com/leynos/netsuke/blob/main/docs/ADR-0048-explicit-config-selection-outside-orthoconfig.md
+//! [2]: https://github.com/leynos/netsuke/blob/main/docs/adrs/adr-0048-explicit-config-selection-outside-orthoconfig.md
 
 use super::merge_probe::{environment_with_system_scope, merge_in_child};
 use anyhow::{Context, Result, ensure};

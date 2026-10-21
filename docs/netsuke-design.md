@@ -651,7 +651,7 @@ adopted that part of the grammar.
 Metadata follows the same emission-boundary rule. A `description`, `depfile`,
 `deps`, or `pool` keeps its backend-neutral IR text, and the Ninja writer
 escapes only the emitted binding, doubling a literal dollar and rejecting
-newline, carriage-return, and NUL. ADR 0049 records the boundary and its
+newline, carriage-return, and NUL. ADR 0014 records the boundary and its
 migration consequences.
 
 #### Structured environment mapping

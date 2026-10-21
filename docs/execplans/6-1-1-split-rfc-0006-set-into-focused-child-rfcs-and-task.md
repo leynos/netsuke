@@ -5692,9 +5692,9 @@ stating the superseded model.
 Identical in shape, so stated once. For child `00NN` owning the groups in
 `Table 1` for roadmap step `6.S`:
 
-- Outcome: `docs/rfcs/00NN-<slug>.md` exists per the template in `ADR-0040`; the
-  coverage map names it; `docs/contents.md` lists it; roadmap step `6.S` and
-  each of its tasks cite it.
+- Outcome: `docs/rfcs/rfc-nnnn-title-slug.md` exists per the template in
+  `ADR-0040`; the coverage map names it; `docs/contents.md` lists it; roadmap
+  step `6.S` and each of its tasks cite it.
 - Acceptance evidence: `COV-1` shows exactly that RFC's registry helpers owned
   by it; `CONF-1` green; `COV-4`'s unwritten count decremented; gates green.
 - Conformance check: no disposition changed; `COV-2` proves mechanically that
@@ -5786,7 +5786,8 @@ covering struct fields and enum variants, not merely types.
 `EP-M1` as commits in PR #697, then `EP-M2`, then one commit per child. For
 each child:
 
-1. Create `docs/rfcs/00NN-<slug>.md` from the literal template in `ADR-0040`.
+1. Create `docs/rfcs/rfc-nnnn-title-slug.md` from the literal template in
+   `ADR-0040`.
 2. Write section 4 as a list of the group's helpers with one-line purposes and
    links into RFC 0006 section 8.N. Do not restate a contract.
 3. Write section 5.1's registry, then 5.6, 5.7, 5.8, and 5.9. Apply the

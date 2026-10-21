@@ -204,8 +204,14 @@ fn parse_all_uses_only_reserved_numbers_and_sorts_them() -> Result<()> {
 #[case("rfc-٠٠١٣-child.md", None)]
 #[case("rfc-0013child.md", None)]
 #[case("rfc-0013-.md", None)]
+#[case("rfc-0013-Child.md", None)]
+#[case("rfc-0013-a_b.md", None)]
+#[case("rfc-0013-a b.md", None)]
+#[case("rfc-0013-a--b.md", None)]
+#[case("rfc-0013--a.md", None)]
 #[case("rfc-0013-child.txt", None)]
 #[case("docs/rfcs/rfc-0013-child.md", Some("0013"))]
+#[case("docs/rfcs/rfc-0013-child-42.md", Some("0013"))]
 fn canonical_rfc_filenames_reserve_four_ascii_digits(
     #[case] input: &str,
     #[case] expected: Option<&str>,

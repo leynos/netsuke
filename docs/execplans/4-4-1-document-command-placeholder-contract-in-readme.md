@@ -199,9 +199,10 @@ same Netsuke source can therefore get different acceptance sets. This matters to
   README links to it rather than restating it.
 - `docs/netsuke-design.md:290-298` and `docs/netsuke-design.md:2616-2644`, the
   canonical design text.
-- `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md:167-177`, which records
-  that the Kani proofs cover only the marker recognizer, and that the backtick
-  state machine and `shlex` guard are covered by Proptest rather than proof.
+- `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md:167-177`,
+  which records that the Kani proofs cover only the marker recognizer, and that
+  the backtick state machine and `shlex` guard are covered by Proptest rather
+  than proof.
 - `docs/adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md:42-45`, the
   escaping seam.
 
@@ -324,8 +325,8 @@ at commit `c31057c1` after the 2026-09-23 rebase:
   accepted on `main` 2026-09-20 — owns the placeholder-set decision this plan's
   `D1` reports. It postdates revisions 1 and 2 and reverses the asymmetry they
   described; `D1` and ADR-0027 were revised to agree with it.
-- `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md` — constrains what may
-  be claimed as *proved* versus *property-tested*.
+- `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+  — constrains what may be claimed as *proved* versus *property-tested*.
 - `docs/adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md` — the escaping
   seam this contract sits above.
 - No Terms of Reference document exists for this repository. Do not invent
@@ -386,9 +387,10 @@ workaround.
    identifier whose spelling would otherwise trip the `typos` gate.
 6. **No new dependency.** Nothing is added to `Cargo.toml`.
 7. **No claim of proof beyond what exists.** Per
-   `docs/ADR-0047-bound-kani-ir-harnesses-to-small-n.md:167-177`, Kani proves
-   the marker recognizer only. The README and ADR must not describe the
-   backtick guard or the `shlex` guard as *proved*; they are property-tested.
+   `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md:167-177`,
+   Kani proves the marker recognizer only. The README and ADR must not
+   describe the backtick guard or the `shlex` guard as *proved*; they are
+   property-tested.
 8. **`docs/users-guide.md` remains the detailed reference.** The README owns
    the placeholder contract and the non-guarantees; the users' guide keeps the
    shell-route mechanics, and the README does not restate them. Correcting a
@@ -1116,9 +1118,12 @@ Run everything from the repository root,
    Three things were wrong with it. It cannot match `docs/users-guide.md`'s
    claim, which wraps across a line break. Its `remain unchanged` pattern is
    far too broad, matching unrelated prose about schema and snapshot stability
-   in `docs/roadmap.md` and `docs/developers-guide.md`. And revision 1's
-   narrower variant (`'literal .\$in\|\$in. and .\$out. remain'`) hit
-   `docs/ADR-0047-…:165`, which must not be edited.
+   in `docs/roadmap.md` and `docs/developers-guide.md`.
+
+   And revision 1's narrower variant
+   (`'literal .\$in\|\$in. and .\$out. remain'`) hit
+   `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md:165`,
+   which must not be edited.
 
 6. Add `tests/readme_security_tests.rs` and the three identifiers to
    `EXPECTED_EXAMPLE_IDS`. Observe red.

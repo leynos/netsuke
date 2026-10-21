@@ -687,4 +687,4 @@ investment in existing Gherkin feature files and step logic.
 ## References
 
 [^1]: <https://github.com/leynos/rstest-bdd/tree/v0.3.2>
-[^2]: ../`docs/rstest-bdd-users-guide.md`
+[^2]: [`rstest-bdd` user guide](../rstest-bdd-users-guide.md)

@@ -115,7 +115,7 @@ every other YAML type. A string is validated syntactically while loading the
 manifest and resolved against the trusted registry during compilation.
 
 [adr-019-reserved-names]:
-  ../adr-019-structured-command-shell-selection.md#2026-09-24-reserve-yaml-boolean-spellings-as-shell-names
+  ../adrs/adr-0019-select-allow-listed-structured-command-shells.md#2026-09-24-reserve-yaml-boolean-spellings-as-shell-names
 
 ### 4.2 Valid command positions
 

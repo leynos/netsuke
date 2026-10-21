@@ -11,7 +11,7 @@
 - **Companion documents:** `docs/netsuke-design.md` (architecture),
   `docs/netsuke-cli-design-document.md` (command-line interface),
   `docs/roadmap.md` and `docs/roadmap-composition.md` (sequencing),
-  `docs/ADR-0046-agent-consistent-human-first-cli.md`,
+  `docs/adrs/adr-0046-agent-consistent-human-first-cli.md`,
   `docs/adrs/adr-0021-keep-project-fetch-policy-below-the-operator-ceiling.md`,
   `docs/adrs/adr-0026-keep-project-environment-policy-below-the-operator-ceiling.md`,
   and the RFCs under `docs/rfcs/`. There is no `docs/context.md` yet; see
