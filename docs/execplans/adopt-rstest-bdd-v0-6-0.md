@@ -2351,3 +2351,30 @@ The gate set for this revision is the Markdown-scoped one — `check-fmt`,
 `docs/`. That scoping was not assumed: this document is a gate input only
 through `tests/execplan_status_contract_tests.rs`, which parses the header
 above the first level-two heading, and the edits are far below it.
+
+All four were run on `95eec9f0`, the commit that carries the text above, and
+all four pass: `check-fmt` reports 186 Python files formatted and 174 Markdown
+files unchanged (`/tmp/check-fmt-netsuke-adopt-rstest-bdd-v0-6-0-upstream.out`);
+`spelling` exits 0
+(`/tmp/spelling-netsuke-adopt-rstest-bdd-v0-6-0-upstream.out`); `markdownlint`
+reports `Summary: 0 issues in 0 files` over 175 files
+(`/tmp/markdownlint-netsuke-adopt-rstest-bdd-v0-6-0-upstream.out`); and `nixie`
+validates every diagram
+(`/tmp/nixie-netsuke-adopt-rstest-bdd-v0-6-0-upstream.out`). The tree was
+confirmed empty with `git status --porcelain` before and after the sweep.
+
+`make spelling` regenerated `typos.toml` on the first run, which is the
+documented behaviour of a generated file whose committed blob is not a fixed
+point of the builder. The regenerated blob is `d32137d0`, byte-identical to
+`origin/main`'s copy from `9bb384850`, so it was committed separately as
+`afd4a084` — a refresh that will collapse on rebase rather than a change this
+work introduced. The plan's own content is unaffected by that pattern; the
+match is on the `color` ignore rule, and this document mentions no `color`
+token at all.
+
+This closing record cannot cite a log for its own bytes, exactly as the
+`-confirm` note above explains: writing this paragraph moved `HEAD` again. The
+four gates above gated `95eec9f0`, whose only subsequent change is this
+paragraph, and the same four targets are re-run on the resulting commit with
+`/tmp/<target>-upstream-confirm-adopt-rstest-bdd-v0-6-0.out` paths; that
+verdict is reported in the pull request rather than folded back here.
