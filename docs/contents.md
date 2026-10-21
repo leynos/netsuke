@@ -353,6 +353,13 @@ operator, user, and contributor references are easier to find.
 - [rstest-bdd-v0-6-0-migration-guide.md](rstest-bdd-v0-6-0-migration-guide.md):
   Migration notes for the current `rstest-bdd` release. Imported byte-for-byte
   from `leynos/rstest-bdd` tag `v0.6.0` at commit `72fb2263`.
+- [rstest-bdd-link-compatibility.md](rstest-bdd-link-compatibility.md): How the
+  relative links inside the two imported `rstest-bdd` documents resolve in this
+  repository, which upstream names change on import, and which upstream files
+  are not carried locally.
+- [v0-6-0-migration-guide.md](v0-6-0-migration-guide.md): Compatibility path
+  for the upstream filename of the `rstest-bdd` 0.6.0 migration guide. It holds
+  no content of its own.
 - [rust-doctest-dry-guide.md](rust-doctest-dry-guide.md): Doctest workflow and
   dry-run guidance.
 - [rust-testing-with-rstest-fixtures.md](rust-testing-with-rstest-fixtures.md):

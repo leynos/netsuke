@@ -376,6 +376,36 @@ the conflict in `Decision log` before proceeding.
 
 ## Surprises & discoveries
 
+- Observation: a byte-for-byte import makes every relative link in the source
+  text a candidate broken link at the destination, and the digests that prove
+  the import also forbid the obvious fix. Formal review found two such links;
+  auditing the whole surface found **eleven**, across the two imported guides.
+
+  Ten of the eleven were invisible to a search for inline `](…)` links: they
+  are Markdown *reference definitions* (`[adr-007]: adr-007-…md`,
+  `[design-beta2-quick-wins]: rstest-bdd-design.md#…`), which are not links
+  until some `[text][label]` use resolves them. The migration guide carries
+  nine of them; the imported users' guide carries one, and it is the sole
+  relative link in that document — which is why an earlier entry in this plan
+  asserted the guide "contains no relative Markdown links". That claim was
+  false, and this entry is where its correction is recorded rather than
+  silently edited away. The lesson is narrow and mechanical: when auditing
+  links in imported text, match reference definitions, not only the inline form.
+
+  Two further points kept the fix honest. First, the users' guide was modified
+  by this PR (`1577` insertions, `203` deletions) rather than re-imported
+  unchanged, and at the merge-base `c8e58a0a8` it linked to
+  `rstest-bdd-v0-5-0-migration-guide.md`, which exists. So the broken
+  `v0-6-0-migration-guide.md` target is a link this PR introduced, not
+  pre-existing rot inherited from `main`. Second, upstream already has the
+  identical problem for the same reason — `docs/users-guide.md` is vendored
+  downstream there too — and its ADR-014 and ADR-021 solve it with a link
+  validator and a single recorded base URL. The remedy here is different
+  because the constraint is different: upstream owns its links and can rewrite
+  them, whereas this repository imports the text and must not. Hence
+  compatibility paths and headings outside the imports rather than edited links
+  inside them.
+
 - Observation: `make lint` is red on this branch with 39
   `cognitive_complexity` errors in `netsuke-build (lib)`. The migration **is**
   the cause, by a feature-unification edge the dependency bump introduces — not
@@ -993,8 +1023,16 @@ touched them.
 The task's naming convention is followed exactly; the repository has no
 competing convention for imported upstream documents.
 
-`docs/rstest-bdd-users-guide.md` contains no relative Markdown links, so it
-needs no mapping.
+`docs/rstest-bdd-users-guide.md` **does** contain one relative Markdown link,
+and this entry previously said it contained none. The link is the reference
+definition `[gpui-migration]:` at the foot of the guide, which targets
+`v0-6-0-migration-guide.md#migrate-a-stateful-gpui-test`. It is present in the
+pristine upstream text, so it is not a transcription error; the earlier "no
+relative links" claim simply missed it, because the target is a bare reference
+definition rather than an inline `](…)` link. It resolves through the same
+filename mapping as the migration guide's own links — see
+`docs/v0-6-0-migration-guide.md`, the compatibility path — and the reasoning is
+recorded in `docs/rstest-bdd-link-compatibility.md`.
 
 `docs/rstest-bdd-v0-6-0-migration-guide.md` links to five upstream files by
 relative path. Because the imported text must stay byte-for-byte intact, the
@@ -1094,6 +1132,32 @@ the link site.
   rest do not exist. Vendoring them would be a large, unevidenced scope
   increase, and rewriting links would break byte-for-byte fidelity.
   Date/Author: 2026-09-26, implementing agent.
+
+  Amended 2026-10-22: the mapping is no longer only prose in this plan. Formal
+  review observed that a recorded mapping does not help a reader who follows
+  one of those links in a rendered document, and that two of them were
+  reachable — the users' guide's `[gpui-migration]:` reference definition,
+  which targets the upstream migration-guide filename, and the migration guide's
+  `[users-guide-playbook]:` and `[published-variants]:` definitions, which
+  target upstream users'-guide anchors. The remedy keeps the byte-for-byte
+  constraint and puts the compatibility outside the imports:
+
+  - `docs/v0-6-0-migration-guide.md` is a Netsuke-owned compatibility path
+    carrying no content of its own, so the upstream filename resolves.
+  - `docs/users-guide.md` gains two compatibility headings,
+    `stateful-gpui-scenarios-with-durable-handles` and
+    `published-gpui-022-stateful-step-variants`, each forwarding to the real
+    section in the imported users' guide.
+  - `docs/rstest-bdd-link-compatibility.md` records the whole mapping in one
+    place, including the one genuinely hazardous name: the migration guide's
+    `developers-guide.md` link means the *upstream* developers' guide, not
+    Netsuke's.
+
+  Deliberately **not** done: the five upstream files are still not vendored
+  (`rstest-bdd-design.md` alone is 165 KB, and none is a Netsuke deliverable),
+  and no imported byte was touched. The compatibility headings are shims, and
+  they say so in their own text rather than pretending to be documentation.
+  Date/Author: 2026-10-22, implementing agent.
 
 - Decision: the `rstest-bdd-harness` crate that now appears in `Cargo.lock` is
   transitive and is not added to any manifest. Rationale:
