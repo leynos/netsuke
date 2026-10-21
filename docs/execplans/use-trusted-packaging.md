@@ -632,21 +632,32 @@ Each gains a `scripts/tests/test_<module>.py`. The contract tests gain:
 
 `.github/actions/` gains one composite action per extracted body:
 
-- `release-candidate/` — resolve and record the identity.
-- `crate-package/` — package, list, verify, digest, stage.
+- `package-crate/` — resolve and record the identity.
 - `publish-crates-io/` — probe, decide, upload, verify registry bytes.
 - `verify-release-inventory/` — compare the whole release against the
   identity record.
 - `finalize-github-release/` — reconcile the draft, then un-draft.
+- `consumer-smoke/` — download, verify, extract and run the published bytes.
+
+A sixth action, `upload-declared-assets/`, is called by the existing
+`publish-release` job rather than by a new one; the Decision log records why
+the upload step becomes a composite action instead of an inline `run` block.
 
 Each new job's name matches the composite action it calls, so a reader moving
 between `release.yml` and `.github/actions/` does not have to translate.
 
 **The new actions pass values by environment, never by `${{ }}` in a `run`
 block.** `tests/workflow_contracts/release_run_interpolation_test.py` forbids
-`${{` inside any `run` in `release.yml` or `package.yml` — but its
-`_step_contexts` skips every job carrying `uses`, so moving a step body into a
-composite action **removes that shell from the contract's reach entirely**.
+`${{` inside any `run` in `release.yml` or `package.yml`. When this paragraph
+was written its `_step_contexts` skipped every job carrying `uses`, so moving a
+step body into a composite action **removed that shell from the contract's
+reach entirely** — the extraction this stage performs would have *weakened* the
+rule it was written to satisfy. That gap is now closed: the predicate and its
+containers live in `tests/workflow_contracts/action_run_sources.py`, and
+`composite_action_contract_test.py` applies the identical rule to every
+manifest under `.github/actions`, so a job body moved into an action stays
+under the contract it was written for. A path-scoped exemption would have
+reintroduced the hole for every later action.
 
 Re-measured at `c1f3f2ed`, the five existing actions carry **68** expression
 sites between them (`windows-gate-cache` 26, `windows-msi-upgrade-validation`
@@ -1782,6 +1793,33 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `windows-msi-upgrade-validation/action.yml` shows `---$`, and
   `tail -c 60 | cat -A` on `windows-gate-cache/action.yml` ends at the cache
   key with no trailing newline beyond it.
+- [x] (2026-10-21) Closed the hole Stage C would have opened in the rule it
+  was written to satisfy, and settled the last design question before the
+  audits. Extracted the run-interpolation predicate and its two containers into
+  `tests/workflow_contracts/action_run_sources.py` so one rule serves workflow
+  jobs and composite-action manifests alike, and made
+  `release_run_interpolation_test` import it. This is a prerequisite rather
+  than a tidy-up: the stage moves five job bodies out of `release.yml` and into
+  `.github/actions/`, and the contract's own step container skipped every job
+  carrying `uses`, so extraction would have removed those shells from the
+  contract's reach. `require_action_step` returns a declaration index so a
+  mutation restores an unsafe body where it came from instead of asserting
+  against an absent step; its terminal `pytest.fail` is written as
+  `return pytest.fail(...)` because the bare form trips pylint R1710 after
+  `return` arms — the failure that made the previous lint batch red. Full
+  seven-gate batch at HEAD `cd85a1a1c` over candidate digests `980be42b…` and
+  `2761f735…`: `check-fmt`, `lint`, `typecheck`, `markdownlint`, `nixie`,
+  `test` (4300 nextest, 113 doctests) and `test-workflow-contracts` all exited
+  zero. Committed at `374da419d` and pushed.
+- [x] (2026-10-21) Settled how the upload step carries the declared names,
+  the last Stage C unknown that blocked authoring the actions. The step keeps
+  its `id`, name, position and `with.dry-run` and becomes a `uses:` call to a
+  new local action `.github/actions/upload-declared-assets/`, because a `run:`
+  step has no `with` and so cannot satisfy the coupling the plan already
+  states. The rehearsal lane keeps the shared action, so
+  `tests/workflow_release.rs:25`'s raw `upload-release-assets@` pin survives on
+  one occurrence with no Rust edit. Rationale, the measured two-occurrence
+  count, and the rehearsal-lane gap left for Stage D are in the Decision log.
 
 ## Surprises & discoveries
 
@@ -2996,6 +3034,51 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   one of the three that already holds `contents: write` and is permitted
   `gh release` calls, so the reshape introduces no new credential surface.
   Date/Author: 2026-10-21, implementation agent.
+
+- Decision: the per-name upload is a **new local composite action**,
+  `.github/actions/upload-declared-assets/`, and `publish-release`'s step keeps
+  its `id: upload_assets`, its name `Upload artefacts to release`, its
+  position, and its `with.dry-run` expression — only its `uses:` target
+  changes. Rationale: the 2026-10-19 coupling note states the choice exactly —
+  a per-name rewrite "has to keep the step's id, its name, its position, and a
+  `dry-run` key — or edit those four assertions in the same commit, which would
+  move the contract away from the property it states". A `run:` step cannot
+  satisfy the first branch, because `check_upload_plan` reads `with.dry-run`
+  through `require_mapping`, which fails on an absent `with`; and `with` is not
+  a `run`-step key at all. Keeping the step a `uses:` step is therefore the
+  only way to hold the stated property rather than restate it. The action is a
+  composite action rather than an inline `run:` block because the repository's
+  own convention is to extract a step body into `.github/actions/`
+  (`docs/developers-guide.md:1415-1416`), and because the composite-action
+  contract then applies the run-interpolation rule to it automatically. It is a
+  sixth action rather than a sixth *job*: the five-action rule in Stage C names
+  the actions the five new jobs call, and this one is called by an existing
+  job, so the job/action name-parity rule that produced those five names does
+  not reach it. The name states what it does — it uploads exactly the declared
+  names — rather than repeating the job it serves.
+
+  Two couplings follow, both measured. First, `tests/workflow_release.rs:25`
+  pins the raw substring `upload-release-assets@`, and `release.yml` carries
+  that substring twice — once in `release` at line 493 (pin `a5765019…`) and
+  once in `publish-release` at line 634 (pin `0606ca89…`). Changing only
+  `publish-release`'s `uses:` leaves exactly one occurrence, so the Rust pin
+  stays satisfied with no edit to the Rust suite. Substituting **both** lanes
+  would delete the substring and turn that assertion red, which is a second
+  reason the rehearsal lane is out of scope for this change. Second, the
+  orientation sentence "the repository now invokes one shared action at two
+  revisions, chosen by job" describes the current tree and goes stale in the
+  same commit that lands this change; it must be corrected there rather than
+  left as a description of a file that no longer has that shape.
+
+  The rehearsal lane is left on the shared action deliberately, and the gap is
+  recorded rather than closed: `release` runs with `dry-run: true` and uploads
+  nothing, so the defect it retains is that its *plan* omits the archives, not
+  that it drops bytes a user fetches. Its dry run therefore cannot catch a
+  declaration-versus-release disagreement that `publish-release` would hit.
+  Closing that would mean giving `release` the declaration producer too, which
+  would put a `publish-release`-owned output on a mutually exclusive job and
+  widen this change beyond the upload path. Flagged for Stage D rather than
+  decided here. Date/Author: 2026-10-21, implementation agent.
 
 ## Outcomes & retrospective
 
