@@ -164,6 +164,14 @@ O compilador de sistema de build principal do Netsuke v0.1.0-beta4 oferece:
 - cobertura de testes unitários, comportamentais, de integração, de
   propriedade, de snapshot e verificação inicial com Kani.
 
+A emissão determinística é uma garantia publicada: para um manifesto, ambiente,
+plataforma, seleção de shell de receita e versão do Netsuke fixos,
+`netsuke generate` produz saída idêntica byte a byte, incluindo todos os
+arquivos auxiliares dyndep. A estabilidade de bytes entre versões do Netsuke,
+entre plataformas ou entre seleções de shell **não** é garantida. O
+[contrato de determinismo](docs/adr-030-ninja-emission-determinism-contract.md)
+enuncia a garantia, suas precondições e suas exclusões.
+
 Desde a beta3, o Netsuke também oferece suporte a agregados de ações e alvos
 apenas-de-dependência: nós com uma lista `deps` não vazia podem omitir uma
 receita.

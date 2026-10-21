@@ -23,17 +23,18 @@
 //! specification; the split is the file-size cap, not a boundary in the
 //! reasoning.
 
-use super::classification::Classification;
-use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
+use crate::ir::{BuildEdge, BuildGraph};
 use blueprint::Blueprint;
 use camino::Utf8PathBuf;
 use proptest::prelude::*;
 use proptest::test_runner::TestCaseError;
-use std::collections::hash_map::DefaultHasher;
-use std::fmt;
 use std::hash::{Hash, Hasher};
 
 pub(super) mod blueprint;
+pub(super) mod spec;
+
+/// Re-exported so the specification keeps one import path for its callers.
+pub(crate) use spec::GraphSpec;
 
 /// Greatest number of actions a specification may declare.
 pub(crate) const MAX_ACTIONS: usize = 50;
@@ -102,13 +103,67 @@ pub(super) struct EdgePlan {
     pub(super) is_phony: bool,
 }
 
+/// The generation bounds a graph specification is drawn under.
+///
+/// The shared domain is the roadmap's, and every obligation but one draws from
+/// it. `OBL-NINJA` cannot: it hands each case to a real `ninja` binary twice,
+/// so its domain is deliberately smaller, and a duplicate generator would be a
+/// second, drifting statement of the same well-formedness argument. The bounds
+/// are therefore named once and passed in, with the shared set as the default.
+///
+/// Only the *sampling* bounds vary. The structural constants — the pool's cost
+/// budget, how many outputs an edge may take, the default count — are shared,
+/// because they describe what a well-formed specification looks like rather
+/// than how large a case is.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GraphBounds {
+    /// Fewest actions a specification may declare.
+    pub(crate) min_actions: usize,
+    /// Greatest number of actions a specification may declare.
+    pub(crate) max_actions: usize,
+    /// Fewest edges a specification may declare.
+    pub(crate) min_edges: usize,
+    /// Greatest number of edges a specification may declare.
+    pub(crate) max_edges: usize,
+    /// Greatest pool slot number an edge may name.
+    ///
+    /// A drawn slot is clamped to the window of slots allocated before the
+    /// edge, so a ceiling much larger than a domain's pool collapses most
+    /// dependency draws onto the window's last slot. That is harmless for the
+    /// shared domain, whose pools run to 200 paths, but it would leave the
+    /// small `OBL-NINJA` domain unable to reach two distinct implicit
+    /// dependencies — the shape its dyndep path needs. Each domain therefore
+    /// states a ceiling its own pool cannot outgrow.
+    pub(crate) max_position: usize,
+    /// Fewest leading actions declared dependency-only.
+    pub(crate) min_phony_actions: usize,
+}
+
+impl GraphBounds {
+    /// The bounds every property but `OBL-NINJA` draws under.
+    pub(crate) const SHARED: Self = Self {
+        min_actions: MIN_ACTIONS,
+        max_actions: MAX_ACTIONS,
+        min_edges: MIN_EDGES,
+        max_edges: MAX_EDGES,
+        max_position: MAX_POSITION,
+        min_phony_actions: 1,
+    };
+}
+
 /// The per-edge shape strategy, kept separate so that it reads on its own.
 ///
 /// The action slot is drawn against `action_count` rather than a fixed ceiling,
 /// so every drawn slot names a declared action. Bounding it here rather than
 /// folding the draw afterwards keeps the mapping total without a wrap-around
 /// step, which would make several action slots unreachable for a short list.
-pub(super) fn edge_plan_strategy(action_count: usize) -> impl Strategy<Value = EdgePlan> {
+///
+/// `max_position` comes from the caller's [`GraphBounds`]; see that field's
+/// documentation for why the ceiling is domain-specific.
+pub(super) fn edge_plan_strategy(
+    action_count: usize,
+    max_position: usize,
+) -> impl Strategy<Value = EdgePlan> {
     (
         (
             0usize..=MAX_EXTRA_PER_EDGE,
@@ -116,9 +171,9 @@ pub(super) fn edge_plan_strategy(action_count: usize) -> impl Strategy<Value = E
             0usize..action_count,
         ),
         (
-            prop::collection::vec(0usize..MAX_POSITION, 0..=3),
-            prop::collection::vec(0usize..MAX_POSITION, 0..=3),
-            prop::collection::vec(0usize..MAX_POSITION, 0..=2),
+            prop::collection::vec(0usize..max_position, 0..=3),
+            prop::collection::vec(0usize..max_position, 0..=3),
+            prop::collection::vec(0usize..max_position, 0..=2),
         ),
         (
             0usize..=MAX_EXTERNAL_PER_EDGE,
@@ -145,104 +200,6 @@ pub(super) fn edge_plan_strategy(action_count: usize) -> impl Strategy<Value = E
                 is_phony,
             },
         )
-}
-
-/// A bounded, well-formed build-graph specification and two insertion orders.
-///
-/// Materializing one specification twice under different orders yields two
-/// graphs with identical key sets and identical values. That is what makes an
-/// insertion-order property sound: a comparison over graphs with *differing*
-/// key sets establishes nothing, since any divergence between them would be
-/// legitimate and any agreement would be uninformative.
-pub(crate) struct GraphSpec {
-    /// Action identifier and action, in declaration order.
-    pub(super) actions: Vec<(String, Action)>,
-    /// The graph's edges, in the order they would be declared.
-    pub(super) edges: Vec<BuildEdge>,
-    /// Default targets: a sub-multiset of the pool, with repeats.
-    pub(super) default_targets: Vec<Utf8PathBuf>,
-    /// One permutation of `0..edges.len()`.
-    pub(super) first_order: Vec<usize>,
-    /// A second permutation, distinct from [`Self::first_order`] whenever the
-    /// edge count admits a second arrangement at all.
-    pub(super) second_order: Vec<usize>,
-}
-
-impl GraphSpec {
-    /// Build the graph these parts describe, inserting edges in `order`.
-    ///
-    /// Edges are cloned from the specification rather than consumed, so one
-    /// specification can be materialized as many times as a property needs.
-    /// Out-of-range indices in `order` are skipped rather than rejected:
-    /// shrinking can shorten a sampled order, and that is not a defect.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if an edge's outputs collide with one already
-    /// inserted; see [`insert_pool_edge`] for why that is reported rather than
-    /// asserted. The pool's disjoint slices make it unreachable in practice.
-    pub(crate) fn materialize(&self, order: &[usize]) -> Result<BuildGraph, TestCaseError> {
-        let mut graph = BuildGraph::default();
-        for (id, action) in &self.actions {
-            graph.actions.insert(id.clone(), action.clone());
-        }
-        for index in order {
-            if let Some(edge) = self.edges.get(*index) {
-                insert_pool_edge(&mut graph, edge)?;
-            }
-        }
-        graph.default_targets.clone_from(&self.default_targets);
-        Ok(graph)
-    }
-
-    /// The specification's insertion orders, as `(first, second)`.
-    ///
-    /// The two differ whenever the edge count admits a second permutation, so a
-    /// property comparing them compares two genuinely different arrangements
-    /// rather than a thing to itself.
-    pub(crate) fn orders(&self) -> (&[usize], &[usize]) {
-        (&self.first_order, &self.second_order)
-    }
-
-    /// The number of edges, which bounds a valid index into an insertion order.
-    pub(crate) const fn edge_count(&self) -> usize {
-        self.edges.len()
-    }
-
-    /// Shape counts for this specification.
-    pub(crate) fn classification(&self) -> Classification {
-        Classification::of(&self.actions, &self.edges, &self.default_targets)
-    }
-
-    /// A stable digest over every field a determinism property can observe.
-    ///
-    /// There is no `Hash` impl to lean on: `Action` and `BuildEdge` derive
-    /// `PartialEq` but not `Hash`, and hashing their `Debug` output would fold
-    /// in formatting that is free to change. The walk therefore names each
-    /// observable field explicitly.
-    fn digest(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        for (id, action) in &self.actions {
-            id.hash(&mut hasher);
-            action.restat.hash(&mut hasher);
-            action.recipe.is_dependency_only().hash(&mut hasher);
-        }
-        for edge in &self.edges {
-            edge.action_id.hash(&mut hasher);
-            hash_paths(&mut hasher, &edge.explicit_outputs);
-            hash_paths(&mut hasher, &edge.implicit_outputs);
-            hash_paths(&mut hasher, &edge.inputs);
-            hash_paths(&mut hasher, &edge.implicit_deps);
-            hash_paths(&mut hasher, &edge.order_only_deps);
-            (edge.dependency_order == DependencyOrder::Serial).hash(&mut hasher);
-            edge.phony.hash(&mut hasher);
-            edge.always.hash(&mut hasher);
-        }
-        hash_paths(&mut hasher, &self.default_targets);
-        self.first_order.hash(&mut hasher);
-        self.second_order.hash(&mut hasher);
-        hasher.finish()
-    }
 }
 
 /// Insert one pool edge, reporting a collision as a shrinkable test failure.
@@ -272,51 +229,50 @@ fn hash_paths<H: Hasher>(hasher: &mut H, paths: &[Utf8PathBuf]) {
     }
 }
 
-impl fmt::Debug for GraphSpec {
-    /// Print the specification's shape, never its contents.
-    ///
-    /// Proptest renders a counter-example regardless of the assertion's own
-    /// message, and a 50-action, 100-edge specification is tens of kilobytes on
-    /// a single line — long enough that the diagnostic a reader needs scrolls
-    /// out of reach. The counts say which shapes a case reached and the digest
-    /// says whether two runs are looking at the same value, so a failing case
-    /// stays diagnosable without replaying its seed.
-    ///
-    /// The formatter's alternate flag is deliberately ignored. Proptest renders
-    /// this value through `{:#?}`, so honouring the flag would pretty-print the
-    /// specification's contents across many lines and defeat the compaction the
-    /// reader needs; the diagnostic is one line whatever the caller asks for.
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "GraphSpec {{ digest: {:016x}, classes: {:?} }}",
-            self.digest(),
-            self.classification(),
-        )
-    }
-}
-
 /// Generate a bounded, well-formed [`GraphSpec`].
 ///
 /// Actions and edges are drawn independently, so the shapes the obligations
 /// name are reachable but not guaranteed on any one case. Properties record the
 /// classes they observed rather than assuming them.
 pub(crate) fn arb_graph_spec() -> impl Strategy<Value = GraphSpec> {
-    (MIN_ACTIONS..=MAX_ACTIONS, MIN_EDGES..=MAX_EDGES)
-        .prop_flat_map(|(action_count, edge_count)| {
+    arb_graph_spec_within(GraphBounds::SHARED)
+}
+
+/// Generate a well-formed [`GraphSpec`] inside `bounds`.
+///
+/// The same construction as [`arb_graph_spec`], with the sampling bounds
+/// supplied rather than fixed, so `OBL-NINJA` can draw its smaller domain
+/// without a second copy of the well-formedness argument. A domain narrower
+/// than the shared one needs at least one executable action and at least one
+/// non-phony action for the same reason the shared domain does; the phony
+/// share is bounded by `action_count` rather than by a fixed margin, because a
+/// one-action domain has no room for the shared margin.
+pub(crate) fn arb_graph_spec_within(bounds: GraphBounds) -> impl Strategy<Value = GraphSpec> {
+    (
+        bounds.min_actions..=bounds.max_actions,
+        bounds.min_edges..=bounds.max_edges,
+    )
+        .prop_flat_map(move |(action_count, edge_count)| {
             let positions: Vec<usize> = (0..edge_count).collect();
             (
                 Just(action_count),
                 Just(edge_count),
-                prop::collection::vec(edge_plan_strategy(action_count), edge_count),
+                prop::collection::vec(
+                    edge_plan_strategy(action_count, bounds.max_position),
+                    edge_count,
+                ),
                 prop::collection::vec(any::<bool>(), action_count),
-                prop::collection::vec(0usize..MAX_POSITION, 0..=MAX_DEFAULT_PICKS),
+                prop::collection::vec(0usize..bounds.max_position, 0..=MAX_DEFAULT_PICKS),
                 // At least one action must be executable, so that a non-phony
                 // edge has something to name; the phony share stops short of
                 // the total and at least two actions exist besides.
-                1usize..=(action_count.saturating_sub(2)).max(1),
+                bounds.min_phony_actions
+                    ..=(action_count.saturating_sub(2)).max(bounds.min_phony_actions),
                 Just(positions).prop_shuffle(),
-                1usize..edge_count,
+                // A one-edge domain has no second arrangement, so the rotation
+                // is the identity there; the range must still be non-empty,
+                // because `1..1` is an empty range and Proptest rejects it.
+                1usize..=edge_count.saturating_sub(1).max(1),
             )
         })
         .prop_map(

@@ -190,6 +190,14 @@ Netsuke v0.1.0-beta4's core build-system compiler provides:
 - unit, behavioural, integration, property, snapshot, and initial Kani
   verification coverage.
 
+Deterministic emission is a published guarantee: for a fixed manifest,
+environment, platform, recipe-shell selection, and Netsuke version,
+`netsuke generate` produces byte-identical output, including every dyndep
+sidecar. Byte stability across Netsuke versions, across platforms, or across
+shell selections is **not** promised. The
+[determinism contract](docs/adr-030-ninja-emission-determinism-contract.md)
+states the guarantee, its preconditions, and what it excludes.
+
 Since beta3, Netsuke also supports dependency-only action and target
 aggregates: nodes with a non-empty `deps` list may omit a recipe.
 

@@ -10,8 +10,10 @@
 //! module per obligation: the first two draw graphs from the generator, while
 //! `order` and `defaults` drive the ordering rules both emission paths share.
 //! `declaration` states the end-to-end obligation over manifests rather than
-//! graphs, so the lowering runs inside the comparison. `support` holds the
-//! pieces the graph-drawing suites share — so that they cannot drift into
+//! graphs, so the lowering runs inside the comparison. `ninja_oracle` is the
+//! only suite whose oracle leaves the process: it writes each emitted bundle
+//! to a fresh directory and hands it to a real `ninja` binary. `support` holds
+//! the pieces the graph-drawing suites share — so that they cannot drift into
 //! slightly different domains, which is a defect no gate would catch: both
 //! would pass, and neither would be evidence about the other.
 
@@ -19,6 +21,8 @@
 mod declaration;
 #[cfg(test)]
 mod defaults;
+#[cfg(test)]
+mod ninja_oracle;
 #[cfg(test)]
 mod no_loss;
 #[cfg(test)]
