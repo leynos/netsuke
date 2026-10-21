@@ -2230,6 +2230,54 @@ rows — 1.1 s and 1.8 s early, 3.8 s and 23.1 s late — is consistent with the
 late run rebuilding what the rewrite changed, but the logs do not record cache
 state, so that is an observation offered as corroboration and not as proof.
 
+#### Assessment-correction sweeps
+
+Two further full sweeps ran after the assessment rounds, each on a committed
+revision with the tree clean before and after. Both were run by the
+`scrutineer` subagent, sequentially and once per gate, and both were green on
+the first attempt; no gate was re-run for a failure.
+
+The `-r6` sweep gated `8ae039d11`, the commit that first corrected the
+lockfile-scope claim and the stale completion record. The `-r7` sweep gated
+`1ef3dcf51`, which reconciled the four remaining numeric and consistency
+defects the assessment's second round identified. `-r7` is the current evidence;
+`-r6` is retained because it covered a different set of bytes and its result
+is what justified pushing that revision.
+
+| Gate                           | `-r6` at `8ae039d11` | `-r7` at `1ef3dcf51` | `-r7` log                                                          |
+| ------------------------------ | -------------------- | -------------------- | ------------------------------------------------------------------ |
+| `make check-fmt`               | pass — 2s            | pass — 2s            | `/tmp/check-fmt-gate-r7-adopt-rstest-bdd-v0-6-0.out`               |
+| `make lint`                    | pass — 35s           | pass — 130s          | `/tmp/lint-gate-r7-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make typecheck`               | pass — 14s           | pass — 85s           | `/tmp/typecheck-gate-r7-adopt-rstest-bdd-v0-6-0.out`               |
+| `make markdownlint`            | pass — 16s           | pass — 18s           | `/tmp/markdownlint-gate-r7-adopt-rstest-bdd-v0-6-0.out`            |
+| `make nixie`                   | pass — 1s            | pass — 0s            | `/tmp/nixie-gate-r7-adopt-rstest-bdd-v0-6-0.out`                   |
+| `make test`                    | pass — 118s          | pass — 128s          | `/tmp/test-gate-r7-adopt-rstest-bdd-v0-6-0.out`                    |
+| `make test-workflow-contracts` | pass — 94s           | pass — 96s           | `/tmp/test-workflow-contracts-gate-r7-adopt-rstest-bdd-v0-6-0.out` |
+
+The `-r7` counts match the `-rebase6` baseline exactly, which is the expected
+result for a documentation-only delta: `make test` reports 4311 run, 4311
+passed, 6 skipped across 112 binaries, with doctests at 113 + 2 + 39.
+`make test-workflow-contracts` reports 1324 passed, 3 skipped, plus 27 in the
+script suite. `make lint` reaches every stage — `cargo doc`, `cargo clippy`,
+both Whitaker passes, Ruff, Pylint 10.00/10, the df12 house lints at 10.00/10,
+`ambrleaks`, `interrogate` at 100.0%, `yamllint` and `actionlint`.
+
+The gate durations are not comparable between the two sweeps and should not be
+read as a regression. `-r6` ran warm; `-r7` ran while the `build-limits`
+supervisor reported `capacity 4, held 4` with waiting requests throughout, and
+both `lint` and `typecheck` logged
+`the managed sccache server is not serving compilations; compiling without the
+cache`.
+The `Blocking waiting for file lock on package cache` lines in `test` and the
+second Whitaker pass are queue latency, not deadlock. As recorded above, a
+duration in this environment measures contention rather than the gate's cost.
+
+`make doc-coverage` and `make spelling` were not part of the seven-target set
+either sweep was asked to run. The seven targets were requested explicitly;
+`doc-coverage` reads Rustdoc over unchanged Rust sources, and the `spelling`
+gate runs inside `markdownlint` as its prerequisite, so it did execute within
+`-r7` rather than being skipped.
+
 ### Recurrence correction (Requirement 4)
 
 The fourth part of the task asked for a Clippy `cognitive_complexity`
