@@ -1313,6 +1313,39 @@ severity totals are computed from all findings before truncation.
 `netsuke --json check --explain` emits the rule catalogue as a result document
 whose `result.command` is `check-explain`.
 
+## Rely on deterministic emission
+
+`netsuke generate` publishes one determinism guarantee. For a fixed tuple of
+manifest, environment, platform, recipe-shell selection, and Netsuke version,
+the emitted bundle is byte-identical on every run. The bundle is the main build
+file plus every dyndep sidecar it names, so comparing only `build.ninja` is not
+a complete check.
+
+The guarantee is deliberately narrow:
+
+- **Not across versions.** A Netsuke upgrade may change the emitted bytes for
+  an unchanged manifest. The content-addressed dyndep namespaces carry explicit
+  format tags so that a staging-format change produces new names rather than
+  colliding with sidecars written by an older Netsuke.
+- **Not across platforms or shells.** Windows PowerShell and POSIX recipes are
+  different renderers, and differ in response-file emission and script
+  wrapping. Switching `NETSUKE_WINDOWS_SHELL` selects a different renderer.
+- **Only for a fixed graph.** Two graphs whose edges, inputs, or defaults
+  differ in content are different graphs; their output is expected to differ.
+
+Determinism is also not promised for an edge's own path-list order. Netsuke
+renders each path vector in declaration order, so permuting the entries of one
+target's `sources`, `deps`, `order_only_deps`, or `name` list can change the
+bytes while both graphs are correct.
+
+Emission is deterministic, not idempotent under arbitrary text edits: if you
+hand-edit a generated file, regenerating replaces it. Treat `build.ninja` and
+its sidecars as build artefacts.
+
+[ADR-030](adr-030-ninja-emission-determinism-contract.md) records the full
+contract, its numbered preconditions, and the statements deliberately excluded
+from it.
+
 ## Configure Netsuke
 
 Configuration precedence, from lowest to highest, is:

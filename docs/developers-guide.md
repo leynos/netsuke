@@ -5619,6 +5619,36 @@ all valid inputs.
   discovery-diagnostic replays stay identical without re-reading the
   environment.
 
+#### Emission determinism suites
+
+The suites that verify
+[ADR-030](adr-030-ninja-emission-determinism-contract.md) live in
+`src/ninja_gen/determinism/property_tests/`, one module per obligation, behind
+`#[cfg(test)]`. They share the generator in `.../strategy/graph/` rather than
+copying it: a second generator is a second statement of the well-formedness
+argument, and the two drift silently because both keep passing. Each suite
+cites the ADR precondition it relies on (`P-1` … `P-5`) instead of restating
+it, and the `property_tests` module segment is load-bearing — `make proptest`
+selects suites by that segment, so a suite placed elsewhere never runs.
+
+`ninja_oracle` is the only suite whose oracle leaves the process. It writes
+each emitted bundle to a fresh `tempfile::TempDir` and runs the real `ninja`
+binary twice, `-n` and `-t commands`. Both are required: measured,
+`-t commands` exits zero when a dyndep sidecar is missing while `-n` fails. The
+directory is fresh per case because sidecar names are content-addressed, so a
+shared directory would let one case's sidecar satisfy another case's reference.
+The suite skips when `ninja` is absent unless `NETSUKE_REQUIRE_NINJA=1`, which
+makes absence a failure.
+
+Mutation evidence is registered in
+`tests/kani_mutation_evidence_tests/contracts.rs`. A Proptest-only obligation
+lists its patch stem in `SUPPLEMENTAL_PROPERTY_PATCHES`, and each stem must
+name a property a candidate source declares and match a committed patch. One
+obligation may not borrow another's stem: the contract compares sets, so a
+shared stem leaves the second obligation with no evidence at all. Where one
+fault demonstrates two obligations, commit the same hunk under two stems.
+discovery-diagnostic replays stay identical without re-reading the environment.
+
 ### Parametrized unit tests with rstest
 
 Plain `#[rstest]` (not rstest-bdd) is used for exhaustive state-enumeration

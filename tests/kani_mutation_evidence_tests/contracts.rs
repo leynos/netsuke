@@ -43,6 +43,7 @@ const SUPPLEMENTAL_PROPERTY_PATCHES: &[&str] = &[
     "ir__cmd_interpolate__property_tests__substituted_odd_backticks_are_rejected",
     "ninja_gen__determinism__property_tests__defaults__the_default_line_follows_every_build_line",
     "ninja_gen__determinism__property_tests__defaults__the_default_line_sorts_its_operands",
+    "ninja_gen__determinism__property_tests__ninja_oracle__real_ninja_accepts_both_insertion_orders",
     "ninja_gen__determinism__property_tests__no_loss__every_explicit_output_appears_exactly_once",
     "ninja_gen__determinism__property_tests__order__ordered_actions_ignore_input_order",
     "ninja_gen__determinism__property_tests__order__ordered_edges_ignore_input_order",

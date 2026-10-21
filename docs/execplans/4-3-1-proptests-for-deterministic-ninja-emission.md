@@ -638,6 +638,26 @@ question.
 - **`git apply --check` proves a patch applies, not that it still kills.**
   *Severity: moderate. Likelihood: moderate.* *Mitigation:* `EP-M8` re-applies
   every patch against the final tree and records which properties failed.
+- **`ninja` segfaults on a serial-gate shape the emitter currently produces.**
+  *Severity: high. Likelihood: observed in `EP-M8`'s first run, then reproduced
+  by hand.* `OBL-NINJA`'s saved seed crashed the oracle with SIGSEGV rather
+  than a rejection. The crash is an upstream defect — `Node::out_edges_` is a
+  `std::vector<Edge*>`, and a nested `Builder::LoadDyndeps` calls `AddOutEdge`,
+  reallocating the vector that an enclosing `Plan::NodeFinished` is iterating —
+  and it reproduces on distro `ninja` 1.11.1, on a self-built debug 1.11.1, and
+  on upstream master 1.14.0.git. It is reachable only when a sidecar-revealed
+  dependency has another consumer edge and both are requested:
+  `ninja -n <dyndep-owner>` alone exits 0, `ninja -n <other-consumer>` alone
+  exits 0, and the pair together segfaults — on a **real** build as well as
+  under `-n`. *Mitigation:* the diagnosis is complete and recorded in the
+  delivery ledger; the shape-level repair (a relay phony per sidecar-revealed
+  dependency) was verified against both binaries. Applying it is a production
+  change, which `Tolerances` makes an escalation rather than a drafting choice,
+  so it is escalated to the user with three options: repair the emitter,
+  document the limitation and narrow the generated domain so the property
+  cannot reach the crash, or report upstream and leave the gate red. No
+  mitigation is applied until that direction arrives; the property must not be
+  weakened quietly to make it pass.
 - **Real-Ninja oracle silently vanishes from a lane.** *Severity: moderate.
   Likelihood: moderate.* `ci-windows.yml` installs Ninja but does not set
   `NETSUKE_REQUIRE_NINJA`, so that lane skips silently today. *Mitigation:* use
@@ -1348,15 +1368,16 @@ permutations.
   `-t commands` and fails only under `-n`. As first drafted this obligation
   was vacuous over the sidecar bundle, the newest and most intricate part of
   the emitter. Measured cost is 1.63 ms and 1.91 ms respectively.
-- **Artefact:** `src/ninja_gen/determinism/property_tests/ninja_oracle.rs`. The
-  existing `NinjaCommandOracle::ninja_commands` cannot be reused:
-  `batch_ninja_files` discards the graph and scrapes only `command =` lines. A
-  new harness is budgeted, which must create `.netsuke/dyndep/` and
-  `.netsuke/serial/` before writing sidecars, materialize or exclude
-  out-of-namespace inputs, and use a **fresh temporary directory per case** —
-  the existing oracle reuses one directory, so content-addressed sidecars from
-  earlier cases could satisfy a later case's reference and mask a
-  missing-sidecar bug.
+- **Artefact:** `src/ninja_gen/determinism/property_tests/ninja_oracle/`
+  (`mod.rs` for the properties and generator, `workspace.rs` for the temporary
+  directory and the two subprocess invocations). The existing
+  `NinjaCommandOracle::ninja_commands` cannot be reused: `batch_ninja_files`
+  discards the graph and scrapes only `command =` lines. A new harness is
+  budgeted, which must create `.netsuke/dyndep/` and `.netsuke/serial/` before
+  writing sidecars, materialize or exclude out-of-namespace inputs, and use a
+  **fresh temporary directory per case** — the existing oracle reuses one
+  directory, so content-addressed sidecars from earlier cases could satisfy a
+  later case's reference and mask a missing-sidecar bug.
 - **Non-vacuity:**
   - *Covers.* Multi-output edges, phony edges, dyndep-staged edges, and a
     non-empty `default` line. Assert a non-zero case count when Ninja is
@@ -1817,6 +1838,25 @@ obligations as discharged; the roadmap marked done; and confirmation that
 `ADR-030` is still the next free number after re-checking remote branches,
 since it was allocated in `EP-M1` and the claim is only as good as that sweep.
 
+**Correction (2026-10-20, execution).** Three of the claims above did not
+survive re-checking and were corrected in the documentation rather than
+restated:
+
+- The stale phrase is attributed to "line 17" in
+  `docs/formal-verification-methods-in-netsuke.md`, not to line 165. Line 17 of
+  `README.md` is a badge; the only near-match for "reproducible" is line 178
+  ("reproducible dependency graphs as Graphviz DOT…"), inside the "What works
+  today" bullet list, and even that describes the `graph` renderer rather than
+  the Ninja emission this plan governs. The corrected paragraph now cites the
+  `[What works today](../README.md#what-works-today)` heading and `ADR-030`
+  instead of a sentence fragment.
+- Footnote `[^6]` already read `../src/ninja_gen/mod.rs` at line 416; it did
+  not point at the nonexistent `../src/ninja_gen.rs`. No repoint was needed.
+- `ADR-030` is neither the next free number nor current: the ADR set now runs
+  to `adr-043`, and `docs/adr-030-ninja-emission-determinism-contract.md`
+  already exists. The number is confirmed allocated, which is the only part of
+  the requirement that still mattered.
+
 *Acceptance:* all gates pass; every mutation patch applied and reverted once
 more against the final tree with results tabulated; classification counts
 recorded for every obligation; `coderabbit review --agent` returns no
@@ -1864,7 +1904,14 @@ Strategies and library-side properties, all `#[cfg(test)]`, wired from
   `manifest/blueprint.rs`, `classification.rs`
 - `src/ninja_gen/determinism/property_tests/mod.rs`, `path_key.rs`,
   `no_loss.rs`, `order.rs`, `defaults/mod.rs`, `defaults/generator.rs`,
-  `declaration.rs`, `ninja_oracle.rs`, `strategy/mod.rs`, `strategy/graph.rs`
+  `declaration.rs`, `ninja_oracle/mod.rs`, `ninja_oracle/workspace.rs`,
+  `strategy/mod.rs`, `strategy/graph.rs`
+
+  `ninja_oracle` shipped as a directory module rather than the flat
+  `ninja_oracle.rs` first planned: the properties plus the temporary-directory
+  and subprocess machinery exceeded the 400-line `module_max_lines` ceiling,
+  and the workspace/lifecycle seam is a genuine unit rather than a split for
+  line count. The layout contract's directory form was the shape to hand.
 - `src/ir/action_hash_property_tests.rs`
 - `src/ir/graph/property_tests/mod.rs`, `duplicates.rs`, `cycles.rs`
 
@@ -2212,12 +2259,123 @@ dyndep sidecar exits 0 under `-t commands` and fails only under `-n`; a
 production scale is 16.2 ms release for a 10,000-edge graph, so the repeated
 `path_key` allocation is a test-budget item, not a production defect.
 
+### The `EP-M8` evidence sweep
+
+Every one of the nine plan-owned patches was applied to the final tree, its
+named suites run, and the patch reverted; after each revert the whole working
+diff was re-hashed and compared with the hash captured before the sweep
+(`8f024bce…`). **No handle drifted.** Every one falsified its named test and
+exited `100` (nextest's "tests failed"), and every revert restored the exact
+baseline tree. Script and transcripts are `/tmp/epm8-sweep.sh`,
+`/tmp/epm8-sweep.log`, `/tmp/epm8-sweep-results.tsv`; the follow-ups that close
+two coverage gaps are `/tmp/epm8-followup*.sh` and their logs. These are
+scratch, outside the tracked diff, and are cited by name rather than committed.
+
+| Handle           | Obligations                | Suite run                           | rc  | Named test that failed                                                   | Tree     |
+| ---------------- | -------------------------- | ----------------------------------- | --- | ------------------------------------------------------------------------ | -------- |
+| `MUT-PATHKEY`    | `OBL-PATHKEY`              | `property_tests::path_key`          | 100 | `path_key_is_permutation_invariant` (+2 companions)                      | restored |
+| `MUT-EDGEDROP`   | `OBL-NOLOSS`               | `property_tests::no_loss`           | 100 | `every_explicit_output_appears_exactly_once`                             | restored |
+| `MUT-EDGESORT`   | `OBL-ORDER`                | `property_tests::order`             | 100 | `ordered_edges_ignore_input_order` (+2 companions)                       | restored |
+| `MUT-ACTIONSORT` | `OBL-ORDER`, `OBL-PROCESS` | `property_tests::order`             | 100 | `ordered_actions_ignore_input_order` (+ bundle property)                 | restored |
+| `MUT-DEFSORT`    | `OBL-DEFAULT`, `OBL-E2E`   | `defaults` + `declaration`          | 100 | `the_default_line_sorts_its_operands` (+3), and `OBL-E2E`                | restored |
+| `MUT-DEFPOS`     | `OBL-DEFAULT`, `OBL-NINJA` | `defaults` + `ninja_oracle`         | 100 | `the_default_line_follows_every_build_line` + both real-Ninja properties | restored |
+| `MUT-HASHMETA`   | `OBL-ACTION`               | `action_hash_property_tests`        | 100 | `a_pool_difference_is_not_interned_away` (+1)                            | restored |
+| `MUT-DUPWITHIN`  | `OBL-DUP`                  | `graph::property_tests::duplicates` | 100 | `duplicate_outputs_are_rejected_at_larger_n` (+2)                        | restored |
+| `MUT-CYCLEDEPTH` | `OBL-CYCLE`                | `graph::property_tests::cycles`     | 100 | `cycles_are_rejected_at_larger_n` + `a_long_cycle_is_rejected`           | restored |
+
+Durations are dominated by the package-cache and compile-admission queues, not
+by the suites: `MUT-ACTIONSORT` took 2,280 s of wall clock for 2.7 s of test
+time, and `MUT-EDGESORT` 4,984 s. The eight runs that had to build after a
+source edit all waited in a queue that reached 93 processes and included other
+agents' `cargo metadata` calls that were themselves blocked on compile
+admission. That is saturation, not the nested-Cargo deadlock: `rustc` was
+continuously non-zero and the granted lock holder rotated.
+
+Two coverage gaps the sweep's own short-circuit left, and how they were closed:
+
+| Follow-up                    | Suite                                    | Expected       | Observed | Verdict     |
+| ---------------------------- | ---------------------------------------- | -------------- | -------- | ----------- |
+| `MUT-ACTIONSORT-PROCESS`     | `--test ninja_determinism_process_tests` | fail (`100`)   | `100`    | as expected |
+| `MUT-DEFSORT-DECLARATION`    | `property_tests::declaration`            | fail (`100`)   | `100`    | as expected |
+| `MUT-DEFSORT-PROCESS-PASSES` | `--test ninja_determinism_process_tests` | **pass** (`0`) | `0`      | as expected |
+
+`MUT-DEFSORT-PROCESS-PASSES` is the one row whose expected value is a *pass*,
+and it is the direct evidence for the plan's negative acceptance clause. It
+also demonstrates the boundary the process suite's own module doc claims: a
+fault fixed for a fixed manifest is invisible to a two-run comparison, so the
+single-run properties and the snapshots are what detect it, and neither
+substitutes for the other. The follow-up runs reported `TREE_DRIFT` against the
+sweep's `8f024bce…` baseline because this document was being edited
+concurrently; that hash was `b4bcaf64…`, the post-edit baseline the later
+classification capture used, and no mutation residue remained — both patches
+still `git apply --check` cleanly and both production `sort_by_key` sites in
+`src/ninja_gen/order.rs` are present.
+
+- `MUT-ACTIONSORT` belongs to `EP-M5` and `EP-M6` jointly. The main sweep ran
+  its lib suite first, which failed, so the script stopped before
+  `OBL-PROCESS`. The follow-up runs `ninja_determinism_process_tests` under the
+  patch on its own — see the follow-up table below.
+- `MUT-DEFSORT`'s acceptance carries a **negative** requirement as well: it
+  "must *not* be required to fail `OBL-PROCESS`", because a fixed manifest's
+  unsorted defaults are deterministic across processes. The follow-up runs the
+  process suite under that patch and requires it to **pass**, which is a
+  different assertion from the other eight and had to be expressed as such.
+
+The first follow-up attempt invoked `--package netsuke` and every process stage
+exited `101` with "cannot specify features for packages outside of workspace".
+The integration binary is named `netsuke`, but the package that owns it is
+`netsuke-build`, and the only workspace member is `test_support`. Selecting with
+`--test ninja_determinism_process_tests --all-features` avoids a package
+selector entirely; the `101` was a wrong invocation, not a test verdict, and is
+recorded here rather than silently dropped because it briefly looked like a
+result.
+
+### Per-obligation classification counts
+
+Every coverage suite runs under one pinned seed (`COVERAGE_SEED`, `"NETSKE"` in
+ASCII) rather than a random one, so these counts are reproducible: the same run
+of the same revision reproduces them exactly. They are printed only on failure,
+so they were captured by inserting one `eprintln!` per coverage test, running
+the seven tests with `--no-capture`, and removing the probes again — verified
+by re-hashing the whole diff against the pre-probe hash (`b4bcaf64…`)
+afterwards. Scripts and output: `/tmp/epm8-classifications{,2,3}.sh` and `.txt`.
+
+| Obligation     | Test (fixed seed)                                                          | Counts                                                                                                                                                                              |
+| -------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OBL-ORDER`    | `order::the_run_diverges_and_reaches_every_required_class`                 | 128 cases: `diverged` 128, `actions_diverged` 128, `multi_output_and_phony` 126, `multi_output_and_staged` 114, `with_defaults` 111, **`intersections` 97**, `always_restat` 15     |
+| `OBL-NOLOSS`   | `no_loss::the_run_reaches_multi_output_and_staged_graphs`                  | 128 cases: `multi_output_cases` 128, `staged_cases` 114                                                                                                                             |
+| `OBL-PATHKEY`  | `path_key::the_run_reaches_lists_of_every_shape`                           | 256 cases: `empty` 54, `singleton` 30, `already_sorted` 9, `reverse_sorted` 8, `with_repeats` 143, `reordered` 20, `unchanged` 9                                                    |
+| `OBL-E2E`      | `declaration::the_run_reaches_every_required_class`                        | 128 cases: `reordered` 116, `interned` 116, `with_defaults` 128, `descending_defaults` 57, `cross_target_deps` 116, `intersections` 57                                              |
+| `OBL-DEFAULT`  | `defaults::the_run_reaches_every_default_shape`                            | 128 cases: `empty` 6, `singleton` 7, `already_sorted` 2, `reverse_sorted` 6, `with_repeats` 104                                                                                     |
+| `OBL-NINJA`    | `ninja_oracle::the_domain_reaches_every_class_the_obligation_names`        | 64 cases: `multi_output` 63, `phony` 57, `dyndep_staged` 35, `defaults` 55, `divergent_orders` 57, `cases` 64                                                                       |
+| `EP-M3` domain | `strategy::graph::the_generator_reaches_every_required_class_across_a_run` | 64 cases: `actions` 50, `edges` 100, `multi_output_edges` 53, `phony_edges` 88, `dyndep_staged_edges` 29, `default_targets` 6, **`intersection_cases` 48**, `always_restat_seen` 15 |
+
+Three numbers carry more weight than the rest. `intersections` 97 of 128 and
+`intersection_cases` 48 of 64 are *intersection* tallies rather than marginals,
+so they show the classes co-occur in one case — the thing no marginal tally can
+establish and the reason `OBL-ORDER` says "named intersection classes rather
+than only marginal ones". `always_restat_seen` 15 is `0b1111` in both suites:
+all four combinations of `edge.always` and `action.restat` are reached at both
+generator sizes, which is why the assertion is `assert_eq!` against the full
+mask rather than a `> 0` test.
+
+The two small cells are worth stating plainly rather than leaving to be noticed.
+`OBL-PATHKEY`'s `reverse_sorted` is 8 and `already_sorted` 9 out of 256, and
+`OBL-DEFAULT`'s `already_sorted` is 2 out of 128. A sort and a permutation
+property are exactly the properties that a randomly-ordered list exercises most
+weakly, so the two shapes that need no sorting are the ones that matter — and
+`already_sorted` at 2 is thin enough that a change to the draw distribution
+could empty a cell the assertion requires. It is recorded here as a margin to
+watch, not as a defect: the suite passes, and the seed is pinned, so it cannot
+fail spontaneously.
+
 ### Still to record
 
-`EP-M2` timings; per-obligation classification counts; per-mutation
-transcripts; final gate logs; CodeRabbit outcomes; whether an output-less
-target is constructible through the loader (`EP-M4`). All `EP-M0` questions are
-answered above.
+`EP-M2` timings; final gate logs; CodeRabbit outcomes; whether an output-less
+target is constructible through the loader (`EP-M4`); the scoped
+`cargo mutants` survivor run named under `EP-M8`. Per-mutation transcripts and
+per-obligation classification counts are the two sections above. All `EP-M0`
+questions are answered above.
 
 The determinism contract itself is no longer on this list: it is
 [`docs/adr-030-ninja-emission-determinism-contract.md`](../adr-030-ninja-emission-determinism-contract.md),
@@ -2234,6 +2392,68 @@ above; the placeholder survives only so that trace links written before
 allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
+
+- [ ] (2026-10-21) **A third batch is green on all eleven gates, and that green
+      does not clear `OBL-NINJA`.** Candidate frozen at staged-diff
+      `66e1cc5c…` / tree `ae96832`, unchanged before and after (21 staged
+      entries, 0 untracked). All eleven gates exited 0: `check-fmt`,
+      `lint`, `typecheck`, `doc-coverage` (98.89%), `test` (nextest 4139
+      passed, 6 skipped; doctests 95+2+39 passed), `proptest` (141 passed),
+      `test-documentation-contracts` (14 passed), `test-workflow-contracts`
+      (1317 passed + **27 passed in the third stage, which until this run had
+      never executed**), `markdownlint`, `spelling`, `nixie`.
+
+  *The property passed only because its reproducing seed is not in the tree,
+  and that was verified rather than assumed.* With the seed deleted, the
+  property samples 64 cases and passes. Restoring the saved seed from
+  `/tmp/700-evidence/seed-mod.txt` and re-running makes it fail
+  deterministically in 10.9 s with
+  `minimal failing input: spec = GraphSpec {
+  digest: f8cd06895cd3249c, … dyndep_staged_edges: 1 … }`.
+  The seed is therefore *not* committed, and the defect it encodes is live in
+  the tree. This is the sharpest form of the plan's own lesson about vacuity: a
+  sampling property over a 64-case budget is green on a defect that a single
+  saved case reproduces every time, so "the gate passed" and "the obligation
+  holds" are different claims here. The seed was deliberately withheld from the
+  commit because committing it would make `make test` red on every run for a
+  defect whose repair the plan reserves to the user; that is a stated posture,
+  not a pass, and the item stays unticked.
+
+  **Batch integrity, third attempt.** Unlike the second batch, this one had no
+  concurrent authoring: the frozen hash and tree were identical at both ends,
+  and all three `test-workflow-contracts` stages ran. The provenance caveat the
+  scrutineer raised (`.coverage`, `.hypothesis/*`, `.pytest_cache/*` written
+  during the run) is tool scratch state that appears in no `git status` entry.
+
+- [ ] (2026-10-21) **`EP-M8` second gate batch did not complete, for two
+      independent reasons; `OBL-NINJA` is red and escalated.** The batch ran
+      against the frozen candidate in `/tmp`, sequentially, with the two
+      previously omitted in-scope gates (`proptest`, and
+      `test-documentation-contracts`) added. *Outcome:* `check-fmt` and the
+      `cargo doc` / `cargo clippy` stages passed; `make lint` then failed in
+      Whitaker with `Module graph spans 443 lines, exceeding the allowed 400`
+      at `strategy/mod.rs:16`, which is a genuine finding against the frozen
+      candidate and is repaired by the `graph/mod.rs` → `graph/spec.rs` split
+      (`mod.rs` 322, `blueprint.rs` 209, `spec.rs` 138). `make test` separately
+      failed on `real_ninja_accepts_both_insertion_orders` with SIGSEGV from
+      real `ninja`; the diagnosis, the 13-line reproducer, and the version
+      matrix are in `Risks` and in the delivery ledger, and the shape repair is
+      **escalated, not applied**.
+
+  *Batch-integrity defect, mine.* The scrutineer detected a peer session
+  authoring `graph/spec.rs` at 02:26:09Z while the batch's
+  `test-workflow-contracts` was still running; that peer is this session, and
+  the finding is correct. The batch therefore cannot be read as a verdict on
+  one frozen candidate, and its eleventh gate must be re-run: its third stage
+  (`PYTHONPATH=scripts` pytest) never executed because the second stage failed,
+  so `test-workflow-contracts` has still never run to completion on this
+  branch. Re-run the whole set against a re-frozen candidate after the
+  escalation is resolved; a partial re-run would repeat the mistake in the
+  other direction.
+
+  *Coverage gap now closed.* The first batch omitted `make proptest` and
+  `make test-documentation-contracts`, both of which `AGENTS.md` and the plan
+  place in scope for this milestone's surface; they are added to the re-batch.
 
 - [x] (2026-10-19) **The `EP-M7` milestone CodeRabbit review completed and all
       six distinct findings were valid; every one is repaired.** Scope was
@@ -4684,13 +4904,147 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
       so the file axis was not the constraint. The `EP-M3` and `EP-M4` suites
       are ~69% of the budget as it then stood.
 
+- [x] (2026-10-21) **The `EP-M8` evidence sweep is complete: all nine mutation
+      patches falsified their named tests and every revert restored the tree.**
+      Nine for nine, each exiting `100` on the suites its row names, with the
+      whole working diff re-hashed after each revert against a baseline
+      captured before the sweep began. Zero drift. The per-handle table, the
+      three follow-up rows, and the two corrections they forced are under
+      *The `EP-M8` evidence sweep* above; the raw transcripts are
+      `/tmp/epm8-sweep.log` and `/tmp/epm8-followup*.log`.
+
+  - *What the sweep learned about the queue, not the code.* Eight of the nine
+    runs had to rebuild after a source edit, and the wall clock is entirely
+    queue time: 2,280 s for 2.7 s of `MUT-ACTIONSORT` tests, 4,984 s for
+    `MUT-EDGESORT`. The package-cache queue reached 93 processes. It was
+    diagnosed as saturation and not the nested-Cargo deadlock because `rustc`
+    stayed non-zero throughout and the granted lock holder rotated — the two
+    checks the deadlock memory prescribes, both of which a single `cargo`
+    probe cannot supply. Other agents' `cargo metadata` calls were themselves
+    blocked on compile admission while holding the cache lock, which is what
+    made the queue so deep; nothing was killed and no isolated cache was
+    created.
+
+  - *Two coverage gaps the short-circuit left, now closed.* The script stops at
+    the first failing stage, so `MUT-ACTIONSORT`'s `OBL-PROCESS` stage never
+    ran; a follow-up ran it alone and it fails, as the plan requires. And
+    `MUT-DEFSORT` carries a *negative* acceptance — it "must **not** be
+    required to fail `OBL-PROCESS`" — so a follow-up ran the process suite
+    under that patch and required it to **pass**; it does, which is the direct
+    evidence that a fixed-manifest fault is invisible to a two-run comparison.
+
+  - *Two of my own errors, recorded rather than dropped.* The first follow-up
+    invoked `--package netsuke`, which exits `101` with "cannot specify
+    features for packages outside of workspace" — the binary is `netsuke` but
+    the package is `netsuke-build`, and the only workspace member is
+    `test_support`. That `101` briefly read like a verdict and was not one.
+    The first classification capture used `git checkout --` to remove its
+    probes, which restores from the index and therefore cannot undo an edit to
+    a file with uncommitted work: the probes survived and the run reported
+    `TREE_DRIFT`. Both were repaired and the repairs verified against a hash,
+    not against an expectation.
+
+- [x] (2026-10-21) **Per-obligation classification counts recorded for all
+      seven coverage suites.** Captured under the pinned `COVERAGE_SEED`, so
+      reproducible; the table and the three numbers that carry the argument
+      (both intersection tallies and the `0b1111` always/restat mask) are under
+      *Per-obligation classification counts* above. One margin is flagged
+      there rather than left to be discovered: `OBL-DEFAULT`'s
+      `already_sorted` cell is 2 of 128 cases, thin enough that a change to the
+      draw distribution could empty a cell the assertion requires. The seed is
+      pinned, so it cannot fail spontaneously, and the note is a margin to
+      watch rather than a defect.
+
+- [x] (2026-10-21) **The first `EP-M8` gate batch went red on two
+      candidate-introduced defects, and both are repaired.** The batch ran
+      nine gates sequentially against the frozen candidate; seven passed and
+      `make lint` (rc 2) and `make test` (rc 100) failed.
+
+  - *`make lint`: two Clippy diagnostics in `ninja_oracle/workspace.rs`.*
+    `excessive_nesting` at the `create_dir_all` call and `collapsible_if` on
+    the `if let Some(parent)` / `if !parent.as_str().is_empty()` pair. The
+    scrutineer suggested the obvious let-chain, which is the trap this
+    repository has hit before: `clippy.toml` sets
+    `excessive-nesting-threshold = 4`, and a let-chain at that depth still
+    reports as nested, so the suggested rewrite trades one diagnostic for the
+    other. The repair factors the condition into `parent_directory`, whose
+    `Option::filter` also expresses why both clauses belong together — a bare
+    filename has parent `""`, the working directory rather than a directory to
+    create — and moves the error formatting into `create_failure`. That leaves
+    the write site a single `if let` at depth 3. `create_failure` takes
+    `&io::Error` because `needless_pass_by_value` fired on the by-value form.
+  - *`make test`: `docs/users-guide.md:1168 fence is missing a tested-example
+    marker`.* The new *Rely on deterministic emission* section had put the
+    guarantee's parameter tuple in a `plaintext` fence. `README.md`,
+    `docs/users-guide.md` and `docs/stdlib-yaml-and-jinja-guide.md` load under
+    `FencePolicy::RequireMarkers`, so one unmarked fence fails the whole
+    document. Marking it was rejected: the tuple is a sentence fragment, not an
+    executable example, and registering an id would claim a test that cannot
+    exist. The tuple is now inline prose, which is also the form the sentence
+    wanted.
+  - **The batch's own coverage was incomplete for a reason worth recording.**
+    `make test` aborted at test 1778 of 4139, so 2361 tests never ran and the
+    `doctest` prerequisite never fired. A green `make test` after repair is
+    therefore not evidence about the remainder on its own. The repair run
+    executed all 4139 with 0 failures and the doctest step alongside them.
+  - **Two gates the batch omitted are in scope and were added.** The plan's
+    *Risks* entry requires re-deriving the conditional extras per milestone,
+    and `EP-M8` changes `docs/users-guide.md`, which puts
+    `test-documentation-contracts` squarely in scope; `proptest` is this
+    milestone's own subject. Both run in the re-batch rather than after it.
+  - Pre-flight before the re-batch: `cargo fmt --all -- --check` clean,
+    `cargo clippy --workspace --all-targets --all-features -D warnings` clean,
+    `mdtablefix --check` on the edited document unchanged,
+    `make test-documentation-contracts` 14/14, and `make test` 4139/4139 with
+    39 doctests passing.
+
 - [x] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [x] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [x] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
 - [x] `EP-M7`: `OBL-DUP`, `OBL-CYCLE`.
 - [ ] `EP-M8`: `OBL-NINJA`, documentation, evidence sweep, roadmap.
 
+  Code, documentation, and the evidence sweep are delivered. What remains
+  before the box can be ticked is external to the implementation: the full
+  sequential gate batch, the `coderabbit review --agent` pass, and the
+  roadmap/PR bookkeeping that depends on them.
+
 ## Surprises & discoveries
+
+- (2026-10-21) **`OBL-NINJA` earned its existence on its first red run: the
+  real-`ninja` arm found a crash in a shipped feature, not a defect in the new
+  test.** Every other obligation in this plan reads the emitter's text, and all
+  of them would have passed over a serial-gate shape that makes `ninja`
+  segfault. The property crashed with SIGSEGV on its own saved seed, was
+  reproduced by hand in a 13-line `build.ninja`, and then traced with an
+  instrumented upstream build to `AddOutEdge` reallocating `Node::out_edges_`
+  underneath `Plan::NodeFinished`'s iterator. Three consequences. First, a
+  crash is not a rejection: the oracle's `TestCaseError` reported "rejected the
+  bundle" with empty stderr, because a signal-killed child has no stderr; a
+  future harness should report the exit signal distinctly so that "Ninja
+  refused this" and "Ninja died on this" are not the same message. Second, the
+  failure is *shape-dependent, not seed-dependent*: `ninja -n` on either target
+  alone exits 0 and only the pair crashes, so the property's 64-case budget
+  reached it once and would have been easy to dismiss as a flake. Third, it is
+  upstream — the same code is in master 1.14.0.git — so the repair is a choice
+  about our emission shape, and the plan's own escalation rule, not the agent's
+  judgement, decides who makes it.
+
+- (2026-10-21) **Both `EP-M8` gate failures were produced by the same habit:
+  a fence, and a nesting level, added without asking what enforces it.** The
+  users-guide `plaintext` fence read as ordinary Markdown and passed both
+  Markdown gates, while the documentation-example contract failed the *Rust*
+  suite; and the `if let` / `if` pair read as ordinary control flow while
+  `excessive-nesting-threshold = 4` in `clippy.toml` turned it into two
+  diagnostics. Neither is caught by the gate a contributor would predict from
+  the file type. Two consequences follow. A docs edit in this repository is
+  gated by `make test`, not only by `make markdownlint` and `make spelling` —
+  the marker contract lives in `tests/documentation_examples/`. And the
+  scrutineer's suggested let-chain fix was wrong for this repository, because
+  the same depth that trips `excessive_nesting` survives a let-chain rewrite;
+  the suggestion was transcribed from Clippy's help text rather than checked
+  against `clippy.toml`. Verify a proposed fix against the configuration that
+  raised the diagnostic before applying it.
 
 - (2026-10-19) **The `MUT-DEFSORT` run repeated the persistence lesson the plan
   had already recorded, and the repeat is the point.** The run left
@@ -6581,6 +6935,76 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   obligation's headline law, and the *Mutation* note beside `OBL-ACTION` now
   states which property does the detecting. Date/Author: 2026-10-18 /
   implementation agent.
+- Decision: the six translated READMEs are updated **in step with `README.md`
+  in the same commit**, rather than tracked as separate work. Date/Author:
+  2026-10-20 / implementation agent.
+
+  *Precedent, checked rather than assumed.* Commit `ff797f683` (roadmap item
+  4.4.1) updated `README.md` and all six translations in one commit, so in-step
+  maintenance is the established repository practice rather than a departure.
+  `scripts/check-readme-parity.sh` also enforces a structural comparison across
+  the seven files; leaving six of them a heading behind would keep that check
+  green (it compares heading shape, not prose) while making six published entry
+  points state a weaker contract than the English one. That is the failure mode
+  the parity script cannot catch, which is the argument for treating prose as
+  in scope too.
+
+  *Mechanical consequence.* `make spelling` runs over the translated files as
+  Markdown, and the gate had to stay green with the new Portuguese and Chinese
+  paragraphs. The paragraphs are literal translations of the English guarantee,
+  including the **not promised** emphasis and the closing `ADR-030` link, so
+  each translation names the same conditional promise the English text does.
+
+- Decision: **two mutation-patch stems exist for one patch**, because
+  `MUT-DEFPOS` demonstrates two obligations at once. The stem
+  `ninja_gen__determinism__property_tests__ninja_oracle__real_ninja_accepts_both_insertion_orders`
+  is registered in `SUPPLEMENTAL_PROPERTY_PATCHES` beside the pre-existing
+  `ninja_gen__determinism__property_tests__defaults__the_default_line_follows_every_build_line`
+  stem. Date/Author: 2026-10-20 / implementation agent.
+
+  *Why duplication rather than a shared stem.* `every_patch_matches_a_harness`
+  in `tests/kani_mutation_evidence_tests/contracts.rs` compares the set of
+  patch stems against the set of (harness ∪ supplemental) stems for **set
+  equality**. One stem cannot serve two obligations without the patch set and
+  the harness set disagreeing on the side that names the other obligation: a
+  single stem registered in one prose list leaves either a patch with no
+  matching supplemental entry, or a supplemental entry with no patch. Set
+  equality is deliberately the weaker direction — it does not stop one patch
+  from proving two obligations, but it does stop one *stem* from doing so.
+
+  *What duplicates and what does not.* The patch **file** is a byte copy of the
+  original, not a second mutation. `every_patch_applies_cleanly` applies each
+  stem's file in turn, so the copy is exercised and the copy itself is checked
+  to apply; the underlying fault is the single `MUT-DEFPOS` reordering of the
+  `default` line. `OBL-NINJA` can see it because the emitted bundle is handed
+  to the real `ninja` binary and the default-target order changes the
+  `-t commands` output; `OBL-DEFAULT` sees it as a raw text comparison. The
+  evidence table's *Mutation* column lists both obligations against the one
+  handle rather than pretending they are separate faults.
+
+- Decision: the ninja-oracle workspace's `.netsuke/serial/` directory is
+  **created but never read**, and this is intentional. Date/Author: 2026-10-20
+  / implementation agent.
+
+  *What creates it.* `BundleWorkspace::write` creates it next to
+  `.netsuke/dyndep/` before the invocations run, so the temporary directory
+  matches the on-disk shape a real `netsuke` run leaves behind. Sidecar
+  emission itself is exercised by the suite; the empty serial directory is set
+  dressing for the layout.
+
+  *Why nothing reads it directly.* The requirement is a statement about what
+  *Ninja* sees, not about the on-disk layout — so the oracle asserts the two
+  `ninja` invocations succeed and produce the same command list, not that a
+  particular file exists. The `-n` dry run loads the sidecars; `-t commands`
+  does not. Reading the directory instead would test the implementation's
+  staging convention, which `OBL-NOLOSS` and `OBL-DEFAULT` already cover as
+  text.
+
+  *The consequence that had to be handled.* Because `-t commands` does not load
+  dyndep sidecars, a `-t commands`-only oracle would pass while a sidecar is
+  missing — measured: it exits 0 with the sidecar removed while `-n` exits
+  1. Both invocations are therefore required, and the developers' guide states
+  that as a rule so a later edit cannot quietly drop one.
 
 ## Design review findings
 
