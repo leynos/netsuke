@@ -318,6 +318,19 @@ the conflict in `Decision log` before proceeding.
   Measured basis: with the threshold at 0, `src/` maxes at 8 with the `log`
   bridge off and 31 with it on, across the same 2174 functions. `make lint`
   exits 0.
+- [x] (2026-10-21) Rebase onto the pull request's current target,
+  `c8e58a0a8`, so the branch stops being `CONFLICTING` and hosted CI can run
+  at all. Thirty-six commits replayed, one dropped as already upstream,
+  thirty-five remain, new head `89d98910e`. Four paths conflicted, two of them
+  twice, and none was predicted by `merge-tree`. Weave artefacts stripped;
+  three files restored from `main` after proving the branch's net effect on
+  each was zero. See the revision note for the full account.
+- [ ] (2026-10-21) Re-run the seven-gate set on the rebased revision. A rebase
+  carries no approval forward, and the rebase record is itself a Markdown edit
+  the sweep must follow.
+- [ ] (2026-10-21) Push the rebased branch under an explicit lease, observe
+  hosted CI on the new head, and take the pull request through review to a
+  merge.
 
 ## Surprises & discoveries
 
@@ -1857,6 +1870,13 @@ itself with `HEAD_AT_START` and `HEAD_AT_END`, both reading
 The revision is therefore pinned by the log rather than inferred from its name,
 which is the distinction the section above draws.
 
+`021e0524` is quoted here because it is literally what those logs printed, not
+because it still names a commit on this branch. A later rebase onto
+`c8e58a0a8` replayed the series, so the sweep's revision now appears in
+history as `b27bbb1c`, sitting on a base 46 commits further along. The
+`/tmp/...-gate-rebase4-...out` files still hold the original value, and
+rewriting this paragraph to the new SHA would misreport what they contain.
+
 `make check-fmt` passed in 1s over 186 Python files formatted, 174 Markdown
 files unchanged, and a clean `cargo fmt`. `make spelling` passed in 7s, which
 matters beyond its own verdict: `markdownlint` declares `spelling` as a
@@ -2142,9 +2162,9 @@ It also notes the two existing Whitaker lints that disagree with each other:
 `bumpy_road_function` prunes on `from_expansion()` and so loses source `for`
 loops, while `conditional_max_n_branches` has no expansion guard at all.
 
-**The hoisting refactor is reverted.** Four commits were undone: `021e05245`
-(relocate emitter modules), `17d4b5e8e` (child-shutdown emitters), `f2642d2ae`
-(Kani guard and tracing-capture emitters) and `d4d06c3b0` (hoist tracing
+**The hoisting refactor is reverted.** Four commits were undone: `b27bbb1c`
+(relocate emitter modules), `848bf58b` (child-shutdown emitters), `bc9030ff`
+(Kani guard and tracing-capture emitters) and `3020a971` (hoist tracing
 macros). Every `info!` and `tracing` call is inline again. The revert also
 restored `tests/kani_mutation_evidence_tests/compile_guard.rs` to 393 lines: the
 `apply_patch` sibling module had existed only because hoisting pushed that
@@ -2651,3 +2671,77 @@ run, and their absence is a scope decision rather than a gap: no path under
 `docs/stdlib-yaml-and-jinja-guide.md` is touched, so neither target's input
 changed. `make test-podman` likewise does not apply: no path under `ansible/`
 appears in the delta.
+
+2026-10-21 — fourth rebase, onto `c8e58a0a8`, and the conflicts `merge-tree`
+did not predict. The pull request was `CONFLICTING` against a target that had
+moved 46 commits, so no `pull_request` workflow could even produce a merge ref:
+zero checks ran, and a red or green badge did not exist to read. The rebase
+replayed 36 commits and dropped one, `afd4a0847` (refresh the generated
+spelling ignore), because its patch was already upstream. Thirty-five commits
+therefore remain, ending at `89d98910e`, which is `5e5ccbfd2`'s content
+replayed.
+
+`git merge-tree --write-tree` reported exactly one conflicting path,
+`docs/rstest-bdd-users-guide.md`. The rebase conflicted on four paths, two of
+them twice: that guide, `tests/support/test_support_rlib.rs` (at commit 6 and
+again at the final commit), and `docs/repository-layout.md` (likewise twice).
+The lesson is that `merge-tree` compares the two *final* trees, while a rebase
+replays every intermediate state; a commit whose net effect on a file is zero
+can still conflict on the way past. Predicting conflicts from `merge-tree`
+alone is therefore unsound for a long series, and each conflict has to be
+resolved by reading the conflicting commit's own diff.
+
+The guide conflict is the instructive one. `c8e58a0a8` renumbered netsuke's
+ADRs repository-wide and edited two lines of the old adapted copy to point at
+`adrs/adr-0002-...`. The branch had already replaced that whole sentence with
+a link to upstream's own `ADR-001`, whose definitions point at absolute
+`github.com/leynos/rstest-bdd` URLs. Restoring the branch blob was therefore
+correct: there is no netsuke-local ADR path left in that file to renumber, and
+the imported guide is required to be byte-identical to upstream, so resolving
+into it would have broken the import invariant. Its SHA-256 still reads
+`1e9f4d1b6607fdf83df979676f1a682218cd6751381d374cb98b701778b798b2`.
+
+Weave resolved some of this automatically and left two classes of artefact
+behind, both of which were stripped. The first is annotation comment lines —
+one recording the refusing rule and collision, one pointing at `weave explain`.
+A scan of the whole tree for conflict markers and for those two comment forms
+now finds none; the only surviving occurrences are the words in this paragraph,
+which describe the pattern rather than match it. The second is blank lines
+injected between
+adjacent `mod` declarations and between a doc comment and the item it
+documents. Three files had drifted from `main` this way — `src/runner/mod.rs`,
+`src/stdlib/network/redirect/mod.rs` and `tests/packaging_smoke_tests.rs` —
+and each was proved net-zero for the branch before being restored from
+`origin/main`: `git diff --numstat <merge-base> 5e5ccbfd2 -- <file>` returned
+empty for all three. That check is the one worth repeating, because a blank
+line is invisible in a review diff and a plausible-looking file can be wrong.
+
+Two further corrections came out of the conflict resolutions themselves. The
+revert had restored the log message `"cargo build test_support completed"`
+while `main` had already corrected it to `"cargo check test_support completed"`
+alongside `.arg("check")`; the merged result kept `main`'s wording. And a blank
+line before `## Placement conventions` in `docs/repository-layout.md` was lost
+when trailing blanks were popped programmatically, then restored.
+
+The new head differs from `origin/main` by exactly 12 files, and 8 of them are
+byte-for-byte identical to the pre-rebase tree. The other four —
+`docs/contents.md`, `docs/developers-guide.md`, `docs/rstest-bdd-users-guide.md`
+and `tests/bdd/steps/mod.rs` — were read individually and each carries exactly
+this branch's intended addition on top of `main`. No Weave damage reached a
+file the branch never touched.
+
+This entry's own SHA citations needed two different treatments, and the
+distinction matters. The four commits named under
+*The hoisting refactor is reverted* describe history that is still on this
+branch, so they were remapped to their replays: `021e05245`→`b27bbb1c`,
+`17d4b5e8e`→`848bf58b`, `f2642d2ae`→`bc9030ff`, `d4d06c3b0`→`3020a971`. The
+SHA at `021e0524` in *Post-rebase sweep on the relocated revision* was **not**
+remapped, because there it is the literal string those gate logs printed; it
+now carries a note saying so. Rewriting a quoted log is falsifying a record,
+whereas remapping a narrative pointer keeps it usable.
+
+A rebase inherits no approval and no green CI, so the full seven-gate set has
+to be re-run on the rebased tree, and this record is itself a Markdown edit
+that the sweep must follow. The order therefore inverts as it did for earlier
+revisions: this note is committed first, the gates run on the committed
+revision, and the tree is confirmed clean once they finish.
