@@ -11,12 +11,16 @@ stand-in, and no compiler work back inside the timed test.
 Run via ``make test-workflow-contracts``.
 """
 
+import re
 import tomllib
 
 import pytest
 from workflow_loading import REPO_ROOT
 
 FIXTURE = REPO_ROOT / "build_slice_fixture"
+
+#: `cfg(feature = "…")` as written in Rust, including the `cfg!(…)` form.
+FEATURE_GATE = re.compile(r'cfg!?\(\s*feature\s*=\s*"([^"]+)"')
 
 #: Markers each fixture source must carry, and the behaviour losing one would
 #: reintroduce. ``lib.rs`` must include the shared slice composition and hold
@@ -74,6 +78,39 @@ def test_build_slice_fixture_uses_the_production_build_dependencies() -> None:
     assert fixture["lib"].get("doctest", True), (
         "the boundary doctests must execute; disabling doctests would remove "
         "both compiler controls"
+    )
+
+
+def test_build_slice_fixture_declares_every_gated_feature_name() -> None:
+    """Keep the fixture's feature names in step with the sources it reaches.
+
+    The fixture compiles production modules by path, so their
+    `cfg(feature = …)` sites are evaluated in a package whose feature list
+    Cargo reads from *this* manifest. The workspace denies `unexpected_cfgs`,
+    so a name the host package declares but the fixture does not fails
+    `cargo doc` and `cargo clippy` with an error that names the included
+    source rather than the missing declaration.
+
+    Deriving the expected set from `src/` rather than hard-coding it keeps the
+    contract honest when a future feature gate lands in an included module.
+    """
+    root = tomllib.loads((REPO_ROOT / "Cargo.toml").read_text(encoding="utf-8"))
+    fixture = tomllib.loads((FIXTURE / "Cargo.toml").read_text(encoding="utf-8"))
+    gated = {
+        name
+        for path in (REPO_ROOT / "src").rglob("*.rs")
+        for name in FEATURE_GATE.findall(path.read_text(encoding="utf-8"))
+    }
+    declared = set(fixture.get("features", {}))
+    missing = sorted(gated - declared)
+    assert not missing, (
+        "the fixture must declare every feature name `src/` gates on, or its "
+        f"build fails on `unexpected_cfgs` for {missing}"
+    )
+    unknown = sorted(declared - set(root["features"]))
+    assert not unknown, (
+        "a fixture-only feature name would let the slice compile under a gate "
+        f"the host package never sets: {unknown}"
     )
 
 
