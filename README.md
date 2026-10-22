@@ -195,7 +195,7 @@ environment, platform, recipe-shell selection, and Netsuke version,
 `netsuke generate` produces byte-identical output, including every dyndep
 sidecar. Byte stability across Netsuke versions, across platforms, or across
 shell selections is **not** promised. The
-[determinism contract](docs/adr-030-ninja-emission-determinism-contract.md)
+[determinism contract](docs/adrs/adr-0030-ninja-emission-determinism-contract.md)
 states the guarantee, its preconditions, and what it excludes.
 
 Since beta3, Netsuke also supports dependency-only action and target

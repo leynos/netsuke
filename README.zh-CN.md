@@ -141,7 +141,7 @@ Netsuke v0.1.0-beta4的核心构建系统编译器提供以下功能：
 确定性输出是一项已发布的保证：在清单、环境、平台、配方 shell 选择和 Netsuke
 版本固定时，`netsuke generate` 会生成逐字节相同的输出，包括所有 dyndep
 附属文件。跨 Netsuke 版本、跨平台或跨 shell
-选择的字节稳定性**不予**保证。[确定性契约](docs/adr-030-ninja-emission-determinism-contract.md)阐述了该保证、其前提条件以及排除项。
+选择的字节稳定性**不予**保证。[确定性契约](docs/adrs/adr-0030-ninja-emission-determinism-contract.md)阐述了该保证、其前提条件以及排除项。
 
 自beta3起，Netsuke还支持仅依赖的操作和目标聚合：
 `deps`列表非空的节点可以省略配方。

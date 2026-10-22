@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc bec5df63b59396e38ce5ca15096ae09cb19ce4f94c4a2240d070d6f884e67408 # shrinks to case = DefaultCase { graph: BuildGraph { actions: {"act": Action { recipe: Command { isolation: Shared, command: String("echo 00") }, description: None, depfile: None, deps_format: None, pool: None, restat: false }}, edges: [BuildEdge { action_id: "act", inputs: [], implicit_deps: [], dependency_order: Parallel, explicit_outputs: ["out/0000"], implicit_outputs: [], order_only_deps: [], phony: false, always: false }], targets: {"out/0000": EdgeId(0)}, default_targets: ["out/0000"] }, declared: ["out/0000"] }

@@ -22,7 +22,9 @@
 //! passing, which is the separation `MUT-DUPWITHIN` exists to demonstrate and
 //! the older `||`-to-`&&` patch cannot show.
 
-use crate::ast::{DependencyOrder, NetsukeManifest, Recipe, StringOrList, Target, Vars};
+use crate::ast::{
+    CommandIsolation, DependencyOrder, NetsukeManifest, Recipe, StringOrList, Target, Vars,
+};
 use crate::ir::{BuildGraph, IrGenError};
 use crate::ninja_gen::RecipeShell;
 use proptest::prelude::*;
@@ -236,6 +238,7 @@ fn target(slot: usize, outputs: Vec<String>) -> Target {
         name: list_or_empty(outputs),
         recipe: Recipe::Command {
             command: StringOrList::String(format!("echo target-{slot:02}")),
+            isolation: CommandIsolation::Shared,
         },
         sources: StringOrList::Empty,
         deps: StringOrList::Empty,

@@ -1,4 +1,4 @@
-# Architecture decision record (ADR): Publish and verify the Ninja emission determinism contract
+# Architectural decision record (ADR) 0030: Publish and verify the Ninja emission determinism contract
 
 ## Status
 
@@ -17,10 +17,10 @@ Netsuke's design document states, without qualification, that "the generated
 `build.ninja` will be byte-for-byte identical" given the same `Netsukefile` and
 environment variables (`docs/netsuke-design.md` §1.2). The README advertises "a
 deterministic intermediate build graph" and "reproducible dependency graphs"
-for the `graph` renderer ([`README.md`](../README.md)). The formal-verification
-survey asks for the guarantee to be "strengthened" by deciding "whether
-byte-for-byte stable Ninja output and stable action identifiers are public
-guarantees or current implementation details"
+for the `graph` renderer ([`README.md`](../../README.md)). The
+formal-verification survey asks for the guarantee to be "strengthened" by
+deciding "whether byte-for-byte stable Ninja output and stable action
+identifiers are public guarantees or current implementation details"
 (`docs/formal-verification-methods-in-netsuke.md` §Determinism contract).
 
 Three problems follow from that state.
@@ -465,25 +465,25 @@ reconciles to.
 ## Implementation references
 
 - IR collections and the Kani substitution:
-  [`src/ir/graph/mod.rs`](../src/ir/graph/mod.rs) and
-  [`src/ir/graph/kani_map.rs`](../src/ir/graph/kani_map.rs)
+  [`src/ir/graph/mod.rs`](../../src/ir/graph/mod.rs) and
+  [`src/ir/graph/kani_map.rs`](../../src/ir/graph/kani_map.rs)
 - Lowering, rule resolution, and default targets:
-  [`src/ir/from_manifest/mod.rs`](../src/ir/from_manifest/mod.rs) and
-  [`src/ir/from_manifest/support/mod.rs`](../src/ir/from_manifest/support/mod.rs)
+  [`src/ir/from_manifest/mod.rs`](../../src/ir/from_manifest/mod.rs) and
+  [`src/ir/from_manifest/support/mod.rs`](../../src/ir/from_manifest/support/mod.rs)
 - Emission entry points:
-  [`src/ninja_gen/mod.rs`](../src/ninja_gen/mod.rs),
-  [`src/ninja_gen/explicit_shell.rs`](../src/ninja_gen/explicit_shell.rs), and
-  [`src/ninja_gen/dyndep/mod.rs`](../src/ninja_gen/dyndep/mod.rs)
+  [`src/ninja_gen/mod.rs`](../../src/ninja_gen/mod.rs),
+  [`src/ninja_gen/explicit_shell.rs`](../../src/ninja_gen/explicit_shell.rs),
+  and [`src/ninja_gen/dyndep/mod.rs`](../../src/ninja_gen/dyndep/mod.rs)
 - Within-edge rendering, exempt from I-1:
-  [`src/ninja_gen/display_edge.rs`](../src/ninja_gen/display_edge.rs)
+  [`src/ninja_gen/display_edge.rs`](../../src/ninja_gen/display_edge.rs)
 - Path and namespace preconditions:
-  [`src/ninja_gen/path_syntax.rs`](../src/ninja_gen/path_syntax.rs)
+  [`src/ninja_gen/path_syntax.rs`](../../src/ninja_gen/path_syntax.rs)
 - The deferred obligation this discharges:
-  [ADR-004](adr-004-bound-kani-ir-harnesses-to-small-n.md)
+  [ADR-004](adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md)
 - Prior art for order-invariance testing:
-  [`src/graph_view/tests/property.rs`](../src/graph_view/tests/property.rs)
+  [`src/graph_view/tests/property.rs`](../../src/graph_view/tests/property.rs)
 - ExecPlan:
-  [4.3.1 Proptest coverage for deterministic Ninja emission](execplans/4-3-1-proptests-for-deterministic-ninja-emission.md)
+  [4.3.1 Proptest coverage for deterministic Ninja emission](../execplans/4-3-1-proptests-for-deterministic-ninja-emission.md)
 
 ## Related decisions
 

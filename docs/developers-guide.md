@@ -5622,7 +5622,7 @@ all valid inputs.
 #### Emission determinism suites
 
 The suites that verify
-[ADR-030](adr-030-ninja-emission-determinism-contract.md) live in
+[ADR-030](adrs/adr-0030-ninja-emission-determinism-contract.md) live in
 `src/ninja_gen/determinism/property_tests/`, one module per obligation, behind
 `#[cfg(test)]`. They share the generator in `.../strategy/graph/` rather than
 copying it: a second generator is a second statement of the well-formedness
@@ -9893,12 +9893,12 @@ fed back upstream.
 
 All four tiers are set here.
 
-| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                                                                                             |
-| ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                                                              |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation; 900 s ambient public-API fixtures, stub-environment, split-build, and packaging smoke tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally                                                                                                                         |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step                                                                                                             |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                                                                                                                                     |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally                                                                                          |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step                                                                              |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                                                                                                      |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
@@ -9923,8 +9923,8 @@ gate gets ten periods, 600 s; it compiles all 18 patched trees through the Kani
 frontend into a target directory no cache restores.
 `production_build_module_slice_has_expected_boundary` uses the default 300 s
 allowance because it checks source text only; Cargo compiles the production
-slice in the workspace library build, before the test's timed execution.
-The nine ambient public-API fixtures, `stub_env_default_does_not_compile`,
+slice in the workspace library build, before the test's timed execution. The
+nine ambient public-API fixtures, `stub_env_default_does_not_compile`,
 `split_build_fixture_compiles_through_the_direct_rustc_harness`, and the
 packaging smoke test each get fifteen periods, 900 s. The split-build fixture
 uses a private fixture workspace. Packaging verifies fresh extracted crate

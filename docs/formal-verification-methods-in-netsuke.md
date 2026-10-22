@@ -124,7 +124,7 @@ actions and 100 edges):
 
 All four now exist. The determinism suites live in
 `src/ninja_gen/determinism/property_tests/`, one module per obligation in
-[ADR-030](adr-030-ninja-emission-determinism-contract.md), over a shared
+[ADR-030](adrs/adr-0030-ninja-emission-determinism-contract.md), over a shared
 generator bounded at 50 actions and 100 edges; a real `ninja` binary provides
 the oracle for the emitted bundle.
 
@@ -382,11 +382,11 @@ to support deterministic emission.[^4][^6] The formal-verification work has
 since strengthened that contract by deciding which statements are public
 guarantees and which are implementation details, and by stating the parameter
 tuple each is a function of. The result is
-[ADR-030](adr-030-ninja-emission-determinism-contract.md), which the README now
-cites in place of a bare reproducibility claim. The earlier form of this
-paragraph cited "README line 17" and a phrase, "a reproducible, fully static
-dependency graph", that no longer appears in the README; both were stale and
-are corrected here rather than reproduced.
+[ADR-030](adrs/adr-0030-ninja-emission-determinism-contract.md), which the
+README now cites in place of a bare reproducibility claim. The earlier form of
+this paragraph cited "README line 17" and a phrase, "a reproducible, fully
+static dependency graph", that no longer appears in the README; both were stale
+and are corrected here rather than reproduced.
 
 ## Recommended delivery order
 

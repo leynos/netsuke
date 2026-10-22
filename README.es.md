@@ -175,7 +175,7 @@ Netsuke fijos, `netsuke generate` produce una salida idéntica byte a byte,
 incluidas todas las copias auxiliares de dyndep. La estabilidad de bytes entre
 versiones de Netsuke, entre plataformas o entre selecciones de shell **no**
 está garantizada. El
-[contrato de determinismo](docs/adr-030-ninja-emission-determinism-contract.md)
+[contrato de determinismo](docs/adrs/adr-0030-ninja-emission-determinism-contract.md)
 enuncia la garantía, sus precondiciones y sus exclusiones.
 
 Desde beta3, Netsuke también admite agregados de acciones y objetivos basados
